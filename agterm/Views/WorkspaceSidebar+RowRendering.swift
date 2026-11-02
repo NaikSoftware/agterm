@@ -265,7 +265,7 @@ extension WorkspaceSidebar.Coordinator {
             addBtn.isHidden = true
             let repeatBtn = makeRowButton(identifier: "workspace-repeat-launcher", label: "New Session",
                                           action: #selector(repeatLauncherClicked(_:)))
-            repeatBtn.imagePosition = .imageOnly
+            repeatBtn.imagePosition = .imageLeading
             repeatBtn.imageScaling = .scaleNone
             cell.addSubview(repeatBtn)
             cell.repeatButton = repeatBtn

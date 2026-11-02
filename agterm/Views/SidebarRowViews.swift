@@ -94,7 +94,8 @@ class SidebarCellView: NSTableCellView {
             repeatButton.setAccessibilityValue(launcher.rawValue)
         }
         repeatButton.isHidden = !visible
-        repeatButtonWidthConstraint.constant = visible ? Self.addButtonWidth + 2 : 0
+        // the image sits leading, so the extra width is the gap before "+"
+        repeatButtonWidthConstraint.constant = visible ? Self.addButtonWidth + 6 : 0
     }
 
     override func layout() {
