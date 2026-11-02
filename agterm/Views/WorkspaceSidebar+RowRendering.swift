@@ -341,6 +341,7 @@ extension WorkspaceSidebar.Coordinator {
 
     private func makeRowButton(identifier: String, label: String, action: Selector) -> NSButton {
         let btn = AddSessionButton()
+        btn.title = "" // the default "Button" title shows beside a leading image
         btn.translatesAutoresizingMaskIntoConstraints = false
         btn.isBordered = false
         btn.contentTintColor = .secondaryLabelColor
