@@ -591,7 +591,22 @@ public final class Session: Identifiable {
 
     /// The focused pane's terminal title: the split pane's while it has focus AND exists, else the primary's
     /// (see `focusedCwd` for the existence guard).
-    private var focusedOscTitle: String? { splitFocused && splitSurface != nil ? splitTitle : oscTitle }
+    private var focusedOscTitle: String? {
+        (splitFocused && splitSurface != nil ? splitTitle : oscTitle).map(Self.strippingTitleSpinner)
+    }
+
+    /// Drops the leading status glyphs a coding agent animates in its title (Claude Code's `✳`, `◑`, braille
+    /// frames), which would otherwise make the row name flicker.
+    public nonisolated static func strippingTitleSpinner(_ title: String) -> String {
+        let spinner = { (scalar: Unicode.Scalar) in
+            switch scalar.value {
+            case 0x2800...0x28FF, 0x25CB...0x25D3, 0x2722...0x2725, 0x2731...0x273F, 0x00B7: true
+            default: false
+            }
+        }
+        let scalars = title.unicodeScalars.drop { spinner($0) || $0.properties.isWhitespace }
+        return scalars.isEmpty ? title : String(String.UnicodeScalarView(scalars))
+    }
 
     /// The detail after the workspace name on line two of the session palette, the Ctrl-Tab switcher, and the
     /// title bar: the focused pane's terminal title unless that is already the `displayName` (so it ADDS

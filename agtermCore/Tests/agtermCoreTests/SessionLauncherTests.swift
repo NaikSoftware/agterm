@@ -28,3 +28,17 @@ struct SessionLauncherTests {
         #expect(SessionLauncher.available(path: "") { _ in true } == [.terminal])
     }
 }
+
+struct TitleSpinnerTests {
+    @Test(arguments: [
+        ("✳ Agterm workspace", "Agterm workspace"),
+        ("◑ Agterm workspace", "Agterm workspace"),
+        ("⠂ Fix tests", "Fix tests"),
+        ("· ✶ Thinking", "Thinking"),
+        ("vim notes.md", "vim notes.md"),
+        ("✳", "✳")
+    ])
+    func stripsLeadingSpinnerGlyphs(title: String, expected: String) {
+        #expect(Session.strippingTitleSpinner(title) == expected)
+    }
+}
