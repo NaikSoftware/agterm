@@ -110,8 +110,9 @@ extension WorkspaceSidebar.Coordinator {
             let notice = session.flatMap(presentationNotice(for:))
             cell.imageView?.image = session?.content == .page
                 ? (flagged ? flaggedPageSessionIcon : pageSessionIcon)
-                : iconForSession(split: showSplitIcon, axis: session?.splitAxis ?? .leftRight, flagged: flagged,
-                                 remote: session?.remoteHost != nil, disconnected: notice != nil)
+                : session?.runningAgent.flatMap { showSplitIcon ? nil : $0.image(pointSize: 15) }
+                    ?? iconForSession(split: showSplitIcon, axis: session?.splitAxis ?? .leftRight, flagged: flagged,
+                                      remote: session?.remoteHost != nil, disconnected: notice != nil)
             cell.notice = notice
             cell.imageView?.setAccessibilityIdentifier("session-icon")
             cell.tint = session?.tint
@@ -262,8 +263,22 @@ extension WorkspaceSidebar.Coordinator {
             let width = addBtn.widthAnchor.constraint(equalToConstant: 0)
             cell.addButtonWidthConstraint = width
             addBtn.isHidden = true
+            let repeatBtn = makeRowButton(identifier: "workspace-repeat-launcher", label: "New Session",
+                                          action: #selector(repeatLauncherClicked(_:)))
+            repeatBtn.imagePosition = .imageOnly
+            repeatBtn.imageScaling = .scaleNone
+            cell.addSubview(repeatBtn)
+            cell.repeatButton = repeatBtn
+            cell.repeatLauncher = { [weak self] in self?.lastLauncher ?? .terminal }
+            let repeatWidth = repeatBtn.widthAnchor.constraint(equalToConstant: 0)
+            cell.repeatButtonWidthConstraint = repeatWidth
+            repeatBtn.isHidden = true
             constraints += [
-                field.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor, constant: -6),
+                field.trailingAnchor.constraint(equalTo: repeatBtn.leadingAnchor, constant: -6),
+                repeatBtn.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor),
+                repeatBtn.centerYAnchor.constraint(equalTo: center),
+                repeatWidth,
+                repeatBtn.heightAnchor.constraint(equalToConstant: 16),
                 addBtn.trailingAnchor.constraint(equalTo: statusIcon.leadingAnchor),
                 addBtn.centerYAnchor.constraint(equalTo: center),
                 width,
@@ -314,21 +329,27 @@ extension WorkspaceSidebar.Coordinator {
     }
 
     private func makeAddSessionButton() -> NSButton {
-        let btn = AddSessionButton()
-        btn.translatesAutoresizingMaskIntoConstraints = false
-        btn.isBordered = false
+        let btn = makeRowButton(identifier: "workspace-add-session", label: "New Session…",
+                                action: #selector(addSessionButtonClicked(_:)))
         let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
         btn.image = NSImage(systemSymbolName: InterfaceElement.workspaceAddSession.symbolName!, accessibilityDescription: "New Session")?
             .withSymbolConfiguration(config)
         btn.image?.isTemplate = true
         btn.imageScaling = .scaleProportionallyUpOrDown
+        return btn
+    }
+
+    private func makeRowButton(identifier: String, label: String, action: Selector) -> NSButton {
+        let btn = AddSessionButton()
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        btn.isBordered = false
         btn.contentTintColor = .secondaryLabelColor
         btn.setContentHuggingPriority(.required, for: .horizontal)
         btn.setContentCompressionResistancePriority(.required, for: .horizontal)
-        btn.setAccessibilityIdentifier("workspace-add-session")
-        btn.setAccessibilityLabel("New Session")
+        btn.setAccessibilityIdentifier(identifier)
+        btn.setAccessibilityLabel(label)
         btn.target = self
-        btn.action = #selector(addSessionButtonClicked(_:))
+        btn.action = action
         return btn
     }
 

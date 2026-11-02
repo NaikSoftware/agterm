@@ -22,8 +22,9 @@ extension WorkspaceSidebar.Coordinator {
             if point.x < sender.frameOfOutlineCell(atRow: row).maxX { return }
             // clicking the inline "+" button is handled by the button itself — don't schedule the toggle.
             if let cell = sender.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarCellView,
-               let btn = cell.addButton,
-               btn.convert(btn.bounds, to: sender).contains(point) { return }
+               [cell.addButton, cell.repeatButton].contains(where: { btn in
+                   btn.map { $0.convert($0.bounds, to: sender).contains(point) } ?? false
+               }) { return }
         }
         pendingRowToggle?.cancel()
         // re-read the mirror when the deferred item fires: the setting can be turned off inside the
@@ -302,18 +303,6 @@ extension WorkspaceSidebar.Coordinator {
         addNewSession(toWorkspace: node.id)
     }
 
-    /// Inline "+" button on a workspace row, the right-click "New Session" action. The button carries no
-    /// workspace id, so it is derived from the outline row at click time — reused cells target the right one.
-    @objc func addSessionButtonClicked(_ sender: NSButton) {
-        // cancel any pending single-click workspace toggle so clicking "+" doesn't also flip expansion.
-        pendingRowToggle?.cancel()
-        pendingRowToggle = nil
-        guard let outline = outlineView else { return }
-        let row = outline.row(for: sender)
-        guard row >= 0, let node = outline.item(atRow: row) as? SidebarNode, node.kind == .workspace else { return }
-        addNewSession(toWorkspace: node.id)
-    }
-
     @objc private func menuDeleteWorkspace(_ sender: NSMenuItem) {
         guard let node = sender.representedObject as? SidebarNode else { return }
         // this sidebar's window-local store, like Close/Flag/Duplicate/Focus: the enabled state came from
@@ -343,20 +332,22 @@ extension WorkspaceSidebar.Coordinator {
 
     /// addNewSession shares the directory and placement settings of `AppActions.newSession()`
     /// with the workspace row's New Session and "+".
-    private func addNewSession(toWorkspace workspaceID: UUID) {
+    @discardableResult
+    func addNewSession(toWorkspace workspaceID: UUID) -> Session? {
         addSession(toWorkspace: workspaceID, cwd: actions.resolvedNewSessionCwd(inWorkspace: workspaceID),
                    at: actions.resolvedNewSessionIndex(in: workspaceID, store: store))
     }
 
     /// Adds a session to `workspaceID` at `cwd` and selects it; a nil `index` appends.
-    private func addSession(toWorkspace workspaceID: UUID, cwd: String, at index: Int? = nil) {
-        if let session = store.addSession(toWorkspace: workspaceID, cwd: cwd, at: index) {
-            // creating + selecting from the sidebar context menu is a user-initiated selection on THIS
-            // window's store: note activity so it buys the full idle grace before auto-follow pulls away.
-            store.noteUserActivity()
-            store.selectSession(session.id)
-            actions.focusActiveSession()
-        }
+    @discardableResult
+    private func addSession(toWorkspace workspaceID: UUID, cwd: String, at index: Int? = nil) -> Session? {
+        guard let session = store.addSession(toWorkspace: workspaceID, cwd: cwd, at: index) else { return nil }
+        // creating + selecting from the sidebar context menu is a user-initiated selection on THIS
+        // window's store: note activity so it buys the full idle grace before auto-follow pulls away.
+        store.noteUserActivity()
+        store.selectSession(session.id)
+        actions.focusActiveSession()
+        return session
     }
 
     private func openDirectoryAndAddSession(toWorkspace workspaceID: UUID) {

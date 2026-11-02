@@ -136,6 +136,9 @@ struct agtermApp: App {
         _controlServer = State(initialValue: controlServer)
         actions.remoteAttacher = controlServer
         actions.companionDuplicator = controlServer
+        actions.sessionTyper = controlServer
+        SessionLaunchers.refresh()
+        SessionAgentMonitor.start(library: library, zmxResolver: restored.foregroundResolver)
         LinkOpener.shared.mode = { settingsModel.settings.effectiveLinkOpenMode }
         LinkOpener.shared.overlay = { [weak controlServer] url, session, percent in
             controlServer?.openLinkOverlay(url, session: session, sizePercent: percent) ?? false

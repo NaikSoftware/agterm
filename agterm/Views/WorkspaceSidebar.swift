@@ -101,7 +101,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
         _ = store.workspaces.map {
             ($0.id, $0.name, $0.unseenCount, $0.tint, $0.sessions.map {
                 ($0.id, $0.displayName, $0.hasSplit, $0.splitAxis, $0.unseenCount, $0.agentIndicator, $0.flagged,
-                 $0.remoteConnection, $0.tint, $0.effectiveInfo)
+                 $0.remoteConnection, $0.tint, $0.effectiveInfo, $0.runningAgent)
             })
         }
         _ = store.selectedSessionID
@@ -403,6 +403,8 @@ struct WorkspaceSidebar: NSViewRepresentable {
             var foldedAttention: [String] = []
             /// info is the shown info line; a change reloads the row and re-asks its height.
             var info: [SessionInfoSpan]?
+            /// The agent whose logo replaces the terminal icon.
+            var agent: SessionLauncher?
 
             func differsOnlyInLabel(from other: RowContent) -> Bool {
                 var relabeled = self
@@ -518,7 +520,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
                        indicator: session.agentIndicator, flagged: session.flagged,
                        focusMember: false, presentationNotice: presentationNotice(for: session), tint: session.tint,
                        foldedAttention: foldedAttention(forSession: session.id).map(\.displayName),
-                       info: sessionInfo(for: session))
+                       info: sessionInfo(for: session), agent: session.runningAgent)
         }
 
         /// Rebuilds `roots` from the store, reusing cached node instances by id so NSOutlineView item

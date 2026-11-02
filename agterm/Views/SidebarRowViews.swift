@@ -44,6 +44,12 @@ class SidebarCellView: NSTableCellView {
 
     private static let addButtonWidth: CGFloat = 16
 
+    /// Repeat button left of `addButton`: starts the last "+" choice and shows its icon. Shares the "+" hover
+    /// reveal and Interface toggle. `repeatLauncher` is read on each reveal, since the last choice changes.
+    var repeatButton: NSButton?
+    var repeatButtonWidthConstraint: NSLayoutConstraint?
+    var repeatLauncher: (() -> SessionLauncher)?
+
     var iconWidthConstraint: NSLayoutConstraint?
     var iconGapConstraint: NSLayoutConstraint?
 
@@ -80,6 +86,15 @@ class SidebarCellView: NSTableCellView {
         guard let addButton, let addButtonWidthConstraint else { return }
         addButton.isHidden = !visible
         addButtonWidthConstraint.constant = visible ? Self.addButtonWidth : 0
+        guard let repeatButton, let repeatButtonWidthConstraint else { return }
+        if visible, let launcher = repeatLauncher?() {
+            repeatButton.image = launcher.image(pointSize: 13)
+            repeatButton.toolTip = "New \(launcher.title) Session"
+            repeatButton.setAccessibilityLabel(repeatButton.toolTip)
+            repeatButton.setAccessibilityValue(launcher.rawValue)
+        }
+        repeatButton.isHidden = !visible
+        repeatButtonWidthConstraint.constant = visible ? Self.addButtonWidth + 2 : 0
     }
 
     override func layout() {
@@ -139,6 +154,7 @@ class SidebarCellView: NSTableCellView {
         let iconAlpha: CGFloat = selected ? 0.85 : 0.6
         imageView?.contentTintColor = tint?.shows(.icon) == true ? tintColor : color.withAlphaComponent(iconAlpha)
         addButton?.contentTintColor = color.withAlphaComponent(iconAlpha)
+        repeatButton?.contentTintColor = color.withAlphaComponent(iconAlpha)
     }
 
     /// themeTextColor is the row text color the theme gives for a selection state, never a row tint.

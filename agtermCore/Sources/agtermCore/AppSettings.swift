@@ -373,6 +373,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var newSessionDirectory: String?
     /// The fixed directory used when `newSessionDirectory` is `custom`; nil/empty falls back to home.
     public var newSessionCustomDirectory: String?
+    /// The `SessionLauncher` raw value the workspace row's repeat button starts; nil means `terminal`.
+    public var lastSessionLauncher: String?
     /// newSessionPlacement stores a `NewSessionPlacement` raw value; nil means `end`.
     public var newSessionPlacement: String?
     /// Whether a GUI session close (⌘W, the File/palette Close Session, the sidebar row's Close) confirms

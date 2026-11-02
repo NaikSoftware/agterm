@@ -38,6 +38,10 @@ public final class Session: Identifiable {
     /// status glyph reacts. Ephemeral.
     public var agentIndicator = AgentIndicator()
 
+    /// The coding agent the focused pane runs in the foreground, sampled by the app; the sidebar row shows its
+    /// logo. Ephemeral, and nil again once the agent exits.
+    public var runningAgent: SessionLauncher?
+
     /// Last time the status was set, idle and repeated values included; nil before any set, never persisted.
     /// Must stay a wall-clock `Date`: `controlTree` ships it as epoch seconds compared against `ControlEvent.ts`,
     /// so a monotonic instant would make a client's computed age meaningless.
