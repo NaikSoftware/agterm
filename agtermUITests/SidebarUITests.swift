@@ -521,8 +521,27 @@ final class SidebarUITests: XCTestCase {
         }
         XCTAssertTrue(addBtn.isHittable, "hovering the workspace row should reveal the inline '+' button")
         addBtn.click()
+        let terminal = presentedMenuItem("Terminal")
+        XCTAssertTrue(terminal.waitForExistence(timeout: 5), "the inline '+' should open the launcher menu")
+        terminal.click()
         XCTAssertTrue(pollSessionCount(workspace: "workspace 1", expected: 2, timeout: 5),
-                      "workspace 1 should have 2 sessions after clicking the inline '+' button")
+                      "workspace 1 should have 2 sessions after choosing Terminal from the inline '+' menu")
+    }
+
+    func testRepeatLauncherButtonCreatesSession() throws {
+        XCTAssertTrue(sessionRow().waitForExistence(timeout: 20), "seeded session should exist")
+        let ws = app.staticTexts["workspace 1"]
+        XCTAssertTrue(ws.waitForExistence(timeout: 5), "seeded workspace should exist")
+        let repeatBtn = app.descendants(matching: .any).matching(identifier: "workspace-repeat-launcher").firstMatch
+        let deadline = Date().addingTimeInterval(8)
+        while !repeatBtn.isHittable, Date() < deadline {
+            ws.hover()
+            usleep(200_000)
+        }
+        XCTAssertEqual(repeatBtn.value as? String, "terminal", "a fresh state repeats Terminal")
+        repeatBtn.click()
+        XCTAssertTrue(pollSessionCount(workspace: "workspace 1", expected: 2, timeout: 5),
+                      "the repeat button should start a session without a menu")
     }
 
     func testControlClickInlineAddSessionButtonOpensWorkspaceMenu() throws {
