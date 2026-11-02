@@ -327,6 +327,9 @@ struct SocketClient {
             // docs ask for is NUMERIC, never string equality.
             return String(sidebarWidth)
         }
+        if let filePanelWidth = response.result?.filePanelWidth {
+            return String(filePanelWidth)
+        }
         if echoID, let id = response.result?.id {
             return id
         }

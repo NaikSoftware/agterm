@@ -89,6 +89,8 @@ final class MockControlActions: ControlActions {
         case expand(window: String?)
         case collapse(window: String?)
         case sidebarWidth(points: Double, window: String?)
+        case filePanelVisibility(ControlToggleMode)
+        case filePanelWidth(points: Double, window: String?)
         case quick(String?)
         case quickType(text: String)
         case quickText(all: Bool, lines: Int?)
@@ -158,6 +160,7 @@ final class MockControlActions: ControlActions {
     var nextExpandResponse = ControlResponse(ok: true)
     var nextCollapseResponse = ControlResponse(ok: true)
     var nextSidebarWidthResponse = ControlResponse(ok: true)
+    var nextFilePanelWidthResponse = ControlResponse(ok: true)
     var nextFontResponse = ControlResponse(ok: true)
     var nextNotifyResponse = ControlResponse(ok: true)
     var nextKeymapListResponse = ControlResponse(ok: true)
@@ -651,6 +654,16 @@ final class MockControlActions: ControlActions {
     func setSidebarWidth(_ points: Double, window: String?) -> ControlResponse {
         calls.append(.sidebarWidth(points: points, window: window))
         return nextSidebarWidthResponse
+    }
+
+    func setFilePanelVisibility(_ mode: ControlToggleMode) -> ControlResponse {
+        calls.append(.filePanelVisibility(mode))
+        return ControlResponse(ok: true)
+    }
+
+    func setFilePanelWidth(_ points: Double, window: String?) -> ControlResponse {
+        calls.append(.filePanelWidth(points: points, window: window))
+        return nextFilePanelWidthResponse
     }
 
     func setQuickTerminal(mode: String?) -> ControlResponse {

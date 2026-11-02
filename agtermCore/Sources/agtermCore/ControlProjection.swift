@@ -721,6 +721,10 @@ public struct ControlTree: Codable, Sendable, Equatable {
     /// tree is the live per-window read surface, and nothing needs width discovery ACROSS windows, which is
     /// the only thing the cached `window.list` copy would add.
     public let sidebarWidth: Double?
+    /// The projected window's file panel visibility and width in points - the read side of `filepanel` and
+    /// `filepanel.width`, `tree`-only like `sidebarWidth`.
+    public let filePanelVisible: Bool?
+    public let filePanelWidth: Double?
     /// Whether the projected window's workspace focus FILTER is applied — the flag half of the focus set,
     /// whose member half is each workspace node's `focused`. Only ONE term of the row-visibility predicate;
     /// see `focused`. LIVE and `tree`-only (the bottom-bar toggle and the row menu flip it outside the
@@ -771,7 +775,8 @@ public struct ControlTree: Codable, Sendable, Equatable {
     public init(workspaces: [ControlWorkspaceNode], idleMs: Int? = nil, autoFollowMs: Int? = nil,
                 attentionIncludesActive: Bool? = nil, attentionNavigationAcrossWindows: Bool? = nil,
                 sidebarVisible: Bool? = nil, sidebarMode: String? = nil, sidebarFlaggedLayout: String? = nil,
-                flaggedOrder: [String]? = nil, sidebarWidth: Double? = nil, workspaceFilter: Bool? = nil,
+                flaggedOrder: [String]? = nil, sidebarWidth: Double? = nil,
+                filePanelVisible: Bool? = nil, filePanelWidth: Double? = nil, workspaceFilter: Bool? = nil,
                 quickVisible: Bool? = nil,
                 zoomedSurface: String? = nil, dashboardMembers: [String]? = nil,
                 dashboardHighlighted: String? = nil, dashboardFontSize: Double? = nil,
@@ -791,6 +796,8 @@ public struct ControlTree: Codable, Sendable, Equatable {
         self.sidebarFlaggedLayout = sidebarFlaggedLayout
         self.flaggedOrder = flaggedOrder
         self.sidebarWidth = sidebarWidth
+        self.filePanelVisible = filePanelVisible
+        self.filePanelWidth = filePanelWidth
         self.workspaceFilter = workspaceFilter
         self.quickVisible = quickVisible
         self.zoomedSurface = zoomedSurface

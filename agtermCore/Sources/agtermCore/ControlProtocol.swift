@@ -80,6 +80,8 @@ public enum Command: String, Codable, Sendable {
     case sidebarExpand = "sidebar.expand"
     case sidebarCollapse = "sidebar.collapse"
     case sidebarWidth = "sidebar.width"
+    case filePanel = "filepanel"
+    case filePanelWidth = "filepanel.width"
     case notify
     case fontInc = "font.inc"
     case fontDec = "font.dec"
@@ -386,6 +388,8 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     /// `AppStore.sidebarWidthMin...sidebarWidthMax`. `Double`, not `width`'s `Int`: the divider drag writes a
     /// fractional cursor x, so an Int could not express every width the GUI can reach.
     public var sidebarWidth: Double?
+    /// The file panel width in points for `filepanel.width`, clamped server-side like `sidebarWidth`.
+    public var filePanelWidth: Double?
     /// New window top-left x/y in points for `window.move`, relative to the top-left of the target
     /// display (see `display`); y measured down from the display's top edge.
     public var x: Int?
@@ -479,7 +483,8 @@ public struct ControlArgs: Codable, Sendable, Equatable {
                 after: String? = nil, before: String? = nil, run: String? = nil,
                 kinds: [String]? = nil, limit: Int? = nil,
                 title: String? = nil, body: String? = nil,
-                width: Int? = nil, height: Int? = nil, sidebarWidth: Double? = nil, x: Int? = nil, y: Int? = nil, display: Int? = nil,
+                width: Int? = nil, height: Int? = nil, sidebarWidth: Double? = nil,
+                filePanelWidth: Double? = nil, x: Int? = nil, y: Int? = nil, display: Int? = nil,
                 status: String? = nil, blink: Bool? = nil, autoReset: Bool? = nil, sound: String? = nil,
                 ratio: Double? = nil, ratioDelta: Double? = nil,
                 path: String? = nil, color: String? = nil, textColor: String? = nil, shape: String? = nil,
@@ -548,6 +553,7 @@ public struct ControlArgs: Codable, Sendable, Equatable {
         self.width = width
         self.height = height
         self.sidebarWidth = sidebarWidth
+        self.filePanelWidth = filePanelWidth
         self.x = x
         self.y = y
         self.display = display
@@ -657,6 +663,8 @@ public struct ControlResult: Codable, Sendable, Equatable {
     /// from. Without the echo a caller cannot tell an out-of-range request from an honored one, both
     /// answering ok.
     public var sidebarWidth: Double?
+    /// The STORED file panel width echoed by `filepanel.width`, after clamping.
+    public var filePanelWidth: Double?
     /// pane is the pane session.restore wrote, session.text read or session.type typed into, or the anchor
     /// ask.open resolved. The first three report it on every success, the default-pane paths included.
     public var pane: String?
@@ -726,7 +734,7 @@ public struct ControlResult: Codable, Sendable, Equatable {
                 windows: [ControlWindowNode]? = nil, exitCode: Int? = nil, count: Int? = nil,
                 affected: Int? = nil,
                 theme: String? = nil, themes: [String]? = nil, ratio: Double? = nil,
-                sidebarWidth: Double? = nil, pane: String? = nil,
+                sidebarWidth: Double? = nil, filePanelWidth: Double? = nil, pane: String? = nil,
                 sync: Bool? = nil, light: String? = nil, dark: String? = nil,
                 events: ControlEventBatch? = nil, keymap: ControlKeymap? = nil, hooks: ControlHooks? = nil,
                 pick: ControlPickResult? = nil, ask: ControlAskResult? = nil, cursor: ControlCursor? = nil,
@@ -775,6 +783,7 @@ public struct ControlResult: Codable, Sendable, Equatable {
         self.themes = themes
         self.ratio = ratio
         self.sidebarWidth = sidebarWidth
+        self.filePanelWidth = filePanelWidth
         self.pane = pane
         self.sync = sync
         self.light = light
