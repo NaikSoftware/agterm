@@ -51,6 +51,28 @@ struct AgentHooksInstallTests {
         #expect(evts["PostToolUse"]![0]["matcher"] == nil)
     }
 
+    @Test func mergeAddsClaudeModToPluginDirs() throws {
+        let mod = scriptDir + "/" + AgentHooksInstall.claudeModRelativePath
+        let fresh = try AgentHooksInstall.mergeClaudeSettings(existing: nil, scriptDir: scriptDir)
+        #expect((object(fresh.json)["env"] as? [String: Any])?["CLAUDE_CODE_PLUGIN_DIRS"] as? String == mod)
+
+        let existing = #"{"env":{"CLAUDE_CODE_PLUGIN_DIRS":"/a:/b","FOO":"1"}}"#
+        let merged = try AgentHooksInstall.mergeClaudeSettings(existing: existing, scriptDir: scriptDir)
+        let env = object(merged.json)["env"] as? [String: Any]
+        #expect(env?["CLAUDE_CODE_PLUGIN_DIRS"] as? String == "/a:/b:" + mod)
+        #expect(env?["FOO"] as? String == "1")
+        let again = try AgentHooksInstall.mergeClaudeSettings(existing: merged.json, scriptDir: scriptDir)
+        #expect(!again.changed)
+    }
+
+    @Test func mergeRefusesWrongShapedEnv() {
+        for existing in [#"{"env":[]}"#, #"{"env":{"CLAUDE_CODE_PLUGIN_DIRS":1}}"#] {
+            #expect(throws: AgentHooksInstall.MergeError.self) {
+                try AgentHooksInstall.mergeClaudeSettings(existing: existing, scriptDir: scriptDir)
+            }
+        }
+    }
+
     @Test func mergeWhenPresentIsNoOp() throws {
         let first = try AgentHooksInstall.mergeClaudeSettings(existing: nil, scriptDir: scriptDir)
         let second = try AgentHooksInstall.mergeClaudeSettings(existing: first.json, scriptDir: scriptDir)

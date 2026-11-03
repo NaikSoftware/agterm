@@ -3764,6 +3764,10 @@ for (const ws of tree.workspaces) for (const s of ws.sessions) {
               tool run → active, Stop → completed, permission request and permission prompt → blocked), and an OpenCode lifecycle plugin.
               When Claude Code runs as a worker under another agent with a shell process still between them, as in a
               tool call, its hooks stay silent, so the status of the pane that spawned it is not overwritten.
+              It also adds a Claude Code mod to
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">CLAUDE_CODE_PLUGIN_DIRS</span>: while
+              Claude Code runs agent-team teammates in tmux, a <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">subagents</span>
+              companion shows them, and it closes when the last teammate ends.
             </p>
             <p style="font-size: 15px; line-height: 1.65; color: #949ba4; margin: 16px 0 0">
               The scripts go to

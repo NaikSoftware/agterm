@@ -400,7 +400,7 @@ enum AgentHooksInstaller {
             ? "Your ~/.claude/settings.json couldn't be safely read or merged, so the Claude Code hooks were NOT added "
               + "(the file was left untouched). It is unreadable, not valid JSON, or has a hooks entry in a shape we "
               + "don't recognize. Fix it and run this again, or add the hooks manually."
-            : "Claude Code hooks merged into ~/.claude/settings.json."
+            : "Claude Code hooks and the teammates companion mod merged into ~/.claude/settings.json."
         return """
         Scripts installed to \(destinationFolder.path).
         \(claudeLine)
