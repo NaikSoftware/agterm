@@ -287,6 +287,10 @@ void MainWindow::createMenus()
     }));
     session->addAction(action(QStringLiteral("new_companion"), tr("New Companion"), QStringLiteral("list-add"), {},
                               [this] { newCompanion(m_store.selected); }));
+    session->addAction(action(QStringLiteral("duplicate_companion"), tr("Duplicate as Companion"), QStringLiteral("edit-copy"), {}, [this] {
+        if (m_store.session(m_store.selected))
+            duplicateCompanion(m_store.selected);
+    }));
     session->addAction(action(QStringLiteral("clear_status"), tr("Clear Status"), QStringLiteral("edit-clear"), {},
                               [this] { m_store.setStatus(m_store.selected, QStringLiteral("idle")); }));
     session->addAction(action(QStringLiteral("toggle_flag"), tr("Flag"), QStringLiteral("flag"), QKeySequence(QStringLiteral("Ctrl+Alt+Shift+F")), [this] {
@@ -536,7 +540,9 @@ void MainWindow::applyLayout(const QString &id)
         return;
     Panes &p = m_panes[id];
     if (s->hasSplit && !p.right) {
-        p.right = spawnPart(id, QStringLiteral("right"), liveCwd(id).isEmpty() ? s->cwd : liveCwd(id), {}, p.split);
+        const QString cwd = !s->splitCwd.isEmpty() ? s->splitCwd : liveCwd(id).isEmpty() ? s->cwd : liveCwd(id);
+        p.right = spawnPart(id, QStringLiteral("right"), cwd, std::exchange(s->splitCommand, {}), p.split);
+        s->splitCwd.clear();
         if (p.right)
             p.split->addWidget(p.right->widget());
         p.split->handle(1)->installEventFilter(this); // double-click resets an even split
@@ -596,6 +602,43 @@ void MainWindow::newCompanion(const QString &parentId)
 {
     if (m_store.session(parentId))
         m_store.select(m_store.addCompanion(parentId, {}, liveCwd(parentId)));
+}
+
+void MainWindow::duplicateCompanion(const QString &id)
+{
+    QString error;
+    const QString copy = duplicateAsCompanion(m_store, *this, id, &error);
+    copy.isEmpty() ? statusBar()->showMessage(error, 5000) : m_store.select(copy);
+}
+
+bool MainWindow::panePlan(const QString &sessionId, const QString &pane, PanePlan *out, QString *error)
+{
+    // a shell holding the pane gives a plain shell in its directory; anything else is run again as it was started
+    const Panes p = m_panes.value(sessionId);
+    auto *t = qobject_cast<TerminalInterface *>(pane == QLatin1String("right") ? p.right : p.main);
+    const QString name = pane == QLatin1String("right") ? QStringLiteral("right") : QStringLiteral("left");
+    if (!t || t->terminalProcessId() <= 0) {
+        *error = QStringLiteral("%1 pane is not realized; nothing was created").arg(name);
+        return false;
+    }
+    const int shell = t->terminalProcessId(), fg = t->foregroundProcessId();
+    const int pid = fg > 0 ? fg : shell;
+    out->cwd = QFile::symLinkTarget(QStringLiteral("/proc/%1/cwd").arg(pid));
+    out->command.clear();
+    if (pid == shell)
+        return !out->cwd.isEmpty() || (*error = QStringLiteral("%1 pane: its directory cannot be read; nothing was created").arg(name), false);
+    QFile f(QStringLiteral("/proc/%1/cmdline").arg(pid));
+    const QStringList argv = f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()).split(QChar(0), Qt::SkipEmptyParts) : QStringList();
+    if (argv.isEmpty() || out->cwd.isEmpty()) {
+        *error = QStringLiteral("%1 pane: the foreground program cannot be read; nothing was created").arg(name);
+        return false;
+    }
+    // shortcut: the source session's id in the arguments is not rebound to the copy's, as master does
+    QStringList quoted;
+    for (QString a : argv)
+        quoted << QLatin1Char('\'') + a.replace(QLatin1Char('\''), QStringLiteral("'\\''")) + QLatin1Char('\'');
+    out->command = QStringLiteral("exec ") + quoted.join(QLatin1Char(' '));
+    return true;
 }
 
 void MainWindow::swapPanes(const QString &id)
@@ -1012,6 +1055,7 @@ void MainWindow::sidebarMenu(const QPoint &pos)
             menu.addAction(tr("Copy Name"), this, [s] { QApplication::clipboard()->setText(s->displayName()); });
             menu.addAction(tr("Duplicate Session"), this, [this, id] { m_store.select(m_store.duplicateSession(id, liveCwd(id))); });
             menu.addAction(tr("New Companion"), this, [this, id] { newCompanion(id); });
+            menu.addAction(tr("Duplicate as Companion"), this, [this, id] { duplicateCompanion(id); });
         }
         fillMoveMenu(menu.addMenu(tr("Move to")), ids);
         bool allFlagged = true;

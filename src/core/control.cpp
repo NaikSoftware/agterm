@@ -161,6 +161,31 @@ static QJsonObject sessionNew(Store &store, const QJsonObject &args)
     return ok({{"id", id}});
 }
 
+QString duplicateAsCompanion(Store &store, Terminals &terminals, const QString &id, QString *error)
+{
+    const Session *source = store.session(id);
+    if (!source) {
+        *error = QStringLiteral("no such session");
+        return {};
+    }
+    PanePlan left, right;
+    if (!terminals.panePlan(id, QStringLiteral("main"), &left, error)
+        || (source->hasSplit && !terminals.panePlan(id, QStringLiteral("right"), &right, error)))
+        return {};
+    const bool split = source->hasSplit;
+    const QString axis = source->splitAxis;
+    const double ratio = source->splitRatio;
+    const QString copy = store.addCompanion(id, {}, left.cwd, left.command);
+    if (split) {
+        Session *c = store.session(copy);
+        c->splitCwd = right.cwd;
+        c->splitCommand = right.command;
+        c->splitRatio = ratio;
+        store.setSplit(copy, true, true, axis);
+    }
+    return copy;
+}
+
 QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &request)
 {
     const QString cmd = request.value("cmd").toString();
@@ -305,6 +330,13 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             store.requestSwap(id);
         } else if (cmd == QLatin1String("session.seen")) {
             store.setUnseen(id, 0);
+        } else if (cmd == QLatin1String("session.companion.duplicate")) {
+            const QString copy = duplicateAsCompanion(store, terminals, id, &error);
+            if (copy.isEmpty())
+                return fail(error);
+            if (!args.value("noSelect").toBool())
+                store.select(copy);
+            return ok({{"id", copy}, {"parent", store.session(copy)->parentId}});
         } else if (cmd == QLatin1String("session.duplicate")) {
             const QString copy = store.duplicateSession(id, {});
             if (!args.value("noSelect").toBool())

@@ -24,6 +24,7 @@ struct Session {
     QString title;   // last title a program running in the session set, spinner glyphs stripped
     QString agent;   // launcher id of the coding agent in the foreground, "" for none; not persisted
     QString command; // run instead of a shell at creation, not persisted
+    QString splitCwd, splitCommand; // the same for the split pane's first spawn, not persisted
     // one session, up to two terminals: the split pane is a second shell sharing the sidebar row
     bool hasSplit = false;
     bool splitVisible = false;

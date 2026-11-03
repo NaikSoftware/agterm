@@ -16,6 +16,14 @@ public:
     bool type(const QString &, const QString &text, QString *) override { return typed += text, true; }
     QString text(const QString &, QString *) override { return screen; }
     QJsonObject info(const QString &) override { return {{"pid", 42}}; }
+    QString refuse; // the pane panePlan refuses
+    bool panePlan(const QString &, const QString &pane, PanePlan *out, QString *error) override
+    {
+        if (pane == refuse)
+            return *error = pane + " refused", false;
+        *out = {QDir::tempPath(), pane == "right" ? "exec 'top'" : ""};
+        return true;
+    }
 };
 
 class TestCore : public QObject
@@ -375,6 +383,33 @@ private Q_SLOTS:
         QCOMPARE(s.workspaces.first().id, ws);
         QVERIFY(s.focused.contains(ws));
         Q_UNUSED(other);
+    }
+
+    void duplicateAsCompanionCopiesTheLayout()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString ws = s.addWorkspace("w");
+        const QString src = s.addSession(ws, {}, {});
+        s.select(src);
+        s.setSplit(src, true, false, "horizontal");
+        s.session(src)->splitRatio = 0.3;
+        t.refuse = "right";
+        QVERIFY(!call(s, t, "session.companion.duplicate", src)["ok"].toBool());
+        QCOMPARE(s.workspace(ws)->sessions.size(), 1); // one refused pane creates nothing
+        t.refuse.clear();
+        QSignalSpy layout(&s, &Store::paneLayoutChanged);
+        const auto r = call(s, t, "session.companion.duplicate", src, {{"noSelect", true}});
+        const Session *copy = s.session(r["result"]["id"].toString());
+        QCOMPARE(r["result"]["parent"].toString(), src);
+        QCOMPARE(copy->cwd, QDir::tempPath());
+        QVERIFY(copy->command.isEmpty()); // a shell in the left pane gives a plain shell
+        QVERIFY(copy->hasSplit && copy->splitVisible);
+        QCOMPARE(copy->splitAxis, QStringLiteral("horizontal"));
+        QCOMPARE(copy->splitRatio, 0.3);
+        QCOMPARE(copy->splitCommand, QStringLiteral("exec 'top'"));
+        QCOMPARE(layout.count(), 1);
+        QCOMPARE(s.selected, src);
     }
 
     void treeAndUnknownCommand()

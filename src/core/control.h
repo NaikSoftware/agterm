@@ -5,6 +5,11 @@
 
 class Store;
 
+// what one pane of a Duplicate as Companion starts: a shell in cwd, or another copy of its program
+struct PanePlan {
+    QString cwd, command; // command "" = a plain shell
+};
+
 // What the dispatcher needs from live terminals; the app implements it over Konsole parts.
 class Terminals
 {
@@ -22,7 +27,20 @@ public:
         return false;
     }
     virtual QJsonObject chromeState() const { return {}; } // chrome read-back merged into `tree`
+    // pane main | right; false with the reason when the pane's program cannot be copied
+    virtual bool panePlan(const QString &sessionId, const QString &pane, PanePlan *out, QString *error)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        Q_UNUSED(out);
+        *error = QStringLiteral("no terminals");
+        return false;
+    }
 };
+
+// A companion copying the session's split layout and each pane's program; plans every pane before creating
+// anything, so one refused pane leaves the tree as it was. "" with *error set on refusal.
+QString duplicateAsCompanion(Store &store, Terminals &terminals, const QString &id, QString *error);
 
 // One request object ({cmd, target, args}) in, one response ({ok, result | error}) out.
 QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &request);

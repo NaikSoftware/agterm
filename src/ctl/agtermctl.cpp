@@ -28,6 +28,7 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session close | select | info         (--target: session id/prefix/name, default $AGTERM_SESSION_ID, then active)
   session rename <name>                 empty name reverts to the directory name
   session duplicate [--no-select]
+  session duplicate --companion [--no-select]   a companion copying the split layout and each pane's program
   session flag [on|off|toggle]
   session move <workspace> [--index N]
   workspace move --index N
@@ -54,7 +55,7 @@ static int die(const QString &message)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
-    const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "undoable"};
+    const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "undoable", "companion"};
     QStringList pos;
     QHash<QString, QString> opt;
     const QStringList in = app.arguments().mid(1);
@@ -81,6 +82,8 @@ int main(int argc, char **argv)
         cmd += QLatin1Char('.') + pos.takeFirst();
     if (cmd == QLatin1String("filepanel") && pos.value(0) == QLatin1String("width"))
         cmd = QStringLiteral("filepanel.width"), pos.removeFirst();
+    if (cmd == QLatin1String("session.duplicate") && opt.contains(QStringLiteral("companion")))
+        cmd = QStringLiteral("session.companion.duplicate");
     if (cmd == QLatin1String("session.split") && pos.value(0) == QLatin1String("close"))
         cmd = QStringLiteral("session.split.close"), pos.removeFirst();
     const QString arg = pos.value(0);
@@ -197,7 +200,8 @@ int main(int argc, char **argv)
             putchar('\n');
     } else if (result.contains("undoable")) {
         printf("ok %s\n", result["undoable"].toBool() ? "(undoable)" : "(not undoable)");
-    } else if (cmd.endsWith(QLatin1String(".new")) || cmd == QLatin1String("session.duplicate") || cmd == QLatin1String("recent.open")) {
+    } else if (cmd.endsWith(QLatin1String(".new")) || cmd == QLatin1String("session.duplicate") || cmd == QLatin1String("session.companion.duplicate")
+               || cmd == QLatin1String("recent.open")) {
         printf("%s\n", qPrintable(result["id"].toString()));
     }
     return 0;

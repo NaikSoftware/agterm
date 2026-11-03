@@ -38,6 +38,7 @@ public:
     QStringList availableLaunchers() const { return m_launchers; }
     bool filePanel(const QString &mode, int width, QString *error) override;
     QJsonObject chromeState() const override;
+    bool panePlan(const QString &sessionId, const QString &pane, PanePlan *out, QString *error) override;
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -53,6 +54,7 @@ private:
     void paneExited(const QString &id, KParts::ReadOnlyPart *part);
     void swapPanes(const QString &id);
     void newCompanion(const QString &parentId);
+    void duplicateCompanion(const QString &id);
     void focusPane(bool right);
     void toggleZoom();
     void showSelected();
