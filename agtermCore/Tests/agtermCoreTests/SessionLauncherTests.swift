@@ -24,6 +24,16 @@ struct SessionLauncherTests {
         #expect(SessionLauncher.agent(argv: argv) == expected)
     }
 
+    @Test(arguments: [
+        ([["/bin/zsh", "-l", "/tmp/PR-1.command"], ["claude", "review"]], SessionLauncher.claude),
+        ([["-claude"]], .claude),
+        ([["make"], ["cc", "a.c"]], nil),
+        ([], nil)
+    ])
+    func agentFoundAnywhereInForegroundGroup(group: [[String]], expected: SessionLauncher?) {
+        #expect(SessionLauncher.agent(group: group) == expected)
+    }
+
     @Test func availableKeepsTerminalWithNothingInstalled() {
         #expect(SessionLauncher.available(path: "") { _ in true } == [.terminal])
     }

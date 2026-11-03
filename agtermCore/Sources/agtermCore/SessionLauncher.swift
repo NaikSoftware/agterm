@@ -37,6 +37,12 @@ public enum SessionLauncher: String, CaseIterable, Sendable {
         return argv.dropFirst().first { !$0.hasPrefix("-") }.flatMap(named)
     }
 
+    /// The first agent among a foreground process group's argvs, leader first. A script shell does no job control,
+    /// so an agent it starts shares the script's group without leading it.
+    public static func agent(group: [[String]]) -> SessionLauncher? {
+        group.lazy.compactMap { agent(argv: CommandRestore.stripLoginDash($0)) }.first
+    }
+
     /// Terminal plus every agent whose command is an executable in one of `path`'s directories.
     public static func available(path: String, isExecutable: (String) -> Bool) -> [SessionLauncher] {
         let directories = path.split(separator: ":").map(String.init)

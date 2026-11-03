@@ -76,7 +76,6 @@ extension SessionLauncher {
 final class SessionAgentMonitor {
     private let library: WindowLibrary
     private let zmxResolver: ZmxForegroundResolver?
-    private let shellBasename = ProcessInfo.processInfo.environment["SHELL"].map(CommandRestore.basename)
     private var timer: Timer?
     private static var shared: SessionAgentMonitor?
 
@@ -98,9 +97,7 @@ final class SessionAgentMonitor {
             guard let store = library.store(for: window.id) else { continue }
             for session in store.workspaces.flatMap(\.sessions) where session.remoteHost == nil {
                 let agent = (session.activeSurface as? GhosttySurfaceView)
-                    .flatMap { ForegroundProcess.running(for: $0, shellBasename: shellBasename, zmxResolver: zmxResolver) }
-                    .flatMap(\.command)
-                    .flatMap(SessionLauncher.agent(argv:))
+                    .flatMap { SessionLauncher.agent(group: ForegroundProcess.groupArgvs(for: $0, zmxResolver: zmxResolver)) }
                 if session.runningAgent != agent { session.runningAgent = agent }
             }
         }
