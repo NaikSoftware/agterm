@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QRegularExpression>
 
 static QJsonObject ok(const QJsonObject &result = {})
 {
@@ -81,14 +82,123 @@ static QString creationTint(const QJsonObject &args, QString *color, QStringList
     return tintArgs(args, color, parts);
 }
 
-static QJsonObject tree(Store &store)
+static QJsonObject merged(QJsonObject node, const QJsonObject &extra)
+{
+    for (auto it = extra.begin(); it != extra.end(); ++it)
+        node.insert(it.key(), it.value());
+    return node;
+}
+
+static bool isColor(const QString &c)
+{
+    static const QRegularExpression re(QStringLiteral("^#[0-9a-fA-F]{6}$"));
+    return re.match(c).hasMatch();
+}
+
+QString overlayArgsError(const QString &cmd, QJsonObject *args)
+{
+    QJsonObject &a = *args;
+    const QString name = cmd;
+    if (a.contains("pane")) {
+        static const QStringList left{"left", "primary", "top"}, right{"right", "split", "bottom"};
+        const QString p = a.value("pane").toString().toLower();
+        if (!left.contains(p) && !right.contains(p))
+            return QStringLiteral("--pane must be left or right");
+        a.insert("pane", left.contains(p) ? QStringLiteral("left") : QStringLiteral("right"));
+    }
+    auto percent = [&]() -> QString {
+        if (a.contains("sizePercent") && (a.value("sizePercent").toInt() < 1 || a.value("sizePercent").toInt() > 100))
+            return QStringLiteral("%1: --size-percent must be 1...100").arg(name);
+        return {};
+    };
+    auto points = [&]() -> QString {
+        for (const char *k : {"width", "height"})
+            if (a.contains(QLatin1String(k)) && a.value(QLatin1String(k)).toDouble() <= 0)
+                return QStringLiteral("%1: --%2 must be a positive number of points").arg(name, QLatin1String(k));
+        return {};
+    };
+    if (a.contains("color") && !isColor(a.value("color").toString()))
+        return QStringLiteral("invalid color: %1 (#rrggbb)").arg(a.value("color").toString());
+    if (cmd == QLatin1String("session.overlay.open")) {
+        if (a.contains("html") || a.contains("url") || a.contains("image") || a.contains("markdownFile") || a.contains("textFile"))
+            return QStringLiteral("page overlays need Qt WebEngine, which this build lacks (install qt6-webengine-dev and rebuild)");
+        if (a.value("command").toString().trimmed().isEmpty())
+            return QStringLiteral("session.overlay.open requires a command");
+        if (a.contains("pane") && a.contains("sizePercent"))
+            return QStringLiteral("session.overlay.open: --pane is mutually exclusive with --size-percent");
+        if ((a.contains("width") || a.contains("height")) && !a.contains("sizePercent"))
+            return QStringLiteral("session.overlay.open: --width/--height need --size-percent");
+        if (QString e = percent(); !e.isEmpty())
+            return e;
+        return points();
+    }
+    if (cmd == QLatin1String("session.overlay.resize")) {
+        if (a.contains("pane"))
+            return QStringLiteral("session.overlay.resize: --pane is not supported (pane overlays are always full)");
+        if (a.value("full").toBool() && a.contains("sizePercent"))
+            return QStringLiteral("session.overlay.resize: --full is mutually exclusive with --size-percent");
+        if (!a.value("full").toBool() && !a.contains("sizePercent") && !a.contains("width") && !a.contains("height"))
+            return QStringLiteral("session.overlay.resize requires --size-percent, --width/--height or --full");
+        if (QString e = percent(); !e.isEmpty())
+            return e;
+        return points();
+    }
+    if (cmd == QLatin1String("session.hud.open") || cmd == QLatin1String("session.hud.update")) {
+        const QString message = a.value("message").toString(), detail = a.value("detail").toString();
+        const bool markdown = a.value("markdown").toBool();
+        if (message.isEmpty())
+            return QStringLiteral("%1 requires a message").arg(cmd);
+        auto controls = [](const QString &t, bool allowLines) {
+            for (QChar ch : t)
+                if ((ch.unicode() < 0x20 || ch.unicode() == 0x7f) && !(allowLines && (ch == QLatin1Char('\n') || ch == QLatin1Char('\t'))))
+                    return true;
+            return false;
+        };
+        if (controls(message, markdown) || controls(detail, false))
+            return QStringLiteral("hud text must not contain control characters");
+        if (message.size() > (markdown ? 4096 : 256))
+            return QStringLiteral("hud message too long (max %1 characters)").arg(markdown ? 4096 : 256);
+        if (detail.size() > 256)
+            return QStringLiteral("hud detail too long (max 256 characters)");
+        if (a.contains("textColor") && !isColor(a.value("textColor").toString()))
+            return QStringLiteral("invalid text color: %1 (#rrggbb)").arg(a.value("textColor").toString());
+        if (a.contains("fontSize")) {
+            if (cmd == QLatin1String("session.hud.update"))
+                return QStringLiteral("session.hud.update: --font-size is fixed at open; reopen the hud to change it");
+            if (a.value("fontSize").toDouble() < 6 || a.value("fontSize").toDouble() > 72)
+                return QStringLiteral("session.hud.open: --font-size must be 6...72 points");
+        }
+        if (cmd == QLatin1String("session.hud.update"))
+            a.remove("color"); // fixed at open, ignored on update as master does
+        if (QString e = percent(); !e.isEmpty())
+            return e;
+        if (a.contains("hideAfter") && (a.value("hideAfter").toDouble() < 0 || a.value("hideAfter").toDouble() > 86400))
+            return QStringLiteral("%1: --hide-after must be 0...86400 seconds").arg(cmd);
+        static const QStringList positions{"top-left", "top-center", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom-center", "bottom-right"};
+        QString pos = a.value("position").toString(QStringLiteral("center")).toLower();
+        pos = pos == QLatin1String("top") ? QStringLiteral("top-center") : pos == QLatin1String("bottom") ? QStringLiteral("bottom-center") : pos;
+        if (!positions.contains(pos))
+            return QStringLiteral("invalid position: %1 (%2)").arg(a.value("position").toString(), positions.join(QLatin1Char('|')));
+        a.insert("position", pos);
+        static const QStringList spinners{"bar", "braille", "circle", "blocks", "dot", "none"};
+        if (a.contains("spinner")) {
+            const QString sp = a.value("spinner").isBool() ? (a.value("spinner").toBool() ? QStringLiteral("bar") : QStringLiteral("none")) : a.value("spinner").toString();
+            if (!spinners.contains(sp))
+                return QStringLiteral("invalid spinner: %1 (%2)").arg(sp, spinners.join(QLatin1Char('|')));
+            a.insert("spinner", sp);
+        }
+    }
+    return {};
+}
+
+static QJsonObject tree(Store &store, const Terminals &terminals)
 {
     QJsonArray ws;
     for (const auto &w : store.workspaces) {
         QJsonArray ss;
         bool active = false;
         for (const auto &s : w.sessions) {
-            ss << sessionNode(s, store.selected);
+            ss << merged(sessionNode(s, store.selected), terminals.sessionExtras(s.id));
             active |= s.id == store.selected;
         }
         QJsonObject node = withTint({{"id", w.id}, {"name", w.name}, {"rememberedFolder", w.folder}, {"active", active}, {"sessions", ss}}, w.tint);
@@ -194,7 +304,7 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
     QString error;
 
     if (cmd == QLatin1String("tree")) {
-        QJsonObject t = tree(store);
+        QJsonObject t = tree(store, terminals);
         const QJsonObject w = terminals.chromeState();
         for (auto it = w.begin(); it != w.end(); ++it)
             t.insert(it.key(), it.value());
@@ -307,6 +417,22 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         return ok({{"id", id}});
     }
 
+    if (cmd.startsWith(QLatin1String("session.overlay.")) || cmd.startsWith(QLatin1String("session.hud."))) {
+        const QString id = store.resolveSession(target, &error);
+        if (id.isEmpty())
+            return fail(error);
+        QJsonObject a = args;
+        if (error = overlayArgsError(cmd, &a); !error.isEmpty())
+            return fail(error);
+        if (a.value("pane").toString() == QLatin1String("right") && !store.session(id)->hasSplit)
+            return fail(QStringLiteral("session has no split"));
+        QJsonObject result{{"id", id}};
+        if (!terminals.appCommand(cmd, id, a, &result, &error))
+            return fail(error);
+        if (a.value("follow").toBool())
+            store.select(id);
+        return ok(result);
+    }
     if (cmd.startsWith(QLatin1String("session."))) {
         const QString id = store.resolveSession(target, &error);
         if (id.isEmpty())
@@ -386,7 +512,7 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             }
             return ok({{"id", id}, {"text", text}});
         } else if (cmd == QLatin1String("session.info")) {
-            QJsonObject node = sessionNode(*store.session(id), store.selected);
+            QJsonObject node = merged(sessionNode(*store.session(id), store.selected), terminals.sessionExtras(id));
             node.insert("workspace", store.workspaceOf(id)->id);
             const QJsonObject live = terminals.info(id);
             for (auto it = live.begin(); it != live.end(); ++it)

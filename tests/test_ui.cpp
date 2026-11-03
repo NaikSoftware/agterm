@@ -16,6 +16,7 @@
 #include <QToolButton>
 #include <QSignalSpy>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QToolBar>
 #include <QTest>
 
@@ -237,6 +238,55 @@ private Q_SLOTS:
         QTRY_COMPARE(store.selected, closing);
         QVERIFY(term); // the shell survived the grace window
         QTRY_COMPARE(QApplication::focusWidget(), term.data());
+    }
+
+    void overlayRunsOverTheSessionAndReportsItsExitStatus()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("overlay.json"));
+        w.restore({});
+        const QString id = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(id);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QWidget *term = display(w);
+        QVERIFY(term);
+        auto run = [&](const QString &cmd, const QJsonObject &args = {}) {
+            QJsonObject result;
+            QString error;
+            const bool ok = w.appCommand(cmd, id, args, &result, &error);
+            return ok ? result : QJsonObject{{"error", error}};
+        };
+        QVERIFY(!run("session.overlay.open", {{"command", "sleep 30; exit 3"}, {"sizePercent", 50}}).contains("error"));
+        QCOMPARE(run("session.overlay.open", {{"command", "true"}})["error"].toString(), QStringLiteral("overlay already open"));
+        QTRY_VERIFY(QApplication::focusWidget() && QApplication::focusWidget() != term); // the cover owns the keyboard
+        QCOMPARE(w.sessionExtras(id)["overlaySizePercent"].toInt(), 50);
+        QCOMPARE(run("session.overlay.result")["error"].toString(), QStringLiteral("overlay still running"));
+        QCOMPARE(run("session.overlay.toggle")["text"].toString(), QStringLiteral("hidden"));
+        QCOMPARE(w.sessionExtras(id)["hiddenOverlays"].toArray().first().toString(), QStringLiteral("session"));
+        QTRY_COMPARE(QApplication::focusWidget(), term);
+        QCOMPARE(w.namedAction("toggle_overlay")->text(), QStringLiteral("Show Overlays"));
+        QVERIFY(!run("session.overlay.close").contains("error"));
+        QVERIFY(!w.sessionExtras(id)["overlay"].toBool());
+
+        QVERIFY(!run("session.overlay.open", {{"command", "exit 3"}}).contains("error"));
+        QTRY_VERIFY_WITH_TIMEOUT(!w.sessionExtras(id)["overlay"].toBool(), 5000);
+        QCOMPARE(run("session.overlay.result")["exitCode"].toInt(), 3);
+        QTRY_COMPARE(QApplication::focusWidget(), term);
+
+        // the HUD takes no input: typing still reaches the terminal under it
+        QVERIFY(!run("session.hud.open", {{"message", "building"}, {"spinner", "dot"}, {"hideAfter", 1}}).contains("error"));
+        QCOMPARE(w.sessionExtras(id)["hud"].toObject()["message"].toString(), QStringLiteral("building"));
+        QCOMPARE(QApplication::focusWidget(), term);
+        QTRY_VERIFY_WITH_TIMEOUT(!w.sessionExtras(id).contains("hud"), 3000); // --hide-after clears it
+        QCOMPARE(run("session.hud.close")["error"].toString(), QStringLiteral("no hud"));
+
+        qputenv("VISUAL", "sleep 1; true"); // Edit Keymap runs the editor in a 95% overlay and closes with it
+        w.namedAction("edit_keymap")->trigger();
+        QCOMPARE(w.sessionExtras(id)["overlaySizePercent"].toInt(), 95);
+        QTRY_VERIFY_WITH_TIMEOUT(!w.sessionExtras(id)["overlay"].toBool(), 5000);
+        qunsetenv("VISUAL");
     }
 
     void selectingASessionUpdatesTheSidebarInPlace()

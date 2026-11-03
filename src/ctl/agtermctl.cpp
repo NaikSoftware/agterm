@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QSet>
+#include <QThread>
 #include <cstdio>
 
 static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--socket PATH] [--json]
@@ -50,7 +51,34 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   hooks reload | list                   re-read hooks.conf; show each hook's live state
   theme list                            Konsole colour schemes (* = current)
   theme set [name]                      no name: back to the Konsole profile's own scheme
+  session overlay open <command> [--cwd DIR] [--wait | --block] [--size-percent N [--width PT] [--height PT]]
+                       [--background-color #rrggbb] [--follow] [--pane left|right]
+                                        a program over the session (full, floating, or one pane); closes when it exits
+  session overlay close | result | text [--lines N] [--pane left|right]
+  session overlay hide | show | toggle [--pane left|right]
+  session overlay resize (--size-percent N [--width PT] [--height PT] | --width PT | --height PT | --full)
+  session hud [open] <message> | --file F [--markdown] [--font-size PT] [--detail T] [--spinner] [--spinner-style S]
+              [--position P] [--background-color #rrggbb] [--text-color #rrggbb] [--size-percent N] [--sticky] [--no-frame]
+              [--hide-after SECONDS] [--pane left|right]      a passive panel; the session stays typable
+  session hud update <message> ...      replaces the whole panel (font size and background stay)
+  session hud close
 )";
+
+static QByteArray roundTrip(const QString &path, const QJsonObject &request, QString *error)
+{
+    QLocalSocket socket;
+    socket.connectToServer(path);
+    if (!socket.waitForConnected(3000))
+        return *error = QStringLiteral("cannot connect to %1: %2 (is agterm-qt running?)").arg(path, socket.errorString()), QByteArray();
+    socket.write(QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n');
+    QByteArray line;
+    while (!line.endsWith('\n') && socket.waitForReadyRead(30000))
+        line += socket.readAll();
+    line += socket.readAll();
+    if (line.trimmed().isEmpty())
+        *error = QStringLiteral("no response from %1").arg(path);
+    return line.trimmed().isEmpty() ? QByteArray() : line;
+}
 
 static int die(const QString &message)
 {
@@ -61,7 +89,8 @@ static int die(const QString &message)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
-    const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "undoable", "companion"};
+    const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "undoable", "companion",
+                            "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner"};
     QStringList pos;
     QHash<QString, QString> opt;
     const QStringList in = app.arguments().mid(1);
@@ -90,6 +119,10 @@ int main(int argc, char **argv)
         cmd = QStringLiteral("filepanel.width"), pos.removeFirst();
     if (cmd == QLatin1String("session.duplicate") && opt.contains(QStringLiteral("companion")))
         cmd = QStringLiteral("session.companion.duplicate");
+    if (cmd == QLatin1String("session.overlay") && !pos.isEmpty())
+        cmd += QLatin1Char('.') + pos.takeFirst();
+    if (cmd == QLatin1String("session.hud"))
+        cmd += QStringList{"open", "update", "close"}.contains(pos.value(0)) ? QLatin1Char('.') + pos.takeFirst() : QStringLiteral(".open");
     if (cmd == QLatin1String("session.split") && pos.value(0) == QLatin1String("close"))
         cmd = QStringLiteral("session.split.close"), pos.removeFirst();
     const QString arg = pos.value(0);
@@ -151,6 +184,44 @@ int main(int argc, char **argv)
     } else if (opt.contains(QStringLiteral("tint-on"))) {
         args.insert("tintOn", QJsonArray()); // the app refuses a placement without a colour
     }
+    if (cmd.startsWith(QLatin1String("session.overlay.")) || cmd.startsWith(QLatin1String("session.hud."))) {
+        copy("background-color", "color");
+        copy("text-color", "textColor");
+        copy("detail", "detail");
+        copy("position", "position");
+        copy("spinner-style", "spinner");
+        copy("html", "html");
+        copy("url", "url");
+        flag("wait", "wait");
+        flag("follow", "follow");
+        flag("full", "full");
+        flag("markdown", "markdown");
+        flag("sticky", "sticky");
+        if (opt.contains(QStringLiteral("spinner")) && !args.contains("spinner"))
+            args.insert("spinner", true);
+        if (opt.contains(QStringLiteral("no-frame")))
+            args.insert("frame", false);
+        for (const auto &[from, to] : {std::pair{"size-percent", "sizePercent"}})
+            if (opt.contains(QLatin1String(from)))
+                args.insert(QLatin1String(to), opt.value(QLatin1String(from)).toInt());
+        for (const auto &[from, to] : {std::pair{"width", "width"}, {"height", "height"}, {"hide-after", "hideAfter"}, {"font-size", "fontSize"}})
+            if (opt.contains(QLatin1String(from)))
+                args.insert(QLatin1String(to), opt.value(QLatin1String(from)).toDouble());
+        if (cmd == QLatin1String("session.overlay.open") && !arg.isEmpty())
+            args.insert("command", arg);
+        if (cmd == QLatin1String("session.hud.open") || cmd == QLatin1String("session.hud.update")) {
+            if (opt.contains(QStringLiteral("file"))) {
+                QFile f(opt.value(QStringLiteral("file")));
+                if (!f.open(QIODevice::ReadOnly))
+                    return die(QStringLiteral("cannot read %1").arg(f.fileName()));
+                args.insert("message", QString::fromUtf8(f.readAll()).trimmed());
+            } else {
+                args.insert("message", arg);
+            }
+        }
+        if (opt.contains(QStringLiteral("block")) && opt.contains(QStringLiteral("wait")))
+            return die(QStringLiteral("--block is mutually exclusive with --wait"));
+    }
     if (cmd == QLatin1String("session.type")) {
         if (opt.contains(QStringLiteral("stdin"))) {
             QFile f;
@@ -171,17 +242,10 @@ int main(int argc, char **argv)
         request.insert("target", target);
 
     const QString path = opt.value(QStringLiteral("socket"), socketPath());
-    QLocalSocket socket;
-    socket.connectToServer(path);
-    if (!socket.waitForConnected(3000))
-        return die(QStringLiteral("cannot connect to %1: %2 (is agterm-qt running?)").arg(path, socket.errorString()));
-    socket.write(QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n');
-    QByteArray line;
-    while (!line.endsWith('\n') && socket.waitForReadyRead(30000))
-        line += socket.readAll();
-    line += socket.readAll();
-    if (line.trimmed().isEmpty())
-        return die(QStringLiteral("no response from %1").arg(path));
+    QString error;
+    const QByteArray line = roundTrip(path, request, &error);
+    if (line.isEmpty())
+        return die(error);
 
     if (opt.contains(QStringLiteral("json")))
         return fputs(line.constData(), stdout), 0;
@@ -189,6 +253,23 @@ int main(int argc, char **argv)
     if (!response.value("ok").toBool())
         return die(response.value("error").toString());
     const QJsonObject result = response.value("result").toObject();
+    if (cmd == QLatin1String("session.overlay.open") && opt.contains(QStringLiteral("block"))) {
+        // exits with the program's status, printing none of its output
+        QJsonObject pollArgs;
+        if (args.contains("pane"))
+            pollArgs.insert("pane", args.value("pane"));
+        const QJsonObject poll{{"cmd", "session.overlay.result"}, {"target", result["id"].toString()}, {"args", pollArgs}};
+        for (;;) {
+            const QJsonObject r = QJsonDocument::fromJson(roundTrip(path, poll, &error)).object();
+            if (r.value("ok").toBool())
+                return r["result"]["exitCode"].toInt();
+            if (r.value("error").toString() != QLatin1String("overlay still running"))
+                return die(r.value("error").toString(error));
+            QThread::msleep(200);
+        }
+    }
+    if (result.contains("exitCode"))
+        return printf("%d\n", result["exitCode"].toInt()), 0;
 
     if (result.contains("tree")) {
         for (const auto &wv : result["tree"]["workspaces"].toArray()) {

@@ -242,6 +242,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     connect(&m_store, &Store::sessionAdded, this, &MainWindow::createTerminal);
     connect(&m_store, &Store::sessionRemoved, this, [this](const QString &id) {
         m_sessions.remove(id);
+        forgetOverlays(id);
         // taken first, so the parts dying with their view are not mistaken for shells that exited
         if (Panes p = m_panes.take(id); p.view)
             p.view->deleteLater(); // closes the ptys, which hangs up the shells
@@ -292,14 +293,6 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         m_store.select(last);
     });
     connect(&m_store, &Store::settingsChanged, this, &MainWindow::applySettings);
-    connect(&m_store, &Store::sessionRemoved, this, [this](const QString &id) {
-        // the editor File > Edit Keymap/Hooks opened has quit: apply what it saved
-        const QString file = m_editing.take(id);
-        if (file.endsWith(QLatin1String("keymap.conf")))
-            reloadKeymap();
-        else if (!file.isEmpty())
-            reloadHooks();
-    });
     connect(&m_store, &Store::statusChanged, this, [this](const QString &, const QString &status) {
         if (status == QLatin1String("blocked"))
             playSound(m_store.settings.blockedStatusSoundName);
@@ -416,6 +409,8 @@ void MainWindow::createMenus()
     }));
     view->addAction(action(QStringLiteral("toggle_menubar"), tr("Show Menu Bar"), QStringLiteral("show-menu"), QKeySequence(QStringLiteral("Ctrl+Shift+M")),
                            [this] { menuBar()->setVisible(!menuBar()->isVisible()); }));
+    view->addAction(action(QStringLiteral("toggle_overlay"), tr("Hide Overlays"), {}, QKeySequence(QStringLiteral("Ctrl+Alt+Shift+J")),
+                           [this] { toggleOverlays(); }));
     view->addSeparator();
     view->addAction(action(QStringLiteral("toggle_split"), tr("Split"), {}, QKeySequence(QStringLiteral("Ctrl+Shift+D")),
                            [this] { m_store.toggleSplit(m_store.selected, QStringLiteral("vertical")); }));
@@ -572,7 +567,8 @@ void MainWindow::restore(const QJsonObject &window)
     showSelected();
 }
 
-KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pane, const QString &cwd, const QString &command, QWidget *parent)
+KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pane, const QString &cwd, const QString &command, QWidget *parent,
+                                            const QStringList &env)
 {
     auto result = KParts::PartLoader::instantiatePart<KParts::ReadOnlyPart>(KPluginMetaData(QStringLiteral("kf6/parts/konsolepart")), parent, this);
     if (!result) {
@@ -609,8 +605,8 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
                      QStringLiteral("AGTERM_PANE=") + pane,
                      QStringLiteral("AGTERM_SOCKET=") + socketPath(),
                      QStringLiteral("AGTERMCTL=") + appDir + QStringLiteral("/agtermctl"),
-                     QStringLiteral("PATH=") + appDir + QLatin1Char(':') + qEnvironmentVariable("PATH"),
-                     shell};
+                     QStringLiteral("PATH=") + appDir + QLatin1Char(':') + qEnvironmentVariable("PATH")};
+    argv << env << shell;
     if (!command.isEmpty())
         argv << QStringLiteral("-c") << command;
     qobject_cast<TerminalInterface *>(part)->startProgram(argv.first(), argv);
@@ -702,8 +698,9 @@ void MainWindow::applyLayout(const QString &id)
         p.split->setSizes({int(total * s->splitRatio), total - int(total * s->splitRatio)});
     }
     p.layers->setCurrentWidget(p.split);
-    if (KParts::ReadOnlyPart *target = p.main; target && id == m_store.selected && isActiveWindow())
+    if (KParts::ReadOnlyPart *target = coverPart(id); target && id == m_store.selected && isActiveWindow())
         target->widget()->setFocus();
+    layoutOverlays(id);
 }
 
 void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
@@ -967,7 +964,7 @@ void MainWindow::showSelected()
     m_stack->setCurrentWidget(p.view ? p.view : m_empty);
     // focus moves only with the selection, so a status repaint never pulls it out of the split pane
     if (p.view && m_shownId != m_store.selected && isActiveWindow() && !m_tree->editing()) {
-        KParts::ReadOnlyPart *front = p.main;
+        KParts::ReadOnlyPart *front = coverPart(m_store.selected);
         if (front)
             front->widget()->setFocus();
     }
@@ -1198,6 +1195,10 @@ void MainWindow::syncChrome()
     m_actions.value(QStringLiteral("clear_focus"))->setEnabled(!m_store.focused.isEmpty());
     m_actions.value(QStringLiteral("undo_close"))->setEnabled(!m_store.pending.isEmpty());
     m_recentAction->setEnabled(!m_store.recentOthers().isEmpty());
+    bool shown = false;
+    QAction *overlays = m_actions.value(QStringLiteral("toggle_overlay"));
+    overlays->setEnabled(hasHideableOverlay(m_store.selected, &shown));
+    overlays->setText(overlays->isEnabled() && !shown ? tr("Show Overlays") : tr("Hide Overlays"));
 }
 
 void MainWindow::fillTintMenu(QMenu *menu, const QStringList &ids)
@@ -1381,6 +1382,8 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         }
         return true;
     }
+    if (event->type() == QEvent::Resize && watched->property("agtermOverlayHost").isValid())
+        layoutOverlays(watched->property("agtermOverlayHost").toString());
     if (event->type() == QEvent::KeyPress && !m_quitting) {
         auto *w = qobject_cast<QWidget *>(watched);
         auto *key = static_cast<QKeyEvent *>(event);

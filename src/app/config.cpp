@@ -25,6 +25,7 @@
 #include <QJsonArray>
 #include <QMenuBar>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QSplitter>
 #include <QStandardPaths>
 #include <QStatusBar>
@@ -104,18 +105,20 @@ int MainWindow::reloadHooks()
 
 void MainWindow::editConfigFile(const QString &path)
 {
-    // master opens $VISUAL/$EDITOR in a 95% overlay and reloads on quit; without overlays it runs in a companion
+    // $VISUAL/$EDITOR in a 95% overlay; the file reloads when the editor quits
     QDir().mkpath(QFileInfo(path).path());
     writeIfMissing(path, path.endsWith(QLatin1String("keymap.conf")) ? starterKeymap(m_defaultKeys) : starterHooks());
     QString quoted = path;
     quoted.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
     // resolved here: the pane's shell may be fish, which has no ${VAR:-default}
     const QString editor = qEnvironmentVariable("VISUAL", qEnvironmentVariable("EDITOR", QStringLiteral("vi")));
-    const QString command = QStringLiteral("exec %1 '%2'").arg(editor, quoted);
-    const QString id = m_store.session(m_store.selected) ? m_store.addCompanion(m_store.selected, QFileInfo(path).fileName(), QFileInfo(path).path(), command)
-                                                         : m_store.addSession(currentWorkspace(), QFileInfo(path).fileName(), QFileInfo(path).path(), command);
-    m_editing.insert(id, path);
-    m_store.select(id);
+    const QString command = QStringLiteral("%1 '%2'").arg(editor, quoted);
+    if (!m_store.session(m_store.selected))
+        newSession(currentWorkspace());
+    QString error;
+    const bool keymap = path.endsWith(QLatin1String("keymap.conf"));
+    if (!openOverlay(m_store.selected, {}, command, QFileInfo(path).path(), 95, 0, 0, {}, false, [this, keymap] { keymap ? reloadKeymap() : reloadHooks(); }, &error))
+        QApplication::beep(), statusBar()->showMessage(error, 3000);
 }
 
 QList<KParts::ReadOnlyPart *> MainWindow::parts() const
@@ -306,17 +309,37 @@ void MainWindow::runCustomCommand(const QString &name, const QString &sessionId)
     if (QFileInfo(ctx.value(QStringLiteral("AGT_SESSION_PWD"))).isDir())
         proc->setWorkingDirectory(ctx.value(QStringLiteral("AGT_SESSION_PWD")));
     const bool hud = c->errorHud;
-    connect(proc, &QProcess::finished, this, [this, proc, name, hud](int code, QProcess::ExitStatus status) {
+    // --error-hud: a failure panel on the session (10 s), with the last stderr line as its detail
+    auto failurePanel = [this, sessionId, name, position = c->errorPosition, pane = c->errorPane](const QString &what, const QString &detail) {
+        QString clean = detail;
+        clean.remove(QRegularExpression(QStringLiteral("\x1b\\[[0-9;?]*[A-Za-z]|[\\x00-\\x1f\\x7f]")));
+        QJsonObject spec{{"message", QStringLiteral("%1: %2").arg(name, what).left(256)}, {"position", position}, {"hideAfter", 10}};
+        if (!clean.isEmpty())
+            spec.insert("detail", clean.left(256));
+        const Session *s = m_store.session(sessionId);
+        if (pane == QLatin1String("right") && s && s->splitVisible)
+            spec.insert("pane", pane); // a missing or hidden pane falls back to the whole session
+        QString error;
+        if (s && !openHud(sessionId, spec, &error))
+            qWarning("error hud for %s refused: %s", qPrintable(name), qPrintable(error)); // a program overlay keeps its slot
+    };
+    connect(proc, &QProcess::finished, this, [this, proc, name, hud, failurePanel](int code, QProcess::ExitStatus status) {
         if (code != 0 || status == QProcess::CrashExit) {
-            // no HUD here yet: --error-hud puts the command's stderr in the notification instead
-            const QString err = hud ? QString::fromUtf8(proc->readAllStandardError()).trimmed().right(400) : QString();
-            notifyFailure(tr("%1 failed").arg(name), (status == QProcess::CrashExit ? tr("killed by a signal") : tr("exit status %1").arg(code))
-                                                         + (err.isEmpty() ? QString() : QStringLiteral("\n") + err));
+            const QString what = status == QProcess::CrashExit ? tr("killed by a signal") : tr("exit %1").arg(code);
+            QString last;
+            if (hud) {
+                const QStringList lines = QString::fromUtf8(proc->readAllStandardError().right(16384)).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+                last = lines.isEmpty() ? QString() : lines.last().trimmed();
+                failurePanel(what, last);
+            }
+            notifyFailure(tr("%1 failed").arg(name), what + (last.isEmpty() ? QString() : QStringLiteral("\n") + last));
         }
         proc->deleteLater();
     });
-    connect(proc, &QProcess::errorOccurred, this, [this, proc, name](QProcess::ProcessError e) {
+    connect(proc, &QProcess::errorOccurred, this, [this, proc, name, hud, failurePanel](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart) {
+            if (hud)
+                failurePanel(proc->errorString(), {});
             notifyFailure(tr("%1 failed").arg(name), proc->errorString());
             proc->deleteLater();
         }
@@ -418,6 +441,8 @@ void MainWindow::applySettings()
 
 bool MainWindow::appCommand(const QString &cmd, const QString &sessionId, const QJsonObject &args, QJsonObject *result, QString *error)
 {
+    if (cmd.startsWith(QLatin1String("session.overlay.")) || cmd.startsWith(QLatin1String("session.hud.")))
+        return overlayCommand(cmd, sessionId, args, result, error);
     auto diagnostics = [](const QList<KeymapDiagnostic> &list) {
         QJsonArray out;
         for (const auto &d : list)

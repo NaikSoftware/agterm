@@ -74,13 +74,21 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   title-bar elements, session info line, multiple-window sidebar, attention indicator, crossing windows, keyboard-layout lock
 - [x] Theme picker with live preview (Konsole colour schemes applied per session at runtime, no profile file written; `theme list|set`)
 - [x] keymap.conf: built-in rebinding, alternatives, leader sequences, `command "Name" chord shell…`, AGT_* tokens and env, diagnostics,
-  File ▸ Edit/Reload Keymap (the editor runs in a companion until overlays exist), `keymap reload|list|run`.
-  `--repeat` is accepted with a diagnostic and not honoured yet; `--error-hud` adds stderr to the failure notification (no HUD yet);
+  File ▸ Edit/Reload Keymap (the editor runs in a 95% overlay and the file reloads when it quits), `keymap reload|list|run`.
+  `--repeat` is accepted with a diagnostic and not honoured yet; `--error-hud` opens a 10 s failure HUD with the last stderr line;
   `global-hotkey` is refused (it summons the removed quick terminal)
 - [x] Hooks (`hooks.conf`, File ▸ Edit/Reload Hooks, `hooks reload|list`): status, notify, session.created/closed/selected,
   tree.changed, pane.split, app.launched fire; pane.scratch, pane.focused, remote.* and message parse but never fire
 - [ ] Page bridge
-- [ ] Overlays (program, HTML/URL page, HUD), dashboard
+- [x] Program overlays: `session overlay open|close|result|text|hide|show|toggle|resize` (full, `--size-percent`,
+  `--width/--height`, `--pane left|right`, `--wait`, `--follow`, CLI `--block`), View ▸ Hide/Show Overlays Ctrl+Alt+Shift+J;
+  read-back `overlay`, `overlaySizePercent`, `overlayWidth/Height`, `paneOverlays`, `hiddenOverlays`.
+  `--background-color` tints the floating frame only (Konsole takes colours from the profile); `overlay copy` is not ported
+- [ ] Page overlays (`--html`, `--url`, `--image`, `--markdown`, `--text`): blocked, they need Qt WebEngine (`qt6-webengine-dev`),
+  which is not installed; the command refuses them with that reason
+- [x] HUD: `session hud open|update|close` (markdown, detail, spinner styles, nine positions, colours, font size, width percent,
+  sticky, no-frame, `--hide-after`, `--pane`), passive (no focus, clicks pass through), read-back `hud`; control-only as in master.
+  Not ported: ⌘-click on a HUD link
 - [ ] Restore modes (fresh / re-run commands / live sessions)
 - [ ] Control API breadth: every command in `site/commands.html`
 - [ ] Agent skill + hook installers for Claude/Codex/OpenCode/Pi

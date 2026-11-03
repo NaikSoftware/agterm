@@ -45,6 +45,10 @@ cmake --install build && kbuildsycoca6 --noincremental
   shell commands with `{AGT_*}` tokens (Ctrl+Alt+O lists them), and run scripts on control events. Both files start
   as commented references; File ▸ Edit Keymap… / Reload Keymap and the Hooks pair apply them.
 - Programs in a pane can raise notifications with OSC 9 or OSC 777 (`printf '\e]9;done\a'`).
+- Overlays: `agtermctl session overlay open <command>` runs a program in a temporary terminal over a session (full,
+  floating with `--size-percent`, or one split pane with `--pane`); it closes when the program exits and
+  `overlay result` (or `--block`) returns the status. Ctrl+Alt+Shift+J hides and shows them. `session hud` puts a
+  passive message panel over a session that stays typable; keymap `--error-hud` commands report failures in one.
 
 ## Keys
 
@@ -70,6 +74,7 @@ ctrl+alt+shift), next to plain `ctrl`, `shift`, `alt` and `super`.
 | Ctrl+P / Ctrl+Shift+P / Ctrl+Tab | Session palette / action palette / recent sessions |
 | Ctrl+Alt+O | Custom-commands palette (agterm's ⌃⇧O; Ctrl+Shift+O is Open Directory here) |
 | Ctrl+Alt+Shift+F | Flag session |
+| Ctrl+Alt+Shift+J | Hide / show overlays |
 
 ## Agent status
 

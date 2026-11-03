@@ -41,6 +41,11 @@ public:
     QStringList availableLaunchers() const { return m_launchers; }
     bool filePanel(const QString &mode, int width, QString *error) override;
     QJsonObject chromeState() const override;
+    QJsonObject sessionExtras(const QString &sessionId) const override;
+    // overlay.cpp: a program in a temporary terminal over the session (pane "") or one pane, and the HUD
+    bool openOverlay(const QString &id, const QString &pane, const QString &command, const QString &cwd, int sizePercent, double width,
+                     double height, const QString &color, bool wait, std::function<void()> onClose, QString *error);
+    bool openHud(const QString &id, const QJsonObject &spec, QString *error);
     bool panePlan(const QString &sessionId, const QString &pane, PanePlan *out, QString *error) override;
     bool font(const QString &sessionId, const QString &pane, const QString &op, QString *error) override;
     bool appCommand(const QString &cmd, const QString &sessionId, const QJsonObject &args, QJsonObject *result, QString *error) override;
@@ -70,7 +75,31 @@ private:
     QAction *action(const QString &name, const QString &text, const QString &icon, const QKeySequence &key, std::function<void()> slot);
     void createMenus();
     void createTerminal(const QString &id);
-    KParts::ReadOnlyPart *spawnPart(const QString &id, const QString &pane, const QString &cwd, const QString &command, QWidget *parent);
+    KParts::ReadOnlyPart *spawnPart(const QString &id, const QString &pane, const QString &cwd, const QString &command, QWidget *parent,
+                                    const QStringList &env = {});
+    struct Overlay {
+        QPointer<QWidget> frame;
+        KParts::ReadOnlyPart *part = nullptr;
+        QString command, codeFile;
+        int sizePercent = 0; // 0 = full
+        double width = 0, height = 0; // points overriding the percent per axis
+        bool hidden = false;
+        std::function<void()> onClose;
+    };
+    QHash<QString, Overlay> m_overlays;   // "<session>|session|left|right" -> the running cover
+    QHash<QString, int> m_overlayResults; // same key -> the exit status of the last program that closed there
+    QHash<QString, QPointer<QWidget>> m_huds;
+    bool overlayCommand(const QString &cmd, const QString &id, const QJsonObject &args, QJsonObject *result, QString *error);
+    void overlayExited(const QString &key, KParts::ReadOnlyPart *part);
+    void closeOverlay(const QString &key);
+    bool closeHud(const QString &id);
+    void layoutOverlays(const QString &id);
+    void forgetOverlays(const QString &id);
+    void toggleOverlays();
+    bool hasHideableOverlay(const QString &id, bool *anyShown) const;
+    QWidget *paneWidget(const QString &id, const QString &pane) const;
+    QRect overlayTarget(const QString &id, const QString &pane) const;
+    KParts::ReadOnlyPart *coverPart(const QString &id) const;
     void applyLayout(const QString &id);
     void paneExited(const QString &id, KParts::ReadOnlyPart *part);
     void swapPanes(const QString &id);
@@ -110,7 +139,6 @@ private:
     class EventSource *m_events;
     mutable QList<QKeyCombination> m_chordPrefix; // a leader sequence in progress
     QString m_previewTheme, m_appliedAppearance;
-    QHash<QString, QString> m_editing; // session id -> the config file its editor has open
     QLabel *m_workspaceLabel;
     QHash<QString, QAction *> m_chrome; // interface element -> its title-strip action
     QHash<QString, QWidget *> m_footer; // interface element -> its footer button

@@ -20,6 +20,15 @@ public:
     bool type(const QString &, const QString &text, QString *) override { return typed += text, true; }
     QString text(const QString &, QString *) override { return screen; }
     QJsonObject info(const QString &) override { return {{"pid", 42}}; }
+    QString appCmd;
+    QJsonObject appArgs;
+    bool appCommand(const QString &cmd, const QString &, const QJsonObject &args, QJsonObject *, QString *) override
+    {
+        appCmd = cmd;
+        appArgs = args;
+        return true;
+    }
+    QJsonObject sessionExtras(const QString &) const override { return {{"overlay", true}}; }
     QString refuse; // the pane panePlan refuses
     bool panePlan(const QString &, const QString &pane, PanePlan *out, QString *error) override
     {
@@ -556,6 +565,41 @@ private Q_SLOTS:
         QCOMPARE(copy->splitCommand, QStringLiteral("exec 'top'"));
         QCOMPARE(layout.count(), 1);
         QCOMPARE(s.selected, src);
+    }
+
+    void overlayAndHudArgumentsFollowMaster()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString id = call(s, t, "session.new")["result"]["id"].toString();
+        auto error = [&](const QString &cmd, const QJsonObject &args) { return call(s, t, cmd, id, args)["error"].toString(); };
+        QCOMPARE(error("session.overlay.open", {}), QStringLiteral("session.overlay.open requires a command"));
+        QCOMPARE(error("session.overlay.open", {{"command", "top"}, {"sizePercent", 0}}), QStringLiteral("session.overlay.open: --size-percent must be 1...100"));
+        QCOMPARE(error("session.overlay.open", {{"command", "top"}, {"sizePercent", 50}, {"pane", "left"}}),
+                 QStringLiteral("session.overlay.open: --pane is mutually exclusive with --size-percent"));
+        QCOMPARE(error("session.overlay.open", {{"command", "top"}, {"color", "red"}}), QStringLiteral("invalid color: red (#rrggbb)"));
+        QVERIFY(error("session.overlay.open", {{"html", "x.html"}}).contains("qt6-webengine-dev"));
+        QCOMPARE(error("session.overlay.open", {{"command", "top"}, {"pane", "right"}}), QStringLiteral("session has no split"));
+        QCOMPARE(error("session.overlay.resize", {}), QStringLiteral("session.overlay.resize requires --size-percent, --width/--height or --full"));
+        QCOMPARE(error("session.overlay.resize", {{"full", true}, {"sizePercent", 40}}),
+                 QStringLiteral("session.overlay.resize: --full is mutually exclusive with --size-percent"));
+        QCOMPARE(error("session.hud.open", {}), QStringLiteral("session.hud.open requires a message"));
+        QCOMPARE(error("session.hud.open", {{"message", "a\nb"}}), QStringLiteral("hud text must not contain control characters"));
+        QCOMPARE(error("session.hud.open", {{"message", QString(257, 'x')}}), QStringLiteral("hud message too long (max 256 characters)"));
+        QCOMPARE(error("session.hud.open", {{"message", "m"}, {"fontSize", 5}}), QStringLiteral("session.hud.open: --font-size must be 6...72 points"));
+        QCOMPARE(error("session.hud.update", {{"message", "m"}, {"fontSize", 12}}),
+                 QStringLiteral("session.hud.update: --font-size is fixed at open; reopen the hud to change it"));
+        QCOMPARE(error("session.hud.open", {{"message", "m"}, {"hideAfter", 90000}}), QStringLiteral("session.hud.open: --hide-after must be 0...86400 seconds"));
+        QVERIFY(error("session.hud.open", {{"message", "m"}, {"position", "middle"}}).startsWith("invalid position: middle"));
+        QVERIFY(error("session.hud.open", {{"message", "m"}, {"spinner", "wheel"}}).startsWith("invalid spinner: wheel"));
+
+        QVERIFY(call(s, t, "session.hud.open", id, {{"message", "a\nb"}, {"markdown", true}, {"position", "top"}, {"spinner", true}, {"pane", "primary"}})["ok"].toBool());
+        QCOMPARE(t.appCmd, QStringLiteral("session.hud.open"));
+        QCOMPARE(t.appArgs["position"].toString(), QStringLiteral("top-center"));
+        QCOMPARE(t.appArgs["spinner"].toString(), QStringLiteral("bar"));
+        QCOMPARE(t.appArgs["pane"].toString(), QStringLiteral("left"));
+        QVERIFY(call(s, t, "session.overlay.open", id, {{"command", "top"}, {"follow", true}})["ok"].toBool());
+        QVERIFY(call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0]["overlay"].toBool()); // the app's read-back joins the node
     }
 
     void treeAndUnknownCommand()

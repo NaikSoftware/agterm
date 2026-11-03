@@ -27,6 +27,11 @@ public:
         return false;
     }
     virtual QJsonObject chromeState() const { return {}; } // chrome read-back merged into `tree`
+    virtual QJsonObject sessionExtras(const QString &sessionId) const // overlay/HUD read-back merged into each session node
+    {
+        Q_UNUSED(sessionId);
+        return {};
+    }
     // op inc | dec | reset on pane main | right; records the resulting size on the session
     virtual bool font(const QString &sessionId, const QString &pane, const QString &op, QString *error)
     {
@@ -59,6 +64,10 @@ public:
 // A companion copying the session's split layout and each pane's program; plans every pane before creating
 // anything, so one refused pane leaves the tree as it was. "" with *error set on refusal.
 QString duplicateAsCompanion(Store &store, Terminals &terminals, const QString &id, QString *error);
+
+// session.overlay.* / session.hud.*: master's argument rules; canonicalizes pane (left|right) and position in place.
+// "" when valid.
+QString overlayArgsError(const QString &cmd, QJsonObject *args);
 
 // One request object ({cmd, target, args}) in, one response ({ok, result | error}) out.
 QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &request);
