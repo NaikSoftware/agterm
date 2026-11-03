@@ -68,6 +68,28 @@ private Q_SLOTS:
         QTRY_COMPARE(QApplication::focusWidget(), term.data());
     }
 
+    void selectingASessionUpdatesTheSidebarInPlace()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("inplace.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, {}, {}), b = store.addSession(ws, {}, {});
+        store.select(a);
+        w.show();
+        auto *tree = w.findChild<Sidebar *>();
+        QTreeWidgetItem *wsItem = tree->topLevelItem(0), *rowA = wsItem->child(0), *rowB = wsItem->child(1);
+        store.select(b);
+        store.setStatus(a, "blocked");
+        QCOMPARE(tree->topLevelItem(0), wsItem);
+        QCOMPARE(wsItem->child(0), rowA);
+        QCOMPARE(wsItem->child(1), rowB);
+        QVERIFY(rowB->isSelected() && !rowA->isSelected());
+        QCOMPARE(rowA->data(0, SidebarRole::Status).toString(), QStringLiteral("blocked"));
+        store.addSession(ws, {}, {}); // a new row is a structural change
+        QCOMPARE(tree->topLevelItem(0)->childCount(), 3);
+    }
+
     void footerFilterNarrowsTheTreeAndTintReachesTheRow()
     {
         Store store;

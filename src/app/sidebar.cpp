@@ -342,6 +342,7 @@ Sidebar::Sidebar(Store &store, QWidget *parent)
     setContextMenuPolicy(Qt::CustomContextMenu);
     setFocusPolicy(Qt::NoFocus); // the keyboard stays in the terminal
     setVerticalScrollMode(ScrollPerPixel);
+    setAnimated(false); // a style (Breeze) may animate expansion, which a rebuild would replay
     setDragEnabled(true);
     setAcceptDrops(true);
     setDropIndicatorShown(false);
@@ -399,6 +400,27 @@ QStringList Sidebar::selectedSessionIds() const
     return ids;
 }
 
+QStringList Sidebar::structure() const
+{
+    // the rows and their order; anything else about a row is updated in place
+    QStringList rows{m_store.flaggedView ? QStringLiteral("flagged") : QStringLiteral("tree")};
+    for (const auto &w : m_store.workspaces) {
+        if (m_store.flaggedView) {
+            for (const auto &s : w.sessions)
+                if (s.flagged)
+                    rows << s.id;
+            continue;
+        }
+        if (m_store.focusEnabled && !m_store.focused.contains(w.id))
+            continue;
+        rows << QLatin1Char('w') + w.id;
+        for (const auto &s : w.sessions)
+            if (s.parentId.isEmpty() || !m_collapsed.contains(s.parentId)) // a folded companion has no row
+                rows << s.id;
+    }
+    return rows;
+}
+
 void Sidebar::rebuild()
 {
     if (state() == EditingState)
@@ -409,7 +431,16 @@ void Sidebar::rebuild()
     QStringList keepSelected = selectedSessionIds();
     if (!keepSelected.contains(m_store.selected))
         keepSelected.clear();
-    clear();
+    // recreating the items on every change (a selection, a status) flickers and replays the expand animation
+    const QStringList rows = structure();
+    const bool reuse = rows == m_structure;
+    m_structure = rows;
+    if (!reuse) {
+        setUpdatesEnabled(false);
+        clear();
+    }
+    int top = 0;
+    auto topItem = [&] { return reuse ? topLevelItem(top++) : new QTreeWidgetItem(this); };
     bool blinking = false;
     auto sessionItem = [&](QTreeWidgetItem *item, const ::Session &s) {
         item->setText(0, s.displayName());
@@ -433,12 +464,14 @@ void Sidebar::rebuild()
         if (m_store.flaggedView) {
             for (const auto &s : w.sessions)
                 if (s.flagged)
-                    sessionItem(new QTreeWidgetItem(this), s);
+                    sessionItem(topItem(), s);
             continue;
         }
         if (m_store.focusEnabled && !m_store.focused.contains(w.id))
             continue;
-        auto *wi = new QTreeWidgetItem(this, {w.name});
+        QTreeWidgetItem *wi = topItem();
+        int child = 0;
+        wi->setText(0, w.name);
         wi->setData(0, Focused, m_store.focused.contains(w.id));
         wi->setData(0, Id, w.id);
         wi->setData(0, Kind, WorkspaceRow);
@@ -449,7 +482,7 @@ void Sidebar::rebuild()
         for (const auto &s : w.sessions) {
             if (!s.parentId.isEmpty() && m_collapsed.contains(s.parentId))
                 continue; // folded under its parent
-            auto *item = new QTreeWidgetItem(wi);
+            QTreeWidgetItem *item = reuse ? wi->child(child++) : new QTreeWidgetItem(wi);
             sessionItem(item, s);
             item->setData(0, Companion, !s.parentId.isEmpty());
             bool hasCompanions = false, attention = false;
@@ -465,7 +498,11 @@ void Sidebar::rebuild()
         wi->setExpanded(!m_collapsed.contains(w.id) || m_store.isSoleFocus(w.id)); // a zoomed-to workspace is always open
         wi->setData(0, Expanded, wi->isExpanded());
     }
-    verticalScrollBar()->setValue(scroll);
+    if (!reuse) {
+        verticalScrollBar()->setValue(scroll);
+        setUpdatesEnabled(true);
+    }
+    viewport()->update();
     blinking ? m_blinkTimer.start() : (m_blinkTimer.stop(), m_blinkAlpha = 255, void());
     m_rebuilding = false;
 }

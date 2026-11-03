@@ -79,6 +79,8 @@ private:
         QRect line;
     };
     Drop dropTarget(const QPoint &pos, bool workspaceDrag) const;
+    QStringList structure() const;
+    QStringList m_structure; // what the items were built from; an equal one is updated in place
     QRect m_dropLine;
     Store &m_store;
     bool m_rebuilding = false;
