@@ -17,17 +17,18 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Settings: new session directory (home / workspace folder / custom), placement (end / after current)
 - [x] Session name: pinned rename, else the title a running program (agent) set, else "New session" (owner's default; shell prompt titles ignored); inline rename on double-click
 - [x] Sidebar footer: new session, new workspace, flagged view (flat list)
-- [ ] Sidebar footer: workspace filter (phase 3)
+- [x] Sidebar footer: workspace filter
 - [x] Session context menu: Clear Status, Rename, Copy Name, Duplicate Session, Move to ▸, Flag, Close Session (batch over a multi-selection)
 - [x] Session context menu: New Companion
 - [x] Workspace context menu: New Session, Rename, Copy Name, Flag All Sessions, Delete Workspace
-- [ ] Workspace context menu: Focus (phase 3)
+- [x] Workspace context menu: Focus/Unfocus, Add to/Remove from Focus, Tint
+- [x] Session context menu: Tint (None, seven colours, Show On icon/name; batch), palette Tint Session items, `session|workspace tint`, `--tint` on new
 - [x] Drag to reorder sessions and workspaces; drag a session to another workspace; multi-select
 - [x] Drop folders from the file manager onto the tree to open sessions there
 - [x] Strip agent spinner glyphs (✳ ◑ braille) from terminal titles (fork)
 - [x] Close-session reselection by MRU within the workspace
 - [x] Shortcuts: new session ⌘N, new workspace ⌘⇧N, open directory ⌘O, close ⌘W, prev/next session ⌥⌘↑↓, attention ⌃⌥↑↓, toggle sidebar ⌘⌃S, flag ⌘⇧F
-- [ ] Shortcuts: reopen ⌘⇧T (phase 3), font ±0
+- [x] Shortcuts: reopen ⌘⇧T, font ⌘+ ⌘− ⌘0 (`font inc|dec|reset`, sizes persisted; driven through Konsole's Ctrl+wheel zoom)
 
 ## Phase 2: terminals
 
@@ -38,17 +39,18 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Terminal zoom ⌘⇧↩ (⌘W leaves zoom)
 - [x] Fullscreen (F11: ⌘⌃F maps onto the flag chord)
 - [x] Companions (pinned under parent, folding with attention marker, moves with parent, closes with parent, respawn on exit, `session new --parent`)
-- [ ] Duplicate as Companion (copies the split layout)
+- [x] Duplicate as Companion (copies the split layout and each pane's program; `session duplicate --companion`)
 
 ## Phase 3: navigation and windows
 
 - [x] Session palette ⌃P, action palette ⌃⇧P (fuzzy, Ctrl-J/K, disabled actions greyed)
 - [ ] Custom-commands palette ⌃⇧O (with keymap, phase 5)
 - [x] Ctrl-Tab MRU switcher (hold Ctrl, Tab walks, release switches; one tap flips back)
-- [ ] Recent-sessions title-bar button
-- [ ] Flagged view (flat / workspace tree), workspace filter / focus
+- [x] Recent-sessions title-bar button (a menu under the clock, not a popover)
+- [ ] Flagged view workspace-tree layout, Edit Flagged Sessions… / Edit Focused Workspaces… editors
+- [x] Workspace filter / focus (`workspace focus on|off|toggle|add`, `workspace filter`; suspends on an outside select; navigation stays inside)
 - [x] Reopen closed session ⌘⇧T, `recent open`
-- [ ] Undo close ⌘Z within the grace period
+- [x] Undo close ⌘Z within the 3 s grace (sessions, batches with companions, workspaces; Settings switch; `session close --undoable`)
 - [ ] Multiple windows (library, restore frames)
 - [x] Notifications: `notify`, unseen-count badge, banner click focuses the session, `session seen`
 - [ ] Notifications from OSC 9 / 777 inside the terminal; settings (banner, badge, sound)

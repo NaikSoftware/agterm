@@ -28,11 +28,16 @@ cmake --install build && kbuildsycoca6 --noincremental
   sessions open there. Its "+" (on hover) starts Terminal, Claude Code, Codex, OpenCode or Antigravity (whichever
   your login shell finds), and the button beside it repeats the last choice.
 - A session row shows the logo of the agent running in it, its status dot (active, blocked, completed), an unseen
-  notification count, and a filled icon when flagged. Companions sit indented under their parent.
+  notification count, and a filled icon when flagged. Companions sit indented under their parent; Duplicate as
+  Companion copies a session's split layout and the program in each pane.
+- Tint a session or workspace row (row menu ▸ Tint: seven colours, on the icon, the name, or both).
 - Rename inline (double-click), multi-select, drag to reorder or move between workspaces, and drop folders from the
-  file manager to open sessions there. The footer has New Session, New Workspace and the flagged view.
+  file manager to open sessions there. The footer has New Session, New Workspace, the workspace filter and the
+  flagged view. Mark workspaces with Focus / Add to Focus in their row menu; the grid button applies or suspends
+  the filter, and selecting a session outside it suspends it.
 - Splits, terminal zoom, full screen.
-- Session (Ctrl+P) and action (Ctrl+Shift+P) palettes, a Ctrl-Tab recent-session switcher, and reopen-closed.
+- Session (Ctrl+P) and action (Ctrl+Shift+P) palettes, a Ctrl-Tab recent-session switcher and its title-bar clock
+  button, undo of a close for 3 seconds, and reopen-closed.
 - A file panel (the session folder as a tree with file-type icons, a built-in viewer, clipboard, drag and drop).
 
 ## Keys
@@ -44,7 +49,9 @@ agterm's ⌘ is Ctrl+Shift here (Konsole's convention); ⌘⇧ and ⌘⌃ are Ct
 | Ctrl+Shift+N / Ctrl+Alt+Shift+N | New session / new workspace |
 | Ctrl+Shift+O | Open directory as a session |
 | Ctrl+Shift+W | Close session (leaves terminal zoom first) |
-| Ctrl+Alt+Shift+T | Reopen closed session |
+| Ctrl+Shift+Z | Undo a close within its 3 s grace (Settings can turn the grace off) |
+| Ctrl+Alt+Shift+T | Reopen last closed item |
+| Ctrl+Shift+= / - / 0 | Terminal font size larger / smaller / reset |
 | Ctrl+Shift+D / Ctrl+Alt+Shift+D | Split side by side / top and bottom (again: hide; the other: transpose) |
 | Ctrl+Alt+Shift+← / → | Focus left / right pane |
 | Ctrl+Alt+Shift+Return | Terminal zoom |

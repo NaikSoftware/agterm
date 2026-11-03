@@ -74,6 +74,32 @@ kill -0 "$dpid" || fail "no shell pid for doomed"
 ctl session close --target "$doomed"
 for _ in $(seq 20); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.1; done
 kill -0 "$dpid" 2>/dev/null && fail "closing a session left its shell running"
+ctl session tint red --on icon,name --target "$id"
+ctl tree --json | grep -q '"tint":"red","tintOn":\["icon","name"\]' || fail "session tint read-back"
+ctl session tint pink --target "$id" 2>/dev/null && fail "unknown tint accepted"
+ctl workspace new --name tinted --tint green >/dev/null
+ctl tree --json | grep -q '"name":"tinted","rememberedFolder":"","sessions":\[\],"tint":"green"' || ctl tree --json | grep -q '"tint":"green"' || fail "workspace new --tint"
+ctl workspace focus on --target agents
+ctl tree --json | grep -q '"workspaceFilter":true' || fail "workspace focus on"
+ctl workspace filter off
+ctl tree --json | grep -q '"workspaceFilter":false' || fail "workspace filter off"
+ctl tree --json | grep -q '"focused":true' || fail "filter off keeps the marked set"
+ctl font inc --target "$id"
+ctl session info --target "$id" | grep -qE '^fontSize +[1-9]' || fail "font inc read-back"
+ctl font reset --target "$id"
+ctl session info --target "$id" | grep -qE '^fontSize +0' || fail "font reset"
+src=$(ctl session new --name src --no-select)
+sleep 1
+ctl session type $'sleep 300\n' --target "$src"
+sleep 1
+dup=$(ctl session duplicate --companion --no-select --target "$src")
+sleep 1
+ctl session info --target "$dup" | grep -qE "^parent +$src" || fail "duplicate as companion parent"
+dupid=$(ctl session info --target "$dup" | awk '/^pid /{print $2}') # exec'd: the program is the pane's process itself
+grep -qx sleep "/proc/$dupid/comm" || fail "duplicate as companion runs the pane's program"
+undo=$(ctl session new --name undo --no-select)
+[ "$(ctl session close --undoable --target "$undo")" = "ok (undoable)" ] || fail "close --undoable"
+ctl tree | grep -q undo && fail "an undoable close leaves the tree"
 cd /tmp
 ctl session type $'cd /usr\n' --target "$id"
 sleep 1
@@ -83,5 +109,6 @@ start
 ctl tree | grep -q 'renamed' || fail "session not restored"
 ctl tree | grep renamed | grep -q idle || fail "status must not survive a restart"
 ctl tree | grep renamed | grep -q '/usr' || fail "cwd not tracked"
+ctl tree --json | grep -q '"tint":"red"' || fail "tint not restored"
 stop
 echo "smoke OK"
