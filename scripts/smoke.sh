@@ -51,6 +51,12 @@ ctl filepanel width 260 >/dev/null
 ctl filepanel hide >/dev/null
 ctl session new --parent "$id" --name logs --no-select >/dev/null
 ctl tree --json | grep -q "\"parent\":\"$id\"" || fail "companion"
+named=$(ctl session new --no-select)
+sleep 1.5
+ctl tree | grep "$named" | grep -q 'New session' || fail "a plain shell is a New session (its prompt title is not a name)"
+ctl session type "sh -c 'printf \"\\033]0;Agent task\\007\"; sleep 3'"$'\n' --target "$named"
+sleep 2
+ctl tree | grep "$named" | grep -q 'Agent task' || fail "a running program's title names the session"
 ctl session rename renamed --target probe
 ctl session go --to next >/dev/null
 gone=$(ctl session new --name exits --no-select)

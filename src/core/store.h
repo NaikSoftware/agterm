@@ -14,7 +14,7 @@ struct Session {
     bool blink = false;
     bool autoReset = false; // a completed status clears once the session is viewed
     bool flagged = false;
-    QString title;   // live terminal title, spinner glyphs stripped; not persisted
+    QString title;   // last title a program running in the session set, spinner glyphs stripped
     QString agent;   // launcher id of the coding agent in the foreground, "" for none; not persisted
     QString command; // run instead of a shell at creation, not persisted
     // one session, up to two terminals: the split pane is a second shell sharing the sidebar row

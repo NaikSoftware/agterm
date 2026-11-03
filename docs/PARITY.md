@@ -15,7 +15,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Workspace "+" on hover: menu of Terminal + agents found on the login shell PATH, with logos; repeat button for the last choice (fork)
 - [x] Remembered folder per workspace (last cwd its panes reported); new sessions open there (fork)
 - [x] Settings: new session directory (home / workspace folder / custom), placement (end / after current)
-- [x] Default session name = cwd basename; rename pins a name, clearing reverts; inline rename on double-click
+- [x] Session name: pinned rename, else the title a running program (agent) set, else "New session" (owner's default; shell prompt titles ignored); inline rename on double-click
 - [x] Sidebar footer: new session, new workspace, flagged view (flat list)
 - [ ] Sidebar footer: workspace filter (phase 3)
 - [x] Session context menu: Clear Status, Rename, Copy Name, Duplicate Session, Move to ▸, Flag, Close Session (batch over a multi-selection)

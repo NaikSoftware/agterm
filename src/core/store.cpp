@@ -10,10 +10,10 @@ const QStringList Store::statuses = {QStringLiteral("idle"), QStringLiteral("act
 
 QString Session::displayName() const
 {
+    // a pinned name, else the title the session's program set, as in agterm; "New session" until one does
     if (!name.isEmpty())
         return name;
-    const QString c = QDir::cleanPath(cwd);
-    return c == QDir::homePath() || c.isEmpty() ? QStringLiteral("~") : c == QLatin1String("/") ? c : QFileInfo(c).fileName();
+    return title.trimmed().isEmpty() ? QStringLiteral("New session") : title.trimmed();
 }
 
 QString Store::newId()
@@ -412,8 +412,8 @@ void Store::setTitle(const QString &id, const QString &title)
 {
     const QString t = stripTitleSpinner(title);
     if (auto *s = session(id); s && s->title != t) {
-        s->title = t; // not persisted, and Konsole retitles on every prompt: no changed(), so no save
-        Q_EMIT titleChanged(id);
+        s->title = t; // the window passes only titles a running program set, so this is rare enough to save
+        Q_EMIT changed();
     }
 }
 
@@ -514,7 +514,7 @@ QJsonObject Store::toJson() const
         QJsonArray ss;
         for (const auto &s : w.sessions)
             ss << QJsonObject{{"id", s.id},           {"name", s.name},
-                              {"cwd", s.cwd},         {"flagged", s.flagged}, {"parentId", s.parentId},
+                              {"cwd", s.cwd}, {"title", s.title}, {"flagged", s.flagged}, {"parentId", s.parentId},
                               {"hasSplit", s.hasSplit}, {"splitVisible", s.splitVisible},
                               {"splitAxis", s.splitAxis}, {"splitRatio", s.splitRatio}};
         ws << QJsonObject{{"id", w.id}, {"name", w.name}, {"folder", w.folder}, {"sessions", ss}};
@@ -543,8 +543,9 @@ void Store::fromJson(const QJsonObject &o)
             s.id = so.value("id").toString();
             s.cwd = so.value("cwd").toString();
             s.name = so.value("name").toString();
-            if (version < 2 && s.name == s.displayName()) // v1 stored the derived name
+            if (version < 2 && s.name == QFileInfo(s.cwd).fileName()) // v1 stored the derived name
                 s.name.clear();
+            s.title = so.value("title").toString();
             s.flagged = so.value("flagged").toBool();
             s.parentId = so.value("parentId").toString();
             s.hasSplit = so.value("hasSplit").toBool();

@@ -152,16 +152,21 @@ private Q_SLOTS:
         QCOMPARE(s.session(a)->status, QStringLiteral("idle"));
     }
 
-    void namesDeriveFromCwdUntilPinned()
+    void namesComeFromTheProgramUntilPinned()
     {
         Store s;
         const QString a = s.addSession(s.addWorkspace("w"), {}, QDir::tempPath());
-        QCOMPARE(s.session(a)->displayName(), QFileInfo(QDir::tempPath()).fileName());
+        QCOMPARE(s.session(a)->displayName(), QStringLiteral("New session"));
+        s.setTitle(a, QString::fromUtf8("✳ Fix the login bug"));
+        QCOMPARE(s.session(a)->displayName(), QStringLiteral("Fix the login bug"));
         s.renameSession(a, "pinned");
-        s.setCwd(a, QDir::homePath());
+        s.setTitle(a, "later title");
         QCOMPARE(s.session(a)->displayName(), QStringLiteral("pinned"));
         s.renameSession(a, "");
-        QCOMPARE(s.session(a)->displayName(), QStringLiteral("~"));
+        QCOMPARE(s.session(a)->displayName(), QStringLiteral("later title"));
+        Store r;
+        r.fromJson(s.toJson());
+        QCOMPARE(r.session(a)->displayName(), QStringLiteral("later title")); // the agent's name survives a restart
     }
 
     void workspaceRemembersFolderForNewSessions()

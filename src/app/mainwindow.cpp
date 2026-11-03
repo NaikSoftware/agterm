@@ -422,7 +422,14 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
     connect(part, SIGNAL(currentDirectoryChanged(QString)), bridge, SLOT(currentDirectoryChanged(QString)));
     connect(part, SIGNAL(overrideShortcut(QKeyEvent *, bool &)), bridge, SLOT(overrideShortcut(QKeyEvent *, bool &)));
     if (pane == QLatin1String("main"))
-        connect(part, &KParts::Part::setWindowCaption, this, [this, id](const QString &title) { m_store.setTitle(id, title); });
+        connect(part, &KParts::Part::setWindowCaption, this, [this, id, part](const QString &title) {
+            // a title set by a running program (an agent naming its task) renames the session; the one a shell
+            // prompt sets on every line (bash's user@host: dir) does not
+            auto *t = qobject_cast<TerminalInterface *>(part);
+            const int fg = t->foregroundProcessId();
+            if (fg > 0 && fg != t->terminalProcessId() && !title.trimmed().isEmpty())
+                m_store.setTitle(id, title);
+        });
     // the part deletes itself when its shell exits
     connect(part, &QObject::destroyed, this, [this, id, part] {
         if (!m_quitting)
@@ -473,6 +480,9 @@ void MainWindow::createTerminal(const QString &id)
         }
     });
     m_panes.insert(id, p);
+    if (QObject *ks = konsoleSession(id))
+        for (int context : {0, 1}) // local and remote: caption = the title the program set (%w), not "dir : process"
+            QMetaObject::invokeMethod(ks, "setTabTitleFormat", Q_ARG(int, context), Q_ARG(QString, QStringLiteral("%w")));
     m_stack->addWidget(p.view);
     applyLayout(id);
     prime(p.view);
