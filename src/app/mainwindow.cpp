@@ -1,46 +1,48 @@
 #include "mainwindow.h"
 
+#include "launcher.h"
 #include "paths.h"
-#include "sidebardelegate.h"
+#include "sidebar.h"
 #include "store.h"
-#include "theme.h"
 
-#include <KNotification>
 #include <KParts/PartLoader>
 #include <KParts/ReadOnlyPart>
 #include <kde_terminal_interface.h>
 
 #include <QAction>
 #include <QApplication>
+#include <QButtonGroup>
+#include <QClipboard>
+#include <QCheckBox>
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QDBusConnection>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
+#include <QDirIterator>
+#include <QFileDialog>
 #include <QFileInfo>
-#include <QFontDatabase>
+#include <QFormLayout>
 #include <QHBoxLayout>
-#include <QPushButton>
-#include <QToolButton>
-#include <QVBoxLayout>
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QProcess>
+#include <QPushButton>
 #include <QSaveFile>
-#include <QScrollBar>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
-#include <QTreeWidget>
-#include <QTreeWidgetItemIterator>
-
-namespace {
-constexpr int IdRole = SidebarRole::Id, KindRole = SidebarRole::Kind;
-constexpr int WorkspaceKind = SidebarRole::Workspace, SessionKind = SidebarRole::Session;
-} // namespace
+#include <QToolBar>
+#include <QToolButton>
+#include <QVBoxLayout>
 
 PartBridge::PartBridge(MainWindow *window, Store &store, const QString &id, QObject *parent)
     : QObject(parent), m_window(window), m_store(store), m_id(id)
@@ -62,25 +64,11 @@ void PartBridge::overrideShortcut(QKeyEvent *event, bool &override)
 MainWindow::MainWindow(Store &store, const QString &statePath)
     : m_store(store), m_statePath(statePath)
 {
-    m_tree = new SidebarView;
-    m_tree->setHeaderHidden(true);
-    m_tree->setRootIsDecorated(false);
-    m_tree->setIndentation(0);
-    m_tree->setItemDelegate(m_delegate = new SidebarDelegate(m_tree));
-    m_tree->setMouseTracking(true);
-    m_tree->setFrameShape(QFrame::NoFrame);
-    m_tree->setExpandsOnDoubleClick(false);
-    m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_tree->setFocusPolicy(Qt::NoFocus); // keyboard stays in the terminal
-    m_tree->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    setWindowIcon(QIcon::fromTheme(QStringLiteral("utilities-terminal")));
+    m_tree = new Sidebar(store);
 
-    // sidebar: title row with + and the main menu, the tree, a socket status footer
-    auto *title = new QLabel(tr("Sessions"));
-    QFont tf = title->font();
-    tf.setWeight(QFont::DemiBold);
-    tf.setPointSizeF(tf.pointSizeF() * 1.08);
-    title->setFont(tf);
-    auto toolButton = [](const QString &icon, const QString &tip) {
+    // footer: new session, new workspace, and the flagged view toggle, as agterm's sidebar bar
+    auto footerButton = [](const QString &icon, const QString &tip) {
         auto *b = new QToolButton;
         b->setIcon(QIcon::fromTheme(icon));
         b->setToolTip(tip);
@@ -89,119 +77,83 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         b->setFocusPolicy(Qt::NoFocus);
         return b;
     };
-    auto *add = toolButton(QStringLiteral("list-add"), tr("New Session (Ctrl+Shift+T)"));
-    connect(add, &QToolButton::clicked, this, [this] { QString e; newSession(m_store.resolveWorkspace({}, &e)); });
-    m_menuButton = toolButton(QStringLiteral("application-menu"), tr("Main Menu"));
-    m_menuButton->setPopupMode(QToolButton::InstantPopup);
-    auto *titleRow = new QHBoxLayout;
-    titleRow->setContentsMargins(14, 8, 8, 6);
-    titleRow->addWidget(title, 1);
-    titleRow->addWidget(add);
-    titleRow->addWidget(m_menuButton);
+    auto *newSessionButton = footerButton(QStringLiteral("tab-new"), tr("New Session"));
+    connect(newSessionButton, &QToolButton::clicked, this, [this] { newSession(currentWorkspace()); });
+    auto *newWorkspaceButton = footerButton(QStringLiteral("list-add"), tr("New Workspace"));
+    connect(newWorkspaceButton, &QToolButton::clicked, this, &MainWindow::newWorkspace);
+    m_flagButton = footerButton(QStringLiteral("flag"), tr("Flagged Sessions"));
+    m_flagButton->setCheckable(true);
+    connect(m_flagButton, &QToolButton::toggled, this, [this](bool on) {
+        m_tree->setFlaggedView(on);
+        m_actions.value(QStringLiteral("toggle_flagged_view"))->setChecked(on);
+        m_saveTimer.start();
+    });
+    auto *footer = new QHBoxLayout;
+    footer->setContentsMargins(8, 4, 8, 6);
+    footer->setSpacing(2);
+    footer->addWidget(newSessionButton);
+    footer->addWidget(newWorkspaceButton);
+    footer->addStretch(1);
+    footer->addWidget(m_flagButton);
 
-    m_socketDot = new QLabel;
-    m_socketDot->setFixedSize(7, 7);
-    m_socketText = new QLabel;
-    auto *hint = new QLabel(tr("Ctrl+Alt+↓ attention"));
-    hint->setToolTip(tr("Jump to the next session that needs you"));
-    m_footer = new QWidget;
-    auto *footerRow = new QHBoxLayout(m_footer);
-    footerRow->setContentsMargins(12, 7, 12, 8);
-    footerRow->setSpacing(8);
-    footerRow->addWidget(m_socketDot);
-    footerRow->addWidget(m_socketText, 1);
-    footerRow->addWidget(hint);
-    m_footerLabels = {m_socketText, hint};
-
-    m_sidebar = new QWidget;
-    m_sidebar->setObjectName(QStringLiteral("sidebar"));
-    auto *side = new QVBoxLayout(m_sidebar);
-    side->setContentsMargins(0, 0, 0, 0);
+    m_sidebarPanel = new QWidget;
+    auto *side = new QVBoxLayout(m_sidebarPanel);
+    side->setContentsMargins(0, 6, 0, 0);
     side->setSpacing(0);
-    side->addLayout(titleRow);
     side->addWidget(m_tree, 1);
-    side->addWidget(m_footer);
-
-    // session header: workspace › session, status chip, cwd, foreground process
-    m_crumbWs = new QLabel;
-    m_crumbSep = new QLabel(QStringLiteral("›"));
-    m_crumbName = new QLabel;
-    QFont nf = m_crumbName->font();
-    nf.setWeight(QFont::DemiBold);
-    m_crumbName->setFont(nf);
-    m_statusChip = new QLabel;
-    m_cwdLabel = new QLabel;
-    m_cwdLabel->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    m_cwdLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_procChip = new QLabel;
-    m_procChip->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    m_header = new QWidget;
-    m_header->setObjectName(QStringLiteral("header"));
-    auto *headerRow = new QHBoxLayout(m_header);
-    headerRow->setContentsMargins(14, 7, 14, 7);
-    headerRow->setSpacing(10);
-    for (QWidget *w : {m_crumbWs, m_crumbSep, m_crumbName, m_statusChip})
-        headerRow->addWidget(w);
-    headerRow->addStretch(1);
-    headerRow->addWidget(m_cwdLabel);
-    headerRow->addWidget(m_procChip);
+    side->addLayout(footer);
 
     m_stack = new QStackedWidget;
     m_empty = new QWidget;
-    auto *emptyCol = new QVBoxLayout(m_empty);
-    emptyCol->addStretch(1);
-    auto *emptyIcon = new QLabel;
-    emptyIcon->setPixmap(QIcon::fromTheme(QStringLiteral("utilities-terminal")).pixmap(64));
-    auto *emptyTitle = new QLabel(tr("No sessions"));
-    emptyTitle->setFont(tf);
-    auto *emptyHint = new QLabel(tr("Open a shell, or let an agent create one with agtermctl."));
-    auto *emptyButton = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")), tr("New Session"));
-    connect(emptyButton, &QPushButton::clicked, add, &QToolButton::click);
-    for (QWidget *w : {static_cast<QWidget *>(emptyIcon), static_cast<QWidget *>(emptyTitle), static_cast<QWidget *>(emptyHint),
-                       static_cast<QWidget *>(emptyButton)})
-        emptyCol->addWidget(w, 0, Qt::AlignHCenter);
-    emptyCol->addStretch(1);
     m_stack->addWidget(m_empty);
 
-    auto *content = new QWidget;
-    auto *contentCol = new QVBoxLayout(content);
-    contentCol->setContentsMargins(0, 0, 0, 0);
-    contentCol->setSpacing(0);
-    contentCol->addWidget(m_header);
-    contentCol->addWidget(m_stack, 1);
-
     m_split = new QSplitter;
-    m_split->setHandleWidth(1);
     m_split->setChildrenCollapsible(false);
-    m_split->addWidget(m_sidebar);
-    m_split->addWidget(content);
+    m_split->addWidget(m_sidebarPanel);
+    m_split->addWidget(m_stack);
     m_split->setStretchFactor(1, 1);
-    m_split->setSizes({264, 940});
-    m_sidebar->setMinimumWidth(180);
+    m_split->setSizes({230, 970});
+    m_sidebarPanel->setMinimumWidth(160);
     setCentralWidget(m_split);
-    resize(1280, 800);
+    resize(1200, 760);
+    // messages only: an idle status bar would be chrome agterm doesn't have
+    statusBar()->hide();
+    connect(statusBar(), &QStatusBar::messageChanged, statusBar(), [this](const QString &m) { statusBar()->setVisible(!m.isEmpty()); });
 
-    createActions();
-    applyTheme();
+    createMenus();
 
-    // the active-status ring spins only while some session is working
-    m_spinTimer.setInterval(50);
-    connect(&m_spinTimer, &QTimer::timeout, this, [this] {
-        m_delegate->spinnerPhase = (m_delegate->spinnerPhase + 18) % 360;
-        m_tree->viewport()->update();
-    });
-    // cwd and foreground process have no change signal for background panes; poll the shown one
-    m_headerTimer.setInterval(1000);
-    connect(&m_headerTimer, &QTimer::timeout, this, &MainWindow::updateHeader);
-    m_headerTimer.start();
+    // title strip: sidebar toggle and the session name, as agterm's title bar
+    auto *strip = new QToolBar;
+    strip->setObjectName(QStringLiteral("titleStrip"));
+    strip->setMovable(false);
+    strip->setFloatable(false);
+    strip->setIconSize(QSize(16, 16));
+    strip->toggleViewAction()->setVisible(false);
+    // a plain button, not the checkable menu action: agterm's toggle never renders pressed
+    strip->addAction(m_sidebarAction->icon(), tr("Toggle Sidebar"), m_sidebarAction, &QAction::trigger);
+    m_title = new QLabel;
+    QFont tf = m_title->font();
+    tf.setWeight(QFont::DemiBold);
+    m_title->setFont(tf);
+    m_title->setContentsMargins(6, 0, 0, 0);
+    strip->addWidget(m_title);
+    addToolBar(Qt::TopToolBarArea, strip);
 
     m_saveTimer.setSingleShot(true);
     m_saveTimer.setInterval(500);
     connect(&m_saveTimer, &QTimer::timeout, this, &MainWindow::save);
+    m_agentTimer.setInterval(2000);
+    connect(&m_agentTimer, &QTimer::timeout, this, &MainWindow::sampleAgents);
+    m_agentTimer.start();
 
     connect(&m_store, &Store::changed, this, [this] {
-        rebuildSidebar();
+        m_tree->rebuild();
+        showSelected();
         m_saveTimer.start();
+    });
+    connect(&m_store, &Store::titleChanged, this, [this] {
+        m_tree->rebuild();
+        showSelected();
     });
     connect(&m_store, &Store::sessionAdded, this, &MainWindow::createTerminal);
     connect(&m_store, &Store::sessionRemoved, this, [this](const QString &id) {
@@ -210,134 +162,108 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
             part->deleteLater(); // closes the pty, which hangs up the shell
     });
     connect(&m_store, &Store::selectionChanged, this, &MainWindow::showSelected);
-    connect(&m_store, &Store::statusChanged, this, &MainWindow::notify);
-    connect(&m_store, &Store::titleChanged, this, [this](const QString &id) {
-        for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
-            if ((*it)->data(0, IdRole).toString() == id)
-                (*it)->setToolTip(0, QStringLiteral("%1\n%2").arg(m_store.session(id)->title, shortPath(m_store.session(id)->cwd)));
-    });
     connect(m_tree, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) {
-        if (!m_rebuilding && item && item->data(0, KindRole).toInt() == SessionKind)
-            m_store.select(item->data(0, IdRole).toString());
-    });
-    connect(m_tree, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *item) {
-        if (item->data(0, KindRole).toInt() != WorkspaceKind)
-            return;
-        const QString id = item->data(0, IdRole).toString();
-        m_collapsed.contains(id) ? m_collapsed.remove(id) : (m_collapsed.insert(id), true);
-        item->setExpanded(!m_collapsed.contains(id));
-        item->setData(0, SidebarRole::Expanded, item->isExpanded());
-        m_saveTimer.start();
+        if (item && item->data(0, SidebarRole::Kind).toInt() == SidebarRole::SessionRow)
+            m_store.select(item->data(0, SidebarRole::Id).toString());
     });
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &MainWindow::sidebarMenu);
-    connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
-        const QString id = item->data(0, IdRole).toString();
-        item->data(0, KindRole).toInt() == SessionKind ? renameSession(id) : renameWorkspace(id);
+    connect(m_tree, &Sidebar::launcherMenuRequested, this, &MainWindow::launcherMenu);
+    connect(m_tree, &Sidebar::repeatRequested, this, [this](const QString &ws) { launch(m_store.settings.lastLauncher, ws); });
+    connect(m_tree, &Sidebar::renameRequested, this, [this](const QString &kind, const QString &id, const QString &name) {
+        kind == QLatin1String("session") ? m_store.renameSession(id, name) : m_store.renameWorkspace(id, name);
+        m_tree->rebuild();
+    });
+    connect(m_tree, &Sidebar::foldersDropped, this, [this](const QString &ws, const QStringList &dirs) {
+        const QString target = m_store.workspace(ws) ? ws : currentWorkspace();
+        QString last;
+        for (const auto &d : dirs)
+            last = m_store.addSession(target, {}, d);
+        m_store.select(last);
     });
     qApp->installEventFilter(this);
+    detectLaunchers();
 }
 
-void MainWindow::createActions()
+QAction *MainWindow::action(const QString &name, const QString &text, const QString &icon, const QKeySequence &key, std::function<void()> slot)
 {
-    auto add = [this](QMenu *menu, const QString &text, const QKeySequence &key, const QString &icon, auto slot) {
-        auto *a = menu->addAction(QIcon::fromTheme(icon), text);
-        a->setShortcut(key);
-        connect(a, &QAction::triggered, this, slot);
-        addAction(a); // shortcuts work with the menu bar hidden
-        return a;
-    };
-    auto *file = menuBar()->addMenu(tr("&Session"));
-    add(file, tr("&New Session"), QKeySequence(QStringLiteral("Ctrl+Shift+T")), QStringLiteral("tab-new"),
-        [this] { QString e; newSession(m_store.resolveWorkspace({}, &e)); });
-    add(file, tr("New &Workspace…"), QKeySequence(QStringLiteral("Ctrl+Shift+N")), QStringLiteral("folder-new"), &MainWindow::newWorkspace);
-    add(file, tr("&Rename Session…"), QKeySequence(QStringLiteral("Ctrl+Shift+R")), QStringLiteral("edit-rename"),
-        [this] { renameSession(m_store.selected); });
-    add(file, tr("&Close Session"), QKeySequence(QStringLiteral("Ctrl+Shift+W")), QStringLiteral("tab-close"),
-        [this] { closeSession(m_store.selected); });
+    auto *a = new QAction(QIcon::fromTheme(icon), text, this);
+    a->setShortcut(key);
+    a->setShortcutContext(Qt::ApplicationShortcut);
+    connect(a, &QAction::triggered, this, slot);
+    addAction(a); // shortcuts work with the menu bar hidden
+    m_actions.insert(name, a);
+    return a;
+}
+
+void MainWindow::createMenus()
+{
+    // agterm's ⌘ is Ctrl+Shift here (Konsole's convention), ⌘⇧ and ⌘⌃ are Ctrl+Alt+Shift, ⌥ is Alt, ⌃ is Ctrl
+    auto *file = menuBar()->addMenu(tr("&File"));
+    file->addAction(action(QStringLiteral("new_session"), tr("New Session"), QStringLiteral("tab-new"), QKeySequence(QStringLiteral("Ctrl+Shift+N")),
+                           [this] { newSession(currentWorkspace()); }));
+    file->addAction(action(QStringLiteral("new_workspace"), tr("New Workspace…"), QStringLiteral("list-add"),
+                           QKeySequence(QStringLiteral("Ctrl+Alt+Shift+N")), [this] { newWorkspace(); }));
+    file->addAction(action(QStringLiteral("open_directory"), tr("Open Directory…"), QStringLiteral("folder-open"),
+                           QKeySequence(QStringLiteral("Ctrl+Shift+O")), [this] { openDirectory(); }));
     file->addSeparator();
-    add(file, tr("&Quit"), QKeySequence(QStringLiteral("Ctrl+Shift+Q")), QStringLiteral("application-exit"), &QWidget::close);
+    file->addAction(action(QStringLiteral("close_session"), tr("Close Session"), QStringLiteral("tab-close"), QKeySequence(QStringLiteral("Ctrl+Shift+W")),
+                           [this] { closeSessions({m_store.selected}); }));
+    file->addSeparator();
+    file->addAction(action(QStringLiteral("quit"), tr("Quit"), QStringLiteral("application-exit"), QKeySequence(QStringLiteral("Ctrl+Shift+Q")),
+                           [this] { close(); }));
+
+    auto *session = menuBar()->addMenu(tr("&Session"));
+    session->addAction(action(QStringLiteral("rename_session"), tr("Rename Session"), QStringLiteral("edit-rename"), {}, [this] {
+        if (QTreeWidgetItem *item = m_tree->currentItem())
+            m_tree->editItem(item);
+    }));
+    session->addAction(action(QStringLiteral("duplicate_session"), tr("Duplicate Session"), QStringLiteral("edit-copy"), {}, [this] {
+        if (m_store.session(m_store.selected))
+            m_store.select(m_store.duplicateSession(m_store.selected, liveCwd(m_store.selected)));
+    }));
+    session->addAction(action(QStringLiteral("clear_status"), tr("Clear Status"), QStringLiteral("edit-clear"), {},
+                              [this] { m_store.setStatus(m_store.selected, QStringLiteral("idle")); }));
+    session->addAction(action(QStringLiteral("toggle_flag"), tr("Flag"), QStringLiteral("flag"), QKeySequence(QStringLiteral("Ctrl+Alt+Shift+F")), [this] {
+        if (const Session *s = m_store.session(m_store.selected))
+            m_store.setFlag(s->id, !s->flagged);
+    }));
 
     auto *view = menuBar()->addMenu(tr("&View"));
-    add(view, tr("Next Session"), QKeySequence(QStringLiteral("Ctrl+PgDown")), QStringLiteral("go-down"), [this] { go(QStringLiteral("next")); });
-    add(view, tr("Previous Session"), QKeySequence(QStringLiteral("Ctrl+PgUp")), QStringLiteral("go-up"), [this] { go(QStringLiteral("prev")); });
-    add(view, tr("Next Session Needing Attention"), QKeySequence(QStringLiteral("Ctrl+Alt+Down")), QStringLiteral("go-down-skip"),
-        [this] { go(QStringLiteral("next-attention")); });
-    add(view, tr("Previous Session Needing Attention"), QKeySequence(QStringLiteral("Ctrl+Alt+Up")), QStringLiteral("go-up-skip"),
-        [this] { go(QStringLiteral("prev-attention")); });
-    view->addSeparator();
-    add(view, tr("Show &Sidebar"), QKeySequence(QStringLiteral("Ctrl+Shift+B")), QStringLiteral("sidebar-show"),
-        [this] { m_sidebar->setVisible(m_sidebar->isHidden()); m_saveTimer.start(); });
-    add(view, tr("Show &Menu Bar"), QKeySequence(QStringLiteral("Ctrl+Shift+M")), QStringLiteral("show-menu"),
-        [this] { menuBar()->setVisible(!menuBar()->isVisible()); m_saveTimer.start(); });
+    m_sidebarAction = action(QStringLiteral("toggle_sidebar"), tr("Show Sidebar"), QStringLiteral("sidebar-show-symbolic"),
+                             QKeySequence(QStringLiteral("Ctrl+Alt+Shift+S")), [this] {
+                                 m_sidebarPanel->setVisible(m_sidebarAction->isChecked());
+                                 m_saveTimer.start();
+                             });
+    m_sidebarAction->setCheckable(true);
+    m_sidebarAction->setChecked(true);
+    m_sidebarAction->setToolTip(tr("Toggle Sidebar"));
+    view->addAction(m_sidebarAction);
+    auto *flagged = action(QStringLiteral("toggle_flagged_view"), tr("Flagged Sessions"), QStringLiteral("flag"), {},
+                           [this] { m_flagButton->setChecked(m_actions.value(QStringLiteral("toggle_flagged_view"))->isChecked()); });
+    flagged->setCheckable(true);
+    view->addAction(flagged);
+    view->addAction(action(QStringLiteral("toggle_menubar"), tr("Show Menu Bar"), QStringLiteral("show-menu"), QKeySequence(QStringLiteral("Ctrl+Shift+M")),
+                           [this] { menuBar()->setVisible(!menuBar()->isVisible()); }));
+
+    auto *nav = menuBar()->addMenu(tr("&Navigate"));
+    nav->addAction(action(QStringLiteral("previous_session"), tr("Previous Session"), QStringLiteral("go-up"),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Up")), [this] { go(QStringLiteral("prev")); }));
+    nav->addAction(action(QStringLiteral("next_session"), tr("Next Session"), QStringLiteral("go-down"),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Down")), [this] { go(QStringLiteral("next")); }));
+    nav->addAction(action(QStringLiteral("previous_attention_session"), tr("Previous Attention Session"), QStringLiteral("go-up-skip"),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+Up")), [this] { go(QStringLiteral("prev-attention")); }));
+    nav->addAction(action(QStringLiteral("next_attention_session"), tr("Next Attention Session"), QStringLiteral("go-down-skip"),
+                          QKeySequence(QStringLiteral("Ctrl+Alt+Down")), [this] { go(QStringLiteral("next-attention")); }));
+    nav->addAction(action(QStringLiteral("first_session"), tr("First Session"), QStringLiteral("go-top"), {}, [this] { go(QStringLiteral("first")); }));
+    nav->addAction(action(QStringLiteral("last_session"), tr("Last Session"), QStringLiteral("go-bottom"), {}, [this] { go(QStringLiteral("last")); }));
 
     auto *settings = menuBar()->addMenu(tr("Se&ttings"));
-    add(settings, tr("&Edit Current Profile…"), {}, QStringLiteral("document-edit"), [this] { profileDialog("showEditCurrentProfileDialog"); });
-    add(settings, tr("&Manage Profiles…"), {}, QStringLiteral("configure"), [this] { profileDialog("showManageProfilesDialog"); });
-
-    // the menu bar starts hidden, KDE-style; the same menus live behind the sidebar's menu button
-    auto *hamburger = new QMenu(this);
-    for (QAction *a : menuBar()->actions())
-        hamburger->addAction(a);
-    m_menuButton->setMenu(hamburger);
-}
-
-void MainWindow::applyTheme()
-{
-    const Theme t = Theme::from(palette());
-    m_sidebar->setStyleSheet(QStringLiteral("#sidebar{background:%1;} QTreeView{background:transparent;}").arg(Theme::css(t.sidebar)));
-    m_footer->setStyleSheet(QStringLiteral("QWidget{border-top:1px solid %1;} QLabel{border:none;}").arg(Theme::css(t.line)));
-    for (QLabel *l : m_footerLabels) {
-        QFont f = font();
-        f.setPointSizeF(f.pointSizeF() * 0.85);
-        l->setFont(f);
-        l->setStyleSheet(QStringLiteral("color:%1;").arg(Theme::css(t.faint)));
-    }
-    m_header->setStyleSheet(QStringLiteral("#header{background:%1; border-bottom:1px solid %2;}").arg(Theme::css(t.window), Theme::css(t.line)));
-    m_crumbWs->setStyleSheet(QStringLiteral("color:%1;").arg(Theme::css(t.dim)));
-    m_crumbSep->setStyleSheet(QStringLiteral("color:%1;").arg(Theme::css(t.faint)));
-    m_cwdLabel->setStyleSheet(QStringLiteral("color:%1;").arg(Theme::css(t.dim)));
-    m_procChip->setStyleSheet(QStringLiteral("color:%1; background:%2; border-radius:5px; padding:1px 7px;")
-                                  .arg(Theme::css(t.dim), Theme::css(Theme::alpha(t.text, 22))));
-    m_split->setStyleSheet(QStringLiteral("QSplitter::handle{background:%1;}").arg(Theme::css(t.line)));
-    setSocketStatus(m_socketOk, m_socketError);
-    updateHeader();
-}
-
-void MainWindow::setSocketStatus(bool ok, const QString &error)
-{
-    m_socketOk = ok;
-    m_socketError = error;
-    const Theme t = Theme::from(palette());
-    m_socketDot->setStyleSheet(QStringLiteral("background:%1; border-radius:3px;").arg(Theme::css(ok ? t.ok : t.warn)));
-    m_socketText->setText(ok ? tr("Socket ready") : tr("Socket unavailable"));
-    m_socketText->setToolTip(ok ? socketPath() : error);
-}
-
-void MainWindow::updateHeader()
-{
-    const Session *s = m_store.session(m_store.selected);
-    m_header->setVisible(s);
-    if (!s)
-        return;
-    const Theme t = Theme::from(palette());
-    m_crumbWs->setText(m_store.workspaceOf(s->id)->name);
-    m_crumbName->setText(s->name);
-    const QColor c = s->status == QLatin1String("idle") ? t.dim : t.statusColor(s->status);
-    m_statusChip->setText(Theme::statusPhrase(s->status));
-    m_statusChip->setStyleSheet(QStringLiteral("color:%1; background:%2; border-radius:9px; padding:1px 8px; font-weight:500;")
-                                    .arg(Theme::css(c), Theme::css(Theme::alpha(c, s->status == QLatin1String("idle") ? 26 : 46))));
-    const QString cwd = liveCwd(s->id);
-    m_cwdLabel->setText(shortPath(cwd.isEmpty() ? s->cwd : cwd));
-    const QString fg = terminal(s->id) ? terminal(s->id)->foregroundProcessName() : QString();
-    m_procChip->setText(fg);
-    m_procChip->setVisible(!fg.isEmpty());
-}
-
-void MainWindow::changeEvent(QEvent *event)
-{
-    if (event->type() == QEvent::PaletteChange && m_header)
-        applyTheme();
-    QMainWindow::changeEvent(event);
+    settings->addAction(action(QStringLiteral("settings"), tr("Configure agterm…"), QStringLiteral("configure"), QKeySequence(QStringLiteral("Ctrl+Shift+,")),
+                               [this] { showSettings(); }));
+    settings->addAction(action(QStringLiteral("edit_profile"), tr("Edit Current Profile…"), QStringLiteral("document-edit"), {},
+                               [this] { profileDialog("showEditCurrentProfileDialog"); }));
+    settings->addAction(action(QStringLiteral("manage_profiles"), tr("Manage Profiles…"), QStringLiteral("configure-shortcuts"), {},
+                               [this] { profileDialog("showManageProfilesDialog"); }));
 }
 
 bool MainWindow::isOwnShortcut(QKeyEvent *event) const
@@ -349,6 +275,12 @@ bool MainWindow::isOwnShortcut(QKeyEvent *event) const
     return false;
 }
 
+void MainWindow::setSocketStatus(bool ok, const QString &error)
+{
+    if (!ok)
+        statusBar()->showMessage(tr("Control socket unavailable: %1").arg(error));
+}
+
 void MainWindow::restore(const QJsonObject &window)
 {
     for (auto *s : m_store.allSessions())
@@ -356,10 +288,11 @@ void MainWindow::restore(const QJsonObject &window)
     restoreGeometry(QByteArray::fromBase64(window.value("geometry").toString().toLatin1()));
     m_split->restoreState(QByteArray::fromBase64(window.value("splitter").toString().toLatin1()));
     for (const auto &v : window.value("collapsed").toArray())
-        m_collapsed.insert(v.toString());
-    m_sidebar->setVisible(window.value("sidebar").toBool(true));
-    menuBar()->setVisible(window.value("menubar").toBool(false));
-    rebuildSidebar();
+        m_tree->m_collapsed.insert(v.toString());
+    m_sidebarAction->setChecked(window.value("sidebar").toBool(true));
+    m_sidebarPanel->setVisible(m_sidebarAction->isChecked());
+    m_flagButton->setChecked(window.value("flaggedView").toBool(false));
+    m_tree->rebuild();
     showSelected();
 }
 
@@ -378,11 +311,7 @@ void MainWindow::createTerminal(const QString &id)
     auto *bridge = new PartBridge(this, m_store, id, part);
     connect(part, SIGNAL(currentDirectoryChanged(QString)), bridge, SLOT(currentDirectoryChanged(QString)));
     connect(part, SIGNAL(overrideShortcut(QKeyEvent *, bool &)), bridge, SLOT(overrideShortcut(QKeyEvent *, bool &)));
-    connect(part, &KParts::Part::setWindowCaption, this, [this, id](const QString &title) {
-        m_store.setTitle(id, title);
-        if (id == m_store.selected)
-            showSelected();
-    });
+    connect(part, &KParts::Part::setWindowCaption, this, [this, id](const QString &title) { m_store.setTitle(id, title); });
     // the part deletes itself when its shell exits; that ends the session, except during app teardown
     connect(part, &QObject::destroyed, this, [this, id] {
         if (m_quitting)
@@ -469,6 +398,8 @@ bool MainWindow::type(const QString &sessionId, const QString &text, QString *er
         return false;
     }
     t->sendInput(text);
+    if (text.contains(QLatin1Char('\n')) || text.contains(QLatin1Char('\r')))
+        m_store.keyPressed(sessionId, Store::Key::Submit); // injected text carrying a newline is a submit
     return true;
 }
 
@@ -493,83 +424,112 @@ QJsonObject MainWindow::info(const QString &sessionId)
             {"profile", t->currentProfileName()}};
 }
 
-void MainWindow::rebuildSidebar()
-{
-    m_rebuilding = true;
-    const int scroll = m_tree->verticalScrollBar()->value();
-    m_tree->clear();
-    bool anyActive = false;
-    for (const auto &w : m_store.workspaces) {
-        auto *wi = new QTreeWidgetItem(m_tree, {w.name});
-        wi->setData(0, IdRole, w.id);
-        wi->setData(0, KindRole, WorkspaceKind);
-        wi->setFlags(Qt::ItemIsEnabled);
-        int attention = 0;
-        for (const auto &s : w.sessions) {
-            auto *si = new QTreeWidgetItem(wi, {s.name});
-            si->setData(0, IdRole, s.id);
-            si->setData(0, KindRole, SessionKind);
-            si->setData(0, SidebarRole::Status, s.status);
-            si->setData(0, SidebarRole::Sub, s.status == QLatin1String("idle") ? shortPath(s.cwd) : Theme::statusPhrase(s.status));
-            si->setToolTip(0, QStringLiteral("%1\n%2").arg(s.title, shortPath(s.cwd)));
-            attention += s.status == QLatin1String("blocked") || s.status == QLatin1String("completed");
-            anyActive |= s.status == QLatin1String("active");
-        }
-        wi->setData(0, SidebarRole::Count, int(w.sessions.size()));
-        wi->setData(0, SidebarRole::Attention, attention);
-        wi->setExpanded(!m_collapsed.contains(w.id));
-        wi->setData(0, SidebarRole::Expanded, wi->isExpanded());
-        for (int i = 0; i < wi->childCount(); ++i)
-            if (wi->child(i)->data(0, IdRole).toString() == m_store.selected)
-                m_tree->setCurrentItem(wi->child(i));
-    }
-    m_tree->verticalScrollBar()->setValue(scroll);
-    anyActive ? m_spinTimer.start() : m_spinTimer.stop();
-    m_rebuilding = false;
-    updateHeader();
-}
-
 void MainWindow::showSelected()
 {
     const Session *s = m_store.session(m_store.selected);
     auto *part = m_parts.value(m_store.selected);
     m_stack->setCurrentWidget(part ? part->widget() : m_empty);
-    if (part && part->widget()->window()->isActiveWindow())
+    if (part && part->widget()->window()->isActiveWindow() && !m_tree->editing())
         part->widget()->setFocus();
-    setWindowTitle(s ? QStringLiteral("%1 / %2").arg(m_store.workspaceOf(s->id)->name, s->name) : QString());
-    updateHeader();
+    const QString name = s ? s->displayName() : QString();
+    m_title->setText(name);
+    setWindowTitle(name);
 }
 
-void MainWindow::sidebarMenu(const QPoint &pos)
+QString MainWindow::currentWorkspace()
 {
-    QMenu menu;
-    auto *item = m_tree->itemAt(pos);
-    const QString id = item ? item->data(0, IdRole).toString() : QString();
-    if (item && item->data(0, KindRole).toInt() == SessionKind) {
-        menu.addAction(QIcon::fromTheme(QStringLiteral("edit-rename")), tr("Rename…"), this, [this, id] { renameSession(id); });
-        menu.addAction(QIcon::fromTheme(QStringLiteral("tab-close")), tr("Close"), this, [this, id] { closeSession(id); });
-        if (m_store.session(id)->status != QLatin1String("idle"))
-            menu.addAction(tr("Clear Status"), this, [this, id] { m_store.setStatus(id, QStringLiteral("idle")); });
-    } else if (item) {
-        menu.addAction(QIcon::fromTheme(QStringLiteral("tab-new")), tr("New Session"), this, [this, id] { newSession(id); });
-        menu.addAction(QIcon::fromTheme(QStringLiteral("edit-rename")), tr("Rename…"), this, [this, id] { renameWorkspace(id); });
-        menu.addAction(QIcon::fromTheme(QStringLiteral("edit-delete")), tr("Delete Workspace"), this, [this, id] { deleteWorkspace(id); });
-    }
-    menu.addSeparator();
-    menu.addAction(QIcon::fromTheme(QStringLiteral("folder-new")), tr("New Workspace…"), this, &MainWindow::newWorkspace);
-    menu.exec(m_tree->viewport()->mapToGlobal(pos));
+    QString error;
+    const QString ws = m_store.resolveWorkspace({}, &error);
+    return ws.isEmpty() ? m_store.addWorkspace(QStringLiteral("main")) : ws;
 }
 
 void MainWindow::newSession(const QString &workspaceId)
 {
-    QString ws = workspaceId;
-    if (!m_store.workspace(ws))
-        ws = m_store.addWorkspace(QStringLiteral("main"));
-    // inherit the live directory of the current session, as a new tab would
-    QString cwd;
-    if (auto *w = m_store.workspaceOf(m_store.selected); w && w->id == ws)
-        cwd = liveCwd(m_store.selected);
-    m_store.select(m_store.addSession(ws, {}, cwd));
+    const QString ws = m_store.workspace(workspaceId) ? workspaceId : currentWorkspace();
+    m_store.select(m_store.addSession(ws, {}, m_store.newSessionCwd(ws, liveCwd(m_store.selected))));
+}
+
+void MainWindow::launch(const QString &launcherId, const QString &workspaceId)
+{
+    const Launcher *l = launcher(launcherId);
+    if (!l)
+        return;
+    Settings s = m_store.settings;
+    s.lastLauncher = l->id;
+    m_store.setSettings(s);
+    newSession(workspaceId);
+    if (!l->command.isEmpty()) {
+        QString error;
+        type(m_store.selected, l->command + QLatin1Char('\n'), &error); // typed into the shell, so the shell remains when it exits
+    }
+}
+
+void MainWindow::launcherMenu(const QString &workspaceId, const QPoint &globalPos)
+{
+    detectLaunchers();
+    QMenu menu;
+    const QColor ink = palette().color(QPalette::WindowText);
+    for (const QString &id : std::as_const(m_launchers))
+        if (const Launcher *l = launcher(id))
+            menu.addAction(launcherIcon(id, ink), l->title, this, [this, id, workspaceId] { launch(id, workspaceId); });
+    menu.exec(globalPos);
+}
+
+void MainWindow::detectLaunchers()
+{
+    // agents install into directories only the user's shell startup adds to PATH, so ask a login shell
+    if (m_launchersAt.isValid() && m_launchersAt.secsTo(QDateTime::currentDateTime()) < 300)
+        return;
+    m_launchersAt = QDateTime::currentDateTime();
+    auto *proc = new QProcess(this);
+    const QString marker = QStringLiteral("agterm-launcher-path");
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.remove(QStringLiteral("AGTERM_SESSION_ID"));
+    proc->setProcessEnvironment(env);
+    proc->setStandardInputFile(QProcess::nullDevice());
+    connect(proc, &QProcess::finished, this, [this, proc, marker] {
+        const QString out = QString::fromUtf8(proc->readAllStandardOutput());
+        const int at = out.lastIndexOf(marker + QLatin1Char('\n'));
+        const QString shellPath = at < 0 ? QString() : out.mid(at + marker.size() + 1).trimmed();
+        const QString path = QStringList{shellPath, qEnvironmentVariable("PATH"), QDir::homePath() + QStringLiteral("/.local/bin")}.join(QLatin1Char(':'));
+        m_launchers = ::availableLaunchers(path, [](const QString &f) { return QFileInfo(f).isExecutable() && QFileInfo(f).isFile(); });
+        proc->deleteLater();
+    });
+    QTimer::singleShot(3000, proc, [proc] { proc->kill(); });
+    proc->start(qEnvironmentVariable("SHELL", QStringLiteral("/bin/bash")),
+                {QStringLiteral("-l"), QStringLiteral("-i"), QStringLiteral("-c"), QStringLiteral("printf '\\n%s\\n' %1; printenv PATH").arg(marker)});
+}
+
+void MainWindow::sampleAgents()
+{
+    // the agent icon follows whatever runs in the foreground, typed by hand or by a script
+    QHash<int, QList<int>> groups; // pgid -> pids, leader first
+    for (QDirIterator it(QStringLiteral("/proc"), QDir::Dirs | QDir::NoDotAndDotDot); it.hasNext();) {
+        bool numeric = false;
+        const int pid = it.nextFileInfo().fileName().toInt(&numeric);
+        if (!numeric)
+            continue;
+        QFile stat(QStringLiteral("/proc/%1/stat").arg(pid));
+        if (!stat.open(QIODevice::ReadOnly))
+            continue;
+        const QByteArray line = stat.readAll();
+        const QList<QByteArray> fields = line.mid(line.lastIndexOf(')') + 2).split(' ');
+        if (fields.size() < 3)
+            continue;
+        const int pgid = fields[2].toInt();
+        pid == pgid ? groups[pgid].prepend(pid) : groups[pgid].append(pid);
+    }
+    for (auto *s : m_store.allSessions()) {
+        auto *t = terminal(s->id);
+        const int fg = t ? t->foregroundProcessId() : -1;
+        QList<QStringList> argvs;
+        for (int pid : groups.value(fg)) {
+            QFile f(QStringLiteral("/proc/%1/cmdline").arg(pid));
+            if (f.open(QIODevice::ReadOnly))
+                argvs << QString::fromUtf8(f.readAll()).split(QChar(0), Qt::SkipEmptyParts);
+        }
+        m_store.setAgent(s->id, agentForGroup(argvs));
+    }
 }
 
 void MainWindow::newWorkspace()
@@ -577,44 +537,35 @@ void MainWindow::newWorkspace()
     bool ok = false;
     const QString name = QInputDialog::getText(this, tr("New Workspace"), tr("Name:"), QLineEdit::Normal, {}, &ok);
     if (ok && !name.trimmed().isEmpty())
-        m_store.select(m_store.addSession(m_store.addWorkspace(name.trimmed()), {}, {}));
+        m_store.addWorkspace(name.trimmed());
 }
 
-void MainWindow::closeSession(const QString &id)
+void MainWindow::openDirectory()
 {
-    const Session *s = m_store.session(id);
-    if (!s)
+    const Session *cur = m_store.session(m_store.selected);
+    const QString dir = QFileDialog::getExistingDirectory(this, tr("Open Directory"), cur ? liveCwd(cur->id) : QDir::homePath());
+    if (dir.isEmpty())
         return;
-    // closing hangs up whatever runs in the pane; ask only when that is more than the idle shell
-    auto *t = terminal(id);
-    const QString fg = t ? t->foregroundProcessName() : QString();
-    const QString shell = QFileInfo(qEnvironmentVariable("SHELL", QStringLiteral("bash"))).fileName();
-    if (!fg.isEmpty() && fg != shell
-        && QMessageBox::question(this, tr("Close Session"), tr("“%1” is still running %2. Close it?").arg(s->name, fg)) != QMessageBox::Yes)
-        return;
-    m_store.removeSession(id);
+    const QString remembering = m_store.workspaceRemembering(dir);
+    m_store.select(m_store.addSession(remembering.isEmpty() ? currentWorkspace() : remembering, {}, dir));
 }
 
-void MainWindow::renameSession(const QString &id)
+void MainWindow::closeSessions(const QStringList &ids)
 {
-    const Session *s = m_store.session(id);
-    if (!s)
+    QStringList live;
+    for (const auto &id : ids)
+        if (m_store.session(id))
+            live << id;
+    if (live.isEmpty())
         return;
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, tr("Rename Session"), tr("Name:"), QLineEdit::Normal, s->name, &ok);
-    if (ok)
-        m_store.renameSession(id, name.trimmed());
-}
-
-void MainWindow::renameWorkspace(const QString &id)
-{
-    const Workspace *w = m_store.workspace(id);
-    if (!w)
+    if (m_store.settings.confirmCloseSession
+        && QMessageBox::question(this, tr("Close Session"),
+                                 live.size() == 1 ? tr("Close “%1”?").arg(m_store.session(live.first())->displayName())
+                                                  : tr("Close %1 sessions?").arg(live.size()))
+               != QMessageBox::Yes)
         return;
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, tr("Rename Workspace"), tr("Name:"), QLineEdit::Normal, w->name, &ok);
-    if (ok)
-        m_store.renameWorkspace(id, name.trimmed());
+    for (const auto &id : live)
+        m_store.removeSession(id);
 }
 
 void MainWindow::deleteWorkspace(const QString &id)
@@ -624,9 +575,88 @@ void MainWindow::deleteWorkspace(const QString &id)
         return;
     if (!w->sessions.isEmpty()
         && QMessageBox::question(this, tr("Delete Workspace"), tr("Close all %1 sessions in “%2”?").arg(w->sessions.size()).arg(w->name))
-            != QMessageBox::Yes)
+               != QMessageBox::Yes)
         return;
     m_store.removeWorkspace(id);
+}
+
+void MainWindow::fillMoveMenu(QMenu *menu, const QStringList &ids)
+{
+    const Workspace *from = m_store.workspaceOf(ids.value(0));
+    for (const auto &w : m_store.workspaces) {
+        auto *a = menu->addAction(w.name, this, [this, ids, wid = w.id] {
+            for (const auto &id : ids)
+                m_store.moveSession(id, wid, -1);
+        });
+        a->setEnabled(ids.size() > 1 || !from || from->id != w.id);
+    }
+    menu->addSeparator();
+    menu->addAction(tr("New Workspace…"), this, [this, ids] {
+        bool ok = false;
+        const QString name = QInputDialog::getText(this, tr("New Workspace"), tr("Name:"), QLineEdit::Normal, {}, &ok);
+        if (!ok || name.trimmed().isEmpty())
+            return;
+        const QString ws = m_store.addWorkspace(name.trimmed());
+        for (const auto &id : ids)
+            m_store.moveSession(id, ws, -1);
+    });
+}
+
+void MainWindow::sidebarMenu(const QPoint &pos)
+{
+    QMenu menu;
+    QTreeWidgetItem *item = m_tree->itemAt(pos);
+    if (!item) {
+        menu.addAction(QIcon::fromTheme(QStringLiteral("list-add")), tr("New Workspace…"), this, &MainWindow::newWorkspace);
+        menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        return;
+    }
+    const QString id = item->data(0, SidebarRole::Id).toString();
+    if (item->data(0, SidebarRole::Kind).toInt() == SidebarRole::SessionRow) {
+        // right-clicking inside the selection acts on all of it; outside narrows to the row
+        QStringList ids = m_tree->selectedSessionIds();
+        if (!ids.contains(id))
+            ids = {id};
+        const Session *s = m_store.session(id);
+        if (ids.size() == 1) {
+            auto *clear = menu.addAction(tr("Clear Status"), this, [this, id] { m_store.setStatus(id, QStringLiteral("idle")); });
+            clear->setEnabled(s->status != QLatin1String("idle"));
+            menu.addSeparator();
+            menu.addAction(tr("Rename"), this, [this, item] { m_tree->editItem(item); });
+            menu.addAction(tr("Copy Name"), this, [s] { QApplication::clipboard()->setText(s->displayName()); });
+            menu.addAction(tr("Duplicate Session"), this, [this, id] { m_store.select(m_store.duplicateSession(id, liveCwd(id))); });
+        }
+        fillMoveMenu(menu.addMenu(tr("Move to")), ids);
+        bool allFlagged = true;
+        for (const auto &sid : ids)
+            allFlagged &= m_store.session(sid)->flagged;
+        menu.addAction(allFlagged ? tr("Unflag") : tr("Flag"), this, [this, ids, allFlagged] {
+            for (const auto &sid : ids)
+                m_store.setFlag(sid, !allFlagged);
+        });
+        menu.addAction(ids.size() == 1 ? tr("Close Session") : tr("Close %1 Sessions").arg(ids.size()), this, [this, ids] { closeSessions(ids); });
+    } else {
+        const Workspace *w = m_store.workspace(id);
+        menu.addAction(QIcon::fromTheme(QStringLiteral("tab-new")), tr("New Session"), this, [this, id] { newSession(id); });
+        menu.addSeparator();
+        menu.addAction(tr("Rename"), this, [this, item] { m_tree->editItem(item); });
+        menu.addAction(tr("Copy Name"), this, [w] { QApplication::clipboard()->setText(w->name); });
+        bool allFlagged = !w->sessions.isEmpty();
+        for (const auto &s : w->sessions)
+            allFlagged &= s.flagged;
+        auto *flag = menu.addAction(allFlagged ? tr("Unflag All Sessions") : tr("Flag All Sessions"), this, [this, id, allFlagged] {
+            QStringList ids;
+            for (const auto &s : m_store.workspace(id)->sessions)
+                ids << s.id;
+            for (const auto &sid : ids)
+                m_store.setFlag(sid, !allFlagged);
+        });
+        flag->setEnabled(!w->sessions.isEmpty());
+        menu.addSeparator();
+        auto *del = menu.addAction(tr("Delete Workspace"), this, [this, id] { deleteWorkspace(id); });
+        del->setEnabled(m_store.workspaces.size() > 1);
+    }
+    menu.exec(m_tree->viewport()->mapToGlobal(pos));
 }
 
 void MainWindow::go(const QString &direction)
@@ -643,22 +673,68 @@ void MainWindow::profileDialog(const char *slot)
         statusBar()->showMessage(tr("Open a session first"), 2000);
 }
 
-void MainWindow::notify(const QString &id, const QString &status)
+void MainWindow::showSettings()
 {
-    const Session *s = m_store.session(id);
-    if (!s || (status != QLatin1String("blocked") && status != QLatin1String("completed")))
-        return;
-    if (isActiveWindow() && id == m_store.selected)
-        return;
-    const QString text = status == QLatin1String("blocked") ? tr("%1 is waiting for you").arg(s->name) : tr("%1 finished").arg(s->name);
-    auto *n = KNotification::event(KNotification::Notification, QStringLiteral("agterm-qt"), text, QStringLiteral("utilities-terminal"));
-    auto *action = n->addDefaultAction(tr("Show"));
-    connect(action, &KNotificationAction::activated, this, [this, id] {
-        m_store.select(id);
-        show();
-        raise();
-        activateWindow();
+    // agterm's Settings ▸ General subset that exists here so far
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Configure agterm"));
+    auto *form = new QFormLayout;
+    Settings s = m_store.settings;
+
+    auto *dirMode = new QComboBox;
+    dirMode->addItem(tr("Home directory"), QStringLiteral("home"));
+    dirMode->addItem(tr("Workspace folder"), QStringLiteral("workspace"));
+    dirMode->addItem(tr("Fixed folder"), QStringLiteral("custom"));
+    dirMode->setCurrentIndex(dirMode->findData(s.newSessionDirectory));
+    auto *custom = new QLineEdit(s.newSessionCustomDirectory);
+    auto *browse = new QPushButton(QIcon::fromTheme(QStringLiteral("document-open-folder")), {});
+    connect(browse, &QPushButton::clicked, &dlg, [&] {
+        const QString d = QFileDialog::getExistingDirectory(&dlg, tr("Folder for new sessions"), custom->text().isEmpty() ? QDir::homePath() : custom->text());
+        if (!d.isEmpty())
+            custom->setText(d);
     });
+    auto *customRow = new QHBoxLayout;
+    customRow->addWidget(custom, 1);
+    customRow->addWidget(browse);
+    auto syncCustom = [&] {
+        const bool on = dirMode->currentData() == QLatin1String("custom");
+        custom->setEnabled(on);
+        browse->setEnabled(on);
+    };
+    connect(dirMode, &QComboBox::currentIndexChanged, &dlg, syncCustom);
+    syncCustom();
+
+    auto *placement = new QComboBox;
+    placement->addItem(tr("At the end of the workspace"), QStringLiteral("end"));
+    placement->addItem(tr("After the current session"), QStringLiteral("afterCurrent"));
+    placement->setCurrentIndex(placement->findData(s.newSessionPlacement));
+    auto *reset = new QComboBox;
+    reset->addItem(tr("On the first key"), QStringLiteral("firstKey"));
+    reset->addItem(tr("On Enter"), QStringLiteral("enter"));
+    reset->addItem(tr("Never"), QStringLiteral("never"));
+    reset->setCurrentIndex(reset->findData(s.statusReset));
+    auto *confirm = new QCheckBox(tr("Ask before closing a session"));
+    confirm->setChecked(s.confirmCloseSession);
+
+    form->addRow(tr("New sessions open in:"), dirMode);
+    form->addRow(QString(), customRow);
+    form->addRow(tr("New sessions are added:"), placement);
+    form->addRow(tr("Typing clears blocked/done status:"), reset);
+    form->addRow(QString(), confirm);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    auto *col = new QVBoxLayout(&dlg);
+    col->addLayout(form);
+    col->addWidget(buttons);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    s.newSessionDirectory = dirMode->currentData().toString();
+    s.newSessionCustomDirectory = custom->text();
+    s.newSessionPlacement = placement->currentData().toString();
+    s.statusReset = reset->currentData().toString();
+    s.confirmCloseSession = confirm->isChecked();
+    m_store.setSettings(s);
 }
 
 void MainWindow::save()
@@ -666,15 +742,15 @@ void MainWindow::save()
     // Konsole signals directory changes only for a shown pane; /proc is authoritative for the rest
     for (auto *s : m_store.allSessions())
         if (const QString cwd = liveCwd(s->id); !cwd.isEmpty())
-            s->cwd = cwd;
+            m_store.workspaceOf(s->id)->folder = s->cwd = cwd;
     QJsonObject root = m_store.toJson();
     QJsonArray collapsed;
-    for (const auto &c : m_collapsed)
+    for (const auto &c : std::as_const(m_tree->m_collapsed))
         collapsed << c;
     root.insert("window", QJsonObject{{"geometry", QString::fromLatin1(saveGeometry().toBase64())},
                                       {"splitter", QString::fromLatin1(m_split->saveState().toBase64())},
-                                      {"sidebar", !m_sidebar->isHidden()},
-                                      {"menubar", !menuBar()->isHidden()},
+                                      {"sidebar", m_sidebarAction->isChecked()},
+                                      {"flaggedView", m_tree->flaggedView()},
                                       {"collapsed", collapsed}});
     QSaveFile f(m_statePath);
     if (f.open(QIODevice::WriteOnly)) {
@@ -688,6 +764,11 @@ MainWindow::~MainWindow()
     // ~QWidget would delete the parts after our members are gone, while their destroyed handlers still run
     m_quitting = true;
     qDeleteAll(m_parts);
+    // a still-running PATH probe would emit finished() into our destroyed members when ~QObject kills it
+    for (auto *proc : findChildren<QProcess *>()) {
+        proc->disconnect(this);
+        delete proc;
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
@@ -702,8 +783,12 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
     if (event->type() == QEvent::KeyPress && !m_quitting) {
         auto *w = qobject_cast<QWidget *>(watched);
-        if (w && m_stack->isAncestorOf(w) && !isOwnShortcut(static_cast<QKeyEvent *>(event)))
-            m_store.keyPressed(m_store.selected);
+        auto *key = static_cast<QKeyEvent *>(event);
+        if (w && m_stack->isAncestorOf(w) && !isOwnShortcut(key) && !key->isAutoRepeat()) {
+            const bool interrupt = key->key() == Qt::Key_Escape || (key->key() == Qt::Key_C && key->modifiers() == Qt::ControlModifier);
+            const bool submit = (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter) && !(key->modifiers() & ~Qt::KeypadModifier);
+            m_store.keyPressed(m_store.selected, interrupt ? Store::Key::Interrupt : submit ? Store::Key::Submit : Store::Key::Plain);
+        }
     }
     return QMainWindow::eventFilter(watched, event);
 }

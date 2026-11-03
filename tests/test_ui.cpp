@@ -25,12 +25,12 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(QApplication::focusWidget() && QApplication::focusWidget() != &w, 5000);
         QWidget *term = QApplication::focusWidget();
 
-        QTest::keyClick(term, Qt::Key_T, Qt::ControlModifier | Qt::ShiftModifier);
+        QTest::keyClick(term, Qt::Key_N, Qt::ControlModifier | Qt::ShiftModifier);
         QTRY_COMPARE(store.allSessions().size(), 2);
 
         const QString first = store.workspaces.first().sessions.first().id;
         store.setStatus(first, "blocked");
-        QTest::keyClick(&w, Qt::Key_PageUp, Qt::ControlModifier);
+        QTest::keyClick(term, Qt::Key_Up, Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier);
         QTRY_COMPARE(store.selected, first);
         QCOMPARE(store.session(first)->status, QStringLiteral("blocked")); // a shortcut is not engagement
 

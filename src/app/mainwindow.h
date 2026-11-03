@@ -2,19 +2,19 @@
 
 #include "control.h"
 
+#include <QDateTime>
 #include <QHash>
 #include <QMainWindow>
 #include <QPointer>
-#include <QSet>
 #include <QTimer>
 
 class QKeyEvent;
 class QLabel;
+class QMenu;
 class QSplitter;
 class QStackedWidget;
 class QToolButton;
-class QTreeWidget;
-class SidebarDelegate;
+class Sidebar;
 class Store;
 class TerminalInterface;
 namespace KParts { class ReadOnlyPart; }
@@ -34,30 +34,33 @@ public:
     void save();
     bool isOwnShortcut(QKeyEvent *event) const;
     void setSocketStatus(bool ok, const QString &error);
+    QStringList availableLaunchers() const { return m_launchers; }
 
 protected:
     void closeEvent(QCloseEvent *event) override;
     void showEvent(QShowEvent *event) override;
-    void changeEvent(QEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
-    void createActions();
-    void applyTheme();
-    void updateHeader();
+    QAction *action(const QString &name, const QString &text, const QString &icon, const QKeySequence &key, std::function<void()> slot);
+    void createMenus();
     void createTerminal(const QString &id);
-    void rebuildSidebar();
     void showSelected();
     void sidebarMenu(const QPoint &pos);
+    void launcherMenu(const QString &workspaceId, const QPoint &globalPos);
+    void launch(const QString &launcherId, const QString &workspaceId);
+    QString currentWorkspace();
     void newSession(const QString &workspaceId);
     void newWorkspace();
-    void closeSession(const QString &id);
-    void renameSession(const QString &id);
-    void renameWorkspace(const QString &id);
+    void openDirectory();
+    void closeSessions(const QStringList &ids);
     void deleteWorkspace(const QString &id);
+    void fillMoveMenu(QMenu *menu, const QStringList &ids);
     void go(const QString &direction);
     void profileDialog(const char *slot);
-    void notify(const QString &id, const QString &status);
+    void showSettings();
+    void sampleAgents();
+    void detectLaunchers();
     TerminalInterface *terminal(const QString &id) const;
     QString liveCwd(const QString &id) const;
     void prime(QWidget *page);
@@ -66,26 +69,20 @@ private:
     Store &m_store;
     QString m_statePath;
     QSplitter *m_split;
-    QWidget *m_sidebar;
-    QTreeWidget *m_tree;
-    SidebarDelegate *m_delegate;
-    QToolButton *m_menuButton;
-    QWidget *m_footer;
-    QLabel *m_socketDot, *m_socketText;
-    QList<QLabel *> m_footerLabels;
-    QWidget *m_header = nullptr; // null until the constructor has built the chrome
-    QLabel *m_crumbWs, *m_crumbSep, *m_crumbName, *m_statusChip, *m_cwdLabel, *m_procChip;
+    QWidget *m_sidebarPanel;
+    Sidebar *m_tree;
+    QToolButton *m_flagButton;
+    QAction *m_sidebarAction;
+    QLabel *m_title;
     QStackedWidget *m_stack;
     QWidget *m_empty;
-    QTimer m_spinTimer, m_headerTimer;
-    bool m_socketOk = false;
-    QString m_socketError;
+    QHash<QString, QAction *> m_actions;
     QHash<QString, KParts::ReadOnlyPart *> m_parts;
     QHash<QString, QPointer<QObject>> m_sessions;
-    QSet<QString> m_collapsed;
-    QTimer m_saveTimer;
+    QStringList m_launchers{QStringLiteral("terminal")};
+    QDateTime m_launchersAt;
+    QTimer m_saveTimer, m_agentTimer;
     bool m_quitting = false;
-    bool m_rebuilding = false;
 };
 
 // Receives the Konsole part's string-only signals for one session.

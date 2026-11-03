@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/">
+    <file>launchers/claude.svg</file>
+    <file>launchers/codex.svg</file>
+    <file>launchers/opencode.svg</file>
+    <file>launchers/antigravity.svg</file>
+  </qresource>
+</RCC>

@@ -20,11 +20,15 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session new [--name N] [--cwd DIR] [--workspace W | --workspace-name N [--create-workspace]]
               [--command CMD] [--no-select]
   session close | select | info         (--target: session id/prefix/name, default $AGTERM_SESSION_ID, then active)
-  session rename <name>
+  session rename <name>                 empty name reverts to the directory name
+  session duplicate [--no-select]
+  session flag [on|off|toggle]
+  session move <workspace> [--index N]
+  workspace move --index N
   session type <text> | --stdin
   session text [--lines N]              full screen + scrollback
-  session status <idle|active|completed|blocked> [--auto-reset]
-  session go --to next|prev|next-attention|prev-attention
+  session status <idle|active|completed|blocked> [--auto-reset] [--blink]
+  session go --to next|prev|first|last|next-attention|prev-attention
 )";
 
 static int die(const QString &message)
@@ -81,8 +85,15 @@ int main(int argc, char **argv)
     flag("create-workspace", "createWorkspace");
     flag("no-select", "noSelect");
     flag("auto-reset", "autoReset");
+    flag("blink", "blink");
     if (opt.contains(QStringLiteral("lines")))
         args.insert("lines", opt.value(QStringLiteral("lines")).toInt());
+    if (opt.contains(QStringLiteral("index")))
+        args.insert("index", opt.value(QStringLiteral("index")).toInt());
+    if (cmd == QLatin1String("session.flag"))
+        args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
+    if (cmd == QLatin1String("session.move"))
+        args.insert("workspace", arg);
     if (cmd.endsWith(QLatin1String(".rename")))
         args.insert("name", arg);
     if (cmd == QLatin1String("session.status"))
@@ -143,7 +154,7 @@ int main(int argc, char **argv)
         fputs(result["text"].toString().toUtf8().constData(), stdout);
         if (!result["text"].toString().endsWith(QLatin1Char('\n')))
             putchar('\n');
-    } else if (cmd.endsWith(QLatin1String(".new"))) {
+    } else if (cmd.endsWith(QLatin1String(".new")) || cmd == QLatin1String("session.duplicate")) {
         printf("%s\n", qPrintable(result["id"].toString()));
     }
     return 0;

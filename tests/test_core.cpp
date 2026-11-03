@@ -1,7 +1,9 @@
 #include "control.h"
+#include "launcher.h"
 #include "store.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QSignalSpy>
 #include <QTest>
@@ -91,7 +93,7 @@ private Q_SLOTS:
         QCOMPARE(s.go("next-attention", &err), c);
         QCOMPARE(s.go("next", &err), a); // wraps
         QCOMPARE(s.go("prev", &err), c);
-        s.keyPressed(c);
+        s.keyPressed(c, Store::Key::Plain);
         QCOMPARE(s.session(c)->status, QStringLiteral("idle"));
         QVERIFY(s.go("next-attention", &err).isEmpty());
         Q_UNUSED(b);
@@ -131,6 +133,81 @@ private Q_SLOTS:
         QCOMPARE(r.selected, a);
         QCOMPARE(r.session(a)->cwd, QStringLiteral("/tmp"));
         QCOMPARE(r.session(a)->status, QStringLiteral("idle")); // a stale glyph must not outlive the run
+    }
+
+    void statusResetFollowsTheSetting()
+    {
+        Store s;
+        const QString a = s.addSession(s.addWorkspace("w"), {}, {});
+        s.setStatus(a, "active");
+        s.keyPressed(a, Store::Key::Plain);
+        QCOMPARE(s.session(a)->status, QStringLiteral("active")); // typing while the agent works keeps the glyph
+        s.keyPressed(a, Store::Key::Interrupt);
+        QCOMPARE(s.session(a)->status, QStringLiteral("idle"));
+        s.settings.statusReset = "enter";
+        s.setStatus(a, "completed");
+        s.keyPressed(a, Store::Key::Plain);
+        QCOMPARE(s.session(a)->status, QStringLiteral("completed"));
+        s.keyPressed(a, Store::Key::Submit);
+        QCOMPARE(s.session(a)->status, QStringLiteral("idle"));
+    }
+
+    void namesDeriveFromCwdUntilPinned()
+    {
+        Store s;
+        const QString a = s.addSession(s.addWorkspace("w"), {}, QDir::tempPath());
+        QCOMPARE(s.session(a)->displayName(), QFileInfo(QDir::tempPath()).fileName());
+        s.renameSession(a, "pinned");
+        s.setCwd(a, QDir::homePath());
+        QCOMPARE(s.session(a)->displayName(), QStringLiteral("pinned"));
+        s.renameSession(a, "");
+        QCOMPARE(s.session(a)->displayName(), QStringLiteral("~"));
+    }
+
+    void workspaceRemembersFolderForNewSessions()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString ws = s.addWorkspace("proj"), other = s.addWorkspace("other");
+        const QString a = s.addSession(ws, {}, {});
+        s.setCwd(a, QDir::tempPath());
+        QCOMPARE(s.workspace(ws)->folder, QDir::tempPath());
+        QCOMPARE(s.newSessionCwd(ws, {}), QDir::tempPath());
+        QCOMPARE(s.newSessionCwd(other, {}), QDir::homePath());
+        s.settings.newSessionDirectory = "home";
+        QCOMPARE(s.newSessionCwd(ws, {}), QDir::homePath());
+        s.settings.newSessionDirectory = "workspace";
+        const auto r = call(s, t, "session.new", {}, {{"cwd", QDir::tempPath()}}); // a bare --cwd joins the workspace living there
+        QCOMPARE(s.workspaceOf(r["result"]["id"].toString())->id, ws);
+    }
+
+    void moveFlagDuplicateAndMruReselection()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString w1 = s.addWorkspace("a"), w2 = s.addWorkspace("b");
+        const QString x = s.addSession(w1, {}, {}), y = s.addSession(w1, {}, {}), z = s.addSession(w2, {}, {});
+        QVERIFY(call(s, t, "session.move", y, {{"workspace", "b"}, {"index", 0}})["ok"].toBool());
+        QCOMPARE(s.workspace(w2)->sessions.first().id, y);
+        QVERIFY(call(s, t, "session.flag", x, {{"mode", "on"}})["ok"].toBool());
+        QVERIFY(s.session(x)->flagged);
+        const QString copy = call(s, t, "session.duplicate", x)["result"]["id"].toString();
+        QCOMPARE(s.workspace(w1)->sessions[1].id, copy);
+        s.select(z);
+        s.select(y);
+        s.removeSession(y); // back to the most recent session in the same workspace, not the adjacent row
+        QCOMPARE(s.selected, z);
+    }
+
+    void agentDetectionAndSpinnerStripping()
+    {
+        QCOMPARE(agentForArgv({"/usr/bin/claude", "--resume"}), QStringLiteral("claude"));
+        QCOMPARE(agentForArgv({"node", "--max-old-space-size=4096", "/opt/codex/bin/codex"}), QStringLiteral("codex"));
+        QCOMPARE(agentForArgv({"-zsh"}), QString());
+        QCOMPARE(agentForGroup({{"bash", "run.sh"}, {"agy"}}), QStringLiteral("antigravity"));
+        QCOMPARE(availableLaunchers("/a:/b", [](const QString &f) { return f == "/b/claude"; }), QStringList({"terminal", "claude"}));
+        QCOMPARE(Store::stripTitleSpinner(QString::fromUtf8("✳ Claude Code")), QStringLiteral("Claude Code"));
+        QCOMPARE(Store::stripTitleSpinner(QString::fromUtf8("⠋ build")), QStringLiteral("build"));
     }
 
     void treeAndUnknownCommand()

@@ -8,9 +8,31 @@
 const QStringList Store::statuses = {QStringLiteral("idle"), QStringLiteral("active"), QStringLiteral("completed"),
                                      QStringLiteral("blocked")};
 
+QString Session::displayName() const
+{
+    if (!name.isEmpty())
+        return name;
+    const QString c = QDir::cleanPath(cwd);
+    return c == QDir::homePath() || c.isEmpty() ? QStringLiteral("~") : c == QLatin1String("/") ? c : QFileInfo(c).fileName();
+}
+
 QString Store::newId()
 {
     return QUuid::createUuid().toString(QUuid::Id128).left(12);
+}
+
+QString Store::stripTitleSpinner(const QString &title)
+{
+    // agents animate a status glyph (✳, ◑, braille frames) at the start of the title
+    int i = 0;
+    for (; i < title.size(); ++i) {
+        const char16_t c = title[i].unicode();
+        const bool spinner = (c >= 0x2800 && c <= 0x28FF) || (c >= 0x25CB && c <= 0x25D3) || (c >= 0x2722 && c <= 0x2725)
+                             || (c >= 0x2731 && c <= 0x273F) || c == 0x00B7;
+        if (!spinner && !title[i].isSpace())
+            break;
+    }
+    return i == title.size() ? title : title.mid(i);
 }
 
 Session *Store::session(const QString &id)
@@ -39,6 +61,14 @@ Workspace *Store::workspaceOf(const QString &sessionId)
     return nullptr;
 }
 
+int Store::indexIn(const Workspace &w, const QString &sessionId) const
+{
+    for (int i = 0; i < w.sessions.size(); ++i)
+        if (w.sessions[i].id == sessionId)
+            return i;
+    return -1;
+}
+
 QList<Session *> Store::allSessions()
 {
     QList<Session *> out;
@@ -48,8 +78,8 @@ QList<Session *> Store::allSessions()
     return out;
 }
 
-template<typename T>
-static QString resolve(const QList<T *> &items, const QString &target, const char *kind, QString *error)
+template<typename T, typename Name>
+static QString resolve(const QList<T *> &items, const QString &target, const char *kind, Name name, QString *error)
 {
     QList<T *> prefix, named;
     for (T *i : items) {
@@ -57,7 +87,7 @@ static QString resolve(const QList<T *> &items, const QString &target, const cha
             return i->id;
         if (target.size() >= 3 && i->id.startsWith(target))
             prefix << i;
-        if (i->name == target)
+        if (name(i) == target)
             named << i;
     }
     const auto &hits = prefix.isEmpty() ? named : prefix;
@@ -75,7 +105,7 @@ QString Store::resolveSession(const QString &target, QString *error)
             *error = QStringLiteral("no active session");
         return selected;
     }
-    return resolve(allSessions(), target, "session", error);
+    return resolve(allSessions(), target, "session", [](Session *s) { return s->displayName(); }, error);
 }
 
 QString Store::resolveWorkspace(const QString &target, QString *error)
@@ -91,18 +121,41 @@ QString Store::resolveWorkspace(const QString &target, QString *error)
     QList<Workspace *> ws;
     for (auto &w : workspaces)
         ws << &w;
-    return resolve(ws, target, "workspace", error);
+    return resolve(ws, target, "workspace", [](Workspace *w) { return w->name; }, error);
+}
+
+QString Store::workspaceRemembering(const QString &folder) const
+{
+    const QString f = QDir::cleanPath(folder);
+    for (const auto &w : workspaces)
+        if (!w.folder.isEmpty() && w.folder == f)
+            return w.id;
+    return {};
+}
+
+QString Store::newSessionCwd(const QString &workspaceId, const QString &currentCwd) const
+{
+    const QString home = QDir::homePath();
+    if (settings.newSessionDirectory == QLatin1String("custom"))
+        return QFileInfo(settings.newSessionCustomDirectory).isDir() ? settings.newSessionCustomDirectory : home;
+    if (settings.newSessionDirectory == QLatin1String("workspace")) {
+        for (const auto &w : workspaces)
+            if (w.id == workspaceId && QFileInfo(w.folder).isDir())
+                return w.folder; // a vanished folder is skipped, not cleared
+        return currentCwd.isEmpty() ? home : currentCwd;
+    }
+    return home;
 }
 
 QString Store::addWorkspace(const QString &name)
 {
-    Workspace w{newId(), name.isEmpty() ? QStringLiteral("workspace %1").arg(workspaces.size() + 1) : name, {}};
+    Workspace w{newId(), name.isEmpty() ? QStringLiteral("workspace %1").arg(workspaces.size() + 1) : name, {}, {}};
     workspaces << w;
     Q_EMIT changed();
     return w.id;
 }
 
-QString Store::addSession(const QString &workspaceId, const QString &name, const QString &cwd, const QString &command)
+QString Store::addSession(const QString &workspaceId, const QString &name, const QString &cwd, const QString &command, int index)
 {
     auto *w = workspace(workspaceId);
     if (!w)
@@ -110,12 +163,24 @@ QString Store::addSession(const QString &workspaceId, const QString &name, const
     Session s;
     s.id = newId();
     s.cwd = cwd.isEmpty() ? QDir::homePath() : cwd;
-    s.name = !name.isEmpty() ? name : s.cwd == QDir::homePath() ? QStringLiteral("~") : QFileInfo(s.cwd).fileName();
+    s.name = name;
     s.command = command;
-    w->sessions << s;
+    if (index < 0 && settings.newSessionPlacement == QLatin1String("afterCurrent"))
+        if (const int at = indexIn(*w, selected); at >= 0)
+            index = at + 1;
+    w->sessions.insert(index < 0 || index > w->sessions.size() ? w->sessions.size() : index, s);
     Q_EMIT sessionAdded(s.id);
     Q_EMIT changed();
     return s.id;
+}
+
+QString Store::duplicateSession(const QString &id, const QString &cwd)
+{
+    auto *w = workspaceOf(id);
+    if (!w)
+        return {};
+    const Session *s = session(id);
+    return addSession(w->id, {}, cwd.isEmpty() ? s->cwd : cwd, {}, indexIn(*w, id) + 1);
 }
 
 void Store::removeSession(const QString &id)
@@ -123,17 +188,24 @@ void Store::removeSession(const QString &id)
     auto *w = workspaceOf(id);
     if (!w)
         return;
-    int i = 0;
-    while (w->sessions[i].id != id)
-        ++i;
+    const int i = indexIn(*w, id);
     w->sessions.removeAt(i);
+    recent.removeAll(id);
     if (selected == id) {
-        // the neighbour in the same workspace, else whatever is left anywhere
+        // most recent in the same workspace, then most recent anywhere, then the adjacent row
         QString next;
-        if (!w->sessions.isEmpty())
+        for (const auto &r : std::as_const(recent))
+            if (indexIn(*w, r) >= 0) {
+                next = r;
+                break;
+            }
+        if (next.isEmpty() && !w->sessions.isEmpty())
             next = w->sessions[qMin(i, int(w->sessions.size()) - 1)].id;
-        else if (auto all = allSessions(); !all.isEmpty())
-            next = all.first()->id;
+        if (next.isEmpty() && !recent.isEmpty())
+            next = recent.first();
+        if (next.isEmpty())
+            if (auto all = allSessions(); !all.isEmpty())
+                next = all.first()->id;
         selected.clear();
         if (!next.isEmpty())
             select(next);
@@ -156,24 +228,53 @@ void Store::removeWorkspace(const QString &id)
         removeSession(sid);
     for (int i = 0; i < workspaces.size(); ++i)
         if (workspaces[i].id == id)
-            workspaces.removeAt(i);
+            workspaces.removeAt(i--);
     Q_EMIT changed();
 }
 
 void Store::renameSession(const QString &id, const QString &name)
 {
-    if (auto *s = session(id); s && !name.isEmpty()) {
-        s->name = name;
+    if (auto *s = session(id)) {
+        s->name = name.trimmed();
         Q_EMIT changed();
     }
 }
 
 void Store::renameWorkspace(const QString &id, const QString &name)
 {
-    if (auto *w = workspace(id); w && !name.isEmpty()) {
-        w->name = name;
+    if (auto *w = workspace(id); w && !name.trimmed().isEmpty()) {
+        w->name = name.trimmed();
         Q_EMIT changed();
     }
+}
+
+bool Store::moveSession(const QString &id, const QString &workspaceId, int index)
+{
+    auto *from = workspaceOf(id);
+    if (!from || !workspace(workspaceId))
+        return false;
+    const int at = indexIn(*from, id);
+    Session s = from->sessions.takeAt(at);
+    auto *to = workspace(workspaceId);
+    if (to == from && index > at)
+        --index; // the removal shifted the target
+    to->sessions.insert(index < 0 || index > to->sessions.size() ? to->sessions.size() : index, s);
+    Q_EMIT changed();
+    return true;
+}
+
+bool Store::moveWorkspace(const QString &id, int index)
+{
+    for (int i = 0; i < workspaces.size(); ++i)
+        if (workspaces[i].id == id) {
+            Workspace w = workspaces.takeAt(i);
+            if (index > i)
+                --index;
+            workspaces.insert(index < 0 || index > workspaces.size() ? workspaces.size() : index, w);
+            Q_EMIT changed();
+            return true;
+        }
+    return false;
 }
 
 void Store::select(const QString &id)
@@ -182,19 +283,23 @@ void Store::select(const QString &id)
     if (!s || selected == id)
         return;
     selected = id;
+    recent.removeAll(id);
+    recent.prepend(id);
     if (s->status == QLatin1String("completed") && s->autoReset)
         setStatus(id, QStringLiteral("idle"));
     Q_EMIT selectionChanged(id);
     Q_EMIT changed();
 }
 
-bool Store::setStatus(const QString &id, const QString &status, bool autoReset)
+bool Store::setStatus(const QString &id, const QString &status, bool autoReset, bool blink)
 {
     auto *s = session(id);
     if (!s || !statuses.contains(status))
         return false;
+    const bool same = s->status == status && s->blink == blink;
     s->autoReset = autoReset;
-    if (s->status == status)
+    s->blink = blink && status != QLatin1String("idle");
+    if (same)
         return true;
     s->status = status;
     Q_EMIT statusChanged(id, status);
@@ -202,37 +307,88 @@ bool Store::setStatus(const QString &id, const QString &status, bool autoReset)
     return true;
 }
 
-void Store::setCwd(const QString &id, const QString &cwd)
+void Store::setFlag(const QString &id, bool flagged)
 {
-    if (auto *s = session(id); s && !cwd.isEmpty() && s->cwd != cwd) {
-        s->cwd = cwd;
+    if (auto *s = session(id); s && s->flagged != flagged) {
+        s->flagged = flagged;
         Q_EMIT changed();
     }
 }
 
+void Store::setCwd(const QString &id, const QString &cwd)
+{
+    auto *s = session(id);
+    if (!s || cwd.isEmpty())
+        return;
+    const QString c = QDir::cleanPath(cwd);
+    auto *w = workspaceOf(id);
+    if (s->cwd == c && w->folder == c)
+        return;
+    s->cwd = c;
+    w->folder = c; // the workspace remembers where its sessions last were
+    Q_EMIT changed();
+}
+
 void Store::setTitle(const QString &id, const QString &title)
 {
-    if (auto *s = session(id); s && s->title != title) {
-        s->title = title; // not persisted, and Konsole retitles on every prompt: no changed(), so no save
+    const QString t = stripTitleSpinner(title);
+    if (auto *s = session(id); s && s->title != t) {
+        s->title = t; // not persisted, and Konsole retitles on every prompt: no changed(), so no save
         Q_EMIT titleChanged(id);
     }
 }
 
-void Store::keyPressed(const QString &id)
+void Store::setAgent(const QString &id, const QString &agent)
 {
-    if (auto *s = session(id); s && (s->status == QLatin1String("blocked") || s->status == QLatin1String("completed")))
+    if (auto *s = session(id); s && s->agent != agent) {
+        s->agent = agent;
+        Q_EMIT titleChanged(id); // a repaint, not a save
+    }
+}
+
+void Store::setSettings(const Settings &s)
+{
+    settings = s;
+    Q_EMIT changed();
+}
+
+void Store::keyPressed(const QString &id, Key key)
+{
+    auto *s = session(id);
+    if (!s)
+        return;
+    bool clear = false;
+    if (s->status == QLatin1String("active"))
+        clear = key == Key::Interrupt;
+    else if (s->status == QLatin1String("blocked") || s->status == QLatin1String("completed")) {
+        if (settings.statusReset == QLatin1String("firstKey"))
+            clear = true;
+        else if (settings.statusReset == QLatin1String("enter"))
+            clear = key == Key::Submit || (s->status == QLatin1String("blocked") && key == Key::Interrupt);
+    }
+    if (clear)
         setStatus(id, QStringLiteral("idle"));
 }
 
 QString Store::go(const QString &direction, QString *error)
 {
-    const bool attention = direction.endsWith(QLatin1String("-attention"));
-    const bool back = direction.startsWith(QLatin1String("prev"));
-    if (!QStringList{"next", "prev", "next-attention", "prev-attention"}.contains(direction)) {
+    static const QStringList known{"next", "prev", "first", "last", "next-attention", "prev-attention"};
+    if (!known.contains(direction)) {
         *error = QStringLiteral("unknown direction '%1'").arg(direction);
         return {};
     }
     const auto all = allSessions();
+    if (all.isEmpty()) {
+        *error = QStringLiteral("no sessions");
+        return {};
+    }
+    if (direction == QLatin1String("first") || direction == QLatin1String("last")) {
+        const QString id = (direction == QLatin1String("first") ? all.first() : all.last())->id;
+        select(id);
+        return id;
+    }
+    const bool attention = direction.endsWith(QLatin1String("-attention"));
+    const bool back = direction.startsWith(QLatin1String("prev"));
     int at = -1;
     for (int i = 0; i < all.size(); ++i)
         if (all[i]->id == selected)
@@ -246,7 +402,7 @@ QString Store::go(const QString &direction, QString *error)
             return s->id;
         }
     }
-    *error = all.isEmpty() ? QStringLiteral("no sessions") : QStringLiteral("no session needs attention");
+    *error = QStringLiteral("no session needs attention");
     return {};
 }
 
@@ -256,31 +412,53 @@ QJsonObject Store::toJson() const
     for (const auto &w : workspaces) {
         QJsonArray ss;
         for (const auto &s : w.sessions)
-            ss << QJsonObject{{"id", s.id}, {"name", s.name}, {"cwd", s.cwd}};
-        ws << QJsonObject{{"id", w.id}, {"name", w.name}, {"sessions", ss}};
+            ss << QJsonObject{{"id", s.id}, {"name", s.name}, {"cwd", s.cwd}, {"flagged", s.flagged}};
+        ws << QJsonObject{{"id", w.id}, {"name", w.name}, {"folder", w.folder}, {"sessions", ss}};
     }
-    return {{"version", 1}, {"selected", selected}, {"workspaces", ws}};
+    const QJsonObject st{{"newSessionDirectory", settings.newSessionDirectory},
+                         {"newSessionCustomDirectory", settings.newSessionCustomDirectory},
+                         {"newSessionPlacement", settings.newSessionPlacement},
+                         {"statusReset", settings.statusReset},
+                         {"lastLauncher", settings.lastLauncher},
+                         {"confirmCloseSession", settings.confirmCloseSession}};
+    return {{"version", 2}, {"selected", selected}, {"recent", QJsonArray::fromStringList(recent)}, {"settings", st}, {"workspaces", ws}};
 }
 
 void Store::fromJson(const QJsonObject &o)
 {
+    const int version = o.value("version").toInt(1);
     workspaces.clear();
     for (const auto &wv : o.value("workspaces").toArray()) {
         const auto wo = wv.toObject();
-        Workspace w{wo.value("id").toString(), wo.value("name").toString(), {}};
+        Workspace w{wo.value("id").toString(), wo.value("name").toString(), wo.value("folder").toString(), {}};
         if (w.id.isEmpty())
             continue;
         for (const auto &sv : wo.value("sessions").toArray()) {
             const auto so = sv.toObject();
             Session s;
             s.id = so.value("id").toString();
-            s.name = so.value("name").toString();
             s.cwd = so.value("cwd").toString();
+            s.name = so.value("name").toString();
+            if (version < 2 && s.name == s.displayName()) // v1 stored the derived name
+                s.name.clear();
+            s.flagged = so.value("flagged").toBool();
             if (!s.id.isEmpty())
                 w.sessions << s;
         }
         workspaces << w;
     }
+    const auto st = o.value("settings").toObject();
+    Settings d;
+    settings.newSessionDirectory = st.value("newSessionDirectory").toString(d.newSessionDirectory);
+    settings.newSessionCustomDirectory = st.value("newSessionCustomDirectory").toString();
+    settings.newSessionPlacement = st.value("newSessionPlacement").toString(d.newSessionPlacement);
+    settings.statusReset = st.value("statusReset").toString(d.statusReset);
+    settings.lastLauncher = st.value("lastLauncher").toString(d.lastLauncher);
+    settings.confirmCloseSession = st.value("confirmCloseSession").toBool();
+    recent.clear();
+    for (const auto &r : o.value("recent").toArray())
+        if (session(r.toString()))
+            recent << r.toString();
     selected = session(o.value("selected").toString()) ? o.value("selected").toString() : QString();
     if (selected.isEmpty())
         if (auto all = allSessions(); !all.isEmpty())

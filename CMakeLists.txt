@@ -9,10 +9,10 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network DBus Test)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network DBus Svg Test)
 find_package(KF6CoreAddons REQUIRED)
 find_package(KF6XmlGui REQUIRED)
-find_package(KF6Notifications REQUIRED)
+set(CMAKE_AUTORCC ON)
 
 # KParts: the real package when libkf6parts-dev is installed, else headers unpacked by
 # scripts/fetch-kparts-headers.sh linked against the runtime library (no root needed).
@@ -31,15 +31,14 @@ if(NOT TARGET KF6::Parts)
     INTERFACE_LINK_LIBRARIES "KF6::CoreAddons;KF6::XmlGui")
 endif()
 
-add_library(agterm-core STATIC src/core/store.cpp src/core/control.cpp)
+add_library(agterm-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp)
 target_include_directories(agterm-core PUBLIC src/core)
 target_link_libraries(agterm-core PUBLIC Qt6::Core)
 
-find_package(KF6ColorScheme REQUIRED)
 find_package(KF6Config REQUIRED)
-add_library(agterm-ui STATIC src/app/mainwindow.cpp src/app/sidebardelegate.cpp src/app/theme.cpp)
+add_library(agterm-ui STATIC src/app/mainwindow.cpp src/app/sidebar.cpp resources/resources.qrc)
 target_include_directories(agterm-ui PUBLIC src/app)
-target_link_libraries(agterm-ui PUBLIC agterm-core Qt6::Widgets Qt6::DBus KF6::Parts KF6::Notifications KF6::ColorScheme)
+target_link_libraries(agterm-ui PUBLIC agterm-core Qt6::Widgets Qt6::DBus Qt6::Svg KF6::Parts)
 add_executable(agterm-qt src/app/main.cpp)
 target_link_libraries(agterm-qt PRIVATE agterm-ui Qt6::Network KF6::ConfigCore)
 

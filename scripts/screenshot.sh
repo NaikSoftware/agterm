@@ -26,7 +26,11 @@ c=$(ctl session new --name "claude · copy" --cwd /tmp --workspace-name website 
 ctl session status blocked --target "$c"
 ctl session new --name "dev server" --cwd /usr --workspace-name website --no-select >/dev/null
 ctl session new --name nvim --cwd "$HOME" --workspace-name dotfiles --create-workspace --no-select >/dev/null
-ctl session type $'printf "\\033[1;32mnaik@station\\033[0m:\\033[1;34m/tmp\\033[0m$ claude\\n"; ls -la /usr | head -12\n' --target "$c"
+ctl session type $'ls -la /usr | head -12\n' --target "$c"
+# a stand-in agent: the sidebar only reads the foreground argv's name
+mkdir -p "$AGTERM_STATE_DIR/fake" && ln -sf "$(command -v sleep)" "$AGTERM_STATE_DIR/fake/claude"
+ctl session type "$AGTERM_STATE_DIR/fake/claude 30"$'\n' --target "$first"
+ctl session flag on --target "$t"
 for _ in $(seq 80); do [ -f "$out" ] && break; sleep 0.1; done
 sleep 0.3
 echo "$out"
