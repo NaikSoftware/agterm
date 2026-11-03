@@ -16,17 +16,22 @@ extension FileTreeOutline.Coordinator {
             return
         }
         let url = node.url
-        guard let session = store.activeSession?.id else {
+        guard let active = store.activeSession else {
             NSWorkspace.shared.open(url)
             return
         }
+        let session = active.id
         let fallback: @MainActor (Bool) -> Void = { shown in if !shown { NSWorkspace.shared.open(url) } }
         let ext = url.pathExtension.lowercased()
-        if LinkPolicy.markdownExtensions.contains(ext) {
+        let markdown = LinkPolicy.markdownExtensions.contains(ext), image = LinkPolicy.imageExtensions.contains(ext)
+        let text = !markdown && !image && TextPage.isPanelCandidate(file: url.path)
+        // the session-wide slot holds one page, so a viewer still showing the previous file would refuse this one
+        if (markdown || image || text) && active.fileViewerActive { store.closeOverlay(session) }
+        if markdown {
             LinkOpener.shared.markdown(url, session, nil, fallback)
-        } else if LinkPolicy.imageExtensions.contains(ext) {
+        } else if image {
             LinkOpener.shared.image(url, session, fallback)
-        } else if TextPage.isEligible(file: url.path) {
+        } else if text {
             LinkOpener.shared.text(LinkPolicy.TextLink(url: url, line: nil, session: session, sizePercent: nil), fallback)
         } else {
             NSWorkspace.shared.open(url)
