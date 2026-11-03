@@ -231,7 +231,18 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         if (args.value("title").toString().isEmpty() && args.value("body").toString().isEmpty())
             return fail(QStringLiteral("a title or a body is required"));
         store.notify(id, args.value("title").toString(), args.value("body").toString());
+        if (!store.settings.notificationsEnabled) // the badge still rises; only the banner is off
+            return ok({{"id", id}, {"text", QStringLiteral("notification banners are off in Settings > Notifications; no banner was shown")}});
         return ok({{"id", id}});
+    }
+    if (cmd.startsWith(QLatin1String("keymap.")) || cmd.startsWith(QLatin1String("hooks.")) || cmd.startsWith(QLatin1String("theme."))) {
+        QString id;
+        if (cmd == QLatin1String("keymap.run") && (id = store.resolveSession(target, &error)).isEmpty())
+            return fail(error);
+        QJsonObject result;
+        if (!terminals.appCommand(cmd, id, args, &result, &error))
+            return fail(error);
+        return ok(result);
     }
     if (cmd == QLatin1String("recent.open")) {
         const QString id = store.reopenClosed();

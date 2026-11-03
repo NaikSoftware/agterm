@@ -54,6 +54,30 @@ struct Settings {
     QString lastLauncher = QStringLiteral("terminal");
     bool confirmCloseSession = false;
     bool closeUndo = true; // GUI closes keep a short undo grace
+    bool workspaceRowClickExpands = true;
+    // Appearance; empty / 0 = the Konsole profile's own
+    QString fontFamily, theme;
+    double fontSize = 0;
+    QString cursorStyle; // block | bar | underline
+    QString cursorBlink; // blink | steady
+    double sidebarFontSize = 0, interfaceFontSize = 0;
+    // Interface: master's InterfaceElement raw names; workspaceName and customCommands are off until shown
+    QStringList hiddenInterfaceElements, shownInterfaceElements;
+    bool shows(const QString &element) const;
+    // Notifications
+    bool notificationsEnabled = true, notificationBadgeEnabled = true;
+    QString notificationSoundName;               // a freedesktop sound-theme name; "" = none
+    QString dockBounce = QStringLiteral("off");   // the taskbar entry asks for attention: off | once | untilFocused
+    // Agent Status; "" = agterm's default colour / circle
+    QString activeStatusColorHex, blockedStatusColorHex, completedStatusColorHex;
+    QString activeStatusShape, blockedStatusShape, completedStatusShape; // circle square triangle diamond capsule star
+    QString blockedStatusSoundName;
+    bool attentionIncludesActive = false;
+    // Key Mapping: the directory holding keymap.conf and hooks.conf; "" = the default
+    QString configDirectory;
+
+    QJsonObject toJson() const;
+    static Settings fromJson(const QJsonObject &o);
 };
 
 // The workspace -> session tree. Owns no terminals: the window reacts to its signals.
@@ -165,6 +189,7 @@ Q_SIGNALS:
     void paneLayoutChanged(const QString &id);
     void swapRequested(const QString &id);
     void notified(const QString &id, const QString &title, const QString &body);
+    void settingsChanged();
 
 private:
     static QString newId();

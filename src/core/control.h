@@ -36,6 +36,15 @@ public:
         *error = QStringLiteral("no terminals");
         return false;
     }
+    // keymap.* hooks.* theme.*: config the app owns; sessionId is resolved for keymap.run only
+    virtual bool appCommand(const QString &cmd, const QString &sessionId, const QJsonObject &args, QJsonObject *result, QString *error)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(args);
+        Q_UNUSED(result);
+        *error = QStringLiteral("unknown command '%1'").arg(cmd);
+        return false;
+    }
     // pane main | right; false with the reason when the pane's program cannot be copied
     virtual bool panePlan(const QString &sessionId, const QString &pane, PanePlan *out, QString *error)
     {

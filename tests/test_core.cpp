@@ -1,10 +1,14 @@
 #include "control.h"
+#include "hooks.h"
+#include "keymap.h"
 #include "launcher.h"
 #include "store.h"
 
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -36,6 +40,148 @@ class TestCore : public QObject
     }
 
 private Q_SLOTS:
+
+    void configDirectoryFollowsSettingThenStateDirThenHome()
+    {
+        QCOMPARE(configDirectory("/x", "/state", "/home/u"), QStringLiteral("/x"));
+        QCOMPARE(configDirectory({}, "/state", "/home/u"), QStringLiteral("/state/config"));
+        QCOMPARE(configDirectory({}, {}, "/home/u"), QStringLiteral("/home/u/.config/agterm-qt"));
+    }
+
+    void chordsMapMacWordsByTheReadmeTable()
+    {
+        QString e;
+        QCOMPARE(parseChordToken("cmd+o", &e), QStringList{"Ctrl+Shift+O"});
+        QCOMPARE(parseChordToken("cmd+shift+d", &e), QStringList{"Ctrl+Alt+Shift+D"});
+        QCOMPARE(parseChordToken("cmd+opt+up", &e), QStringList{"Ctrl+Alt+Shift+Up"});
+        QCOMPARE(parseChordToken("ctrl+opt+down", &e), QStringList{"Ctrl+Alt+Down"});
+        QCOMPARE(parseChordToken("ctrl+shift+/", &e), QStringList{"Ctrl+Shift+?"});
+        QCOMPARE(parseChordToken("ctrl+a>g|f5", &e), (QStringList{"Ctrl+A, G", "F5"}));
+        QVERIFY(parseChordToken("g", &e).isEmpty() && e.contains("modifier"));
+        QVERIFY(parseChordToken("ctrl+bogus", &e).isEmpty() && e.contains("invalid chord"));
+    }
+
+    void keymapRebindsCollidesAndDiagnoses()
+    {
+        const QMap<QString, QStringList> defaults{{"new_session", {"Shift+Ctrl+N"}}, {"toggle_split", {"Ctrl+Shift+D"}}, {"select_theme", {}}};
+        const Keymap km = parseKeymap(QStringLiteral("# comment\n"
+                                                     "map ctrl+alt+l toggle_split\n"
+                                                     "map ctrl+shift+n select_theme   # taken by new_session\n"
+                                                     "map ctrl+alt+j toggle_scratch\n"
+                                                     "map ctrl+alt+k bogus\n"
+                                                     "command \"Edit\" ctrl+a>e --error-hud --error-position top kate \"$AGT_SESSION_PWD\" # c\n"
+                                                     "command \"Plain\" [ -f x ] && echo y\n"
+                                                     "command \"Edit\" ctrl+alt+e true\n"
+                                                     "command \"Clash\" ctrl+alt+l true\n"
+                                                     "command \"Bad\" --error-pane left true\n"
+                                                     "global-hotkey ctrl+space\n"
+                                                     "frobnicate\n"),
+                                      defaults);
+        QCOMPARE(km.bindings.value("toggle_split"), QStringList{"Ctrl+Alt+L"}); // the default is gone
+        QCOMPARE(km.bindings.value("new_session"), QStringList{"Ctrl+Shift+N"});
+        QVERIFY(km.bindings.value("select_theme").isEmpty());
+        QCOMPARE(km.raw.value("toggle_split"), QStringLiteral("ctrl+alt+l"));
+        QCOMPARE(km.commands.size(), 3);
+        QCOMPARE(km.commands[0].keys, QStringList{"Ctrl+A, E"});
+        QVERIFY(km.commands[0].errorHud);
+        QCOMPARE(km.commands[0].errorPosition, QStringLiteral("top-center"));
+        QCOMPARE(km.commands[0].command, QStringLiteral("kate \"$AGT_SESSION_PWD\""));
+        QVERIFY(km.commands[1].keys.isEmpty());
+        QCOMPARE(km.commands[1].command, QStringLiteral("[ -f x ] && echo y"));
+        QVERIFY(km.commands[2].keys.isEmpty()); // collided with toggle_split's new chord
+        QStringList messages;
+        for (const auto &d : km.diagnostics)
+            messages << QString::number(d.line) + ":" + d.message;
+        const QString all = messages.join('\n');
+        QVERIFY2(all.contains("3:chord 'Ctrl+Shift+N' conflicts with built-in 'new_session'"), qPrintable(all));
+        QVERIFY2(all.contains("4:action 'toggle_scratch' is not available in agterm-qt"), qPrintable(all));
+        QVERIFY2(all.contains("5:unknown action 'bogus'"), qPrintable(all));
+        QVERIFY2(all.contains("8:command 'Edit' is already defined"), qPrintable(all));
+        QVERIFY2(all.contains("9:custom command 'Clash' shortcut 'Ctrl+Alt+L' conflicts with built-in 'toggle_split'"), qPrintable(all));
+        QVERIFY2(all.contains("10:command 'Bad' requires --error-hud"), qPrintable(all));
+        QVERIFY2(all.contains("11:global-hotkey"), qPrintable(all));
+        QVERIFY2(all.contains("12:unknown verb 'frobnicate'"), qPrintable(all));
+        // a starter written from the defaults parses clean and changes nothing
+        const Keymap starter = parseKeymap(starterKeymap(defaults), defaults);
+        QVERIFY(starter.diagnostics.isEmpty());
+        QCOMPARE(starter.bindings.value("new_session"), QStringList{"Ctrl+Shift+N"});
+    }
+
+    void tokensExpandRaw()
+    {
+        QCOMPARE(expandTokens("open {AGT_SESSION_PWD} {AGT_NOPE} {AGT_PANE}", {{"AGT_SESSION_PWD", "/tmp"}}), QStringLiteral("open /tmp {AGT_NOPE} "));
+    }
+
+    void hooksParseKindsAndDuplicates()
+    {
+        QList<KeymapDiagnostic> d;
+        const auto hooks = parseHooks("on status echo # kept verbatim\non bogus x\non notify\nmap x y\non status echo # kept verbatim\non tree.changed true\n", &d);
+        QCOMPARE(hooks.size(), 2);
+        QCOMPARE(hooks[0].command, QStringLiteral("echo # kept verbatim"));
+        QCOMPARE(hooks[1].line, 6);
+        QCOMPARE(d.size(), 4);
+        QVERIFY(d[0].message.contains("unknown event kind 'bogus'"));
+        QVERIFY(d[1].message.contains("no shell line"));
+        QVERIFY(d[2].message.contains("unknown verb 'map'"));
+        QVERIFY(d[3].message.contains("already defined"));
+        QList<KeymapDiagnostic> none;
+        QVERIFY(parseHooks(starterHooks(), &none).isEmpty() && none.isEmpty());
+    }
+
+    void hooksRunWithTheEventOnStdinAndReportFailures()
+    {
+        QTemporaryDir dir;
+        const QString out = dir.filePath("out");
+        QFile conf(dir.filePath("hooks.conf"));
+        QVERIFY(conf.open(QIODevice::WriteOnly));
+        conf.write(QStringLiteral("on status cat >> '%1'; echo \"$AGT_EVENT_STATUS $AGT_SESSION_ID $AGT_SOCKET\" >> '%1'\non status exit 3\n").arg(out).toUtf8());
+        conf.close();
+        Store s;
+        EventSource events(s);
+        HookRunner hooks;
+        hooks.socket = "/tmp/sock";
+        QSignalSpy failed(&hooks, &HookRunner::failed);
+        QCOMPARE(hooks.load(conf.fileName()), 0);
+        connect(&events, &EventSource::event, &hooks, &HookRunner::fire);
+        const QString id = s.addSession(s.addWorkspace("w"), {}, {});
+        s.setStatus(id, "blocked");
+        s.setStatus(id, "completed");
+        QTRY_COMPARE(failed.size(), 1); // one banner until the hook next succeeds
+        QTRY_VERIFY(QFile(out).size() > 0 && QFile::exists(out));
+        QTRY_VERIFY([&] {
+            QFile f(out);
+            return f.open(QIODevice::ReadOnly) && f.readAll().count('\n') == 4;
+        }());
+        QFile f(out);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QList<QByteArray> lines = f.readAll().split('\n');
+        const QJsonObject e = QJsonDocument::fromJson(lines[0]).object();
+        QCOMPARE(e["kind"].toString(), QStringLiteral("status"));
+        QCOMPARE(e["session"].toString(), id);
+        QCOMPARE(e["payload"]["previous"].toString(), QStringLiteral("idle"));
+        QCOMPARE(lines[1], QByteArray("blocked ") + id.toUtf8() + " /tmp/sock");
+        QCOMPARE(QJsonDocument::fromJson(lines[2]).object()["payload"].toObject()["previous"].toString(), QStringLiteral("blocked"));
+        QTRY_VERIFY(hooks.list()["hooks"].toArray()[1].toObject()["lastFailure"].toString().contains("exit status 3"));
+        QCOMPARE(failed.size(), 1);
+    }
+
+    void settingsRoundTripByMasterNames()
+    {
+        Settings a;
+        a.theme = "DarkPastels";
+        a.fontSize = 13;
+        a.notificationsEnabled = false;
+        a.hiddenInterfaceElements = {"split"};
+        a.shownInterfaceElements = {"workspaceName"};
+        const QJsonObject o = a.toJson();
+        QCOMPARE(o["theme"].toString(), QStringLiteral("DarkPastels"));
+        const Settings b = Settings::fromJson(o);
+        QCOMPARE(b.theme, a.theme);
+        QCOMPARE(b.fontSize, 13.0);
+        QVERIFY(!b.notificationsEnabled && b.closeUndo);
+        QVERIFY(!b.shows("split") && b.shows("sessionName") && b.shows("workspaceName") && !b.shows("customCommands"));
+        QVERIFY(Settings::fromJson({}).closeUndo); // an old file keeps the defaults
+    }
     void sessionNewCreatesDefaultWorkspaceAndSelects()
     {
         Store s;

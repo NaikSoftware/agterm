@@ -700,7 +700,57 @@ void Store::setAgent(const QString &id, const QString &agent)
 void Store::setSettings(const Settings &s)
 {
     settings = s;
+    Q_EMIT settingsChanged();
     Q_EMIT changed();
+}
+
+// every field by its master name; empty strings and defaults stay out of the file
+#define AGTERM_SETTINGS_STRINGS(X)                                                                                                  \
+    X(newSessionDirectory) X(newSessionCustomDirectory) X(newSessionPlacement) X(statusReset) X(lastLauncher) X(fontFamily) X(theme) \
+    X(cursorStyle) X(cursorBlink) X(notificationSoundName) X(dockBounce) X(activeStatusColorHex) X(blockedStatusColorHex)            \
+    X(completedStatusColorHex) X(activeStatusShape) X(blockedStatusShape) X(completedStatusShape) X(blockedStatusSoundName)            \
+    X(configDirectory)
+#define AGTERM_SETTINGS_BOOLS(X)                                                                                                  \
+    X(confirmCloseSession) X(closeUndo) X(workspaceRowClickExpands) X(notificationsEnabled) X(notificationBadgeEnabled) X(attentionIncludesActive)
+#define AGTERM_SETTINGS_DOUBLES(X) X(fontSize) X(sidebarFontSize) X(interfaceFontSize)
+#define AGTERM_SETTINGS_LISTS(X) X(hiddenInterfaceElements) X(shownInterfaceElements)
+
+QJsonObject Settings::toJson() const
+{
+    QJsonObject o;
+#define X(f) o.insert(QStringLiteral(#f), f);
+    AGTERM_SETTINGS_STRINGS(X) AGTERM_SETTINGS_BOOLS(X) AGTERM_SETTINGS_DOUBLES(X)
+#undef X
+#define X(f) o.insert(QStringLiteral(#f), QJsonArray::fromStringList(f));
+    AGTERM_SETTINGS_LISTS(X)
+#undef X
+    return o;
+}
+
+Settings Settings::fromJson(const QJsonObject &o)
+{
+    Settings s;
+#define X(f) s.f = o.value(QStringLiteral(#f)).toString(s.f);
+    AGTERM_SETTINGS_STRINGS(X)
+#undef X
+#define X(f) s.f = o.value(QStringLiteral(#f)).toBool(s.f);
+    AGTERM_SETTINGS_BOOLS(X)
+#undef X
+#define X(f) s.f = o.value(QStringLiteral(#f)).toDouble(s.f);
+    AGTERM_SETTINGS_DOUBLES(X)
+#undef X
+#define X(f)                                                                                                                       \
+    for (const auto &v : o.value(QStringLiteral(#f)).toArray())                                                                    \
+        s.f << v.toString();
+    AGTERM_SETTINGS_LISTS(X)
+#undef X
+    return s;
+}
+
+bool Settings::shows(const QString &element) const
+{
+    static const QStringList offByDefault{QStringLiteral("workspaceName"), QStringLiteral("customCommands")};
+    return offByDefault.contains(element) ? shownInterfaceElements.contains(element) : !hiddenInterfaceElements.contains(element);
 }
 
 void Store::keyPressed(const QString &id, Key key)
@@ -770,7 +820,8 @@ QString Store::go(const QString &direction, QString *error)
     for (int step = 1; step <= n; ++step) {
         const int idx = at < 0 ? (back ? n - step : step - 1) : ((at + (back ? -step : step)) % n + n) % n;
         auto *s = all[idx];
-        if (!attention || s->status == QLatin1String("blocked") || s->status == QLatin1String("completed")) {
+        if (!attention || s->status == QLatin1String("blocked") || s->status == QLatin1String("completed")
+            || (settings.attentionIncludesActive && s->status == QLatin1String("active"))) {
             select(s->id);
             return s->id;
         }
@@ -799,13 +850,7 @@ QJsonObject Store::toJson() const
             wo.insert("tint", tintJson(w.tint));
         ws << wo;
     }
-    const QJsonObject st{{"newSessionDirectory", settings.newSessionDirectory},
-                         {"newSessionCustomDirectory", settings.newSessionCustomDirectory},
-                         {"newSessionPlacement", settings.newSessionPlacement},
-                         {"statusReset", settings.statusReset},
-                         {"lastLauncher", settings.lastLauncher},
-                         {"confirmCloseSession", settings.confirmCloseSession},
-                         {"closeUndo", settings.closeUndo}};
+    const QJsonObject st = settings.toJson();
     return {{"version", 2},      {"selected", selected}, {"recent", QJsonArray::fromStringList(recent)},
             {"settings", st},    {"workspaces", ws},     {"focusedWorkspaces", QJsonArray::fromStringList(focused)},
             {"focusEnabled", focusEnabled}};
@@ -843,15 +888,7 @@ void Store::fromJson(const QJsonObject &o)
         }
         workspaces << w;
     }
-    const auto st = o.value("settings").toObject();
-    Settings d;
-    settings.newSessionDirectory = st.value("newSessionDirectory").toString(d.newSessionDirectory);
-    settings.newSessionCustomDirectory = st.value("newSessionCustomDirectory").toString();
-    settings.newSessionPlacement = st.value("newSessionPlacement").toString(d.newSessionPlacement);
-    settings.statusReset = st.value("statusReset").toString(d.statusReset);
-    settings.lastLauncher = st.value("lastLauncher").toString(d.lastLauncher);
-    settings.confirmCloseSession = st.value("confirmCloseSession").toBool();
-    settings.closeUndo = st.value("closeUndo").toBool(true);
+    settings = Settings::fromJson(o.value("settings").toObject());
     focused.clear();
     for (const auto &f : o.value("focusedWorkspaces").toArray())
         if (workspace(f.toString())) // stale ids are pruned, so the filter never restores enabled and empty
