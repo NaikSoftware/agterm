@@ -14,6 +14,7 @@
 #include <QFileSystemModel>
 #include <QFontDatabase>
 #include <QHash>
+#include <QScrollBar>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
@@ -324,34 +325,41 @@ void FilePanel::setRoot(const QString &dir)
 {
     if (dir == m_root)
         return;
+    // remember where the user was in the folder being left, to come back to it
+    if (m_proxy && !m_root.isEmpty()) {
+        QStringList expanded;
+        for (QModelIndex i = m_view->indexAt(QPoint(0, 0)); i.isValid(); i = m_view->indexBelow(i))
+            if (m_view->isExpanded(i))
+                expanded << pathOf(i);
+        m_views.insert(m_root, {expanded, m_view->verticalScrollBar()->value()});
+    }
     m_root = dir;
     m_cut.clear();
     if (!m_rootWatcher.directories().isEmpty())
         m_rootWatcher.removePaths(m_rootWatcher.directories());
-    QItemSelectionModel *oldSelection = m_view->selectionModel();
-    QFileSystemModel *oldModel = m_model;
-    QSortFilterProxyModel *oldProxy = m_proxy;
-    m_model = nullptr;
-    m_proxy = nullptr;
-    if (!dir.isEmpty() && QFileInfo(dir).isDir()) {
-        m_rootWatcher.addPath(dir);
+    if (!m_model) {
+        // one model for the panel's life: switching folders moves its root and reuses what it already loaded,
+        // instead of a fresh model refilling an empty tree on every session switch
         m_model = new QFileSystemModel(this);
         m_model->setOption(QFileSystemModel::DontUseCustomDirectoryIcons);
         m_model->setFilter(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
-        m_model->setRootPath(dir);
         m_model->sort(0); // its own sorter: folders first, natural order
         m_proxy = new FileProxy(this);
         m_proxy->setSourceModel(m_model);
-    }
-    m_view->setModel(m_proxy);
-    if (m_proxy) {
-        m_view->setRootIndex(m_proxy->mapFromSource(m_model->index(dir)));
+        m_view->setModel(m_proxy);
         for (int c = 1; c < m_model->columnCount(); ++c)
             m_view->hideColumn(c);
     }
-    delete oldSelection;
-    delete oldProxy;
-    delete oldModel;
+    if (!dir.isEmpty() && QFileInfo(dir).isDir()) {
+        m_rootWatcher.addPath(dir);
+        m_model->setRootPath(dir);
+        m_view->setRootIndex(m_proxy->mapFromSource(m_model->index(dir)));
+        m_view->collapseAll();
+        const View saved = m_views.value(dir);
+        for (const QString &path : saved.expanded)
+            m_view->expand(indexOf(path));
+        QTimer::singleShot(0, m_view, [this, scroll = saved.scroll] { m_view->verticalScrollBar()->setValue(scroll); });
+    }
     m_header->setText(QFileInfo(dir).fileName().isEmpty() ? dir : QFileInfo(dir).fileName());
     m_header->setToolTip(dir);
     updateState();

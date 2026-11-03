@@ -3,6 +3,7 @@
 #include "fileicons.h"
 
 #include <QFileSystemWatcher>
+#include <QHash>
 #include <QSet>
 #include <QWidget>
 
@@ -58,6 +59,11 @@ private:
     QLabel *m_header;
     QLabel *m_empty;
     FileTreeView *m_view;
+    struct View {
+        QStringList expanded;
+        int scroll = 0;
+    };
+    QHash<QString, View> m_views; // per root folder: what was expanded and where the list was scrolled
     QFileSystemModel *m_model = nullptr;
     QSortFilterProxyModel *m_proxy = nullptr;
     QFileSystemWatcher m_rootWatcher;

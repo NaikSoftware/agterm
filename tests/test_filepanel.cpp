@@ -232,6 +232,26 @@ private Q_SLOTS:
         panel.setRoot(tmp.filePath(QStringLiteral("missing")));
         QCOMPARE(empty->text(), QStringLiteral("Folder not found"));
     }
+
+    void switchingFoldersKeepsTheModelAndEachFoldersExpansion()
+    {
+        QTemporaryDir a, b;
+        QDir(a.path()).mkpath(QStringLiteral("sub/deep"));
+        touch(b.filePath(QStringLiteral("f")));
+        FilePanel panel;
+        panel.resize(300, 400);
+        panel.show();
+        auto *view = panel.findChild<QTreeView *>();
+        panel.setRoot(a.path());
+        QTRY_VERIFY(child(view, QStringLiteral("sub")).isValid());
+        view->expand(child(view, QStringLiteral("sub")));
+        const QAbstractItemModel *model = view->model();
+        panel.setRoot(b.path());
+        QCOMPARE(view->model(), model); // a session switch moves the root; it does not rebuild the tree
+        QTRY_VERIFY(child(view, QStringLiteral("f")).isValid());
+        panel.setRoot(a.path());
+        QTRY_VERIFY(view->isExpanded(child(view, QStringLiteral("sub"))));
+    }
 };
 
 QTEST_MAIN(TestFilePanel)
