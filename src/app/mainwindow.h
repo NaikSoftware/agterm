@@ -95,6 +95,7 @@ private:
     };
     QHash<QString, Panes> m_panes;
     QWidget *m_strip = nullptr;
+    class Palette *m_palette = nullptr;
     QWidget *m_quick = nullptr;
     KParts::ReadOnlyPart *m_quickPart = nullptr;
     bool m_quickPinned = false; // opened over the socket: stays put on click-away

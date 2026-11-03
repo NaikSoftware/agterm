@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 
 #include "launcher.h"
+#include "palette.h"
 #include "paths.h"
 #include "sidebar.h"
 #include "store.h"
@@ -60,9 +61,9 @@ void PartBridge::currentDirectoryChanged(const QString &dir)
 
 void PartBridge::overrideShortcut(QKeyEvent *event, bool &override)
 {
-    // true = the host takes the key; the terminal would otherwise swallow every app shortcut
+    // Konsole's part presets override = true (the terminal keeps every key); false hands ours to the window
     if (m_window->isOwnShortcut(event))
-        override = true;
+        override = false;
 }
 
 MainWindow::MainWindow(Store &store, const QString &statePath)
@@ -292,6 +293,42 @@ void MainWindow::createMenus()
                            [this] { setWindowState(windowState() ^ Qt::WindowFullScreen); }));
 
     auto *nav = menuBar()->addMenu(tr("&Navigate"));
+    m_palette = new Palette(this);
+    auto sessionItems = [this](bool byRecency) {
+        QList<Palette::Item> items;
+        QList<Session *> all = m_store.allSessions();
+        if (byRecency) {
+            std::stable_sort(all.begin(), all.end(), [this](Session *a, Session *b) {
+                const qsizetype ia = m_store.recent.indexOf(a->id), ib = m_store.recent.indexOf(b->id);
+                return (ia < 0 ? 1 << 30 : ia) < (ib < 0 ? 1 << 30 : ib);
+            });
+        } else {
+            std::stable_sort(all.begin(), all.end(), [](Session *a, Session *b) { return a->displayName().compare(b->displayName(), Qt::CaseInsensitive) < 0; });
+        }
+        for (Session *s : all)
+            items.append({s->displayName(), m_store.workspaceOf(s->id)->name + QStringLiteral(" · ") + s->cwd, [this, id = s->id] { m_store.select(id); }});
+        return items;
+    };
+    nav->addAction(action(QStringLiteral("session_palette"), tr("Go to Session…"), QStringLiteral("search"), QKeySequence(QStringLiteral("Ctrl+P")),
+                          [this, sessionItems] { m_palette->open(tr("Go to session…"), sessionItems(false)); }));
+    nav->addAction(action(QStringLiteral("command_palette"), tr("Action Palette…"), QStringLiteral("run-build"), QKeySequence(QStringLiteral("Ctrl+Shift+P")), [this] {
+        QList<Palette::Item> items;
+        for (QAction *a : actions())
+            if (!a->text().isEmpty() && a != m_actions.value(QStringLiteral("command_palette")))
+                items.append({a->text().remove(QLatin1Char('&')).remove(QStringLiteral("…")), a->shortcut().toString(QKeySequence::NativeText), [a] { a->trigger(); },
+                              a->isEnabled()});
+        m_palette->open(tr("Run an action…"), items);
+    }));
+    nav->addAction(action(QStringLiteral("mru_switcher"), tr("Switch to Recent Session"), {}, QKeySequence(QStringLiteral("Ctrl+Tab")), [this, sessionItems] {
+        m_palette->switching() ? m_palette->step(1) : m_palette->open({}, sessionItems(true), true);
+    }));
+    nav->addAction(action(QStringLiteral("mru_switcher_back"), tr("Switch to Recent Session (Reverse)"), {}, QKeySequence(QStringLiteral("Ctrl+Shift+Backtab")),
+                          [this, sessionItems] {
+                              if (!m_palette->switching())
+                                  m_palette->open({}, sessionItems(true), true);
+                              m_palette->step(-1);
+                          }));
+    nav->addSeparator();
     nav->addAction(action(QStringLiteral("previous_session"), tr("Previous Session"), QStringLiteral("go-up"),
                           QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Up")), [this] { go(QStringLiteral("prev")); }));
     nav->addAction(action(QStringLiteral("next_session"), tr("Next Session"), QStringLiteral("go-down"),

@@ -2,6 +2,7 @@
 #include "store.h"
 
 #include <QApplication>
+#include <QLineEdit>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -37,6 +38,25 @@ private Q_SLOTS:
         QTRY_COMPARE(QApplication::focusWidget(), term); // focus follows the selection back to its terminal
         QTest::keyClick(term, Qt::Key_A);
         QCOMPARE(store.session(first)->status, QStringLiteral("idle"));
+    }
+
+    void sessionPaletteFiltersAndSelects()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("palette.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        store.select(store.addSession(ws, "alpha", {}));
+        const QString beta = store.addSession(ws, "beta", {});
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QTRY_VERIFY_WITH_TIMEOUT(QApplication::focusWidget() && QApplication::focusWidget() != &w, 5000);
+        QTest::keyClick(QApplication::focusWidget(), Qt::Key_P, Qt::ControlModifier);
+        QTRY_VERIFY(qobject_cast<QLineEdit *>(QApplication::focusWidget()));
+        QTest::keyClicks(QApplication::focusWidget(), "bet");
+        QTest::keyClick(QApplication::focusWidget(), Qt::Key_Return);
+        QCOMPARE(store.selected, beta);
     }
 };
 

@@ -42,8 +42,10 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 
 ## Phase 3: navigation and windows
 
-- [ ] Session palette ⌃P, action palette ⌃⇧P, custom-commands palette ⌃⇧O
-- [ ] Ctrl-Tab MRU switcher; recent-sessions button
+- [x] Session palette ⌃P, action palette ⌃⇧P (fuzzy, Ctrl-J/K, disabled actions greyed)
+- [ ] Custom-commands palette ⌃⇧O (with keymap, phase 5)
+- [x] Ctrl-Tab MRU switcher (hold Ctrl, Tab walks, release switches; one tap flips back)
+- [ ] Recent-sessions title-bar button
 - [ ] Flagged view (flat / workspace tree), workspace filter / focus
 - [x] Reopen closed session ⌘⇧T, `recent open`
 - [ ] Undo close ⌘Z within the grace period
