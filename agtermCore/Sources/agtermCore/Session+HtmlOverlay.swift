@@ -5,6 +5,13 @@ extension Session {
     /// surface, zoom target or exit status, so it never counts as `programOverlayActive`.
     public var htmlOverlayActive: Bool { overlayActive && htmlOverlay != nil }
 
+    /// fileViewerActive says the session-wide slot holds a built-in viewer of one local file, which a newer
+    /// file panel open replaces; a page companion is excluded, since closing its page ends the session.
+    public var fileViewerActive: Bool {
+        guard htmlOverlayActive, content != .page, let source = htmlOverlay?.source else { return false }
+        return source.imagePath != nil || source.markdownPath != nil || source.textPath != nil
+    }
+
     /// coverOverlayActive says a program or page holds the session-wide slot, hidden or not; input exclusion
     /// asks `coverOverlayVisible`, terminal-surface questions `programOverlayActive`.
     public var coverOverlayActive: Bool { programOverlayActive || htmlOverlayActive }

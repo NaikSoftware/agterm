@@ -52,4 +52,20 @@ struct AppStoreFilePanelTests {
         #expect(store.controlTree().filePanelVisible == true)
         #expect(store.controlTree().filePanelWidth == 300)
     }
+
+    @Test func onlyAFileViewerPageCountsAsReplaceable() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        #expect(!session.fileViewerActive)
+
+        for source in [HtmlSource.text(path: "/tmp/a.go", line: nil), .markdown(path: "/tmp/a.md"), .image(path: "/tmp/a.png")] {
+            #expect(store.openHtmlOverlay(session.id, pane: nil, overlay: HtmlOverlay(source: source), sizePercent: nil) == nil)
+            #expect(session.fileViewerActive)
+            store.closeOverlay(session.id)
+        }
+        let web = try #require(URL(string: "https://example.com"))
+        #expect(store.openHtmlOverlay(session.id, pane: nil, overlay: HtmlOverlay(source: .url(web)), sizePercent: nil) == nil)
+        #expect(!session.fileViewerActive)
+    }
 }

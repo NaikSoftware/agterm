@@ -82,6 +82,13 @@ struct TextPageTests {
         #expect(!TextPage.isEligible(file: path))
     }
 
+    @Test func panelTriesEveryFileButRenderedDocumentsAsText() {
+        for path in ["a.dart", "a.tsx", "a.properties", "/x/Podfile", "/x/noext", "a.pdf"] {
+            #expect(TextPage.isPanelCandidate(file: path))
+        }
+        for path in ["a.html", "a.HTM", "a.xhtml", "a.svg"] { #expect(!TextPage.isPanelCandidate(file: path)) }
+    }
+
     @Test func validateAcceptsUTF8AndRefusesBinaries() {
         #expect(TextPage.validate(Data("héllo\n".utf8)) == "héllo\n")
         #expect(TextPage.validate(Data()) == "")

@@ -42,6 +42,14 @@ public enum TextPage {
             || plainBasenames.contains(name)
     }
 
+    private static let renderedExtensions: Set<String> = ["html", "htm", "xhtml", "svg"]
+
+    /// isPanelCandidate says whether the file panel tries `path` as a text page: any file but a rendered
+    /// document, by content rather than extension, since `TextProbe` then refuses a binary or oversized one.
+    public static func isPanelCandidate(file path: String) -> Bool {
+        !renderedExtensions.contains((path as NSString).pathExtension.lowercased())
+    }
+
     /// validate returns the file's text, nil when it is not valid UTF-8 or holds a NUL, which marks a binary.
     public static func validate(_ data: Data) -> String? {
         guard !data.contains(0) else { return nil }
