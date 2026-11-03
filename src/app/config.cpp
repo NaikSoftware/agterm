@@ -370,8 +370,9 @@ void MainWindow::watchTerminalNotifications(KParts::ReadOnlyPart *part, PartBrid
         return; // a Konsole without that symbol: no OSC notifications, everything else unaffected
     bridge->session = session;
     connect(emulation, SIGNAL(sessionAttributeChanged(int, QString)), bridge, SLOT(sessionAttribute(int, QString)));
-    // OSC 777 notify comes to us; Konsole keeps the container forms, forwarded by the bridge
-    disconnect(emulation, SIGNAL(osc777Received(QStringList)), session, SLOT(handleOsc777(QStringList)));
+    // OSC 777 notify comes to us, not to Konsole's own banner; the container forms are forwarded by the bridge.
+    // Konsole connects handleOsc777 by member pointer, which only a receiver-wide disconnect reaches.
+    disconnect(emulation, SIGNAL(osc777Received(QStringList)), session, nullptr);
     connect(emulation, SIGNAL(osc777Received(QStringList)), bridge, SLOT(osc777(QStringList)));
 }
 
