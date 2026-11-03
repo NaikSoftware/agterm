@@ -15,11 +15,11 @@ Needs Qt 6 (Widgets, Network, DBus, Svg), KDE Frameworks 6 (CoreAddons, XmlGui, 
 
 ```sh
 sudo apt install libkf6parts-dev   # or, without root: scripts/fetch-kparts-headers.sh
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_INSTALL_PREFIX=~/.local   # the menu entry gets an absolute Exec
 cmake --build build -j
 ctest --test-dir build              # core, file panel, offscreen UI tests
 scripts/smoke.sh                    # end-to-end over the control socket
-cmake --install build --prefix ~/.local
+cmake --install build && kbuildsycoca6 --noincremental
 ```
 
 ## What it does

@@ -4,5 +4,6 @@
     <file>launchers/codex.svg</file>
     <file>launchers/opencode.svg</file>
     <file>launchers/antigravity.svg</file>
+    <file alias="agterm-qt.png">icons/hicolor/256x256/apps/agterm-qt.png</file>
   </qresource>
 </RCC>

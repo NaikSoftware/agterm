@@ -64,6 +64,8 @@ set_tests_properties(filepanel PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen
 
 include(GNUInstallDirs)
 install(TARGETS agterm-qt agtermctl RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES packaging/agterm-qt.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+configure_file(packaging/agterm-qt.desktop.in agterm-qt.desktop @ONLY) # Exec is absolute: the Plasma menu does not see ~/.local/bin
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/agterm-qt.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(DIRECTORY resources/icons/ DESTINATION ${CMAKE_INSTALL_DATADIR}/icons)
 install(PROGRAMS share/agent-status/agterm-agent-status.sh share/agent-status/agterm-claude-status.sh
   DESTINATION ${CMAKE_INSTALL_DATADIR}/agterm-qt/agent-status)

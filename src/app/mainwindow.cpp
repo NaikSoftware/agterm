@@ -71,7 +71,6 @@ void PartBridge::overrideShortcut(QKeyEvent *event, bool &override)
 MainWindow::MainWindow(Store &store, const QString &statePath)
     : m_store(store), m_statePath(statePath)
 {
-    setWindowIcon(QIcon::fromTheme(QStringLiteral("utilities-terminal")));
     m_tree = new Sidebar(store);
 
     // footer: new session, new workspace, and the flagged view toggle, as agterm's sidebar bar
@@ -200,7 +199,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
             return; // already in front of you
         m_store.setUnseen(id, s->unseen + 1);
         auto *n = KNotification::event(KNotification::Notification, title.isEmpty() ? s->displayName() : title, body,
-                                       QStringLiteral("utilities-terminal"));
+                                       QStringLiteral("agterm-qt"));
         connect(n->addDefaultAction(tr("Show")), &KNotificationAction::activated, this, [this, id] {
             m_store.select(id); // the banner brings the window forward on the session that raised it
             show();

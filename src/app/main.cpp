@@ -74,7 +74,8 @@ int main(int argc, char **argv)
     app.setApplicationName(QStringLiteral("agterm-qt")); // also names the Konsole-part profile namespace
     app.setApplicationVersion(QLatin1String(appVersion));
     app.setDesktopFileName(QStringLiteral("agterm-qt"));
-    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("utilities-terminal")));
+    Q_INIT_RESOURCE(resources); // before the window: the fallback icon lives in the static UI library
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("agterm-qt"), QIcon(QStringLiteral(":/agterm-qt.png"))));
 
     const QString dir = stateDir();
     QDir().mkpath(dir);
