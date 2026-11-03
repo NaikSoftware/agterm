@@ -39,10 +39,18 @@ cmake --install build && kbuildsycoca6 --noincremental
 - Session (Ctrl+P) and action (Ctrl+Shift+P) palettes, a Ctrl-Tab recent-session switcher and its title-bar clock
   button, undo of a close for 3 seconds, and reopen-closed.
 - A file panel (the session folder as a tree with file-type icons, a built-in viewer, clipboard, drag and drop).
+- Settings (Ctrl+Shift+,) with agterm's six pages; terminal font, colour scheme and cursor apply to every open
+  terminal on top of the Konsole profile. View ▸ Select Theme… previews schemes live (Enter keeps, Esc reverts).
+- `keymap.conf` and `hooks.conf` in `~/.config/agterm-qt/` (or `$AGTERM_STATE_DIR/config`): rebind built-ins, add custom
+  shell commands with `{AGT_*}` tokens (Ctrl+Alt+O lists them), and run scripts on control events. Both files start
+  as commented references; File ▸ Edit Keymap… / Reload Keymap and the Hooks pair apply them.
+- Programs in a pane can raise notifications with OSC 9 or OSC 777 (`printf '\e]9;done\a'`).
 
 ## Keys
 
 agterm's ⌘ is Ctrl+Shift here (Konsole's convention); ⌘⇧ and ⌘⌃ are Ctrl+Alt+Shift; ⌃ stays Ctrl; ⌥ is Alt.
+`keymap.conf` reads agterm's `cmd`/`opt` words by the same table (`cmd` alone = ctrl+shift, `cmd` with another modifier =
+ctrl+alt+shift), next to plain `ctrl`, `shift`, `alt` and `super`.
 
 | Key | Action |
 | --- | --- |
@@ -60,6 +68,7 @@ agterm's ⌘ is Ctrl+Shift here (Konsole's convention); ⌘⇧ and ⌘⌃ are Ct
 | Ctrl+Alt+Shift+↑ / ↓ | Previous / next session |
 | Ctrl+Alt+↑ / ↓ | Previous / next session needing attention |
 | Ctrl+P / Ctrl+Shift+P / Ctrl+Tab | Session palette / action palette / recent sessions |
+| Ctrl+Alt+O | Custom-commands palette (agterm's ⌃⇧O; Ctrl+Shift+O is Open Directory here) |
 | Ctrl+Alt+Shift+F | Flag session |
 
 ## Agent status

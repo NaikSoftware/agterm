@@ -44,7 +44,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 ## Phase 3: navigation and windows
 
 - [x] Session palette ⌃P, action palette ⌃⇧P (fuzzy, Ctrl-J/K, disabled actions greyed)
-- [ ] Custom-commands palette ⌃⇧O (with keymap, phase 5)
+- [x] Custom-commands palette ⌃⇧O → Ctrl+Alt+O (Ctrl+Shift+O is ⌘O, Open Directory, so its Shift becomes Alt)
 - [x] Ctrl-Tab MRU switcher (hold Ctrl, Tab walks, release switches; one tap flips back)
 - [x] Recent-sessions title-bar button (a menu under the clock, not a popover)
 - [ ] Flagged view workspace-tree layout, Edit Flagged Sessions… / Edit Focused Workspaces… editors
@@ -53,8 +53,9 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Undo close ⌘Z within the 3 s grace (sessions, batches with companions, workspaces; Settings switch; `session close --undoable`)
 - [ ] Multiple windows (library, restore frames)
 - [x] Notifications: `notify`, unseen-count badge, banner click focuses the session, `session seen`
-- [ ] Notifications from OSC 9 / 777 inside the terminal; settings (banner, badge, sound)
-- [ ] Agent status: dot colours/shapes, blink, status reset (first key / Enter / off), auto-follow, blocked sound
+- [x] Notifications from OSC 9 / 777 inside the terminal (two OSC 9s in one output burst arrive as the last one: Konsole coalesces an attribute); settings: banner, badge, sound, taskbar highlight for the Dock bounce
+- [x] Agent status: dot colours/shapes, blink, status reset (first key / Enter / off), blocked sound, attention includes active, Reset to defaults
+- [ ] Agent status: auto-follow blocked sessions after an idle timeout
 
 ## Phase 4: file panel (fork)
 
@@ -67,10 +68,18 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 
 ## Phase 5: settings, keymap, extension
 
-- [ ] Settings dialog: General, Appearance, Interface, Notifications, Agent Status, Key Mapping
-- [ ] Theme picker with live preview
-- [ ] keymap.conf: built-in rebinding, `command "Name" chord shell…`, AGT_* context, reload/edit
-- [ ] Hooks (`hooks.conf`), page bridge
+- [x] Settings dialog: General, Appearance, Interface, Notifications, Agent Status, Key Mapping (KPageDialog, every control live).
+  Not here, with their features: restore mode, flagged view layout, link opening, scroll speed, right-click paste, Ghostty config,
+  toolbar mode, opacity/blur, sidebar tint, inactive-pane mute, follow system appearance, window/remote/dashboard/scratch/overlay
+  title-bar elements, session info line, multiple-window sidebar, attention indicator, crossing windows, keyboard-layout lock
+- [x] Theme picker with live preview (Konsole colour schemes applied per session at runtime, no profile file written; `theme list|set`)
+- [x] keymap.conf: built-in rebinding, alternatives, leader sequences, `command "Name" chord shell…`, AGT_* tokens and env, diagnostics,
+  File ▸ Edit/Reload Keymap (the editor runs in a companion until overlays exist), `keymap reload|list|run`.
+  `--repeat` is accepted with a diagnostic and not honoured yet; `--error-hud` adds stderr to the failure notification (no HUD yet);
+  `global-hotkey` is refused (it summons the removed quick terminal)
+- [x] Hooks (`hooks.conf`, File ▸ Edit/Reload Hooks, `hooks reload|list`): status, notify, session.created/closed/selected,
+  tree.changed, pane.split, app.launched fire; pane.scratch, pane.focused, remote.* and message parse but never fire
+- [ ] Page bridge
 - [ ] Overlays (program, HTML/URL page, HUD), dashboard
 - [ ] Restore modes (fresh / re-run commands / live sessions)
 - [ ] Control API breadth: every command in `site/commands.html`
