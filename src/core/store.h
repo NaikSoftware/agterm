@@ -62,6 +62,7 @@ Q_SIGNALS:
     void sessionRemoved(const QString &id);
     void selectionChanged(const QString &id);
     void statusChanged(const QString &id, const QString &status);
+    void titleChanged(const QString &id);
 
 private:
     static QString newId();

@@ -213,8 +213,8 @@ void Store::setCwd(const QString &id, const QString &cwd)
 void Store::setTitle(const QString &id, const QString &title)
 {
     if (auto *s = session(id); s && s->title != title) {
-        s->title = title;
-        Q_EMIT changed();
+        s->title = title; // not persisted, and Konsole retitles on every prompt: no changed(), so no save
+        Q_EMIT titleChanged(id);
     }
 }
 

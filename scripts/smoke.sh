@@ -43,6 +43,13 @@ ctl session text --target "$gone" | grep -q BG_OK || fail "background session te
 ctl session type $'exit\n' --target "$gone"
 sleep 1.5
 ctl tree | grep -q exits && fail "exited shell should end its session"
+doomed=$(ctl session new --name doomed --no-select)
+sleep 1
+dpid=$(ctl session info --target "$doomed" | awk '/^pid /{print $2}')
+kill -0 "$dpid" || fail "no shell pid for doomed"
+ctl session close --target "$doomed"
+for _ in $(seq 20); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.1; done
+kill -0 "$dpid" 2>/dev/null && fail "closing a session left its shell running"
 cd /tmp
 ctl session type $'cd /usr\n' --target "$id"
 sleep 1

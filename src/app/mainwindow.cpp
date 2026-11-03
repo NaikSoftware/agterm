@@ -35,6 +35,7 @@
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 
 namespace {
 constexpr int IdRole = SidebarRole::Id, KindRole = SidebarRole::Kind;
@@ -210,6 +211,11 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     });
     connect(&m_store, &Store::selectionChanged, this, &MainWindow::showSelected);
     connect(&m_store, &Store::statusChanged, this, &MainWindow::notify);
+    connect(&m_store, &Store::titleChanged, this, [this](const QString &id) {
+        for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+            if ((*it)->data(0, IdRole).toString() == id)
+                (*it)->setToolTip(0, QStringLiteral("%1\n%2").arg(m_store.session(id)->title, shortPath(m_store.session(id)->cwd)));
+    });
     connect(m_tree, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) {
         if (!m_rebuilding && item && item->data(0, KindRole).toInt() == SessionKind)
             m_store.select(item->data(0, IdRole).toString());
