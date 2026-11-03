@@ -57,18 +57,28 @@ enum ForegroundProcess {
     @MainActor
     static func observed(for view: GhosttySurfaceView, shellBasename: String?, zmxResolver: ZmxForegroundResolver? = nil)
         -> (pid: pid_t, foreground: CommandRestore.PaneForeground, searchPath: String?)? {
-        let pgid: pid_t?
-        if view.backedByZmx, let sessionName = view.zmxSessionName {
-            pgid = zmxResolver?.foregroundPID(sessionName: sessionName)
-        } else {
-            pgid = view.foregroundPid()
-        }
-        guard let pgid else { return nil }
+        guard let pgid = foregroundGroup(of: view, zmxResolver: zmxResolver) else { return nil }
         if let found = foreground(of: pgid, shellBasename: shellBasename) { return found }
         for pid in CommandRestore.groupDescentCandidates(pgid: pgid, members: processGroup(pgid: pgid)) {
             if let found = foreground(of: pid, shellBasename: shellBasename) { return found }
         }
         return nil
+    }
+
+    /// Every readable argv in the pane's foreground process group, leader first, for agent detection.
+    @MainActor
+    static func groupArgvs(for view: GhosttySurfaceView, zmxResolver: ZmxForegroundResolver? = nil) -> [[String]] {
+        guard let pgid = foregroundGroup(of: view, zmxResolver: zmxResolver) else { return [] }
+        let members = processGroup(pgid: pgid).map(\.pid).filter { $0 != pgid }.sorted()
+        return ([pgid] + members).compactMap(procArgs(pid:))
+    }
+
+    @MainActor
+    private static func foregroundGroup(of view: GhosttySurfaceView, zmxResolver: ZmxForegroundResolver?) -> pid_t? {
+        if view.backedByZmx, let sessionName = view.zmxSessionName {
+            return zmxResolver?.foregroundPID(sessionName: sessionName)
+        }
+        return view.foregroundPid()
     }
 
     /// foreground reads `pid`'s argv and PATH from one `KERN_PROCARGS2` blob: nil when the argv is unreadable,
