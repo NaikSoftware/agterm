@@ -181,9 +181,15 @@ enum AgentHooksInstaller {
         }
     }
 
-    // merge the Claude Code hooks into ~/.claude/settings.json, writing a .bak first when anything
-    // changes. returns true when the merge was SKIPPED (invalid JSON, or unreadable) and the file left as is.
     private static func mergeClaudeSettings() throws -> Bool {
+        try rewriteClaudeSettings { existing in
+            try AgentHooksInstall.mergeClaudeSettings(existing: existing, scriptDir: destinationFolder.path)
+        }
+    }
+
+    // apply `merge` to ~/.claude/settings.json, writing a .bak first when anything changes. returns true when
+    // the merge was SKIPPED (invalid JSON, or unreadable) and the file left as is.
+    static func rewriteClaudeSettings(_ merge: (String?) throws -> (json: String, changed: Bool)) throws -> Bool {
         let claudeDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
         let settings = claudeDir.appendingPathComponent("settings.json")
         let existing: String?
@@ -194,7 +200,7 @@ enum AgentHooksInstaller {
         }
         let merged: (json: String, changed: Bool)
         do {
-            merged = try AgentHooksInstall.mergeClaudeSettings(existing: existing, scriptDir: destinationFolder.path)
+            merged = try merge(existing)
         } catch AgentHooksInstall.MergeError.malformedExistingSettings {
             return true // invalid JSON: leave the user's file untouched
         }

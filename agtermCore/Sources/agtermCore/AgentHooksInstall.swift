@@ -533,7 +533,7 @@ public enum AgentHooksInstall {
         return hooks
     }
 
-    private static func parsedObject(_ text: String?) throws -> [String: Any] {
+    static func parsedObject(_ text: String?) throws -> [String: Any] {
         guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [:] }
         guard let data = text.data(using: .utf8),
               let parsed = try? JSONSerialization.jsonObject(with: data),
@@ -544,7 +544,7 @@ public enum AgentHooksInstall {
     }
 
     // serialize a dictionary to pretty-printed, sorted JSON text (deterministic for tests + diffs).
-    private static func serialize(_ object: [String: Any]) -> String {
+    static func serialize(_ object: [String: Any]) -> String {
         let options: JSONSerialization.WritingOptions = [.prettyPrinted, .sortedKeys]
         guard let data = try? JSONSerialization.data(withJSONObject: object, options: options),
               let text = String(data: data, encoding: .utf8) else {

@@ -104,6 +104,11 @@ targets:
       - path: plugins/agterm/skills/agterm
         type: folder
         buildPhase: resources
+      # Help ▸ Install Companion Subagents… copies Contents/Resources/companion-subagents to
+      # ~/.claude/skills/companion-subagents.
+      - path: plugins/companion-subagents/skills/companion-subagents
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.umputun.agterm

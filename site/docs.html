@@ -495,6 +495,20 @@
                 checkout, and it has to cover the marketplace manifest as well as
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">plugins/agterm</span>.
               </li>
+              <li style="font-size: 15px; line-height: 1.6; color: #cbc6bc; padding-left: 22px; position: relative">
+                <span
+                  style="position: absolute; left: 0; top: 1px; color: #6d82f3; font-family: &quot;JetBrains Mono&quot;, monospace"
+                  >›</span
+                ><strong style="color: #e6e1d7">Install Companion Subagents…</strong> makes Claude Code inside agterm run
+                each subagent as a companion session under its own row, where you can watch it and answer its prompts. It
+                installs a skill and two hooks into
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">~/.claude</span>: one
+                redirects the built-in Agent tool to the skill, the other sends a finished companion's reply back over the
+                message bus, after which the companion closes. A follow-up resumes the same conversation in a new
+                companion. Start <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">claude</span>
+                with <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">AGTERM_COMPANIONS=off</span>
+                to keep the built-in tool for one session. Needs python3 and the CLI.
+              </li>
             </ul>
             <h3
               style="
