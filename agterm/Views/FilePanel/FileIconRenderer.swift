@@ -47,20 +47,24 @@ enum FileIconRenderer {
         let units = Unicode.Scalar(icon.glyph).map { Array(String($0).utf16) } ?? []
         var glyphs = [CGGlyph](repeating: 0, count: units.count)
         CTFontGetGlyphsForCharacters(font, units, &glyphs, units.count)
-        let glyph = glyphs.first ?? 0
-        var ink = CGRect.zero
-        CTFontGetBoundingRectsForGlyphs(font, .default, [glyph], &ink, 1)
+        guard let glyphPath = CTFontCreatePathForGlyph(font, glyphs.first ?? 0, nil), !glyphPath.boundingBox.isEmpty else {
+            return NSImage(size: size)
+        }
+        // An immutable CGPath is safe to read from any thread; the SDK just does not mark it Sendable.
+        nonisolated(unsafe) let path = glyphPath
         let color = (NSColor(agtermHex: hex) ?? .secondaryLabelColor).cgColor
         // AppKit may rasterize off the main thread; an inferred main-actor closure would abort there.
         let image = NSImage(size: size, flipped: false) { @Sendable rect in
-            guard let context = NSGraphicsContext.current?.cgContext, ink.width > 0, ink.height > 0 else { return true }
+            guard let context = NSGraphicsContext.current?.cgContext else { return true }
+            let ink = path.boundingBox
             // Icon fonts differ in glyph extent and baseline; centre the ink and shrink it into the square.
             let scale = min(1, rect.width / ink.width, rect.height / ink.height)
             context.translateBy(x: rect.midX, y: rect.midY)
             context.scaleBy(x: scale, y: scale)
             context.translateBy(x: -ink.midX, y: -ink.midY)
+            context.addPath(path)
             context.setFillColor(color)
-            CTFontDrawGlyphs(font, [glyph], [.zero], 1, context)
+            context.fillPath()
             return true
         }
         cache[key] = image
