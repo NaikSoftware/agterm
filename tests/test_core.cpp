@@ -268,6 +268,35 @@ private Q_SLOTS:
         QVERIFY(!s.session(c1) && !s.session(c2));
     }
 
+    void tintRecolorsKeepsPlacementAndPersists()
+    {
+        Store s;
+        FakeTerminals t;
+        QVERIFY(!call(s, t, "workspace.new", {}, {{"tintOn", QJsonArray{"name"}}})["ok"].toBool());
+        QVERIFY(!call(s, t, "workspace.new", {}, {{"tint", "pink"}})["ok"].toBool());
+        QVERIFY(s.workspaces.isEmpty()); // a refused tint creates nothing
+        const QString ws = call(s, t, "workspace.new", {}, {{"name", "prod"}, {"tint", "Red"}})["result"]["id"].toString();
+        QCOMPARE(s.workspace(ws)->tint, (Tint{"red", {"icon"}}));
+        const QString a = s.addSession(ws, {}, {});
+        QVERIFY(s.session(a)->tint.color.isEmpty()); // a workspace tint never reaches its sessions
+        s.placeTint(a, {"name"});
+        QVERIFY(s.session(a)->tint.color.isEmpty()); // placing on an untinted row is a no-op
+        QVERIFY(call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "green"}, {"tintOn", QJsonArray{"name", "icon"}}})["ok"].toBool());
+        QVERIFY(call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "blue"}})["ok"].toBool());
+        QCOMPARE(s.session(a)->tint, (Tint{"blue", {"icon", "name"}}));
+        QVERIFY(!call(s, t, "session.tint", a, {{"mode", "clear"}, {"tint", "red"}})["ok"].toBool());
+        QVERIFY(!call(s, t, "session.tint", a, {{"mode", "set"}, {"tint", "red"}, {"tintOn", QJsonArray{"glyph"}}})["ok"].toBool());
+        const auto node = call(s, t, "tree")["result"]["tree"]["workspaces"][0];
+        QCOMPARE(node["tint"].toString(), QStringLiteral("red"));
+        QCOMPARE(node["sessions"][0]["tintOn"].toArray(), (QJsonArray{"icon", "name"}));
+        QCOMPARE(s.session(s.duplicateSession(a, {}))->tint, Tint{}); // a duplicate starts untinted
+        Store r;
+        r.fromJson(s.toJson());
+        QCOMPARE(r.session(a)->tint, (Tint{"blue", {"icon", "name"}}));
+        QVERIFY(call(s, t, "session.tint", a, {{"mode", "clear"}})["ok"].toBool());
+        QVERIFY(!call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject().contains("tint"));
+    }
+
     void treeAndUnknownCommand()
     {
         Store s;

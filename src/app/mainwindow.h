@@ -66,6 +66,7 @@ private:
     void closeSessions(const QStringList &ids);
     void deleteWorkspace(const QString &id);
     void fillMoveMenu(QMenu *menu, const QStringList &ids);
+    void fillTintMenu(QMenu *menu, const QStringList &ids); // ids: sessions, or one workspace
     void go(const QString &direction);
     void profileDialog(const char *slot);
     void showSettings();

@@ -97,6 +97,21 @@ void drawLauncher(QPainter *p, const QRectF &r, const QString &id, const QColor 
 }
 } // namespace
 
+QColor tintColor(const QString &name)
+{
+    // systemRed..systemGray, light and dark appearance
+    static const QHash<QString, std::pair<QRgb, QRgb>> colors{
+        {QStringLiteral("red"), {0xFF3B30, 0xFF453A}},    {QStringLiteral("orange"), {0xFF9500, 0xFF9F0A}},
+        {QStringLiteral("yellow"), {0xFFCC00, 0xFFD60A}}, {QStringLiteral("green"), {0x34C759, 0x30D158}},
+        {QStringLiteral("blue"), {0x007AFF, 0x0A84FF}},   {QStringLiteral("purple"), {0xAF52DE, 0xBF5AF2}},
+        {QStringLiteral("gray"), {0x8E8E93, 0x98989D}}};
+    const auto it = colors.constFind(name);
+    if (it == colors.cend())
+        return {};
+    const bool dark = QApplication::palette().color(QPalette::Window).lightness() < 128;
+    return QColor(dark ? it->second : it->first);
+}
+
 QIcon launcherIcon(const QString &launcherId, const QColor &color)
 {
     QPixmap pm(QSize(32, 32));
@@ -168,6 +183,11 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
     const QRectF r = QRectF(opt.rect).adjusted(6, 1, -6, -1);
     const bool session = index.data(Kind).toInt() == SessionRow;
     const bool flat = m_sidebar->flaggedView();
+    // a row tint colours the parts it lists, selected or not
+    const QColor tint = tintColor(index.data(TintColor).toString());
+    const QStringList tintOn = index.data(TintOn).toStringList();
+    const QColor iconColor = tint.isValid() && tintOn.contains(QLatin1String("icon")) ? tint : dim;
+    const QColor nameColor = tint.isValid() && tintOn.contains(QLatin1String("name")) ? tint : text;
 
     if (opt.state & QStyle::State_Selected) {
         QColor sel = pal.color(QPalette::Highlight);
@@ -199,7 +219,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->setPen(QPen(dim, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         p->drawPath(chevron);
         x += 14;
-        drawGridGlyph(p, QRectF(x, cy - 7, 14, 14), dim);
+        drawGridGlyph(p, QRectF(x, cy - 7, 14, 14), iconColor);
         x += 21;
     } else {
         x += flat ? 2 : 22;
@@ -227,7 +247,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
                 p->drawEllipse(QPointF(x + 15, cy - 6), 3, 3); // a hidden companion needs you
             }
         }
-        drawLauncher(p, QRectF(x, cy - 8, 16, 16), index.data(Agent).toString(), dim, index.data(Flagged).toBool());
+        drawLauncher(p, QRectF(x, cy - 8, 16, 16), index.data(Agent).toString(), iconColor, index.data(Flagged).toBool());
         x += 23;
     }
 
@@ -269,7 +289,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         right = rep.left() - 4;
     }
 
-    p->setPen(text);
+    p->setPen(nameColor);
     p->setFont(opt.font);
     const QRectF label(x, r.top(), right - x, r.height());
     p->drawText(label, Qt::AlignVCenter | Qt::AlignLeft, opt.fontMetrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, label.width()));
@@ -383,6 +403,8 @@ void Sidebar::rebuild()
         item->setData(0, Agent, s.agent);
         item->setData(0, Flagged, s.flagged);
         item->setData(0, Unseen, s.unseen);
+        item->setData(0, TintColor, s.tint.color);
+        item->setData(0, TintOn, s.tint.on);
         item->setToolTip(0, s.title.isEmpty() ? s.cwd : s.title + QLatin1Char('\n') + s.cwd);
         item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
         blinking |= s.blink;
@@ -400,6 +422,8 @@ void Sidebar::rebuild()
         auto *wi = new QTreeWidgetItem(this, {w.name});
         wi->setData(0, Id, w.id);
         wi->setData(0, Kind, WorkspaceRow);
+        wi->setData(0, TintColor, w.tint.color);
+        wi->setData(0, TintOn, w.tint.on);
         wi->setToolTip(0, w.folder);
         wi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
         for (const auto &s : w.sessions) {

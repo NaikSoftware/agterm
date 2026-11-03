@@ -14,11 +14,14 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
 
   tree                                  workspaces and sessions
   version
-  workspace new [--name N]
+  workspace new [--name N] [--tint COLOR [--tint-on icon,name]]
   workspace rename <name>               (--target: workspace id/prefix/name, default active)
+  workspace tint <color|clear> [--on icon,name]   the workspace row only
+  session tint <color|clear> [--on icon,name]     red|orange|yellow|green|blue|purple|gray
   workspace delete | select
   session new [--name N] [--cwd DIR] [--workspace W | --workspace-name N [--create-workspace]]
               [--command CMD] [--no-select] [--parent SESSION]   (--parent makes a companion)
+              [--tint COLOR [--tint-on icon,name]]
   session close | select | info         (--target: session id/prefix/name, default $AGTERM_SESSION_ID, then active)
   session rename <name>                 empty name reverts to the directory name
   session duplicate [--no-select]
@@ -118,6 +121,20 @@ int main(int argc, char **argv)
         args.insert("name", arg);
     if (cmd == QLatin1String("session.status"))
         args.insert("status", arg);
+    if (cmd.endsWith(QLatin1String(".tint"))) {
+        args.insert("mode", arg == QLatin1String("clear") ? QStringLiteral("clear") : QStringLiteral("set"));
+        if (arg != QLatin1String("clear"))
+            args.insert("tint", arg);
+        if (opt.contains(QStringLiteral("on")))
+            args.insert("tintOn", QJsonArray::fromStringList(opt.value(QStringLiteral("on")).split(QLatin1Char(','))));
+    }
+    if (cmd.endsWith(QLatin1String(".new")) && opt.contains(QStringLiteral("tint"))) {
+        args.insert("tint", opt.value(QStringLiteral("tint")));
+        if (opt.contains(QStringLiteral("tint-on")))
+            args.insert("tintOn", QJsonArray::fromStringList(opt.value(QStringLiteral("tint-on")).split(QLatin1Char(','))));
+    } else if (opt.contains(QStringLiteral("tint-on"))) {
+        args.insert("tintOn", QJsonArray()); // the app refuses a placement without a colour
+    }
     if (cmd == QLatin1String("session.type")) {
         if (opt.contains(QStringLiteral("stdin"))) {
             QFile f;

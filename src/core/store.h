@@ -6,6 +6,13 @@
 #include <QString>
 #include <QStringList>
 
+// A sidebar row colour: one of Store::tintColors shown on the icon and/or the name; empty color = none.
+struct Tint {
+    QString color;
+    QStringList on; // icon, name in that order; never empty while tinted
+    bool operator==(const Tint &) const = default;
+};
+
 struct Session {
     QString id;
     QString name; // pinned by a rename; empty = derived from the cwd
@@ -24,6 +31,7 @@ struct Session {
     double splitRatio = 0.5;
     int unseen = 0;              // notifications raised while the session was not in front of you
     QString parentId;            // a companion is pinned to its parent, listed right after it
+    Tint tint;
 
     QString displayName() const;
 };
@@ -33,6 +41,7 @@ struct Workspace {
     QString name;
     QString folder; // last directory one of its sessions reported; where new sessions open
     QList<Session> sessions;
+    Tint tint; // colours the workspace row only, never its sessions
 };
 
 struct Settings {
@@ -51,6 +60,8 @@ class Store : public QObject
 public:
     enum class Key { Plain, Submit, Interrupt };
     static const QStringList statuses;
+    static const QStringList tintColors; // red orange yellow green blue purple gray
+    static QStringList tintParts(const QStringList &raw); // ordered icon,name; empty when empty or unknown
 
     QList<Workspace> workspaces;
     QString selected;
@@ -90,6 +101,9 @@ public:
     void select(const QString &id);
     bool setStatus(const QString &id, const QString &status, bool autoReset = false, bool blink = false);
     void setFlag(const QString &id, bool flagged);
+    // id names a session or a workspace. color "" clears; parts empty keep the row's placement, icon for an untinted row
+    void setTint(const QString &id, const QString &color, const QStringList &parts = {});
+    void placeTint(const QString &id, const QStringList &parts); // an untinted row stays untinted
     void setCwd(const QString &id, const QString &cwd);
     void setTitle(const QString &id, const QString &title);
     void setAgent(const QString &id, const QString &agent);
@@ -121,5 +135,6 @@ Q_SIGNALS:
 
 private:
     static QString newId();
+    Tint *tintOf(const QString &id);
     int indexIn(const Workspace &w, const QString &sessionId) const;
 };

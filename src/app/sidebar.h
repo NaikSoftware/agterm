@@ -11,9 +11,11 @@ class Store;
 QIcon launcherIcon(const QString &launcherId, const QColor &color);
 // agterm's title-bar glyphs: sidebar, split, splitH, filepanel
 QIcon chromeIcon(const QString &name, const QColor &color);
+// a tint name as the macOS system colour of that name, light or dark by the current palette; invalid for ""
+QColor tintColor(const QString &name);
 
 namespace SidebarRole {
-enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Companion, HasCompanions, FoldedAttention };
+enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Companion, HasCompanions, FoldedAttention, TintColor, TintOn };
 enum { WorkspaceRow = 1, SessionRow };
 }
 

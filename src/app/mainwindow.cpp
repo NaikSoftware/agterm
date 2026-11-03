@@ -37,7 +37,9 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPainter>
 #include <QProcess>
+#include <QSet>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QSplitter>
@@ -280,6 +282,11 @@ void MainWindow::createMenus()
         if (const Session *s = m_store.session(m_store.selected))
             m_store.setFlag(s->id, !s->flagged);
     }));
+    // palette-only, as in agterm: "Tint Session: Red" … "Tint Session: None" for the active session
+    for (const QString &c : Store::tintColors + QStringList{QString()})
+        action(QStringLiteral("tint_session_") + (c.isEmpty() ? QStringLiteral("none") : c),
+               tr("Tint Session: %1").arg(c.isEmpty() ? tr("None") : c.left(1).toUpper() + c.mid(1)), {}, {},
+               [this, c] { m_store.setTint(m_store.selected, c); });
 
     auto *view = menuBar()->addMenu(tr("&View"));
     m_sidebarAction = action(QStringLiteral("toggle_sidebar"), tr("Show Sidebar"), QStringLiteral("sidebar-show-symbolic"),
@@ -884,6 +891,48 @@ void MainWindow::fillMoveMenu(QMenu *menu, const QStringList &ids)
     });
 }
 
+void MainWindow::fillTintMenu(QMenu *menu, const QStringList &ids)
+{
+    // a choice is checked only when every target shares it; the placements act only on tinted rows
+    QSet<QString> colors;
+    QSet<QStringList> placements;
+    bool allTinted = true;
+    for (const QString &id : ids) {
+        const Tint t = m_store.session(id) ? m_store.session(id)->tint : m_store.workspace(id)->tint;
+        colors << t.color;
+        placements << t.on;
+        allTinted &= !t.color.isEmpty();
+    }
+    auto add = [&](const QString &title, const QIcon &icon, bool checked, std::function<void(const QString &)> apply) {
+        auto *a = menu->addAction(icon, title, this, [ids, apply] {
+            for (const QString &id : ids)
+                apply(id);
+        });
+        a->setCheckable(true);
+        a->setChecked(checked);
+        return a;
+    };
+    add(tr("None"), {}, colors == QSet<QString>{QString()}, [this](const QString &id) { m_store.setTint(id, {}); });
+    for (const QString &c : Store::tintColors) {
+        QPixmap swatch(24, 24);
+        swatch.fill(Qt::transparent);
+        QPainter p(&swatch);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(Qt::NoPen);
+        p.setBrush(tintColor(c));
+        p.drawEllipse(QRectF(2, 2, 20, 20));
+        p.end();
+        add(c.left(1).toUpper() + c.mid(1), QIcon(swatch), colors == QSet<QString>{c}, [this, c](const QString &id) { m_store.setTint(id, c); });
+    }
+    menu->addSection(tr("Show On"));
+    const QList<std::pair<QString, QStringList>> options{{tr("Icon"), {QStringLiteral("icon")}},
+                                                        {tr("Name"), {QStringLiteral("name")}},
+                                                        {tr("Icon and Name"), {QStringLiteral("icon"), QStringLiteral("name")}}};
+    for (const auto &[title, parts] : options)
+        add(title, {}, allTinted && placements == QSet<QStringList>{parts}, [this, parts](const QString &id) { m_store.placeTint(id, parts); })
+            ->setEnabled(allTinted);
+}
+
 void MainWindow::sidebarMenu(const QPoint &pos)
 {
     QMenu menu;
@@ -917,6 +966,7 @@ void MainWindow::sidebarMenu(const QPoint &pos)
             for (const auto &sid : ids)
                 m_store.setFlag(sid, !allFlagged);
         });
+        fillTintMenu(menu.addMenu(tr("Tint")), ids);
         menu.addAction(ids.size() == 1 ? tr("Close Session") : tr("Close %1 Sessions").arg(ids.size()), this, [this, ids] { closeSessions(ids); });
     } else {
         const Workspace *w = m_store.workspace(id);
@@ -935,6 +985,7 @@ void MainWindow::sidebarMenu(const QPoint &pos)
                 m_store.setFlag(sid, !allFlagged);
         });
         flag->setEnabled(!w->sessions.isEmpty());
+        fillTintMenu(menu.addMenu(tr("Tint")), {id});
         menu.addSeparator();
         auto *del = menu.addAction(tr("Delete Workspace"), this, [this, id] { deleteWorkspace(id); });
         del->setEnabled(m_store.workspaces.size() > 1);

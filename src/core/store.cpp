@@ -7,6 +7,42 @@
 
 const QStringList Store::statuses = {QStringLiteral("idle"), QStringLiteral("active"), QStringLiteral("completed"),
                                      QStringLiteral("blocked")};
+const QStringList Store::tintColors = {QStringLiteral("red"),  QStringLiteral("orange"), QStringLiteral("yellow"), QStringLiteral("green"),
+                                       QStringLiteral("blue"), QStringLiteral("purple"), QStringLiteral("gray")};
+
+QStringList Store::tintParts(const QStringList &raw)
+{
+    QStringList parts;
+    for (const QString &p : raw) {
+        const QString part = p.trimmed().toLower();
+        if (part != QLatin1String("icon") && part != QLatin1String("name"))
+            return {};
+        parts << part;
+    }
+    QStringList ordered;
+    for (const char *p : {"icon", "name"})
+        if (parts.contains(QLatin1String(p)))
+            ordered << QLatin1String(p);
+    return ordered;
+}
+
+static QJsonValue tintJson(const Tint &t)
+{
+    return t.color.isEmpty() ? QJsonValue() : QJsonObject{{"color", t.color}, {"on", QJsonArray::fromStringList(t.on)}};
+}
+
+static Tint tintFromJson(const QJsonValue &v)
+{
+    // an unknown colour drops the tint; unknown parts are skipped and none left reads as the icon
+    const QString color = v.toObject().value("color").toString();
+    if (!Store::tintColors.contains(color))
+        return {};
+    QStringList on;
+    for (const auto &p : v.toObject().value("on").toArray())
+        on += Store::tintParts({p.toString()});
+    on = Store::tintParts(on);
+    return {color, on.isEmpty() ? QStringList{QStringLiteral("icon")} : on};
+}
 
 QString Session::displayName() const
 {
@@ -394,6 +430,34 @@ void Store::setFlag(const QString &id, bool flagged)
     }
 }
 
+Tint *Store::tintOf(const QString &id)
+{
+    if (auto *s = session(id))
+        return &s->tint;
+    auto *w = workspace(id);
+    return w ? &w->tint : nullptr;
+}
+
+void Store::setTint(const QString &id, const QString &color, const QStringList &parts)
+{
+    Tint *t = tintOf(id);
+    if (!t || (!color.isEmpty() && !tintColors.contains(color)))
+        return;
+    Tint next;
+    if (!color.isEmpty())
+        next = {color, !tintParts(parts).isEmpty() ? tintParts(parts) : t->on.isEmpty() ? QStringList{QStringLiteral("icon")} : t->on};
+    if (next == *t)
+        return;
+    *t = next;
+    Q_EMIT changed();
+}
+
+void Store::placeTint(const QString &id, const QStringList &parts)
+{
+    if (Tint *t = tintOf(id); t && !t->color.isEmpty() && !tintParts(parts).isEmpty())
+        setTint(id, t->color, parts);
+}
+
 void Store::setCwd(const QString &id, const QString &cwd)
 {
     auto *s = session(id);
@@ -512,12 +576,19 @@ QJsonObject Store::toJson() const
     QJsonArray ws;
     for (const auto &w : workspaces) {
         QJsonArray ss;
-        for (const auto &s : w.sessions)
-            ss << QJsonObject{{"id", s.id},           {"name", s.name},
-                              {"cwd", s.cwd}, {"title", s.title}, {"flagged", s.flagged}, {"parentId", s.parentId},
-                              {"hasSplit", s.hasSplit}, {"splitVisible", s.splitVisible},
-                              {"splitAxis", s.splitAxis}, {"splitRatio", s.splitRatio}};
-        ws << QJsonObject{{"id", w.id}, {"name", w.name}, {"folder", w.folder}, {"sessions", ss}};
+        for (const auto &s : w.sessions) {
+            QJsonObject so{{"id", s.id},           {"name", s.name},
+                           {"cwd", s.cwd}, {"title", s.title}, {"flagged", s.flagged}, {"parentId", s.parentId},
+                           {"hasSplit", s.hasSplit}, {"splitVisible", s.splitVisible},
+                           {"splitAxis", s.splitAxis}, {"splitRatio", s.splitRatio}};
+            if (!s.tint.color.isEmpty())
+                so.insert("tint", tintJson(s.tint));
+            ss << so;
+        }
+        QJsonObject wo{{"id", w.id}, {"name", w.name}, {"folder", w.folder}, {"sessions", ss}};
+        if (!w.tint.color.isEmpty())
+            wo.insert("tint", tintJson(w.tint));
+        ws << wo;
     }
     const QJsonObject st{{"newSessionDirectory", settings.newSessionDirectory},
                          {"newSessionCustomDirectory", settings.newSessionCustomDirectory},
@@ -534,7 +605,7 @@ void Store::fromJson(const QJsonObject &o)
     workspaces.clear();
     for (const auto &wv : o.value("workspaces").toArray()) {
         const auto wo = wv.toObject();
-        Workspace w{wo.value("id").toString(), wo.value("name").toString(), wo.value("folder").toString(), {}};
+        Workspace w{wo.value("id").toString(), wo.value("name").toString(), wo.value("folder").toString(), {}, tintFromJson(wo.value("tint"))};
         if (w.id.isEmpty())
             continue;
         for (const auto &sv : wo.value("sessions").toArray()) {
@@ -548,6 +619,7 @@ void Store::fromJson(const QJsonObject &o)
             s.title = so.value("title").toString();
             s.flagged = so.value("flagged").toBool();
             s.parentId = so.value("parentId").toString();
+            s.tint = tintFromJson(so.value("tint"));
             s.hasSplit = so.value("hasSplit").toBool();
             s.splitVisible = s.hasSplit && so.value("splitVisible").toBool();
             s.splitAxis = so.value("splitAxis").toString(QStringLiteral("vertical"));
