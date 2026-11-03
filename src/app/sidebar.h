@@ -9,7 +9,7 @@ class Store;
 
 // A launcher's icon as a template tinted `color`: the terminal glyph, or the agent's logo.
 QIcon launcherIcon(const QString &launcherId, const QColor &color);
-// agterm's title-bar glyphs: sidebar, split, splitH, filepanel
+// agterm's title-bar and footer glyphs: sidebar, split, splitH, filepanel, clock, grid, gridFilled
 QIcon chromeIcon(const QString &name, const QColor &color);
 // a tint name as the macOS system colour of that name, light or dark by the current palette; invalid for ""
 QColor tintColor(const QString &name);

@@ -102,6 +102,7 @@ public:
     QList<Session *> allSessions();
     QList<Workspace *> visibleWorkspaces();  // the marked set while the filter applies, else all
     QList<Session *> navigableSessions();    // flagged ones in the flagged view, else those of visible workspaces
+    QStringList recentOthers(int limit = 10); // the MRU sessions on screen, the current one excluded
     bool isSoleFocus(const QString &workspaceId) const { return focusEnabled && focused == QStringList{workspaceId}; }
 
     // target: "" or "active" -> current; else exact id, unique id prefix, or unique exact name.

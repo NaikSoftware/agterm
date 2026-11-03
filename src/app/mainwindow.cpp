@@ -198,6 +198,9 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     auto *spacer = new QWidget;
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     strip->addWidget(spacer);
+    // the mouse form of the Ctrl-Tab switcher, dimmed while there is nowhere else to go
+    m_recentAction = strip->addAction(chromeIcon(QStringLiteral("clock"), ink), tr("Recent sessions (Ctrl+Tab)"), this, &MainWindow::recentMenu);
+    m_recentAction->setEnabled(false);
     strip->addAction(chromeIcon(QStringLiteral("split"), ink), tr("Split"), m_actions.value(QStringLiteral("toggle_split")), &QAction::trigger);
     addToolBar(Qt::TopToolBarArea, strip);
     m_strip = strip;
@@ -210,8 +213,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     m_agentTimer.start();
 
     connect(&m_store, &Store::changed, this, [this] {
-        syncFilterButton();
-        m_actions.value(QStringLiteral("undo_close"))->setEnabled(!m_store.pending.isEmpty());
+        syncChrome();
         m_tree->rebuild();
         showSelected();
         m_saveTimer.start();
@@ -487,7 +489,7 @@ void MainWindow::restore(const QJsonObject &window)
     m_filePanelWidth = qBound(160, window.value("filePanelWidth").toInt(240), 560);
     m_filePanel->setVisible(window.value("filePanel").toBool(false));
     applyFilePanelWidth();
-    syncFilterButton();
+    syncChrome();
     m_tree->rebuild();
     showSelected();
 }
@@ -1060,9 +1062,36 @@ void MainWindow::fillMoveMenu(QMenu *menu, const QStringList &ids)
     });
 }
 
-void MainWindow::syncFilterButton()
+void MainWindow::recentMenu()
 {
-    // dimmed while nothing is marked: there is nothing to filter to
+    QMenu menu;
+    for (const QString &id : m_store.recentOthers()) {
+        const Session *s = m_store.session(id);
+        QIcon dot;
+        if (s->status != QLatin1String("idle")) {
+            static const QHash<QString, QColor> colors{{QStringLiteral("active"), QColor(0xDB, 0xD9, 0xE6)},
+                                                       {QStringLiteral("blocked"), QColor(0xFF, 0x9F, 0x0A)},
+                                                       {QStringLiteral("completed"), QColor(0x30, 0xD1, 0x58)}};
+            QPixmap pm(16, 16);
+            pm.fill(Qt::transparent);
+            QPainter p(&pm);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(Qt::NoPen);
+            p.setBrush(colors.value(s->status));
+            p.drawEllipse(QRectF(3, 3, 10, 10));
+            p.end();
+            dot = QIcon(pm);
+        }
+        // the second column carries the workspace, as the switcher row's subtitle
+        menu.addAction(dot, s->displayName() + QLatin1Char('\t') + m_store.workspaceOf(id)->name, this, [this, id] { m_store.select(id); });
+    }
+    QWidget *button = qobject_cast<QToolBar *>(m_strip)->widgetForAction(m_recentAction);
+    menu.exec(button ? button->mapToGlobal(QPoint(0, button->height())) : QCursor::pos());
+}
+
+void MainWindow::syncChrome()
+{
+    // the filter button is dimmed while nothing is marked: there is nothing to filter to
     const QColor ink = palette().color(QPalette::WindowText);
     m_filterButton->setIcon(chromeIcon(m_store.focusEnabled ? QStringLiteral("gridFilled") : QStringLiteral("grid"), ink));
     m_filterButton->setEnabled(!m_store.focused.isEmpty());
@@ -1071,6 +1100,8 @@ void MainWindow::syncFilterButton()
     m_actions.value(QStringLiteral("focus_workspace"))->setText(m_store.isSoleFocus(m_store.resolveWorkspace({}, &e)) ? tr("Unfocus Workspace") : tr("Focus Workspace"));
     m_actions.value(QStringLiteral("toggle_workspace_filter"))->setEnabled(!m_store.focused.isEmpty());
     m_actions.value(QStringLiteral("clear_focus"))->setEnabled(!m_store.focused.isEmpty());
+    m_actions.value(QStringLiteral("undo_close"))->setEnabled(!m_store.pending.isEmpty());
+    m_recentAction->setEnabled(!m_store.recentOthers().isEmpty());
 }
 
 void MainWindow::fillTintMenu(QMenu *menu, const QStringList &ids)

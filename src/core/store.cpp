@@ -140,6 +140,18 @@ QList<Session *> Store::navigableSessions()
     return out;
 }
 
+QStringList Store::recentOthers(int limit)
+{
+    QSet<QString> shown;
+    for (auto *s : navigableSessions())
+        shown << s->id;
+    QStringList out;
+    for (const QString &id : std::as_const(recent))
+        if (id != selected && shown.contains(id) && out.size() < limit)
+            out << id;
+    return out;
+}
+
 template<typename T, typename Name>
 static QString resolve(const QList<T *> &items, const QString &target, const char *kind, Name name, QString *error)
 {

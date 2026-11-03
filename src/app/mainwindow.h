@@ -89,8 +89,10 @@ private:
     Sidebar *m_tree;
     QToolButton *m_flagButton;
     QToolButton *m_filterButton;
-    void syncFilterButton();
+    void syncChrome();
     QAction *m_sidebarAction;
+    QAction *m_recentAction;
+    void recentMenu();
     QLabel *m_title;
     QStackedWidget *m_stack;
     QWidget *m_empty;

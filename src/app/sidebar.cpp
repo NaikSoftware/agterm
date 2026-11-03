@@ -134,6 +134,13 @@ QIcon chromeIcon(const QString &name, const QColor &color)
     p.setRenderHint(QPainter::Antialiasing);
     p.scale(2, 2);
     p.setPen(QPen(color, 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    if (name == QLatin1String("clock")) { // the title bar's recent sessions
+        p.drawEllipse(QRectF(3, 3, 14, 14));
+        p.drawPolyline(QList<QPointF>{{10, 6}, {10, 10}, {13, 12}});
+        p.end();
+        pm.setDevicePixelRatio(2);
+        return QIcon(pm);
+    }
     if (name.startsWith(QLatin1String("grid"))) {
         // the footer's workspace filter: square.grid.2x2, filled while the filter applies
         if (name == QLatin1String("gridFilled"))

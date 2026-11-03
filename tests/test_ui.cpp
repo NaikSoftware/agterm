@@ -4,6 +4,8 @@
 
 #include <QApplication>
 #include <QLineEdit>
+#include <QMenu>
+#include <QTimer>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QToolButton>
@@ -128,6 +130,36 @@ private Q_SLOTS:
                 term = x;
         QVERIFY(term);
         QCOMPARE(term->font().pointSizeF(), base - 1);
+    }
+
+    void recentButtonListsTheOtherRecentSessions()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("recent.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, "alpha", {}), b = store.addSession(ws, "beta", {});
+        store.select(a);
+        w.show();
+        QToolButton *clock = nullptr;
+        for (auto *t : w.findChildren<QToolButton *>())
+            if (t->defaultAction() && t->defaultAction()->text().startsWith(QLatin1String("Recent sessions")))
+                clock = t;
+        QVERIFY(clock && !clock->isEnabled()); // nowhere else to go yet
+        store.select(b);
+        QVERIFY(clock->isEnabled());
+        QStringList listed;
+        QTimer::singleShot(0, this, [&] {
+            auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            QVERIFY(menu);
+            for (QAction *x : menu->actions())
+                listed << x->text();
+            menu->actions().first()->trigger();
+            menu->close();
+        });
+        clock->click();
+        QTRY_COMPARE(listed, QStringList{QStringLiteral("alpha\tw")});
+        QCOMPARE(store.selected, a);
     }
 
     void footerFilterNarrowsTheTreeAndTintReachesTheRow()
