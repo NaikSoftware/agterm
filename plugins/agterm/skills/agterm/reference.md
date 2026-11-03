@@ -330,7 +330,7 @@ visible before), `sidebarMode` (`tree` or `flagged` — the sidebar view mode, t
 of `sidebar flagged-layout`; app-wide, so every window reports the same value, under the ordinary tree
 too), `flaggedOrder` (the window's flagged session ids in the flat list's saved order, the read side of
 `session flag move`; omitted when nothing is flagged), `sidebarWidth` (the sidebar divider position in points, the read side of
-`sidebar width`, reported here and nowhere else), `workspaceFilter` (whether the window's workspace focus filter is currently APPLIED —
+`sidebar width`, reported here and nowhere else), `filePanelVisible` and `filePanelWidth` (the file panel's visibility and width in points, the read sides of `filepanel` and `filepanel width`, reported here and not on `window list`), `workspaceFilter` (whether the window's workspace focus filter is currently APPLIED —
 the flag half of the focus set, whose member half is each workspace node's `focused`; the read side of
 `workspace filter`, so a script can record the filter state, restore it, or make the toggle idempotent),
 `quickVisible` (whether the quick terminal is currently shown — the read
@@ -1762,6 +1762,20 @@ is how a caller shrinks the terminal below what the window's own minimum width a
 column count, so a caller fitting an exact number of columns measures its own grid and corrects; do not
 expect points to convert to columns without one.
 
+## filepanel
+
+`agtermctl filepanel [show|hide|toggle]` — show or hide the frontmost window's file panel, the tree of the
+active session's current folder beside the sidebar. `toggle` is the default; an unknown mode is an error, and
+`no open window` when none is open. The GUI half is the title-bar folder button, View ▸ Show/Hide File Panel,
+the ⌃⇧P palette "Toggle File Panel", and the ⌃⌘E keymap action (`toggle_file_panel`).
+
+`agtermctl filepanel width <points> [--window W]` sets the panel width in points, clamped server-side to
+160...560 (default 240) and ECHOED as the STORED width, like `sidebar width`; compare numerically. Same
+`--window` selector and defaults as `sidebar expand`.
+
+Read back from the tree's top-level `filePanelVisible` and `filePanelWidth`; `window list` carries neither and
+no event announces a change.
+
 ## notify
 
 `agtermctl notify <body> [--title T] [--target] [--window W]` — post a macOS desktop notification
@@ -1998,7 +2012,7 @@ so `{AGT_SESSION_NAME}` and `{AGT_SESSION_PWD}` are as untrusted as `{AGT_SELECT
 
 Built-in action names for `map` include: `new_window`, `new_workspace`, `new_session`,
 `open_directory`, `rename_session`, `duplicate_session`, `new_companion`, `duplicate_companion`, `close_session`, `reopen_recent`, `undo_close`, `clear_status`, `increase_font_size`,
-`decrease_font_size`, `reset_font_size`, `toggle_split`, `toggle_horizontal_split`, `toggle_scratch`, `toggle_sidebar`,
+`decrease_font_size`, `reset_font_size`, `toggle_split`, `toggle_horizontal_split`, `toggle_scratch`, `toggle_sidebar`, `toggle_file_panel`,
 `focus_workspace`, `toggle_workspace_filter`, `edit_flagged_sessions`, `edit_focused_workspaces`, `quick_terminal`,
 `session_palette`, `command_palette`, `custom_command_palette`, `dashboard`, and the navigation actions (`previous_session`, `next_session`,
 `first_session`, `last_session`, `previous_attention_session`, `next_attention_session`,

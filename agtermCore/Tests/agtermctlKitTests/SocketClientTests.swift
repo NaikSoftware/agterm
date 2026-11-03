@@ -324,6 +324,7 @@ struct SocketClientTests {
             toggle_overlay              cmd+shift+j
             toggle_search               cmd+f
           * toggle_sidebar              t
+            toggle_file_panel           ctrl+cmd+e
             select_theme                -
             toggle_fullscreen           ctrl+cmd+f
             toggle_flagged_view         -

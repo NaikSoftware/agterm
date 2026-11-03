@@ -42,7 +42,8 @@ struct BuiltinActionTests {
         #expect(BuiltinAction.attachRemote.rawValue == "attach_remote")
         #expect(BuiltinAction.editFlaggedSessions.rawValue == "edit_flagged_sessions")
         #expect(BuiltinAction.editFocusedWorkspaces.rawValue == "edit_focused_workspaces")
-        #expect(BuiltinAction.allCases.count == 54)
+        #expect(BuiltinAction.toggleFilePanel.rawValue == "toggle_file_panel")
+        #expect(BuiltinAction.allCases.count == 55)
     }
 
     @Test func rejectsUnknownName() {
@@ -112,6 +113,7 @@ struct BuiltinActionTests {
             .toggleTerminalZoom: Chord(mods: [.command, .shift], key: "return"),
             .toggleSearch: Chord(mods: [.command], key: "f"),
             .toggleSidebar: Chord(mods: [.command, .control], key: "s"),
+            .toggleFilePanel: Chord(mods: [.command, .control], key: "e"),
             .toggleFullscreen: Chord(mods: [.command, .control], key: "f"),
             .selectTheme: nil,
             .toggleFlaggedView: nil,
@@ -157,6 +159,12 @@ struct BuiltinActionTests {
     @Test func toggleSidebarDefaultIsCmdCtrlSAndRoundTrips() {
         let chord = Chord(mods: [.command, .control], key: "s")
         #expect(BuiltinAction.toggleSidebar.defaultChord == chord)
+        #expect(parseKeybind(chord.displayString) == [chord])
+    }
+
+    @Test func toggleFilePanelDefaultIsCmdCtrlEAndRoundTrips() {
+        let chord = Chord(mods: [.command, .control], key: "e")
+        #expect(BuiltinAction.toggleFilePanel.defaultChord == chord)
         #expect(parseKeybind(chord.displayString) == [chord])
     }
 

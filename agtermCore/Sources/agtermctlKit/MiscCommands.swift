@@ -775,6 +775,43 @@ struct Sidebar: ParsableCommand {
     }
 }
 
+// MARK: - filepanel
+
+struct FilePanel: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "filepanel",
+        abstract: "File panel visibility and width.",
+        subcommands: [Visibility.self, Width.self],
+        defaultSubcommand: Visibility.self
+    )
+
+    struct Visibility: RequestCommand {
+        static let configuration = CommandConfiguration(commandName: "visibility", abstract: "File panel visibility (show|hide|toggle).")
+        @Argument(help: "Mode: show, hide, or toggle (default).") var mode: String = "toggle"
+        // frontmost window only, like `sidebar`.
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .filePanel, args: ControlArgs(mode: mode))
+        }
+    }
+
+    /// Prints the applied width, so a clamped request reads back as the clamped value.
+    struct Width: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Set the file panel width in points.")
+        @Argument(help: "File panel width in points, clamped to the drag range.") var points: Double
+        @OptionGroup var options: ClientOptions
+
+        func validate() throws {
+            guard points.isFinite else { throw ValidationError("points must be a number") }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .filePanelWidth, args: options.withWindow(ControlArgs(filePanelWidth: points)))
+        }
+    }
+}
+
 // MARK: - notify
 
 struct Notify: RequestCommand {

@@ -55,6 +55,7 @@ targets:
           - "Resources/agent-status"
           - "Resources/hud"
           - "Resources/markdown"
+          - "Resources/file-icons"
           # committed SOURCE for agterm's own bundled theme(s); setup.sh stages it
           # into Resources/ghostty/themes (above), so the source dir itself must not
           # be pulled into the project tree or the app bundle.
@@ -93,6 +94,11 @@ targets:
       # The markdown page renderer and stylesheet, with the vendored libraries' LICENSE files, which a group
       # would drop for having no extension. Lands at Contents/Resources/markdown; MarkdownAssets reads it.
       - path: agterm/Resources/markdown
+        type: folder
+        buildPhase: resources
+      # Atom file-icons TTF fonts with their LICENSE texts. Lands at Contents/Resources/file-icons;
+      # FileIconRenderer registers the fonts from there.
+      - path: agterm/Resources/file-icons
         type: folder
         buildPhase: resources
       # Agent skill package (SKILL.md + reference.md + examples.md + cookbook.md + troubleshooting.md

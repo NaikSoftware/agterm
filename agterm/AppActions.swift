@@ -803,6 +803,10 @@ final class AppActions {
         store.toggleSidebarVisible()
     }
 
+    func toggleFilePanel() {
+        if uiActionsEnabled { store?.toggleFilePanelVisible() }
+    }
+
     /// Focus a pane of the active session's split: `.split` -> right, anything else -> left/primary; no-op with no split.
     func focusPane(_ pane: PaneRole) {
         guard uiActionsEnabled else { return }

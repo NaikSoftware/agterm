@@ -248,6 +248,29 @@ struct SnapshotRoundTripTests {
         #expect(store.sidebarVisible == true)
     }
 
+    @Test func filePanelStateRoundTripsThroughSnapshot() throws {
+        let store = makeStore()
+        store.setFilePanelVisible(true)
+        store.setFilePanelWidth(300)
+        let data = try JSONEncoder().encode(store.snapshot())
+        let restored = makeStore()
+        restored.restore(from: try JSONDecoder().decode(Snapshot.self, from: data))
+        #expect(restored.filePanelVisible)
+        #expect(restored.filePanelWidth == 300)
+    }
+
+    @Test func oldSnapshotWithoutFilePanelDecodesDefaults() throws {
+        let snap = try JSONDecoder().decode(Snapshot.self, from: Data(#"{"version":1,"workspaces":[]}"#.utf8))
+        #expect(snap.filePanelVisible == nil)
+        #expect(snap.filePanelWidth == nil)
+        let store = makeStore()
+        store.setFilePanelVisible(true)
+        store.setFilePanelWidth(400)
+        store.restore(from: snap)
+        #expect(!store.filePanelVisible)
+        #expect(store.filePanelWidth == 240)
+    }
+
     @Test func restoreClampsOutOfRangeSidebarWidth() {
         let store = makeStore()
         store.restore(from: Snapshot(workspaces: [], sidebarWidth: 2000))

@@ -199,6 +199,14 @@ public extension ControlActions {
         ControlResponse(ok: false, error: "sidebar.width is not supported by this control host")
     }
 
+    func setFilePanelVisibility(_: ControlToggleMode) -> ControlResponse {
+        ControlResponse(ok: false, error: "filepanel is not supported by this control host")
+    }
+
+    func setFilePanelWidth(_: Double, window _: String?) -> ControlResponse {
+        ControlResponse(ok: false, error: "filepanel.width is not supported by this control host")
+    }
+
     func closeSession(_ target: String?, window: String?, undoable: Bool) -> ControlResponse {
         guard !undoable else {
             return ControlResponse(ok: false, error: "session.close --undoable is not supported by this control host")

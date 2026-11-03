@@ -44,7 +44,7 @@ public struct ControlDispatcher {
             return dispatchWorkspaceCommand(request)
         case .quick, .fontInc, .fontDec, .fontReset, .keymapReload, .keymapList, .keymapRun,
                 .configReload, .notify, .themeSet, .themeList, .sidebar, .sidebarMode, .sidebarFlaggedLayout,
-                .sidebarExpand, .sidebarCollapse, .sidebarWidth, .restoreClear, .restoreCapture, .version:
+                .sidebarExpand, .sidebarCollapse, .sidebarWidth, .filePanel, .filePanelWidth, .restoreClear, .restoreCapture, .version:
             return dispatchAppCommand(request)
         case .restoreMode, .zmxList, .zmxPrune, .zmxKill, .zmxReset, .zmxTree, .zmxAttach, .zmxAttachGroup, .zmxPresent, .zmxScreen:
             return await dispatchZmxCommand(request)
@@ -490,6 +490,16 @@ public struct ControlDispatcher {
                 return ControlResponse(ok: false, error: "sidebar.width requires a width in points")
             }
             return actions.setSidebarWidth(points, window: request.args?.window)
+        case .filePanel:
+            guard let mode = ControlToggleMode.parse(request.args?.mode, on: "show", off: "hide") else {
+                return ControlResponse(ok: false, error: "invalid filepanel mode: \(request.args?.mode ?? "toggle")")
+            }
+            return actions.setFilePanelVisibility(mode)
+        case .filePanelWidth:
+            guard let points = request.args?.filePanelWidth, points.isFinite else {
+                return ControlResponse(ok: false, error: "filepanel.width requires a width in points")
+            }
+            return actions.setFilePanelWidth(points, window: request.args?.window)
         case .restoreClear:
             return actions.clearRestoreCommands()
         case .restoreCapture:

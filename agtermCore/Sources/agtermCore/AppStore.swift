@@ -120,6 +120,13 @@ public final class AppStore {
     public static let sidebarWidthMin: Double = 160
     public static let sidebarWidthMax: Double = 560
 
+    /// Whether this window's file panel is shown, and its width in points; per-window state in `Snapshot`.
+    public var filePanelVisible = false
+    public var filePanelWidth: Double = AppStore.filePanelWidthDefault
+    public static let filePanelWidthDefault: Double = 240
+    public static let filePanelWidthMin: Double = 160
+    public static let filePanelWidthMax: Double = 560
+
     /// The persisted split-divider primary-pane fraction bounds: live capture skips degenerate extremes outside
     /// this range and `restore()` clamps to it, so the on-disk ratio is always within bounds.
     public static let splitRatioMin: Double = 0.05
@@ -424,6 +431,7 @@ public final class AppStore {
                            sidebarVisible: sidebarVisible, sidebarMode: sidebarMode.rawValue,
                            sidebarFlaggedLayout: flaggedLayout?.rawValue, flaggedOrder: flaggedOrderReadback,
                            sidebarWidth: sidebarWidth,
+                           filePanelVisible: filePanelVisible, filePanelWidth: filePanelWidth,
                            workspaceFilter: focusEnabled,
                            quickVisible: quickVisible(), zoomedSurface: zoomedSurface(),
                            dashboardMembers: dashboardMembers(),

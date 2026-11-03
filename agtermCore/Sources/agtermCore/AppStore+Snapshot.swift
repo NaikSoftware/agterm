@@ -24,7 +24,8 @@ extension AppStore {
                         focusedWorkspaceIDs: focusIDs.isEmpty ? nil : focusIDs,
                         focusEnabled: focusEnabled ? true : nil,
                         sessionRecency: recency,
-                        flaggedOrder: flaggedIDs.isEmpty ? nil : flaggedIDs)
+                        flaggedOrder: flaggedIDs.isEmpty ? nil : flaggedIDs,
+                        filePanelVisible: filePanelVisible, filePanelWidth: filePanelWidth)
     }
 
     /// The selection to write. A remote session is not in the snapshot, so naming it would restore an empty
@@ -168,6 +169,8 @@ extension AppStore {
         // out-of-range frame width; the drag and `sidebar.width` clamp to the same bounds.
         sidebarWidth = AppStore.clampSidebarWidth(snapshot.sidebarWidth ?? AppStore.sidebarWidthDefault)
         sidebarVisible = snapshot.sidebarVisible ?? true
+        filePanelWidth = AppStore.clampFilePanelWidth(snapshot.filePanelWidth ?? AppStore.filePanelWidthDefault)
+        filePanelVisible = snapshot.filePanelVisible ?? false
         sidebarMode = snapshot.sidebarMode ?? .tree
         restoreFlaggedOrder(snapshot.flaggedOrder)
         restoreFocus(from: snapshot)

@@ -243,6 +243,12 @@ extension agtermApp {
                 }
                 .keyboardShortcut(shortcut(for: .toggleSidebar))
                 .disabled(!PaletteCommand.toggleSidebar.isEnabled(in: context))
+                let filePanelShown = library.activeStore?.filePanelVisible ?? false
+                Button { actions.toggleFilePanel() } label: {
+                    Label(filePanelShown ? "Hide File Panel" : "Show File Panel", systemImage: "folder")
+                }
+                .keyboardShortcut(shortcut(for: .toggleFilePanel))
+                .disabled(!PaletteCommand.toggleFilePanel.isEnabled(in: context))
                 // expand every workspace / collapse all but the active one. plain keyless items, disabled
                 // under the flat flagged list, where there are no workspace rows; control sidebar.expand/collapse.
                 Button { actions.expandAllWorkspaces() } label: { Label("Expand Workspaces", systemImage: "chevron.down") }

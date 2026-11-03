@@ -103,6 +103,7 @@ extension AppActions {
         case .toggleOverlay: toggleOverlays()
         case .toggleTerminalZoom: toggleTerminalZoom()
         case .toggleSidebar: toggleSidebar()
+        case .toggleFilePanel: toggleFilePanel()
         case .toggleFlag: toggleFlagActiveSession()
         case .focusWorkspace: focusActiveWorkspace()
         case .find: toggleSearch()

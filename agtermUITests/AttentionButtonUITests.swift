@@ -19,7 +19,7 @@ final class AttentionButtonUITests: XCTestCase {
         // the runner's own temp dir keeps the socket path under the sun_path ~104-byte limit and inside
         // the sandbox grant (the per-test AGTERM_STATE_DIR subdir is too long; /tmp is outside the grant).
         socketPath = (NSTemporaryDirectory() as NSString)
-            .appendingPathComponent("agtermc-\(UUID().uuidString.prefix(8)).sock")
+            .appendingPathComponent("c-\(UUID().uuidString.prefix(8)).sock")
     }
 
     override func tearDown() async throws {

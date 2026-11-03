@@ -35,6 +35,7 @@ struct PaletteCatalogTests {
             "Toggle Overlays",
             "Toggle Terminal Zoom",
             "Toggle Sidebar",
+            "Toggle File Panel",
             "Flag Session",
             "Focus Workspace",
             "Find…",
@@ -69,7 +70,7 @@ struct PaletteCatalogTests {
     }
 
     @Test func catalogHasTheExpectedStaticCommandCount() {
-        #expect(PaletteCommand.allCases.count == 61)
+        #expect(PaletteCommand.allCases.count == 62)
     }
 
     @Test func idsRoundTripThroughRawValue() {

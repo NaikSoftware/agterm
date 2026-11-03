@@ -46,6 +46,20 @@ final class ControlSidebarStatusUITests: ControlAPITestCase {
         XCTAssertEqual(bad["ok"] as? Bool, false, "an invalid sidebar mode should error")
     }
 
+    func testFilePanelShowHideToggle() throws {
+        XCTAssertTrue(app.staticTexts["session-row"].waitForExistence(timeout: 10), "seeded session row")
+        XCTAssertEqual(try sendCommand(#"{"cmd":"filepanel","args":{"mode":"show"}}"#)["ok"] as? Bool, true)
+        XCTAssertEqual(try treeFilePanelVisible(), true)
+
+        XCTAssertEqual(try sendCommand(#"{"cmd":"filepanel","args":{"mode":"toggle"}}"#)["ok"] as? Bool, true)
+        XCTAssertEqual(try treeFilePanelVisible(), false)
+
+        let button = app.buttons["file-panel-toggle-button"]
+        XCTAssertTrue(button.waitForExistence(timeout: 10), "the titlebar should show the file panel toggle")
+        button.click()
+        XCTAssertTrue(pollTreeFilePanelVisible(true, timeout: 10), "clicking the toggle should show the file panel")
+    }
+
     // flagged rows are labeled "session : workspace", which is how they are told apart from tree rows.
     func testSessionFlagAndSidebarModeFlagged() throws {
         XCTAssertTrue(app.staticTexts["session-row"].firstMatch.waitForExistence(timeout: 10), "seeded session row")
@@ -1201,6 +1215,20 @@ final class ControlSidebarStatusUITests: ControlAPITestCase {
     private func treeRequest(window: String?) -> String {
         guard let window else { return #"{"cmd":"tree"}"# }
         return #"{"cmd":"tree","args":{"window":"\#(window)"}}"#
+    }
+
+    private func treeFilePanelVisible() throws -> Bool? {
+        let result = try XCTUnwrap(try sendCommand(#"{"cmd":"tree"}"#)["result"] as? [String: Any])
+        return try XCTUnwrap(result["tree"] as? [String: Any])["filePanelVisible"] as? Bool
+    }
+
+    private func pollTreeFilePanelVisible(_ expected: Bool, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if (try? treeFilePanelVisible()) == expected { return true }
+            usleep(200_000)
+        }
+        return false
     }
 
     /// Polls until the tree's top-level `sidebarVisible` reads false (draining the run loop so SwiftUI can

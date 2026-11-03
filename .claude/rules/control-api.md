@@ -180,7 +180,7 @@ renumbering. Do not reintroduce a count anywhere.
 - `quick`, `quick.type`, `quick.text`
 - `msg.send`, `msg.read`, `msg.ack`
 - `sidebar`, `sidebar.mode`, `sidebar.flagged-layout`, `sidebar.expand`, `sidebar.collapse`, `sidebar.width`,
-  `notify`
+  `filepanel`, `filepanel.width`, `notify`
 - `font.inc`, `font.dec`, `font.reset`
 - `window.new`, `.list`, `.select`, `.go`, `.close`, `.rename`, `.delete`, `.resize`, `.move`, `.zoom`,
   `.fullscreen`, `.minimize`
@@ -1371,6 +1371,13 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   on the tree top level only. `ControlActions` DEFAULTS this arm in a public extension rather than requiring
   it, so a shared-dispatcher host outside this repo owes no conformance change; that does NOT make such a
   host build unchanged, since adding a `Command` case breaks any exhaustive switch over it first.
+- `filepanel show|hide|toggle` is frontmost-only and persisted; `filepanel.width <points>` targets an optional
+  open window, clamps like `sidebar.width` and echoes the stored width as `result.filePanelWidth`.
+  Deliberate exemption: `filePanelVisible` and `filePanelWidth` are read back on the `tree` top level only, with
+  no `window.list` field and no change notification.
+  The panel's file operations (open, rename, trash, cut/copy/paste, drag-move, New Companion Here) deliberately have no
+  protocol or CLI form: shell `mv`/`cp`/`trash`, `session.companion.new --cwd` and
+  `session.overlay.open --markdown/--text/--image` already script them.
 - `workspace.focus on` replaces/enables; off removes and disables on empty; toggle clears sole applied
   target or replaces/enables; add inserts without changing enabled state. There is no membership toggle.
   Clear Focus loops off over members; `workspace.filter off` only suspends.

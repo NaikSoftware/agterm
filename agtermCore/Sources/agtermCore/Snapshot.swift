@@ -18,6 +18,9 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public var sidebarWidth: Double?
     /// Whether the window's sidebar is shown; nil = the default (shown).
     public var sidebarVisible: Bool?
+    /// The window's file panel visibility and width in points; nil = the default (hidden, 240).
+    public var filePanelVisible: Bool?
+    public var filePanelWidth: Double?
     /// Which view the sidebar renders (the workspace tree or the flagged view); nil = `.tree`.
     public var sidebarMode: SidebarMode?
     /// The workspaces marked in the sidebar focus set, in tree order; nil = nothing marked.
@@ -34,7 +37,8 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public init(version: Int = Snapshot.currentVersion, selectedSessionID: UUID? = nil,
                 workspaces: [WorkspaceSnapshot] = [], sidebarWidth: Double? = nil, sidebarVisible: Bool? = nil,
                 sidebarMode: SidebarMode? = nil, focusedWorkspaceIDs: [UUID]? = nil, focusEnabled: Bool? = nil,
-                sessionRecency: [UUID]? = nil, flaggedOrder: [UUID]? = nil) {
+                sessionRecency: [UUID]? = nil, flaggedOrder: [UUID]? = nil,
+                filePanelVisible: Bool? = nil, filePanelWidth: Double? = nil) {
         self.version = version
         self.selectedSessionID = selectedSessionID
         self.workspaces = workspaces
@@ -45,11 +49,13 @@ public struct Snapshot: Codable, Equatable, Sendable {
         self.focusEnabled = focusEnabled
         self.sessionRecency = sessionRecency
         self.flaggedOrder = flaggedOrder
+        self.filePanelVisible = filePanelVisible
+        self.filePanelWidth = filePanelWidth
     }
 
     enum CodingKeys: String, CodingKey {
         case version, selectedSessionID, workspaces, sidebarWidth, sidebarVisible, sidebarMode
-        case focusedWorkspaceIDs, focusEnabled, sessionRecency, flaggedOrder
+        case focusedWorkspaceIDs, focusEnabled, sessionRecency, flaggedOrder, filePanelVisible, filePanelWidth
     }
 
     /// The legacy single-workspace focus key from before the focus SET existed. Its own key type with no
@@ -86,6 +92,8 @@ public struct Snapshot: Codable, Equatable, Sendable {
         workspaces = try c.decode([WorkspaceSnapshot].self, forKey: .workspaces)
         sidebarWidth = (try? c.decodeIfPresent(Double.self, forKey: .sidebarWidth)) ?? nil
         sidebarVisible = (try? c.decodeIfPresent(Bool.self, forKey: .sidebarVisible)) ?? nil
+        filePanelVisible = (try? c.decodeIfPresent(Bool.self, forKey: .filePanelVisible)) ?? nil
+        filePanelWidth = (try? c.decodeIfPresent(Double.self, forKey: .filePanelWidth)) ?? nil
         sidebarMode = (try? c.decodeIfPresent(SidebarMode.self, forKey: .sidebarMode)) ?? nil
         let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
         let legacyFocus = (try? legacyContainer.decodeIfPresent(UUID.self, forKey: .focusedWorkspaceID)) ?? nil

@@ -928,16 +928,20 @@ final class SidebarOutlineView: NSOutlineView {
     /// and gated on the version because the earlier layout is already tight and cannot be tested here.
     /// `frameOfOutlineCell` stays untouched: the triangle keeps its place, and `handleSingleClick` reads
     /// that frame to keep a row click from double-toggling expansion.
-    override func frameOfCell(atColumn column: Int, row: Int) -> NSRect {
-        var frame = super.frameOfCell(atColumn: column, row: row)
-        guard #available(macOS 27.0, *), !frame.isEmpty, tableColumns.indices.contains(column),
-              tableColumns[column] === outlineTableColumn else { return frame }
-        let level = level(forRow: row)
+    static func trimmedCellFrame(_ frame: NSRect, in outline: NSOutlineView, column: Int, row: Int) -> NSRect {
+        var frame = frame
+        guard #available(macOS 27.0, *), !frame.isEmpty, outline.tableColumns.indices.contains(column),
+              outline.tableColumns[column] === outline.outlineTableColumn else { return frame }
+        let level = outline.level(forRow: row)
         guard level >= 0 else { return frame }
-        let trim = max(0, frame.minX - (Self.contentX + CGFloat(level) * indentationPerLevel))
+        let trim = max(0, frame.minX - (contentX + CGFloat(level) * outline.indentationPerLevel))
         frame.origin.x -= trim
         frame.size.width += trim
         return frame
+    }
+
+    override func frameOfCell(atColumn column: Int, row: Int) -> NSRect {
+        Self.trimmedCellFrame(super.frameOfCell(atColumn: column, row: row), in: self, column: column, row: row)
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {

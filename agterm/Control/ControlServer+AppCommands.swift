@@ -93,6 +93,23 @@ extension ControlServer {
         }
     }
 
+    // MARK: - File panel
+
+    func setFilePanelVisibility(_ mode: ControlToggleMode) -> ControlResponse {
+        guard let store = library.activeStore else {
+            return ControlResponse(ok: false, error: "no open window")
+        }
+        store.setFilePanelVisible(mode.desiredValue(current: store.filePanelVisible))
+        return ControlResponse(ok: true)
+    }
+
+    func setFilePanelWidth(_ points: Double, window: String?) -> ControlResponse {
+        resolver.resolveOpenPlacementStore(window) { store in
+            store.setFilePanelWidth(points)
+            return ControlResponse(ok: true, result: ControlResult(filePanelWidth: store.filePanelWidth))
+        }
+    }
+
     // MARK: - Keymap
 
     /// Re-read and re-parse `keymap.conf`, returning the parse-diagnostic count. The SAME `reloadKeymap()` path

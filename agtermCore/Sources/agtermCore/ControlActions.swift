@@ -137,6 +137,8 @@ public protocol ControlActions {
     func expandSidebar(window: String?) -> ControlResponse
     func collapseSidebar(window: String?) -> ControlResponse
     func setSidebarWidth(_ points: Double, window: String?) -> ControlResponse
+    func setFilePanelVisibility(_ mode: ControlToggleMode) -> ControlResponse
+    func setFilePanelWidth(_ points: Double, window: String?) -> ControlResponse
     func setQuickTerminal(mode: String?) -> ControlResponse
     func typeQuick(text: String) async -> ControlResponse
     func readQuickText(all: Bool, lines: Int?) async -> ControlResponse

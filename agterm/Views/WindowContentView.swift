@@ -146,6 +146,13 @@ struct WindowContentView: View {
         // with the title bar hidden (.hiddenTitleBar), pull our header to the very top so the traffic
         // lights overlay it as one row; no system title bar is left to clip the content.
         .ignoresSafeArea(.container, edges: .top)
+        .onChange(of: store.filePanelVisible) { _, visible in
+            // same latch reset as the sidebar below: hiding mid-drag cancels the gesture without `onEnded`.
+            if !visible {
+                dividerHovered = false
+                dividerDragging = false
+            }
+        }
         // re-tint the sidebar after a collapse/expand: the re-attached NSScrollView comes back with a
         // default (lighter) background until the next WindowAppearance sync; nudge that sync now.
         .onChange(of: store.sidebarVisible) { _, visible in
@@ -301,10 +308,19 @@ struct WindowContentView: View {
             if store.sidebarVisible {
                 sidebarColumn
                     .frame(width: CGFloat(store.sidebarWidth))
-                sidebarDivider
+                columnDivider { x in store.sidebarWidth = AppStore.clampSidebarWidth(x) }
                     // the divider is the middle HStack child, so without this the detail column (drawn last)
                     // shadows the right half of the grab handle and only a few points stay grabbable.
                     .zIndex(1)
+            }
+            if store.filePanelVisible {
+                filePanelColumn
+                    .frame(width: CGFloat(store.filePanelWidth))
+                columnDivider { x in
+                    let leading = store.sidebarVisible ? store.sidebarWidth + 1 : 0
+                    store.filePanelWidth = AppStore.clampFilePanelWidth(x - leading)
+                }
+                .zIndex(1)
             }
             detailColumn
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -353,8 +369,16 @@ struct WindowContentView: View {
         }
     }
 
-    /// A 1px themed vertical separator with a wider invisible drag handle to resize the sidebar.
-    private var sidebarDivider: some View {
+    private var filePanelColumn: some View {
+        VStack(spacing: 0) {
+            titlebarHairline
+            FileTreeView(store: store, actions: actions)
+        }
+        .background(sidebarTintWash)
+    }
+
+    /// A 1px themed vertical separator with a wider invisible drag handle; `onDrag` gets the pointer's window X.
+    private func columnDivider(onDrag: @escaping (Double) -> Void) -> some View {
         Rectangle()
             .fill(chromeText.opacity(0.1))
             .frame(width: 1)
@@ -383,7 +407,7 @@ struct WindowContentView: View {
                         DragGesture(minimumDistance: 1, coordinateSpace: .global)
                             .onChanged { value in
                                 dividerDragging = true
-                                store.sidebarWidth = AppStore.clampSidebarWidth(Double(value.location.x))
+                                onDrag(Double(value.location.x))
                                 // past the clamp the divider stops following the pointer, which ends up over
                                 // live terminal with no hover event left to repaint ↔.
                                 setDividerCursor()
@@ -565,19 +589,24 @@ struct WindowContentView: View {
     /// `frontmostWindowID`, and is observed, so this reacts.
     private var isFrontmost: Bool { library.activeWindowID == windowID }
 
-    /// Where the terminal area starts ON SCREEN: the sidebar column plus its 1pt divider, or 0 whenever no
-    /// sidebar is showing. The palette and switcher center their panel over THAT area rather than the whole
-    /// window, which otherwise reads as off-center whenever the sidebar is up. The palette's scrim stays
+    /// Where the terminal area starts ON SCREEN: `leadingColumnsWidth`, or 0 whenever no leading column is
+    /// showing. The palette and switcher center their panel over THAT area rather than the whole
+    /// window, which otherwise reads as off-center whenever a leading column is up. The palette's scrim stays
     /// full width and dismisses on a click anywhere; the switcher's is deliberately click-through and ends
     /// on Ctrl release.
     ///
-    /// Zoom and the dashboard are why `store.sidebarVisible` alone is not the answer: both leave that flag
-    /// set while covering the sidebar (zoom drops `alwaysMountedSplitLayer` to opacity 0, the dashboard
+    /// Zoom and the dashboard are why the visibility flags alone are not the answer: both leave them
+    /// set while covering the columns (zoom drops `alwaysMountedSplitLayer` to opacity 0, the dashboard
     /// paints over it), and `pickPaletteOverlay` is mounted through both. Reading the flag there shifts a
     /// picker by half a sidebar that is not on screen.
     private var terminalAreaInset: Double {
-        guard store.sidebarVisible, terminalZoom.target == nil, !dashboard.isOpen else { return 0 }
-        return store.sidebarWidth + 1
+        guard terminalZoom.target == nil, !dashboard.isOpen else { return 0 }
+        return Double(leadingColumnsWidth)
+    }
+
+    /// The on-screen width of the sidebar and file panel columns, each with its 1pt divider.
+    var leadingColumnsWidth: CGFloat {
+        CGFloat((store.sidebarVisible ? store.sidebarWidth + 1 : 0) + (store.filePanelVisible ? store.filePanelWidth + 1 : 0))
     }
 
     /// Mounted only while a palette is open in the frontmost window; its content (search field + result
