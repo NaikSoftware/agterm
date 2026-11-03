@@ -93,6 +93,10 @@ struct FileTreeOutline: NSViewRepresentable {
         column.resizingMask = .autoresizingMask
         outline.addTableColumn(column)
         outline.outlineTableColumn = column
+        outline.registerForDraggedTypes([.fileURL])
+        // `.copy` locally too: the terminal surface accepts file drops only as a copy.
+        outline.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
+        outline.setDraggingSourceOperationMask(.copy, forLocal: false)
 
         let scroll = SidebarScrollView()
         scroll.documentView = outline
@@ -292,7 +296,7 @@ struct FileTreeOutline: NSViewRepresentable {
             (item as? FileTreeNode)?.isDirectory ?? false
         }
 
-        func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? { SidebarRowView() }
+        func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? { FileTreeRowView() }
 
         func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
             guard let node = item as? FileTreeNode else { return nil }

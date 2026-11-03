@@ -280,4 +280,101 @@ final class FileTreeViewTests: XCTestCase {
         XCTAssertEqual(companion.initialCwd, rootDir.path)
         XCTAssertFalse(front.workspaces.flatMap(\.sessions).contains { $0.parentID != nil })
     }
+
+    // MARK: - Drag and drop
+
+    private func drag(_ paths: [String], fromPanel: Bool = true, mask: NSDragOperation = [.copy, .move]) -> FakeFileDrag {
+        let board = NSPasteboard(name: NSPasteboard.Name("agterm-test-drag-\(UUID().uuidString)"))
+        board.clearContents()
+        board.writeObjects(paths.map { rootDir.appendingPathComponent($0) as NSURL })
+        return FakeFileDrag(board, source: fromPanel ? outline : nil, mask: mask)
+    }
+
+    private func validate(_ info: NSDraggingInfo, onto item: FileTreeNode?) -> NSDragOperation {
+        coordinator.outlineView(outline, validateDrop: info, proposedItem: item, proposedChildIndex: NSOutlineViewDropOnItemIndex)
+    }
+
+    private func accept(_ info: NSDraggingInfo, onto item: FileTreeNode?) -> Bool {
+        coordinator.outlineView(outline, acceptDrop: info, item: item, childIndex: NSOutlineViewDropOnItemIndex)
+    }
+
+    func testDragWritesTheNodesFileURL() throws {
+        let writer = coordinator.outlineView(outline, pasteboardWriterForItem: try node("a-file.txt"))
+        XCTAssertEqual((writer as? NSURL)?.path, coordinator.rootNode?.url.appendingPathComponent("a-file.txt").path)
+    }
+
+    func testInternalDropOfAFileOntoAFolderMovesIt() throws {
+        let info = drag(["a-file.txt"])
+        let alpha = try node("alpha")
+        XCTAssertEqual(validate(info, onto: alpha), .move)
+        XCTAssertTrue(accept(info, onto: alpha))
+        XCTAssertFalse(exists("a-file.txt"))
+        XCTAssertTrue(exists("alpha/a-file.txt"))
+        XCTAssertEqual(shownErrors, [])
+    }
+
+    func testOptionDragInsideThePanelCopies() throws {
+        let info = drag(["a-file.txt"], mask: .copy)
+        let alpha = try node("alpha")
+        XCTAssertEqual(validate(info, onto: alpha), .copy)
+        XCTAssertTrue(accept(info, onto: alpha))
+        XCTAssertTrue(exists("a-file.txt"))
+        XCTAssertTrue(exists("alpha/a-file.txt"))
+    }
+
+    func testFolderDroppedOntoItsOwnChildIsRefused() throws {
+        outline.expandItem(try node("zeta"))
+        XCTAssertEqual(validate(drag(["zeta"]), onto: try node("inner")), [])
+        XCTAssertEqual(validate(drag(["zeta"], mask: .copy), onto: try node("inner")), [])
+    }
+
+    func testInternalMoveOntoAnExistingNameIsRefused() throws {
+        try Data("keep".utf8).write(to: rootDir.appendingPathComponent("alpha/a-file.txt"))
+        XCTAssertEqual(validate(drag(["a-file.txt"]), onto: try node("alpha")), [])
+    }
+
+    func testExternalDropCopiesWithACollisionName() throws {
+        let info = drag(["a-file.txt"], fromPanel: false)
+        XCTAssertEqual(validate(info, onto: nil), .copy)
+        XCTAssertTrue(accept(info, onto: nil))
+        XCTAssertTrue(exists("a-file.txt"))
+        XCTAssertTrue(exists("a-file copy.txt"))
+    }
+
+    func testDropOnAFileRowLandsInItsFolder() throws {
+        outline.expandItem(try node("zeta"))
+        let info = drag(["a-file.txt"])
+        let leaf = try node("leaf.md")
+        XCTAssertEqual(validate(info, onto: leaf), .move)
+        XCTAssertTrue(accept(info, onto: leaf))
+        XCTAssertTrue(exists("zeta/a-file.txt"))
+    }
+}
+
+@MainActor
+private final class FakeFileDrag: NSObject, @preconcurrency NSDraggingInfo {
+    let draggingPasteboard: NSPasteboard
+    let draggingSource: Any?
+    let draggingSourceOperationMask: NSDragOperation
+
+    init(_ pasteboard: NSPasteboard, source: Any?, mask: NSDragOperation) {
+        draggingPasteboard = pasteboard
+        draggingSource = source
+        draggingSourceOperationMask = mask
+    }
+
+    var draggingDestinationWindow: NSWindow? { nil }
+    var draggingLocation: NSPoint { .zero }
+    var draggedImageLocation: NSPoint { .zero }
+    var draggedImage: NSImage? { nil }
+    var draggingSequenceNumber: Int { 1 }
+    var draggingFormation: NSDraggingFormation = .default
+    var animatesToDestination = false
+    var numberOfValidItemsForDrop = 1
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+    func slideDraggedImage(to _: NSPoint) {}
+    func enumerateDraggingItems(options _: NSDraggingItemEnumerationOptions = [], for _: NSView?, classes _: [AnyClass],
+                                searchOptions _: [NSPasteboard.ReadingOptionKey: Any] = [:],
+                                using _: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {}
+    func resetSpringLoading() {}
 }

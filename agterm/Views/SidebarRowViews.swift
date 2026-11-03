@@ -309,7 +309,7 @@ final class StatusIconView: NSImageView {
 /// from) re-tints the hosted `SidebarCellView` whenever AppKit updates it, and `didAddSubview` tints a cell the
 /// moment it attaches. Otherwise pill and text color desync — and on the many themes where
 /// `foreground == selection-background` (the inverted-selection idiom), a stale tint renders the text invisible.
-final class SidebarRowView: NSTableRowView {
+class SidebarRowView: NSTableRowView {
     private static let keyAlpha: CGFloat = 0.13
     private static let inactiveAlpha: CGFloat = 0.07
 
@@ -349,7 +349,11 @@ final class SidebarRowView: NSTableRowView {
             (GhosttyApp.shared.terminalForegroundColor ?? .white)
                 .withAlphaComponent(isEmphasized ? Self.keyAlpha : Self.inactiveAlpha).setFill()
         }
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 8, dy: 1.5), xRadius: 7, yRadius: 7).fill()
+        Self.pill(in: bounds).fill()
+    }
+
+    static func pill(in bounds: NSRect) -> NSBezierPath {
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 8, dy: 1.5), xRadius: 7, yRadius: 7)
     }
 }
 

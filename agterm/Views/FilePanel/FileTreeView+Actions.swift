@@ -105,30 +105,42 @@ extension FileTreeOutline.Coordinator: NSTextFieldDelegate {
         setCut([])
         // Finder empties the pasteboard after a move, so a second paste never names the moved-away sources.
         if moving { pasteboard.clearContents() }
-        let fm = FileManager.default
+        transfer(sources, into: target, moving: moving)
+    }
+
+    /// Why `source` cannot move or copy into `target`; nil when it can. Drops validate with it too.
+    func transferRefusal(_ source: URL, into target: URL, moving: Bool) -> String? {
+        let name = source.lastPathComponent
         let into = Self.canonical(target)
+        if moving {
+            guard FileTree.canMove(Self.canonical(source), into: into) else {
+                return "\"\(name)\" cannot move into itself or the folder it is already in."
+            }
+            guard !FileManager.default.fileExists(atPath: target.appendingPathComponent(name).path) else {
+                return "\"\(name)\" already exists in \"\(target.lastPathComponent)\"."
+            }
+        } else if into.pathComponents.starts(with: Self.canonical(source).pathComponents) {
+            return "\"\(name)\" cannot be copied into itself."
+        }
+        return nil
+    }
+
+    /// Moves, or copies under `FileTree.copyDestination`, never over an existing item; one sheet lists what was skipped.
+    func transfer(_ sources: [URL], into target: URL, moving: Bool) {
+        let fm = FileManager.default
         var touched = [target], results: [URL] = [], errors: [String] = []
         for source in sources {
-            let name = source.lastPathComponent
+            if let refusal = transferRefusal(source, into: target, moving: moving) {
+                errors.append(refusal)
+                continue
+            }
             do {
                 if moving {
-                    let dest = target.appendingPathComponent(name)
-                    guard FileTree.canMove(Self.canonical(source), into: into) else {
-                        errors.append("\"\(name)\" cannot move into itself or the folder it is already in.")
-                        continue
-                    }
-                    guard !fm.fileExists(atPath: dest.path) else {
-                        errors.append("\"\(name)\" already exists in \"\(target.lastPathComponent)\".")
-                        continue
-                    }
+                    let dest = target.appendingPathComponent(source.lastPathComponent)
                     try fm.moveItem(at: source, to: dest)
                     touched.append(source.deletingLastPathComponent())
                     results.append(dest)
                 } else {
-                    guard !into.pathComponents.starts(with: Self.canonical(source).pathComponents) else {
-                        errors.append("\"\(name)\" cannot be copied into itself.")
-                        continue
-                    }
                     let dest = FileTree.copyDestination(for: source, in: target) {
                         fm.fileExists(atPath: target.appendingPathComponent($0).path)
                     }
