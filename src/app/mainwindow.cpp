@@ -102,6 +102,9 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     footer->addWidget(newSessionButton);
     footer->addWidget(newWorkspaceButton);
     footer->addStretch(1);
+    m_filterButton = footerButton({}, tr("Toggle Workspace Filter"));
+    connect(m_filterButton, &QToolButton::clicked, this, [this] { m_store.setFilter(!m_store.focusEnabled); });
+    footer->addWidget(m_filterButton);
     footer->addWidget(m_flagButton);
 
     m_sidebarPanel = new QWidget;
@@ -178,6 +181,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     m_agentTimer.start();
 
     connect(&m_store, &Store::changed, this, [this] {
+        syncFilterButton();
         m_tree->rebuild();
         showSelected();
         m_saveTimer.start();
@@ -304,6 +308,17 @@ void MainWindow::createMenus()
                            [this] { m_flagButton->setChecked(m_actions.value(QStringLiteral("toggle_flagged_view"))->isChecked()); });
     flagged->setCheckable(true);
     view->addAction(flagged);
+    view->addAction(action(QStringLiteral("focus_workspace"), tr("Focus Workspace"), {}, {}, [this] {
+        QString e;
+        if (const QString ws = m_store.resolveWorkspace({}, &e); !ws.isEmpty())
+            m_store.focusWorkspace(ws, QStringLiteral("toggle"));
+    }));
+    view->addAction(action(QStringLiteral("toggle_workspace_filter"), tr("Toggle Workspace Filter"), {}, {},
+                           [this] { m_store.setFilter(!m_store.focusEnabled); }));
+    view->addAction(action(QStringLiteral("clear_focus"), tr("Clear Focus"), {}, {}, [this] {
+        for (const QString &id : QStringList(m_store.focused))
+            m_store.focusWorkspace(id, QStringLiteral("off"));
+    }));
     view->addAction(action(QStringLiteral("toggle_menubar"), tr("Show Menu Bar"), QStringLiteral("show-menu"), QKeySequence(QStringLiteral("Ctrl+Shift+M")),
                            [this] { menuBar()->setVisible(!menuBar()->isVisible()); }));
     view->addSeparator();
@@ -330,7 +345,7 @@ void MainWindow::createMenus()
     m_palette = new Palette(this);
     auto sessionItems = [this](bool byRecency) {
         QList<Palette::Item> items;
-        QList<Session *> all = m_store.allSessions();
+        QList<Session *> all = m_store.navigableSessions(); // the palettes stay inside the flagged view or the filter
         if (byRecency) {
             std::stable_sort(all.begin(), all.end(), [this](Session *a, Session *b) {
                 const qsizetype ia = m_store.recent.indexOf(a->id), ib = m_store.recent.indexOf(b->id);
@@ -412,6 +427,7 @@ void MainWindow::restore(const QJsonObject &window)
     m_filePanelWidth = qBound(160, window.value("filePanelWidth").toInt(240), 560);
     m_filePanel->setVisible(window.value("filePanel").toBool(false));
     applyFilePanelWidth();
+    syncFilterButton();
     m_tree->rebuild();
     showSelected();
 }
@@ -891,6 +907,19 @@ void MainWindow::fillMoveMenu(QMenu *menu, const QStringList &ids)
     });
 }
 
+void MainWindow::syncFilterButton()
+{
+    // dimmed while nothing is marked: there is nothing to filter to
+    const QColor ink = palette().color(QPalette::WindowText);
+    m_filterButton->setIcon(chromeIcon(m_store.focusEnabled ? QStringLiteral("gridFilled") : QStringLiteral("grid"), ink));
+    m_filterButton->setEnabled(!m_store.focused.isEmpty());
+    m_filterButton->setToolTip(m_store.focusEnabled ? tr("Show all workspaces") : tr("Show only focused workspaces"));
+    QString e;
+    m_actions.value(QStringLiteral("focus_workspace"))->setText(m_store.isSoleFocus(m_store.resolveWorkspace({}, &e)) ? tr("Unfocus Workspace") : tr("Focus Workspace"));
+    m_actions.value(QStringLiteral("toggle_workspace_filter"))->setEnabled(!m_store.focused.isEmpty());
+    m_actions.value(QStringLiteral("clear_focus"))->setEnabled(!m_store.focused.isEmpty());
+}
+
 void MainWindow::fillTintMenu(QMenu *menu, const QStringList &ids)
 {
     // a choice is checked only when every target shares it; the placements act only on tinted rows
@@ -971,6 +1000,11 @@ void MainWindow::sidebarMenu(const QPoint &pos)
     } else {
         const Workspace *w = m_store.workspace(id);
         menu.addAction(QIcon::fromTheme(QStringLiteral("tab-new")), tr("New Session"), this, [this, id] { newSession(id); });
+        menu.addSeparator();
+        menu.addAction(m_store.isSoleFocus(id) ? tr("Unfocus") : tr("Focus"), this, [this, id] { m_store.focusWorkspace(id, QStringLiteral("toggle")); });
+        const bool member = m_store.focused.contains(id);
+        menu.addAction(member ? tr("Remove from Focus") : tr("Add to Focus"), this,
+                       [this, id, member] { m_store.focusWorkspace(id, member ? QStringLiteral("off") : QStringLiteral("add")); });
         menu.addSeparator();
         menu.addAction(tr("Rename"), this, [this, item] { m_tree->editItem(item); });
         menu.addAction(tr("Copy Name"), this, [w] { QApplication::clipboard()->setText(w->name); });

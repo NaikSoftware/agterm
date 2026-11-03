@@ -57,10 +57,11 @@ void drawTerminalGlyph(QPainter *p, const QRectF &r, const QColor &c, bool fille
     p->drawPath(prompt);
 }
 
-void drawGridGlyph(QPainter *p, const QRectF &r, const QColor &c)
+void drawGridGlyph(QPainter *p, const QRectF &r, const QColor &c, bool heavy = false)
 {
+    // heavy: agterm draws a workspace in the focus set at black weight
     const qreal g = 2, s = (r.width() - g) / 2;
-    p->setPen(QPen(c, 1.1));
+    p->setPen(QPen(c, heavy ? 2.2 : 1.1));
     p->setBrush(Qt::NoBrush);
     for (int i = 0; i < 4; ++i)
         p->drawRoundedRect(QRectF(r.left() + (i % 2) * (s + g), r.top() + (i / 2) * (s + g), s, s).adjusted(0.5, 0.5, -0.5, -0.5), 1.5, 1.5);
@@ -133,6 +134,17 @@ QIcon chromeIcon(const QString &name, const QColor &color)
     p.setRenderHint(QPainter::Antialiasing);
     p.scale(2, 2);
     p.setPen(QPen(color, 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    if (name.startsWith(QLatin1String("grid"))) {
+        // the footer's workspace filter: square.grid.2x2, filled while the filter applies
+        if (name == QLatin1String("gridFilled"))
+            for (int i = 0; i < 4; ++i)
+                p.fillRect(QRectF(3.5 + (i % 2) * 7, 3.5 + (i / 2) * 7, 6, 6), color);
+        else
+            drawGridGlyph(&p, QRectF(3, 3, 14, 14), color, false);
+        p.end();
+        pm.setDevicePixelRatio(2);
+        return QIcon(pm);
+    }
     if (name == QLatin1String("filepanel")) {
         // agterm's "folder" symbol: a tab on the left of the lid
         QPainterPath folder;
@@ -219,7 +231,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->setPen(QPen(dim, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         p->drawPath(chevron);
         x += 14;
-        drawGridGlyph(p, QRectF(x, cy - 7, 14, 14), iconColor);
+        drawGridGlyph(p, QRectF(x, cy - 7, 14, 14), iconColor, index.data(Focused).toBool());
         x += 21;
     } else {
         x += flat ? 2 : 22;
@@ -369,8 +381,13 @@ QRect Sidebar::repeatButtonRect(const QRect &row)
 
 void Sidebar::setFlaggedView(bool on)
 {
-    m_flaggedView = on;
+    m_store.flaggedView = on;
     rebuild();
+}
+
+bool Sidebar::flaggedView() const
+{
+    return m_store.flaggedView;
 }
 
 QStringList Sidebar::selectedSessionIds() const
@@ -413,13 +430,16 @@ void Sidebar::rebuild()
         item->setSelected(s.id == m_store.selected || keepSelected.contains(s.id));
     };
     for (const auto &w : m_store.workspaces) {
-        if (m_flaggedView) {
+        if (m_store.flaggedView) {
             for (const auto &s : w.sessions)
                 if (s.flagged)
                     sessionItem(new QTreeWidgetItem(this), s);
             continue;
         }
+        if (m_store.focusEnabled && !m_store.focused.contains(w.id))
+            continue;
         auto *wi = new QTreeWidgetItem(this, {w.name});
+        wi->setData(0, Focused, m_store.focused.contains(w.id));
         wi->setData(0, Id, w.id);
         wi->setData(0, Kind, WorkspaceRow);
         wi->setData(0, TintColor, w.tint.color);
@@ -442,7 +462,7 @@ void Sidebar::rebuild()
             item->setData(0, Expanded, !m_collapsed.contains(s.id));
             item->setData(0, FoldedAttention, attention && m_collapsed.contains(s.id));
         }
-        wi->setExpanded(!m_collapsed.contains(w.id));
+        wi->setExpanded(!m_collapsed.contains(w.id) || m_store.isSoleFocus(w.id)); // a zoomed-to workspace is always open
         wi->setData(0, Expanded, wi->isExpanded());
     }
     verticalScrollBar()->setValue(scroll);
@@ -480,7 +500,7 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
 {
     const QPoint pos = event->position().toPoint();
     QTreeWidgetItem *item = itemAt(pos);
-    if (item && item->data(0, HasCompanions).toBool() && !m_flaggedView && event->button() == Qt::LeftButton
+    if (item && item->data(0, HasCompanions).toBool() && !m_store.flaggedView && event->button() == Qt::LeftButton
         && pos.x() < visualItemRect(item).left() + 34) {
         const QString id = item->data(0, Id).toString(); // the parent's chevron folds its companions
         m_collapsed.contains(id) ? m_collapsed.remove(id) : (m_collapsed.insert(id), true);
@@ -555,7 +575,7 @@ Sidebar::Drop Sidebar::dropTarget(const QPoint &pos, bool workspaceDrag) const
         return d;
     }
     if (!item) {
-        if (m_flaggedView || !topLevelItemCount())
+        if (m_store.flaggedView || !topLevelItemCount())
             return d;
         QTreeWidgetItem *last = topLevelItem(topLevelItemCount() - 1);
         d.workspaceId = last->data(0, Id).toString();

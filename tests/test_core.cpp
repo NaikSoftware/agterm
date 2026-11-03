@@ -297,6 +297,44 @@ private Q_SLOTS:
         QVERIFY(!call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0].toObject().contains("tint"));
     }
 
+    void workspaceFocusFilterAndSuspend()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString w1 = s.addWorkspace("a"), w2 = s.addWorkspace("b");
+        const QString a1 = s.addSession(w1, {}, {}), a2 = s.addSession(w1, {}, {}), b1 = s.addSession(w2, {}, {});
+        s.select(a2);
+        s.select(b1);
+        QVERIFY(call(s, t, "workspace.focus", "a", {{"mode", "add"}})["ok"].toBool());
+        QVERIFY(!s.focusEnabled); // marking never narrows on its own
+        QCOMPARE(s.selected, b1);
+        QVERIFY(call(s, t, "workspace.filter", {}, {{"mode", "on"}})["ok"].toBool());
+        QCOMPARE(s.selected, a2); // the narrowing hid b1: back to the most recent session still on screen
+        QCOMPARE(s.visibleWorkspaces().size(), 1);
+        QString err;
+        QCOMPARE(s.go("next", &err), a1);
+        QCOMPARE(s.go("next", &err), a2); // navigation wraps inside the filter
+        const auto tree = call(s, t, "tree")["result"]["tree"];
+        QVERIFY(tree["workspaceFilter"].toBool());
+        QVERIFY(tree["workspaces"][0]["focused"].toBool());
+        QVERIFY(!tree["workspaces"][1].toObject().contains("focused"));
+        const QString w3 = s.addWorkspace("c"); // created under the filter, so it joins the set
+        QVERIFY(s.focused.contains(w3));
+        s.select(b1);
+        QVERIFY(!s.focusEnabled && s.focused.size() == 2); // selecting outside suspends, the set stays
+        Store r;
+        r.fromJson(s.toJson());
+        QCOMPARE(r.focused, s.focused);
+        s.removeWorkspace(w3);
+        s.focusWorkspace(w1, "toggle");
+        QVERIFY(s.isSoleFocus(w1));
+        s.focusWorkspace(w1, "toggle");
+        QVERIFY(s.focused.isEmpty() && !s.focusEnabled);
+        s.setFilter(true);
+        QVERIFY(!s.focusEnabled); // an empty set is never applied
+        QVERIFY(!call(s, t, "workspace.focus", "a", {{"mode", "sideways"}})["ok"].toBool());
+    }
+
     void treeAndUnknownCommand()
     {
         Store s;

@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QSet>
 #include <QUuid>
 
 const QStringList Store::statuses = {QStringLiteral("idle"), QStringLiteral("active"), QStringLiteral("completed"),
@@ -114,6 +115,30 @@ QList<Session *> Store::allSessions()
     return out;
 }
 
+QList<Workspace *> Store::visibleWorkspaces()
+{
+    QList<Workspace *> out;
+    for (auto &w : workspaces)
+        if (!focusEnabled || focused.contains(w.id))
+            out << &w;
+    return out;
+}
+
+QList<Session *> Store::navigableSessions()
+{
+    QList<Session *> out;
+    if (flaggedView) { // the flagged view is cross-workspace and ignores the filter
+        for (auto *s : allSessions())
+            if (s->flagged)
+                out << s;
+        return out;
+    }
+    for (auto *w : visibleWorkspaces())
+        for (auto &s : w->sessions)
+            out << &s;
+    return out;
+}
+
 template<typename T, typename Name>
 static QString resolve(const QList<T *> &items, const QString &target, const char *kind, Name name, QString *error)
 {
@@ -187,6 +212,8 @@ QString Store::addWorkspace(const QString &name)
 {
     Workspace w{newId(), name.isEmpty() ? QStringLiteral("workspace %1").arg(workspaces.size() + 1) : name, {}, {}};
     workspaces << w;
+    if (focusEnabled)
+        focused << w.id; // a workspace created under the filter joins it rather than vanishing
     Q_EMIT changed();
     return w.id;
 }
@@ -265,13 +292,25 @@ void Store::removeSession(const QString &id)
     w->sessions.removeAt(i);
     recent.removeAll(id);
     if (selected == id) {
-        // most recent in the same workspace, then most recent anywhere, then the adjacent row
+        // most recent in the same workspace, the adjacent row, then most recent anywhere: each kept on screen first
+        QSet<QString> shown;
+        for (auto *s : navigableSessions())
+            shown << s->id;
         QString next;
         for (const auto &r : std::as_const(recent))
-            if (indexIn(*w, r) >= 0) {
+            if (indexIn(*w, r) >= 0 && shown.contains(r)) {
                 next = r;
                 break;
             }
+        for (int k = i; next.isEmpty() && k < w->sessions.size(); ++k)
+            if (shown.contains(w->sessions[k].id))
+                next = w->sessions[k].id;
+        for (int k = qMin(i, int(w->sessions.size())) - 1; next.isEmpty() && k >= 0; --k)
+            if (shown.contains(w->sessions[k].id))
+                next = w->sessions[k].id;
+        for (const auto &r : std::as_const(recent))
+            if (next.isEmpty() && shown.contains(r))
+                next = r;
         if (next.isEmpty() && !w->sessions.isEmpty())
             next = w->sessions[qMin(i, int(w->sessions.size()) - 1)].id;
         if (next.isEmpty() && !recent.isEmpty())
@@ -307,6 +346,8 @@ void Store::removeWorkspace(const QString &id)
     auto *w = workspace(id);
     if (!w)
         return;
+    focused.removeAll(id);
+    focusEnabled = focusEnabled && !focused.isEmpty();
     QStringList ids;
     for (const auto &s : w->sessions)
         ids << s.id;
@@ -388,6 +429,8 @@ void Store::select(const QString &id)
     auto *s = session(id);
     if (!s || selected == id)
         return;
+    if (focusEnabled && !flaggedView && !focused.contains(workspaceOf(id)->id))
+        focusEnabled = false; // selecting outside the set suspends the filter, keeping the set
     selected = id;
     recent.removeAll(id);
     recent.prepend(id);
@@ -428,6 +471,55 @@ void Store::setFlag(const QString &id, bool flagged)
         s->flagged = flagged;
         Q_EMIT changed();
     }
+}
+
+bool Store::focusWorkspace(const QString &id, const QString &mode)
+{
+    // marking (add) never applies the filter on its own, so a set is built with the whole tree on screen
+    const bool exists = workspace(id);
+    QStringList ids = focused;
+    if (mode == QLatin1String("on") || (mode == QLatin1String("toggle") && !isSoleFocus(id))) {
+        if (exists)
+            commitFocus({id}, true);
+    } else if (mode == QLatin1String("toggle")) {
+        commitFocus({}, false);
+    } else if (mode == QLatin1String("add")) {
+        if (exists && !ids.contains(id))
+            commitFocus(ids << id, focusEnabled);
+    } else if (mode == QLatin1String("off")) {
+        ids.removeAll(id);
+        commitFocus(ids, focusEnabled);
+    } else {
+        return false;
+    }
+    return true;
+}
+
+void Store::setFilter(bool on)
+{
+    commitFocus(focused, on);
+}
+
+void Store::commitFocus(QStringList ids, bool enabled)
+{
+    enabled = enabled && !ids.isEmpty();
+    if (ids == focused && enabled == focusEnabled)
+        return;
+    focused = ids;
+    focusEnabled = enabled;
+    // a narrowing that hid the active session moves to the most recent one still on screen
+    const auto nav = navigableSessions();
+    const bool hidden = !selected.isEmpty() && std::none_of(nav.begin(), nav.end(), [this](Session *s) { return s->id == selected; });
+    if (hidden && !nav.isEmpty()) {
+        QString next = nav.first()->id;
+        for (const auto &r : std::as_const(recent))
+            if (std::any_of(nav.begin(), nav.end(), [&r](Session *s) { return s->id == r; })) {
+                next = r;
+                break;
+            }
+        select(next);
+    }
+    Q_EMIT changed();
 }
 
 Tint *Store::tintOf(const QString &id)
@@ -542,7 +634,7 @@ QString Store::go(const QString &direction, QString *error)
         *error = QStringLiteral("unknown direction '%1'").arg(direction);
         return {};
     }
-    const auto all = allSessions();
+    const auto all = navigableSessions();
     if (all.isEmpty()) {
         *error = QStringLiteral("no sessions");
         return {};
@@ -596,7 +688,9 @@ QJsonObject Store::toJson() const
                          {"statusReset", settings.statusReset},
                          {"lastLauncher", settings.lastLauncher},
                          {"confirmCloseSession", settings.confirmCloseSession}};
-    return {{"version", 2}, {"selected", selected}, {"recent", QJsonArray::fromStringList(recent)}, {"settings", st}, {"workspaces", ws}};
+    return {{"version", 2},      {"selected", selected}, {"recent", QJsonArray::fromStringList(recent)},
+            {"settings", st},    {"workspaces", ws},     {"focusedWorkspaces", QJsonArray::fromStringList(focused)},
+            {"focusEnabled", focusEnabled}};
 }
 
 void Store::fromJson(const QJsonObject &o)
@@ -637,6 +731,11 @@ void Store::fromJson(const QJsonObject &o)
     settings.statusReset = st.value("statusReset").toString(d.statusReset);
     settings.lastLauncher = st.value("lastLauncher").toString(d.lastLauncher);
     settings.confirmCloseSession = st.value("confirmCloseSession").toBool();
+    focused.clear();
+    for (const auto &f : o.value("focusedWorkspaces").toArray())
+        if (workspace(f.toString())) // stale ids are pruned, so the filter never restores enabled and empty
+            focused << f.toString();
+    focusEnabled = o.value("focusEnabled").toBool() && !focused.isEmpty();
     recent.clear();
     for (const auto &r : o.value("recent").toArray())
         if (session(r.toString()))

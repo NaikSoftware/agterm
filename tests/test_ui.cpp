@@ -1,9 +1,11 @@
 #include "mainwindow.h"
+#include "sidebar.h"
 #include "store.h"
 
 #include <QApplication>
 #include <QLineEdit>
 #include <QTemporaryDir>
+#include <QToolButton>
 #include <QTest>
 
 class TestUi : public QObject
@@ -38,6 +40,33 @@ private Q_SLOTS:
         QTRY_COMPARE(QApplication::focusWidget(), term); // focus follows the selection back to its terminal
         QTest::keyClick(term, Qt::Key_A);
         QCOMPARE(store.session(first)->status, QStringLiteral("idle"));
+    }
+
+    void footerFilterNarrowsTheTreeAndTintReachesTheRow()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("filter.json"));
+        w.restore({});
+        const QString a = store.addWorkspace("a");
+        store.addWorkspace("b");
+        store.select(store.addSession(a, {}, {}));
+        w.show();
+        auto *tree = w.findChild<Sidebar *>();
+        QToolButton *filter = nullptr;
+        for (auto *b : w.findChildren<QToolButton *>())
+            if (b->accessibleName() == QLatin1String("Toggle Workspace Filter"))
+                filter = b;
+        QVERIFY(filter && !filter->isEnabled());
+        QCOMPARE(tree->topLevelItemCount(), 2);
+        store.focusWorkspace(a, "add");
+        QVERIFY(filter->isEnabled());
+        QCOMPARE(tree->topLevelItemCount(), 2);
+        filter->click();
+        QVERIFY(store.focusEnabled);
+        QCOMPARE(tree->topLevelItemCount(), 1);
+        QVERIFY(tree->topLevelItem(0)->data(0, SidebarRole::Focused).toBool());
+        store.setTint(a, "red");
+        QCOMPARE(tree->topLevelItem(0)->data(0, SidebarRole::TintColor).toString(), QStringLiteral("red"));
     }
 
     void sessionPaletteFiltersAndSelects()

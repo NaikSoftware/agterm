@@ -91,9 +91,12 @@ static QJsonObject tree(Store &store)
             ss << sessionNode(s, store.selected);
             active |= s.id == store.selected;
         }
-        ws << withTint({{"id", w.id}, {"name", w.name}, {"rememberedFolder", w.folder}, {"active", active}, {"sessions", ss}}, w.tint);
+        QJsonObject node = withTint({{"id", w.id}, {"name", w.name}, {"rememberedFolder", w.folder}, {"active", active}, {"sessions", ss}}, w.tint);
+        if (store.focused.contains(w.id))
+            node.insert("focused", true); // membership, whether or not the filter applies (workspaceFilter)
+        ws << node;
     }
-    return {{"workspaces", ws}};
+    return {{"workspaces", ws}, {"workspaceFilter", store.focusEnabled}, {"sidebarMode", store.flaggedView ? "flagged" : "tree"}};
 }
 
 // on | off | toggle against the current state; "" means toggle
@@ -214,6 +217,13 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         return id.isEmpty() ? fail(error) : ok({{"id", id}});
     }
 
+    if (cmd == QLatin1String("workspace.filter")) { // the window's filter, not one workspace
+        bool on = false;
+        if (!resolveMode(args.value("mode").toString(), store.focusEnabled, &on))
+            return fail(QStringLiteral("mode must be on, off or toggle"));
+        store.setFilter(on); // enabling an empty set is refused silently, as the footer button is disabled then
+        return ok({{"workspaceFilter", store.focusEnabled}});
+    }
     if (cmd.startsWith(QLatin1String("workspace."))) {
         const QString id = store.resolveWorkspace(target, &error);
         if (id.isEmpty())
@@ -224,6 +234,9 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             store.renameWorkspace(id, args.value("name").toString());
         } else if (cmd == QLatin1String("workspace.move")) {
             store.moveWorkspace(id, args.value("index").toInt());
+        } else if (cmd == QLatin1String("workspace.focus")) {
+            if (!store.focusWorkspace(id, args.value("mode").toString(QStringLiteral("toggle"))))
+                return fail(QStringLiteral("mode must be on, off, toggle or add"));
         } else if (cmd == QLatin1String("workspace.tint")) {
             if (error = applyTint(store, id, cmd, args); !error.isEmpty())
                 return fail(error);

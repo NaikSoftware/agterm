@@ -15,7 +15,7 @@ QIcon chromeIcon(const QString &name, const QColor &color);
 QColor tintColor(const QString &name);
 
 namespace SidebarRole {
-enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Companion, HasCompanions, FoldedAttention, TintColor, TintOn };
+enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Companion, HasCompanions, FoldedAttention, TintColor, TintOn, Focused };
 enum { WorkspaceRow = 1, SessionRow };
 }
 
@@ -40,7 +40,7 @@ public:
     explicit Sidebar(Store &store, QWidget *parent = nullptr);
     void rebuild();
     void setFlaggedView(bool on);
-    bool flaggedView() const { return m_flaggedView; }
+    bool flaggedView() const;
     QStringList selectedSessionIds() const;
     bool editing() const { return state() == EditingState; }
     QString lastLauncher() const;
@@ -81,7 +81,6 @@ private:
     Drop dropTarget(const QPoint &pos, bool workspaceDrag) const;
     QRect m_dropLine;
     Store &m_store;
-    bool m_flaggedView = false;
     bool m_rebuilding = false;
     QSet<QString> m_collapsed;
     QModelIndex m_hovered;

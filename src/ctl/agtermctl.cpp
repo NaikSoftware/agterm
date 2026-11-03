@@ -19,6 +19,8 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   workspace tint <color|clear> [--on icon,name]   the workspace row only
   session tint <color|clear> [--on icon,name]     red|orange|yellow|green|blue|purple|gray
   workspace delete | select
+  workspace focus [on|off|toggle|add]   on: mark this one alone and apply the filter; add: mark without narrowing
+  workspace filter [on|off|toggle]      apply or suspend the marked set (off keeps it)
   session new [--name N] [--cwd DIR] [--workspace W | --workspace-name N [--create-workspace]]
               [--command CMD] [--no-select] [--parent SESSION]   (--parent makes a companion)
               [--tint COLOR [--tint-on icon,name]]
@@ -112,7 +114,7 @@ int main(int argc, char **argv)
         args.insert("width", arg.toInt());
     if (cmd == QLatin1String("filepanel"))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
-    if (QStringList{"session.flag", "session.split"}.contains(cmd))
+    if (QStringList{"session.flag", "session.split", "workspace.focus", "workspace.filter"}.contains(cmd))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
     copy("axis", "axis");
     if (cmd == QLatin1String("session.move"))

@@ -83,6 +83,8 @@ private:
     QWidget *m_sidebarPanel;
     Sidebar *m_tree;
     QToolButton *m_flagButton;
+    QToolButton *m_filterButton;
+    void syncFilterButton();
     QAction *m_sidebarAction;
     QLabel *m_title;
     QStackedWidget *m_stack;

@@ -72,11 +72,18 @@ public:
     };
     QList<Closed> closed; // most recent first; Reopen Closed Item brings the shell back where it was
     Settings settings;
+    bool flaggedView = false; // the sidebar shows flagged sessions only; navigation follows it
+    // the workspace filter: a marked set, applied or suspended; never applied while empty
+    QStringList focused;
+    bool focusEnabled = false;
 
     Session *session(const QString &id);
     Workspace *workspace(const QString &id);
     Workspace *workspaceOf(const QString &sessionId);
     QList<Session *> allSessions();
+    QList<Workspace *> visibleWorkspaces();  // the marked set while the filter applies, else all
+    QList<Session *> navigableSessions();    // flagged ones in the flagged view, else those of visible workspaces
+    bool isSoleFocus(const QString &workspaceId) const { return focusEnabled && focused == QStringList{workspaceId}; }
 
     // target: "" or "active" -> current; else exact id, unique id prefix, or unique exact name.
     QString resolveSession(const QString &target, QString *error);
@@ -101,6 +108,8 @@ public:
     void select(const QString &id);
     bool setStatus(const QString &id, const QString &status, bool autoReset = false, bool blink = false);
     void setFlag(const QString &id, bool flagged);
+    bool focusWorkspace(const QString &id, const QString &mode); // on | off | toggle | add; false on another mode
+    void setFilter(bool on);
     // id names a session or a workspace. color "" clears; parts empty keep the row's placement, icon for an untinted row
     void setTint(const QString &id, const QString &color, const QStringList &parts = {});
     void placeTint(const QString &id, const QStringList &parts); // an untinted row stays untinted
@@ -137,4 +146,5 @@ private:
     static QString newId();
     Tint *tintOf(const QString &id);
     int indexIn(const Workspace &w, const QString &sessionId) const;
+    void commitFocus(QStringList ids, bool enabled);
 };
