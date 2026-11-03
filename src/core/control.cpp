@@ -23,7 +23,7 @@ static QJsonObject sessionNode(const Session &s, const QString &selected)
             {"status", s.status}, {"blink", s.blink},         {"flagged", s.flagged},            {"agent", s.agent},
             {"title", s.title},   {"active", s.id == selected},
             {"hasSplit", s.hasSplit}, {"split", s.splitVisible}, {"splitAxis", s.splitAxis}, {"splitRatio", s.splitRatio},
-            {"scratch", s.scratchVisible}, {"unseen", s.unseen}};
+            {"scratch", s.scratchVisible}, {"unseen", s.unseen}, {"parent", s.parentId}};
 }
 
 static QJsonObject tree(Store &store)
@@ -62,6 +62,15 @@ static QJsonObject sessionNew(Store &store, const QJsonObject &args)
         cwd = QFileInfo(cwd).absoluteFilePath();
 
     QString error, wsId;
+    if (args.contains("parent")) {
+        const QString parent = store.resolveSession(args.value("parent").toString(), &error);
+        if (parent.isEmpty())
+            return fail(error);
+        const QString id = store.addCompanion(parent, args.value("name").toString(), cwd, args.value("command").toString());
+        if (!args.value("noSelect").toBool())
+            store.select(id);
+        return ok({{"id", id}});
+    }
     const QString wsName = args.value("workspaceName").toString();
     if (!wsName.isEmpty()) {
         for (const auto &w : store.workspaces)

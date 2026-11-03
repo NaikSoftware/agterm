@@ -13,7 +13,7 @@ QIcon launcherIcon(const QString &launcherId, const QColor &color);
 QIcon chromeIcon(const QString &name, const QColor &color);
 
 namespace SidebarRole {
-enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen };
+enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Companion, HasCompanions, FoldedAttention };
 enum { WorkspaceRow = 1, SessionRow };
 }
 

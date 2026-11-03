@@ -19,7 +19,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Sidebar footer: new session, new workspace, flagged view (flat list)
 - [ ] Sidebar footer: workspace filter (phase 3)
 - [x] Session context menu: Clear Status, Rename, Copy Name, Duplicate Session, Move to ▸, Flag, Close Session (batch over a multi-selection)
-- [ ] Session context menu: New Companion (phase 2)
+- [x] Session context menu: New Companion
 - [x] Workspace context menu: New Session, Rename, Copy Name, Flag All Sessions, Delete Workspace
 - [ ] Workspace context menu: Focus (phase 3)
 - [x] Drag to reorder sessions and workspaces; drag a session to another workspace; multi-select
@@ -38,7 +38,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Search: Konsole's own search bar (Ctrl+Shift+F)
 - [x] Terminal zoom ⌘⇧↩ (⌘W leaves zoom)
 - [x] Fullscreen (F11: ⌘⌃F maps onto the flag chord)
-- [ ] Companions (pinned under parent, folding, respawn on exit)
+- [x] Companions (pinned under parent, folding with attention marker, moves with parent, closes with parent, respawn on exit, `session new --parent`)
+- [ ] Duplicate as Companion (copies the split layout)
 
 ## Phase 3: navigation and windows
 

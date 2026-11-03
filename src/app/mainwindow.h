@@ -52,6 +52,7 @@ private:
     void applyLayout(const QString &id);
     void paneExited(const QString &id, KParts::ReadOnlyPart *part);
     void swapPanes(const QString &id);
+    void newCompanion(const QString &parentId);
     void focusPane(bool right);
     void toggleZoom();
     void showQuick(bool on, bool pinned);
@@ -101,6 +102,7 @@ private:
     bool m_quickPinned = false; // opened over the socket: stays put on click-away
     bool m_zoomed = false;
     QString m_shownId;
+    QHash<QString, QDateTime> m_respawned;
     bool m_zoomRestoreSidebar = true, m_zoomRestoreMenu = true;
     QHash<QString, QPointer<QObject>> m_sessions;
     QStringList m_launchers{QStringLiteral("terminal")};

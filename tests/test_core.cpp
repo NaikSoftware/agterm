@@ -243,6 +243,29 @@ private Q_SLOTS:
         QVERIFY(s.reopenClosed().isEmpty());
     }
 
+    void companionsStayWithTheirParent()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString w1 = s.addWorkspace("a"), w2 = s.addWorkspace("b");
+        const QString p = s.addSession(w1, {}, QDir::tempPath()), other = s.addSession(w1, {}, {});
+        const QString c1 = call(s, t, "session.new", {}, {{"parent", p}, {"name", "logs"}})["result"]["id"].toString();
+        const QString c2 = s.addCompanion(c1, {}, {}); // a companion target means its parent
+        QCOMPARE(s.session(c2)->parentId, p);
+        QCOMPARE(s.session(c1)->cwd, QDir::tempPath());
+        QStringList order;
+        for (const auto &x : s.workspace(w1)->sessions)
+            order << x.id;
+        QCOMPARE(order, QStringList({p, c1, c2, other}));
+        QVERIFY(!s.moveSession(c1, w2, -1)); // companions reorder only among themselves
+        s.moveSession(c2, w1, 1);
+        QCOMPARE(s.workspace(w1)->sessions[1].id, c2);
+        s.moveSession(p, w2, -1); // the parent carries its group
+        QCOMPARE(s.workspace(w2)->sessions.size(), 3);
+        s.removeSession(p);
+        QVERIFY(!s.session(c1) && !s.session(c2));
+    }
+
     void treeAndUnknownCommand()
     {
         Store s;

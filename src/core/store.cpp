@@ -183,11 +183,45 @@ QString Store::duplicateSession(const QString &id, const QString &cwd)
     return addSession(w->id, {}, cwd.isEmpty() ? s->cwd : cwd, {}, indexIn(*w, id) + 1);
 }
 
+QStringList Store::companionsOf(const QString &parentId) const
+{
+    QStringList ids;
+    for (const auto &w : workspaces)
+        for (const auto &s : w.sessions)
+            if (s.parentId == parentId && !parentId.isEmpty())
+                ids << s.id;
+    return ids;
+}
+
+QString Store::addCompanion(const QString &parentId, const QString &name, const QString &cwd, const QString &command)
+{
+    const Session *p = session(parentId);
+    if (!p)
+        return {};
+    const QString parent = p->parentId.isEmpty() ? parentId : p->parentId;
+    auto *w = workspaceOf(parent);
+    int at = indexIn(*w, parent) + 1;
+    while (at < w->sessions.size() && w->sessions[at].parentId == parent)
+        ++at;
+    Session s;
+    s.id = newId();
+    s.cwd = cwd.isEmpty() ? session(parent)->cwd : cwd;
+    s.name = name;
+    s.command = command;
+    s.parentId = parent;
+    w->sessions.insert(at, s);
+    Q_EMIT sessionAdded(s.id);
+    Q_EMIT changed();
+    return s.id;
+}
+
 void Store::removeSession(const QString &id)
 {
     auto *w = workspaceOf(id);
     if (!w)
         return;
+    for (const QString &c : companionsOf(id))
+        removeSession(c); // closing the parent closes the group
     const int i = indexIn(*w, id);
     closed.prepend({w->id, w->sessions[i].name, w->sessions[i].cwd, i});
     if (closed.size() > 20)
@@ -270,11 +304,31 @@ bool Store::moveSession(const QString &id, const QString &workspaceId, int index
     if (!from || !workspace(workspaceId))
         return false;
     const int at = indexIn(*from, id);
-    Session s = from->sessions.takeAt(at);
+    const QString parent = from->sessions[at].parentId;
+    if (!parent.isEmpty()) {
+        // a companion reorders only among its parent's companions
+        if (from->id != workspaceId)
+            return false;
+        const int first = indexIn(*from, parent) + 1;
+        const int end = first + int(companionsOf(parent).size());
+        index = qBound(first, index < 0 ? end : index, end);
+    } else if (index >= 0) {
+        auto *to = workspace(workspaceId);
+        while (index < to->sessions.size() && index > 0 && !to->sessions[index].parentId.isEmpty())
+            ++index; // never land inside another session's companion group
+    }
+    // a parent carries its companions
+    int count = 1;
+    while (at + count < from->sessions.size() && from->sessions[at + count].parentId == id)
+        ++count;
+    QList<Session> block = from->sessions.mid(at, count);
+    from->sessions.remove(at, count);
     auto *to = workspace(workspaceId);
     if (to == from && index > at)
-        --index; // the removal shifted the target
-    to->sessions.insert(index < 0 || index > to->sessions.size() ? to->sessions.size() : index, s);
+        index -= qMin(count, index - at); // the removal shifted the target
+    int dest = index < 0 || index > to->sessions.size() ? int(to->sessions.size()) : index;
+    for (const Session &s : block)
+        to->sessions.insert(dest++, s);
     Q_EMIT changed();
     return true;
 }
@@ -470,7 +524,7 @@ QJsonObject Store::toJson() const
         QJsonArray ss;
         for (const auto &s : w.sessions)
             ss << QJsonObject{{"id", s.id},           {"name", s.name},
-                              {"cwd", s.cwd},         {"flagged", s.flagged},
+                              {"cwd", s.cwd},         {"flagged", s.flagged}, {"parentId", s.parentId},
                               {"hasSplit", s.hasSplit}, {"splitVisible", s.splitVisible},
                               {"splitAxis", s.splitAxis}, {"splitRatio", s.splitRatio}};
         ws << QJsonObject{{"id", w.id}, {"name", w.name}, {"folder", w.folder}, {"sessions", ss}};
@@ -502,6 +556,7 @@ void Store::fromJson(const QJsonObject &o)
             if (version < 2 && s.name == s.displayName()) // v1 stored the derived name
                 s.name.clear();
             s.flagged = so.value("flagged").toBool();
+            s.parentId = so.value("parentId").toString();
             s.hasSplit = so.value("hasSplit").toBool();
             s.splitVisible = s.hasSplit && so.value("splitVisible").toBool();
             s.splitAxis = so.value("splitAxis").toString(QStringLiteral("vertical"));

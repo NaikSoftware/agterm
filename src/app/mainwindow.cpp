@@ -258,6 +258,8 @@ void MainWindow::createMenus()
         if (m_store.session(m_store.selected))
             m_store.select(m_store.duplicateSession(m_store.selected, liveCwd(m_store.selected)));
     }));
+    session->addAction(action(QStringLiteral("new_companion"), tr("New Companion"), QStringLiteral("list-add"), {},
+                              [this] { newCompanion(m_store.selected); }));
     session->addAction(action(QStringLiteral("clear_status"), tr("Clear Status"), QStringLiteral("edit-clear"), {},
                               [this] { m_store.setStatus(m_store.selected, QStringLiteral("idle")); }));
     session->addAction(action(QStringLiteral("toggle_flag"), tr("Flag"), QStringLiteral("flag"), QKeySequence(QStringLiteral("Ctrl+Alt+Shift+F")), [this] {
@@ -513,10 +515,26 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
             p.main = std::exchange(p.right, nullptr);
             p.main->widget()->show();
             m_store.setSplit(id, false, false, m_store.session(id)->splitAxis);
+        } else if (!m_store.companionsOf(id).isEmpty() && m_respawned.value(id).msecsTo(QDateTime::currentDateTime()) > 2000) {
+            // a parent with companions gets a fresh shell; one that exits again within 2 s closes the group
+            m_respawned.insert(id, QDateTime::currentDateTime());
+            const Session *s = m_store.session(id);
+            p.main = spawnPart(id, QStringLiteral("main"), s->cwd, {}, p.split);
+            if (p.main) {
+                p.split->insertWidget(0, p.main->widget());
+                if (id == m_store.selected)
+                    p.main->widget()->setFocus();
+            }
         } else {
             m_store.removeSession(id);
         }
     }
+}
+
+void MainWindow::newCompanion(const QString &parentId)
+{
+    if (m_store.session(parentId))
+        m_store.select(m_store.addCompanion(parentId, {}, liveCwd(parentId)));
 }
 
 void MainWindow::swapPanes(const QString &id)
@@ -894,6 +912,7 @@ void MainWindow::sidebarMenu(const QPoint &pos)
             menu.addAction(tr("Rename"), this, [this, item] { m_tree->editItem(item); });
             menu.addAction(tr("Copy Name"), this, [s] { QApplication::clipboard()->setText(s->displayName()); });
             menu.addAction(tr("Duplicate Session"), this, [this, id] { m_store.select(m_store.duplicateSession(id, liveCwd(id))); });
+            menu.addAction(tr("New Companion"), this, [this, id] { newCompanion(id); });
         }
         fillMoveMenu(menu.addMenu(tr("Move to")), ids);
         bool allFlagged = true;

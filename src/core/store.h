@@ -24,6 +24,7 @@ struct Session {
     double splitRatio = 0.5;
     bool scratchVisible = false; // the scratch shell covers the session; not persisted, like agterm's
     int unseen = 0;              // notifications raised while the session was not in front of you
+    QString parentId;            // a companion is pinned to its parent, listed right after it
 
     QString displayName() const;
 };
@@ -77,6 +78,9 @@ public:
     // index -1 follows settings.newSessionPlacement
     QString addSession(const QString &workspaceId, const QString &name, const QString &cwd, const QString &command = {}, int index = -1);
     QString duplicateSession(const QString &id, const QString &cwd);
+    // a companion of `parentId` (a companion target means its parent), after the parent's last companion
+    QString addCompanion(const QString &parentId, const QString &name, const QString &cwd, const QString &command = {});
+    QStringList companionsOf(const QString &parentId) const;
     void removeSession(const QString &id);
     QString reopenClosed(); // "" when nothing was closed
     void removeWorkspace(const QString &id);

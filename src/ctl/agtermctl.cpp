@@ -18,7 +18,7 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   workspace rename <name>               (--target: workspace id/prefix/name, default active)
   workspace delete | select
   session new [--name N] [--cwd DIR] [--workspace W | --workspace-name N [--create-workspace]]
-              [--command CMD] [--no-select]
+              [--command CMD] [--no-select] [--parent SESSION]   (--parent makes a companion)
   session close | select | info         (--target: session id/prefix/name, default $AGTERM_SESSION_ID, then active)
   session rename <name>                 empty name reverts to the directory name
   session duplicate [--no-select]
@@ -93,6 +93,7 @@ int main(int argc, char **argv)
     copy("command", "command");
     copy("to", "to");
     copy("title", "title");
+    copy("parent", "parent");
     copy("body", "body");
     flag("create-workspace", "createWorkspace");
     flag("no-select", "noSelect");

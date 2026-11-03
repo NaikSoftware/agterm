@@ -185,6 +185,30 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         x += 21;
     } else {
         x += flat ? 2 : 22;
+        if (index.data(Companion).toBool() && !flat)
+            x += 18; // indented under its parent
+        if (index.data(HasCompanions).toBool() && !flat) {
+            // the parent's own disclosure chevron folds its companions away
+            QPainterPath chevron;
+            const qreal cx = x - 13;
+            if (index.data(Expanded).toBool()) {
+                chevron.moveTo(cx - 3.5, cy - 1.8);
+                chevron.lineTo(cx, cy + 1.8);
+                chevron.lineTo(cx + 3.5, cy - 1.8);
+            } else {
+                chevron.moveTo(cx - 1.8, cy - 3.5);
+                chevron.lineTo(cx + 1.8, cy);
+                chevron.lineTo(cx - 1.8, cy + 3.5);
+            }
+            p->setPen(QPen(dim, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            p->setBrush(Qt::NoBrush);
+            p->drawPath(chevron);
+            if (index.data(FoldedAttention).toBool()) {
+                p->setPen(Qt::NoPen);
+                p->setBrush(statusColor(QStringLiteral("blocked")));
+                p->drawEllipse(QPointF(x + 15, cy - 6), 3, 3); // a hidden companion needs you
+            }
+        }
         drawLauncher(p, QRectF(x, cy - 8, 16, 16), index.data(Agent).toString(), dim, index.data(Flagged).toBool());
         x += 23;
     }
@@ -360,8 +384,22 @@ void Sidebar::rebuild()
         wi->setData(0, Kind, WorkspaceRow);
         wi->setToolTip(0, w.folder);
         wi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
-        for (const auto &s : w.sessions)
-            sessionItem(new QTreeWidgetItem(wi), s);
+        for (const auto &s : w.sessions) {
+            if (!s.parentId.isEmpty() && m_collapsed.contains(s.parentId))
+                continue; // folded under its parent
+            auto *item = new QTreeWidgetItem(wi);
+            sessionItem(item, s);
+            item->setData(0, Companion, !s.parentId.isEmpty());
+            bool hasCompanions = false, attention = false;
+            for (const auto &c : w.sessions)
+                if (c.parentId == s.id) {
+                    hasCompanions = true;
+                    attention |= c.unseen > 0 || c.status == QLatin1String("blocked") || c.status == QLatin1String("completed");
+                }
+            item->setData(0, HasCompanions, hasCompanions);
+            item->setData(0, Expanded, !m_collapsed.contains(s.id));
+            item->setData(0, FoldedAttention, attention && m_collapsed.contains(s.id));
+        }
         wi->setExpanded(!m_collapsed.contains(w.id));
         wi->setData(0, Expanded, wi->isExpanded());
     }
@@ -400,6 +438,13 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
 {
     const QPoint pos = event->position().toPoint();
     QTreeWidgetItem *item = itemAt(pos);
+    if (item && item->data(0, HasCompanions).toBool() && !m_flaggedView && event->button() == Qt::LeftButton
+        && pos.x() < visualItemRect(item).left() + 34) {
+        const QString id = item->data(0, Id).toString(); // the parent's chevron folds its companions
+        m_collapsed.contains(id) ? m_collapsed.remove(id) : (m_collapsed.insert(id), true);
+        rebuild();
+        return;
+    }
     if (item && item->data(0, Kind).toInt() == WorkspaceRow && event->button() == Qt::LeftButton) {
         const QRect row = visualItemRect(item);
         const QString id = item->data(0, Id).toString();
