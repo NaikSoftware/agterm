@@ -14,8 +14,8 @@ extension FileTreeOutline.Coordinator {
                      proposedItem item: Any?, proposedChildIndex _: Int) -> NSDragOperation {
         guard let target = dropTarget(item) else { return [] }
         let sources = droppedURLs(info), moving = dropMoves(info)
-        guard !sources.isEmpty, sources.allSatisfy({ transferRefusal($0, into: target.url, moving: moving) == nil })
-        else { return [] }
+        // Refused only when nothing can land; `transfer` reports the skipped items in one sheet, as paste does.
+        guard sources.contains(where: { transferRefusal($0, into: target.url, moving: moving) == nil }) else { return [] }
         outlineView.setDropItem(target === rootNode ? nil : target, dropChildIndex: NSOutlineViewDropOnItemIndex)
         return moving ? .move : .copy
     }
@@ -31,7 +31,7 @@ extension FileTreeOutline.Coordinator {
     /// The folder a drop lands in: a folder row itself, a file row's folder, or the root for empty space.
     private func dropTarget(_ item: Any?) -> FileTreeNode? {
         guard let node = (item as? FileTreeNode) ?? rootNode else { return nil }
-        return node.isDirectory ? node : nodeCache[Self.canonical(node.url.deletingLastPathComponent()).path] ?? rootNode
+        return node.isDirectory ? node : nodeCache[Self.canonical(node.url.deletingLastPathComponent()).path]
     }
 
     private func droppedURLs(_ info: NSDraggingInfo) -> [URL] {

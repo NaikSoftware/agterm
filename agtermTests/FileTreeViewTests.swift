@@ -333,6 +333,22 @@ final class FileTreeViewTests: XCTestCase {
         XCTAssertEqual(validate(drag(["a-file.txt"]), onto: try node("alpha")), [])
     }
 
+    func testDropWithOneCollisionMovesTheRestAndReportsTheSkippedItem() throws {
+        try Data().write(to: rootDir.appendingPathComponent("b-file.txt"))
+        try Data("keep".utf8).write(to: rootDir.appendingPathComponent("alpha/b-file.txt"))
+        let info = drag(["a-file.txt", "b-file.txt"])
+        let alpha = try node("alpha")
+        XCTAssertEqual(validate(info, onto: alpha), .move)
+        XCTAssertTrue(accept(info, onto: alpha))
+        XCTAssertFalse(exists("a-file.txt"))
+        XCTAssertTrue(exists("alpha/a-file.txt"))
+        XCTAssertTrue(exists("b-file.txt"))
+        XCTAssertEqual(try String(contentsOf: rootDir.appendingPathComponent("alpha/b-file.txt"), encoding: .utf8), "keep")
+        XCTAssertEqual(shownErrors.count, 1)
+        XCTAssertEqual(shownErrors.first?.count, 1)
+        XCTAssertTrue(shownErrors.first?.first?.contains("b-file.txt") ?? false)
+    }
+
     func testExternalDropCopiesWithACollisionName() throws {
         let info = drag(["a-file.txt"], fromPanel: false)
         XCTAssertEqual(validate(info, onto: nil), .copy)
