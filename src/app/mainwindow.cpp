@@ -4,6 +4,7 @@
 #include "hooks.h"
 #include "launcher.h"
 #include "palette.h"
+#include "restore.h"
 #include "paths.h"
 #include "sidebar.h"
 #include "store.h"
@@ -550,6 +551,13 @@ void MainWindow::setSocketStatus(bool ok, const QString &error)
 
 void MainWindow::restore(const QJsonObject &window)
 {
+    // read once at launch, as master; the starter lists the multiplexers a re-run cannot bring back
+    const QString denylist = configDir() + QStringLiteral("/restore-denylist.conf");
+    if (!QFile::exists(denylist) && QDir().mkpath(configDir()))
+        if (QFile f(denylist); f.open(QIODevice::WriteOnly))
+            f.write(Restore::starterDenylist);
+    if (QFile f(denylist); f.open(QIODevice::ReadOnly))
+        m_denylist = Restore::parseDenylist(QString::fromUtf8(f.readAll()));
     for (auto *s : m_store.allSessions())
         createTerminal(s->id);
     restoreGeometry(QByteArray::fromBase64(window.value("geometry").toString().toLatin1()));
@@ -663,6 +671,7 @@ void MainWindow::createTerminal(const QString &id)
         }
     });
     m_panes.insert(id, p);
+    replay(id, p.main, false);
     if (QObject *ks = konsoleSession(id))
         for (int context : {0, 1}) // local and remote: caption = the title the program set (%w), not "dir : process"
             QMetaObject::invokeMethod(ks, "setTabTitleFormat", Q_ARG(int, context), Q_ARG(QString, QStringLiteral("%w")));
@@ -683,8 +692,10 @@ void MainWindow::applyLayout(const QString &id)
         s->splitCwd.clear();
         if (s->splitFontSize > 0)
             zoomFontTo(terminalDisplay(p.right), s->splitFontSize);
-        if (p.right)
+        if (p.right) {
             p.split->addWidget(p.right->widget());
+            replay(id, p.right, true);
+        }
         p.split->handle(1)->installEventFilter(this); // double-click resets an even split
         p.split->handle(1)->setProperty("agtermSession", id);
     } else if (!s->hasSplit && p.right) {
@@ -809,6 +820,31 @@ bool MainWindow::panePlan(const QString &sessionId, const QString &pane, PanePla
         quoted << QLatin1Char('\'') + a.replace(QLatin1Char('\''), QStringLiteral("'\\''")) + QLatin1Char('\'');
     out->command = QStringLiteral("exec ") + quoted.join(QLatin1Char(' '));
     return true;
+}
+
+void MainWindow::replay(const QString &id, KParts::ReadOnlyPart *part, bool split)
+{
+    // typed into the login shell rather than exec'd, so the shell remains when the program ends
+    if (const QString line = m_store.takeReplay(id, split, m_denylist); !line.isEmpty() && part)
+        qobject_cast<TerminalInterface *>(part)->sendInput(line + QLatin1Char('\n'));
+}
+
+QStringList MainWindow::foregroundArgv(const QString &sessionId, const QString &pane)
+{
+    const Panes p = m_panes.value(sessionId);
+    auto *t = qobject_cast<TerminalInterface *>(pane == QLatin1String("right") ? p.right : p.main);
+    if (!t)
+        return {};
+    // the group leader; a pane whose program is the terminal process itself reports no foreground
+    const int pid = t->foregroundProcessId() > 0 ? t->foregroundProcessId() : t->terminalProcessId();
+    QFile f(QStringLiteral("/proc/%1/cmdline").arg(pid));
+    return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()).split(QChar(0), Qt::SkipEmptyParts) : QStringList();
+}
+
+bool MainWindow::saveNow(QString *error)
+{
+    m_saveTimer.stop();
+    return save() || (*error = QStringLiteral("cannot write %1").arg(m_statePath), false);
 }
 
 void MainWindow::swapPanes(const QString &id)
@@ -1323,7 +1359,7 @@ void MainWindow::profileDialog(const char *slot)
         statusBar()->showMessage(tr("Open a session first"), 2000);
 }
 
-void MainWindow::save()
+bool MainWindow::save()
 {
     // Konsole signals directory changes only for a shown pane; /proc is authoritative for the rest
     for (auto *s : m_store.allSessions()) {
@@ -1343,10 +1379,10 @@ void MainWindow::save()
                                       {"filePanelWidth", m_filePanelWidth},
                                       {"collapsed", collapsed}});
     QSaveFile f(m_statePath);
-    if (f.open(QIODevice::WriteOnly)) {
-        f.write(QJsonDocument(root).toJson());
-        f.commit();
-    }
+    if (!f.open(QIODevice::WriteOnly))
+        return false;
+    f.write(QJsonDocument(root).toJson());
+    return f.commit();
 }
 
 MainWindow::~MainWindow()
@@ -1366,6 +1402,12 @@ void MainWindow::closeEvent(QCloseEvent *event)
 {
     m_saveTimer.stop();
     m_store.finalizePending(); // a close still inside its grace is final at quit
+    if (m_store.settings.restoreMode != QLatin1String("none")) {
+        captureForeground(m_store, *this); // only a clean quit captures; SIGTERM saves without it
+    } else {
+        for (Session *s : m_store.allSessions())
+            s->foreground.clear(), s->splitForeground.clear();
+    }
     save();
     m_quitting = true; // parts die with the window from here on; their sessions must stay saved
     QMainWindow::closeEvent(event);

@@ -69,7 +69,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 ## Phase 5: settings, keymap, extension
 
 - [x] Settings dialog: General, Appearance, Interface, Notifications, Agent Status, Key Mapping (KPageDialog, every control live).
-  Not here, with their features: restore mode, flagged view layout, link opening, scroll speed, right-click paste, Ghostty config,
+  Not here, with their features: flagged view layout, link opening, scroll speed, right-click paste, Ghostty config,
   toolbar mode, opacity/blur, sidebar tint, inactive-pane mute, follow system appearance, window/remote/dashboard/scratch/overlay
   title-bar elements, session info line, multiple-window sidebar, attention indicator, crossing windows, keyboard-layout lock
 - [x] Theme picker with live preview (Konsole colour schemes applied per session at runtime, no profile file written; `theme list|set`)
@@ -89,6 +89,12 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] HUD: `session hud open|update|close` (markdown, detail, spinner styles, nine positions, colours, font size, width percent,
   sticky, no-frame, `--hide-after`, `--pane`), passive (no focus, clicks pass through), read-back `hud`; control-only as in master.
   Not ported: ⌘-click on a HUD link
-- [ ] Restore modes (fresh / re-run commands / live sessions)
+- [x] Restore modes: Settings ▸ General ▸ Restore sessions (`restoreMode` none | rerun | live, applies at the next launch);
+  re-run captures each pane's foreground group leader argv from /proc at a clean quit (idle shells skipped) and types it
+  into the new shell once; `restore-denylist.conf` (starter: tmux, screen, zellij); `restore mode|capture|clear`,
+  `session restore <cmd>|--none|--clear [--pane]` pins, read-back `restoreCommand`/`splitRestoreCommand`
+- [ ] Live sessions: not implemented. Master reattaches zmx daemons; zmx needs zig (absent here) and no other multiplexer
+  (tmux, dtach, abduco, screen) is installed, so there is no daemon to reattach. The option is shown disabled and
+  `restore mode live` reports `unavailableReason`, with the active mode falling back to fresh shells as master does
 - [ ] Control API breadth: every command in `site/commands.html`
 - [ ] Agent skill + hook installers for Claude/Codex/OpenCode/Pi

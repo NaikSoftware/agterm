@@ -45,6 +45,8 @@ cmake --install build && kbuildsycoca6 --noincremental
   shell commands with `{AGT_*}` tokens (Ctrl+Alt+O lists them), and run scripts on control events. Both files start
   as commented references; File ▸ Edit Keymap… / Reload Keymap and the Hooks pair apply them.
 - Programs in a pane can raise notifications with OSC 9 or OSC 777 (`printf '\e]9;done\a'`).
+- Restore sessions (Settings ▸ General): fresh shells, or re-run commands, which records what each pane runs at quit
+  and types it into its new shell on the next launch (`restore-denylist.conf` lists programs to leave out).
 - Overlays: `agtermctl session overlay open <command>` runs a program in a temporary terminal over a session (full,
   floating with `--size-percent`, or one split pane with `--pane`); it closes when the program exits and
   `overlay result` (or `--block`) returns the status. Ctrl+Alt+Shift+J hides and shows them. `session hud` puts a

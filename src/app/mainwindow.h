@@ -35,7 +35,9 @@ public:
     QString text(const QString &sessionId, QString *error) override;
     QJsonObject info(const QString &sessionId) override;
 
-    void save();
+    bool save();
+    bool saveNow(QString *error) override;
+    QStringList foregroundArgv(const QString &sessionId, const QString &pane) override;
     bool isOwnShortcut(QKeyEvent *event) const;
     void setSocketStatus(bool ok, const QString &error);
     QStringList availableLaunchers() const { return m_launchers; }
@@ -182,6 +184,8 @@ private:
     bool m_zoomRestoreSidebar = true, m_zoomRestoreMenu = true;
     QHash<QString, QPointer<QObject>> m_sessions;
     QStringList m_launchers{QStringLiteral("terminal")};
+    QStringList m_denylist; // restore-denylist.conf, read at launch
+    void replay(const QString &id, KParts::ReadOnlyPart *part, bool split);
     QDateTime m_launchersAt;
     QTimer m_saveTimer, m_agentTimer;
     bool m_quitting = false;

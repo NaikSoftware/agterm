@@ -1,6 +1,7 @@
 #include "control.h"
 
 #include "paths.h"
+#include "restore.h"
 #include "store.h"
 
 #include <QDir>
@@ -35,6 +36,71 @@ static QJsonObject sessionNode(const Session &s, const QString &selected)
                      {"hasSplit", s.hasSplit}, {"split", s.splitVisible}, {"splitAxis", s.splitAxis}, {"splitRatio", s.splitRatio},
                      {"unseen", s.unseen}, {"parent", s.parentId}, {"fontSize", s.fontSize}, {"splitFontSize", s.splitFontSize}},
                     s.tint);
+}
+
+static QJsonObject withRestore(QJsonObject node, const Session &s)
+{
+    if (s.restorePin)
+        node.insert("restoreCommand", *s.restorePin);
+    if (s.splitRestorePin)
+        node.insert("splitRestoreCommand", *s.splitRestorePin);
+    return node;
+}
+
+int captureForeground(Store &store, Terminals &terminals)
+{
+    const QString shell = qEnvironmentVariable("SHELL");
+    int count = 0;
+    for (Session *s : store.allSessions()) {
+        s->foreground = Restore::captured(terminals.foregroundArgv(s->id, QStringLiteral("main")), shell);
+        s->splitForeground = s->splitVisible ? Restore::captured(terminals.foregroundArgv(s->id, QStringLiteral("right")), shell) : QStringList();
+        count += !s->foreground.isEmpty() + !s->splitForeground.isEmpty();
+    }
+    return count;
+}
+
+static const char *const liveUnavailable = "live sessions need a detached session daemon (master uses zmx), which agterm-qt does not have";
+
+static QJsonObject restoreCommand(Store &store, Terminals &terminals, const QString &cmd, const QJsonObject &args)
+{
+    static const QStringList modes{"none", "rerun", "live"};
+    QString error;
+    if (cmd == QLatin1String("restore.mode")) {
+        if (args.contains("mode")) {
+            const QString mode = args.value("mode").toString();
+            if (!modes.contains(mode))
+                return fail(QStringLiteral("invalid restore mode: %1").arg(mode));
+            Settings s = store.settings;
+            s.restoreMode = mode;
+            store.setSettings(s);
+            if (!terminals.saveNow(&error))
+                return fail(error);
+        }
+        const QString configured = store.settings.restoreMode, requested = store.restoreModeAtLaunch;
+        QJsonObject r{{"configured", configured},
+                      {"requestedAtLaunch", requested},
+                      {"active", requested == QLatin1String("live") ? QStringLiteral("none") : requested},
+                      {"restartRequired", configured != requested}};
+        if (requested == QLatin1String("live"))
+            r.insert("unavailableReason", QLatin1String(liveUnavailable));
+        return ok({{"restore", r}});
+    }
+    if (cmd == QLatin1String("restore.capture")) {
+        if (store.settings.restoreMode != QLatin1String("rerun"))
+            return fail(QStringLiteral("restore.capture requires rerun mode; configured restore mode is %1").arg(store.settings.restoreMode));
+        const int count = captureForeground(store, terminals);
+        if (!terminals.saveNow(&error))
+            return fail(error);
+        return ok({{"count", count}, {"text", QStringLiteral("captured %1 command(s)").arg(count)}});
+    }
+    if (cmd == QLatin1String("restore.clear")) {
+        for (Session *s : store.allSessions())
+            s->foreground.clear(), s->splitForeground.clear();
+        if (!terminals.saveNow(&error))
+            return fail(error);
+        return ok();
+    }
+    return fail(QStringLiteral("unknown command '%1'").arg(cmd));
 }
 
 // a colour from the palette and an optional placement of known parts; "" when valid
@@ -198,7 +264,7 @@ static QJsonObject tree(Store &store, const Terminals &terminals)
         QJsonArray ss;
         bool active = false;
         for (const auto &s : w.sessions) {
-            ss << merged(sessionNode(s, store.selected), terminals.sessionExtras(s.id));
+            ss << merged(withRestore(sessionNode(s, store.selected), s), terminals.sessionExtras(s.id));
             active |= s.id == store.selected;
         }
         QJsonObject node = withTint({{"id", w.id}, {"name", w.name}, {"rememberedFolder", w.folder}, {"active", active}, {"sessions", ss}}, w.tint);
@@ -354,6 +420,8 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             return fail(error);
         return ok(result);
     }
+    if (cmd.startsWith(QLatin1String("restore.")))
+        return restoreCommand(store, terminals, cmd, args);
     if (cmd == QLatin1String("recent.open")) {
         const QString id = store.reopenClosed();
         return id.isEmpty() ? fail(QStringLiteral("nothing to reopen")) : ok({{"id", id}});
@@ -483,6 +551,28 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             if (!store.session(id)->hasSplit)
                 return fail(QStringLiteral("session has no split"));
             store.requestSwap(id);
+        } else if (cmd == QLatin1String("session.restore")) {
+            const QString mode = args.value("mode").toString(QStringLiteral("set")), pane = args.value("pane").toString(QStringLiteral("left"));
+            Session *s = store.session(id);
+            if (pane != QLatin1String("left") && pane != QLatin1String("right"))
+                return fail(QStringLiteral("--pane must be left or right"));
+            if (pane == QLatin1String("right") && !s->hasSplit)
+                return fail(QStringLiteral("session has no split"));
+            auto &pin = pane == QLatin1String("right") ? s->splitRestorePin : s->restorePin;
+            if (mode == QLatin1String("set")) {
+                if (error = Restore::pinError(args.value("command").toString()); !error.isEmpty())
+                    return fail(error);
+                pin = args.value("command").toString();
+            } else if (mode == QLatin1String("none")) {
+                pin = QString();
+            } else if (mode == QLatin1String("clear")) {
+                pin.reset();
+            } else {
+                return fail(QStringLiteral("invalid restore mode: %1 (set|none|clear)").arg(mode));
+            }
+            Q_EMIT store.changed();
+            if (store.settings.restoreMode != QLatin1String("rerun"))
+                return ok({{"id", id}, {"text", QStringLiteral("saved; it applies only in rerun restore mode")}});
         } else if (cmd == QLatin1String("session.seen")) {
             store.setUnseen(id, 0);
         } else if (cmd == QLatin1String("session.companion.duplicate")) {
@@ -512,7 +602,7 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             }
             return ok({{"id", id}, {"text", text}});
         } else if (cmd == QLatin1String("session.info")) {
-            QJsonObject node = merged(sessionNode(*store.session(id), store.selected), terminals.sessionExtras(id));
+            QJsonObject node = merged(withRestore(sessionNode(*store.session(id), store.selected), *store.session(id)), terminals.sessionExtras(id));
             node.insert("workspace", store.workspaceOf(id)->id);
             const QJsonObject live = terminals.info(id);
             for (auto it = live.begin(); it != live.end(); ++it)

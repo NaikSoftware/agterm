@@ -6,6 +6,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <optional>
+
 // A sidebar row colour: one of Store::tintColors shown on the icon and/or the name; empty color = none.
 struct Tint {
     QString color;
@@ -34,6 +36,10 @@ struct Session {
     int unseen = 0;              // notifications raised while the session was not in front of you
     QString parentId;            // a companion is pinned to its parent, listed right after it
     Tint tint;
+    // re-run restore: argv captured at quit (persisted), its one-shot replay this launch (not persisted), and a pinned
+    // command that beats both (persisted; "" = pinned to nothing)
+    QStringList foreground, splitForeground, replay, splitReplay;
+    std::optional<QString> restorePin, splitRestorePin;
 
     QString displayName() const;
 };
@@ -75,6 +81,7 @@ struct Settings {
     bool attentionIncludesActive = false;
     // Key Mapping: the directory holding keymap.conf and hooks.conf; "" = the default
     QString configDirectory;
+    QString restoreMode = QStringLiteral("none"); // none | rerun | live; takes effect at the next launch
 
     QJsonObject toJson() const;
     static Settings fromJson(const QJsonObject &o);
@@ -115,6 +122,9 @@ public:
     QList<PendingClose> pending; // newest last
     int graceMs = 3000;
     Settings settings;
+    QString restoreModeAtLaunch = QStringLiteral("none"); // frozen by the first fromJson
+    // the line to type into a pane's new shell: the pin, else the capture if restorable; consumed once
+    QString takeReplay(const QString &id, bool split, const QStringList &denylist);
     bool flaggedView = false; // the sidebar shows flagged sessions only; navigation follows it
     // the workspace filter: a marked set, applied or suspended; never applied while empty
     QStringList focused;
@@ -199,4 +209,5 @@ private:
     void reselect(const Workspace *w, int i); // after the selected session left w at row i; w null when w went too
     bool park(const PendingClose &close);
     int m_pendingSerial = 0;
+    bool m_loaded = false;
 };

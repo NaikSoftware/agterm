@@ -10,6 +10,7 @@
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QStandardItemModel>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QDirIterator>
@@ -148,6 +149,16 @@ void MainWindow::showSettings()
                             cur.newSessionPlacement, [](Settings &s, const QString &v) { s.newSessionPlacement = v; }));
     sessions->addRow(check(tr("Confirm before closing a session"), cur.confirmCloseSession, [](Settings &s, bool v) { s.confirmCloseSession = v; }));
     sessions->addRow(check(tr("Allow undo after closing sessions and workspaces"), cur.closeUndo, [](Settings &s, bool v) { s.closeUndo = v; }));
+    QComboBox *restoreBox = picker({{tr("Fresh shells"), QStringLiteral("none")}, {tr("Re-run commands"), QStringLiteral("rerun")}, {tr("Live sessions"), QStringLiteral("live")}},
+                                   cur.restoreMode, [](Settings &s, const QString &v) { s.restoreMode = v; });
+    if (auto *model = qobject_cast<QStandardItemModel *>(restoreBox->model()); model && cur.restoreMode != QLatin1String("live")) {
+        model->item(2)->setEnabled(false); // no session daemon here: see restore.mode's unavailableReason
+        model->item(2)->setToolTip(tr("Needs a detached session daemon (zmx), which agterm-qt does not have"));
+    }
+    sessions->addRow(tr("Restore sessions"), restoreBox);
+    auto *restoreHint = new QLabel(tr("Changes apply after restarting agterm."));
+    restoreHint->setForegroundRole(QPalette::PlaceholderText);
+    sessions->addRow(QString(), restoreHint);
     auto *sidebar = new QFormLayout;
     sidebar->addRow(check(tr("Click a workspace row to expand or collapse"), cur.workspaceRowClickExpands,
                           [](Settings &s, bool v) { s.workspaceRowClickExpands = v; }));

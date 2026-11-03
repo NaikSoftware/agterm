@@ -1,4 +1,5 @@
 #include "store.h"
+#include "restore.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -709,7 +710,7 @@ void Store::setSettings(const Settings &s)
     X(newSessionDirectory) X(newSessionCustomDirectory) X(newSessionPlacement) X(statusReset) X(lastLauncher) X(fontFamily) X(theme) \
     X(cursorStyle) X(cursorBlink) X(notificationSoundName) X(dockBounce) X(activeStatusColorHex) X(blockedStatusColorHex)            \
     X(completedStatusColorHex) X(activeStatusShape) X(blockedStatusShape) X(completedStatusShape) X(blockedStatusSoundName)            \
-    X(configDirectory)
+    X(configDirectory) X(restoreMode)
 #define AGTERM_SETTINGS_BOOLS(X)                                                                                                  \
     X(confirmCloseSession) X(closeUndo) X(workspaceRowClickExpands) X(notificationsEnabled) X(notificationBadgeEnabled) X(attentionIncludesActive)
 #define AGTERM_SETTINGS_DOUBLES(X) X(fontSize) X(sidebarFontSize) X(interfaceFontSize)
@@ -830,6 +831,19 @@ QString Store::go(const QString &direction, QString *error)
     return {};
 }
 
+QString Store::takeReplay(const QString &id, bool split, const QStringList &denylist)
+{
+    Session *s = session(id);
+    if (!s)
+        return {};
+    const QStringList argv = std::exchange(split ? s->splitReplay : s->replay, {});
+    if (restoreModeAtLaunch != QLatin1String("rerun"))
+        return {};
+    if (const auto &pin = split ? s->splitRestorePin : s->restorePin)
+        return *pin; // typed verbatim, past the denylist
+    return Restore::shouldRestore(argv, denylist) ? Restore::shellQuoted(argv) : QString();
+}
+
 QJsonObject Store::toJson() const
 {
     QJsonArray ws;
@@ -843,6 +857,14 @@ QJsonObject Store::toJson() const
                            {"fontSize", s.fontSize}, {"splitFontSize", s.splitFontSize}};
             if (!s.tint.color.isEmpty())
                 so.insert("tint", tintJson(s.tint));
+            if (!s.foreground.isEmpty())
+                so.insert("foregroundCommand", QJsonArray::fromStringList(s.foreground));
+            if (!s.splitForeground.isEmpty())
+                so.insert("splitForegroundCommand", QJsonArray::fromStringList(s.splitForeground));
+            if (s.restorePin)
+                so.insert("restoreCommand", *s.restorePin);
+            if (s.splitRestorePin)
+                so.insert("splitRestoreCommand", *s.splitRestorePin);
             ss << so;
         }
         QJsonObject wo{{"id", w.id}, {"name", w.name}, {"folder", w.folder}, {"sessions", ss}};
@@ -883,12 +905,23 @@ void Store::fromJson(const QJsonObject &o)
             s.splitVisible = s.hasSplit && so.value("splitVisible").toBool();
             s.splitAxis = so.value("splitAxis").toString(QStringLiteral("vertical"));
             s.splitRatio = qBound(0.05, so.value("splitRatio").toDouble(0.5), 0.95);
+            // the capture moves into a one-shot slot: the next save writes it as gone, so it replays exactly once
+            for (const auto &v : so.value("foregroundCommand").toArray())
+                s.replay << v.toString();
+            for (const auto &v : so.value("splitForegroundCommand").toArray())
+                s.splitReplay << v.toString();
+            if (so.contains("restoreCommand"))
+                s.restorePin = so.value("restoreCommand").toString();
+            if (so.contains("splitRestoreCommand"))
+                s.splitRestorePin = so.value("splitRestoreCommand").toString();
             if (!s.id.isEmpty())
                 w.sessions << s;
         }
         workspaces << w;
     }
     settings = Settings::fromJson(o.value("settings").toObject());
+    if (!std::exchange(m_loaded, true))
+        restoreModeAtLaunch = settings.restoreMode;
     focused.clear();
     for (const auto &f : o.value("focusedWorkspaces").toArray())
         if (workspace(f.toString())) // stale ids are pruned, so the filter never restores enabled and empty

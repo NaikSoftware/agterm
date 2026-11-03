@@ -62,6 +62,10 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
               [--hide-after SECONDS] [--pane left|right]      a passive panel; the session stays typable
   session hud update <message> ...      replaces the whole panel (font size and background stay)
   session hud close
+  restore mode [none|rerun|live]        bare: configured / at launch / active; a mode applies from the next launch
+  restore capture                       record each pane's foreground command now (rerun mode)
+  restore clear                         forget every captured command
+  session restore <command> | --none | --clear [--pane left|right]   pin what this pane re-runs (rerun mode)
 )";
 
 static QByteArray roundTrip(const QString &path, const QJsonObject &request, QString *error)
@@ -90,7 +94,7 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "undoable", "companion",
-                            "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner"};
+                            "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear"};
     QStringList pos;
     QHash<QString, QString> opt;
     const QStringList in = app.arguments().mid(1);
@@ -113,7 +117,7 @@ int main(int argc, char **argv)
         return fputs(usage, stderr), 1;
 
     QString cmd = pos.takeFirst();
-    if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme"}.contains(cmd) && !pos.isEmpty())
+    if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore"}.contains(cmd) && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
     if (cmd == QLatin1String("filepanel") && pos.value(0) == QLatin1String("width"))
         cmd = QStringLiteral("filepanel.width"), pos.removeFirst();
@@ -222,6 +226,13 @@ int main(int argc, char **argv)
         if (opt.contains(QStringLiteral("block")) && opt.contains(QStringLiteral("wait")))
             return die(QStringLiteral("--block is mutually exclusive with --wait"));
     }
+    if (cmd == QLatin1String("restore.mode") && !arg.isEmpty())
+        args.insert("mode", arg);
+    if (cmd == QLatin1String("session.restore")) {
+        args.insert("mode", opt.contains(QStringLiteral("none")) ? QStringLiteral("none") : opt.contains(QStringLiteral("clear")) ? QStringLiteral("clear") : QStringLiteral("set"));
+        if (!arg.isEmpty())
+            args.insert("command", arg);
+    }
     if (cmd == QLatin1String("session.type")) {
         if (opt.contains(QStringLiteral("stdin"))) {
             QFile f;
@@ -267,6 +278,14 @@ int main(int argc, char **argv)
                 return die(r.value("error").toString(error));
             QThread::msleep(200);
         }
+    }
+    if (result.contains("restore")) {
+        const QJsonObject r = result["restore"].toObject();
+        printf("configured %s\nat launch  %s\nactive     %s%s\n", qPrintable(r["configured"].toString()), qPrintable(r["requestedAtLaunch"].toString()),
+               qPrintable(r["active"].toString()), r["restartRequired"].toBool() ? "\n(restart required)" : "");
+        if (r.contains("unavailableReason"))
+            printf("live unavailable: %s\n", qPrintable(r["unavailableReason"].toString()));
+        return 0;
     }
     if (result.contains("exitCode"))
         return printf("%d\n", result["exitCode"].toInt()), 0;
@@ -316,7 +335,7 @@ int main(int argc, char **argv)
     } else if (result.contains("themes")) {
         for (const auto &v : result["themes"].toArray())
             printf("%s %s\n", v.toString() == result["theme"].toString() ? "*" : " ", qPrintable(v.toString()));
-    } else if (result.contains("count")) {
+    } else if (result.contains("count") && !result.contains("text")) {
         printf("%d diagnostic(s)\n", result["count"].toInt());
     } else if (result.contains("session")) {
         const auto s = result["session"].toObject();

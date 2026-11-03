@@ -97,6 +97,7 @@ int main(int argc, char **argv)
     store.fromJson(state);
     MainWindow window(store, statePath);
     window.restore(state.value("window").toObject());
+    window.save(); // the replayed commands are gone from disk now, so a crash cannot run them twice
     window.loadConfig();
     if (store.allSessions().isEmpty()) {
         const QString ws = store.workspaces.isEmpty() ? store.addWorkspace(QStringLiteral("main")) : store.workspaces.first().id;

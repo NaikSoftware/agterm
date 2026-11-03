@@ -50,6 +50,18 @@ public:
         *error = QStringLiteral("unknown command '%1'").arg(cmd);
         return false;
     }
+    // the foreground process group leader's argv in pane main | right; empty when it cannot be read
+    virtual QStringList foregroundArgv(const QString &sessionId, const QString &pane)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        return {};
+    }
+    virtual bool saveNow(QString *error) // a checked save, for commands that ack only what reached disk
+    {
+        Q_UNUSED(error);
+        return true;
+    }
     // pane main | right; false with the reason when the pane's program cannot be copied
     virtual bool panePlan(const QString &sessionId, const QString &pane, PanePlan *out, QString *error)
     {
@@ -68,6 +80,10 @@ QString duplicateAsCompanion(Store &store, Terminals &terminals, const QString &
 // session.overlay.* / session.hud.*: master's argument rules; canonicalizes pane (left|right) and position in place.
 // "" when valid.
 QString overlayArgsError(const QString &cmd, QJsonObject *args);
+
+// Fills each session's captured foreground commands (main, and the split when shown) for re-run restore;
+// returns how many slots hold a command.
+int captureForeground(Store &store, Terminals &terminals);
 
 // One request object ({cmd, target, args}) in, one response ({ok, result | error}) out.
 QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &request);

@@ -31,7 +31,7 @@ if(NOT TARGET KF6::Parts)
     INTERFACE_LINK_LIBRARIES "KF6::CoreAddons;KF6::XmlGui")
 endif()
 
-add_library(agterm-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp)
+add_library(agterm-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp)
 target_include_directories(agterm-core PUBLIC src/core)
 target_link_libraries(agterm-core PUBLIC Qt6::Core)
 

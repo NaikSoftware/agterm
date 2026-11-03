@@ -2,6 +2,7 @@
 #include "hooks.h"
 #include "keymap.h"
 #include "launcher.h"
+#include "restore.h"
 #include "store.h"
 
 #include <QDir>
@@ -29,6 +30,8 @@ public:
         return true;
     }
     QJsonObject sessionExtras(const QString &) const override { return {{"overlay", true}}; }
+    QHash<QString, QStringList> argv; // pane -> foreground argv
+    QStringList foregroundArgv(const QString &, const QString &pane) override { return argv.value(pane); }
     QString refuse; // the pane panePlan refuses
     bool panePlan(const QString &, const QString &pane, PanePlan *out, QString *error) override
     {
@@ -600,6 +603,51 @@ private Q_SLOTS:
         QCOMPARE(t.appArgs["pane"].toString(), QStringLiteral("left"));
         QVERIFY(call(s, t, "session.overlay.open", id, {{"command", "top"}, {"follow", true}})["ok"].toBool());
         QVERIFY(call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0]["overlay"].toBool()); // the app's read-back joins the node
+    }
+
+    void restoreCapturesProgramsNotIdleShellsAndReplaysOnce()
+    {
+        QCOMPARE(Restore::captured({"-zsh"}, "/bin/zsh"), QStringList());
+        QCOMPARE(Restore::captured({"/usr/bin/fish", "-l", "-i"}, "/bin/bash"), QStringList());
+        QCOMPARE(Restore::captured({"bash", "script.sh"}, "/bin/bash"), (QStringList{"bash", "script.sh"}));
+        QCOMPARE(Restore::captured({"-myshell"}, "/opt/myshell"), QStringList());
+        QCOMPARE(Restore::captured({"claude", "--resume"}, "/bin/bash"), (QStringList{"claude", "--resume"}));
+        const QStringList deny = Restore::parseDenylist(QString::fromUtf8(Restore::starterDenylist));
+        QCOMPARE(deny, (QStringList{"tmux", "screen", "zellij"}));
+        QVERIFY(!Restore::shouldRestore({"/usr/bin/tmux", "attach"}, deny));
+        QVERIFY(!Restore::shouldRestore({"vim", "a\tb"}, deny));
+        QVERIFY(Restore::shouldRestore({"vim", "it's"}, deny));
+        QCOMPARE(Restore::shellQuoted({"vim", "it's"}), QStringLiteral("'vim' 'it'\\''s'"));
+
+        Store s;
+        FakeTerminals t;
+        const QString id = call(s, t, "session.new")["result"]["id"].toString();
+        t.argv.insert("main", {"htop", "-d", "5"});
+        QCOMPARE(call(s, t, "restore.capture")["error"].toString(), QStringLiteral("restore.capture requires rerun mode; configured restore mode is none"));
+        QCOMPARE(call(s, t, "restore.mode", {}, {{"mode", "sometimes"}})["error"].toString(), QStringLiteral("invalid restore mode: sometimes"));
+        const QJsonObject mode = call(s, t, "restore.mode", {}, {{"mode", "rerun"}})["result"]["restore"].toObject();
+        QCOMPARE(mode["configured"].toString(), QStringLiteral("rerun"));
+        QVERIFY(mode["restartRequired"].toBool());
+        QCOMPARE(call(s, t, "restore.capture")["result"]["count"].toInt(), 1);
+
+        Store next;
+        next.fromJson(s.toJson());
+        QCOMPARE(next.restoreModeAtLaunch, QStringLiteral("rerun"));
+        QCOMPARE(next.takeReplay(id, false, deny), QStringLiteral("'htop' '-d' '5'"));
+        QCOMPARE(next.takeReplay(id, false, deny), QString()); // consumed
+        QVERIFY(!next.toJson()["workspaces"][0]["sessions"][0].toObject().contains("foregroundCommand"));
+
+        QCOMPARE(call(s, t, "session.restore", id, {{"mode", "set"}, {"command", "a\tb"}})["error"].toString(),
+                 QStringLiteral("command must not contain control characters"));
+        QCOMPARE(call(s, t, "session.restore", id, {{"mode", "set"}, {"pane", "right"}, {"command", "x"}})["error"].toString(), QStringLiteral("session has no split"));
+        QVERIFY(call(s, t, "session.restore", id, {{"mode", "set"}, {"command", "tmux attach"}})["ok"].toBool());
+        QCOMPARE(call(s, t, "session.info", id)["result"]["session"]["restoreCommand"].toString(), QStringLiteral("tmux attach"));
+        Store pinned;
+        pinned.fromJson(s.toJson());
+        QCOMPARE(pinned.takeReplay(id, false, deny), QStringLiteral("tmux attach")); // a pin beats the capture and the denylist
+        QVERIFY(call(s, t, "restore.clear")["ok"].toBool());
+        QVERIFY(s.session(id)->foreground.isEmpty());
+        QCOMPARE(call(s, t, "restore.mode", {}, {{"mode", "live"}})["result"]["restore"]["active"].toString(), QStringLiteral("none"));
     }
 
     void treeAndUnknownCommand()

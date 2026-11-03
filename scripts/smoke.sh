@@ -144,6 +144,9 @@ grep -qx sleep "/proc/$dupid/comm" || fail "duplicate as companion runs the pane
 undo=$(ctl session new --name undo --no-select)
 [ "$(ctl session close --undoable --target "$undo")" = "ok (undoable)" ] || fail "close --undoable"
 ctl tree | grep -q undo && fail "an undoable close leaves the tree"
+ctl restore capture 2>/dev/null && fail "restore capture outside rerun mode"
+ctl restore mode rerun | grep -q '(restart required)' || fail "restore mode read-back"
+ctl restore capture | grep -q 'captured [1-9]' || fail "restore capture"
 cd /tmp
 ctl session type $'cd /usr\n' --target "$id"
 sleep 1
@@ -154,5 +157,8 @@ ctl tree | grep -q 'renamed' || fail "session not restored"
 ctl tree | grep renamed | grep -q idle || fail "status must not survive a restart"
 ctl tree | grep renamed | grep -q '/usr' || fail "cwd not tracked"
 ctl tree --json | grep -q '"tint":"red"' || fail "tint not restored"
+ctl restore mode | grep -q 'active     rerun' || fail "restore mode at launch"
+for _ in $(seq 20); do ctl session info --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
+ctl session info --target src | grep -qE '^foreground +sleep' || fail "rerun restore replays the captured command"
 stop
 echo "smoke OK"
