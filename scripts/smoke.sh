@@ -30,6 +30,9 @@ ctl session status blocked --target "$id" --blink --pane main
 ctl tree | grep probe | grep -q blocked || fail "status not set"
 ctl session status bogus --target "$id" 2>/dev/null && fail "bogus status accepted"
 AGTERM_SESSION_ID=$id ctl session info | grep -q '^pid' || fail "info by env target"
+ctl session type "$root/share/agent-status/agterm-claude-status.sh completed --auto-reset"$'\n' --target "$id"
+sleep 1
+ctl tree | grep probe | grep -q completed || fail "Claude hook adapter from a pane"
 ctl session rename renamed --target probe
 ctl session go --to next >/dev/null
 gone=$(ctl session new --name exits --no-select)

@@ -1,7 +1,9 @@
 #include "mainwindow.h"
 
 #include "paths.h"
+#include "sidebardelegate.h"
 #include "store.h"
+#include "theme.h"
 
 #include <KNotification>
 #include <KParts/PartLoader>
@@ -14,7 +16,11 @@
 #include <QDBusConnection>
 #include <QDir>
 #include <QFileInfo>
-#include <QHeaderView>
+#include <QFontDatabase>
+#include <QHBoxLayout>
+#include <QPushButton>
+#include <QToolButton>
+#include <QVBoxLayout>
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -24,25 +30,15 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QSaveFile>
+#include <QScrollBar>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTreeWidget>
 
 namespace {
-enum Role { IdRole = Qt::UserRole, KindRole };
-enum Kind { WorkspaceKind = 1, SessionKind };
-
-QIcon statusIcon(const QString &status)
-{
-    if (status == QLatin1String("active"))
-        return QIcon::fromTheme(QStringLiteral("media-playback-start"));
-    if (status == QLatin1String("blocked"))
-        return QIcon::fromTheme(QStringLiteral("dialog-warning"));
-    if (status == QLatin1String("completed"))
-        return QIcon::fromTheme(QStringLiteral("checkmark"), QIcon::fromTheme(QStringLiteral("dialog-ok")));
-    return QIcon::fromTheme(QStringLiteral("utilities-terminal"));
-}
+constexpr int IdRole = SidebarRole::Id, KindRole = SidebarRole::Kind;
+constexpr int WorkspaceKind = SidebarRole::Workspace, SessionKind = SidebarRole::Session;
 } // namespace
 
 PartBridge::PartBridge(MainWindow *window, Store &store, const QString &id, QObject *parent)
@@ -65,24 +61,138 @@ void PartBridge::overrideShortcut(QKeyEvent *event, bool &override)
 MainWindow::MainWindow(Store &store, const QString &statePath)
     : m_store(store), m_statePath(statePath)
 {
-    m_tree = new QTreeWidget;
+    m_tree = new SidebarView;
     m_tree->setHeaderHidden(true);
-    m_tree->setRootIsDecorated(true);
+    m_tree->setRootIsDecorated(false);
+    m_tree->setIndentation(0);
+    m_tree->setItemDelegate(m_delegate = new SidebarDelegate(m_tree));
+    m_tree->setMouseTracking(true);
+    m_tree->setFrameShape(QFrame::NoFrame);
+    m_tree->setExpandsOnDoubleClick(false);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_tree->setFocusPolicy(Qt::NoFocus); // keyboard stays in the terminal
+    m_tree->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+
+    // sidebar: title row with + and the main menu, the tree, a socket status footer
+    auto *title = new QLabel(tr("Sessions"));
+    QFont tf = title->font();
+    tf.setWeight(QFont::DemiBold);
+    tf.setPointSizeF(tf.pointSizeF() * 1.08);
+    title->setFont(tf);
+    auto toolButton = [](const QString &icon, const QString &tip) {
+        auto *b = new QToolButton;
+        b->setIcon(QIcon::fromTheme(icon));
+        b->setToolTip(tip);
+        b->setAccessibleName(tip);
+        b->setAutoRaise(true);
+        b->setFocusPolicy(Qt::NoFocus);
+        return b;
+    };
+    auto *add = toolButton(QStringLiteral("list-add"), tr("New Session (Ctrl+Shift+T)"));
+    connect(add, &QToolButton::clicked, this, [this] { QString e; newSession(m_store.resolveWorkspace({}, &e)); });
+    m_menuButton = toolButton(QStringLiteral("application-menu"), tr("Main Menu"));
+    m_menuButton->setPopupMode(QToolButton::InstantPopup);
+    auto *titleRow = new QHBoxLayout;
+    titleRow->setContentsMargins(14, 8, 8, 6);
+    titleRow->addWidget(title, 1);
+    titleRow->addWidget(add);
+    titleRow->addWidget(m_menuButton);
+
+    m_socketDot = new QLabel;
+    m_socketDot->setFixedSize(7, 7);
+    m_socketText = new QLabel;
+    auto *hint = new QLabel(tr("Ctrl+Alt+↓ attention"));
+    hint->setToolTip(tr("Jump to the next session that needs you"));
+    m_footer = new QWidget;
+    auto *footerRow = new QHBoxLayout(m_footer);
+    footerRow->setContentsMargins(12, 7, 12, 8);
+    footerRow->setSpacing(8);
+    footerRow->addWidget(m_socketDot);
+    footerRow->addWidget(m_socketText, 1);
+    footerRow->addWidget(hint);
+    m_footerLabels = {m_socketText, hint};
+
+    m_sidebar = new QWidget;
+    m_sidebar->setObjectName(QStringLiteral("sidebar"));
+    auto *side = new QVBoxLayout(m_sidebar);
+    side->setContentsMargins(0, 0, 0, 0);
+    side->setSpacing(0);
+    side->addLayout(titleRow);
+    side->addWidget(m_tree, 1);
+    side->addWidget(m_footer);
+
+    // session header: workspace › session, status chip, cwd, foreground process
+    m_crumbWs = new QLabel;
+    m_crumbSep = new QLabel(QStringLiteral("›"));
+    m_crumbName = new QLabel;
+    QFont nf = m_crumbName->font();
+    nf.setWeight(QFont::DemiBold);
+    m_crumbName->setFont(nf);
+    m_statusChip = new QLabel;
+    m_cwdLabel = new QLabel;
+    m_cwdLabel->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    m_cwdLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_procChip = new QLabel;
+    m_procChip->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    m_header = new QWidget;
+    m_header->setObjectName(QStringLiteral("header"));
+    auto *headerRow = new QHBoxLayout(m_header);
+    headerRow->setContentsMargins(14, 7, 14, 7);
+    headerRow->setSpacing(10);
+    for (QWidget *w : {m_crumbWs, m_crumbSep, m_crumbName, m_statusChip})
+        headerRow->addWidget(w);
+    headerRow->addStretch(1);
+    headerRow->addWidget(m_cwdLabel);
+    headerRow->addWidget(m_procChip);
+
     m_stack = new QStackedWidget;
-    m_empty = new QLabel(tr("No sessions.\nCtrl+Shift+T opens one."));
-    m_empty->setAlignment(Qt::AlignCenter);
+    m_empty = new QWidget;
+    auto *emptyCol = new QVBoxLayout(m_empty);
+    emptyCol->addStretch(1);
+    auto *emptyIcon = new QLabel;
+    emptyIcon->setPixmap(QIcon::fromTheme(QStringLiteral("utilities-terminal")).pixmap(64));
+    auto *emptyTitle = new QLabel(tr("No sessions"));
+    emptyTitle->setFont(tf);
+    auto *emptyHint = new QLabel(tr("Open a shell, or let an agent create one with agtermctl."));
+    auto *emptyButton = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")), tr("New Session"));
+    connect(emptyButton, &QPushButton::clicked, add, &QToolButton::click);
+    for (QWidget *w : {static_cast<QWidget *>(emptyIcon), static_cast<QWidget *>(emptyTitle), static_cast<QWidget *>(emptyHint),
+                       static_cast<QWidget *>(emptyButton)})
+        emptyCol->addWidget(w, 0, Qt::AlignHCenter);
+    emptyCol->addStretch(1);
     m_stack->addWidget(m_empty);
+
+    auto *content = new QWidget;
+    auto *contentCol = new QVBoxLayout(content);
+    contentCol->setContentsMargins(0, 0, 0, 0);
+    contentCol->setSpacing(0);
+    contentCol->addWidget(m_header);
+    contentCol->addWidget(m_stack, 1);
+
     m_split = new QSplitter;
-    m_split->addWidget(m_tree);
-    m_split->addWidget(m_stack);
+    m_split->setHandleWidth(1);
+    m_split->setChildrenCollapsible(false);
+    m_split->addWidget(m_sidebar);
+    m_split->addWidget(content);
     m_split->setStretchFactor(1, 1);
-    m_split->setSizes({220, 900});
+    m_split->setSizes({264, 940});
+    m_sidebar->setMinimumWidth(180);
     setCentralWidget(m_split);
-    resize(1200, 760);
+    resize(1280, 800);
 
     createActions();
+    applyTheme();
+
+    // the active-status ring spins only while some session is working
+    m_spinTimer.setInterval(50);
+    connect(&m_spinTimer, &QTimer::timeout, this, [this] {
+        m_delegate->spinnerPhase = (m_delegate->spinnerPhase + 18) % 360;
+        m_tree->viewport()->update();
+    });
+    // cwd and foreground process have no change signal for background panes; poll the shown one
+    m_headerTimer.setInterval(1000);
+    connect(&m_headerTimer, &QTimer::timeout, this, &MainWindow::updateHeader);
+    m_headerTimer.start();
 
     m_saveTimer.setSingleShot(true);
     m_saveTimer.setInterval(500);
@@ -104,8 +214,15 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         if (!m_rebuilding && item && item->data(0, KindRole).toInt() == SessionKind)
             m_store.select(item->data(0, IdRole).toString());
     });
-    connect(m_tree, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem *i) { m_collapsed.insert(i->data(0, IdRole).toString()); });
-    connect(m_tree, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem *i) { m_collapsed.remove(i->data(0, IdRole).toString()); });
+    connect(m_tree, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *item) {
+        if (item->data(0, KindRole).toInt() != WorkspaceKind)
+            return;
+        const QString id = item->data(0, IdRole).toString();
+        m_collapsed.contains(id) ? m_collapsed.remove(id) : (m_collapsed.insert(id), true);
+        item->setExpanded(!m_collapsed.contains(id));
+        item->setData(0, SidebarRole::Expanded, item->isExpanded());
+        m_saveTimer.start();
+    });
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &MainWindow::sidebarMenu);
     connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
         const QString id = item->data(0, IdRole).toString();
@@ -143,13 +260,78 @@ void MainWindow::createActions()
         [this] { go(QStringLiteral("prev-attention")); });
     view->addSeparator();
     add(view, tr("Show &Sidebar"), QKeySequence(QStringLiteral("Ctrl+Shift+B")), QStringLiteral("sidebar-show"),
-        [this] { m_tree->setVisible(!m_tree->isVisible()); m_saveTimer.start(); });
+        [this] { m_sidebar->setVisible(m_sidebar->isHidden()); m_saveTimer.start(); });
     add(view, tr("Show &Menu Bar"), QKeySequence(QStringLiteral("Ctrl+Shift+M")), QStringLiteral("show-menu"),
         [this] { menuBar()->setVisible(!menuBar()->isVisible()); m_saveTimer.start(); });
 
     auto *settings = menuBar()->addMenu(tr("Se&ttings"));
     add(settings, tr("&Edit Current Profile…"), {}, QStringLiteral("document-edit"), [this] { profileDialog("showEditCurrentProfileDialog"); });
     add(settings, tr("&Manage Profiles…"), {}, QStringLiteral("configure"), [this] { profileDialog("showManageProfilesDialog"); });
+
+    // the menu bar starts hidden, KDE-style; the same menus live behind the sidebar's menu button
+    auto *hamburger = new QMenu(this);
+    for (QAction *a : menuBar()->actions())
+        hamburger->addAction(a);
+    m_menuButton->setMenu(hamburger);
+}
+
+void MainWindow::applyTheme()
+{
+    const Theme t = Theme::from(palette());
+    m_sidebar->setStyleSheet(QStringLiteral("#sidebar{background:%1;} QTreeView{background:transparent;}").arg(Theme::css(t.sidebar)));
+    m_footer->setStyleSheet(QStringLiteral("QWidget{border-top:1px solid %1;} QLabel{border:none;}").arg(Theme::css(t.line)));
+    for (QLabel *l : m_footerLabels) {
+        QFont f = font();
+        f.setPointSizeF(f.pointSizeF() * 0.85);
+        l->setFont(f);
+        l->setStyleSheet(QStringLiteral("color:%1;").arg(Theme::css(t.faint)));
+    }
+    m_header->setStyleSheet(QStringLiteral("#header{background:%1; border-bottom:1px solid %2;}").arg(Theme::css(t.window), Theme::css(t.line)));
+    m_crumbWs->setStyleSheet(QStringLiteral("color:%1;").arg(Theme::css(t.dim)));
+    m_crumbSep->setStyleSheet(QStringLiteral("color:%1;").arg(Theme::css(t.faint)));
+    m_cwdLabel->setStyleSheet(QStringLiteral("color:%1;").arg(Theme::css(t.dim)));
+    m_procChip->setStyleSheet(QStringLiteral("color:%1; background:%2; border-radius:5px; padding:1px 7px;")
+                                  .arg(Theme::css(t.dim), Theme::css(Theme::alpha(t.text, 22))));
+    m_split->setStyleSheet(QStringLiteral("QSplitter::handle{background:%1;}").arg(Theme::css(t.line)));
+    setSocketStatus(m_socketOk, m_socketError);
+    updateHeader();
+}
+
+void MainWindow::setSocketStatus(bool ok, const QString &error)
+{
+    m_socketOk = ok;
+    m_socketError = error;
+    const Theme t = Theme::from(palette());
+    m_socketDot->setStyleSheet(QStringLiteral("background:%1; border-radius:3px;").arg(Theme::css(ok ? t.ok : t.warn)));
+    m_socketText->setText(ok ? tr("Socket ready") : tr("Socket unavailable"));
+    m_socketText->setToolTip(ok ? socketPath() : error);
+}
+
+void MainWindow::updateHeader()
+{
+    const Session *s = m_store.session(m_store.selected);
+    m_header->setVisible(s);
+    if (!s)
+        return;
+    const Theme t = Theme::from(palette());
+    m_crumbWs->setText(m_store.workspaceOf(s->id)->name);
+    m_crumbName->setText(s->name);
+    const QColor c = s->status == QLatin1String("idle") ? t.dim : t.statusColor(s->status);
+    m_statusChip->setText(Theme::statusPhrase(s->status));
+    m_statusChip->setStyleSheet(QStringLiteral("color:%1; background:%2; border-radius:9px; padding:1px 8px; font-weight:500;")
+                                    .arg(Theme::css(c), Theme::css(Theme::alpha(c, s->status == QLatin1String("idle") ? 26 : 46))));
+    const QString cwd = liveCwd(s->id);
+    m_cwdLabel->setText(shortPath(cwd.isEmpty() ? s->cwd : cwd));
+    const QString fg = terminal(s->id) ? terminal(s->id)->foregroundProcessName() : QString();
+    m_procChip->setText(fg);
+    m_procChip->setVisible(!fg.isEmpty());
+}
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::PaletteChange && m_header)
+        applyTheme();
+    QMainWindow::changeEvent(event);
 }
 
 bool MainWindow::isOwnShortcut(QKeyEvent *event) const
@@ -169,8 +351,8 @@ void MainWindow::restore(const QJsonObject &window)
     m_split->restoreState(QByteArray::fromBase64(window.value("splitter").toString().toLatin1()));
     for (const auto &v : window.value("collapsed").toArray())
         m_collapsed.insert(v.toString());
-    m_tree->setVisible(window.value("sidebar").toBool(true));
-    menuBar()->setVisible(window.value("menubar").toBool(true));
+    m_sidebar->setVisible(window.value("sidebar").toBool(true));
+    menuBar()->setVisible(window.value("menubar").toBool(false));
     rebuildSidebar();
     showSelected();
 }
@@ -308,42 +490,48 @@ QJsonObject MainWindow::info(const QString &sessionId)
 void MainWindow::rebuildSidebar()
 {
     m_rebuilding = true;
+    const int scroll = m_tree->verticalScrollBar()->value();
     m_tree->clear();
+    bool anyActive = false;
     for (const auto &w : m_store.workspaces) {
         auto *wi = new QTreeWidgetItem(m_tree, {w.name});
         wi->setData(0, IdRole, w.id);
         wi->setData(0, KindRole, WorkspaceKind);
         wi->setFlags(Qt::ItemIsEnabled);
-        QFont f = wi->font(0);
-        f.setBold(true);
-        wi->setFont(0, f);
+        int attention = 0;
         for (const auto &s : w.sessions) {
             auto *si = new QTreeWidgetItem(wi, {s.name});
             si->setData(0, IdRole, s.id);
             si->setData(0, KindRole, SessionKind);
-            si->setIcon(0, statusIcon(s.status));
-            si->setToolTip(0, QStringLiteral("%1\n%2\n%3").arg(s.title, s.cwd, s.status));
-            if (s.status == QLatin1String("blocked") || s.status == QLatin1String("completed")) {
-                QFont sf = si->font(0);
-                sf.setBold(true);
-                si->setFont(0, sf);
-            }
-            if (s.id == m_store.selected)
-                m_tree->setCurrentItem(si);
+            si->setData(0, SidebarRole::Status, s.status);
+            si->setData(0, SidebarRole::Sub, s.status == QLatin1String("idle") ? shortPath(s.cwd) : Theme::statusPhrase(s.status));
+            si->setToolTip(0, QStringLiteral("%1\n%2").arg(s.title, shortPath(s.cwd)));
+            attention += s.status == QLatin1String("blocked") || s.status == QLatin1String("completed");
+            anyActive |= s.status == QLatin1String("active");
         }
+        wi->setData(0, SidebarRole::Count, int(w.sessions.size()));
+        wi->setData(0, SidebarRole::Attention, attention);
         wi->setExpanded(!m_collapsed.contains(w.id));
+        wi->setData(0, SidebarRole::Expanded, wi->isExpanded());
+        for (int i = 0; i < wi->childCount(); ++i)
+            if (wi->child(i)->data(0, IdRole).toString() == m_store.selected)
+                m_tree->setCurrentItem(wi->child(i));
     }
+    m_tree->verticalScrollBar()->setValue(scroll);
+    anyActive ? m_spinTimer.start() : m_spinTimer.stop();
     m_rebuilding = false;
+    updateHeader();
 }
 
 void MainWindow::showSelected()
 {
     const Session *s = m_store.session(m_store.selected);
     auto *part = m_parts.value(m_store.selected);
-    m_stack->setCurrentWidget(part ? part->widget() : static_cast<QWidget *>(m_empty));
+    m_stack->setCurrentWidget(part ? part->widget() : m_empty);
     if (part && part->widget()->window()->isActiveWindow())
         part->widget()->setFocus();
-    setWindowTitle(s ? QStringLiteral("%1 / %2 — %3").arg(m_store.workspaceOf(s->id)->name, s->name, s->title) : QStringLiteral("agterm-qt"));
+    setWindowTitle(s ? QStringLiteral("%1 / %2").arg(m_store.workspaceOf(s->id)->name, s->name) : QString());
+    updateHeader();
 }
 
 void MainWindow::sidebarMenu(const QPoint &pos)
@@ -479,7 +667,7 @@ void MainWindow::save()
         collapsed << c;
     root.insert("window", QJsonObject{{"geometry", QString::fromLatin1(saveGeometry().toBase64())},
                                       {"splitter", QString::fromLatin1(m_split->saveState().toBase64())},
-                                      {"sidebar", !m_tree->isHidden()},
+                                      {"sidebar", !m_sidebar->isHidden()},
                                       {"menubar", !menuBar()->isHidden()},
                                       {"collapsed", collapsed}});
     QSaveFile f(m_statePath);

@@ -3,7 +3,11 @@
 #include "paths.h"
 #include "store.h"
 
+#include <KConfig>
+#include <KConfigGroup>
+#include <KSharedConfig>
 #include <QApplication>
+#include <QStandardPaths>
 #include <QDir>
 #include <QFile>
 #include <QIcon>
@@ -13,6 +17,7 @@
 #include <QLockFile>
 #include <QMessageBox>
 #include <QSocketNotifier>
+#include <QTimer>
 
 #include <csignal>
 #include <sys/socket.h>
@@ -41,6 +46,28 @@ static void serve(QLocalServer &server, Store &store, Terminals &terminals)
     });
 }
 
+// A roomier default profile for this app only; KonsolePart hosts keep their own DefaultProfile, so Konsole is untouched
+// and a profile the user picks later in Settings wins.
+static void ensureProfile()
+{
+    KConfigGroup entry = KSharedConfig::openConfig()->group(QStringLiteral("Desktop Entry"));
+    if (!entry.readEntry("DefaultProfile", QString()).isEmpty())
+        return;
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/konsole");
+    const QString file = dir + QStringLiteral("/agterm-qt.profile");
+    if (!QFile::exists(file)) {
+        QDir().mkpath(dir);
+        KConfig profile(file, KConfig::SimpleConfig);
+        profile.group(QStringLiteral("General")).writeEntry("Name", "agterm-qt");
+        profile.group(QStringLiteral("General")).writeEntry("Parent", "FALLBACK/");
+        profile.group(QStringLiteral("General")).writeEntry("TerminalMargin", 10);
+        profile.group(QStringLiteral("Appearance")).writeEntry("ColorScheme", "Breeze");
+        profile.sync();
+    }
+    entry.writeEntry("DefaultProfile", "agterm-qt.profile");
+    entry.sync();
+}
+
 int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
@@ -58,6 +85,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    ensureProfile();
     const QString statePath = dir + QStringLiteral("/workspaces.json");
     QJsonObject state;
     if (QFile f(statePath); f.open(QIODevice::ReadOnly))
@@ -76,8 +104,10 @@ int main(int argc, char **argv)
     QLocalServer server;
     QLocalServer::removeServer(socketPath()); // safe: the lock says no live instance owns it
     server.setSocketOptions(QLocalServer::UserAccessOption);
-    if (!server.listen(socketPath()))
+    const bool listening = server.listen(socketPath());
+    if (!listening)
         qWarning("control socket %s: %s", qPrintable(socketPath()), qPrintable(server.errorString()));
+    window.setSocketStatus(listening, server.errorString());
     serve(server, store, window);
 
     // SIGTERM (logout, kill) must save like a window close; a self-pipe moves it onto the event loop
@@ -89,6 +119,8 @@ int main(int argc, char **argv)
             std::signal(sig, [](int) { [[maybe_unused]] auto n = ::write(sigFd[0], "x", 1); });
     }
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &window, &MainWindow::save);
+    if (const QString shot = qEnvironmentVariable("AGTERM_SCREENSHOT"); !shot.isEmpty()) // dev aid for UI review
+        QTimer::singleShot(6000, &window, [&window, shot] { window.grab().save(shot); });
 
     return app.exec();
 }
