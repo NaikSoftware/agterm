@@ -174,6 +174,7 @@ struct FileTreeOutline: NSViewRepresentable {
         /// Re-lists one loaded folder and reloads its rows; file operations call it on the parent they changed.
         func reload(_ node: FileTreeNode) {
             guard let old = node.children else { return }
+            let selected = selectedNodes()
             let fresh = list(node)
             let kept = Set((fresh ?? []).map(ObjectIdentifier.init))
             for gone in old where !kept.contains(ObjectIdentifier(gone)) { evict(gone) }
@@ -184,7 +185,20 @@ struct FileTreeOutline: NSViewRepresentable {
             } else {
                 outlineView?.reloadItem(node, reloadChildren: true)
             }
+            select(selected)
             updateEmptyState()
+        }
+
+        func selectedNodes() -> [FileTreeNode] {
+            guard let outline = outlineView else { return [] }
+            return outline.selectedRowIndexes.compactMap { outline.item(atRow: $0) as? FileTreeNode }
+        }
+
+        // A reload keeps selection by row index; re-select by identity so actions never land on a shifted row.
+        func select(_ nodes: [FileTreeNode]) {
+            guard let outline = outlineView else { return }
+            let rows = IndexSet(nodes.map { outline.row(forItem: $0) }.filter { $0 >= 0 })
+            outline.selectRowIndexes(rows, byExtendingSelection: false)
         }
 
         func reload(parentOf url: URL) {
@@ -199,7 +213,8 @@ struct FileTreeOutline: NSViewRepresentable {
         }
 
         func evict(_ node: FileTreeNode) {
-            nodeCache[node.url.path] = nil
+            // A path that changed kind already holds its replacement.
+            if nodeCache[node.url.path] === node { nodeCache[node.url.path] = nil }
             node.children?.forEach(evict)
         }
 
@@ -208,7 +223,9 @@ struct FileTreeOutline: NSViewRepresentable {
             guard FileManager.default.fileExists(atPath: rootNode.url.path) else { return reload(rootNode) }
             var parents: [FileTreeNode] = []
             for path in paths {
-                let parent = URL(fileURLWithPath: path).deletingLastPathComponent().path
+                let url = URL(fileURLWithPath: path)
+                if url.path == rootNode.url.path, !parents.contains(where: { $0 === rootNode }) { parents.append(rootNode) }
+                let parent = url.deletingLastPathComponent().path
                 if let node = nodeCache[parent], node.children != nil, !parents.contains(where: { $0 === node }) {
                     parents.append(node)
                 }
@@ -238,6 +255,7 @@ struct FileTreeOutline: NSViewRepresentable {
             guard let outline = outlineView else { return }
             outline.rowHeight = AppSettings.sidebarRowHeight(fontSize: GhosttyApp.shared.sidebarFontSize)
             outline.reloadData(forRowIndexes: IndexSet(integersIn: 0 ..< outline.numberOfRows), columnIndexes: [0])
+            outline.enumerateAvailableRowViews { rowView, _ in rowView.needsDisplay = true }
         }
 
         func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
@@ -287,7 +305,8 @@ final class FileTreeOutlineView: NSOutlineView {
     }
 
     override func keyDown(with event: NSEvent) {
-        guard [36, 76].contains(event.keyCode), let coordinator = delegate as? FileTreeOutline.Coordinator else {
+        guard [36, 76].contains(event.keyCode), event.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift]),
+              let coordinator = delegate as? FileTreeOutline.Coordinator else {
             return super.keyDown(with: event)
         }
         selectedRowIndexes.compactMap { item(atRow: $0) as? FileTreeNode }.forEach(coordinator.open)

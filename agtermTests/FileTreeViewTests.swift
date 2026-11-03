@@ -93,6 +93,34 @@ final class FileTreeViewTests: XCTestCase {
         XCTAssertEqual(outline.numberOfRows, 0)
     }
 
+    func testSelectionFollowsTheNodeWhenAFileSortsAboveIt() throws {
+        let row = try XCTUnwrap(names().firstIndex(of: "a-file.txt"))
+        let selected = try XCTUnwrap(outline.item(atRow: row) as? FileTreeNode)
+        outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        try Data().write(to: rootDir.appendingPathComponent("0-first.txt"))
+        XCTAssertTrue(waitFor { names().contains("0-first.txt") }, "watcher should add the file: \(names())")
+        XCTAssertEqual(outline.selectedRowIndexes.count, 1)
+        XCTAssertTrue(outline.item(atRow: outline.selectedRow) as? FileTreeNode === selected)
+    }
+
+    func testSelectionInsideAFolderFollowsTheNode() throws {
+        let zeta = try XCTUnwrap(outline.item(atRow: 1) as? FileTreeNode)
+        outline.expandItem(zeta)
+        let row = try XCTUnwrap(names().firstIndex(of: "leaf.md"))
+        let selected = try XCTUnwrap(outline.item(atRow: row) as? FileTreeNode)
+        outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        try Data().write(to: rootDir.appendingPathComponent("zeta/aaa.txt"))
+        XCTAssertTrue(waitFor { names().contains("aaa.txt") }, "watcher should add the file: \(names())")
+        XCTAssertTrue(outline.item(atRow: outline.selectedRow) as? FileTreeNode === selected)
+    }
+
+    func testRecreatedRootClearsFolderNotFound() throws {
+        try FileManager.default.removeItem(at: rootDir)
+        XCTAssertTrue(waitFor { !coordinator.emptyLabel.isHidden })
+        try FileManager.default.createDirectory(at: rootDir, withIntermediateDirectories: true)
+        XCTAssertTrue(waitFor { coordinator.emptyLabel.isHidden }, "label: \(coordinator.emptyLabel.stringValue)")
+    }
+
     func testNoLocalFolderShowsTheMessage() {
         coordinator.setRoot(.noLocalFolder)
         XCTAssertFalse(coordinator.emptyLabel.isHidden)
