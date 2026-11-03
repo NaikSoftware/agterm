@@ -301,6 +301,7 @@ void Store::select(const QString &id)
     selected = id;
     recent.removeAll(id);
     recent.prepend(id);
+    s->unseen = 0; // focusing a session acknowledges its notifications
     if (s->status == QLatin1String("completed") && s->autoReset)
         setStatus(id, QStringLiteral("idle"));
     Q_EMIT selectionChanged(id);
@@ -321,6 +322,14 @@ bool Store::setStatus(const QString &id, const QString &status, bool autoReset, 
     Q_EMIT statusChanged(id, status);
     Q_EMIT changed();
     return true;
+}
+
+void Store::setUnseen(const QString &id, int count)
+{
+    if (auto *s = session(id); s && s->unseen != count) {
+        s->unseen = count;
+        Q_EMIT titleChanged(id); // a repaint, not a save: unseen counts are not persisted
+    }
 }
 
 void Store::setFlag(const QString &id, bool flagged)

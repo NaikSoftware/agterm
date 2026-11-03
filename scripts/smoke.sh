@@ -44,6 +44,10 @@ ctl session scratch on --target "$id"
 ctl session info --target "$id" | grep -qE '^scratch +true' || fail "scratch not shown"
 ctl session scratch off --target "$id"
 ctl quick on >/dev/null && ctl quick off >/dev/null || fail "quick terminal"
+ctl notify --title smoke --body hi --target "$id"
+ctl session info --target "$id" | grep -qE '^unseen +1' || fail "unseen badge"
+ctl session seen --target "$id"
+ctl session info --target "$id" | grep -qE '^unseen +0' || fail "session seen"
 ctl session rename renamed --target probe
 ctl session go --to next >/dev/null
 gone=$(ctl session new --name exits --no-select)

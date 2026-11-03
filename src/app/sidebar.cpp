@@ -201,6 +201,21 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
             p->drawEllipse(QPointF(right - 6, cy), 6, 6);
             right -= 20;
         }
+        if (const int unseen = index.data(Unseen).toInt(); unseen > 0) {
+            QFont f = opt.font;
+            f.setPointSizeF(f.pointSizeF() * 0.8);
+            f.setWeight(QFont::DemiBold);
+            const QString n = unseen > 99 ? QStringLiteral("99+") : QString::number(unseen);
+            const qreal w = qMax<qreal>(18, QFontMetricsF(f).horizontalAdvance(n) + 10);
+            const QRectF pill(right - w, cy - 9, w, 18);
+            p->setPen(Qt::NoPen);
+            p->setBrush(QColor(0xFF, 0x45, 0x3A)); // the system red of agterm's count badge
+            p->drawRoundedRect(pill, 9, 9);
+            p->setPen(Qt::white);
+            p->setFont(f);
+            p->drawText(pill, Qt::AlignCenter, n);
+            right -= w + 6;
+        }
     } else if (m_sidebar->hovered() == index) {
         // hover-only: the launcher menu "+" and, left of it, a repeat of the last choice
         const QRect add = Sidebar::addButtonRect(opt.rect), rep = Sidebar::repeatButtonRect(opt.rect);
@@ -325,6 +340,7 @@ void Sidebar::rebuild()
         item->setData(0, Blink, s.blink);
         item->setData(0, Agent, s.agent);
         item->setData(0, Flagged, s.flagged);
+        item->setData(0, Unseen, s.unseen);
         item->setToolTip(0, s.title.isEmpty() ? s.cwd : s.title + QLatin1Char('\n') + s.cwd);
         item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
         blinking |= s.blink;

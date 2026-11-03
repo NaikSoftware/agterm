@@ -31,6 +31,8 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session scratch [on|off|toggle]
   quick [on|off|toggle]                 the app-wide quick terminal
   recent open                           reopen the most recently closed session
+  notify --title T [--body B]           desktop notification + unseen badge on the session
+  session seen                          clear the session's unseen badge without focusing it
   session type <text> | --stdin
   session text [--lines N]              full screen + scrollback
   session status <idle|active|completed|blocked> [--auto-reset] [--blink]
@@ -90,6 +92,8 @@ int main(int argc, char **argv)
     copy("workspace-name", "workspaceName");
     copy("command", "command");
     copy("to", "to");
+    copy("title", "title");
+    copy("body", "body");
     flag("create-workspace", "createWorkspace");
     flag("no-select", "noSelect");
     flag("auto-reset", "autoReset");
@@ -120,7 +124,7 @@ int main(int argc, char **argv)
 
     QJsonObject request{{"cmd", cmd}, {"args", args}};
     QString target = opt.value(QStringLiteral("target"));
-    if (target.isEmpty() && cmd.startsWith(QLatin1String("session.")) && cmd != QLatin1String("session.new"))
+    if (target.isEmpty() && (cmd.startsWith(QLatin1String("session.")) || cmd == QLatin1String("notify")) && cmd != QLatin1String("session.new"))
         target = qEnvironmentVariable("AGTERM_SESSION_ID"); // a pane addresses itself by default
     if (!target.isEmpty())
         request.insert("target", target);

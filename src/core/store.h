@@ -23,6 +23,7 @@ struct Session {
     QString splitAxis = QStringLiteral("vertical"); // vertical = side by side, horizontal = top and bottom
     double splitRatio = 0.5;
     bool scratchVisible = false; // the scratch shell covers the session; not persisted, like agterm's
+    int unseen = 0;              // notifications raised while the session was not in front of you
 
     QString displayName() const;
 };
@@ -96,6 +97,8 @@ public:
     void setSplit(const QString &id, bool hasSplit, bool visible, const QString &axis);
     void setScratch(const QString &id, bool visible);
     void requestSwap(const QString &id) { Q_EMIT swapRequested(id); }
+    void notify(const QString &id, const QString &title, const QString &body) { Q_EMIT notified(id, title, body); }
+    void setUnseen(const QString &id, int count);
     QString go(const QString &direction, QString *error); // next | prev | first | last | next-attention | prev-attention
 
     QJsonObject toJson() const;
@@ -112,6 +115,7 @@ Q_SIGNALS:
     void titleChanged(const QString &id);
     void paneLayoutChanged(const QString &id);
     void swapRequested(const QString &id);
+    void notified(const QString &id, const QString &title, const QString &body);
 
 private:
     static QString newId();

@@ -50,7 +50,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Reopen closed session ⌘⇧T, `recent open`
 - [ ] Undo close ⌘Z within the grace period
 - [ ] Multiple windows (library, restore frames)
-- [ ] Notifications: OSC 9/777 and `notify`, unseen badges, banner click focuses the pane
+- [x] Notifications: `notify`, unseen-count badge, banner click focuses the session, `session seen`
+- [ ] Notifications from OSC 9 / 777 inside the terminal; settings (banner, badge, sound)
 - [ ] Agent status: dot colours/shapes, blink, status reset (first key / Enter / off), auto-follow, blocked sound
 
 ## Phase 4: file panel (fork)

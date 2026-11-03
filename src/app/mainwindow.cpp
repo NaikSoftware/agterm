@@ -6,6 +6,7 @@
 #include "sidebar.h"
 #include "store.h"
 
+#include <KNotification>
 #include <KParts/PartLoader>
 #include <KParts/ReadOnlyPart>
 #include <kde_terminal_interface.h>
@@ -178,6 +179,20 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     });
     connect(&m_store, &Store::selectionChanged, this, &MainWindow::showSelected);
     connect(&m_store, &Store::paneLayoutChanged, this, &MainWindow::applyLayout);
+    connect(&m_store, &Store::notified, this, [this](const QString &id, const QString &title, const QString &body) {
+        const Session *s = m_store.session(id);
+        if (!s || (isActiveWindow() && id == m_store.selected))
+            return; // already in front of you
+        m_store.setUnseen(id, s->unseen + 1);
+        auto *n = KNotification::event(KNotification::Notification, title.isEmpty() ? s->displayName() : title, body,
+                                       QStringLiteral("utilities-terminal"));
+        connect(n->addDefaultAction(tr("Show")), &KNotificationAction::activated, this, [this, id] {
+            m_store.select(id); // the banner brings the window forward on the session that raised it
+            show();
+            raise();
+            activateWindow();
+        });
+    });
     connect(&m_store, &Store::swapRequested, this, &MainWindow::swapPanes);
     connect(m_tree, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) {
         if (item && item->data(0, SidebarRole::Kind).toInt() == SidebarRole::SessionRow)
