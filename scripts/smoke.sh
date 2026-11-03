@@ -48,6 +48,12 @@ ctl notify --title smoke --body hi --target "$id"
 ctl session info --target "$id" | grep -qE '^unseen +1' || fail "unseen badge"
 ctl session seen --target "$id"
 ctl session info --target "$id" | grep -qE '^unseen +0' || fail "session seen"
+ctl filepanel show >/dev/null
+ctl tree --json | grep -q '"filePanel":{"visible":true' || fail "file panel show"
+ctl filepanel width 260 >/dev/null
+ctl filepanel hide >/dev/null
+ctl session new --parent "$id" --name logs --no-select >/dev/null
+ctl tree --json | grep -q "\"parent\":\"$id\"" || fail "companion"
 ctl session rename renamed --target probe
 ctl session go --to next >/dev/null
 gone=$(ctl session new --name exits --no-select)

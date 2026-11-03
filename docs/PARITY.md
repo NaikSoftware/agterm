@@ -9,7 +9,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 ## Phase 1: sidebar, chrome, sessions
 
 - [x] Title bar strip: sidebar toggle, session name
-- [ ] Title bar: file panel toggle (fork, phase 4); split, split-vertical, scratch, quick terminal buttons (phase 2)
+- [x] Title bar: file panel toggle (fork, left of the sidebar toggle); scratch, split, quick terminal buttons
 - [x] Sidebar rows: workspace = chevron + grid icon + name; session = terminal icon + name + status dot at the right
 - [x] Session icon = logo of the agent in its foreground process group (claude, codex, opencode, agy), sampled every 2 s (fork)
 - [x] Workspace "+" on hover: menu of Terminal + agents found on the login shell PATH, with logos; repeat button for the last choice (fork)
@@ -57,12 +57,12 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 
 ## Phase 4: file panel (fork)
 
-- [ ] Column right of the sidebar with the active session's folder tree, live refresh
-- [ ] Atom file-icons
-- [ ] Open: Markdown, text and images in the built-in viewer; others with the default app
-- [ ] Context menu: Open, Open with Default App, New Companion Here, Cut, Copy, Paste, Rename…, Move to Trash
-- [ ] Drag inside to move (Ctrl to copy), drop from the file manager to copy in, drop on a terminal to paste the path
-- [ ] `filepanel [show|hide|toggle]`, `filepanel width`
+- [x] Column right of the sidebar with the active session's folder tree, live refresh
+- [x] Atom file-icons
+- [x] Open: Markdown, text and images in the built-in viewer; others with the default app
+- [x] Context menu: Open, Open with Default App, New Companion Here, Cut, Copy, Paste, Rename…, Move to Trash
+- [x] Drag inside to move (Ctrl to copy), drop from the file manager to copy in, drop on a terminal to paste the path
+- [x] `filepanel [show|hide|toggle]`, `filepanel width`
 
 ## Phase 5: settings, keymap, extension
 

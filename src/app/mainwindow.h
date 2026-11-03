@@ -38,6 +38,8 @@ public:
     QStringList availableLaunchers() const { return m_launchers; }
     bool quick(const QString &mode, QString *error) override;
     bool quickVisible() const override;
+    bool filePanel(const QString &mode, int width, QString *error) override;
+    QJsonObject chromeState() const override;
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -96,6 +98,7 @@ private:
     };
     QHash<QString, Panes> m_panes;
     QWidget *m_strip = nullptr;
+    class FilePanel *m_filePanel = nullptr;
     class Palette *m_palette = nullptr;
     QWidget *m_quick = nullptr;
     KParts::ReadOnlyPart *m_quickPart = nullptr;

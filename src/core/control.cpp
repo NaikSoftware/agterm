@@ -105,8 +105,24 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
     const QJsonObject args = request.value("args").toObject();
     QString error;
 
-    if (cmd == QLatin1String("tree"))
-        return ok({{"tree", tree(store)}});
+    if (cmd == QLatin1String("tree")) {
+        QJsonObject t = tree(store);
+        const QJsonObject w = terminals.chromeState();
+        for (auto it = w.begin(); it != w.end(); ++it)
+            t.insert(it.key(), it.value());
+        return ok({{"tree", t}});
+    }
+    if (cmd == QLatin1String("filepanel") || cmd == QLatin1String("filepanel.width")) {
+        const QString mode = cmd == QLatin1String("filepanel") ? args.value("mode").toString(QStringLiteral("toggle")) : QString();
+        const int width = args.value("width").toInt();
+        if (cmd == QLatin1String("filepanel.width") && width < 120)
+            return fail(QStringLiteral("width must be at least 120"));
+        if (!mode.isEmpty() && mode != QLatin1String("show") && mode != QLatin1String("hide") && mode != QLatin1String("toggle"))
+            return fail(QStringLiteral("mode must be show, hide or toggle"));
+        if (!terminals.filePanel(mode, width, &error))
+            return fail(error);
+        return ok(terminals.chromeState());
+    }
     if (cmd == QLatin1String("version"))
         return ok({{"text", QStringLiteral("agterm-qt %1").arg(QLatin1String(appVersion))}});
     if (cmd == QLatin1String("workspace.new"))

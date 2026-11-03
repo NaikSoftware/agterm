@@ -31,6 +31,8 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session scratch [on|off|toggle]
   quick [on|off|toggle]                 the app-wide quick terminal
   recent open                           reopen the most recently closed session
+  filepanel [show|hide|toggle]          the session folder tree beside the sidebar
+  filepanel width <px>
   notify --title T [--body B]           desktop notification + unseen badge on the session
   session seen                          clear the session's unseen badge without focusing it
   session type <text> | --stdin
@@ -73,6 +75,8 @@ int main(int argc, char **argv)
     QString cmd = pos.takeFirst();
     if ((cmd == QLatin1String("workspace") || cmd == QLatin1String("session") || cmd == QLatin1String("recent")) && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
+    if (cmd == QLatin1String("filepanel") && pos.value(0) == QLatin1String("width"))
+        cmd = QStringLiteral("filepanel.width"), pos.removeFirst();
     if (cmd == QLatin1String("session.split") && pos.value(0) == QLatin1String("close"))
         cmd = QStringLiteral("session.split.close"), pos.removeFirst();
     const QString arg = pos.value(0);
@@ -103,6 +107,10 @@ int main(int argc, char **argv)
         args.insert("lines", opt.value(QStringLiteral("lines")).toInt());
     if (opt.contains(QStringLiteral("index")))
         args.insert("index", opt.value(QStringLiteral("index")).toInt());
+    if (cmd == QLatin1String("filepanel.width"))
+        args.insert("width", arg.toInt());
+    if (cmd == QLatin1String("filepanel"))
+        args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
     if (QStringList{"session.flag", "session.split", "session.scratch", "quick"}.contains(cmd))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
     copy("axis", "axis");

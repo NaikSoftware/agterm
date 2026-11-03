@@ -20,6 +20,15 @@ public:
         return false;
     }
     virtual bool quickVisible() const { return false; }
+    // mode show | hide | toggle, or "" with width > 0 to resize only
+    virtual bool filePanel(const QString &mode, int width, QString *error)
+    {
+        Q_UNUSED(mode);
+        Q_UNUSED(width);
+        *error = QStringLiteral("no file panel");
+        return false;
+    }
+    virtual QJsonObject chromeState() const { return {}; } // chrome read-back merged into `tree`
 };
 
 // One request object ({cmd, target, args}) in, one response ({ok, result | error}) out.

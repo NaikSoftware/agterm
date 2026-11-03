@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 
+#include "filepanel.h"
 #include "launcher.h"
 #include "palette.h"
 #include "paths.h"
@@ -115,10 +116,18 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
 
     m_split = new QSplitter;
     m_split->setChildrenCollapsible(false);
+    m_filePanel = new FilePanel;
+    m_filePanel->setMinimumWidth(120);
+    m_filePanel->hide();
+    connect(m_filePanel, &FilePanel::companionRequested, this, [this](const QString &dir) {
+        if (m_store.session(m_store.selected))
+            m_store.select(m_store.addCompanion(m_store.selected, {}, dir));
+    });
     m_split->addWidget(m_sidebarPanel);
+    m_split->addWidget(m_filePanel); // agterm's file panel sits right of the sidebar
     m_split->addWidget(m_stack);
-    m_split->setStretchFactor(1, 1);
-    m_split->setSizes({230, 970});
+    m_split->setStretchFactor(2, 1);
+    m_split->setSizes({230, 220, 970});
     m_sidebarPanel->setMinimumWidth(160);
     setCentralWidget(m_split);
     resize(1200, 760);
@@ -137,6 +146,8 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     strip->toggleViewAction()->setVisible(false);
     // a plain button, not the checkable menu action: agterm's toggle never renders pressed
     const QColor ink = palette().color(QPalette::WindowText);
+    strip->addAction(chromeIcon(QStringLiteral("filepanel"), ink), tr("Toggle File Panel"), m_actions.value(QStringLiteral("toggle_file_panel")),
+                     &QAction::trigger);
     strip->addAction(chromeIcon(QStringLiteral("sidebar"), ink), tr("Toggle Sidebar"), m_sidebarAction, &QAction::trigger);
     m_title = new QLabel;
     QFont tf = m_title->font();
@@ -277,6 +288,8 @@ void MainWindow::createMenus()
     m_sidebarAction->setChecked(true);
     m_sidebarAction->setToolTip(tr("Toggle Sidebar"));
     view->addAction(m_sidebarAction);
+    view->addAction(action(QStringLiteral("toggle_file_panel"), tr("Show File Panel"), QStringLiteral("folder"),
+                           QKeySequence(QStringLiteral("Ctrl+Alt+Shift+E")), [this] { QString e; filePanel(QStringLiteral("toggle"), 0, &e); }));
     auto *flagged = action(QStringLiteral("toggle_flagged_view"), tr("Flagged Sessions"), QStringLiteral("flag"), {},
                            [this] { m_flagButton->setChecked(m_actions.value(QStringLiteral("toggle_flagged_view"))->isChecked()); });
     flagged->setCheckable(true);
@@ -392,6 +405,7 @@ void MainWindow::restore(const QJsonObject &window)
     m_sidebarAction->setChecked(window.value("sidebar").toBool(true));
     m_sidebarPanel->setVisible(m_sidebarAction->isChecked());
     m_flagButton->setChecked(window.value("flaggedView").toBool(false));
+    m_filePanel->setVisible(window.value("filePanel").toBool(false));
     m_tree->rebuild();
     showSelected();
 }
@@ -568,6 +582,28 @@ void MainWindow::toggleZoom()
     m_strip->setVisible(!m_zoomed);
 }
 
+bool MainWindow::filePanel(const QString &mode, int width, QString *)
+{
+    if (!mode.isEmpty())
+        m_filePanel->setVisible(mode == QLatin1String("toggle") ? m_filePanel->isHidden() : mode == QLatin1String("show"));
+    if (width > 0) {
+        QList<int> sizes = m_split->sizes();
+        sizes[2] += sizes[1] - width;
+        sizes[1] = width;
+        m_split->setSizes(sizes);
+    }
+    m_filePanel->setRoot(liveCwd(m_store.selected));
+    m_saveTimer.start();
+    return true;
+}
+
+QJsonObject MainWindow::chromeState() const
+{
+    return {{"sidebarVisible", !m_sidebarPanel->isHidden()},
+            {"filePanel", QJsonObject{{"visible", !m_filePanel->isHidden()}, {"width", m_split->sizes().value(1)}}},
+            {"quick", quickVisible()}};
+}
+
 bool MainWindow::quickVisible() const
 {
     return m_quick && m_quick->isVisible();
@@ -718,6 +754,8 @@ void MainWindow::showSelected()
             front->widget()->setFocus();
     }
     m_shownId = m_store.selected;
+    if (!m_filePanel->isHidden())
+        m_filePanel->setRoot(liveCwd(m_store.selected)); // no-op while the folder is unchanged
     const QString name = s ? s->displayName() : QString();
     m_title->setText(name);
     setWindowTitle(name);
@@ -817,6 +855,8 @@ void MainWindow::sampleAgents()
         }
         m_store.setAgent(s->id, agentForGroup(argvs));
     }
+    if (!m_filePanel->isHidden()) // a cd in the active session moves the file panel with it
+        m_filePanel->setRoot(liveCwd(m_store.selected));
 }
 
 void MainWindow::newWorkspace()
@@ -1039,6 +1079,7 @@ void MainWindow::save()
                                       {"splitter", QString::fromLatin1(m_split->saveState().toBase64())},
                                       {"sidebar", m_sidebarAction->isChecked()},
                                       {"flaggedView", m_tree->flaggedView()},
+                                      {"filePanel", !m_filePanel->isHidden()},
                                       {"collapsed", collapsed}});
     QSaveFile f(m_statePath);
     if (f.open(QIODevice::WriteOnly)) {
