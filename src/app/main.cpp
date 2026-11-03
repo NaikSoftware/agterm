@@ -1,0 +1,94 @@
+#include "control.h"
+#include "mainwindow.h"
+#include "paths.h"
+#include "store.h"
+
+#include <QApplication>
+#include <QDir>
+#include <QFile>
+#include <QIcon>
+#include <QJsonDocument>
+#include <QLocalServer>
+#include <QLocalSocket>
+#include <QLockFile>
+#include <QMessageBox>
+#include <QSocketNotifier>
+
+#include <csignal>
+#include <sys/socket.h>
+#include <unistd.h>
+
+// One request line in, one response line out, then the connection closes.
+static void serve(QLocalServer &server, Store &store, Terminals &terminals)
+{
+    QObject::connect(&server, &QLocalServer::newConnection, &server, [&] {
+        while (QLocalSocket *socket = server.nextPendingConnection()) {
+            QObject::connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
+            QObject::connect(socket, &QLocalSocket::readyRead, socket, [socket, &store, &terminals] {
+                if (!socket->canReadLine()) {
+                    if (socket->bytesAvailable() > maxRequestBytes)
+                        socket->abort();
+                    return;
+                }
+                QJsonParseError err{};
+                const auto doc = QJsonDocument::fromJson(socket->readLine(maxRequestBytes + 1), &err);
+                const QJsonObject response = doc.isObject() ? dispatch(store, terminals, doc.object())
+                                                            : QJsonObject{{"ok", false}, {"error", QStringLiteral("bad request: %1").arg(err.errorString())}};
+                socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
+                socket->disconnectFromServer();
+            });
+        }
+    });
+}
+
+int main(int argc, char **argv)
+{
+    QApplication app(argc, argv);
+    app.setApplicationName(QStringLiteral("agterm-qt")); // also names the Konsole-part profile namespace
+    app.setApplicationVersion(QLatin1String(appVersion));
+    app.setDesktopFileName(QStringLiteral("agterm-qt"));
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("utilities-terminal")));
+
+    const QString dir = stateDir();
+    QDir().mkpath(dir);
+    // two instances on one state dir would each rewrite the whole file from memory and lose the other's sessions
+    QLockFile lock(dir + QStringLiteral("/agterm.lock"));
+    if (!lock.tryLock(0)) {
+        QMessageBox::warning(nullptr, QStringLiteral("agterm-qt"), QStringLiteral("agterm-qt is already running on %1").arg(dir));
+        return 1;
+    }
+
+    const QString statePath = dir + QStringLiteral("/workspaces.json");
+    QJsonObject state;
+    if (QFile f(statePath); f.open(QIODevice::ReadOnly))
+        state = QJsonDocument::fromJson(f.readAll()).object();
+
+    Store store;
+    store.fromJson(state);
+    MainWindow window(store, statePath);
+    window.restore(state.value("window").toObject());
+    if (store.allSessions().isEmpty()) {
+        const QString ws = store.workspaces.isEmpty() ? store.addWorkspace(QStringLiteral("main")) : store.workspaces.first().id;
+        store.select(store.addSession(ws, {}, {}));
+    }
+    window.show();
+
+    QLocalServer server;
+    QLocalServer::removeServer(socketPath()); // safe: the lock says no live instance owns it
+    server.setSocketOptions(QLocalServer::UserAccessOption);
+    if (!server.listen(socketPath()))
+        qWarning("control socket %s: %s", qPrintable(socketPath()), qPrintable(server.errorString()));
+    serve(server, store, window);
+
+    // SIGTERM (logout, kill) must save like a window close; a self-pipe moves it onto the event loop
+    static int sigFd[2];
+    if (::socketpair(AF_UNIX, SOCK_STREAM, 0, sigFd) == 0) {
+        auto *notifier = new QSocketNotifier(sigFd[1], QSocketNotifier::Read, &app);
+        QObject::connect(notifier, &QSocketNotifier::activated, &app, &QCoreApplication::quit);
+        for (int sig : {SIGTERM, SIGINT, SIGHUP})
+            std::signal(sig, [](int) { [[maybe_unused]] auto n = ::write(sigFd[0], "x", 1); });
+    }
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &window, &MainWindow::save);
+
+    return app.exec();
+}

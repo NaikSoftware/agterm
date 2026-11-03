@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=agterm
+GenericName=Terminal
+Comment=Workspace terminal with a control API for coding agents
+Exec=agterm-qt
+Icon=utilities-terminal
+Terminal=false
+Categories=Qt;KDE;System;TerminalEmulator;
+Keywords=terminal;shell;agent;claude;
+StartupWMClass=agterm-qt
