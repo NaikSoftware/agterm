@@ -179,6 +179,7 @@ final class FileTreeViewTests: XCTestCase {
         XCTAssertFalse(exists("a-file.txt"))
         XCTAssertTrue(exists("alpha/a-file.txt"))
         XCTAssertTrue(coordinator.cutPaths.isEmpty)
+        XCTAssertFalse(coordinator.canPaste)
         XCTAssertEqual(selectedNames(), ["a-file.txt"])
         XCTAssertEqual(outline.level(forRow: outline.selectedRow), 1)
     }
@@ -247,5 +248,36 @@ final class FileTreeViewTests: XCTestCase {
         XCTAssertEqual(trashed.count, 1)
         XCTAssertTrue(FileManager.default.fileExists(atPath: trashed[0].path))
         XCTAssertEqual(shownErrors, [])
+    }
+
+    func testRootChangeMidRenameCancelsIt() throws {
+        let other = rootDir.appendingPathComponent("alpha")
+        try Data().write(to: other.appendingPathComponent("b.txt"))
+        coordinator.beginRename(try node("a-file.txt"))
+        let editor = try XCTUnwrap(window.firstResponder as? NSTextView)
+        editor.string = "typed.txt"
+        coordinator.setRoot(.folder(other))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertTrue(exists("a-file.txt"))
+        XCTAssertFalse(exists("typed.txt"))
+        XCTAssertFalse(exists("alpha/typed.txt"))
+        XCTAssertNil(coordinator.renamingNode)
+        coordinator.beginRename(try node("b.txt"))
+        XCTAssertNotNil(coordinator.renamingNode)
+    }
+
+    func testNewCompanionHereUsesThePanelsStoreNotTheFrontWindow() throws {
+        let panelStore = coordinator.store
+        let parent = try XCTUnwrap(panelStore.selectedSessionID)
+        let front = try XCTUnwrap(library.store(for: library.newWindow().id))
+        XCTAssertFalse(front === panelStore)
+        let actions = AppActions(library: library)
+        coordinator.actions = actions
+        let item = NSMenuItem()
+        item.representedObject = rootDir
+        coordinator.newCompanionHere(item)
+        let companion = try XCTUnwrap(panelStore.workspaces.flatMap(\.sessions).first { $0.parentID == parent })
+        XCTAssertEqual(companion.initialCwd, rootDir.path)
+        XCTAssertFalse(front.workspaces.flatMap(\.sessions).contains { $0.parentID != nil })
     }
 }

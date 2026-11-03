@@ -44,7 +44,7 @@ extension FileTreeOutline.Coordinator: NSTextFieldDelegate {
 
     @objc func newCompanionHere(_ sender: NSMenuItem) {
         guard let cwd = sender.representedObject as? URL else { return }
-        actions?.newCompanion(cwd: cwd.path)
+        actions?.newCompanion(cwd: cwd.path, in: store)
     }
 
     @objc func renameSelection() {
@@ -103,6 +103,8 @@ extension FileTreeOutline.Coordinator: NSTextFieldDelegate {
             selection: selectedNodes().first.map { FileTreeEntry(url: $0.url, isDirectory: $0.isDirectory) }, root: rootNode.url)
         let moving = cutChangeCount == pasteboard.changeCount
         setCut([])
+        // Finder empties the pasteboard after a move, so a second paste never names the moved-away sources.
+        if moving { pasteboard.clearContents() }
         let fm = FileManager.default
         let into = Self.canonical(target)
         var touched = [target], results: [URL] = [], errors: [String] = []
@@ -181,6 +183,14 @@ extension FileTreeOutline.Coordinator: NSTextFieldDelegate {
         let name = node.url.lastPathComponent
         let stem = node.isDirectory ? name : (name as NSString).deletingPathExtension
         field.currentEditor()?.selectedRange = NSRange(location: 0, length: (stem as NSString).length)
+    }
+
+    /// Ends an open rename without committing, before rows rebuild under its field.
+    func cancelRename() {
+        guard renamingNode != nil else { return }
+        renameCancelled = true
+        outlineView?.window?.makeFirstResponder(outlineView)
+        renamingNode = nil
     }
 
     func control(_ control: NSControl, textView _: NSTextView, doCommandBy selector: Selector) -> Bool {

@@ -152,6 +152,8 @@ struct FileTreeOutline: NSViewRepresentable {
 
         func setRoot(_ state: FileTreeRoot) {
             guard state != rootState else { return }
+            cancelRename()
+            pendingChanges = []
             rootState = state
             stop()
             nodeCache = [:]
@@ -268,6 +270,7 @@ struct FileTreeOutline: NSViewRepresentable {
         }
 
         @objc func appearanceChanged() {
+            cancelRename()
             applyTheme()
             guard let outline = outlineView else { return }
             outline.rowHeight = AppSettings.sidebarRowHeight(fontSize: GhosttyApp.shared.sidebarFontSize)

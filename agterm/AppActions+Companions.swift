@@ -77,11 +77,10 @@ extension AppActions {
         duplicateAsCompanion(id, in: store)
     }
 
-    /// Opens a companion of the active session at `cwd`; a parent that refuses one (a remote row) gets a plain
-    /// session there in its workspace instead.
-    func newCompanion(cwd: String) {
-        guard uiActionsEnabled else { return }
-        guard let store, let id = store.selectedSessionID else { return }
+    /// Opens a companion of `store`'s selected session at `cwd`; a parent that refuses one (a remote row) gets a
+    /// plain session there in its workspace instead. Store-scoped like `newCompanion(_:in:)`.
+    func newCompanion(cwd: String, in store: AppStore) {
+        guard let id = store.selectedSessionID else { return }
         let created: Session? = switch store.addCompanion(to: id, options: CompanionOptions(cwd: cwd)) {
         case .success(let companion): companion
         case .failure: store.workspace(forSession: id).flatMap { store.addSession(toWorkspace: $0.id, cwd: cwd) }
