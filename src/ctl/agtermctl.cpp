@@ -35,6 +35,7 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session split [on|off|toggle] [--axis vertical|horizontal]
   session split close
   session swap
+  font inc|dec|reset [--pane left|right]   the session's terminal font size
   recent open                           reopen the most recently closed session
   filepanel [show|hide|toggle]          the session folder tree beside the sidebar
   filepanel width <px>
@@ -78,7 +79,7 @@ int main(int argc, char **argv)
         return fputs(usage, stderr), 1;
 
     QString cmd = pos.takeFirst();
-    if ((cmd == QLatin1String("workspace") || cmd == QLatin1String("session") || cmd == QLatin1String("recent")) && !pos.isEmpty())
+    if ((cmd == QLatin1String("workspace") || cmd == QLatin1String("session") || cmd == QLatin1String("recent") || cmd == QLatin1String("font")) && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
     if (cmd == QLatin1String("filepanel") && pos.value(0) == QLatin1String("width"))
         cmd = QStringLiteral("filepanel.width"), pos.removeFirst();
@@ -106,6 +107,7 @@ int main(int argc, char **argv)
     copy("title", "title");
     copy("parent", "parent");
     copy("body", "body");
+    copy("pane", "pane");
     flag("create-workspace", "createWorkspace");
     flag("no-select", "noSelect");
     flag("auto-reset", "autoReset");
@@ -155,7 +157,7 @@ int main(int argc, char **argv)
 
     QJsonObject request{{"cmd", cmd}, {"args", args}};
     QString target = opt.value(QStringLiteral("target"));
-    if (target.isEmpty() && (cmd.startsWith(QLatin1String("session.")) || cmd == QLatin1String("notify")) && cmd != QLatin1String("session.new"))
+    if (target.isEmpty() && (cmd.startsWith(QLatin1String("session.")) || cmd.startsWith(QLatin1String("font.")) || cmd == QLatin1String("notify")) && cmd != QLatin1String("session.new"))
         target = qEnvironmentVariable("AGTERM_SESSION_ID"); // a pane addresses itself by default
     if (!target.isEmpty())
         request.insert("target", target);

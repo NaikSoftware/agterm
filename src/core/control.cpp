@@ -32,7 +32,7 @@ static QJsonObject sessionNode(const Session &s, const QString &selected)
                      {"status", s.status}, {"blink", s.blink},         {"flagged", s.flagged},            {"agent", s.agent},
                      {"title", s.title},   {"active", s.id == selected},
                      {"hasSplit", s.hasSplit}, {"split", s.splitVisible}, {"splitAxis", s.splitAxis}, {"splitRatio", s.splitRatio},
-                     {"unseen", s.unseen}, {"parent", s.parentId}},
+                     {"unseen", s.unseen}, {"parent", s.parentId}, {"fontSize", s.fontSize}, {"splitFontSize", s.splitFontSize}},
                     s.tint);
 }
 
@@ -242,6 +242,24 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         return id.isEmpty() ? fail(error) : ok({{"id", id}});
     }
 
+    if (cmd.startsWith(QLatin1String("font."))) {
+        const QString id = store.resolveSession(target, &error);
+        if (id.isEmpty())
+            return fail(error);
+        const QString op = cmd.mid(5), p = args.value("pane").toString(QStringLiteral("left"));
+        static const QStringList left{"left", "main", "primary", "top"}, right{"right", "split", "bottom"};
+        if (!QStringList{"inc", "dec", "reset"}.contains(op))
+            return fail(QStringLiteral("unknown command '%1'").arg(cmd));
+        if (!left.contains(p) && !right.contains(p))
+            return fail(QStringLiteral("pane must be left or right"));
+        const bool split = right.contains(p);
+        if (split && !store.session(id)->hasSplit)
+            return fail(QStringLiteral("session has no split"));
+        if (!terminals.font(id, split ? QStringLiteral("right") : QStringLiteral("main"), op, &error))
+            return fail(error);
+        const Session *s = store.session(id);
+        return ok({{"id", id}, {"fontSize", split ? s->splitFontSize : s->fontSize}});
+    }
     if (cmd == QLatin1String("workspace.filter")) { // the window's filter, not one workspace
         bool on = false;
         if (!resolveMode(args.value("mode").toString(), store.focusEnabled, &on))

@@ -17,6 +17,7 @@ class QStackedWidget;
 class QToolButton;
 class Sidebar;
 class Store;
+struct Session;
 class TerminalInterface;
 namespace KParts { class ReadOnlyPart; }
 
@@ -39,6 +40,7 @@ public:
     bool filePanel(const QString &mode, int width, QString *error) override;
     QJsonObject chromeState() const override;
     bool panePlan(const QString &sessionId, const QString &pane, PanePlan *out, QString *error) override;
+    bool font(const QString &sessionId, const QString &pane, const QString &op, QString *error) override;
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -55,6 +57,7 @@ private:
     void swapPanes(const QString &id);
     void newCompanion(const QString &parentId);
     void duplicateCompanion(const QString &id);
+    void recordFontSizes(Session *s) const;
     void focusPane(bool right);
     void toggleZoom();
     void showSelected();

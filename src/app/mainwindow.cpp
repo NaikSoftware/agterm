@@ -48,11 +48,39 @@
 #include <QSplitterHandle>
 #include <QStackedLayout>
 #include <QStackedWidget>
+#include <QWheelEvent>
 #include <QWindow>
 #include <QStatusBar>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
+
+static QWidget *terminalDisplay(KParts::ReadOnlyPart *part)
+{
+    if (part)
+        for (QWidget *w : part->widget()->findChildren<QWidget *>())
+            if (w->inherits("Konsole::TerminalDisplay"))
+                return w;
+    return nullptr;
+}
+
+// The part exposes no font API and its zoom actions live only in Konsole's main window, so this drives
+// the display's own Ctrl+wheel zoom, one point per notch.
+// shortcut: a profile with MouseWheelZoomEnabled=false makes this a no-op; upgrade if the part grows a font API
+static void zoomFontTo(QWidget *display, double points)
+{
+    for (int guard = 0; display && guard < 200; ++guard) {
+        const double now = display->font().pointSizeF();
+        if (qAbs(now - points) < 0.5)
+            return;
+        const QPointF at(4, 4);
+        QWheelEvent wheel(at, display->mapToGlobal(at), {}, QPoint(0, now < points ? 120 : -120), Qt::NoButton, Qt::ControlModifier,
+                          Qt::NoScrollPhase, false);
+        QApplication::sendEvent(display, &wheel);
+        if (display->font().pointSizeF() == now)
+            return; // at Konsole's limit, or zoom is off in the profile
+    }
+}
 
 PartBridge::PartBridge(MainWindow *window, Store &store, const QString &id, QObject *parent)
     : QObject(parent), m_window(window), m_store(store), m_id(id)
@@ -347,6 +375,25 @@ void MainWindow::createMenus()
     view->addAction(action(QStringLiteral("focus_right_pane"), tr("Focus Right Pane"), {}, QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Right")),
                            [this] { focusPane(true); }));
     view->addSeparator();
+    // ⌘+ ⌘− ⌘0; the shifted forms are what Ctrl+Shift with = - 0 produce on most layouts
+    auto fontAction = [this, view](const QString &name, const QString &text, const QString &op, QList<QKeySequence> keys) {
+        QAction *a = action(name, text, {}, keys.first(), [this, op] {
+            QString e;
+            if (m_store.session(m_store.selected))
+                font(m_store.selected, QStringLiteral("main"), op, &e);
+        });
+        a->setShortcuts(keys);
+        view->addAction(a);
+    };
+    fontAction(QStringLiteral("increase_font_size"), tr("Increase Font Size"), QStringLiteral("inc"),
+               {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Plus), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Equal), QKeySequence(Qt::CTRL | Qt::Key_Plus)});
+    fontAction(QStringLiteral("decrease_font_size"), tr("Decrease Font Size"), QStringLiteral("dec"),
+               {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Minus), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Underscore),
+                QKeySequence(Qt::CTRL | Qt::Key_Underscore)});
+    fontAction(QStringLiteral("reset_font_size"), tr("Reset Font Size"), QStringLiteral("reset"),
+               {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_0), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_ParenRight),
+                QKeySequence(Qt::CTRL | Qt::Key_ParenRight)});
+    view->addSeparator();
     view->addAction(action(QStringLiteral("toggle_terminal_zoom"), tr("Terminal Zoom"), QStringLiteral("zoom-fit-best"),
                            QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Return")), [this] { toggleZoom(); }));
     view->addAction(action(QStringLiteral("toggle_fullscreen"), tr("Full Screen"), QStringLiteral("view-fullscreen"), QKeySequence(QStringLiteral("F11")),
@@ -413,8 +460,10 @@ bool MainWindow::isOwnShortcut(QKeyEvent *event) const
 {
     const QKeySequence key(event->keyCombination());
     for (const QAction *a : actions())
-        if (a->isEnabled() && !a->shortcut().isEmpty() && a->shortcut().matches(key) == QKeySequence::ExactMatch)
-            return true;
+        if (a->isEnabled())
+            for (const QKeySequence &k : a->shortcuts())
+                if (k.matches(key) == QKeySequence::ExactMatch)
+                    return true;
     return false;
 }
 
@@ -485,6 +534,8 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
     if (!command.isEmpty())
         argv << QStringLiteral("-c") << command;
     qobject_cast<TerminalInterface *>(part)->startProgram(argv.first(), argv);
+    if (QWidget *display = terminalDisplay(part)) // the profile's size, what reset returns to
+        display->setProperty("agtermBaseFont", display->font().pointSizeF());
     // Konsole's own actions (close-session on Ctrl+Shift+W, …) would make our chords ambiguous, and an
     // ambiguous shortcut fires neither, so the window's keys win
     QSet<QKeySequence> ours;
@@ -510,6 +561,8 @@ void MainWindow::createTerminal(const QString &id)
     p.split->setChildrenCollapsible(false);
     p.layers->addWidget(p.split);
     p.main = spawnPart(id, QStringLiteral("main"), s->cwd, s->command, p.split);
+    if (s->fontSize > 0)
+        zoomFontTo(terminalDisplay(p.main), s->fontSize);
     if (!p.main) {
         delete p.view;
         return;
@@ -543,6 +596,8 @@ void MainWindow::applyLayout(const QString &id)
         const QString cwd = !s->splitCwd.isEmpty() ? s->splitCwd : liveCwd(id).isEmpty() ? s->cwd : liveCwd(id);
         p.right = spawnPart(id, QStringLiteral("right"), cwd, std::exchange(s->splitCommand, {}), p.split);
         s->splitCwd.clear();
+        if (s->splitFontSize > 0)
+            zoomFontTo(terminalDisplay(p.right), s->splitFontSize);
         if (p.right)
             p.split->addWidget(p.right->widget());
         p.split->handle(1)->installEventFilter(this); // double-click resets an even split
@@ -602,6 +657,35 @@ void MainWindow::newCompanion(const QString &parentId)
 {
     if (m_store.session(parentId))
         m_store.select(m_store.addCompanion(parentId, {}, liveCwd(parentId)));
+}
+
+bool MainWindow::font(const QString &sessionId, const QString &pane, const QString &op, QString *error)
+{
+    const Panes p = m_panes.value(sessionId);
+    QWidget *display = terminalDisplay(pane == QLatin1String("right") ? p.right : p.main);
+    Session *s = m_store.session(sessionId);
+    if (!display || !s) {
+        *error = QStringLiteral("pane has no terminal");
+        return false;
+    }
+    const double now = display->font().pointSizeF();
+    zoomFontTo(display, op == QLatin1String("inc") ? now + 1 : op == QLatin1String("dec") ? now - 1 : display->property("agtermBaseFont").toDouble());
+    recordFontSizes(s);
+    m_saveTimer.start();
+    return true;
+}
+
+void MainWindow::recordFontSizes(Session *s) const
+{
+    // 0 while a pane is at its profile's size, so a profile change still reaches it after a relaunch
+    auto size = [](QWidget *d) {
+        return !d || d->font().pointSizeF() == d->property("agtermBaseFont").toDouble() ? 0.0 : d->font().pointSizeF();
+    };
+    const Panes p = m_panes.value(s->id);
+    if (p.main)
+        s->fontSize = size(terminalDisplay(p.main));
+    if (p.right)
+        s->splitFontSize = size(terminalDisplay(p.right));
 }
 
 void MainWindow::duplicateCompanion(const QString &id)
@@ -1182,9 +1266,11 @@ void MainWindow::showSettings()
 void MainWindow::save()
 {
     // Konsole signals directory changes only for a shown pane; /proc is authoritative for the rest
-    for (auto *s : m_store.allSessions())
+    for (auto *s : m_store.allSessions()) {
         if (const QString cwd = liveCwd(s->id); !cwd.isEmpty())
             m_store.workspaceOf(s->id)->folder = s->cwd = cwd;
+        recordFontSizes(s); // a Ctrl+wheel zoom in the terminal persists too
+    }
     QJsonObject root = m_store.toJson();
     QJsonArray collapsed;
     for (const auto &c : std::as_const(m_tree->m_collapsed))

@@ -27,6 +27,15 @@ public:
         return false;
     }
     virtual QJsonObject chromeState() const { return {}; } // chrome read-back merged into `tree`
+    // op inc | dec | reset on pane main | right; records the resulting size on the session
+    virtual bool font(const QString &sessionId, const QString &pane, const QString &op, QString *error)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        Q_UNUSED(op);
+        *error = QStringLiteral("no terminals");
+        return false;
+    }
     // pane main | right; false with the reason when the pane's program cannot be copied
     virtual bool panePlan(const QString &sessionId, const QString &pane, PanePlan *out, QString *error)
     {

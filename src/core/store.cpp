@@ -776,7 +776,8 @@ QJsonObject Store::toJson() const
             QJsonObject so{{"id", s.id},           {"name", s.name},
                            {"cwd", s.cwd}, {"title", s.title}, {"flagged", s.flagged}, {"parentId", s.parentId},
                            {"hasSplit", s.hasSplit}, {"splitVisible", s.splitVisible},
-                           {"splitAxis", s.splitAxis}, {"splitRatio", s.splitRatio}};
+                           {"splitAxis", s.splitAxis}, {"splitRatio", s.splitRatio},
+                           {"fontSize", s.fontSize}, {"splitFontSize", s.splitFontSize}};
             if (!s.tint.color.isEmpty())
                 so.insert("tint", tintJson(s.tint));
             ss << so;
@@ -819,6 +820,8 @@ void Store::fromJson(const QJsonObject &o)
             s.flagged = so.value("flagged").toBool();
             s.parentId = so.value("parentId").toString();
             s.tint = tintFromJson(so.value("tint"));
+            s.fontSize = so.value("fontSize").toDouble();
+            s.splitFontSize = so.value("splitFontSize").toDouble();
             s.hasSplit = so.value("hasSplit").toBool();
             s.splitVisible = s.hasSplit && so.value("splitVisible").toBool();
             s.splitAxis = so.value("splitAxis").toString(QStringLiteral("vertical"));

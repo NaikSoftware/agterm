@@ -90,6 +90,46 @@ private Q_SLOTS:
         QCOMPARE(tree->topLevelItem(0)->childCount(), 3);
     }
 
+    void fontKeysZoomTheTerminalAndARelaunchKeepsIt()
+    {
+        QJsonObject saved;
+        double base = 0;
+        {
+            Store store;
+            MainWindow w(store, dir.filePath("font.json"));
+            w.restore({});
+            store.select(store.addSession(store.addWorkspace("w"), {}, {}));
+            w.show();
+            w.activateWindow();
+            QVERIFY(QTest::qWaitForWindowActive(&w));
+            QTRY_VERIFY_WITH_TIMEOUT(QApplication::focusWidget() && QApplication::focusWidget()->inherits("Konsole::TerminalDisplay"), 5000);
+            QWidget *term = QApplication::focusWidget();
+            base = term->font().pointSizeF();
+            QTest::keyClick(term, Qt::Key_Plus, Qt::ControlModifier | Qt::ShiftModifier);
+            QTest::keyClick(term, Qt::Key_Plus, Qt::ControlModifier | Qt::ShiftModifier);
+            QCOMPARE(term->font().pointSizeF(), base + 2);
+            QCOMPARE(store.session(store.selected)->fontSize, base + 2);
+            QTest::keyClick(term, Qt::Key_0, Qt::ControlModifier | Qt::ShiftModifier);
+            QCOMPARE(term->font().pointSizeF(), base);
+            QCOMPARE(store.session(store.selected)->fontSize, 0.0);
+            QString e;
+            QVERIFY(w.font(store.selected, "main", "dec", &e));
+            QCOMPARE(store.session(store.selected)->fontSize, base - 1);
+            saved = store.toJson();
+        }
+        Store store;
+        store.fromJson(saved);
+        MainWindow w(store, dir.filePath("font2.json"));
+        w.restore({});
+        w.show();
+        QWidget *term = nullptr;
+        for (QWidget *x : w.findChildren<QWidget *>())
+            if (x->inherits("Konsole::TerminalDisplay"))
+                term = x;
+        QVERIFY(term);
+        QCOMPARE(term->font().pointSizeF(), base - 1);
+    }
+
     void footerFilterNarrowsTheTreeAndTintReachesTheRow()
     {
         Store store;

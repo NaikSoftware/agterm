@@ -30,6 +30,7 @@ struct Session {
     bool splitVisible = false;
     QString splitAxis = QStringLiteral("vertical"); // vertical = side by side, horizontal = top and bottom
     double splitRatio = 0.5;
+    double fontSize = 0, splitFontSize = 0; // points each pane was zoomed to; 0 = the profile's
     int unseen = 0;              // notifications raised while the session was not in front of you
     QString parentId;            // a companion is pinned to its parent, listed right after it
     Tint tint;
