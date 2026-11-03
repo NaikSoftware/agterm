@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/">
+    <file>file-icons/file-icons.ttf</file>
+    <file>file-icons/DevOpicons.ttf</file>
+    <file>file-icons/MFixx.ttf</file>
+    <file>file-icons/fontawesome-webfont.ttf</file>
+  </qresource>
+</RCC>
