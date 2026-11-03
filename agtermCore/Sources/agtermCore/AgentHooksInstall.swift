@@ -19,6 +19,11 @@ public enum AgentHooksInstall {
     /// keeping the Claude-specific knowledge in the hook resource the way the Codex adapter does.
     static let claudeWrapperName = "agterm-claude-status.sh"
 
+    /// The bundled Claude Code mod (teammates view in an agterm companion), loaded by every Claude Code
+    /// session through `CLAUDE_CODE_PLUGIN_DIRS` in the settings `env` block, a `:`-separated path list.
+    public static let claudeModRelativePath = "claude-mods/swarm-companion"
+    static let claudePluginDirsKey = "CLAUDE_CODE_PLUGIN_DIRS"
+
     /// The bundled Pi extension's path relative to the agent-status package, and its destination filename.
     public static let piExtensionRelativePath = "pi/agterm-status.ts"
     static let piExtensionName = "agterm-status.ts"
@@ -182,6 +187,7 @@ public enum AgentHooksInstall {
 
         var hooks = try claudeHooksObject(root)
         var didChange = migrateClaudeEntriesToAdapter(&hooks, scriptDir: scriptDir)
+        didChange = try addClaudeModDir(&root, scriptDir: scriptDir) || didChange
         for hook in claudeHooks {
             var entries = hooks[hook.event] as? [[String: Any]] ?? [] // shape already checked above
             if entries.contains(where: { entryUsesWrapper($0, scriptDir: scriptDir) }) {
@@ -531,6 +537,25 @@ public enum AgentHooksInstall {
             guard hooks[hook.event] is [[String: Any]] else { throw MergeError.malformedExistingSettings }
         }
         return hooks
+    }
+
+    // append the bundled mod's folder to `env.CLAUDE_CODE_PLUGIN_DIRS`, keeping the user's own entries.
+    private static func addClaudeModDir(_ root: inout [String: Any], scriptDir: String) throws -> Bool {
+        let dir = scriptDir + "/" + claudeModRelativePath
+        var env: [String: Any] = [:]
+        if let value = root["env"] {
+            guard let object = value as? [String: Any] else { throw MergeError.malformedExistingSettings }
+            env = object
+        }
+        var entries: [String] = []
+        if let value = env[claudePluginDirsKey] {
+            guard let list = value as? String else { throw MergeError.malformedExistingSettings }
+            entries = list.split(separator: ":").map(String.init)
+        }
+        guard !entries.contains(dir) else { return false }
+        env[claudePluginDirsKey] = (entries + [dir]).joined(separator: ":")
+        root["env"] = env
+        return true
     }
 
     private static func parsedObject(_ text: String?) throws -> [String: Any] {
