@@ -189,6 +189,9 @@ void Store::removeSession(const QString &id)
     if (!w)
         return;
     const int i = indexIn(*w, id);
+    closed.prepend({w->id, w->sessions[i].name, w->sessions[i].cwd, i});
+    if (closed.size() > 20)
+        closed.removeLast();
     w->sessions.removeAt(i);
     recent.removeAll(id);
     if (selected == id) {
@@ -214,6 +217,19 @@ void Store::removeSession(const QString &id)
     }
     Q_EMIT sessionRemoved(id);
     Q_EMIT changed();
+}
+
+QString Store::reopenClosed()
+{
+    if (closed.isEmpty())
+        return {};
+    const Closed c = closed.takeFirst();
+    QString ws = c.workspaceId;
+    if (!workspace(ws))
+        ws = workspaces.isEmpty() ? addWorkspace(QStringLiteral("main")) : workspaces.first().id;
+    const QString id = addSession(ws, c.name, c.cwd, {}, c.index);
+    select(id);
+    return id;
 }
 
 void Store::removeWorkspace(const QString &id)

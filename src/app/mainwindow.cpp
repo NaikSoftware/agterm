@@ -224,6 +224,11 @@ void MainWindow::createMenus()
     file->addSeparator();
     file->addAction(action(QStringLiteral("close_session"), tr("Close Session"), QStringLiteral("tab-close"), QKeySequence(QStringLiteral("Ctrl+Shift+W")),
                            [this] { m_zoomed ? toggleZoom() : closeSessions({m_store.selected}); })); // ⌘W leaves zoom first
+    file->addAction(action(QStringLiteral("reopen_recent"), tr("Reopen Closed Session"), QStringLiteral("edit-undo"),
+                           QKeySequence(QStringLiteral("Ctrl+Alt+Shift+T")), [this] {
+                               if (m_store.reopenClosed().isEmpty())
+                                   statusBar()->showMessage(tr("Nothing to reopen"), 2000);
+                           }));
     file->addSeparator();
     file->addAction(action(QStringLiteral("quit"), tr("Quit"), QStringLiteral("application-exit"), QKeySequence(QStringLiteral("Ctrl+Shift+Q")),
                            [this] { close(); }));

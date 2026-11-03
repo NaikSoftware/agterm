@@ -112,6 +112,10 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             return fail(error);
         return ok({{"quick", on}});
     }
+    if (cmd == QLatin1String("recent.open")) {
+        const QString id = store.reopenClosed();
+        return id.isEmpty() ? fail(QStringLiteral("nothing to reopen")) : ok({{"id", id}});
+    }
     if (cmd == QLatin1String("session.go")) {
         const QString id = store.go(args.value("to").toString(), &error);
         return id.isEmpty() ? fail(error) : ok({{"id", id}});

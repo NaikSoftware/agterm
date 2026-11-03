@@ -54,6 +54,11 @@ public:
     QList<Workspace> workspaces;
     QString selected;
     QStringList recent; // session ids, most recently selected first
+    struct Closed {
+        QString workspaceId, name, cwd;
+        int index;
+    };
+    QList<Closed> closed; // most recent first; Reopen Closed Item brings the shell back where it was
     Settings settings;
 
     Session *session(const QString &id);
@@ -72,6 +77,7 @@ public:
     QString addSession(const QString &workspaceId, const QString &name, const QString &cwd, const QString &command = {}, int index = -1);
     QString duplicateSession(const QString &id, const QString &cwd);
     void removeSession(const QString &id);
+    QString reopenClosed(); // "" when nothing was closed
     void removeWorkspace(const QString &id);
     void renameSession(const QString &id, const QString &name); // "" reverts to the cwd-derived name
     void renameWorkspace(const QString &id, const QString &name);

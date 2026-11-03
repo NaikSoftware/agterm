@@ -228,6 +228,21 @@ private Q_SLOTS:
         QVERIFY(!s.session(a)->scratchVisible && s.session(a)->splitVisible); // a shown scratch hides first
     }
 
+    void reopenClosedRestoresNameDirAndPlace()
+    {
+        Store s;
+        const QString ws = s.addWorkspace("w");
+        s.addSession(ws, {}, {});
+        const QString b = s.addSession(ws, "pinned", QDir::tempPath());
+        s.addSession(ws, {}, {});
+        s.removeSession(b);
+        const QString again = s.reopenClosed();
+        QCOMPARE(s.workspace(ws)->sessions[1].id, again);
+        QCOMPARE(s.session(again)->displayName(), QStringLiteral("pinned"));
+        QCOMPARE(s.session(again)->cwd, QDir::tempPath());
+        QVERIFY(s.reopenClosed().isEmpty());
+    }
+
     void treeAndUnknownCommand()
     {
         Store s;

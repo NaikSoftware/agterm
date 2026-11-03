@@ -30,6 +30,7 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session swap
   session scratch [on|off|toggle]
   quick [on|off|toggle]                 the app-wide quick terminal
+  recent open                           reopen the most recently closed session
   session type <text> | --stdin
   session text [--lines N]              full screen + scrollback
   session status <idle|active|completed|blocked> [--auto-reset] [--blink]
@@ -68,7 +69,7 @@ int main(int argc, char **argv)
         return fputs(usage, stderr), 1;
 
     QString cmd = pos.takeFirst();
-    if ((cmd == QLatin1String("workspace") || cmd == QLatin1String("session")) && !pos.isEmpty())
+    if ((cmd == QLatin1String("workspace") || cmd == QLatin1String("session") || cmd == QLatin1String("recent")) && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
     if (cmd == QLatin1String("session.split") && pos.value(0) == QLatin1String("close"))
         cmd = QStringLiteral("session.split.close"), pos.removeFirst();
@@ -162,7 +163,7 @@ int main(int argc, char **argv)
         fputs(result["text"].toString().toUtf8().constData(), stdout);
         if (!result["text"].toString().endsWith(QLatin1Char('\n')))
             putchar('\n');
-    } else if (cmd.endsWith(QLatin1String(".new")) || cmd == QLatin1String("session.duplicate")) {
+    } else if (cmd.endsWith(QLatin1String(".new")) || cmd == QLatin1String("session.duplicate") || cmd == QLatin1String("recent.open")) {
         printf("%s\n", qPrintable(result["id"].toString()));
     }
     return 0;
