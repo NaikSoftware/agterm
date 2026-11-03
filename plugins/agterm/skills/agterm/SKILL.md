@@ -17,7 +17,7 @@ when_to_use: >
   split the pane, close the overlay, hide the overlay for a moment, show a message over the session, show a question dialog, agtermctl ask,
   ask the user to type a value or a message, let the user pick one or several items from a list,
   show an image inline, show this markdown file rendered, show this source file or log at a line, show this HTML page or artifact, make an HTML page or explainer for this and show
-  it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, show status or activity under a session in the sidebar, make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, run my custom command, send a message to the other pane or another agent, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, copy this to the clipboard, was agterm upgraded under the running app, upgrade agterm without losing sessions, what recipes are there,
+  it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, show status or activity under a session in the sidebar, show or hide the file panel (file tree), make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, run my custom command, send a message to the other pane or another agent, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, copy this to the clipboard, was agterm upgraded under the running app, upgrade agterm without losing sessions, what recipes are there,
   the keymap editor will not open.
 allowed-tools: Bash(agtermctl *)
 ---
@@ -122,7 +122,7 @@ sidebar is currently shown — the read side of the write-only `sidebar` command
 the read side of `browser links`), `sidebarFlaggedLayout` (`flat`, `plain` or `tree`, app-wide —
 the read side of `sidebar flagged-layout`), `flaggedOrder` (the window's flagged session ids in the flat list's
 saved order — the read side of `session flag move`, omitted when nothing is flagged), `sidebarWidth` (the sidebar divider position in
-points — the read side of `sidebar width`, on `tree` only), `workspaceFilter`, `quickVisible` (whether the
+points — the read side of `sidebar width`, on `tree` only), `filePanelVisible` and `filePanelWidth` (the file panel, read sides of `filepanel` and `filepanel width`, on `tree` only), `workspaceFilter`, `quickVisible` (whether the
 quick terminal is shown — the read side of the write-only `quick` command; app-level, so every window
 reports the same value), `zoomedSurface`, the four `dashboard*` fields, `pickPending`, `askPending` (GUI asks only), and `app` (the
 serving app's `version`, plus `commit` when the build recorded one — the same value `agtermctl version`
@@ -686,6 +686,10 @@ back from `sidebarFlaggedLayout`) · `sidebar expand [--window W]` (expand every
 and reads back from the tree's top-level `sidebarWidth`).
 Visibility/mode act on the frontmost window; `sidebar expand`/`collapse`/`width` default to the frontmost but take a
 `--window` selector to target any open window.
+
+**filepanel** — `filepanel [show|hide|toggle]` (the file tree beside the sidebar, frontmost window; read back from the
+tree's `filePanelVisible`) · `filepanel width <points> [--window W]` (clamped to 160...560pt; prints the stored width and
+reads back from the tree's `filePanelWidth`). Neither has a `window list` field or an event.
 
 **notify** — `notify <body> [--title T]` — post a desktop notification attributed to a session. To signal that you need the user, prefer `session status` (`blocked`/`completed`), a persistent typed attention state rather than a one-shot banner; keep `notify` for a one-off nudge.
 
