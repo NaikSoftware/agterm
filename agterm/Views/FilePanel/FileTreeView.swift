@@ -29,6 +29,7 @@ final class FileTreeNode {
 
 struct FileTreeView: View {
     let store: AppStore
+    var actions: AppActions?
     @State private var chromeText = WindowContentView.resolvedChromeText()
 
     var body: some View {
@@ -43,7 +44,7 @@ struct FileTreeView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 4)
             }
-            FileTreeOutline(store: store)
+            FileTreeOutline(store: store, actions: actions)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onReceive(NotificationCenter.default.publisher(for: .agtermAppearanceChanged)) { _ in
@@ -54,8 +55,13 @@ struct FileTreeView: View {
 
 struct FileTreeOutline: NSViewRepresentable {
     let store: AppStore
+    var actions: AppActions?
 
-    func makeCoordinator() -> Coordinator { Coordinator(store: store) }
+    func makeCoordinator() -> Coordinator {
+        let coordinator = Coordinator(store: store)
+        coordinator.actions = actions
+        return coordinator
+    }
 
     func makeNSView(context: Context) -> NSScrollView { Self.makeScrollView(coordinator: context.coordinator) }
 
@@ -111,6 +117,16 @@ struct FileTreeOutline: NSViewRepresentable {
         /// Paths shown dimmed as cut.
         var cutPaths: Set<String> = []
         var watcher: FileTreeWatcher?
+        weak var actions: AppActions?
+        var pasteboard = NSPasteboard.general
+        /// The pasteboard `changeCount` right after a cut; a paste moves only while it still matches.
+        var cutChangeCount: Int?
+        /// nil shows errors in a sheet on the panel's window.
+        var presentErrors: (([String]) -> Void)?
+        var renamingNode: FileTreeNode?
+        var renameCancelled = false
+        /// Watcher events held while a rename field is open, since a row reload would end the edit.
+        var pendingChanges: [String] = []
 
         init(store: AppStore) {
             self.store = store
@@ -219,6 +235,7 @@ struct FileTreeOutline: NSViewRepresentable {
         }
 
         func handleChanges(_ paths: [String]) {
+            guard renamingNode == nil else { return pendingChanges += paths }
             guard let rootNode else { return }
             guard FileManager.default.fileExists(atPath: rootNode.url.path) else { return reload(rootNode) }
             var parents: [FileTreeNode] = []
@@ -284,7 +301,8 @@ struct FileTreeOutline: NSViewRepresentable {
             cell.textField?.font = .systemFont(ofSize: app.sidebarFontSize)
             cell.imageView?.image = FileIconRenderer.image(
                 for: FileIconCatalog.icon(forName: name, isDirectory: node.isDirectory), pointSize: 16, dark: app.terminalThemeIsDark)
-            cell.textAlpha = cutPaths.contains(node.url.path) ? 0.5 : name.hasPrefix(".") ? 0.6 : 1
+            let cut = cutChangeCount == pasteboard.changeCount && cutPaths.contains(node.url.path)
+            cell.textAlpha = cut ? 0.5 : name.hasPrefix(".") ? 0.6 : 1
             cell.setColors(selected: outlineView.isRowSelected(outlineView.row(forItem: node)))
             return cell
         }
@@ -304,12 +322,48 @@ final class FileTreeOutlineView: NSOutlineView {
         SidebarOutlineView.trimmedCellFrame(super.frameOfCell(atColumn: column, row: row), in: self, column: column, row: row)
     }
 
+    private var coordinator: FileTreeOutline.Coordinator? { delegate as? FileTreeOutline.Coordinator }
+
     override func keyDown(with event: NSEvent) {
-        guard [36, 76].contains(event.keyCode), event.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift]),
-              let coordinator = delegate as? FileTreeOutline.Coordinator else {
-            return super.keyDown(with: event)
+        let mods = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        guard let coordinator else { return super.keyDown(with: event) }
+        if [36, 76].contains(event.keyCode), mods.isEmpty {
+            coordinator.selectedNodes().forEach(coordinator.open)
+        } else if event.keyCode == 51, mods == .command {
+            coordinator.trashSelection()
+        } else {
+            super.keyDown(with: event)
         }
-        selectedRowIndexes.compactMap { item(atRow: $0) as? FileTreeNode }.forEach(coordinator.open)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let row = self.row(at: convert(event.locationInWindow, from: nil))
+        if row < 0 {
+            deselectAll(nil)
+        } else if !selectedRowIndexes.contains(row) {
+            selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        }
+        return coordinator?.menu(forRow: row)
+    }
+
+    // NSTableView treats Control-click as a plain click; see `SidebarOutlineView.mouseDown`.
+    override func mouseDown(with event: NSEvent) {
+        guard event.modifierFlags.contains(.control) else { return super.mouseDown(with: event) }
+        if let menu = menu(for: event) { NSMenu.popUpContextMenu(menu, with: event, for: self) }
+    }
+
+    @objc func copy(_: Any?) { coordinator?.copySelection() }
+    @objc func cut(_: Any?) { coordinator?.cutSelection() }
+    @objc func paste(_: Any?) { coordinator?.paste() }
+}
+
+extension FileTreeOutlineView: NSMenuItemValidation {
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        switch item.action {
+        case #selector(copy(_:)), #selector(cut(_:)): !selectedRowIndexes.isEmpty
+        case #selector(paste(_:)): coordinator?.canPaste ?? false
+        default: true
+        }
     }
 }
 

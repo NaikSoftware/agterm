@@ -10,6 +10,8 @@ final class FileTreeViewTests: XCTestCase {
     private var library: WindowLibrary!
     private var window: NSWindow!
     private var coordinator: FileTreeOutline.Coordinator!
+    private var pasteboard: NSPasteboard!
+    private var shownErrors: [[String]] = []
 
     override func setUp() async throws {
         try await super.setUp()
@@ -24,6 +26,9 @@ final class FileTreeViewTests: XCTestCase {
         library = WindowLibrary(directory: stateDir)
         let store = try XCTUnwrap(library.activeStore)
         coordinator = FileTreeOutline.Coordinator(store: store)
+        pasteboard = NSPasteboard(name: NSPasteboard.Name("agterm-test-\(UUID().uuidString)"))
+        coordinator.pasteboard = pasteboard
+        coordinator.presentErrors = { [unowned self] in shownErrors.append($0) }
         let scroll = FileTreeOutline.makeScrollView(coordinator: coordinator)
         scroll.frame = NSRect(x: 0, y: 0, width: 240, height: 400)
         window = NSWindow(contentRect: scroll.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -34,6 +39,7 @@ final class FileTreeViewTests: XCTestCase {
 
     override func tearDown() async throws {
         coordinator?.stop()
+        pasteboard?.releaseGlobally()
         window?.orderOut(nil)
         window = nil
         coordinator = nil
@@ -126,5 +132,120 @@ final class FileTreeViewTests: XCTestCase {
         XCTAssertFalse(coordinator.emptyLabel.isHidden)
         XCTAssertEqual(coordinator.emptyLabel.stringValue, "No local folder")
         XCTAssertEqual(outline.numberOfRows, 0)
+    }
+
+    private func node(_ name: String) throws -> FileTreeNode {
+        let row = try XCTUnwrap(names().firstIndex(of: name), "no row \(name): \(names())")
+        return try XCTUnwrap(outline.item(atRow: row) as? FileTreeNode)
+    }
+
+    private func selectRow(_ name: String) throws {
+        outline.selectRowIndexes(IndexSet(integer: outline.row(forItem: try node(name))), byExtendingSelection: false)
+    }
+
+    private func exists(_ path: String) -> Bool {
+        FileManager.default.fileExists(atPath: rootDir.appendingPathComponent(path).path)
+    }
+
+    private func selectedNames() -> [String] { coordinator.selectedNodes().map(\.url.lastPathComponent) }
+
+    func testCopyPasteIntoItsOwnFolderCreatesACopy() throws {
+        try selectRow("a-file.txt")
+        coordinator.copySelection()
+        coordinator.paste()
+        XCTAssertTrue(exists("a-file.txt"))
+        XCTAssertTrue(exists("a-file copy.txt"))
+        XCTAssertEqual(selectedNames(), ["a-file copy.txt"])
+        XCTAssertEqual(shownErrors, [])
+    }
+
+    func testCopyPasteIntoAFolderKeepsTheName() throws {
+        try selectRow("a-file.txt")
+        coordinator.copySelection()
+        try selectRow("alpha")
+        coordinator.paste()
+        XCTAssertTrue(exists("a-file.txt"))
+        XCTAssertTrue(exists("alpha/a-file.txt"))
+        XCTAssertEqual(selectedNames(), ["a-file.txt"])
+        XCTAssertTrue(outline.isItemExpanded(try node("alpha")))
+    }
+
+    func testCutPasteMovesAndClearsTheCutDimming() throws {
+        try selectRow("a-file.txt")
+        coordinator.cutSelection()
+        XCTAssertFalse(coordinator.cutPaths.isEmpty)
+        try selectRow("alpha")
+        coordinator.paste()
+        XCTAssertFalse(exists("a-file.txt"))
+        XCTAssertTrue(exists("alpha/a-file.txt"))
+        XCTAssertTrue(coordinator.cutPaths.isEmpty)
+        XCTAssertEqual(selectedNames(), ["a-file.txt"])
+        XCTAssertEqual(outline.level(forRow: outline.selectedRow), 1)
+    }
+
+    func testCutThenAnExternalPasteboardWriteCopiesInstead() throws {
+        try selectRow("a-file.txt")
+        coordinator.cutSelection()
+        pasteboard.clearContents()
+        pasteboard.writeObjects([rootDir.appendingPathComponent("a-file.txt") as NSURL])
+        try selectRow("alpha")
+        coordinator.paste()
+        XCTAssertTrue(exists("a-file.txt"))
+        XCTAssertTrue(exists("alpha/a-file.txt"))
+    }
+
+    func testMoveOntoAnExistingNameIsRefused() throws {
+        try Data("keep".utf8).write(to: rootDir.appendingPathComponent("alpha/a-file.txt"))
+        try selectRow("a-file.txt")
+        coordinator.cutSelection()
+        try selectRow("alpha")
+        coordinator.paste()
+        XCTAssertTrue(exists("a-file.txt"))
+        XCTAssertEqual(try String(contentsOf: rootDir.appendingPathComponent("alpha/a-file.txt"), encoding: .utf8), "keep")
+        XCTAssertEqual(shownErrors.count, 1)
+    }
+
+    func testRenameToAnExistingNameKeepsTheOldName() throws {
+        try Data().write(to: rootDir.appendingPathComponent("b-file.txt"))
+        coordinator.reload(try XCTUnwrap(coordinator.rootNode))
+        XCTAssertFalse(coordinator.rename(try node("a-file.txt"), to: "b-file.txt"))
+        XCTAssertTrue(exists("a-file.txt"))
+        XCTAssertTrue(names().contains("a-file.txt"))
+        XCTAssertEqual(shownErrors.count, 1)
+    }
+
+    func testRenameMovesTheFileAndSelectsIt() throws {
+        XCTAssertTrue(coordinator.rename(try node("a-file.txt"), to: "renamed.txt"))
+        XCTAssertFalse(exists("a-file.txt"))
+        XCTAssertEqual(selectedNames(), ["renamed.txt"])
+    }
+
+    func testCaseOnlyRenameSucceeds() throws {
+        XCTAssertTrue(coordinator.rename(try node("a-file.txt"), to: "A-File.txt"), "errors: \(shownErrors)")
+        let listed = try FileManager.default.contentsOfDirectory(atPath: rootDir.path)
+        XCTAssertTrue(listed.contains("A-File.txt"), "\(listed)")
+        XCTAssertFalse(listed.contains("a-file.txt"))
+        XCTAssertEqual(shownErrors, [])
+    }
+
+    func testBeginRenameSelectsTheNameWithoutItsExtension() throws {
+        let file = try node("a-file.txt")
+        coordinator.beginRename(file)
+        let cell = try XCTUnwrap(outline.view(atColumn: 0, row: outline.row(forItem: file), makeIfNecessary: false) as? NSTableCellView)
+        let editor = try XCTUnwrap(cell.textField?.currentEditor())
+        XCTAssertEqual(editor.selectedRange, NSRange(location: 0, length: 6))
+    }
+
+    func testTrashRemovesTheRowAndKeepsTheItemInTheTrash() throws {
+        // Leaves an `agterm-test-` file in the user's Trash.
+        let name = "agterm-test-trash-\(UUID().uuidString).txt"
+        try Data().write(to: rootDir.appendingPathComponent(name))
+        coordinator.reload(try XCTUnwrap(coordinator.rootNode))
+        try selectRow(name)
+        let trashed = coordinator.trashSelection()
+        XCTAssertFalse(names().contains(name))
+        XCTAssertEqual(trashed.count, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: trashed[0].path))
+        XCTAssertEqual(shownErrors, [])
     }
 }

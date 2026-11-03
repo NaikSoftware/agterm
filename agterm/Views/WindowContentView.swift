@@ -372,7 +372,7 @@ struct WindowContentView: View {
     private var filePanelColumn: some View {
         VStack(spacing: 0) {
             titlebarHairline
-            FileTreeView(store: store)
+            FileTreeView(store: store, actions: actions)
         }
         .background(sidebarTintWash)
     }
