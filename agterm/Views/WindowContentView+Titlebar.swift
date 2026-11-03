@@ -40,27 +40,32 @@ extension WindowContentView {
         }
     }
 
-    /// Custom titlebar row replacing the system toolbar: the sidebar toggle pinned to the sidebar's trailing
-    /// edge (by the divider), the title at the terminal's start, and the trailing cluster (recent-sessions /
-    /// attention popovers, divider, scratch / split controls, divider, dashboard / quick terminal / custom
-    /// commands). Positions track `sidebarWidth`; the left inset clears the system traffic lights.
+    /// Custom titlebar row replacing the system toolbar: the sidebar and file panel toggles pinned to the
+    /// leading columns' trailing edge (by the divider), the title at the terminal's start, and the trailing
+    /// cluster (recent-sessions / attention popovers, divider, scratch / split controls, divider, dashboard /
+    /// quick terminal / custom commands). Positions track `leadingColumnsWidth`; the left inset clears the system traffic lights.
     private var titlebarRow: some View {
         HStack(spacing: 0) {
             Color.clear.frame(width: 78).allowsHitTesting(false) // system traffic lights
-            if store.sidebarVisible {
-                HStack(spacing: 0) {
+            if leadingColumnsWidth > 0 {
+                HStack(spacing: 14) {
                     Spacer(minLength: 0)
-                    // keep the sidebar-width frame even when the toggle is hidden, so the title still starts
+                    // keep the columns-width frame even when the toggle is hidden, so the title still starts
                     // at the terminal's leading edge; the Spacer fills the freed space.
                     if shows(.sidebarToggle) {
                         sidebarToggleButton.labelStyle(.iconOnly)
                     }
+                    filePanelToggleButton.labelStyle(.iconOnly)
                 }
-                .frame(width: max(40, CGFloat(store.sidebarWidth) - 78))
+                // the 40pt floor plus the file panel button and its spacing
+                .frame(width: max(74, leadingColumnsWidth - 1 - 78))
                 Color.clear.frame(width: 11).allowsHitTesting(false) // 1px divider + gap to the title
             } else {
-                if shows(.sidebarToggle) {
-                    sidebarToggleButton.labelStyle(.iconOnly)
+                HStack(spacing: 14) {
+                    if shows(.sidebarToggle) {
+                        sidebarToggleButton.labelStyle(.iconOnly)
+                    }
+                    filePanelToggleButton.labelStyle(.iconOnly)
                 }
                 Spacer().frame(width: 12)
             }
@@ -137,6 +142,16 @@ extension WindowContentView {
         }
         .toolTip(helpHint("Toggle Sidebar", .toggleSidebar), isShown: titlebarTipsShown)
         .accessibilityIdentifier("sidebar-toggle-button")
+    }
+
+    private var filePanelToggleButton: some View {
+        Button {
+            actions.toggleFilePanel()
+        } label: {
+            Label("Toggle File Panel", systemImage: "folder")
+        }
+        .toolTip(helpHint("Toggle File Panel", .toggleFilePanel), isShown: titlebarTipsShown)
+        .accessibilityIdentifier("file-panel-toggle-button")
     }
 
     private var splitButton: some View {

@@ -13,7 +13,7 @@ public enum BuiltinAction: String, CaseIterable, Sendable {
     case toggleSplit = "toggle_split", toggleHorizontalSplit = "toggle_horizontal_split"
     case toggleScratch = "toggle_scratch", toggleTerminalZoom = "toggle_terminal_zoom", toggleOverlay = "toggle_overlay"
     case toggleSearch = "toggle_search"
-    case toggleSidebar = "toggle_sidebar", selectTheme = "select_theme", toggleFullscreen = "toggle_fullscreen"
+    case toggleSidebar = "toggle_sidebar", toggleFilePanel = "toggle_file_panel", selectTheme = "select_theme", toggleFullscreen = "toggle_fullscreen"
     case toggleFlaggedView = "toggle_flagged_view", toggleFlag = "toggle_flag", focusWorkspace = "focus_workspace"
     case toggleWorkspaceFilter = "toggle_workspace_filter"
     case previousWorkspace = "previous_workspace", nextWorkspace = "next_workspace"
@@ -52,6 +52,7 @@ public enum BuiltinAction: String, CaseIterable, Sendable {
         case .toggleTerminalZoom: return Chord(mods: [.command, .shift], key: "return")
         case .toggleSearch: return Chord(mods: [.command], key: "f")
         case .toggleSidebar: return Chord(mods: [.command, .control], key: "s")
+        case .toggleFilePanel: return Chord(mods: [.command, .control], key: "e")
         case .toggleFullscreen: return Chord(mods: [.command, .control], key: "f")
         case .toggleFlag: return Chord(mods: [.command, .shift], key: "f")
         case .quickTerminal: return Chord(mods: [.control], key: "`")

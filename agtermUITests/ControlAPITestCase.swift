@@ -38,10 +38,10 @@ class ControlAPITestCase: XCTestCase {
         markerDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("agterm-ctlmarker-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: markerDir, withIntermediateDirectories: true)
-        // the runner's own temp dir keeps the socket path under the sun_path ~104-byte limit AND inside
+        // the runner's own temp dir keeps the socket path under the sun_path ~104-byte limit (a long home path fills it) AND inside
         // the sandbox grant (the per-test AGTERM_STATE_DIR subdir is ~135 bytes; /tmp gives EPERM).
         socketPath = (NSTemporaryDirectory() as NSString)
-            .appendingPathComponent("agtermc-\(UUID().uuidString.prefix(8)).sock")
+            .appendingPathComponent("c-\(UUID().uuidString.prefix(8)).sock")
         app = makeApp()
         // pin the title-bar double-click action so the header gesture tests are hermetic regardless of
         // the host's Desktop & Dock setting; launch args can't carry it — FB11763863.
