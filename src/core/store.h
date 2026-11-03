@@ -22,7 +22,6 @@ struct Session {
     bool splitVisible = false;
     QString splitAxis = QStringLiteral("vertical"); // vertical = side by side, horizontal = top and bottom
     double splitRatio = 0.5;
-    bool scratchVisible = false; // the scratch shell covers the session; not persisted, like agterm's
     int unseen = 0;              // notifications raised while the session was not in front of you
     QString parentId;            // a companion is pinned to its parent, listed right after it
 
@@ -96,10 +95,9 @@ public:
     void setAgent(const QString &id, const QString &agent);
     void setSettings(const Settings &s);
     void keyPressed(const QString &id, Key key);
-    // ⌘D / ⌘⇧D: create, transpose (other axis), or hide (same axis); a shown scratch is hidden instead
+    // ⌘D / ⌘⇧D: create, transpose (other axis), or hide (same axis)
     void toggleSplit(const QString &id, const QString &axis);
     void setSplit(const QString &id, bool hasSplit, bool visible, const QString &axis);
-    void setScratch(const QString &id, bool visible);
     void requestSwap(const QString &id) { Q_EMIT swapRequested(id); }
     void notify(const QString &id, const QString &title, const QString &body) { Q_EMIT notified(id, title, body); }
     void setUnseen(const QString &id, int count);

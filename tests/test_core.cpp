@@ -223,9 +223,6 @@ private Q_SLOTS:
         QVERIFY(s.session(a)->hasSplit && !s.session(a)->splitVisible); // hidden, second shell kept
         s.toggleSplit(a, "vertical");
         QVERIFY(s.session(a)->splitVisible);
-        s.setScratch(a, true);
-        s.toggleSplit(a, "vertical");
-        QVERIFY(!s.session(a)->scratchVisible && s.session(a)->splitVisible); // a shown scratch hides first
     }
 
     void reopenClosedRestoresNameDirAndPlace()

@@ -454,8 +454,6 @@ void Store::toggleSplit(const QString &id, const QString &axis)
     Session *s = session(id);
     if (!s)
         return;
-    if (s->scratchVisible)
-        return setScratch(id, false);
     if (!s->hasSplit || !s->splitVisible)
         return setSplit(id, true, true, axis);
     setSplit(id, true, s->splitAxis != axis, axis);
@@ -471,14 +469,6 @@ void Store::setSplit(const QString &id, bool hasSplit, bool visible, const QStri
     s->splitAxis = axis;
     Q_EMIT paneLayoutChanged(id);
     Q_EMIT changed();
-}
-
-void Store::setScratch(const QString &id, bool visible)
-{
-    if (Session *s = session(id); s && s->scratchVisible != visible) {
-        s->scratchVisible = visible;
-        Q_EMIT paneLayoutChanged(id);
-    }
 }
 
 QString Store::go(const QString &direction, QString *error)

@@ -89,9 +89,9 @@ private:
     QHash<QString, QAction *> m_actions;
     struct Panes {
         QWidget *view = nullptr;          // the session's page in m_stack
-        QStackedLayout *layers = nullptr; // split view, with the scratch above it when shown
+        QStackedLayout *layers = nullptr; // the split view; overlays will stack above it
         QSplitter *split = nullptr;
-        KParts::ReadOnlyPart *main = nullptr, *right = nullptr, *scratch = nullptr;
+        KParts::ReadOnlyPart *main = nullptr, *right = nullptr;
     };
     QHash<QString, Panes> m_panes;
     QWidget *m_strip = nullptr;

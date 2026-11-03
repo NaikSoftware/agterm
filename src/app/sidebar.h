@@ -9,7 +9,7 @@ class Store;
 
 // A launcher's icon as a template tinted `color`: the terminal glyph, or the agent's logo.
 QIcon launcherIcon(const QString &launcherId, const QColor &color);
-// agterm's title-bar glyphs: sidebar, scratch, split, splitH, filepanel
+// agterm's title-bar glyphs: sidebar, split, splitH, filepanel
 QIcon chromeIcon(const QString &name, const QColor &color);
 
 namespace SidebarRole {

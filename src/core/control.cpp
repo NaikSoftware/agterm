@@ -23,7 +23,7 @@ static QJsonObject sessionNode(const Session &s, const QString &selected)
             {"status", s.status}, {"blink", s.blink},         {"flagged", s.flagged},            {"agent", s.agent},
             {"title", s.title},   {"active", s.id == selected},
             {"hasSplit", s.hasSplit}, {"split", s.splitVisible}, {"splitAxis", s.splitAxis}, {"splitRatio", s.splitRatio},
-            {"scratch", s.scratchVisible}, {"unseen", s.unseen}, {"parent", s.parentId}};
+            {"unseen", s.unseen}, {"parent", s.parentId}};
 }
 
 static QJsonObject tree(Store &store)
@@ -209,11 +209,6 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             if (!store.session(id)->hasSplit)
                 return fail(QStringLiteral("session has no split"));
             store.requestSwap(id);
-        } else if (cmd == QLatin1String("session.scratch")) {
-            bool on = false;
-            if (!resolveMode(args.value("mode").toString(), store.session(id)->scratchVisible, &on))
-                return fail(QStringLiteral("mode must be on, off or toggle"));
-            store.setScratch(id, on);
         } else if (cmd == QLatin1String("session.seen")) {
             store.setUnseen(id, 0);
         } else if (cmd == QLatin1String("session.duplicate")) {

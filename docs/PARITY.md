@@ -9,7 +9,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 ## Phase 1: sidebar, chrome, sessions
 
 - [x] Title bar strip: sidebar toggle, session name
-- [x] Title bar: file panel toggle (fork, left of the sidebar toggle); scratch and split buttons
+- [x] Title bar: file panel toggle (fork, left of the sidebar toggle); split button
 - [x] Sidebar rows: workspace = chevron + grid icon + name; session = terminal icon + name + status dot at the right
 - [x] Session icon = logo of the agent in its foreground process group (claude, codex, opencode, agy), sampled every 2 s (fork)
 - [x] Workspace "+" on hover: menu of Terminal + agents found on the login shell PATH, with logos; repeat button for the last choice (fork)
@@ -32,7 +32,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 ## Phase 2: terminals
 
 - [x] Split ⌘D / ⌘⇧D (one session, two shells; transposes; hides; divider memory, double-click resets; swap panes; focus left/right; close split)
-- [x] Scratch ⌘J per session
+- Scratch: dropped at the owner's request (2026-11-04)
 - Quick terminal: dropped at the owner's request (2026-11-04)
 - [x] Search: Konsole's own search bar (Ctrl+Shift+F)
 - [x] Terminal zoom ⌘⇧↩ (⌘W leaves zoom)

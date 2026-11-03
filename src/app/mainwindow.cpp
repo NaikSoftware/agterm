@@ -165,7 +165,6 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     auto *spacer = new QWidget;
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     strip->addWidget(spacer);
-    strip->addAction(chromeIcon(QStringLiteral("scratch"), ink), tr("Scratch"), m_actions.value(QStringLiteral("toggle_scratch")), &QAction::trigger);
     strip->addAction(chromeIcon(QStringLiteral("split"), ink), tr("Split"), m_actions.value(QStringLiteral("toggle_split")), &QAction::trigger);
     addToolBar(Qt::TopToolBarArea, strip);
     m_strip = strip;
@@ -315,10 +314,6 @@ void MainWindow::createMenus()
                            [this] { focusPane(false); }));
     view->addAction(action(QStringLiteral("focus_right_pane"), tr("Focus Right Pane"), {}, QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Right")),
                            [this] { focusPane(true); }));
-    view->addAction(action(QStringLiteral("toggle_scratch"), tr("Scratch"), {}, QKeySequence(QStringLiteral("Ctrl+Shift+J")), [this] {
-        if (const Session *s = m_store.session(m_store.selected))
-            m_store.setScratch(s->id, !s->scratchVisible);
-    }));
     view->addSeparator();
     view->addAction(action(QStringLiteral("toggle_terminal_zoom"), tr("Terminal Zoom"), QStringLiteral("zoom-fit-best"),
                            QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Return")), [this] { toggleZoom(); }));
@@ -505,14 +500,8 @@ void MainWindow::applyLayout(const QString &id)
         const int total = 10000;
         p.split->setSizes({int(total * s->splitRatio), total - int(total * s->splitRatio)});
     }
-    if (s->scratchVisible && !p.scratch) {
-        p.scratch = spawnPart(id, QStringLiteral("scratch"), liveCwd(id).isEmpty() ? s->cwd : liveCwd(id), {}, p.view);
-        if (p.scratch)
-            p.layers->addWidget(p.scratch->widget());
-    }
-    QWidget *front = s->scratchVisible && p.scratch ? p.scratch->widget() : static_cast<QWidget *>(p.split);
-    p.layers->setCurrentWidget(front);
-    if (KParts::ReadOnlyPart *target = front == p.split ? p.main : p.scratch; target && id == m_store.selected && isActiveWindow())
+    p.layers->setCurrentWidget(p.split);
+    if (KParts::ReadOnlyPart *target = p.main; target && id == m_store.selected && isActiveWindow())
         target->widget()->setFocus();
 }
 
@@ -521,10 +510,7 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
     if (!m_panes.contains(id))
         return;
     Panes &p = m_panes[id];
-    if (part == p.scratch) {
-        p.scratch = nullptr;
-        m_store.setScratch(id, false);
-    } else if (part == p.right) {
+    if (part == p.right) {
         p.right = nullptr;
         m_store.setSplit(id, false, false, m_store.session(id)->splitAxis);
     } else if (part == p.main) {
@@ -709,7 +695,7 @@ void MainWindow::showSelected()
     m_stack->setCurrentWidget(p.view ? p.view : m_empty);
     // focus moves only with the selection, so a status repaint never pulls it out of the split pane
     if (p.view && m_shownId != m_store.selected && isActiveWindow() && !m_tree->editing()) {
-        KParts::ReadOnlyPart *front = s->scratchVisible && p.scratch ? p.scratch : p.main;
+        KParts::ReadOnlyPart *front = p.main;
         if (front)
             front->widget()->setFocus();
     }

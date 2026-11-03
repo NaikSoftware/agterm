@@ -40,9 +40,6 @@ ctl session info --target "$id" | grep -qE '^splitAxis +horizontal' || fail "spl
 ctl session swap --target "$id"
 ctl session split close --target "$id"
 ctl session info --target "$id" | grep -qE '^hasSplit +false' || fail "split not closed"
-ctl session scratch on --target "$id"
-ctl session info --target "$id" | grep -qE '^scratch +true' || fail "scratch not shown"
-ctl session scratch off --target "$id"
 bg=$(ctl session new --name bg --no-select) # a notification for the session in front of you is not a badge
 ctl notify --title smoke --body hi --target "$bg"
 ctl session info --target "$bg" | grep -qE '^unseen +1' || fail "unseen badge"
