@@ -83,6 +83,11 @@ Palette::Palette(QWidget *window)
     col->addWidget(m_list);
     connect(m_search, &QLineEdit::textChanged, this, &Palette::filter);
     connect(m_list, &QListWidget::itemClicked, this, &Palette::runCurrent);
+    connect(m_list, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *row) {
+        if (row && isVisible())
+            if (const auto &preview = m_items[row->data(IndexRole).toInt()].preview)
+                preview();
+    });
     m_search->installEventFilter(this);
     qApp->installEventFilter(this); // Ctrl release ends the switcher; a click elsewhere dismisses
     hide();
@@ -102,14 +107,17 @@ bool Palette::fuzzyMatch(const QString &needle, const QString &haystack)
     return true;
 }
 
-void Palette::open(const QString &placeholder, const QList<Item> &items, bool switcher)
+void Palette::open(const QString &placeholder, const QList<Item> &items, bool switcher, std::function<void()> cancel, int current)
 {
     m_items = items;
     m_switcher = switcher;
+    m_cancel = std::move(cancel);
+    m_initial = current;
     m_search->setPlaceholderText(placeholder);
     m_search->setVisible(!switcher);
     m_search->clear();
     filter();
+    m_initial = -1;
     place();
     show();
     raise();
@@ -141,7 +149,11 @@ void Palette::filter()
         if (!it.enabled)
             row->setFlags(row->flags() & ~Qt::ItemIsEnabled);
     }
-    m_list->setCurrentRow(m_switcher && m_list->count() > 1 ? 1 : 0); // a single Ctrl-Tab tap flips back
+    int row = m_switcher && m_list->count() > 1 ? 1 : 0; // a single Ctrl-Tab tap flips back
+    for (int i = 0; m_initial >= 0 && i < m_list->count(); ++i)
+        if (m_list->item(i)->data(IndexRole).toInt() == m_initial)
+            row = i;
+    m_list->setCurrentRow(row);
     if (isVisible())
         place();
 }
@@ -155,6 +167,7 @@ void Palette::step(int delta)
 void Palette::runCurrent()
 {
     QListWidgetItem *row = m_list->currentItem();
+    m_cancel = {};
     hide();
     if (row && (row->flags() & Qt::ItemIsEnabled))
         if (const auto &run = m_items[row->data(IndexRole).toInt()].run)
@@ -170,7 +183,7 @@ bool Palette::eventFilter(QObject *watched, QEvent *event)
         return true;
     }
     if (event->type() == QEvent::MouseButtonPress && !isAncestorOf(qobject_cast<QWidget *>(watched)) && watched != this) {
-        hide();
+        dismiss();
         return false;
     }
     if (event->type() != QEvent::KeyPress || (watched != m_search && !m_switcher))
@@ -179,7 +192,7 @@ bool Palette::eventFilter(QObject *watched, QEvent *event)
     const bool ctrl = key->modifiers() & Qt::ControlModifier;
     switch (key->key()) {
     case Qt::Key_Escape:
-        hide();
+        dismiss();
         return true;
     case Qt::Key_Return:
     case Qt::Key_Enter:
@@ -208,4 +221,11 @@ bool Palette::eventFilter(QObject *watched, QEvent *event)
     default:
         return m_switcher; // the switcher swallows keys while Ctrl is held
     }
+}
+
+void Palette::dismiss()
+{
+    hide();
+    if (auto cancel = std::exchange(m_cancel, {}))
+        cancel();
 }

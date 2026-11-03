@@ -17,6 +17,44 @@
 
 using namespace SidebarRole;
 
+QColor statusColor(const Settings &settings, const QString &status)
+{
+    // agterm's defaults: active #DBD9E6, blocked system orange, completed system green
+    const QHash<QString, std::pair<QString, QColor>> table{{QStringLiteral("active"), {settings.activeStatusColorHex, QColor(0xDB, 0xD9, 0xE6)}},
+                                                           {QStringLiteral("blocked"), {settings.blockedStatusColorHex, QColor(0xFF, 0x9F, 0x0A)}},
+                                                           {QStringLiteral("completed"), {settings.completedStatusColorHex, QColor(0x30, 0xD1, 0x58)}}};
+    const auto [hex, fallback] = table.value(status);
+    return QColor::isValidColorName(hex) ? QColor(hex) : fallback;
+}
+
+QString statusShape(const Settings &settings, const QString &status)
+{
+    const QString shape = status == QLatin1String("active")      ? settings.activeStatusShape
+                          : status == QLatin1String("blocked")   ? settings.blockedStatusShape
+                          : status == QLatin1String("completed") ? settings.completedStatusShape
+                                                                 : QString();
+    return shape.isEmpty() ? QStringLiteral("circle") : shape;
+}
+
+void drawStatusGlyph(QPainter *p, const QPointF &c, qreal r, const QString &shape)
+{
+    if (shape == QLatin1String("square")) {
+        p->drawRoundedRect(QRectF(c.x() - r * 0.85, c.y() - r * 0.85, r * 1.7, r * 1.7), r * 0.3, r * 0.3);
+    } else if (shape == QLatin1String("capsule")) {
+        p->drawRoundedRect(QRectF(c.x() - r, c.y() - r * 0.6, r * 2, r * 1.2), r * 0.6, r * 0.6);
+    } else if (shape == QLatin1String("triangle") || shape == QLatin1String("diamond") || shape == QLatin1String("star")) {
+        QPolygonF poly;
+        const int points = shape == QLatin1String("triangle") ? 3 : shape == QLatin1String("diamond") ? 4 : 10;
+        for (int i = 0; i < points; ++i) {
+            const qreal a = -M_PI / 2 + i * 2 * M_PI / points, radius = shape == QLatin1String("star") && i % 2 ? r * 0.45 : r * 1.1;
+            poly << c + QPointF(radius * qCos(a), radius * qSin(a) + (points == 3 ? r * 0.2 : 0));
+        }
+        p->drawPolygon(poly);
+    } else {
+        p->drawEllipse(c, r, r);
+    }
+}
+
 static const char *sessionsMime = "application/x-agterm-sessions";
 static const char *workspaceMime = "application/x-agterm-workspace";
 
@@ -24,18 +62,6 @@ namespace {
 QColor textColor()
 {
     return QApplication::palette().color(QPalette::WindowText);
-}
-
-QColor statusColor(const QString &status)
-{
-    // agterm's defaults: active #DBD9E6, blocked system orange, completed system green
-    if (status == QLatin1String("active"))
-        return QColor(0xDB, 0xD9, 0xE6);
-    if (status == QLatin1String("blocked"))
-        return QColor(0xFF, 0x9F, 0x0A);
-    if (status == QLatin1String("completed"))
-        return QColor(0x30, 0xD1, 0x58);
-    return {};
 }
 
 void drawTerminalGlyph(QPainter *p, const QRectF &r, const QColor &c, bool filled)
@@ -238,8 +264,12 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
         p->setPen(QPen(dim, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         p->drawPath(chevron);
         x += 14;
-        drawGridGlyph(p, QRectF(x, cy - 7, 14, 14), iconColor, index.data(Focused).toBool());
-        x += 21;
+        if (m_sidebar->settings().shows(QStringLiteral("workspaceIcons"))) {
+            drawGridGlyph(p, QRectF(x, cy - 7, 14, 14), iconColor, index.data(Focused).toBool());
+            x += 21;
+        } else {
+            x += 4;
+        }
     } else {
         x += flat ? 2 : 22;
         if (index.data(Companion).toBool() && !flat)
@@ -262,27 +292,29 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
             p->drawPath(chevron);
             if (index.data(FoldedAttention).toBool()) {
                 p->setPen(Qt::NoPen);
-                p->setBrush(statusColor(QStringLiteral("blocked")));
+                p->setBrush(statusColor(m_sidebar->settings(), QStringLiteral("blocked")));
                 p->drawEllipse(QPointF(x + 15, cy - 6), 3, 3); // a hidden companion needs you
             }
         }
-        drawLauncher(p, QRectF(x, cy - 8, 16, 16), index.data(Agent).toString(), iconColor, index.data(Flagged).toBool());
-        x += 23;
+        if (m_sidebar->settings().shows(QStringLiteral("sessionIcons"))) {
+            drawLauncher(p, QRectF(x, cy - 8, 16, 16), index.data(Agent).toString(), iconColor, index.data(Flagged).toBool());
+            x += 23;
+        }
     }
 
     qreal right = r.right() - 8;
     if (session) {
         const QString status = index.data(Status).toString();
         if (status != QLatin1String("idle")) {
-            QColor c = statusColor(status);
+            QColor c = statusColor(m_sidebar->settings(), status);
             if (index.data(Blink).toBool())
                 c.setAlpha(m_sidebar->blinkAlpha());
             p->setPen(Qt::NoPen);
             p->setBrush(c);
-            p->drawEllipse(QPointF(right - 6, cy), 6, 6);
+            drawStatusGlyph(p, QPointF(right - 6, cy), 6, statusShape(m_sidebar->settings(), status));
             right -= 20;
         }
-        if (const int unseen = index.data(Unseen).toInt(); unseen > 0) {
+        if (const int unseen = index.data(Unseen).toInt(); unseen > 0 && m_sidebar->settings().notificationBadgeEnabled) {
             QFont f = opt.font;
             f.setPointSizeF(f.pointSizeF() * 0.8);
             f.setWeight(QFont::DemiBold);
@@ -297,7 +329,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
             p->drawText(pill, Qt::AlignCenter, n);
             right -= w + 6;
         }
-    } else if (m_sidebar->hovered() == index) {
+    } else if (m_sidebar->hovered() == index && m_sidebar->settings().shows(QStringLiteral("workspaceAddSession"))) {
         // hover-only: the launcher menu "+" and, left of it, a repeat of the last choice
         const QRect add = Sidebar::addButtonRect(opt.rect), rep = Sidebar::repeatButtonRect(opt.rect);
         p->setPen(QPen(dim, 1.4, Qt::SolidLine, Qt::RoundCap));
@@ -322,7 +354,9 @@ QSize SidebarDelegate::sizeHint(const QStyleOptionViewItem &opt, const QModelInd
 
 void SidebarDelegate::updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &opt, const QModelIndex &index) const
 {
-    const int left = index.data(Kind).toInt() == SessionRow ? (m_sidebar->flaggedView() ? 37 : 57) : 47;
+    const Settings &st = m_sidebar->settings();
+    const int left = index.data(Kind).toInt() == SessionRow ? (m_sidebar->flaggedView() ? 37 : 57) - (st.shows(QStringLiteral("sessionIcons")) ? 0 : 23)
+                                                            : 47 - (st.shows(QStringLiteral("workspaceIcons")) ? 0 : 17);
     editor->setGeometry(opt.rect.adjusted(left, 3, -12, -3));
 }
 
@@ -375,6 +409,11 @@ Sidebar::Sidebar(Store &store, QWidget *parent)
 QString Sidebar::lastLauncher() const
 {
     return m_store.settings.lastLauncher;
+}
+
+const Settings &Sidebar::settings() const
+{
+    return m_store.settings;
 }
 
 QRect Sidebar::addButtonRect(const QRect &row)
@@ -554,15 +593,18 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
     if (item && item->data(0, Kind).toInt() == WorkspaceRow && event->button() == Qt::LeftButton) {
         const QRect row = visualItemRect(item);
         const QString id = item->data(0, Id).toString();
-        if (addButtonRect(row).contains(pos)) {
+        const bool buttons = m_store.settings.shows(QStringLiteral("workspaceAddSession"));
+        if (buttons && addButtonRect(row).contains(pos)) {
             Q_EMIT launcherMenuRequested(id, viewport()->mapToGlobal(addButtonRect(row).bottomLeft() + QPoint(0, 4)));
             return;
         }
-        if (repeatButtonRect(row).contains(pos)) {
+        if (buttons && repeatButtonRect(row).contains(pos)) {
             Q_EMIT repeatRequested(id);
             return;
         }
-        // a click on the row folds or unfolds it, as agterm's default does
+        // a click on the row folds or unfolds it, as agterm's default does; with that off only the chevron does
+        if (!m_store.settings.workspaceRowClickExpands && pos.x() > row.left() + 24)
+            return QTreeWidget::mousePressEvent(event);
         m_collapsed.contains(id) ? m_collapsed.remove(id) : (m_collapsed.insert(id), true);
         item->setExpanded(!m_collapsed.contains(id));
         item->setData(0, Expanded, item->isExpanded());

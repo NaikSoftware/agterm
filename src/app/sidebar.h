@@ -6,11 +6,17 @@
 #include <QTreeWidget>
 
 class Store;
+struct Settings;
+class QPainter;
 
 // A launcher's icon as a template tinted `color`: the terminal glyph, or the agent's logo.
 QIcon launcherIcon(const QString &launcherId, const QColor &color);
 // agterm's title-bar and footer glyphs: sidebar, split, splitH, filepanel, clock, grid, gridFilled
 QIcon chromeIcon(const QString &name, const QColor &color);
+// a status's glyph colour and shape (circle square triangle diamond capsule star) from Settings > Agent Status
+QColor statusColor(const Settings &settings, const QString &status);
+QString statusShape(const Settings &settings, const QString &status);
+void drawStatusGlyph(QPainter *p, const QPointF &center, qreal radius, const QString &shape);
 // a tint name as the macOS system colour of that name, light or dark by the current palette; invalid for ""
 QColor tintColor(const QString &name);
 
@@ -50,6 +56,7 @@ public:
     static QRect repeatButtonRect(const QRect &row);
     QModelIndex hovered() const { return m_hovered; }
     int blinkAlpha() const { return m_blinkAlpha; }
+    const Settings &settings() const;
 
 Q_SIGNALS:
     void launcherMenuRequested(const QString &workspaceId, const QPoint &globalPos);

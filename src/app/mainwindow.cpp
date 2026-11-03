@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 
 #include "filepanel.h"
+#include "hooks.h"
 #include "launcher.h"
 #include "palette.h"
 #include "paths.h"
@@ -114,6 +115,12 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         b->setFocusPolicy(Qt::NoFocus);
         return b;
     };
+    m_events = new EventSource(store, this);
+    m_hooks = new HookRunner(this);
+    m_hooks->socket = socketPath();
+    m_hooks->pathPrefix = QCoreApplication::applicationDirPath();
+    connect(m_events, &EventSource::event, m_hooks, &HookRunner::fire);
+    connect(m_hooks, &HookRunner::failed, this, [this](const QString &hook, const QString &message) { notifyFailure(tr("Hook failed"), hook + QStringLiteral(": ") + message); });
     auto *newSessionButton = footerButton(QStringLiteral("tab-new"), tr("New Session"));
     connect(newSessionButton, &QToolButton::clicked, this, [this] { newSession(currentWorkspace()); });
     auto *newWorkspaceButton = footerButton(QStringLiteral("list-add"), tr("New Workspace"));
@@ -135,6 +142,8 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     connect(m_filterButton, &QToolButton::clicked, this, [this] { m_store.setFilter(!m_store.focusEnabled); });
     footer->addWidget(m_filterButton);
     footer->addWidget(m_flagButton);
+    m_footer = {{QStringLiteral("newSession"), newSessionButton}, {QStringLiteral("newWorkspace"), newWorkspaceButton},
+                {QStringLiteral("focusFilter"), m_filterButton}, {QStringLiteral("flaggedView"), m_flagButton}};
 
     m_sidebarPanel = new QWidget;
     auto *side = new QVBoxLayout(m_sidebarPanel);
@@ -186,22 +195,30 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     strip->toggleViewAction()->setVisible(false);
     // a plain button, not the checkable menu action: agterm's toggle never renders pressed
     const QColor ink = palette().color(QPalette::WindowText);
-    strip->addAction(chromeIcon(QStringLiteral("filepanel"), ink), tr("Toggle File Panel"), m_actions.value(QStringLiteral("toggle_file_panel")),
-                     &QAction::trigger);
-    strip->addAction(chromeIcon(QStringLiteral("sidebar"), ink), tr("Toggle Sidebar"), m_sidebarAction, &QAction::trigger);
+    m_chrome.insert(QStringLiteral("filePanel"), strip->addAction(chromeIcon(QStringLiteral("filepanel"), ink), tr("Toggle File Panel"),
+                                                                  m_actions.value(QStringLiteral("toggle_file_panel")), &QAction::trigger));
+    m_chrome.insert(QStringLiteral("sidebarToggle"), strip->addAction(chromeIcon(QStringLiteral("sidebar"), ink), tr("Toggle Sidebar"), m_sidebarAction, &QAction::trigger));
+    m_workspaceLabel = new QLabel;
+    m_workspaceLabel->setContentsMargins(6, 0, 0, 0);
+    m_workspaceLabel->setForegroundRole(QPalette::PlaceholderText);
+    m_chrome.insert(QStringLiteral("workspaceName"), strip->addWidget(m_workspaceLabel));
     m_title = new QLabel;
     QFont tf = m_title->font();
     tf.setWeight(QFont::DemiBold);
     m_title->setFont(tf);
     m_title->setContentsMargins(6, 0, 0, 0);
-    strip->addWidget(m_title);
+    m_chrome.insert(QStringLiteral("sessionName"), strip->addWidget(m_title));
     auto *spacer = new QWidget;
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     strip->addWidget(spacer);
     // the mouse form of the Ctrl-Tab switcher, dimmed while there is nowhere else to go
     m_recentAction = strip->addAction(chromeIcon(QStringLiteral("clock"), ink), tr("Recent sessions (Ctrl+Tab)"), this, &MainWindow::recentMenu);
     m_recentAction->setEnabled(false);
-    strip->addAction(chromeIcon(QStringLiteral("split"), ink), tr("Split"), m_actions.value(QStringLiteral("toggle_split")), &QAction::trigger);
+    m_chrome.insert(QStringLiteral("recentSessions"), m_recentAction);
+    m_chrome.insert(QStringLiteral("customCommands"), strip->addAction(QIcon::fromTheme(QStringLiteral("overflow-menu")), tr("Custom Commands"),
+                                                                       this, &MainWindow::customCommandPalette));
+    m_chrome.insert(QStringLiteral("split"),
+                    strip->addAction(chromeIcon(QStringLiteral("split"), ink), tr("Split"), m_actions.value(QStringLiteral("toggle_split")), &QAction::trigger));
     addToolBar(Qt::TopToolBarArea, strip);
     m_strip = strip;
 
@@ -235,15 +252,25 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         const Session *s = m_store.session(id);
         if (!s || (isActiveWindow() && id == m_store.selected))
             return; // already in front of you
-        m_store.setUnseen(id, s->unseen + 1);
-        auto *n = KNotification::event(KNotification::Notification, title.isEmpty() ? s->displayName() : title, body,
-                                       QStringLiteral("agterm-qt"));
+        m_store.setUnseen(id, s->unseen + 1); // counted whatever the badge setting: tree read-back keeps it
+        const Settings &st = m_store.settings;
+        if (st.dockBounce != QLatin1String("off"))
+            QApplication::alert(this, st.dockBounce == QLatin1String("once") ? 1500 : 0);
+        if (!st.notificationsEnabled)
+            return;
+        playSound(st.notificationSoundName);
+        auto *n = new KNotification(QStringLiteral("notification"), KNotification::CloseOnTimeout);
+        n->setComponentName(QStringLiteral("plasma_workspace")); // KNotification::event's standard notification, without a notifyrc of our own
+        n->setTitle(title.isEmpty() ? s->displayName() : title);
+        n->setText(body);
+        n->setIconName(QStringLiteral("agterm-qt"));
         connect(n->addDefaultAction(tr("Show")), &KNotificationAction::activated, this, [this, id] {
             m_store.select(id); // the banner brings the window forward on the session that raised it
             show();
             raise();
             activateWindow();
         });
+        n->sendEvent();
     });
     connect(&m_store, &Store::swapRequested, this, &MainWindow::swapPanes);
     connect(m_tree, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) {
@@ -264,8 +291,28 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
             last = m_store.addSession(target, {}, d);
         m_store.select(last);
     });
+    connect(&m_store, &Store::settingsChanged, this, &MainWindow::applySettings);
+    connect(&m_store, &Store::sessionRemoved, this, [this](const QString &id) {
+        // the editor File > Edit Keymap/Hooks opened has quit: apply what it saved
+        const QString file = m_editing.take(id);
+        if (file.endsWith(QLatin1String("keymap.conf")))
+            reloadKeymap();
+        else if (!file.isEmpty())
+            reloadHooks();
+    });
+    connect(&m_store, &Store::statusChanged, this, [this](const QString &, const QString &status) {
+        if (status == QLatin1String("blocked"))
+            playSound(m_store.settings.blockedStatusSoundName);
+    });
+    for (auto it = m_actions.begin(); it != m_actions.end(); ++it) {
+        QStringList keys;
+        for (const QKeySequence &k : it.value()->shortcuts())
+            keys << k.toString(QKeySequence::PortableText);
+        m_defaultKeys.insert(it.key(), keys);
+    }
     qApp->installEventFilter(this);
     detectLaunchers();
+    applySettings();
 }
 
 QAction *MainWindow::action(const QString &name, const QString &text, const QString &icon, const QKeySequence &key, std::function<void()> slot)
@@ -302,6 +349,13 @@ void MainWindow::createMenus()
                                if (m_store.reopenClosed().isEmpty())
                                    statusBar()->showMessage(tr("Nothing to reopen"), 2000);
                            }));
+    file->addSeparator();
+    file->addAction(action(QStringLiteral("edit_keymap"), tr("Edit Keymap…"), QStringLiteral("document-edit"), {},
+                           [this] { editConfigFile(configDir() + QStringLiteral("/keymap.conf")); }));
+    file->addAction(action(QStringLiteral("reload_keymap"), tr("Reload Keymap"), QStringLiteral("view-refresh"), {}, [this] { reloadKeymap(); }));
+    file->addAction(action(QStringLiteral("edit_hooks"), tr("Edit Hooks…"), QStringLiteral("document-edit"), {},
+                           [this] { editConfigFile(configDir() + QStringLiteral("/hooks.conf")); }));
+    file->addAction(action(QStringLiteral("reload_hooks"), tr("Reload Hooks"), QStringLiteral("view-refresh"), {}, [this] { reloadHooks(); }));
     file->addSeparator();
     file->addAction(action(QStringLiteral("quit"), tr("Quit"), QStringLiteral("application-exit"), QKeySequence(QStringLiteral("Ctrl+Shift+Q")),
                            [this] { close(); }));
@@ -398,6 +452,7 @@ void MainWindow::createMenus()
     view->addSeparator();
     view->addAction(action(QStringLiteral("toggle_terminal_zoom"), tr("Terminal Zoom"), QStringLiteral("zoom-fit-best"),
                            QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Return")), [this] { toggleZoom(); }));
+    view->addAction(action(QStringLiteral("select_theme"), tr("Select Theme…"), QStringLiteral("color-management"), {}, [this] { selectTheme(); }));
     view->addAction(action(QStringLiteral("toggle_fullscreen"), tr("Full Screen"), QStringLiteral("view-fullscreen"), QKeySequence(QStringLiteral("F11")),
                            [this] { setWindowState(windowState() ^ Qt::WindowFullScreen); }));
 
@@ -424,10 +479,14 @@ void MainWindow::createMenus()
         QList<Palette::Item> items;
         for (QAction *a : actions())
             if (!a->text().isEmpty() && a != m_actions.value(QStringLiteral("command_palette")))
-                items.append({a->text().remove(QLatin1Char('&')).remove(QStringLiteral("…")), a->shortcut().toString(QKeySequence::NativeText), [a] { a->trigger(); },
-                              a->isEnabled()});
+                items.append({a->text().remove(QLatin1Char('&')).remove(QStringLiteral("…")),
+                              (a->property("agtermCustom").toBool() ? tr("custom") + QStringLiteral("  ") : QString()) + a->shortcut().toString(QKeySequence::NativeText),
+                              [a] { a->trigger(); }, a->isEnabled()});
         m_palette->open(tr("Run an action…"), items);
     }));
+    // ⌃⇧O; Ctrl+Shift+O is ⌘O (Open Directory) here, so the Shift becomes Alt
+    nav->addAction(action(QStringLiteral("custom_command_palette"), tr("Custom Commands…"), QStringLiteral("system-run"), QKeySequence(QStringLiteral("Ctrl+Alt+O")),
+                          [this] { customCommandPalette(); }));
     nav->addAction(action(QStringLiteral("mru_switcher"), tr("Switch to Recent Session"), {}, QKeySequence(QStringLiteral("Ctrl+Tab")), [this, sessionItems] {
         m_palette->switching() ? m_palette->step(1) : m_palette->open({}, sessionItems(true), true);
     }));
@@ -460,12 +519,31 @@ void MainWindow::createMenus()
 
 bool MainWindow::isOwnShortcut(QKeyEvent *event) const
 {
-    const QKeySequence key(event->keyCombination());
+    static const QSet<int> modifierKeys{Qt::Key_Control, Qt::Key_Shift, Qt::Key_Alt, Qt::Key_Meta, Qt::Key_AltGr, Qt::Key_Super_L, Qt::Key_Super_R};
+    if (modifierKeys.contains(event->key()))
+        return false;
+    // a leader sequence (ctrl+a>g): the window claims every key while some binding still partially matches
+    QList<QKeyCombination> chords = m_chordPrefix;
+    chords << event->keyCombination();
+    const auto none = QKeyCombination::fromCombined(0);
+    const QKeySequence seq(chords[0], chords.value(1, none), chords.value(2, none), chords.value(3, none));
+    bool partial = false;
     for (const QAction *a : actions())
         if (a->isEnabled())
-            for (const QKeySequence &k : a->shortcuts())
-                if (k.matches(key) == QKeySequence::ExactMatch)
+            for (const QKeySequence &k : a->shortcuts()) {
+                const auto m = seq.matches(k); // Partial: seq is a prefix of k
+                if (m == QKeySequence::ExactMatch) {
+                    m_chordPrefix.clear();
                     return true;
+                }
+                partial |= m == QKeySequence::PartialMatch;
+            }
+    if (partial && chords.size() < 4) {
+        m_chordPrefix = chords;
+        return true;
+    }
+    if (!std::exchange(m_chordPrefix, {}).isEmpty())
+        return isOwnShortcut(event); // the sequence broke off: this key on its own
     return false;
 }
 
@@ -536,8 +614,18 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
     if (!command.isEmpty())
         argv << QStringLiteral("-c") << command;
     qobject_cast<TerminalInterface *>(part)->startProgram(argv.first(), argv);
-    if (QWidget *display = terminalDisplay(part)) // the profile's size, what reset returns to
+    if (QWidget *display = terminalDisplay(part)) { // the profile's font, what Settings and reset return to
+        display->setProperty("agtermProfileFont", display->font());
         display->setProperty("agtermBaseFont", display->font().pointSizeF());
+    }
+    applyAppearance(part);
+    watchTerminalNotifications(part, bridge);
+    stripPartShortcuts();
+    return part;
+}
+
+void MainWindow::stripPartShortcuts()
+{
     // Konsole's own actions (close-session on Ctrl+Shift+W, …) would make our chords ambiguous, and an
     // ambiguous shortcut fires neither, so the window's keys win
     QSet<QKeySequence> ours;
@@ -550,7 +638,6 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
             if (keep.removeIf([&ours](const QKeySequence &k) { return ours.contains(k); }) > 0)
                 a->setShortcuts(keep);
         }
-    return part;
 }
 
 void MainWindow::createTerminal(const QString &id)
@@ -889,6 +976,7 @@ void MainWindow::showSelected()
         m_filePanel->setRoot(liveCwd(m_store.selected)); // no-op while the folder is unchanged
     const QString name = s ? s->displayName() : QString();
     m_title->setText(name);
+    m_workspaceLabel->setText(s ? m_store.workspaceOf(s->id)->name.left(24) + QStringLiteral("  /") : QString());
     setWindowTitle(name);
 }
 
@@ -1080,16 +1168,13 @@ void MainWindow::recentMenu()
         const Session *s = m_store.session(id);
         QIcon dot;
         if (s->status != QLatin1String("idle")) {
-            static const QHash<QString, QColor> colors{{QStringLiteral("active"), QColor(0xDB, 0xD9, 0xE6)},
-                                                       {QStringLiteral("blocked"), QColor(0xFF, 0x9F, 0x0A)},
-                                                       {QStringLiteral("completed"), QColor(0x30, 0xD1, 0x58)}};
             QPixmap pm(16, 16);
             pm.fill(Qt::transparent);
             QPainter p(&pm);
             p.setRenderHint(QPainter::Antialiasing);
             p.setPen(Qt::NoPen);
-            p.setBrush(colors.value(s->status));
-            p.drawEllipse(QRectF(3, 3, 10, 10));
+            p.setBrush(statusColor(m_store.settings, s->status));
+            drawStatusGlyph(&p, QPointF(8, 8), 5, statusShape(m_store.settings, s->status));
             p.end();
             dot = QIcon(pm);
         }
@@ -1235,74 +1320,6 @@ void MainWindow::profileDialog(const char *slot)
     auto *part = m_panes.value(m_store.selected).main;
     if (!part || !QMetaObject::invokeMethod(part, slot, Q_ARG(QWidget *, this)))
         statusBar()->showMessage(tr("Open a session first"), 2000);
-}
-
-void MainWindow::showSettings()
-{
-    // agterm's Settings ▸ General subset that exists here so far
-    QDialog dlg(this);
-    dlg.setWindowTitle(tr("Configure agterm"));
-    auto *form = new QFormLayout;
-    Settings s = m_store.settings;
-
-    auto *dirMode = new QComboBox;
-    dirMode->addItem(tr("Home directory"), QStringLiteral("home"));
-    dirMode->addItem(tr("Workspace folder"), QStringLiteral("workspace"));
-    dirMode->addItem(tr("Fixed folder"), QStringLiteral("custom"));
-    dirMode->setCurrentIndex(dirMode->findData(s.newSessionDirectory));
-    auto *custom = new QLineEdit(s.newSessionCustomDirectory);
-    auto *browse = new QPushButton(QIcon::fromTheme(QStringLiteral("document-open-folder")), {});
-    connect(browse, &QPushButton::clicked, &dlg, [&] {
-        const QString d = QFileDialog::getExistingDirectory(&dlg, tr("Folder for new sessions"), custom->text().isEmpty() ? QDir::homePath() : custom->text());
-        if (!d.isEmpty())
-            custom->setText(d);
-    });
-    auto *customRow = new QHBoxLayout;
-    customRow->addWidget(custom, 1);
-    customRow->addWidget(browse);
-    auto syncCustom = [&] {
-        const bool on = dirMode->currentData() == QLatin1String("custom");
-        custom->setEnabled(on);
-        browse->setEnabled(on);
-    };
-    connect(dirMode, &QComboBox::currentIndexChanged, &dlg, syncCustom);
-    syncCustom();
-
-    auto *placement = new QComboBox;
-    placement->addItem(tr("At the end of the workspace"), QStringLiteral("end"));
-    placement->addItem(tr("After the current session"), QStringLiteral("afterCurrent"));
-    placement->setCurrentIndex(placement->findData(s.newSessionPlacement));
-    auto *reset = new QComboBox;
-    reset->addItem(tr("On the first key"), QStringLiteral("firstKey"));
-    reset->addItem(tr("On Enter"), QStringLiteral("enter"));
-    reset->addItem(tr("Never"), QStringLiteral("never"));
-    reset->setCurrentIndex(reset->findData(s.statusReset));
-    auto *confirm = new QCheckBox(tr("Ask before closing a session"));
-    confirm->setChecked(s.confirmCloseSession);
-    auto *undoClose = new QCheckBox(tr("Allow undo after closing sessions and workspaces"));
-    undoClose->setChecked(s.closeUndo);
-
-    form->addRow(tr("New sessions open in:"), dirMode);
-    form->addRow(QString(), customRow);
-    form->addRow(tr("New sessions are added:"), placement);
-    form->addRow(tr("Typing clears blocked/done status:"), reset);
-    form->addRow(QString(), confirm);
-    form->addRow(QString(), undoClose);
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    auto *col = new QVBoxLayout(&dlg);
-    col->addLayout(form);
-    col->addWidget(buttons);
-    if (dlg.exec() != QDialog::Accepted)
-        return;
-    s.newSessionDirectory = dirMode->currentData().toString();
-    s.newSessionCustomDirectory = custom->text();
-    s.newSessionPlacement = placement->currentData().toString();
-    s.statusReset = reset->currentData().toString();
-    s.confirmCloseSession = confirm->isChecked();
-    s.closeUndo = undoClose->isChecked();
-    m_store.setSettings(s);
 }
 
 void MainWindow::save()

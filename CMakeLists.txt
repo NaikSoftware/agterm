@@ -36,10 +36,12 @@ target_include_directories(agterm-core PUBLIC src/core)
 target_link_libraries(agterm-core PUBLIC Qt6::Core)
 
 find_package(KF6Config REQUIRED)
-add_library(agterm-ui STATIC src/app/mainwindow.cpp src/app/sidebar.cpp src/app/palette.cpp resources/resources.qrc)
+find_package(KF6WidgetsAddons REQUIRED)
+add_library(agterm-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/settingsdialog.cpp src/app/sidebar.cpp src/app/palette.cpp
+  resources/resources.qrc)
 target_include_directories(agterm-ui PUBLIC src/app)
 find_package(KF6Notifications REQUIRED)
-target_link_libraries(agterm-ui PUBLIC agterm-core Qt6::Widgets Qt6::DBus Qt6::Svg KF6::Parts KF6::Notifications)
+target_link_libraries(agterm-ui PUBLIC agterm-core Qt6::Widgets Qt6::DBus Qt6::Svg KF6::Parts KF6::Notifications KF6::ConfigCore KF6::WidgetsAddons ${CMAKE_DL_LIBS})
 add_executable(agterm-qt src/app/main.cpp)
 target_link_libraries(agterm-qt PRIVATE agterm-ui Qt6::Network KF6::ConfigCore)
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "control.h"
+#include "keymap.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -19,6 +20,7 @@ class Sidebar;
 class Store;
 struct Session;
 class TerminalInterface;
+class PartBridge;
 namespace KParts { class ReadOnlyPart; }
 
 class MainWindow : public QMainWindow, public Terminals
@@ -41,6 +43,23 @@ public:
     QJsonObject chromeState() const override;
     bool panePlan(const QString &sessionId, const QString &pane, PanePlan *out, QString *error) override;
     bool font(const QString &sessionId, const QString &pane, const QString &op, QString *error) override;
+    bool appCommand(const QString &cmd, const QString &sessionId, const QJsonObject &args, QJsonObject *result, QString *error) override;
+
+    // config.cpp: keymap.conf, hooks.conf, appearance, the theme picker
+    QString configDir() const;
+    void loadConfig(); // reads both files, writing the commented starters where they are missing
+    int reloadKeymap();
+    int reloadHooks();
+    const Keymap &keymap() const { return m_keymap; }
+    class HookRunner *hooks() const { return m_hooks; }
+    class EventSource *events() const { return m_events; }
+    QStringList themes() const; // Konsole colour schemes: the bundled ones and the user's
+    void selectTheme();
+    void previewTheme(const QString &name); // "" ends the preview
+    void runCustomCommand(const QString &name, const QString &sessionId);
+    void showSettings();
+    void applySettings(); // live: appearance, chrome visibility, sidebar
+    QAction *namedAction(const QString &name) const { return m_actions.value(name); }
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -75,7 +94,26 @@ private:
     void fillTintMenu(QMenu *menu, const QStringList &ids); // ids: sessions, or one workspace
     void go(const QString &direction);
     void profileDialog(const char *slot);
-    void showSettings();
+    void editConfigFile(const QString &path);
+    void applyAppearance(KParts::ReadOnlyPart *part);
+    void watchTerminalNotifications(KParts::ReadOnlyPart *part, PartBridge *bridge);
+    void stripPartShortcuts();
+    void notifyFailure(const QString &title, const QString &body);
+    void playSound(const QString &name) const; // a freedesktop sound-theme name; "" plays nothing
+    void customCommandPalette();
+    QObject *sessionOf(KParts::ReadOnlyPart *part) const;
+    QList<KParts::ReadOnlyPart *> parts() const;
+    QMap<QString, QStringList> m_defaultKeys; // each built-in's shipped shortcuts, portable text
+    Keymap m_keymap;
+    QList<QAction *> m_customActions;
+    class HookRunner *m_hooks;
+    class EventSource *m_events;
+    mutable QList<QKeyCombination> m_chordPrefix; // a leader sequence in progress
+    QString m_previewTheme, m_appliedAppearance;
+    QHash<QString, QString> m_editing; // session id -> the config file its editor has open
+    QLabel *m_workspaceLabel;
+    QHash<QString, QAction *> m_chrome; // interface element -> its title-strip action
+    QHash<QString, QWidget *> m_footer; // interface element -> its footer button
     void sampleAgents();
     void detectLaunchers();
     TerminalInterface *terminal(const QString &id) const;
@@ -127,9 +165,13 @@ class PartBridge : public QObject
     Q_OBJECT
 public:
     PartBridge(MainWindow *window, Store &store, const QString &id, QObject *parent);
+    QPointer<QObject> session; // Konsole's Session, for forwarding the OSC 777 forms we do not take
+
 public Q_SLOTS:
     void currentDirectoryChanged(const QString &dir);
     void overrideShortcut(QKeyEvent *event, bool &override);
+    void sessionAttribute(int what, const QString &text); // OSC 9 from the emulation
+    void osc777(const QStringList &params);
 
 private:
     MainWindow *m_window;

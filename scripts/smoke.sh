@@ -17,8 +17,34 @@ stop() { kill "$pid"; wait "$pid" 2>/dev/null || true; }
 fail() { echo "FAIL: $*"; ctl tree || true; stop; exit 1; }
 trap 'kill $pid 2>/dev/null || true; rm -rf "$AGTERM_STATE_DIR"' EXIT
 
+mkdir -p "$AGTERM_STATE_DIR/config" # an isolated state dir keeps keymap.conf and hooks.conf there too
+cat >"$AGTERM_STATE_DIR/config/keymap.conf" <<EOF
+map ctrl+alt+l toggle_split
+command "Mark" ctrl+a>m echo "{AGT_SESSION_ID}" > "$AGTERM_STATE_DIR/mark"
+map bogus toggle_split
+EOF
+cat >"$AGTERM_STATE_DIR/config/hooks.conf" <<EOF
+on app.launched touch "$AGTERM_STATE_DIR/launched"
+on session.created cat >> "$AGTERM_STATE_DIR/created"
+EOF
 start
 ctl version
+for _ in $(seq 20); do [ -f "$AGTERM_STATE_DIR/launched" ] && break; sleep 0.1; done
+[ -f "$AGTERM_STATE_DIR/launched" ] || fail "app.launched hook"
+ctl keymap list | grep -qE '^  toggle_split +Ctrl\+Alt\+L  \(mapped\)' || fail "keymap list read-back"
+ctl keymap list | grep -q "line 3: invalid chord 'bogus'" || fail "keymap diagnostics"
+[ "$(ctl keymap reload)" = "1 diagnostic(s)" ] || fail "keymap reload count"
+first=$(ctl tree | awk 'NR==2{print $2}')
+ctl keymap run Mark --target "$first" >/dev/null
+for _ in $(seq 20); do [ -s "$AGTERM_STATE_DIR/mark" ] && break; sleep 0.1; done
+[ "$(cat "$AGTERM_STATE_DIR/mark")" = "$first" ] || fail "keymap run with {AGT_SESSION_ID}"
+ctl keymap run Nope 2>/dev/null && fail "unknown custom command accepted"
+ctl hooks list | grep -q 'on session.created' || fail "hooks list"
+ctl theme list | grep -q ' DarkPastels' || fail "theme list"
+ctl theme set DarkPastels >/dev/null
+ctl theme list | grep -q '^\* DarkPastels' || fail "theme set read-back"
+ctl theme set NoSuchScheme 2>/dev/null && fail "unknown theme accepted"
+ctl theme set >/dev/null
 [ "$(ctl tree | grep -c '^  ')" = 1 ] || fail "first launch should open one session"
 id=$(ctl session new --name probe --cwd /tmp --workspace-name agents --create-workspace)
 sleep 1
@@ -45,6 +71,11 @@ ctl notify --title smoke --body hi --target "$bg"
 ctl session info --target "$bg" | grep -qE '^unseen +1' || fail "unseen badge"
 ctl session seen --target "$bg"
 ctl session info --target "$bg" | grep -qE '^unseen +0' || fail "session seen"
+sleep 0.5
+ctl session type $'printf "\\033]9;from osc\\007"\n' --target "$bg"
+for _ in $(seq 20); do ctl session info --target "$bg" | grep -qE '^unseen +1' && break; sleep 0.1; done
+ctl session info --target "$bg" | grep -qE '^unseen +1' || fail "OSC 9 from a pane raises the badge"
+grep -q "\"session\":\"$bg\"" "$AGTERM_STATE_DIR/created" || fail "session.created hook got the event on stdin"
 ctl filepanel show >/dev/null
 ctl tree --json | grep -q '"filePanel":{"visible":true' || fail "file panel show"
 ctl filepanel width 260 >/dev/null

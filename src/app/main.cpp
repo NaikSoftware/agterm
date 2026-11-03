@@ -1,4 +1,5 @@
 #include "control.h"
+#include "hooks.h"
 #include "mainwindow.h"
 #include "paths.h"
 #include "store.h"
@@ -96,6 +97,7 @@ int main(int argc, char **argv)
     store.fromJson(state);
     MainWindow window(store, statePath);
     window.restore(state.value("window").toObject());
+    window.loadConfig();
     if (store.allSessions().isEmpty()) {
         const QString ws = store.workspaces.isEmpty() ? store.addWorkspace(QStringLiteral("main")) : store.workspaces.first().id;
         store.select(store.addSession(ws, {}, {}));
@@ -110,6 +112,7 @@ int main(int argc, char **argv)
         qWarning("control socket %s: %s", qPrintable(socketPath()), qPrintable(server.errorString()));
     window.setSocketStatus(listening, server.errorString());
     serve(server, store, window);
+    window.events()->emitEvent(QStringLiteral("app.launched")); // hooks loaded, socket accepting, sessions restored
 
     // SIGTERM (logout, kill) must save like a window close; a self-pipe moves it onto the event loop
     static int sigFd[2];

@@ -45,6 +45,11 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session text [--lines N]              full screen + scrollback
   session status <idle|active|completed|blocked> [--auto-reset] [--blink]
   session go --to next|prev|first|last|next-attention|prev-attention
+  keymap reload | list                  re-read keymap.conf; show what each built-in and custom command is bound to
+  keymap run <name>                     start a custom command for the target session
+  hooks reload | list                   re-read hooks.conf; show each hook's live state
+  theme list                            Konsole colour schemes (* = current)
+  theme set [name]                      no name: back to the Konsole profile's own scheme
 )";
 
 static int die(const QString &message)
@@ -79,7 +84,7 @@ int main(int argc, char **argv)
         return fputs(usage, stderr), 1;
 
     QString cmd = pos.takeFirst();
-    if ((cmd == QLatin1String("workspace") || cmd == QLatin1String("session") || cmd == QLatin1String("recent") || cmd == QLatin1String("font")) && !pos.isEmpty())
+    if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme"}.contains(cmd) && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
     if (cmd == QLatin1String("filepanel") && pos.value(0) == QLatin1String("width"))
         cmd = QStringLiteral("filepanel.width"), pos.removeFirst();
@@ -126,6 +131,8 @@ int main(int argc, char **argv)
     copy("axis", "axis");
     if (cmd == QLatin1String("session.move"))
         args.insert("workspace", arg);
+    if (cmd == QLatin1String("keymap.run") || cmd == QLatin1String("theme.set"))
+        args.insert("name", arg);
     if (cmd.endsWith(QLatin1String(".rename")))
         args.insert("name", arg);
     if (cmd == QLatin1String("session.status"))
@@ -157,7 +164,8 @@ int main(int argc, char **argv)
 
     QJsonObject request{{"cmd", cmd}, {"args", args}};
     QString target = opt.value(QStringLiteral("target"));
-    if (target.isEmpty() && (cmd.startsWith(QLatin1String("session.")) || cmd.startsWith(QLatin1String("font.")) || cmd == QLatin1String("notify")) && cmd != QLatin1String("session.new"))
+    if (target.isEmpty() && (cmd.startsWith(QLatin1String("session.")) || cmd.startsWith(QLatin1String("font.")) || cmd == QLatin1String("notify") || cmd == QLatin1String("keymap.run"))
+        && cmd != QLatin1String("session.new"))
         target = qEnvironmentVariable("AGTERM_SESSION_ID"); // a pane addresses itself by default
     if (!target.isEmpty())
         request.insert("target", target);
@@ -192,6 +200,43 @@ int main(int argc, char **argv)
                        qPrintable(s["name"].toString()), qPrintable(s["status"].toString()), qPrintable(s["cwd"].toString()));
             }
         }
+    } else if (result.contains("keymap")) {
+        const QJsonObject k = result["keymap"].toObject();
+        printf("%s\n", qPrintable(k["path"].toString()));
+        for (const auto &v : k["actions"].toArray()) {
+            QStringList keys{v.toObject()["chord"].toString()};
+            for (const auto &a : v.toObject()["alternates"].toArray())
+                keys << a.toString();
+            printf("  %-28s %s%s\n", qPrintable(v.toObject()["name"].toString()), qPrintable(keys.join(QLatin1Char('|'))), v.toObject()["marked"].toBool() ? "  (mapped)" : "");
+        }
+        for (const auto &v : k["commands"].toArray())
+            printf("  command \"%s\" %s%s  %s\n", qPrintable(v.toObject()["name"].toString()), qPrintable(v.toObject()["shortcut"].toString()),
+                   v.toObject()["errorHud"].toBool() ? " --error-hud" : "", qPrintable(v.toObject()["command"].toString()));
+        for (const auto &v : k["diagnostics"].toArray())
+            printf("  line %d: %s\n", v.toObject()["line"].toInt(), qPrintable(v.toObject()["message"].toString()));
+        printf("menu:\n");
+        for (const auto &v : k["menu"].toArray())
+            printf("  %-32s %s%s\n", qPrintable(v.toObject()["title"].toString()), qPrintable(v.toObject()["chord"].toString()), v.toObject()["enabled"].toBool() ? "" : "  (disabled)");
+    } else if (result.contains("hooks")) {
+        const QJsonObject h = result["hooks"].toObject();
+        printf("%s\n", qPrintable(h["path"].toString()));
+        for (const auto &v : h["hooks"].toArray()) {
+            printf("  line %d  on %s %s", v.toObject()["line"].toInt(), qPrintable(v.toObject()["kind"].toString()), qPrintable(v.toObject()["command"].toString()));
+            if (v.toObject().contains("runningPid"))
+                printf("  [running pid %lld]", qint64(v.toObject()["runningPid"].toDouble()));
+            if (v.toObject()["pending"].toInt() || v.toObject()["dropped"].toInt())
+                printf("  [pending %d, dropped %d]", v.toObject()["pending"].toInt(), v.toObject()["dropped"].toInt());
+            if (v.toObject().contains("lastFailure"))
+                printf("  [last failure: %s]", qPrintable(v.toObject()["lastFailure"].toString()));
+            printf("%s\n", v.toObject()["retired"].toBool() ? "  (retired)" : "");
+        }
+        for (const auto &v : h["diagnostics"].toArray())
+            printf("  line %d: %s\n", v.toObject()["line"].toInt(), qPrintable(v.toObject()["message"].toString()));
+    } else if (result.contains("themes")) {
+        for (const auto &v : result["themes"].toArray())
+            printf("%s %s\n", v.toString() == result["theme"].toString() ? "*" : " ", qPrintable(v.toString()));
+    } else if (result.contains("count")) {
+        printf("%d diagnostic(s)\n", result["count"].toInt());
     } else if (result.contains("session")) {
         const auto s = result["session"].toObject();
         for (auto it = s.begin(); it != s.end(); ++it)

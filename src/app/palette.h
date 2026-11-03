@@ -16,10 +16,12 @@ public:
         QString title, subtitle;
         std::function<void()> run;
         bool enabled = true; // a disabled action still shows and matches, greyed out, and does nothing
+        std::function<void()> preview; // runs when the row becomes current (the theme picker's live preview)
     };
 
     explicit Palette(QWidget *window);
-    void open(const QString &placeholder, const QList<Item> &items, bool switcher = false);
+    // cancel runs on Esc or a click outside, not after a pick; current = the row selected at open
+    void open(const QString &placeholder, const QList<Item> &items, bool switcher = false, std::function<void()> cancel = {}, int current = -1);
     void step(int delta);
     bool switching() const { return isVisible() && m_switcher; }
 
@@ -37,4 +39,7 @@ private:
     QListWidget *m_list;
     QList<Item> m_items;
     bool m_switcher = false;
+    std::function<void()> m_cancel;
+    int m_initial = -1;
+    void dismiss();
 };

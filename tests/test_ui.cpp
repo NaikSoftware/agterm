@@ -1,14 +1,22 @@
 #include "mainwindow.h"
+#include "hooks.h"
 #include "sidebar.h"
 #include "store.h"
 
 #include <QApplication>
+#include <QCheckBox>
+#include <QDir>
+#include <QFile>
+#include <KPageDialog>
 #include <QLineEdit>
 #include <QMenu>
 #include <QTimer>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QToolButton>
+#include <QSignalSpy>
+#include <QJsonDocument>
+#include <QToolBar>
 #include <QTest>
 
 class TestUi : public QObject
@@ -18,6 +26,167 @@ class TestUi : public QObject
     QTemporaryDir dir;
 
 private Q_SLOTS:
+
+    // the config dir follows AGTERM_STATE_DIR (set by ctest), so nothing here touches ~/.config
+    static QString writeConfig(const QString &name, const QString &text)
+    {
+        const QString dir = qEnvironmentVariable("AGTERM_STATE_DIR") + QStringLiteral("/config");
+        QDir().mkpath(dir);
+        QFile f(dir + QLatin1Char('/') + name);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+            return {};
+        f.write(text.toUtf8());
+        return f.fileName();
+    }
+
+    static QWidget *display(MainWindow &)
+    {
+        const bool ok = QTest::qWaitFor([] { return QApplication::focusWidget() && QApplication::focusWidget()->inherits("Konsole::TerminalDisplay"); }, 5000);
+        return ok ? QApplication::focusWidget() : nullptr;
+    }
+
+    void keymapRebindsAndLeaderSequencesFireFromTheTerminal()
+    {
+        QTemporaryDir out;
+        const QString touched = out.filePath("touched");
+        writeConfig("keymap.conf", QStringLiteral("map ctrl+alt+l toggle_split\n"
+                                                  "command \"Touch\" ctrl+a>g touch \"%1\" && echo \"{AGT_SESSION_ID}\" > \"%1\"\n"
+                                                  "map bogus toggle_split\n")
+                                       .arg(touched));
+        Store store;
+        MainWindow w(store, dir.filePath("keymap.json"));
+        w.restore({});
+        w.loadConfig();
+        const QString id = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(id);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QWidget *term = display(w);
+        QCOMPARE(w.keymap().diagnostics.size(), 1);
+        QCOMPARE(w.namedAction("toggle_split")->shortcut(), QKeySequence("Ctrl+Alt+L"));
+
+        QTest::keyClick(term, Qt::Key_L, Qt::ControlModifier | Qt::AltModifier);
+        QTRY_VERIFY(store.session(id)->hasSplit);
+        QTest::keyClick(term, Qt::Key_D, Qt::ControlModifier | Qt::ShiftModifier); // its old chord is free now
+        QVERIFY(store.session(id)->splitVisible);
+
+        QTRY_VERIFY_WITH_TIMEOUT(QApplication::focusWidget() && QApplication::focusWidget()->inherits("Konsole::TerminalDisplay"), 5000);
+        term = QApplication::focusWidget();
+        QTest::keyClick(term, Qt::Key_A, Qt::ControlModifier);
+        QTest::keyClick(term, Qt::Key_G);
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(touched) && QFile(touched).size() > 0, 5000);
+        QFile f(touched);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll().trimmed(), id.toUtf8()); // {AGT_SESSION_ID} expanded
+
+        QString error;
+        QJsonObject result;
+        QVERIFY(!w.appCommand("keymap.run", id, {{"name", "nope"}}, &result, &error));
+        QVERIFY(w.appCommand("keymap.list", {}, {}, &result, &error));
+        QVERIFY(QJsonDocument(result).toJson().contains("\"marked\": true"));
+    }
+
+    void themePickerPreviewsRevertsAndCommits()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("theme.json"));
+        w.restore({});
+        store.select(store.addSession(store.addWorkspace("w"), {}, {}));
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QWidget *term = display(w);
+        QVERIFY(w.themes().contains("DarkPastels"));
+        const QColor before = term->palette().color(QPalette::Window);
+        w.previewTheme("DarkPastels");
+        QTRY_VERIFY(term->palette().color(QPalette::Window) != before);
+        w.previewTheme({});
+        QTRY_COMPARE(term->palette().color(QPalette::Window), before);
+
+        w.selectTheme();
+        auto *search = qobject_cast<QLineEdit *>(QApplication::focusWidget());
+        QVERIFY(search);
+        QTest::keyClicks(search, "DarkPastels");
+        QTRY_VERIFY(term->palette().color(QPalette::Window) != before); // the filtered row is previewed
+        QTest::keyClick(search, Qt::Key_Escape);
+        QTRY_COMPARE(term->palette().color(QPalette::Window), before);
+        QVERIFY(store.settings.theme.isEmpty());
+
+        w.selectTheme();
+        search = qobject_cast<QLineEdit *>(QApplication::focusWidget());
+        QTest::keyClicks(search, "DarkPastels");
+        QTest::keyClick(search, Qt::Key_Return);
+        QCOMPARE(store.settings.theme, QStringLiteral("DarkPastels"));
+        QString error;
+        QJsonObject result;
+        QVERIFY(!w.appCommand("theme.set", {}, {{"name", "NoSuchScheme"}}, &result, &error));
+        QVERIFY(w.appCommand("theme.set", {}, {}, &result, &error));
+        QTRY_COMPARE(term->palette().color(QPalette::Window), before); // back to the profile's scheme
+    }
+
+    void oscNotificationsRaiseTheBadge()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("osc.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString front = store.addSession(ws, {}, {}), back = store.addSession(ws, {}, {});
+        store.select(front);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        display(w);
+        QSignalSpy notified(&store, &Store::notified);
+        QString error;
+        QTest::qWait(500); // the shell is up
+        w.type(back, QStringLiteral("printf '\\033]9;nine\\007'; printf '\\033]777;notify;Title;Body\\007'\n"), &error);
+        QTRY_COMPARE_WITH_TIMEOUT(notified.size(), 2, 5000);
+        QStringList got;
+        for (const auto &n : notified)
+            got << n[1].toString() + "|" + n[2].toString();
+        got.sort();
+        QCOMPARE(got, (QStringList{"Title|Body", "|nine"}));
+        QCOMPARE(store.session(back)->unseen, 2);
+    }
+
+    void settingsDialogAppliesLive()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("settings.json"));
+        w.restore({});
+        store.select(store.addSession(store.addWorkspace("w"), {}, {}));
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QWidget *term = display(w);
+        QAction *split = nullptr;
+        for (QAction *a : w.findChild<QToolBar *>("titleStrip")->actions())
+            if (a->text() == QStringLiteral("Split"))
+                split = a;
+        QVERIFY(split && split->isVisible());
+        w.showSettings();
+        auto *dlg = w.findChild<KPageDialog *>("settingsDialog");
+        QVERIFY(dlg);
+        QCheckBox *box = nullptr;
+        for (QWidget *x : QApplication::allWidgets()) // KPageView parents a page only once it is shown
+            if (auto *b = qobject_cast<QCheckBox *>(x); b && b->text().remove('&') == QStringLiteral("Split view")) // KDE adds accelerators
+                box = b;
+        QVERIFY(box);
+        QVERIFY(box->isChecked());
+        box->setChecked(false);
+        QVERIFY(!store.settings.shows("split"));
+        QVERIFY(!split->isVisible());
+        const double size = term->font().pointSizeF();
+        Settings s = store.settings;
+        s.fontSize = size + 4;
+        store.setSettings(s);
+        QTRY_COMPARE(term->font().pointSizeF(), size + 4);
+        QString error;
+        QVERIFY(w.font(store.selected, "main", "reset", &error)); // reset returns to the Settings size, not the profile's
+        QCOMPARE(term->font().pointSizeF(), size + 4);
+        dlg->close();
+    }
     void shortcutsReachTheAppFromTheTerminalAndTypingClearsAttention()
     {
         Store store;
