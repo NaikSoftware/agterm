@@ -52,20 +52,20 @@ extension WindowContentView {
                     Spacer(minLength: 0)
                     // keep the columns-width frame even when the toggle is hidden, so the title still starts
                     // at the terminal's leading edge; the Spacer fills the freed space.
+                    filePanelToggleButton.labelStyle(.iconOnly)
                     if shows(.sidebarToggle) {
                         sidebarToggleButton.labelStyle(.iconOnly)
                     }
-                    filePanelToggleButton.labelStyle(.iconOnly)
                 }
                 // the 40pt floor plus the file panel button and its spacing
                 .frame(width: max(74, leadingColumnsWidth - 1 - 78))
                 Color.clear.frame(width: 11).allowsHitTesting(false) // 1px divider + gap to the title
             } else {
                 HStack(spacing: 14) {
+                    filePanelToggleButton.labelStyle(.iconOnly)
                     if shows(.sidebarToggle) {
                         sidebarToggleButton.labelStyle(.iconOnly)
                     }
-                    filePanelToggleButton.labelStyle(.iconOnly)
                 }
                 Spacer().frame(width: 12)
             }
