@@ -1375,6 +1375,9 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   open window, clamps like `sidebar.width` and echoes the stored width as `result.filePanelWidth`.
   Deliberate exemption: `filePanelVisible` and `filePanelWidth` are read back on the `tree` top level only, with
   no `window.list` field and no change notification.
+  The panel's file operations (open, rename, trash, cut/copy/paste, drag-move, New Companion Here) deliberately have no
+  protocol or CLI form: shell `mv`/`cp`/`trash`, `session.companion.new --cwd` and
+  `session.overlay.open --markdown/--text/--image` already script them.
 - `workspace.focus on` replaces/enables; off removes and disables on empty; toggle clears sole applied
   target or replaces/enables; add inserts without changing enabled state. There is no membership toggle.
   Clear Focus loops off over members; `workspace.filter off` only suspends.

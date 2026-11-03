@@ -2,8 +2,8 @@
 name: agterm
 description: >
   Drive agterm, a native macOS terminal, via agtermctl. Use in an agterm session:
-  manage sessions, companions and workspaces; split panes; toggle the scratch; run, hide or show overlays;
-  read exit status; show HTML pages, interactive too, URLs or dev servers in an overlay with saved logins;
+  manage sessions, companions and workspaces; split panes; toggle the scratch or file panel; run, hide or show overlays;
+  read exit status; show HTML pages, URLs or dev servers in an overlay with saved logins;
   post a HUD/caption/notification/sidebar activity line; message panes; show a picker, question or input dialog; show images/markdown/code; type
   into or restart a pane by id, copy its selection, set the clipboard, search its scrollback; manage windows, font size and
   theme; reload or edit the keymap, event hooks and agterm-scoped ghostty config; run a custom command; read
@@ -689,7 +689,7 @@ Visibility/mode act on the frontmost window; `sidebar expand`/`collapse`/`width`
 
 **filepanel** — `filepanel [show|hide|toggle]` (the file tree beside the sidebar, frontmost window; read back from the
 tree's `filePanelVisible`) · `filepanel width <points> [--window W]` (clamped to 160...560pt; prints the stored width and
-reads back from the tree's `filePanelWidth`). Neither has a `window list` field or an event.
+reads back from the tree's `filePanelWidth`). See [reference.md](reference.md#filepanel).
 
 **notify** — `notify <body> [--title T]` — post a desktop notification attributed to a session. To signal that you need the user, prefer `session status` (`blocked`/`completed`), a persistent typed attention state rather than a one-shot banner; keep `notify` for a one-off nudge.
 

@@ -266,6 +266,29 @@ final class FileTreeViewTests: XCTestCase {
         XCTAssertNotNil(coordinator.renamingNode)
     }
 
+    func testRenameThatCannotTakeFocusRollsBackAndReplaysChanges() throws {
+        let stubborn = StubbornResponder(frame: .zero)
+        window.contentView?.addSubview(stubborn)
+        XCTAssertTrue(window.makeFirstResponder(stubborn))
+        try Data().write(to: rootDir.appendingPathComponent("b-new.txt"))
+        coordinator.pendingChanges = [try XCTUnwrap(coordinator.rootNode).url.appendingPathComponent("b-new.txt").path]
+        let file = try node("a-file.txt")
+        let field = try XCTUnwrap((outline.view(atColumn: 0, row: outline.row(forItem: file), makeIfNecessary: true)
+                as? NSTableCellView)?.textField)
+        coordinator.beginRename(file)
+        XCTAssertNil(coordinator.renamingNode)
+        XCTAssertTrue(coordinator.pendingChanges.isEmpty)
+        XCTAssertTrue(names().contains("b-new.txt"))
+        XCTAssertFalse(field.isEditable)
+        XCTAssertNil(field.delegate)
+    }
+
+    func testNoSessionShowsNoFolder() {
+        coordinator.setRoot(.noSession)
+        XCTAssertFalse(coordinator.emptyLabel.isHidden)
+        XCTAssertEqual(coordinator.emptyLabel.stringValue, "No folder")
+    }
+
     func testNewCompanionHereUsesThePanelsStoreNotTheFrontWindow() throws {
         let panelStore = coordinator.store
         let parent = try XCTUnwrap(panelStore.selectedSessionID)
@@ -393,4 +416,9 @@ private final class FakeFileDrag: NSObject, @preconcurrency NSDraggingInfo {
                                 searchOptions _: [NSPasteboard.ReadingOptionKey: Any] = [:],
                                 using _: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {}
     func resetSpringLoading() {}
+}
+
+private final class StubbornResponder: NSView {
+    override var acceptsFirstResponder: Bool { true }
+    override func resignFirstResponder() -> Bool { false }
 }

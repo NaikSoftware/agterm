@@ -258,6 +258,7 @@ struct FileTreeOutline: NSViewRepresentable {
 
         func updateEmptyState() {
             let message: String? = switch rootState {
+            case .noSession: "No folder"
             case .noLocalFolder: "No local folder"
             case .folder where !FileManager.default.fileExists(atPath: rootNode?.url.path ?? ""): "Folder not found"
             case .folder where !rootReadable: "Cannot read this folder"

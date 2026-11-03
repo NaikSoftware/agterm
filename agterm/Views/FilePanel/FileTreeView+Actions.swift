@@ -191,7 +191,12 @@ extension FileTreeOutline.Coordinator: NSTextFieldDelegate {
         field.textColor = GhosttyApp.shared.terminalForegroundColor ?? .labelColor
         field.backgroundColor = GhosttyApp.shared.terminalBackgroundColor ?? .textBackgroundColor
         field.delegate = self
-        field.window?.makeFirstResponder(field)
+        guard field.window?.makeFirstResponder(field) == true else {
+            renamingNode = nil
+            resetRenameField(field)
+            replayPendingChanges()
+            return
+        }
         let name = node.url.lastPathComponent
         let stem = node.isDirectory ? name : (name as NSString).deletingPathExtension
         field.currentEditor()?.selectedRange = NSRange(location: 0, length: (stem as NSString).length)
@@ -213,24 +218,33 @@ extension FileTreeOutline.Coordinator: NSTextFieldDelegate {
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
-        guard let field = notification.object as? NSTextField, let node = renamingNode else { return }
-        renamingNode = nil
+        guard let field = notification.object as? NSTextField else { return }
         let newName = field.stringValue
+        resetRenameField(field)
+        guard let node = renamingNode else { return }
+        renamingNode = nil
         let commit = !renameCancelled
-        field.isEditable = false
-        field.isBordered = false
-        field.drawsBackground = false
-        field.delegate = nil
         field.stringValue = node.url.lastPathComponent
         // Let the field editor finish resigning before rows reload under it.
         DispatchQueue.main.async { [weak self] in
             guard let self, let outline = outlineView else { return }
             if !commit || !rename(node, to: newName) { outline.reloadItem(node) }
             outline.window?.makeFirstResponder(outline)
-            let pending = pendingChanges
-            pendingChanges = []
-            if !pending.isEmpty { handleChanges(pending) }
+            replayPendingChanges()
         }
+    }
+
+    private func resetRenameField(_ field: NSTextField) {
+        field.isEditable = false
+        field.isBordered = false
+        field.drawsBackground = false
+        field.delegate = nil
+    }
+
+    private func replayPendingChanges() {
+        let pending = pendingChanges
+        pendingChanges = []
+        if !pending.isEmpty { handleChanges(pending) }
     }
 
     /// Renames on disk after `FileTree.renameError` passes; false, with an error shown, when nothing changed.
