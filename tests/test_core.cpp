@@ -210,6 +210,24 @@ private Q_SLOTS:
         QCOMPARE(Store::stripTitleSpinner(QString::fromUtf8("⠋ build")), QStringLiteral("build"));
     }
 
+    void splitShortcutsCreateTransposeAndHide()
+    {
+        Store s;
+        const QString a = s.addSession(s.addWorkspace("w"), {}, {});
+        s.toggleSplit(a, "vertical");
+        QVERIFY(s.session(a)->hasSplit && s.session(a)->splitVisible);
+        s.toggleSplit(a, "horizontal");
+        QVERIFY(s.session(a)->splitVisible);
+        QCOMPARE(s.session(a)->splitAxis, QStringLiteral("horizontal"));
+        s.toggleSplit(a, "horizontal");
+        QVERIFY(s.session(a)->hasSplit && !s.session(a)->splitVisible); // hidden, second shell kept
+        s.toggleSplit(a, "vertical");
+        QVERIFY(s.session(a)->splitVisible);
+        s.setScratch(a, true);
+        s.toggleSplit(a, "vertical");
+        QVERIFY(!s.session(a)->scratchVisible && s.session(a)->splitVisible); // a shown scratch hides first
+    }
+
     void treeAndUnknownCommand()
     {
         Store s;

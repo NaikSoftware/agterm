@@ -25,6 +25,11 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session flag [on|off|toggle]
   session move <workspace> [--index N]
   workspace move --index N
+  session split [on|off|toggle] [--axis vertical|horizontal]
+  session split close
+  session swap
+  session scratch [on|off|toggle]
+  quick [on|off|toggle]                 the app-wide quick terminal
   session type <text> | --stdin
   session text [--lines N]              full screen + scrollback
   session status <idle|active|completed|blocked> [--auto-reset] [--blink]
@@ -65,6 +70,8 @@ int main(int argc, char **argv)
     QString cmd = pos.takeFirst();
     if ((cmd == QLatin1String("workspace") || cmd == QLatin1String("session")) && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
+    if (cmd == QLatin1String("session.split") && pos.value(0) == QLatin1String("close"))
+        cmd = QStringLiteral("session.split.close"), pos.removeFirst();
     const QString arg = pos.value(0);
 
     QJsonObject args;
@@ -90,8 +97,9 @@ int main(int argc, char **argv)
         args.insert("lines", opt.value(QStringLiteral("lines")).toInt());
     if (opt.contains(QStringLiteral("index")))
         args.insert("index", opt.value(QStringLiteral("index")).toInt());
-    if (cmd == QLatin1String("session.flag"))
+    if (QStringList{"session.flag", "session.split", "session.scratch", "quick"}.contains(cmd))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
+    copy("axis", "axis");
     if (cmd == QLatin1String("session.move"))
         args.insert("workspace", arg);
     if (cmd.endsWith(QLatin1String(".rename")))

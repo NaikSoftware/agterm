@@ -17,6 +17,12 @@ struct Session {
     QString title;   // live terminal title, spinner glyphs stripped; not persisted
     QString agent;   // launcher id of the coding agent in the foreground, "" for none; not persisted
     QString command; // run instead of a shell at creation, not persisted
+    // one session, up to two terminals: the split pane is a second shell sharing the sidebar row
+    bool hasSplit = false;
+    bool splitVisible = false;
+    QString splitAxis = QStringLiteral("vertical"); // vertical = side by side, horizontal = top and bottom
+    double splitRatio = 0.5;
+    bool scratchVisible = false; // the scratch shell covers the session; not persisted, like agterm's
 
     QString displayName() const;
 };
@@ -79,6 +85,11 @@ public:
     void setAgent(const QString &id, const QString &agent);
     void setSettings(const Settings &s);
     void keyPressed(const QString &id, Key key);
+    // ⌘D / ⌘⇧D: create, transpose (other axis), or hide (same axis); a shown scratch is hidden instead
+    void toggleSplit(const QString &id, const QString &axis);
+    void setSplit(const QString &id, bool hasSplit, bool visible, const QString &axis);
+    void setScratch(const QString &id, bool visible);
+    void requestSwap(const QString &id) { Q_EMIT swapRequested(id); }
     QString go(const QString &direction, QString *error); // next | prev | first | last | next-attention | prev-attention
 
     QJsonObject toJson() const;
@@ -93,6 +104,8 @@ Q_SIGNALS:
     void selectionChanged(const QString &id);
     void statusChanged(const QString &id, const QString &status);
     void titleChanged(const QString &id);
+    void paneLayoutChanged(const QString &id);
+    void swapRequested(const QString &id);
 
 private:
     static QString newId();

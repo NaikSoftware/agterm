@@ -370,6 +370,38 @@ void Store::keyPressed(const QString &id, Key key)
         setStatus(id, QStringLiteral("idle"));
 }
 
+void Store::toggleSplit(const QString &id, const QString &axis)
+{
+    Session *s = session(id);
+    if (!s)
+        return;
+    if (s->scratchVisible)
+        return setScratch(id, false);
+    if (!s->hasSplit || !s->splitVisible)
+        return setSplit(id, true, true, axis);
+    setSplit(id, true, s->splitAxis != axis, axis);
+}
+
+void Store::setSplit(const QString &id, bool hasSplit, bool visible, const QString &axis)
+{
+    Session *s = session(id);
+    if (!s || (axis != QLatin1String("vertical") && axis != QLatin1String("horizontal")))
+        return;
+    s->hasSplit = hasSplit;
+    s->splitVisible = hasSplit && visible;
+    s->splitAxis = axis;
+    Q_EMIT paneLayoutChanged(id);
+    Q_EMIT changed();
+}
+
+void Store::setScratch(const QString &id, bool visible)
+{
+    if (Session *s = session(id); s && s->scratchVisible != visible) {
+        s->scratchVisible = visible;
+        Q_EMIT paneLayoutChanged(id);
+    }
+}
+
 QString Store::go(const QString &direction, QString *error)
 {
     static const QStringList known{"next", "prev", "first", "last", "next-attention", "prev-attention"};
@@ -412,7 +444,10 @@ QJsonObject Store::toJson() const
     for (const auto &w : workspaces) {
         QJsonArray ss;
         for (const auto &s : w.sessions)
-            ss << QJsonObject{{"id", s.id}, {"name", s.name}, {"cwd", s.cwd}, {"flagged", s.flagged}};
+            ss << QJsonObject{{"id", s.id},           {"name", s.name},
+                              {"cwd", s.cwd},         {"flagged", s.flagged},
+                              {"hasSplit", s.hasSplit}, {"splitVisible", s.splitVisible},
+                              {"splitAxis", s.splitAxis}, {"splitRatio", s.splitRatio}};
         ws << QJsonObject{{"id", w.id}, {"name", w.name}, {"folder", w.folder}, {"sessions", ss}};
     }
     const QJsonObject st{{"newSessionDirectory", settings.newSessionDirectory},
@@ -442,6 +477,10 @@ void Store::fromJson(const QJsonObject &o)
             if (version < 2 && s.name == s.displayName()) // v1 stored the derived name
                 s.name.clear();
             s.flagged = so.value("flagged").toBool();
+            s.hasSplit = so.value("hasSplit").toBool();
+            s.splitVisible = s.hasSplit && so.value("splitVisible").toBool();
+            s.splitAxis = so.value("splitAxis").toString(QStringLiteral("vertical"));
+            s.splitRatio = qBound(0.05, so.value("splitRatio").toDouble(0.5), 0.95);
             if (!s.id.isEmpty())
                 w.sessions << s;
         }

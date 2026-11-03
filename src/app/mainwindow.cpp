@@ -38,7 +38,11 @@
 #include <QPushButton>
 #include <QSaveFile>
 #include <QSplitter>
+#include <QScreen>
+#include <QSplitterHandle>
+#include <QStackedLayout>
 #include <QStackedWidget>
+#include <QWindow>
 #include <QStatusBar>
 #include <QToolBar>
 #include <QToolButton>
@@ -130,14 +134,23 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     strip->setIconSize(QSize(16, 16));
     strip->toggleViewAction()->setVisible(false);
     // a plain button, not the checkable menu action: agterm's toggle never renders pressed
-    strip->addAction(m_sidebarAction->icon(), tr("Toggle Sidebar"), m_sidebarAction, &QAction::trigger);
+    const QColor ink = palette().color(QPalette::WindowText);
+    strip->addAction(chromeIcon(QStringLiteral("sidebar"), ink), tr("Toggle Sidebar"), m_sidebarAction, &QAction::trigger);
     m_title = new QLabel;
     QFont tf = m_title->font();
     tf.setWeight(QFont::DemiBold);
     m_title->setFont(tf);
     m_title->setContentsMargins(6, 0, 0, 0);
     strip->addWidget(m_title);
+    auto *spacer = new QWidget;
+    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    strip->addWidget(spacer);
+    strip->addAction(chromeIcon(QStringLiteral("scratch"), ink), tr("Scratch"), m_actions.value(QStringLiteral("toggle_scratch")), &QAction::trigger);
+    strip->addAction(chromeIcon(QStringLiteral("split"), ink), tr("Split"), m_actions.value(QStringLiteral("toggle_split")), &QAction::trigger);
+    strip->addSeparator();
+    strip->addAction(launcherIcon(QStringLiteral("terminal"), ink), tr("Quick Terminal"), m_actions.value(QStringLiteral("quick_terminal")), &QAction::trigger);
     addToolBar(Qt::TopToolBarArea, strip);
+    m_strip = strip;
 
     m_saveTimer.setSingleShot(true);
     m_saveTimer.setInterval(500);
@@ -158,10 +171,13 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     connect(&m_store, &Store::sessionAdded, this, &MainWindow::createTerminal);
     connect(&m_store, &Store::sessionRemoved, this, [this](const QString &id) {
         m_sessions.remove(id);
-        if (auto *part = m_parts.take(id))
-            part->deleteLater(); // closes the pty, which hangs up the shell
+        // taken first, so the parts dying with their view are not mistaken for shells that exited
+        if (Panes p = m_panes.take(id); p.view)
+            p.view->deleteLater(); // closes the ptys, which hangs up the shells
     });
     connect(&m_store, &Store::selectionChanged, this, &MainWindow::showSelected);
+    connect(&m_store, &Store::paneLayoutChanged, this, &MainWindow::applyLayout);
+    connect(&m_store, &Store::swapRequested, this, &MainWindow::swapPanes);
     connect(m_tree, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) {
         if (item && item->data(0, SidebarRole::Kind).toInt() == SidebarRole::SessionRow)
             m_store.select(item->data(0, SidebarRole::Id).toString());
@@ -207,7 +223,7 @@ void MainWindow::createMenus()
                            QKeySequence(QStringLiteral("Ctrl+Shift+O")), [this] { openDirectory(); }));
     file->addSeparator();
     file->addAction(action(QStringLiteral("close_session"), tr("Close Session"), QStringLiteral("tab-close"), QKeySequence(QStringLiteral("Ctrl+Shift+W")),
-                           [this] { closeSessions({m_store.selected}); }));
+                           [this] { m_zoomed ? toggleZoom() : closeSessions({m_store.selected}); })); // ⌘W leaves zoom first
     file->addSeparator();
     file->addAction(action(QStringLiteral("quit"), tr("Quit"), QStringLiteral("application-exit"), QKeySequence(QStringLiteral("Ctrl+Shift+Q")),
                            [this] { close(); }));
@@ -244,6 +260,31 @@ void MainWindow::createMenus()
     view->addAction(flagged);
     view->addAction(action(QStringLiteral("toggle_menubar"), tr("Show Menu Bar"), QStringLiteral("show-menu"), QKeySequence(QStringLiteral("Ctrl+Shift+M")),
                            [this] { menuBar()->setVisible(!menuBar()->isVisible()); }));
+    view->addSeparator();
+    view->addAction(action(QStringLiteral("toggle_split"), tr("Split"), {}, QKeySequence(QStringLiteral("Ctrl+Shift+D")),
+                           [this] { m_store.toggleSplit(m_store.selected, QStringLiteral("vertical")); }));
+    view->addAction(action(QStringLiteral("toggle_horizontal_split"), tr("Split Horizontally"), {}, QKeySequence(QStringLiteral("Ctrl+Alt+Shift+D")),
+                           [this] { m_store.toggleSplit(m_store.selected, QStringLiteral("horizontal")); }));
+    view->addAction(action(QStringLiteral("swap_panes"), tr("Swap Panes"), {}, {}, [this] { swapPanes(m_store.selected); }));
+    view->addAction(action(QStringLiteral("close_split"), tr("Close Split"), {}, {}, [this] {
+        if (const Session *s = m_store.session(m_store.selected); s && s->hasSplit)
+            m_store.setSplit(s->id, false, false, s->splitAxis);
+    }));
+    view->addAction(action(QStringLiteral("focus_left_pane"), tr("Focus Left Pane"), {}, QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Left")),
+                           [this] { focusPane(false); }));
+    view->addAction(action(QStringLiteral("focus_right_pane"), tr("Focus Right Pane"), {}, QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Right")),
+                           [this] { focusPane(true); }));
+    view->addAction(action(QStringLiteral("toggle_scratch"), tr("Scratch"), {}, QKeySequence(QStringLiteral("Ctrl+Shift+J")), [this] {
+        if (const Session *s = m_store.session(m_store.selected))
+            m_store.setScratch(s->id, !s->scratchVisible);
+    }));
+    view->addSeparator();
+    view->addAction(action(QStringLiteral("quick_terminal"), tr("Quick Terminal"), QStringLiteral("utilities-terminal"), QKeySequence(QStringLiteral("Ctrl+`")),
+                           [this] { showQuick(!quickVisible(), false); }));
+    view->addAction(action(QStringLiteral("toggle_terminal_zoom"), tr("Terminal Zoom"), QStringLiteral("zoom-fit-best"),
+                           QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Return")), [this] { toggleZoom(); }));
+    view->addAction(action(QStringLiteral("toggle_fullscreen"), tr("Full Screen"), QStringLiteral("view-fullscreen"), QKeySequence(QStringLiteral("F11")),
+                           [this] { setWindowState(windowState() ^ Qt::WindowFullScreen); }));
 
     auto *nav = menuBar()->addMenu(tr("&Navigate"));
     nav->addAction(action(QStringLiteral("previous_session"), tr("Previous Session"), QStringLiteral("go-up"),
@@ -296,31 +337,26 @@ void MainWindow::restore(const QJsonObject &window)
     showSelected();
 }
 
-void MainWindow::createTerminal(const QString &id)
+KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pane, const QString &cwd, const QString &command, QWidget *parent)
 {
-    const Session *s = m_store.session(id);
-    auto result = KParts::PartLoader::instantiatePart<KParts::ReadOnlyPart>(KPluginMetaData(QStringLiteral("kf6/parts/konsolepart")), m_stack, this);
+    auto result = KParts::PartLoader::instantiatePart<KParts::ReadOnlyPart>(KPluginMetaData(QStringLiteral("kf6/parts/konsolepart")), parent, this);
     if (!result) {
         statusBar()->showMessage(tr("Cannot load the Konsole part: %1").arg(result.errorString));
-        return;
+        return nullptr;
     }
     KParts::ReadOnlyPart *part = result.plugin;
-    m_parts.insert(id, part);
-    m_stack->addWidget(part->widget());
-
     auto *bridge = new PartBridge(this, m_store, id, part);
     connect(part, SIGNAL(currentDirectoryChanged(QString)), bridge, SLOT(currentDirectoryChanged(QString)));
     connect(part, SIGNAL(overrideShortcut(QKeyEvent *, bool &)), bridge, SLOT(overrideShortcut(QKeyEvent *, bool &)));
-    connect(part, &KParts::Part::setWindowCaption, this, [this, id](const QString &title) { m_store.setTitle(id, title); });
-    // the part deletes itself when its shell exits; that ends the session, except during app teardown
-    connect(part, &QObject::destroyed, this, [this, id] {
-        if (m_quitting)
-            return;
-        m_parts.remove(id);
-        m_store.removeSession(id);
+    if (pane == QLatin1String("main"))
+        connect(part, &KParts::Part::setWindowCaption, this, [this, id](const QString &title) { m_store.setTitle(id, title); });
+    // the part deletes itself when its shell exits
+    connect(part, &QObject::destroyed, this, [this, id, part] {
+        if (!m_quitting)
+            paneExited(id, part);
     });
 
-    const QString dir = QFileInfo(s->cwd).isDir() ? s->cwd : QDir::homePath();
+    const QString dir = QFileInfo(cwd).isDir() ? cwd : QDir::homePath();
     const QString appDir = QCoreApplication::applicationDirPath();
     const QString shell = qEnvironmentVariable("SHELL", QStringLiteral("/bin/bash"));
     QStringList argv{QStringLiteral("/usr/bin/env"),
@@ -328,19 +364,190 @@ void MainWindow::createTerminal(const QString &id)
                      dir,
                      QStringLiteral("AGTERM_SESSION_ID=") + id,
                      QStringLiteral("AGTERM_WORKSPACE_ID=") + m_store.workspaceOf(id)->id,
+                     QStringLiteral("AGTERM_PANE=") + pane,
                      QStringLiteral("AGTERM_SOCKET=") + socketPath(),
                      QStringLiteral("AGTERMCTL=") + appDir + QStringLiteral("/agtermctl"),
                      QStringLiteral("PATH=") + appDir + QLatin1Char(':') + qEnvironmentVariable("PATH"),
                      shell};
-    if (!s->command.isEmpty())
-        argv << QStringLiteral("-c") << s->command;
+    if (!command.isEmpty())
+        argv << QStringLiteral("-c") << command;
     qobject_cast<TerminalInterface *>(part)->startProgram(argv.first(), argv);
-    prime(part->widget());
+    return part;
+}
+
+void MainWindow::createTerminal(const QString &id)
+{
+    const Session *s = m_store.session(id);
+    Panes p;
+    p.view = new QWidget;
+    p.layers = new QStackedLayout(p.view);
+    p.split = new QSplitter;
+    p.split->setChildrenCollapsible(false);
+    p.layers->addWidget(p.split);
+    p.main = spawnPart(id, QStringLiteral("main"), s->cwd, s->command, p.split);
+    if (!p.main) {
+        delete p.view;
+        return;
+    }
+    p.split->addWidget(p.main->widget());
+    connect(p.split, &QSplitter::splitterMoved, this, [this, id] {
+        Session *s = m_store.session(id);
+        const auto &pp = m_panes[id];
+        const QList<int> sizes = pp.split->sizes();
+        if (s && sizes.size() == 2 && sizes[0] + sizes[1] > 0) {
+            s->splitRatio = double(sizes[0]) / (sizes[0] + sizes[1]);
+            m_saveTimer.start();
+        }
+    });
+    m_panes.insert(id, p);
+    m_stack->addWidget(p.view);
+    applyLayout(id);
+    prime(p.view);
+}
+
+void MainWindow::applyLayout(const QString &id)
+{
+    Session *s = m_store.session(id);
+    if (!s || !m_panes.contains(id))
+        return;
+    Panes &p = m_panes[id];
+    if (s->hasSplit && !p.right) {
+        p.right = spawnPart(id, QStringLiteral("right"), liveCwd(id).isEmpty() ? s->cwd : liveCwd(id), {}, p.split);
+        if (p.right)
+            p.split->addWidget(p.right->widget());
+        p.split->handle(1)->installEventFilter(this); // double-click resets an even split
+        p.split->handle(1)->setProperty("agtermSession", id);
+    } else if (!s->hasSplit && p.right) {
+        auto *right = std::exchange(p.right, nullptr);
+        delete right; // closes the split shell whatever it runs
+    }
+    p.split->setOrientation(s->splitAxis == QLatin1String("horizontal") ? Qt::Vertical : Qt::Horizontal);
+    if (p.right) {
+        p.right->widget()->setVisible(s->splitVisible);
+        const int total = 10000;
+        p.split->setSizes({int(total * s->splitRatio), total - int(total * s->splitRatio)});
+    }
+    if (s->scratchVisible && !p.scratch) {
+        p.scratch = spawnPart(id, QStringLiteral("scratch"), liveCwd(id).isEmpty() ? s->cwd : liveCwd(id), {}, p.view);
+        if (p.scratch)
+            p.layers->addWidget(p.scratch->widget());
+    }
+    QWidget *front = s->scratchVisible && p.scratch ? p.scratch->widget() : static_cast<QWidget *>(p.split);
+    p.layers->setCurrentWidget(front);
+    if (KParts::ReadOnlyPart *target = front == p.split ? p.main : p.scratch; target && id == m_store.selected && isActiveWindow())
+        target->widget()->setFocus();
+}
+
+void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
+{
+    if (!m_panes.contains(id))
+        return;
+    Panes &p = m_panes[id];
+    if (part == p.scratch) {
+        p.scratch = nullptr;
+        m_store.setScratch(id, false);
+    } else if (part == p.right) {
+        p.right = nullptr;
+        m_store.setSplit(id, false, false, m_store.session(id)->splitAxis);
+    } else if (part == p.main) {
+        p.main = nullptr;
+        m_sessions.remove(id);
+        if (p.right) { // the split survivor becomes the session's only shell
+            p.main = std::exchange(p.right, nullptr);
+            p.main->widget()->show();
+            m_store.setSplit(id, false, false, m_store.session(id)->splitAxis);
+        } else {
+            m_store.removeSession(id);
+        }
+    }
+}
+
+void MainWindow::swapPanes(const QString &id)
+{
+    Panes &p = m_panes[id];
+    if (!p.right)
+        return;
+    p.split->insertWidget(0, p.right->widget()); // physical positions and the primary role move together
+    std::swap(p.main, p.right);
+    m_sessions.remove(id);
+}
+
+void MainWindow::focusPane(bool right)
+{
+    const Panes p = m_panes.value(m_store.selected);
+    KParts::ReadOnlyPart *target = right ? p.right : p.main;
+    if (target && target->widget()->isVisible())
+        target->widget()->setFocus();
+}
+
+void MainWindow::toggleZoom()
+{
+    // a view mode: everything but the terminal hides, and comes back exactly as it was
+    m_zoomed = !m_zoomed;
+    if (m_zoomed) {
+        m_zoomRestoreSidebar = m_sidebarPanel->isVisible();
+        m_zoomRestoreMenu = menuBar()->isVisible();
+    }
+    m_sidebarPanel->setVisible(!m_zoomed && m_zoomRestoreSidebar);
+    menuBar()->setVisible(!m_zoomed && m_zoomRestoreMenu);
+    m_strip->setVisible(!m_zoomed);
+}
+
+bool MainWindow::quickVisible() const
+{
+    return m_quick && m_quick->isVisible();
+}
+
+bool MainWindow::quick(const QString &mode, QString *)
+{
+    showQuick(mode == QLatin1String("on"), true);
+    return true;
+}
+
+void MainWindow::showQuick(bool on, bool pinned)
+{
+    if (!on) {
+        if (m_quick)
+            m_quick->hide(); // hiding keeps its shell alive
+        return;
+    }
+    if (!m_quick) {
+        m_quick = new QWidget(nullptr, Qt::Window | Qt::FramelessWindowHint);
+        m_quick->setWindowTitle(tr("Quick Terminal"));
+        new QVBoxLayout(m_quick);
+        m_quick->layout()->setContentsMargins(0, 0, 0, 0);
+        m_quick->installEventFilter(this);
+    }
+    if (!m_quickPart) {
+        // one throwaway shell for the whole app, opened in the active session's directory
+        const QString cwd = liveCwd(m_store.selected);
+        auto result = KParts::PartLoader::instantiatePart<KParts::ReadOnlyPart>(KPluginMetaData(QStringLiteral("kf6/parts/konsolepart")), m_quick, this);
+        if (!result)
+            return;
+        m_quickPart = result.plugin;
+        m_quick->layout()->addWidget(m_quickPart->widget());
+        auto *bridge = new PartBridge(this, m_store, {}, m_quickPart);
+        connect(m_quickPart, SIGNAL(overrideShortcut(QKeyEvent *, bool &)), bridge, SLOT(overrideShortcut(QKeyEvent *, bool &)));
+        connect(m_quickPart, &QObject::destroyed, this, [this] {
+            m_quickPart = nullptr;
+            if (!m_quitting && m_quick)
+                m_quick->hide();
+        });
+        qobject_cast<TerminalInterface *>(m_quickPart)->showShellInDir(cwd.isEmpty() ? QDir::homePath() : cwd);
+    }
+    m_quickPinned = pinned;
+    const QRect screen = (windowHandle() && windowHandle()->screen() ? windowHandle()->screen() : QGuiApplication::primaryScreen())->availableGeometry();
+    const QSize size(qMin(int(screen.width() * 0.9), 1600), qMin(int(screen.height() * 0.9), 1000));
+    m_quick->setGeometry(QRect(screen.center() - QPoint(size.width() / 2, size.height() / 2), size));
+    m_quick->show();
+    m_quick->raise();
+    m_quick->activateWindow();
+    m_quickPart->widget()->setFocus();
 }
 
 TerminalInterface *MainWindow::terminal(const QString &id) const
 {
-    auto *part = m_parts.value(id);
+    auto *part = m_panes.value(id).main;
     return part ? qobject_cast<TerminalInterface *>(part) : nullptr;
 }
 
@@ -365,8 +572,8 @@ void MainWindow::prime(QWidget *page)
 void MainWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
-    for (auto *part : std::as_const(m_parts))
-        prime(part->widget());
+    for (const Panes &p : std::as_const(m_panes))
+        prime(p.view);
 }
 
 QObject *MainWindow::konsoleSession(const QString &id)
@@ -427,10 +634,15 @@ QJsonObject MainWindow::info(const QString &sessionId)
 void MainWindow::showSelected()
 {
     const Session *s = m_store.session(m_store.selected);
-    auto *part = m_parts.value(m_store.selected);
-    m_stack->setCurrentWidget(part ? part->widget() : m_empty);
-    if (part && part->widget()->window()->isActiveWindow() && !m_tree->editing())
-        part->widget()->setFocus();
+    const Panes p = m_panes.value(m_store.selected);
+    m_stack->setCurrentWidget(p.view ? p.view : m_empty);
+    // focus moves only with the selection, so a status repaint never pulls it out of the split pane
+    if (p.view && m_shownId != m_store.selected && isActiveWindow() && !m_tree->editing()) {
+        KParts::ReadOnlyPart *front = s->scratchVisible && p.scratch ? p.scratch : p.main;
+        if (front)
+            front->widget()->setFocus();
+    }
+    m_shownId = m_store.selected;
     const QString name = s ? s->displayName() : QString();
     m_title->setText(name);
     setWindowTitle(name);
@@ -668,7 +880,7 @@ void MainWindow::go(const QString &direction)
 
 void MainWindow::profileDialog(const char *slot)
 {
-    auto *part = m_parts.value(m_store.selected);
+    auto *part = m_panes.value(m_store.selected).main;
     if (!part || !QMetaObject::invokeMethod(part, slot, Q_ARG(QWidget *, this)))
         statusBar()->showMessage(tr("Open a session first"), 2000);
 }
@@ -763,7 +975,9 @@ MainWindow::~MainWindow()
 {
     // ~QWidget would delete the parts after our members are gone, while their destroyed handlers still run
     m_quitting = true;
-    qDeleteAll(m_parts);
+    for (const Panes &p : std::as_const(m_panes))
+        delete p.view; // its parts go with their widgets
+    delete m_quick;
     // a still-running PATH probe would emit finished() into our destroyed members when ~QObject kills it
     for (auto *proc : findChildren<QProcess *>()) {
         proc->disconnect(this);
@@ -781,6 +995,17 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == m_quick && event->type() == QEvent::WindowDeactivate && !m_quickPinned)
+        m_quick->hide(); // a click away dismisses it, unless a script opened it
+    if (event->type() == QEvent::MouseButtonDblClick && watched->property("agtermSession").isValid()) {
+        const QString id = watched->property("agtermSession").toString();
+        if (Session *s = m_store.session(id)) {
+            s->splitRatio = 0.5; // a double-click on the divider returns to an even split
+            applyLayout(id);
+            m_saveTimer.start();
+        }
+        return true;
+    }
     if (event->type() == QEvent::KeyPress && !m_quitting) {
         auto *w = qobject_cast<QWidget *>(watched);
         auto *key = static_cast<QKeyEvent *>(event);

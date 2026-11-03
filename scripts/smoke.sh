@@ -33,6 +33,17 @@ AGTERM_SESSION_ID=$id ctl session info | grep -q '^pid' || fail "info by env tar
 ctl session type "$root/share/agent-status/agterm-claude-status.sh completed --auto-reset"$'\n' --target "$id"
 sleep 1
 ctl tree | grep probe | grep -q completed || fail "Claude hook adapter from a pane"
+ctl session split on --axis horizontal --target "$id"
+sleep 1
+ctl session info --target "$id" | grep -qE '^hasSplit +true' || fail "split not created"
+ctl session info --target "$id" | grep -qE '^splitAxis +horizontal' || fail "split axis"
+ctl session swap --target "$id"
+ctl session split close --target "$id"
+ctl session info --target "$id" | grep -qE '^hasSplit +false' || fail "split not closed"
+ctl session scratch on --target "$id"
+ctl session info --target "$id" | grep -qE '^scratch +true' || fail "scratch not shown"
+ctl session scratch off --target "$id"
+ctl quick on >/dev/null && ctl quick off >/dev/null || fail "quick terminal"
 ctl session rename renamed --target probe
 ctl session go --to next >/dev/null
 gone=$(ctl session new --name exits --no-select)

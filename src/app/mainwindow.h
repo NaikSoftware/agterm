@@ -12,6 +12,7 @@ class QKeyEvent;
 class QLabel;
 class QMenu;
 class QSplitter;
+class QStackedLayout;
 class QStackedWidget;
 class QToolButton;
 class Sidebar;
@@ -35,6 +36,8 @@ public:
     bool isOwnShortcut(QKeyEvent *event) const;
     void setSocketStatus(bool ok, const QString &error);
     QStringList availableLaunchers() const { return m_launchers; }
+    bool quick(const QString &mode, QString *error) override;
+    bool quickVisible() const override;
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -45,6 +48,13 @@ private:
     QAction *action(const QString &name, const QString &text, const QString &icon, const QKeySequence &key, std::function<void()> slot);
     void createMenus();
     void createTerminal(const QString &id);
+    KParts::ReadOnlyPart *spawnPart(const QString &id, const QString &pane, const QString &cwd, const QString &command, QWidget *parent);
+    void applyLayout(const QString &id);
+    void paneExited(const QString &id, KParts::ReadOnlyPart *part);
+    void swapPanes(const QString &id);
+    void focusPane(bool right);
+    void toggleZoom();
+    void showQuick(bool on, bool pinned);
     void showSelected();
     void sidebarMenu(const QPoint &pos);
     void launcherMenu(const QString &workspaceId, const QPoint &globalPos);
@@ -77,7 +87,20 @@ private:
     QStackedWidget *m_stack;
     QWidget *m_empty;
     QHash<QString, QAction *> m_actions;
-    QHash<QString, KParts::ReadOnlyPart *> m_parts;
+    struct Panes {
+        QWidget *view = nullptr;          // the session's page in m_stack
+        QStackedLayout *layers = nullptr; // split view, with the scratch above it when shown
+        QSplitter *split = nullptr;
+        KParts::ReadOnlyPart *main = nullptr, *right = nullptr, *scratch = nullptr;
+    };
+    QHash<QString, Panes> m_panes;
+    QWidget *m_strip = nullptr;
+    QWidget *m_quick = nullptr;
+    KParts::ReadOnlyPart *m_quickPart = nullptr;
+    bool m_quickPinned = false; // opened over the socket: stays put on click-away
+    bool m_zoomed = false;
+    QString m_shownId;
+    bool m_zoomRestoreSidebar = true, m_zoomRestoreMenu = true;
     QHash<QString, QPointer<QObject>> m_sessions;
     QStringList m_launchers{QStringLiteral("terminal")};
     QDateTime m_launchersAt;

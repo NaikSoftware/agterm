@@ -31,12 +31,13 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 
 ## Phase 2: terminals
 
-- [ ] Split ⌘D / ⌘⇧D (one session, two shells; transposes; hides; divider memory; swap panes; focus left/right)
-- [ ] Scratch ⌘J per session
-- [ ] Quick terminal ⌃` (floating, 90% of screen, global hotkey)
-- [ ] Search ⌘F (Konsole's own search bar)
-- [ ] Terminal zoom ⌘⇧↩
-- [ ] Fullscreen
+- [x] Split ⌘D / ⌘⇧D (one session, two shells; transposes; hides; divider memory, double-click resets; swap panes; focus left/right; close split)
+- [x] Scratch ⌘J per session
+- [x] Quick terminal ⌃` (floating, 90% of screen, click-away dismiss; `quick on` stays put)
+- [ ] Quick terminal global hotkey (keymap `global-hotkey`, phase 5)
+- [x] Search: Konsole's own search bar (Ctrl+Shift+F)
+- [x] Terminal zoom ⌘⇧↩ (⌘W leaves zoom)
+- [x] Fullscreen (F11: ⌘⌃F maps onto the flag chord)
 - [ ] Companions (pinned under parent, folding, respawn on exit)
 
 ## Phase 3: navigation and windows

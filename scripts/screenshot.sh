@@ -31,6 +31,7 @@ ctl session type $'ls -la /usr | head -12\n' --target "$c"
 mkdir -p "$AGTERM_STATE_DIR/fake" && ln -sf "$(command -v sleep)" "$AGTERM_STATE_DIR/fake/claude"
 ctl session type "$AGTERM_STATE_DIR/fake/claude 30"$'\n' --target "$first"
 ctl session flag on --target "$t"
+ctl session split on --target "$c"
 for _ in $(seq 80); do [ -f "$out" ] && break; sleep 0.1; done
 sleep 0.3
 echo "$out"
