@@ -335,6 +335,48 @@ private Q_SLOTS:
         QVERIFY(!call(s, t, "workspace.focus", "a", {{"mode", "sideways"}})["ok"].toBool());
     }
 
+    void undoCloseRestoresInPlaceWithinTheGrace()
+    {
+        Store s;
+        FakeTerminals t;
+        s.graceMs = 50;
+        const QString ws = s.addWorkspace("w");
+        const QString a = s.addSession(ws, {}, {}), p = s.addSession(ws, "parent", {}), c = s.addCompanion(p, {}, {});
+        s.select(a);
+        s.select(p);
+        QSignalSpy removed(&s, &Store::sessionRemoved);
+        QVERIFY(s.softClose({p}));
+        QVERIFY(!s.session(p) && !s.session(c)); // the group leaves the tree
+        QCOMPARE(s.selected, a);
+        QCOMPARE(removed.count(), 0); // the terminals live on through the grace
+        QVERIFY(s.undoClose());
+        QStringList order;
+        for (const auto &x : s.workspace(ws)->sessions)
+            order << x.id;
+        QCOMPARE(order, QStringList({a, p, c}));
+        QCOMPARE(s.selected, p);
+        QVERIFY(!s.undoClose());
+
+        const auto r = call(s, t, "session.close", c, {{"undoable", true}});
+        QVERIFY(r["result"]["undoable"].toBool());
+        QTRY_COMPARE(removed.count(), 1); // the grace expired: final, and reopenable
+        QVERIFY(!s.undoClose());
+        QCOMPARE(s.closed.size(), 1);
+        s.settings.closeUndo = false;
+        QVERIFY(!call(s, t, "session.close", a, {{"undoable", true}})["result"]["undoable"].toBool());
+        QVERIFY(!s.session(a));
+
+        const QString other = s.addWorkspace("other");
+        s.focusWorkspace(ws, "add");
+        QVERIFY(s.softRemoveWorkspace(ws));
+        QCOMPARE(s.workspaces.size(), 1);
+        QVERIFY(s.focused.isEmpty());
+        QVERIFY(s.undoClose());
+        QCOMPARE(s.workspaces.first().id, ws);
+        QVERIFY(s.focused.contains(ws));
+        Q_UNUSED(other);
+    }
+
     void treeAndUnknownCommand()
     {
         Store s;

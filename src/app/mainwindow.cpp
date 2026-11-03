@@ -7,6 +7,7 @@
 #include "sidebar.h"
 #include "store.h"
 
+#include <KActionCollection>
 #include <KNotification>
 #include <KParts/PartLoader>
 #include <KParts/ReadOnlyPart>
@@ -182,6 +183,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
 
     connect(&m_store, &Store::changed, this, [this] {
         syncFilterButton();
+        m_actions.value(QStringLiteral("undo_close"))->setEnabled(!m_store.pending.isEmpty());
         m_tree->rebuild();
         showSelected();
         m_saveTimer.start();
@@ -260,7 +262,12 @@ void MainWindow::createMenus()
     file->addSeparator();
     file->addAction(action(QStringLiteral("close_session"), tr("Close Session"), QStringLiteral("tab-close"), QKeySequence(QStringLiteral("Ctrl+Shift+W")),
                            [this] { m_zoomed ? toggleZoom() : closeSessions({m_store.selected}); })); // ⌘W leaves zoom first
-    file->addAction(action(QStringLiteral("reopen_recent"), tr("Reopen Closed Session"), QStringLiteral("edit-undo"),
+    // ⌘Z: the newest close inside its grace comes back with its shells; enabled only then, so Redo keeps the chord otherwise
+    QAction *undo = action(QStringLiteral("undo_close"), tr("Reopen Closed Item"), QStringLiteral("edit-undo"),
+                           QKeySequence(QStringLiteral("Ctrl+Shift+Z")), [this] { m_store.undoClose(); });
+    undo->setEnabled(false);
+    file->addAction(undo);
+    file->addAction(action(QStringLiteral("reopen_recent"), tr("Reopen Last Closed Item"), QStringLiteral("edit-undo"),
                            QKeySequence(QStringLiteral("Ctrl+Alt+Shift+T")), [this] {
                                if (m_store.reopenClosed().isEmpty())
                                    statusBar()->showMessage(tr("Nothing to reopen"), 2000);
@@ -402,7 +409,7 @@ bool MainWindow::isOwnShortcut(QKeyEvent *event) const
 {
     const QKeySequence key(event->keyCombination());
     for (const QAction *a : actions())
-        if (!a->shortcut().isEmpty() && a->shortcut().matches(key) == QKeySequence::ExactMatch)
+        if (a->isEnabled() && !a->shortcut().isEmpty() && a->shortcut().matches(key) == QKeySequence::ExactMatch)
             return true;
     return false;
 }
@@ -474,6 +481,18 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
     if (!command.isEmpty())
         argv << QStringLiteral("-c") << command;
     qobject_cast<TerminalInterface *>(part)->startProgram(argv.first(), argv);
+    // Konsole's own actions (close-session on Ctrl+Shift+W, …) would make our chords ambiguous, and an
+    // ambiguous shortcut fires neither, so the window's keys win
+    QSet<QKeySequence> ours;
+    for (const QAction *a : actions())
+        for (const QKeySequence &k : a->shortcuts())
+            ours << k;
+    for (KActionCollection *col : KActionCollection::allCollections())
+        for (QAction *a : col->actions()) {
+            QList<QKeySequence> keep = a->shortcuts();
+            if (keep.removeIf([&ours](const QKeySequence &k) { return ours.contains(k); }) > 0)
+                a->setShortcuts(keep);
+        }
     return part;
 }
 
@@ -542,6 +561,11 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
     if (!m_panes.contains(id))
         return;
     Panes &p = m_panes[id];
+    if (!m_store.session(id)) { // closed and inside its undo grace: an undo brings back what is left
+        p.main = p.main == part ? nullptr : p.main;
+        p.right = p.right == part ? nullptr : p.right;
+        return;
+    }
     if (part == p.right) {
         p.right = nullptr;
         m_store.setSplit(id, false, false, m_store.session(id)->splitAxis);
@@ -869,8 +893,9 @@ void MainWindow::closeSessions(const QStringList &ids)
                                                   : tr("Close %1 sessions?").arg(live.size()))
                != QMessageBox::Yes)
         return;
-    for (const auto &id : live)
-        m_store.removeSession(id);
+    if (!m_store.settings.closeUndo || !m_store.softClose(live))
+        for (const auto &id : live)
+            m_store.removeSession(id);
 }
 
 void MainWindow::deleteWorkspace(const QString &id)
@@ -882,7 +907,8 @@ void MainWindow::deleteWorkspace(const QString &id)
         && QMessageBox::question(this, tr("Delete Workspace"), tr("Close all %1 sessions in “%2”?").arg(w->sessions.size()).arg(w->name))
                != QMessageBox::Yes)
         return;
-    m_store.removeWorkspace(id);
+    if (!m_store.settings.closeUndo || !m_store.softRemoveWorkspace(id))
+        m_store.removeWorkspace(id);
 }
 
 void MainWindow::fillMoveMenu(QMenu *menu, const QStringList &ids)
@@ -1083,12 +1109,15 @@ void MainWindow::showSettings()
     reset->setCurrentIndex(reset->findData(s.statusReset));
     auto *confirm = new QCheckBox(tr("Ask before closing a session"));
     confirm->setChecked(s.confirmCloseSession);
+    auto *undoClose = new QCheckBox(tr("Allow undo after closing sessions and workspaces"));
+    undoClose->setChecked(s.closeUndo);
 
     form->addRow(tr("New sessions open in:"), dirMode);
     form->addRow(QString(), customRow);
     form->addRow(tr("New sessions are added:"), placement);
     form->addRow(tr("Typing clears blocked/done status:"), reset);
     form->addRow(QString(), confirm);
+    form->addRow(QString(), undoClose);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
@@ -1102,6 +1131,7 @@ void MainWindow::showSettings()
     s.newSessionPlacement = placement->currentData().toString();
     s.statusReset = reset->currentData().toString();
     s.confirmCloseSession = confirm->isChecked();
+    s.closeUndo = undoClose->isChecked();
     m_store.setSettings(s);
 }
 
@@ -1145,6 +1175,7 @@ MainWindow::~MainWindow()
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     m_saveTimer.stop();
+    m_store.finalizePending(); // a close still inside its grace is final at quit
     save();
     m_quitting = true; // parts die with the window from here on; their sessions must stay saved
     QMainWindow::closeEvent(event);

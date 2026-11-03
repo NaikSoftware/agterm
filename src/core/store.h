@@ -51,6 +51,7 @@ struct Settings {
     QString statusReset = QStringLiteral("firstKey");    // firstKey | enter | never
     QString lastLauncher = QStringLiteral("terminal");
     bool confirmCloseSession = false;
+    bool closeUndo = true; // GUI closes keep a short undo grace
 };
 
 // The workspace -> session tree. Owns no terminals: the window reacts to its signals.
@@ -71,6 +72,22 @@ public:
         int index;
     };
     QList<Closed> closed; // most recent first; Reopen Closed Item brings the shell back where it was
+    // a close inside its undo grace: the sessions are out of the tree, their terminals still running
+    struct Parked {
+        QString workspaceId;
+        int index;
+        Session session;
+    };
+    struct PendingClose {
+        int serial = 0;
+        QList<Parked> sessions;
+        Workspace workspace; // a whole workspace close; id empty otherwise
+        int workspaceIndex = -1;
+        bool focusMember = false;
+        QString select;
+    };
+    QList<PendingClose> pending; // newest last
+    int graceMs = 3000;
     Settings settings;
     bool flaggedView = false; // the sidebar shows flagged sessions only; navigation follows it
     // the workspace filter: a marked set, applied or suspended; never applied while empty
@@ -100,6 +117,10 @@ public:
     QStringList companionsOf(const QString &parentId) const;
     void removeSession(const QString &id);
     QString reopenClosed(); // "" when nothing was closed
+    bool softClose(const QStringList &ids); // closes with the undo grace; finalized by a timer
+    bool softRemoveWorkspace(const QString &id);
+    bool undoClose();                       // the newest pending close back in place, shells intact
+    void finalizePending(int serial = -1);  // -1: every pending close, as at quit
     void removeWorkspace(const QString &id);
     void renameSession(const QString &id, const QString &name); // "" reverts to the cwd-derived name
     void renameWorkspace(const QString &id, const QString &name);
@@ -147,4 +168,7 @@ private:
     Tint *tintOf(const QString &id);
     int indexIn(const Workspace &w, const QString &sessionId) const;
     void commitFocus(QStringList ids, bool enabled);
+    void reselect(const Workspace *w, int i); // after the selected session left w at row i; w null when w went too
+    bool park(const PendingClose &close);
+    int m_pendingSerial = 0;
 };

@@ -258,7 +258,15 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         if (id.isEmpty())
             return fail(error);
         if (cmd == QLatin1String("session.close")) {
-            store.removeSession(id);
+            // immediate unless asked for the GUI's undo grace, and then only while that setting allows it
+            if (!args.value("undoable").toBool()) {
+                store.removeSession(id);
+            } else {
+                const bool soft = store.settings.closeUndo && store.softClose({id});
+                if (!soft)
+                    store.removeSession(id);
+                return ok({{"id", id}, {"undoable", soft}});
+            }
         } else if (cmd == QLatin1String("session.select")) {
             store.select(id);
         } else if (cmd == QLatin1String("session.rename")) {

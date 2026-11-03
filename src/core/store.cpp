@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QSet>
+#include <QTimer>
 #include <QUuid>
 
 const QStringList Store::statuses = {QStringLiteral("idle"), QStringLiteral("active"), QStringLiteral("completed"),
@@ -291,41 +292,144 @@ void Store::removeSession(const QString &id)
         closed.removeLast();
     w->sessions.removeAt(i);
     recent.removeAll(id);
-    if (selected == id) {
-        // most recent in the same workspace, the adjacent row, then most recent anywhere: each kept on screen first
-        QSet<QString> shown;
-        for (auto *s : navigableSessions())
-            shown << s->id;
-        QString next;
-        for (const auto &r : std::as_const(recent))
-            if (indexIn(*w, r) >= 0 && shown.contains(r)) {
-                next = r;
-                break;
-            }
-        for (int k = i; next.isEmpty() && k < w->sessions.size(); ++k)
-            if (shown.contains(w->sessions[k].id))
-                next = w->sessions[k].id;
-        for (int k = qMin(i, int(w->sessions.size())) - 1; next.isEmpty() && k >= 0; --k)
-            if (shown.contains(w->sessions[k].id))
-                next = w->sessions[k].id;
-        for (const auto &r : std::as_const(recent))
-            if (next.isEmpty() && shown.contains(r))
-                next = r;
-        if (next.isEmpty() && !w->sessions.isEmpty())
-            next = w->sessions[qMin(i, int(w->sessions.size()) - 1)].id;
-        if (next.isEmpty() && !recent.isEmpty())
-            next = recent.first();
-        if (next.isEmpty())
-            if (auto all = allSessions(); !all.isEmpty())
-                next = all.first()->id;
-        selected.clear();
-        if (!next.isEmpty())
-            select(next);
-        else
-            Q_EMIT selectionChanged({});
-    }
+    if (selected == id)
+        reselect(w, i);
     Q_EMIT sessionRemoved(id);
     Q_EMIT changed();
+}
+
+void Store::reselect(const Workspace *w, int i)
+{
+    // most recent in the same workspace, the adjacent row, then most recent anywhere: each kept on screen first
+    QSet<QString> shown;
+    for (auto *s : navigableSessions())
+        shown << s->id;
+    QString next;
+    for (const auto &r : std::as_const(recent))
+        if (w && indexIn(*w, r) >= 0 && shown.contains(r)) {
+            next = r;
+            break;
+        }
+    for (int k = i; w && next.isEmpty() && k < w->sessions.size(); ++k)
+        if (shown.contains(w->sessions[k].id))
+            next = w->sessions[k].id;
+    for (int k = w ? qMin(i, int(w->sessions.size())) - 1 : -1; next.isEmpty() && k >= 0; --k)
+        if (shown.contains(w->sessions[k].id))
+            next = w->sessions[k].id;
+    for (const auto &r : std::as_const(recent))
+        if (next.isEmpty() && shown.contains(r))
+            next = r;
+    if (next.isEmpty() && w && !w->sessions.isEmpty())
+        next = w->sessions[qMin(i, int(w->sessions.size()) - 1)].id;
+    if (next.isEmpty() && !recent.isEmpty())
+        next = recent.first();
+    if (next.isEmpty())
+        if (auto all = allSessions(); !all.isEmpty())
+            next = all.first()->id;
+    selected.clear();
+    if (!next.isEmpty())
+        select(next);
+    else
+        Q_EMIT selectionChanged({});
+}
+
+bool Store::softClose(const QStringList &ids)
+{
+    // a parent takes its companions; the panes stay alive, hidden, until the grace expires
+    QStringList group;
+    for (const QString &id : ids)
+        if (session(id))
+            group << id << companionsOf(id);
+    PendingClose close{++m_pendingSerial};
+    for (auto *s : allSessions())
+        if (group.contains(s->id)) {
+            auto *w = workspaceOf(s->id);
+            close.sessions << Parked{w->id, indexIn(*w, s->id), *s};
+        }
+    if (close.sessions.isEmpty())
+        return false;
+    const Parked first = close.sessions.first();
+    close.select = group.contains(selected) ? selected : first.session.id;
+    const bool wasSelected = group.contains(selected);
+    for (auto it = close.sessions.crbegin(); it != close.sessions.crend(); ++it) {
+        workspace(it->workspaceId)->sessions.removeAt(it->index);
+        recent.removeAll(it->session.id);
+    }
+    if (wasSelected) {
+        const Parked &at = *std::find_if(close.sessions.cbegin(), close.sessions.cend(), [this](const Parked &p) { return p.session.id == selected; });
+        reselect(workspace(at.workspaceId), at.index);
+    }
+    return park(close);
+}
+
+bool Store::softRemoveWorkspace(const QString &id)
+{
+    const auto at = std::find_if(workspaces.cbegin(), workspaces.cend(), [&id](const Workspace &w) { return w.id == id; });
+    if (at == workspaces.cend())
+        return false;
+    PendingClose close{++m_pendingSerial};
+    close.workspace = *at;
+    close.workspaceIndex = int(at - workspaces.cbegin());
+    close.focusMember = focused.contains(id);
+    focused.removeAll(id);
+    focusEnabled = focusEnabled && !focused.isEmpty();
+    const bool wasSelected = workspaceOf(selected) && workspaceOf(selected)->id == id;
+    workspaces.removeAt(close.workspaceIndex);
+    for (const auto &s : close.workspace.sessions)
+        recent.removeAll(s.id);
+    close.select = wasSelected ? selected : QString();
+    if (wasSelected)
+        reselect(nullptr, 0);
+    return park(close);
+}
+
+bool Store::park(const PendingClose &close)
+{
+    pending << close;
+    QTimer::singleShot(graceMs, this, [this, serial = close.serial] { finalizePending(serial); });
+    Q_EMIT changed();
+    return true;
+}
+
+void Store::finalizePending(int serial)
+{
+    for (int i = 0; i < pending.size(); ++i) {
+        if (serial >= 0 && pending[i].serial != serial)
+            continue;
+        const PendingClose c = pending.takeAt(i--);
+        QList<Parked> gone = c.sessions;
+        for (int k = 0; k < c.workspace.sessions.size(); ++k)
+            gone << Parked{c.workspace.id, k, c.workspace.sessions[k]};
+        for (const Parked &p : std::as_const(gone)) {
+            closed.prepend({p.workspaceId, p.session.name, p.session.cwd, p.index});
+            Q_EMIT sessionRemoved(p.session.id);
+        }
+        while (closed.size() > 20)
+            closed.removeLast();
+        Q_EMIT changed();
+    }
+}
+
+bool Store::undoClose()
+{
+    if (pending.isEmpty())
+        return false;
+    const PendingClose c = pending.takeLast();
+    if (!c.workspace.id.isEmpty()) {
+        workspaces.insert(qMin(c.workspaceIndex, int(workspaces.size())), c.workspace);
+        if (c.focusMember)
+            focused << c.workspace.id; // membership only: the filter flag is current state
+    }
+    for (const Parked &p : c.sessions) {
+        Workspace *w = workspace(p.workspaceId);
+        if (!w) // its workspace went meanwhile
+            w = workspace(workspaces.isEmpty() ? addWorkspace(QStringLiteral("main")) : workspaces.first().id);
+        w->sessions.insert(qMin(p.index, int(w->sessions.size())), p.session);
+    }
+    if (!c.select.isEmpty())
+        select(c.select);
+    Q_EMIT changed();
+    return true;
 }
 
 QString Store::reopenClosed()
@@ -687,7 +791,8 @@ QJsonObject Store::toJson() const
                          {"newSessionPlacement", settings.newSessionPlacement},
                          {"statusReset", settings.statusReset},
                          {"lastLauncher", settings.lastLauncher},
-                         {"confirmCloseSession", settings.confirmCloseSession}};
+                         {"confirmCloseSession", settings.confirmCloseSession},
+                         {"closeUndo", settings.closeUndo}};
     return {{"version", 2},      {"selected", selected}, {"recent", QJsonArray::fromStringList(recent)},
             {"settings", st},    {"workspaces", ws},     {"focusedWorkspaces", QJsonArray::fromStringList(focused)},
             {"focusEnabled", focusEnabled}};
@@ -731,6 +836,7 @@ void Store::fromJson(const QJsonObject &o)
     settings.statusReset = st.value("statusReset").toString(d.statusReset);
     settings.lastLauncher = st.value("lastLauncher").toString(d.lastLauncher);
     settings.confirmCloseSession = st.value("confirmCloseSession").toBool();
+    settings.closeUndo = st.value("closeUndo").toBool(true);
     focused.clear();
     for (const auto &f : o.value("focusedWorkspaces").toArray())
         if (workspace(f.toString())) // stale ids are pruned, so the filter never restores enabled and empty

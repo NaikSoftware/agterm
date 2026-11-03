@@ -24,6 +24,7 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session new [--name N] [--cwd DIR] [--workspace W | --workspace-name N [--create-workspace]]
               [--command CMD] [--no-select] [--parent SESSION]   (--parent makes a companion)
               [--tint COLOR [--tint-on icon,name]]
+  session close [--undoable]           with the GUI's undo grace when Settings allow it; prints (undoable)|(not undoable)
   session close | select | info         (--target: session id/prefix/name, default $AGTERM_SESSION_ID, then active)
   session rename <name>                 empty name reverts to the directory name
   session duplicate [--no-select]
@@ -53,7 +54,7 @@ static int die(const QString &message)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
-    const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink"};
+    const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "undoable"};
     QStringList pos;
     QHash<QString, QString> opt;
     const QStringList in = app.arguments().mid(1);
@@ -106,6 +107,7 @@ int main(int argc, char **argv)
     flag("no-select", "noSelect");
     flag("auto-reset", "autoReset");
     flag("blink", "blink");
+    flag("undoable", "undoable");
     if (opt.contains(QStringLiteral("lines")))
         args.insert("lines", opt.value(QStringLiteral("lines")).toInt());
     if (opt.contains(QStringLiteral("index")))
@@ -193,6 +195,8 @@ int main(int argc, char **argv)
         fputs(result["text"].toString().toUtf8().constData(), stdout);
         if (!result["text"].toString().endsWith(QLatin1Char('\n')))
             putchar('\n');
+    } else if (result.contains("undoable")) {
+        printf("ok %s\n", result["undoable"].toBool() ? "(undoable)" : "(not undoable)");
     } else if (cmd.endsWith(QLatin1String(".new")) || cmd == QLatin1String("session.duplicate") || cmd == QLatin1String("recent.open")) {
         printf("%s\n", qPrintable(result["id"].toString()));
     }

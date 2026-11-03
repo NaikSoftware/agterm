@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QLineEdit>
+#include <QPointer>
 #include <QTemporaryDir>
 #include <QToolButton>
 #include <QTest>
@@ -40,6 +41,31 @@ private Q_SLOTS:
         QTRY_COMPARE(QApplication::focusWidget(), term); // focus follows the selection back to its terminal
         QTest::keyClick(term, Qt::Key_A);
         QCOMPARE(store.session(first)->status, QStringLiteral("idle"));
+    }
+
+    void undoCloseBringsBackTheSameTerminal()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("undo.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, {}, {});
+        store.select(a);
+        store.select(store.addSession(ws, {}, {}));
+        const QString closing = store.selected;
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QTRY_VERIFY_WITH_TIMEOUT(QApplication::focusWidget() && QApplication::focusWidget() != &w, 5000);
+        QPointer<QWidget> term = QApplication::focusWidget();
+        QTest::keyClick(term, Qt::Key_W, Qt::ControlModifier | Qt::ShiftModifier);
+        QTRY_COMPARE(store.selected, a);
+        QVERIFY(!store.session(closing));
+        QTRY_VERIFY(QApplication::focusWidget() && QApplication::focusWidget() != term);
+        QTest::keyClick(QApplication::focusWidget(), Qt::Key_Z, Qt::ControlModifier | Qt::ShiftModifier);
+        QTRY_COMPARE(store.selected, closing);
+        QVERIFY(term); // the shell survived the grace window
+        QTRY_COMPARE(QApplication::focusWidget(), term.data());
     }
 
     void footerFilterNarrowsTheTreeAndTintReachesTheRow()
