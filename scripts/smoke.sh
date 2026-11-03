@@ -43,11 +43,11 @@ ctl session info --target "$id" | grep -qE '^hasSplit +false' || fail "split not
 ctl session scratch on --target "$id"
 ctl session info --target "$id" | grep -qE '^scratch +true' || fail "scratch not shown"
 ctl session scratch off --target "$id"
-ctl quick on >/dev/null && ctl quick off >/dev/null || fail "quick terminal"
-ctl notify --title smoke --body hi --target "$id"
-ctl session info --target "$id" | grep -qE '^unseen +1' || fail "unseen badge"
-ctl session seen --target "$id"
-ctl session info --target "$id" | grep -qE '^unseen +0' || fail "session seen"
+bg=$(ctl session new --name bg --no-select) # a notification for the session in front of you is not a badge
+ctl notify --title smoke --body hi --target "$bg"
+ctl session info --target "$bg" | grep -qE '^unseen +1' || fail "unseen badge"
+ctl session seen --target "$bg"
+ctl session info --target "$bg" | grep -qE '^unseen +0' || fail "session seen"
 ctl filepanel show >/dev/null
 ctl tree --json | grep -q '"filePanel":{"visible":true' || fail "file panel show"
 ctl filepanel width 260 >/dev/null

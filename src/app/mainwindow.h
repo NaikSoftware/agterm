@@ -36,8 +36,6 @@ public:
     bool isOwnShortcut(QKeyEvent *event) const;
     void setSocketStatus(bool ok, const QString &error);
     QStringList availableLaunchers() const { return m_launchers; }
-    bool quick(const QString &mode, QString *error) override;
-    bool quickVisible() const override;
     bool filePanel(const QString &mode, int width, QString *error) override;
     QJsonObject chromeState() const override;
 
@@ -57,7 +55,6 @@ private:
     void newCompanion(const QString &parentId);
     void focusPane(bool right);
     void toggleZoom();
-    void showQuick(bool on, bool pinned);
     void showSelected();
     void sidebarMenu(const QPoint &pos);
     void launcherMenu(const QString &workspaceId, const QPoint &globalPos);
@@ -99,10 +96,9 @@ private:
     QHash<QString, Panes> m_panes;
     QWidget *m_strip = nullptr;
     class FilePanel *m_filePanel = nullptr;
+    int m_filePanelWidth = 240; // agterm's default; clamped to 160..560
+    void applyFilePanelWidth();
     class Palette *m_palette = nullptr;
-    QWidget *m_quick = nullptr;
-    KParts::ReadOnlyPart *m_quickPart = nullptr;
-    bool m_quickPinned = false; // opened over the socket: stays put on click-away
     bool m_zoomed = false;
     QString m_shownId;
     QHash<QString, QDateTime> m_respawned;

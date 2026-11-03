@@ -29,7 +29,6 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session split close
   session swap
   session scratch [on|off|toggle]
-  quick [on|off|toggle]                 the app-wide quick terminal
   recent open                           reopen the most recently closed session
   filepanel [show|hide|toggle]          the session folder tree beside the sidebar
   filepanel width <px>
@@ -111,7 +110,7 @@ int main(int argc, char **argv)
         args.insert("width", arg.toInt());
     if (cmd == QLatin1String("filepanel"))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
-    if (QStringList{"session.flag", "session.split", "session.scratch", "quick"}.contains(cmd))
+    if (QStringList{"session.flag", "session.split", "session.scratch"}.contains(cmd))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
     copy("axis", "axis");
     if (cmd == QLatin1String("session.move"))

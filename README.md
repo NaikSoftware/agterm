@@ -31,7 +31,7 @@ cmake --install build --prefix ~/.local
   notification count, and a filled icon when flagged. Companions sit indented under their parent.
 - Rename inline (double-click), multi-select, drag to reorder or move between workspaces, and drop folders from the
   file manager to open sessions there. The footer has New Session, New Workspace and the flagged view.
-- Splits, a per-session scratch shell, a quick terminal, terminal zoom, full screen.
+- Splits, a per-session scratch shell, terminal zoom, full screen.
 - Session (Ctrl+P) and action (Ctrl+Shift+P) palettes, a Ctrl-Tab recent-session switcher, and reopen-closed.
 - A file panel (the session folder as a tree with file-type icons, a built-in viewer, clipboard, drag and drop).
 
@@ -48,7 +48,6 @@ agterm's ⌘ is Ctrl+Shift here (Konsole's convention); ⌘⇧ and ⌘⌃ are Ct
 | Ctrl+Shift+D / Ctrl+Alt+Shift+D | Split side by side / top and bottom (again: hide; the other: transpose) |
 | Ctrl+Alt+Shift+← / → | Focus left / right pane |
 | Ctrl+Shift+J | Scratch shell |
-| Ctrl+` | Quick terminal |
 | Ctrl+Alt+Shift+Return | Terminal zoom |
 | F11 | Full screen |
 | Ctrl+Alt+Shift+S / Ctrl+Alt+Shift+E | Toggle sidebar / file panel |

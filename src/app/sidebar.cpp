@@ -117,13 +117,31 @@ QIcon chromeIcon(const QString &name, const QColor &color)
     QPainter p(&pm);
     p.setRenderHint(QPainter::Antialiasing);
     p.scale(2, 2);
-    p.setPen(QPen(color, 1.3));
+    p.setPen(QPen(color, 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    if (name == QLatin1String("filepanel")) {
+        // agterm's "folder" symbol: a tab on the left of the lid
+        QPainterPath folder;
+        folder.moveTo(2.5, 15);
+        folder.lineTo(2.5, 5.5);
+        folder.quadTo(2.5, 4.5, 3.5, 4.5);
+        folder.lineTo(7.5, 4.5);
+        folder.lineTo(9, 6.5);
+        folder.lineTo(16.5, 6.5);
+        folder.quadTo(17.5, 6.5, 17.5, 7.5);
+        folder.lineTo(17.5, 15);
+        folder.quadTo(17.5, 16, 16.5, 16);
+        folder.lineTo(3.5, 16);
+        folder.quadTo(2.5, 16, 2.5, 15);
+        p.drawPath(folder);
+        p.drawLine(QPointF(2.5, 8.5), QPointF(17.5, 8.5));
+        p.end();
+        pm.setDevicePixelRatio(2);
+        return QIcon(pm);
+    }
     const QRectF box(2.5, 4.5, 15, 11);
     p.drawRoundedRect(box, 2.5, 2.5);
     if (name == QLatin1String("sidebar"))
         p.drawLine(QPointF(7.5, 4.5), QPointF(7.5, 15.5));
-    else if (name == QLatin1String("filepanel"))
-        p.drawLine(QPointF(12.5, 4.5), QPointF(12.5, 15.5));
     else if (name == QLatin1String("split"))
         p.drawLine(QPointF(10, 4.5), QPointF(10, 15.5));
     else if (name == QLatin1String("splitH"))

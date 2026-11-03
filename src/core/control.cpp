@@ -129,14 +129,6 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         return ok({{"id", store.addWorkspace(args.value("name").toString())}});
     if (cmd == QLatin1String("session.new"))
         return sessionNew(store, args);
-    if (cmd == QLatin1String("quick")) {
-        bool on = false;
-        if (!resolveMode(args.value("mode").toString(), terminals.quickVisible(), &on))
-            return fail(QStringLiteral("mode must be on, off or toggle"));
-        if (!terminals.quick(on ? QStringLiteral("on") : QStringLiteral("off"), &error))
-            return fail(error);
-        return ok({{"quick", on}});
-    }
     if (cmd == QLatin1String("notify")) {
         const QString id = store.resolveSession(target, &error);
         if (id.isEmpty())

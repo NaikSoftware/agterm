@@ -117,7 +117,8 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     m_split = new QSplitter;
     m_split->setChildrenCollapsible(false);
     m_filePanel = new FilePanel;
-    m_filePanel->setMinimumWidth(120);
+    m_filePanel->setMinimumWidth(160);
+    m_filePanel->setMaximumWidth(560);
     m_filePanel->hide();
     connect(m_filePanel, &FilePanel::companionRequested, this, [this](const QString &dir) {
         if (m_store.session(m_store.selected))
@@ -127,7 +128,13 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     m_split->addWidget(m_filePanel); // agterm's file panel sits right of the sidebar
     m_split->addWidget(m_stack);
     m_split->setStretchFactor(2, 1);
-    m_split->setSizes({230, 220, 970});
+    m_split->setSizes({230, 240, 970});
+    connect(m_split, &QSplitter::splitterMoved, this, [this] {
+        if (!m_filePanel->isHidden() && m_split->sizes().value(1) > 0) {
+            m_filePanelWidth = m_split->sizes().value(1); // a dragged divider is the new width
+            m_saveTimer.start();
+        }
+    });
     m_sidebarPanel->setMinimumWidth(160);
     setCentralWidget(m_split);
     resize(1200, 760);
@@ -160,8 +167,6 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     strip->addWidget(spacer);
     strip->addAction(chromeIcon(QStringLiteral("scratch"), ink), tr("Scratch"), m_actions.value(QStringLiteral("toggle_scratch")), &QAction::trigger);
     strip->addAction(chromeIcon(QStringLiteral("split"), ink), tr("Split"), m_actions.value(QStringLiteral("toggle_split")), &QAction::trigger);
-    strip->addSeparator();
-    strip->addAction(launcherIcon(QStringLiteral("terminal"), ink), tr("Quick Terminal"), m_actions.value(QStringLiteral("quick_terminal")), &QAction::trigger);
     addToolBar(Qt::TopToolBarArea, strip);
     m_strip = strip;
 
@@ -315,8 +320,6 @@ void MainWindow::createMenus()
             m_store.setScratch(s->id, !s->scratchVisible);
     }));
     view->addSeparator();
-    view->addAction(action(QStringLiteral("quick_terminal"), tr("Quick Terminal"), QStringLiteral("utilities-terminal"), QKeySequence(QStringLiteral("Ctrl+`")),
-                           [this] { showQuick(!quickVisible(), false); }));
     view->addAction(action(QStringLiteral("toggle_terminal_zoom"), tr("Terminal Zoom"), QStringLiteral("zoom-fit-best"),
                            QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Return")), [this] { toggleZoom(); }));
     view->addAction(action(QStringLiteral("toggle_fullscreen"), tr("Full Screen"), QStringLiteral("view-fullscreen"), QKeySequence(QStringLiteral("F11")),
@@ -405,7 +408,9 @@ void MainWindow::restore(const QJsonObject &window)
     m_sidebarAction->setChecked(window.value("sidebar").toBool(true));
     m_sidebarPanel->setVisible(m_sidebarAction->isChecked());
     m_flagButton->setChecked(window.value("flaggedView").toBool(false));
+    m_filePanelWidth = qBound(160, window.value("filePanelWidth").toInt(240), 560);
     m_filePanel->setVisible(window.value("filePanel").toBool(false));
+    applyFilePanelWidth();
     m_tree->rebuild();
     showSelected();
 }
@@ -582,16 +587,24 @@ void MainWindow::toggleZoom()
     m_strip->setVisible(!m_zoomed);
 }
 
+void MainWindow::applyFilePanelWidth()
+{
+    // the splitter would otherwise hand a newly shown panel whatever share it computes
+    if (m_filePanel->isHidden())
+        return;
+    QList<int> sizes = m_split->sizes();
+    sizes[2] = qMax(200, sizes[2] + sizes[1] - m_filePanelWidth);
+    sizes[1] = m_filePanelWidth;
+    m_split->setSizes(sizes);
+}
+
 bool MainWindow::filePanel(const QString &mode, int width, QString *)
 {
     if (!mode.isEmpty())
         m_filePanel->setVisible(mode == QLatin1String("toggle") ? m_filePanel->isHidden() : mode == QLatin1String("show"));
-    if (width > 0) {
-        QList<int> sizes = m_split->sizes();
-        sizes[2] += sizes[1] - width;
-        sizes[1] = width;
-        m_split->setSizes(sizes);
-    }
+    if (width > 0)
+        m_filePanelWidth = qBound(160, width, 560); // agterm's clamp
+    applyFilePanelWidth();
     m_filePanel->setRoot(liveCwd(m_store.selected));
     m_saveTimer.start();
     return true;
@@ -600,60 +613,7 @@ bool MainWindow::filePanel(const QString &mode, int width, QString *)
 QJsonObject MainWindow::chromeState() const
 {
     return {{"sidebarVisible", !m_sidebarPanel->isHidden()},
-            {"filePanel", QJsonObject{{"visible", !m_filePanel->isHidden()}, {"width", m_split->sizes().value(1)}}},
-            {"quick", quickVisible()}};
-}
-
-bool MainWindow::quickVisible() const
-{
-    return m_quick && m_quick->isVisible();
-}
-
-bool MainWindow::quick(const QString &mode, QString *)
-{
-    showQuick(mode == QLatin1String("on"), true);
-    return true;
-}
-
-void MainWindow::showQuick(bool on, bool pinned)
-{
-    if (!on) {
-        if (m_quick)
-            m_quick->hide(); // hiding keeps its shell alive
-        return;
-    }
-    if (!m_quick) {
-        m_quick = new QWidget(nullptr, Qt::Window | Qt::FramelessWindowHint);
-        m_quick->setWindowTitle(tr("Quick Terminal"));
-        new QVBoxLayout(m_quick);
-        m_quick->layout()->setContentsMargins(0, 0, 0, 0);
-        m_quick->installEventFilter(this);
-    }
-    if (!m_quickPart) {
-        // one throwaway shell for the whole app, opened in the active session's directory
-        const QString cwd = liveCwd(m_store.selected);
-        auto result = KParts::PartLoader::instantiatePart<KParts::ReadOnlyPart>(KPluginMetaData(QStringLiteral("kf6/parts/konsolepart")), m_quick, this);
-        if (!result)
-            return;
-        m_quickPart = result.plugin;
-        m_quick->layout()->addWidget(m_quickPart->widget());
-        auto *bridge = new PartBridge(this, m_store, {}, m_quickPart);
-        connect(m_quickPart, SIGNAL(overrideShortcut(QKeyEvent *, bool &)), bridge, SLOT(overrideShortcut(QKeyEvent *, bool &)));
-        connect(m_quickPart, &QObject::destroyed, this, [this] {
-            m_quickPart = nullptr;
-            if (!m_quitting && m_quick)
-                m_quick->hide();
-        });
-        qobject_cast<TerminalInterface *>(m_quickPart)->showShellInDir(cwd.isEmpty() ? QDir::homePath() : cwd);
-    }
-    m_quickPinned = pinned;
-    const QRect screen = (windowHandle() && windowHandle()->screen() ? windowHandle()->screen() : QGuiApplication::primaryScreen())->availableGeometry();
-    const QSize size(qMin(int(screen.width() * 0.9), 1600), qMin(int(screen.height() * 0.9), 1000));
-    m_quick->setGeometry(QRect(screen.center() - QPoint(size.width() / 2, size.height() / 2), size));
-    m_quick->show();
-    m_quick->raise();
-    m_quick->activateWindow();
-    m_quickPart->widget()->setFocus();
+            {"filePanel", QJsonObject{{"visible", !m_filePanel->isHidden()}, {"width", m_filePanelWidth}}}};
 }
 
 TerminalInterface *MainWindow::terminal(const QString &id) const
@@ -1080,6 +1040,7 @@ void MainWindow::save()
                                       {"sidebar", m_sidebarAction->isChecked()},
                                       {"flaggedView", m_tree->flaggedView()},
                                       {"filePanel", !m_filePanel->isHidden()},
+                                      {"filePanelWidth", m_filePanelWidth},
                                       {"collapsed", collapsed}});
     QSaveFile f(m_statePath);
     if (f.open(QIODevice::WriteOnly)) {
@@ -1094,7 +1055,6 @@ MainWindow::~MainWindow()
     m_quitting = true;
     for (const Panes &p : std::as_const(m_panes))
         delete p.view; // its parts go with their widgets
-    delete m_quick;
     // a still-running PATH probe would emit finished() into our destroyed members when ~QObject kills it
     for (auto *proc : findChildren<QProcess *>()) {
         proc->disconnect(this);
@@ -1112,8 +1072,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_quick && event->type() == QEvent::WindowDeactivate && !m_quickPinned)
-        m_quick->hide(); // a click away dismisses it, unless a script opened it
     if (event->type() == QEvent::MouseButtonDblClick && watched->property("agtermSession").isValid()) {
         const QString id = watched->property("agtermSession").toString();
         if (Session *s = m_store.session(id)) {
