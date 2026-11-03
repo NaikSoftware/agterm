@@ -67,6 +67,7 @@ private:
     QString currentWorkspace();
     void newSession(const QString &workspaceId);
     void newWorkspace();
+    QString askName(const QString &title, bool *ok);
     void openDirectory();
     void closeSessions(const QStringList &ids);
     void deleteWorkspace(const QString &id);

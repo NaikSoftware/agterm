@@ -990,10 +990,21 @@ void MainWindow::sampleAgents()
         m_filePanel->setRoot(liveCwd(m_store.selected));
 }
 
+QString MainWindow::askName(const QString &title, bool *ok)
+{
+    // QInputDialog sizes itself to its short label; a name field wants room
+    QInputDialog dlg(this);
+    dlg.setWindowTitle(title);
+    dlg.setLabelText(tr("Name:"));
+    dlg.setMinimumWidth(qMax(420, width() / 3));
+    *ok = dlg.exec() == QDialog::Accepted;
+    return dlg.textValue();
+}
+
 void MainWindow::newWorkspace()
 {
     bool ok = false;
-    const QString name = QInputDialog::getText(this, tr("New Workspace"), tr("Name:"), QLineEdit::Normal, {}, &ok);
+    const QString name = askName(tr("New Workspace"), &ok);
     if (ok && !name.trimmed().isEmpty())
         m_store.addWorkspace(name.trimmed());
 }
@@ -1053,7 +1064,7 @@ void MainWindow::fillMoveMenu(QMenu *menu, const QStringList &ids)
     menu->addSeparator();
     menu->addAction(tr("New Workspace…"), this, [this, ids] {
         bool ok = false;
-        const QString name = QInputDialog::getText(this, tr("New Workspace"), tr("Name:"), QLineEdit::Normal, {}, &ok);
+        const QString name = askName(tr("New Workspace"), &ok);
         if (!ok || name.trimmed().isEmpty())
             return;
         const QString ws = m_store.addWorkspace(name.trimmed());
