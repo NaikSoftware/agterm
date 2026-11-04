@@ -3,10 +3,10 @@ import Foundation
 import Observation
 import UserNotifications
 
-/// Drives the Dock icon's unseen-notification badge from the app-wide total — the same `Session.unseenCount`
-/// the sidebar's red pills show, summed across open windows by `WindowLibrary.totalUnseenCount`. Capped at 99
-/// (the sidebar pill's `99+`), cleared at zero, gated by the SAME `GhosttyApp.notificationBadgeEnabled`
-/// ("Show notification badges") toggle as the pills.
+/// Drives the Dock icon's badge: the number of open sessions needing attention
+/// (`attentionCount` over `WindowLibrary.allOpenSessions`), a session counting once for unseen notifications or a
+/// blocked/completed status. Capped at 99, cleared at zero. The "Show notification badges" toggle drops only
+/// the unseen part, since it never gates the status glyph.
 ///
 /// **Uses the modern UserNotifications badge, NOT `NSApp.dockTile.badgeLabel`.** The legacy dock-tile label
 /// is silently suppressed for agterm — the value sets and persists on the tile, but the Dock never draws the
@@ -77,12 +77,11 @@ final class DockBadgeController {
     /// re-arm here — they come through `start()`'s `.agtermAppearanceChanged` observer instead.
     private func apply() {
         let count = withObservationTracking { () -> Int in
-            guard GhosttyApp.shared.notificationBadgeEnabled else { return 0 }
-            return self.library?.totalUnseenCount ?? 0
+            self.library?.allOpenSessions().attentionCount(countingUnseen: GhosttyApp.shared.notificationBadgeEnabled) ?? 0
         } onChange: { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.scheduleRefresh() } }
         }
-        // capped at 99 to mirror the sidebar pill's `99+` ceiling — the OS renders the raw Int.
+        // capped at 99 — the OS renders the raw Int.
         UNUserNotificationCenter.current().setBadgeCount(min(count, 99))
     }
 }
