@@ -159,4 +159,10 @@ public struct AgentIndicator: Equatable, Sendable {
     func normalizedPane(hasSplit: Bool) -> StatusPane? {
         statusPane == .right && !hasSplit ? .left : statusPane
     }
+
+    /// The indicator a folded group shows: its most urgent member's by `attentionRank`, the first on a tie,
+    /// idle when every member is idle.
+    public static func rolledUp(_ indicators: some Sequence<AgentIndicator>) -> AgentIndicator {
+        indicators.filter { $0.status != .idle }.min { $0.status.attentionRank < $1.status.attentionRank } ?? AgentIndicator()
+    }
 }

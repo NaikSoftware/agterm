@@ -880,6 +880,36 @@ final class ControlSidebarStatusUITests: ControlAPITestCase {
                       "re-enabling the badge setting should show the count pill again")
     }
 
+    func testWorkspaceRollUpShowsOnlyWhileCollapsed() throws {
+        let workspace = try XCTUnwrap(treeWorkspaces().first, "tree should list a workspace")
+        let wsID = try XCTUnwrap(workspace["id"] as? String, "workspace should carry an id")
+        let sessions = try XCTUnwrap(workspace["sessions"] as? [[String: Any]], "workspace should list sessions")
+        let seeded = try XCTUnwrap(sessions.first?["id"] as? String, "should have a seeded session id")
+        XCTAssertEqual(try sendCommand(#"{"cmd":"session.new"}"#)["ok"] as? Bool, true)
+        XCTAssertTrue(pollSessionCount(2, timeout: 10), "the new session should land")
+
+        let notified = try sendCommand(#"{"cmd":"notify","target":"\#(seeded)","args":{"body":"hi"}}"#)
+        XCTAssertEqual(notified["ok"] as? Bool, true, "notify should succeed: \(notified)")
+        let status = try sendCommand(#"{"cmd":"session.status","target":"\#(seeded)","args":{"status":"active"}}"#)
+        XCTAssertEqual(status["ok"] as? Bool, true, "session.status should succeed: \(status)")
+        let badges = app.staticTexts.matching(identifier: "notify-badge")
+        let glyphs = app.staticTexts.matching(identifier: "agent-status")
+        XCTAssertTrue(badges.firstMatch.waitForExistence(timeout: 12), "the session row should show a badge")
+        XCTAssertEqual(badges.count, 1, "an expanded workspace must not repeat its session's count")
+        XCTAssertEqual(glyphs.count, 1, "an expanded workspace must not repeat its session's status")
+
+        XCTAssertEqual(try sendCommand(#"{"cmd":"workspace.collapse","target":"\#(wsID)"}"#)["ok"] as? Bool, true)
+        XCTAssertTrue(app.staticTexts["session-row"].waitForNonExistence(timeout: 10), "session rows should fold away")
+        XCTAssertTrue(badges.firstMatch.waitForExistence(timeout: 12), "the collapsed workspace should roll up the count")
+        XCTAssertEqual(badges.count, 1)
+        XCTAssertEqual(glyphs.firstMatch.value as? String, "active", "the collapsed workspace should roll up the status")
+
+        XCTAssertEqual(try sendCommand(#"{"cmd":"workspace.expand","target":"\#(wsID)"}"#)["ok"] as? Bool, true)
+        XCTAssertTrue(app.staticTexts["session-row"].waitForExistence(timeout: 10), "session rows should return")
+        XCTAssertEqual(badges.count, 1, "expanding should drop the roll-up again")
+        XCTAssertEqual(glyphs.count, 1)
+    }
+
     // session.seen clears a session's unseen badge WITHOUT changing the selection/focus — the focus-free
     // counterpart to notify. Fire notify on a non-selected session so the badge + tree `unseen` read-back
     // show, then session.seen clears both while the selection stays on the other session.

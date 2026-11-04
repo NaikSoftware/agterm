@@ -30,4 +30,10 @@ extension WorkspaceSidebar.Coordinator {
         guard flaggedLayout == .tree else { return workspace.unseenCount }
         return workspace.sessions.reduce(0) { $1.flagged ? $0 + $1.unseenCount : $0 }
     }
+
+    /// The status glyph a collapsed workspace row rolls up, over the same rendered children as `displayedUnseen`.
+    func displayedIndicator(for workspace: Workspace) -> AgentIndicator {
+        let shown = flaggedLayout == .tree ? workspace.sessions.filter(\.flagged) : workspace.sessions
+        return .rolledUp(shown.map(\.agentIndicator))
+    }
 }
