@@ -46,7 +46,8 @@ Every pane shell gets these variables; `AGTERM_SESSION_ID` being set is the test
 - `AGTERMCTL`: the absolute path of the app's own `agtermctl`.
 
 The app also prepends its binary directory to the pane's `PATH`.
-A login shell or a profile can put an older `agtermctl` first, so inside a pane prefer `"$AGTERMCTL"`.
+Call plain `agtermctl`. If it reports an unknown command or flag that this skill documents, a login profile put an older
+`agtermctl` first on PATH; `"$AGTERMCTL"` is the app's own binary.
 Examples below write `agtermctl` for brevity.
 
 The variables are inherited by everything the shell starts, including daemons that outlive it.
