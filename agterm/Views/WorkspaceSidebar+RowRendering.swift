@@ -75,16 +75,16 @@ extension WorkspaceSidebar.Coordinator {
         switch node.kind {
         case .workspace:
             let workspace = store.workspaces.first(where: { $0.id == node.id })
-            // workspaces carry no agent status; the idle apply collapses the glyph slot
-            cell.statusIcon.apply(AgentIndicator())
+            // badge and status roll up only while collapsed: an expanded workspace shows its sessions' own, and a
+            // second copy would double-report them. Expand/collapse reload the row (see outlineViewItemDidExpand).
+            let collapsed = !outlineView.isItemExpanded(node)
+            cell.statusIcon.apply(collapsed ? workspace.map(displayedIndicator(for:)) ?? AgentIndicator() : AgentIndicator())
             field.stringValue = workspace?.name ?? ""
             field.font = .systemFont(ofSize: GhosttyApp.shared.sidebarFontSize, weight: .medium)
             field.setAccessibilityIdentifier("workspace-row")
             // expose the workspace name so app.staticTexts["workspace 1"] resolves
             field.setAccessibilityLabel(workspace?.name ?? "")
-            // roll-up badge so an unseen notification stays visible when the workspace is collapsed
-            // (gated by the Settings badge toggle, like the session badge below)
-            applyBadge(toCell: cell, count: effectiveUnseen(workspace.map(displayedUnseen(for:)) ?? 0))
+            applyBadge(toCell: cell, count: effectiveUnseen(collapsed ? workspace.map(displayedUnseen(for:)) ?? 0 : 0))
             // a workspace in the focus set draws the SAME grid glyph at BLACK weight, keyed on MEMBERSHIP
             // alone and NOT on `focusEnabled` — so the marked set stays legible with the filter off, while
             // looking at the whole tree.

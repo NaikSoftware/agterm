@@ -273,4 +273,13 @@ struct AgentStatusTests {
         #expect(AgentStatus.completed.tooltipText == "Agent status: Completed")
         #expect(AgentStatus.idle.tooltipText == nil)
     }
+
+    @Test func rolledUpPicksTheMostUrgentFirstNonIdleIndicator() {
+        let completed = AgentIndicator(status: .completed)
+        let active = AgentIndicator(status: .active, color: "#112233")
+        #expect(AgentIndicator.rolledUp([]) == AgentIndicator())
+        #expect(AgentIndicator.rolledUp([AgentIndicator(), AgentIndicator()]) == AgentIndicator())
+        #expect(AgentIndicator.rolledUp([completed, active, AgentIndicator(status: .active)]) == active)
+        #expect(AgentIndicator.rolledUp([active, AgentIndicator(status: .blocked, blink: true)]).status == .blocked)
+    }
 }

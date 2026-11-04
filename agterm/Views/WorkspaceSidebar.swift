@@ -506,7 +506,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
         private func rowContent(forWorkspace workspace: Workspace) -> RowContent {
             RowContent(label: workspace.name, hasSplit: false, splitAxis: .leftRight,
                        unseen: effectiveUnseen(displayedUnseen(for: workspace)),
-                       indicator: AgentIndicator(), flagged: false,
+                       indicator: displayedIndicator(for: workspace), flagged: false,
                        focusMember: store.focusedWorkspaceIDs.contains(workspace.id), tint: workspace.tint)
         }
 
@@ -688,6 +688,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
             // persist ONLY a genuine user expand: a programmatic reveal or rebuild re-apply sets
             // suppressExpansionPersist, updating the visual set above without burning the persisted intent.
             if !suppressExpansionPersist { store.setWorkspaceExpanded(node.id, expanded: true) }
+            if !renameController.isEditing { outlineView?.reloadItem(node) }
             applyParentExpansion(under: node)
         }
 
@@ -697,6 +698,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
             expandedWorkspaceIDs.remove(node.id)
             // persist only a genuine user collapse; programmatic collapses are suppressed (see didExpand).
             if !suppressExpansionPersist { store.setWorkspaceExpanded(node.id, expanded: false) }
+            if !renameController.isEditing { outlineView?.reloadItem(node) }
         }
 
         func node(for id: UUID, kind: SidebarNode.Kind) -> SidebarNode {

@@ -40,7 +40,9 @@ paths:
 ## Badges
 
 - `Session.unseenCount` is observed but excluded from `SessionSnapshot`. `BadgeView` draws an accent
-  capsule capped at `99+`, role `.staticText`, ID `notify-badge`; workspace rows roll up descendant counts.
+  capsule capped at `99+`, role `.staticText`, ID `notify-badge`.
+  A collapsed workspace row rolls up descendant counts and the most urgent status glyph by `attentionRank`;
+  an expanded one shows neither, so nothing shows twice.
   Dependency reads plus `snapshotBadges`/`reloadChangedBadgeRows` limit reloads to changed rows.
 - Selection and pane focus clear unseen state and delivered banners. App activation does not transition
   the retained first responder, which caused #155; the `didBecomeKey` observer therefore calls
