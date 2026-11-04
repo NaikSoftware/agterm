@@ -52,12 +52,13 @@ paths:
   The unseen count is unchanged.
 - `notificationBadgeEnabled` gates session, workspace, and Dock counts through `effectiveUnseen`, including
   `RowContent.unseen` so toggles reload rows. It never gates the agent-status glyph.
-- `DockBadgeController` shows host-free `WindowLibrary.totalUnseenCount`. Use
+- `DockBadgeController` shows host-free `attentionCount` over `WindowLibrary.allOpenSessions()`: sessions with unseen
+  notifications or a blocked/completed status, each once; the badge toggle drops only the unseen part. Use
   `UNUserNotificationCenter.setBadgeCount`, not `NSApp.dockTile.badgeLabel`, which stores but does not draw
   agterm's value. The modern API preserves the adaptive icon, so never override `applicationIconImage`.
   Clear the OS-persistent badge in `applicationWillTerminate`; `willClose` cannot do this because
   `isTerminating` makes `closeWindow` a no-op.
-- `apply()` observes and re-arms on `totalUnseenCount`. Explicitly refresh after window close, control
+- `apply()` observes and re-arms on that count. Explicitly refresh after window close, control
   `window.close`, and `ContentView.resolveStore` reopen; observe `.agtermAppearanceChanged` for the
   non-observable toggle. This derived chrome is keep-in-sync exempt.
 

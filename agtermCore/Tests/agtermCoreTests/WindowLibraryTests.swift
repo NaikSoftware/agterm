@@ -145,6 +145,22 @@ final class WindowLibraryTests {
         #expect(library.totalUnseenCount == 2)
     }
 
+    @Test func attentionSessionCountCountsEachSessionOnce() {
+        let library = WindowLibrary(directory: directory)
+        let store = try! #require(library.activeStore)
+        let first = store.workspaces[0].sessions[0]
+        let second = try! #require(store.addSession(toWorkspace: store.workspaces[0].id, cwd: "/tmp"))
+        let third = try! #require(store.addSession(toWorkspace: store.workspaces[0].id, cwd: "/tmp"))
+        first.unseenCount = 3
+        first.agentIndicator = AgentIndicator(status: .blocked)
+        second.agentIndicator = AgentIndicator(status: .completed)
+        third.agentIndicator = AgentIndicator(status: .active)
+        #expect(library.allOpenSessions().attentionCount(countingUnseen: true) == 2)
+        first.agentIndicator = AgentIndicator()
+        #expect(library.allOpenSessions().attentionCount(countingUnseen: true) == 2)
+        #expect(library.allOpenSessions().attentionCount(countingUnseen: false) == 1)
+    }
+
     @Test func closingSessionRecordsAndReopensRecentItem() {
         let library = WindowLibrary(directory: directory)
         let store = try! #require(library.activeStore)

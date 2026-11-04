@@ -970,3 +970,11 @@ public final class Session: Identifiable {
         searchSurface = nil
     }
 }
+
+extension Sequence<Session> {
+    /// The Dock badge count: sessions that need attention, each counted once whether it has unseen
+    /// notifications (when `countingUnseen`) or a blocked/completed status.
+    @MainActor public func attentionCount(countingUnseen: Bool) -> Int {
+        count { (countingUnseen && $0.unseenCount > 0) || $0.agentIndicator.status.needsAttention }
+    }
+}
