@@ -295,7 +295,7 @@ QJsonObject WindowLibrary::dispatch(const QJsonObject &request)
     if (open.isEmpty())
         return fail(QStringLiteral("no open window"));
     // config the whole app shares, and the app-global restore commands, act on every open window
-    static const QStringList everywhere{"keymap.reload", "hooks.reload", "theme.set", "restore.capture", "restore.clear"};
+    static const QStringList everywhere{"keymap.reload", "hooks.reload", "theme.set", "restore.mode", "restore.capture", "restore.clear"};
     if (everywhere.contains(cmd)) {
         QJsonObject last;
         int count = 0;
