@@ -221,6 +221,8 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
                                                                        this, &MainWindow::customCommandPalette));
     m_chrome.insert(QStringLiteral("split"),
                     strip->addAction(chromeIcon(QStringLiteral("split"), ink), tr("Split"), m_actions.value(QStringLiteral("toggle_split")), &QAction::trigger));
+    m_chrome.insert(QStringLiteral("dashboard"), strip->addAction(chromeIcon(QStringLiteral("grid"), ink), tr("Dashboard"), m_actions.value(QStringLiteral("dashboard")),
+                                                                  &QAction::trigger));
     addToolBar(Qt::TopToolBarArea, strip);
     m_strip = strip;
 
@@ -301,7 +303,17 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         m_store.select(last);
     });
     connect(&m_store, &Store::settingsChanged, this, &MainWindow::applySettings);
-    connect(&m_store, &Store::statusChanged, this, [this](const QString &, const QString &status) {
+    m_idle.start();
+    m_followTimer.setInterval(1000);
+    connect(&m_followTimer, &QTimer::timeout, this, [this] { autoFollowTick(m_idle.elapsed()); });
+    m_followTimer.start();
+    connect(m_tree, &Sidebar::editFlaggedRequested, this, &MainWindow::editFlaggedSessions);
+    connect(&m_store, &Store::selectionChanged, this, [this](const QString &id) {
+        if (const Session *s = m_store.session(id); s && s->status == QLatin1String("blocked"))
+            m_followShown.insert(id);
+    });
+    connect(&m_store, &Store::statusChanged, this, [this](const QString &id, const QString &status) {
+        trackBlocked(id, status);
         if (status == QLatin1String("blocked"))
             playSound(m_store.settings.blockedStatusSoundName);
     });
@@ -446,6 +458,8 @@ void MainWindow::createMenus()
         for (const QString &id : QStringList(m_store.focused))
             m_store.focusWorkspace(id, QStringLiteral("off"));
     }));
+    view->addAction(action(QStringLiteral("edit_flagged"), tr("Edit Flagged Sessions…"), {}, {}, [this] { editFlaggedSessions(); }));
+    view->addAction(action(QStringLiteral("edit_focused"), tr("Edit Focused Workspaces…"), {}, {}, [this] { editFocusedWorkspaces(); }));
     view->addAction(action(QStringLiteral("toggle_menubar"), tr("Show Menu Bar"), QStringLiteral("show-menu"), QKeySequence(QStringLiteral("Ctrl+Shift+M")),
                            [this] { menuBar()->setVisible(!menuBar()->isVisible()); }));
     view->addAction(action(QStringLiteral("toggle_overlay"), tr("Hide Overlays"), {}, QKeySequence(QStringLiteral("Ctrl+Alt+Shift+J")),
@@ -613,7 +627,7 @@ void MainWindow::restore(const QJsonObject &window)
     restoreGeometry(QByteArray::fromBase64(window.value("geometry").toString().toLatin1()));
     m_split->restoreState(QByteArray::fromBase64(window.value("splitter").toString().toLatin1()));
     for (const auto &v : window.value("collapsed").toArray())
-        m_tree->m_collapsed.insert(v.toString());
+        m_store.collapsed.insert(v.toString());
     m_sidebarAction->setChecked(window.value("sidebar").toBool(true));
     m_sidebarPanel->setVisible(m_sidebarAction->isChecked());
     m_flagButton->setChecked(window.value("flaggedView").toBool(false));
@@ -959,7 +973,10 @@ bool MainWindow::filePanel(const QString &mode, int width, QString *)
 QJsonObject MainWindow::chromeState() const
 {
     QJsonObject out{{"sidebarVisible", !m_sidebarPanel->isHidden()},
-                    {"filePanel", QJsonObject{{"visible", !m_filePanel->isHidden()}, {"width", m_filePanelWidth}}}};
+                    {"filePanel", QJsonObject{{"visible", !m_filePanel->isHidden()}, {"width", m_filePanelWidth}}},
+                    {"idleMs", m_idle.elapsed()}};
+    if (const qint64 follow = autoFollowMs())
+        out.insert("autoFollowMs", follow);
     const QJsonObject dash = dashboardState();
     for (auto it = dash.begin(); it != dash.end(); ++it)
         out.insert(it.key(), it.value());
@@ -1433,7 +1450,7 @@ bool MainWindow::save()
     }
     QJsonObject root = m_store.toJson();
     QJsonArray collapsed;
-    for (const auto &c : std::as_const(m_tree->m_collapsed))
+    for (const auto &c : std::as_const(m_store.collapsed))
         collapsed << c;
     root.insert("window", QJsonObject{{"geometry", QString::fromLatin1(saveGeometry().toBase64())},
                                       {"splitter", QString::fromLatin1(m_split->saveState().toBase64())},
@@ -1507,6 +1524,9 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         return true;
     if (event->type() == QEvent::Resize && watched->property("agtermOverlayHost").isValid())
         layoutOverlays(watched->property("agtermOverlayHost").toString());
+    if ((event->type() == QEvent::KeyPress || event->type() == QEvent::MouseButtonPress || event->type() == QEvent::Wheel) && watched->isWidgetType()
+        && static_cast<QWidget *>(watched)->window() == this)
+        m_idle.restart(); // auto-follow waits for input idleness in this window
     if (event->type() == QEvent::KeyPress && !m_quitting) {
         auto *w = qobject_cast<QWidget *>(watched);
         auto *key = static_cast<QKeyEvent *>(event);

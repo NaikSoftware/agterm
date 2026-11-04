@@ -710,9 +710,9 @@ void Store::setSettings(const Settings &s)
     X(newSessionDirectory) X(newSessionCustomDirectory) X(newSessionPlacement) X(statusReset) X(lastLauncher) X(fontFamily) X(theme) \
     X(cursorStyle) X(cursorBlink) X(notificationSoundName) X(dockBounce) X(activeStatusColorHex) X(blockedStatusColorHex)            \
     X(completedStatusColorHex) X(activeStatusShape) X(blockedStatusShape) X(completedStatusShape) X(blockedStatusSoundName)            \
-    X(configDirectory) X(restoreMode)
+    X(configDirectory) X(restoreMode) X(autoFollowAttention) X(flaggedViewLayout)
 #define AGTERM_SETTINGS_BOOLS(X)                                                                                                  \
-    X(confirmCloseSession) X(closeUndo) X(workspaceRowClickExpands) X(notificationsEnabled) X(notificationBadgeEnabled) X(attentionIncludesActive)
+    X(confirmCloseSession) X(closeUndo) X(workspaceRowClickExpands) X(notificationsEnabled) X(notificationBadgeEnabled) X(attentionIncludesActive) X(autoFollowStayOnActive)
 #define AGTERM_SETTINGS_DOUBLES(X) X(fontSize) X(sidebarFontSize) X(interfaceFontSize)
 #define AGTERM_SETTINGS_LISTS(X) X(hiddenInterfaceElements) X(shownInterfaceElements)
 

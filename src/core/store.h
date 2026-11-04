@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -79,6 +80,9 @@ struct Settings {
     QString activeStatusShape, blockedStatusShape, completedStatusShape; // circle square triangle diamond capsule star
     QString blockedStatusSoundName;
     bool attentionIncludesActive = false;
+    QString autoFollowAttention = QStringLiteral("off"); // off s5 s10 s30 s60 m5: idle time before the window follows a blocked session
+    bool autoFollowStayOnActive = false;                  // hold the selection while the current session is active
+    QString flaggedViewLayout = QStringLiteral("flat");   // flat (session : workspace) | plain | tree
     // Key Mapping: the directory holding keymap.conf and hooks.conf; "" = the default
     QString configDirectory;
     QString restoreMode = QStringLiteral("none"); // none | rerun | live; takes effect at the next launch
@@ -126,6 +130,7 @@ public:
     // the line to type into a pane's new shell: the pin, else the capture if restorable; consumed once
     QString takeReplay(const QString &id, bool split, const QStringList &denylist);
     bool flaggedView = false; // the sidebar shows flagged sessions only; navigation follows it
+    QSet<QString> collapsed;  // folded workspace rows and companion parents, shared by the tree and the flagged tree
     // the workspace filter: a marked set, applied or suspended; never applied while empty
     QStringList focused;
     bool focusEnabled = false;

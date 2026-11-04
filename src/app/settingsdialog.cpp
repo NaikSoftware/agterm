@@ -162,6 +162,9 @@ void MainWindow::showSettings()
     auto *sidebar = new QFormLayout;
     sidebar->addRow(check(tr("Click a workspace row to expand or collapse"), cur.workspaceRowClickExpands,
                           [](Settings &s, bool v) { s.workspaceRowClickExpands = v; }));
+    sidebar->addRow(tr("Flagged view layout"),
+                    picker({{tr("Flat list"), QStringLiteral("flat")}, {tr("Flat list, names only"), QStringLiteral("plain")}, {tr("Workspace tree"), QStringLiteral("tree")}},
+                           cur.flaggedViewLayout, [](Settings &s, const QString &v) { s.flaggedViewLayout = v; }));
     page(tr("General"), QStringLiteral("configure"), {group(tr("Sessions"), sessions), group(tr("Sidebar"), sidebar)});
 
     // Appearance: mapped onto each Konsole session at runtime; Default = what the Konsole profile sets
@@ -213,7 +216,7 @@ void MainWindow::showSettings()
          {group(tr("Title Bar"), twoColumns({element(QStringLiteral("filePanel"), tr("File panel toggle")), element(QStringLiteral("sidebarToggle"), tr("Sidebar toggle")),
                                              element(QStringLiteral("workspaceName"), tr("Workspace name")), element(QStringLiteral("sessionName"), tr("Session name")),
                                              element(QStringLiteral("recentSessions"), tr("Recent sessions")), element(QStringLiteral("split"), tr("Split view")),
-                                             element(QStringLiteral("customCommands"), tr("Custom commands"))})),
+                                             element(QStringLiteral("dashboard"), tr("Dashboard")), element(QStringLiteral("customCommands"), tr("Custom commands"))})),
           group(tr("Sidebar"), twoColumns({element(QStringLiteral("newSession"), tr("New session")), element(QStringLiteral("newWorkspace"), tr("New workspace")),
                                            element(QStringLiteral("focusFilter"), tr("Workspace filter")), element(QStringLiteral("flaggedView"), tr("Flagged view")),
                                            element(QStringLiteral("workspaceAddSession"), tr("Workspace add-session")),
@@ -288,6 +291,14 @@ void MainWindow::showSettings()
     auto *nav = new QFormLayout;
     nav->addRow(check(tr("Attention navigation includes active sessions"), cur.attentionIncludesActive,
                       [](Settings &s, bool v) { s.attentionIncludesActive = v; }));
+    QComboBox *follow = picker({{tr("Disabled"), QStringLiteral("off")}, {tr("5 sec idle"), QStringLiteral("s5")}, {tr("10 sec idle"), QStringLiteral("s10")},
+                                {tr("30 sec idle"), QStringLiteral("s30")}, {tr("60 sec idle"), QStringLiteral("s60")}, {tr("5 min idle"), QStringLiteral("m5")}},
+                               cur.autoFollowAttention, [](Settings &s, const QString &v) { s.autoFollowAttention = v; });
+    nav->addRow(tr("Auto-follow blocked sessions"), follow);
+    QCheckBox *away = check(tr("Auto-follow away from a running session"), !cur.autoFollowStayOnActive, [](Settings &s, bool v) { s.autoFollowStayOnActive = !v; });
+    away->setEnabled(cur.autoFollowAttention != QLatin1String("off"));
+    connect(follow, &QComboBox::currentIndexChanged, away, [follow, away] { away->setEnabled(follow->currentData().toString() != QLatin1String("off")); });
+    nav->addRow(away);
     auto *resetButton = new QPushButton(tr("Reset to defaults"));
     connect(resetButton, &QPushButton::clicked, dlg, [=, this] {
         // colours, shapes, sound and status reset back to the shipped values, as master

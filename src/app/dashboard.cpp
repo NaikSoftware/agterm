@@ -71,6 +71,7 @@ bool MainWindow::openDashboard(const QStringList &cells, const QString &fontMode
     setWindowTitle(tr("Dashboard"));
     m_dashBlink.start();
     refreshDashboard();
+    syncDashboardButton();
     return true;
 }
 
@@ -96,6 +97,7 @@ void MainWindow::closeDashboard()
     }
     m_dashboard->deleteLater();
     m_dashboard = nullptr;
+    syncDashboardButton();
     for (const QString &id : ids)
         applyLayout(id);
     m_shownId.clear(); // focus returns to the selected session
@@ -257,4 +259,10 @@ void MainWindow::toggleDashboard()
     const QStringList cells = dashboardCells(m_store, {}, true, &notes, &error);
     if (cells.isEmpty() || !openDashboard(cells, QStringLiteral("auto"), 0, &error))
         statusBar()->showMessage(error, 2000);
+}
+
+void MainWindow::syncDashboardButton()
+{
+    if (QAction *a = m_chrome.value(QStringLiteral("dashboard")))
+        a->setIcon(chromeIcon(m_dashboard ? QStringLiteral("gridFilled") : QStringLiteral("grid"), palette().color(QPalette::WindowText)));
 }

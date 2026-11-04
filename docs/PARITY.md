@@ -47,7 +47,9 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Custom-commands palette ⌃⇧O → Ctrl+Alt+O (Ctrl+Shift+O is ⌘O, Open Directory, so its Shift becomes Alt)
 - [x] Ctrl-Tab MRU switcher (hold Ctrl, Tab walks, release switches; one tap flips back)
 - [x] Recent-sessions title-bar button (a menu under the clock, not a popover)
-- [ ] Flagged view workspace-tree layout, Edit Flagged Sessions… / Edit Focused Workspaces… editors
+- [x] Flagged view layout (Settings ▸ General: Flat list `session : workspace`, Flat list names only, Workspace tree sharing the
+  tree's collapse state), View ▸ Edit Flagged Sessions… / Edit Focused Workspaces… (live checklists; the empty flagged view links
+  to the first). The flat list follows tree order, not a per-window flagged order of its own
 - [x] Workspace filter / focus (`workspace focus on|off|toggle|add`, `workspace filter`; suspends on an outside select; navigation stays inside)
 - [x] Reopen closed session ⌘⇧T, `recent open`
 - [x] Undo close ⌘Z within the 3 s grace (sessions, batches with companions, workspaces; Settings switch; `session close --undoable`)
@@ -62,7 +64,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Notifications: `notify`, unseen-count badge, banner click focuses the session, `session seen`
 - [x] Notifications from OSC 9 / 777 inside the terminal (two OSC 9s in one output burst arrive as the last one: Konsole coalesces an attribute); settings: banner, badge, sound, taskbar highlight for the Dock bounce
 - [x] Agent status: dot colours/shapes, blink, status reset (first key / Enter / off), blocked sound, attention includes active, Reset to defaults
-- [ ] Agent status: auto-follow blocked sessions after an idle timeout
+- [x] Agent status: auto-follow blocked sessions after an idle timeout (Disabled, 5 s … 5 min; oldest block first, each once per
+  episode; parked on a blocked session suppresses; Auto-follow away from a running session); read-back `idleMs`, `autoFollowMs`
 
 ## Phase 4: file panel (fork)
 
@@ -95,7 +98,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   | --mru [--font-size N | --auto-size] | --close`; ≤9 cells, ceil(√n) columns, master's auto font factors; the cells are the live
   Konsole panes themselves, re-hosted view-only (arrows without wrap, Enter or click opens that pane, Esc closes) with a name chip in
   the status colour, pulsing while it blinks; members that go away are dropped. Read-back `dashboardMembers`, `dashboardHighlighted`,
-  `dashboardFontMode`, `dashboardFontSize`. Not ported: the title-bar grid button (an Interface element), the label shown for a
+  `dashboardFontMode`, `dashboardFontSize`. The title-bar grid button is the `dashboard` Interface element (filled while open).
+  Not ported: the label shown for a
   pane under an overlay (the overlay stays on the session page)
 - [ ] Page overlays (`--html`, `--url`, `--image`, `--markdown`, `--text`): blocked, they need Qt WebEngine (`qt6-webengine-dev`),
   which is not installed; the command refuses them with that reason

@@ -35,6 +35,9 @@ cmake --install build && kbuildsycoca6 --noincremental
   file manager to open sessions there. The footer has New Session, New Workspace, the workspace filter and the
   flagged view. Mark workspaces with Focus / Add to Focus in their row menu; the grid button applies or suspends
   the filter, and selecting a session outside it suspends it.
+- The flagged view is a flat list (with or without workspace names) or a workspace tree (Settings ▸ General); View ▸
+  Edit Flagged Sessions… and Edit Focused Workspaces… tick rows on and off.
+- Auto-follow (Settings ▸ Agent Status) moves to the oldest blocked session once you have been idle for a chosen time.
 - Splits, terminal zoom, full screen.
 - Session (Ctrl+P) and action (Ctrl+Shift+P) palettes, a Ctrl-Tab recent-session switcher and its title-bar clock
   button, undo of a close for 3 seconds, and reopen-closed.
@@ -46,7 +49,7 @@ cmake --install build && kbuildsycoca6 --noincremental
   as commented references; File ▸ Edit Keymap… / Reload Keymap and the Hooks pair apply them.
 - Programs in a pane can raise notifications with OSC 9 or OSC 777 (`printf '\e]9;done\a'`).
 - Several windows, each with its own workspaces (File ▸ New Window, Open Window); the ones open at quit come back.
-- A dashboard (Ctrl+Alt+Shift+G, or `agtermctl dashboard <ids>`) shows up to nine live panes side by side, view-only,
+- A dashboard (Ctrl+Alt+Shift+G, the title-bar grid button, or `agtermctl dashboard <ids>`) shows up to nine live panes side by side, view-only,
   with each session's name in its status colour; Enter or a click opens one.
 - Restore sessions (Settings ▸ General): fresh shells, or re-run commands, which records what each pane runs at quit
   and types it into its new shell on the next launch (`restore-denylist.conf` lists programs to leave out).

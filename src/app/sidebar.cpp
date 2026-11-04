@@ -227,7 +227,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
     p->setRenderHint(QPainter::Antialiasing);
     const QRectF r = QRectF(opt.rect).adjusted(6, 1, -6, -1);
     const bool session = index.data(Kind).toInt() == SessionRow;
-    const bool flat = m_sidebar->flaggedView();
+    const bool flat = m_sidebar->flatList();
     // a row tint colours the parts it lists, selected or not
     const QColor tint = tintColor(index.data(TintColor).toString());
     const QStringList tintOn = index.data(TintOn).toStringList();
@@ -343,7 +343,14 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
     p->setPen(nameColor);
     p->setFont(opt.font);
     const QRectF label(x, r.top(), right - x, r.height());
-    p->drawText(label, Qt::AlignVCenter | Qt::AlignLeft, opt.fontMetrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, label.width()));
+    const QString suffix = index.data(WorkspaceLabel).toString().isEmpty() ? QString() : QStringLiteral(" : ") + index.data(WorkspaceLabel).toString();
+    const QString name = opt.fontMetrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, int(label.width()));
+    p->drawText(label, Qt::AlignVCenter | Qt::AlignLeft, name);
+    if (!suffix.isEmpty()) { // flat layout: "session : workspace", the workspace part dimmed
+        p->setPen(dim);
+        const QRectF rest = label.adjusted(opt.fontMetrics.horizontalAdvance(name), 0, 0, 0);
+        p->drawText(rest, Qt::AlignVCenter | Qt::AlignLeft, opt.fontMetrics.elidedText(suffix, Qt::ElideRight, int(rest.width())));
+    }
     p->restore();
 }
 
@@ -355,7 +362,7 @@ QSize SidebarDelegate::sizeHint(const QStyleOptionViewItem &opt, const QModelInd
 void SidebarDelegate::updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &opt, const QModelIndex &index) const
 {
     const Settings &st = m_sidebar->settings();
-    const int left = index.data(Kind).toInt() == SessionRow ? (m_sidebar->flaggedView() ? 37 : 57) - (st.shows(QStringLiteral("sessionIcons")) ? 0 : 23)
+    const int left = index.data(Kind).toInt() == SessionRow ? (m_sidebar->flatList() ? 37 : 57) - (st.shows(QStringLiteral("sessionIcons")) ? 0 : 23)
                                                             : 47 - (st.shows(QStringLiteral("workspaceIcons")) ? 0 : 17);
     editor->setGeometry(opt.rect.adjusted(left, 3, -12, -3));
 }
@@ -437,6 +444,11 @@ bool Sidebar::flaggedView() const
     return m_store.flaggedView;
 }
 
+bool Sidebar::flatList() const
+{
+    return m_store.flaggedView && m_store.settings.flaggedViewLayout != QLatin1String("tree");
+}
+
 QStringList Sidebar::selectedSessionIds() const
 {
     QStringList ids;
@@ -449,19 +461,23 @@ QStringList Sidebar::selectedSessionIds() const
 QStringList Sidebar::structure() const
 {
     // the rows and their order; anything else about a row is updated in place
-    QStringList rows{m_store.flaggedView ? QStringLiteral("flagged") : QStringLiteral("tree")};
+    QStringList rows{m_store.flaggedView ? QStringLiteral("flagged:") + m_store.settings.flaggedViewLayout : QStringLiteral("tree")};
     for (const auto &w : m_store.workspaces) {
         if (m_store.flaggedView) {
+            QStringList flagged;
             for (const auto &s : w.sessions)
                 if (s.flagged)
-                    rows << s.id;
+                    flagged << s.id;
+            if (!flatList() && !flagged.isEmpty()) // the tree layout leaves out workspaces holding nothing flagged
+                rows << QLatin1Char('w') + w.id;
+            rows << flagged;
             continue;
         }
         if (m_store.focusEnabled && !m_store.focused.contains(w.id))
             continue;
         rows << QLatin1Char('w') + w.id;
         for (const auto &s : w.sessions)
-            if (s.parentId.isEmpty() || !m_collapsed.contains(s.parentId)) // a folded companion has no row
+            if (s.parentId.isEmpty() || !m_store.collapsed.contains(s.parentId)) // a folded companion has no row
                 rows << s.id;
     }
     return rows;
@@ -507,13 +523,19 @@ void Sidebar::rebuild()
         item->setSelected(s.id == m_store.selected || keepSelected.contains(s.id));
     };
     for (const auto &w : m_store.workspaces) {
-        if (m_store.flaggedView) {
+        if (flatList()) {
             for (const auto &s : w.sessions)
-                if (s.flagged)
-                    sessionItem(topItem(), s);
+                if (s.flagged) {
+                    QTreeWidgetItem *item = topItem();
+                    sessionItem(item, s);
+                    item->setData(0, WorkspaceLabel, m_store.settings.flaggedViewLayout == QLatin1String("plain") ? QString() : w.name);
+                }
             continue;
         }
-        if (m_store.focusEnabled && !m_store.focused.contains(w.id))
+        const bool flaggedTree = m_store.flaggedView;
+        if (flaggedTree && std::none_of(w.sessions.begin(), w.sessions.end(), [](const ::Session &s) { return s.flagged; }))
+            continue;
+        if (!flaggedTree && m_store.focusEnabled && !m_store.focused.contains(w.id))
             continue;
         QTreeWidgetItem *wi = topItem();
         int child = 0;
@@ -526,8 +548,8 @@ void Sidebar::rebuild()
         wi->setToolTip(0, w.folder);
         wi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsEditable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
         for (const auto &s : w.sessions) {
-            if (!s.parentId.isEmpty() && m_collapsed.contains(s.parentId))
-                continue; // folded under its parent
+            if (flaggedTree ? !s.flagged : !s.parentId.isEmpty() && m_store.collapsed.contains(s.parentId))
+                continue; // not flagged, or folded under its parent
             QTreeWidgetItem *item = reuse ? wi->child(child++) : new QTreeWidgetItem(wi);
             sessionItem(item, s);
             item->setData(0, Companion, !s.parentId.isEmpty());
@@ -537,11 +559,11 @@ void Sidebar::rebuild()
                     hasCompanions = true;
                     attention |= c.unseen > 0 || c.status == QLatin1String("blocked") || c.status == QLatin1String("completed");
                 }
-            item->setData(0, HasCompanions, hasCompanions);
-            item->setData(0, Expanded, !m_collapsed.contains(s.id));
-            item->setData(0, FoldedAttention, attention && m_collapsed.contains(s.id));
+            item->setData(0, HasCompanions, hasCompanions && !flaggedTree); // the flagged tree lists companions on their own
+            item->setData(0, Expanded, !m_store.collapsed.contains(s.id));
+            item->setData(0, FoldedAttention, attention && m_store.collapsed.contains(s.id));
         }
-        wi->setExpanded(!m_collapsed.contains(w.id) || m_store.isSoleFocus(w.id)); // a zoomed-to workspace is always open
+        wi->setExpanded(!m_store.collapsed.contains(w.id) || m_store.isSoleFocus(w.id)); // a zoomed-to workspace is always open
         wi->setData(0, Expanded, wi->isExpanded());
     }
     if (!reuse) {
@@ -583,10 +605,12 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
 {
     const QPoint pos = event->position().toPoint();
     QTreeWidgetItem *item = itemAt(pos);
+    if (!item && m_store.flaggedView && !topLevelItemCount() && event->button() == Qt::LeftButton)
+        return Q_EMIT editFlaggedRequested();
     if (item && item->data(0, HasCompanions).toBool() && !m_store.flaggedView && event->button() == Qt::LeftButton
         && pos.x() < visualItemRect(item).left() + 34) {
         const QString id = item->data(0, Id).toString(); // the parent's chevron folds its companions
-        m_collapsed.contains(id) ? m_collapsed.remove(id) : (m_collapsed.insert(id), true);
+        m_store.collapsed.contains(id) ? m_store.collapsed.remove(id) : (m_store.collapsed.insert(id), true);
         rebuild();
         return;
     }
@@ -605,8 +629,8 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
         // a click on the row folds or unfolds it, as agterm's default does; with that off only the chevron does
         if (!m_store.settings.workspaceRowClickExpands && pos.x() > row.left() + 24)
             return QTreeWidget::mousePressEvent(event);
-        m_collapsed.contains(id) ? m_collapsed.remove(id) : (m_collapsed.insert(id), true);
-        item->setExpanded(!m_collapsed.contains(id));
+        m_store.collapsed.contains(id) ? m_store.collapsed.remove(id) : (m_store.collapsed.insert(id), true);
+        item->setExpanded(!m_store.collapsed.contains(id));
         item->setData(0, Expanded, item->isExpanded());
     }
     QTreeWidget::mousePressEvent(event);
@@ -756,6 +780,14 @@ void Sidebar::dropEvent(QDropEvent *event)
 void Sidebar::paintEvent(QPaintEvent *event)
 {
     QTreeWidget::paintEvent(event);
+    if (m_store.flaggedView && !topLevelItemCount()) {
+        QPainter p(viewport());
+        p.setPen(palette().color(QPalette::PlaceholderText));
+        const QRect r = viewport()->rect().adjusted(12, 24, -12, 0);
+        p.drawText(r, Qt::AlignHCenter | Qt::AlignTop, tr("No flagged sessions"));
+        p.setPen(palette().color(QPalette::Link));
+        p.drawText(r.adjusted(0, fontMetrics().height() + 6, 0, 0), Qt::AlignHCenter | Qt::AlignTop, tr("Edit Flagged Sessions…"));
+    }
     if (m_dropLine.isNull())
         return;
     QPainter p(viewport());

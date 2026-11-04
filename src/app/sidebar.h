@@ -21,7 +21,7 @@ void drawStatusGlyph(QPainter *p, const QPointF &center, qreal radius, const QSt
 QColor tintColor(const QString &name);
 
 namespace SidebarRole {
-enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Companion, HasCompanions, FoldedAttention, TintColor, TintOn, Focused };
+enum { Id = Qt::UserRole, Kind, Status, Blink, Agent, Flagged, Expanded, Unseen, Companion, HasCompanions, FoldedAttention, TintColor, TintOn, Focused, WorkspaceLabel };
 enum { WorkspaceRow = 1, SessionRow };
 }
 
@@ -47,6 +47,7 @@ public:
     void rebuild();
     void setFlaggedView(bool on);
     bool flaggedView() const;
+    bool flatList() const; // the flagged view as one list (flat or plain layout)
     QStringList selectedSessionIds() const;
     bool editing() const { return state() == EditingState; }
     QString lastLauncher() const;
@@ -63,6 +64,7 @@ Q_SIGNALS:
     void repeatRequested(const QString &workspaceId);
     void foldersDropped(const QString &workspaceId, const QStringList &paths);
     void renameRequested(const QString &kind, const QString &id, const QString &name);
+    void editFlaggedRequested(); // the empty flagged view's link
 
 protected:
     void drawRow(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
@@ -91,10 +93,8 @@ private:
     QRect m_dropLine;
     Store &m_store;
     bool m_rebuilding = false;
-    QSet<QString> m_collapsed;
     QModelIndex m_hovered;
     QTimer m_blinkTimer;
     int m_blinkAlpha = 255;
     int m_blinkPhase = 0;
-    friend class MainWindow; // persists the collapsed set
 };

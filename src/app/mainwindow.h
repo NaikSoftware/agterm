@@ -4,6 +4,8 @@
 #include "keymap.h"
 
 #include <QDateTime>
+#include <QElapsedTimer>
+#include <QSet>
 #include <QHash>
 #include <QMainWindow>
 #include <QPointer>
@@ -73,6 +75,11 @@ public:
     void showSettings();
     void applySettings(); // live: appearance, chrome visibility, sidebar
     QAction *namedAction(const QString &name) const { return m_actions.value(name); }
+    // attention.cpp
+    void editFlaggedSessions();
+    void editFocusedWorkspaces();
+    qint64 autoFollowMs() const; // 0 = disabled
+    QString autoFollowTick(qint64 idleMs); // selects the oldest blocked session not yet shown once idle long enough; its id
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -136,6 +143,12 @@ private:
     bool dashboardCommand(const QJsonObject &args, QJsonObject *result, QString *error);
     QJsonObject dashboardState() const;
     void applyLayout(const QString &id);
+    void trackBlocked(const QString &id, const QString &status);
+    QHash<QString, qint64> m_blockedSince; // when each blocked session entered blocked
+    QSet<QString> m_followShown;           // blocks already shown once this episode
+    QElapsedTimer m_idle;                  // since the last key or click in this window
+    QTimer m_followTimer;
+    void syncDashboardButton();
     void paneExited(const QString &id, KParts::ReadOnlyPart *part);
     void swapPanes(const QString &id);
     void newCompanion(const QString &parentId);

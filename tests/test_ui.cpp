@@ -10,6 +10,8 @@
 #include <QFile>
 #include <KPageDialog>
 #include <QLineEdit>
+#include <QListWidget>
+#include <QDialog>
 #include <QMenu>
 #include <QTimer>
 #include <QPointer>
@@ -504,6 +506,95 @@ private Q_SLOTS:
         QTest::keyClicks(QApplication::focusWidget(), "bet");
         QTest::keyClick(QApplication::focusWidget(), Qt::Key_Return);
         QCOMPARE(store.selected, beta);
+    }
+
+    void flaggedViewLayouts()
+    {
+        Store store;
+        const QString a = store.addWorkspace("alpha"), b = store.addWorkspace("beta"), c = store.addWorkspace("gamma");
+        const QString a1 = store.addSession(a, "a1", {}), a2 = store.addSession(a, "a2", {});
+        store.addSession(b, "b1", {});
+        const QString c1 = store.addSession(c, "c1", {});
+        store.setFlag(a1, true), store.setFlag(a2, true), store.setFlag(c1, true);
+        Sidebar tree(store);
+        tree.setFlaggedView(true);
+        QCOMPARE(tree.topLevelItemCount(), 3); // flat: one list labelled with the workspace
+        QCOMPARE(tree.topLevelItem(0)->data(0, SidebarRole::WorkspaceLabel).toString(), QStringLiteral("alpha"));
+        Settings s = store.settings;
+        s.flaggedViewLayout = "plain";
+        store.setSettings(s);
+        tree.rebuild();
+        QVERIFY(tree.topLevelItem(0)->data(0, SidebarRole::WorkspaceLabel).toString().isEmpty());
+        s.flaggedViewLayout = "tree";
+        store.setSettings(s);
+        tree.rebuild();
+        QCOMPARE(tree.topLevelItemCount(), 2); // beta holds nothing flagged
+        QCOMPARE(tree.topLevelItem(0)->text(0), QStringLiteral("alpha"));
+        QCOMPARE(tree.topLevelItem(0)->childCount(), 2);
+        QCOMPARE(tree.topLevelItem(1)->child(0)->data(0, SidebarRole::Id).toString(), c1);
+        store.collapsed.insert(a); // shared with the ordinary tree
+        tree.rebuild();
+        QVERIFY(!tree.topLevelItem(0)->isExpanded());
+    }
+
+    void editorsFlagAndMarkLive()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("editors.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w"), other = store.addWorkspace("o");
+        const QString id = store.addSession(ws, "one", {});
+        store.select(id);
+        w.editFlaggedSessions();
+        auto *list = w.findChild<QDialog *>("checklist")->findChild<QListWidget *>();
+        QCOMPARE(list->count(), 1);
+        QCOMPARE(list->item(0)->text(), QStringLiteral("one : w"));
+        emit list->itemActivated(list->item(0));
+        QVERIFY(store.session(id)->flagged);
+        w.findChild<QDialog *>("checklist")->close();
+        QTRY_VERIFY(!w.findChild<QDialog *>("checklist"));
+        w.editFocusedWorkspaces();
+        list = w.findChild<QDialog *>("checklist")->findChild<QListWidget *>();
+        list->item(1)->setCheckState(Qt::Checked);
+        QCOMPARE(store.focused, QStringList{other});
+        QVERIFY(!store.focusEnabled); // marking never narrows on its own
+        QVERIFY(w.findChild<QToolBar *>("titleStrip")->actions().size() > 0);
+        bool grid = false;
+        for (QAction *act : w.findChild<QToolBar *>("titleStrip")->actions())
+            grid |= act->text() == QLatin1String("Dashboard");
+        QVERIFY(grid);
+    }
+
+    void autoFollowWalksBlockedSessionsOnce()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("follow.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, "a", {}), b = store.addSession(ws, "b", {}), here = store.addSession(ws, "here", {});
+        store.select(here);
+        store.setStatus(a, "blocked");
+        QTest::qWait(5);
+        store.setStatus(b, "blocked");
+        QVERIFY(w.autoFollowTick(60000).isEmpty()); // disabled by default
+        Settings s = store.settings;
+        s.autoFollowAttention = "s5";
+        store.setSettings(s);
+        QCOMPARE(w.autoFollowMs(), 5000);
+        QVERIFY(w.autoFollowTick(1000).isEmpty()); // not idle long enough
+        QCOMPARE(w.autoFollowTick(6000), a);      // oldest first
+        QCOMPARE(w.autoFollowTick(6000), b);
+        QVERIFY(w.autoFollowTick(6000).isEmpty()); // each block once
+        store.setStatus(a, "idle");
+        store.setStatus(a, "blocked"); // a new episode
+        store.select(here);
+        store.setStatus(here, "active");
+        s.autoFollowStayOnActive = true;
+        store.setSettings(s);
+        QVERIFY(w.autoFollowTick(6000).isEmpty()); // holds while the current session runs
+        s.autoFollowStayOnActive = false;
+        store.setSettings(s);
+        QCOMPARE(w.autoFollowTick(6000), a);
     }
 };
 
