@@ -79,11 +79,13 @@ class SidebarCellView: NSTableCellView {
     }
     private var hoverTrackingArea: NSTrackingArea?
 
-    /// Reveals or collapses the inline "+": the Finder/Xcode hover convention, so an idle row shows no button
-    /// and the roll-up badge keeps its slot. Driven by `mouseEntered`/`mouseExited`, reset hidden when a reused
-    /// cell is reconfigured. No-op for session cells.
+    /// Reveals or collapses the inline "+": the Finder/Xcode hover convention, so an idle row shows no button.
+    /// The roll-up badge and status give way while it shows, so "+" always sits at the trailing edge.
+    /// Driven by `mouseEntered`/`mouseExited`, reset hidden when a reused cell is reconfigured. No-op for session cells.
     func setAddButtonVisible(_ visible: Bool) {
         guard let addButton, let addButtonWidthConstraint else { return }
+        badge.hoverHidden = visible
+        statusIcon.hoverHidden = visible
         addButton.isHidden = !visible
         addButtonWidthConstraint.constant = visible ? Self.addButtonWidth : 0
         guard let repeatButton, let repeatButtonWidthConstraint else { return }
@@ -176,13 +178,26 @@ final class BadgeView: NSView {
         didSet {
             guard count != oldValue else { return }
             invalidateIntrinsicContentSize()
+            isHidden = !showsCapsule
             needsDisplay = true
             setAccessibilityValue(label)
         }
     }
 
+    /// hoverHidden collapses a nonzero badge while the workspace row's hover buttons take its slot.
+    var hoverHidden = false {
+        didSet {
+            guard hoverHidden != oldValue else { return }
+            invalidateIntrinsicContentSize()
+            isHidden = !showsCapsule
+        }
+    }
+
+    private var showsCapsule: Bool { count > 0 && !hoverHidden }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        isHidden = true
         wantsLayer = true
         setAccessibilityElement(true)
         setAccessibilityRole(.staticText)
@@ -203,7 +218,7 @@ final class BadgeView: NSView {
         let height: CGFloat = 16
         // `isHidden` alone does NOT collapse a view in Auto Layout, so a count-0 badge would reserve a trailing
         // slot and push the status glyph in from the right edge; zero width lets the name reclaim it.
-        guard count > 0 else { return NSSize(width: 0, height: height) }
+        guard showsCapsule else { return NSSize(width: 0, height: height) }
         let capsule = max((label as NSString).size(withAttributes: textAttributes).width + 9, height)
         return NSSize(width: capsule + Self.leadingGap, height: height)
     }
@@ -256,20 +271,32 @@ final class StatusIconView: NSImageView {
     /// `.idle` hides the view and stops the blink.
     func apply(_ indicator: AgentIndicator) {
         toolTip = indicator.status.tooltipText
-        guard indicator.status != .idle else {
-            isHidden = true
+        showsGlyph = indicator.status != .idle
+        guard showsGlyph else {
             image = nil
-            widthConstraint.constant = 0
             setAccessibilityValue(AgentStatus.idle.rawValue)
             stopBlink()
             return
         }
-        isHidden = false
         image = Self.icon(for: indicator.status, override: indicator.color, shape: indicator.shape)
-        widthConstraint.constant = Self.glyphWidth
         setAccessibilityValue(indicator.status.rawValue)
         let shouldBlink = indicator.blink && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         if shouldBlink { startBlink() } else { stopBlink() }
+    }
+
+    /// hoverHidden collapses a shown glyph while the workspace row's hover buttons take its slot.
+    var hoverHidden = false {
+        didSet { applyVisibility() }
+    }
+
+    private var showsGlyph = false {
+        didSet { applyVisibility() }
+    }
+
+    private func applyVisibility() {
+        let visible = showsGlyph && !hoverHidden
+        isHidden = !visible
+        widthConstraint.constant = visible ? Self.glyphWidth : 0
     }
 
     private func startBlink() {

@@ -149,7 +149,6 @@ extension WorkspaceSidebar.Coordinator {
     /// Shows the unseen-notification `count` capsule on the row (hidden, zero-width when 0, so the
     /// name reclaims the space). The `notify-badge` accessibility hook lives on `BadgeView`.
     private func applyBadge(toCell cell: SidebarCellView, count: Int) {
-        cell.badge.isHidden = count == 0
         cell.badge.count = count
     }
 
