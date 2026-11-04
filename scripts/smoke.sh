@@ -176,6 +176,53 @@ ctl window delete "$w3"
 ctl window list | grep -q doomed && fail "window delete"
 ctl window go --to next >/dev/null || fail "window go"
 ctl window select "$w1"
+# master's catalog: events, context, sidebar, text extents, pick/ask, messages, recent, batch targets, absent features
+timeout 3 "$bin/agtermctl" events --kind session.created >"$AGTERM_STATE_DIR/events.log" &
+evpid=$!
+sleep 0.5
+ctl session new --name evt --no-select >/dev/null
+wait "$evpid" || true
+grep -q 'session.created evt' "$AGTERM_STATE_DIR/events.log" || fail "events stream"
+ctl session context 'PR 12' --target "$id"
+ctl tree --json | grep -q '"context":"PR 12"' || fail "session context read-back"
+ctl session context 2>/dev/null && fail "context without text or --clear"
+[ "$(ctl sidebar width 300)" = 300.0 ] || fail "sidebar width"
+ctl sidebar mode flagged
+ctl tree --json | grep -q '"sidebarMode":"flagged"' || fail "sidebar mode"
+ctl sidebar mode tree
+[ "$(ctl sidebar flagged-layout tree)" = tree ] || fail "sidebar flagged-layout"
+ctl workspace go --to next >/dev/null || fail "workspace go"
+ctl session select --target "$id"
+ctl session type $'seq 1 120\n' --target "$id"
+sleep 1
+ctl session text --all --target "$id" | grep -qx 1 || fail "session text --all reaches the scrollback"
+ctl session text --target "$id" | grep -qx 1 && fail "session text is the visible screen"
+ctl session text --all --lines 2 --target "$id" 2>/dev/null && fail "--all with --lines"
+ctl session search 117 --target "$id" | grep -q 'match' || fail "session search"
+ctl session search --close --target "$id"
+pick=$(printf 'one\ntwo\n' | ctl pick --no-block | sed 's/.*"id":"\([^"]*\)".*/\1/')
+ctl tree --json | grep -q "\"pickPending\":\"$pick\"" || fail "pick pending read-back"
+ctl pick cancel "$pick"
+rc=0; ctl pick result "$pick" >/dev/null || rc=$?
+[ "$rc" = 2 ] || fail "pick result exit after cancel ($rc)"
+ask=$(ctl ask 'Ship?' --button yes=Yes --button no --no-block --target "$id" | sed 's/.*"id":"\([^"]*\)".*/\1/')
+ctl tree --json | grep -q "\"ask\":{\"id\":\"$ask\"" || fail "ask read-back"
+ctl ask cancel "$ask"
+rc=0; ctl ask result "$ask" >/dev/null || rc=$?
+[ "$rc" = 2 ] || fail "ask result exit after cancel ($rc)"
+ctl ask 'No buttons' 2>/dev/null && fail "ask without buttons"
+ctl session type '"$AGTERMCTL" msg send ping --to "$AGTERM_SESSION_ID:left" >/dev/null; "$AGTERMCTL" msg read --ack > "'"$AGTERM_STATE_DIR"'/inbox"'$'\n' --target "$id"
+for _ in $(seq 20); do grep -q ping "$AGTERM_STATE_DIR/inbox" 2>/dev/null && break; sleep 0.2; done
+grep -q ping "$AGTERM_STATE_DIR/inbox" || fail "msg send/read from a pane"
+b1=$(ctl session new --name batch1 --no-select)
+b2=$(ctl session new --name batch2 --no-select)
+[ "$(ctl session close --target "$b1" --target "$b2")" = "2 session(s)" ] || fail "batch close"
+ctl recent list | grep -q batch2 || fail "recent list"
+ctl recent open "$b2" >/dev/null
+ctl tree | grep -q batch2 || fail "recent open by id"
+err=$(ctl zmx list 2>&1) && fail "zmx list answered"
+[[ $err == *'zmx.list is not supported on this platform'* ]] || fail "absent feature error"
+ctl notify 2>/dev/null && fail "notify without a body"
 cd /tmp
 ctl session type $'cd /usr\n' --target "$id"
 sleep 1
@@ -186,6 +233,7 @@ ctl tree | grep -q 'renamed' || fail "session not restored"
 ctl tree | grep renamed | grep -q idle || fail "status must not survive a restart"
 ctl tree | grep renamed | grep -q '/usr' || fail "cwd not tracked"
 ctl tree --json | grep -q '"tint":"red"' || fail "tint not restored"
+ctl tree --json | grep -q '"context":"PR 12"' || fail "context not restored"
 ctl restore mode | grep -q 'active     rerun' || fail "restore mode at launch"
 [ "$(ctl window list | grep -c ' open$')" = 2 ] || fail "open windows reopen at launch"
 ctl tree --window "$w2" | grep -q inw2 || fail "second window restored"

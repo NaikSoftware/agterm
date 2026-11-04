@@ -113,5 +113,17 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [ ] Live sessions: not implemented. Master reattaches zmx daemons; zmx needs zig (absent here) and no other multiplexer
   (tmux, dtach, abduco, screen) is installed, so there is no daemon to reattach. The option is shown disabled and
   `restore mode live` reports `unavailableReason`, with the active mode falling back to fresh shells as master does
-- [ ] Control API breadth: every command in `site/commands.html`
+- [x] Control API breadth: master's catalog with its argument names, errors and read-backs — `events` (an app-wide ring
+  with run/after cursors; the CLI polls it), `workspace go|collapse|expand|flag`, `session context|reveal|collapse|expand|focus|resize|
+  copy|paste|select-all|search`, `session text` (visible screen; `--all` and `--lines` page the scrollback through the view's
+  scrollbar), `session new --parent` as `session.companion.new`, `surface zoom`, `sidebar [show|hide|toggle]|mode|flagged-layout|
+  expand|collapse|width`, `pick` (the palette; exits 0 picked/custom, 2 cancelled), `ask` (a dialog; buttons, hotkeys, line or
+  multiline input, choices with other; exits 0/2/3), `msg send|read|ack` (panes export `AGTERM_PANE_ID`), `recent list|open <id>|clear`,
+  `notify <body>`, repeated `--target` for `session close|move`. Read-back `context`, `collapsed`, `splitFocused`, `ask`,
+  `sidebarFlaggedLayout`, `sidebarWidth`, `zoomedSurface`, `pickPending`, `askPending`. Absent features answer master's
+  "<cmd> is not supported on this platform" with the reason: `zmx.*`, `session restart|lead|background`, `surface cursor`
+  (Konsole exposes no cursor), `config reload`, `browser.*`, page overlays/companions, quick and scratch terminals.
+  Simplified: a terminal-style ask is a dialog over the window rather than drawn in the pane; pick rows show no status glyph;
+  `msg send --all` reaches the addressed window only; search counts case-insensitive matches in the pane's history;
+  `pane.focused` events are not emitted
 - [ ] Agent skill + hook installers for Claude/Codex/OpenCode/Pi

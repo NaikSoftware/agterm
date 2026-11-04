@@ -16,7 +16,20 @@ class Terminals
 public:
     virtual ~Terminals() = default;
     virtual bool type(const QString &sessionId, const QString &text, QString *error) = 0;
-    virtual QString text(const QString &sessionId, QString *error) = 0;
+    // pane left | right; the visible screen, or the whole history with scrollback
+    virtual QString text(const QString &sessionId, const QString &pane, bool scrollback, QString *error) = 0;
+    // the live panes' ids (AGTERM_PANE_ID) by role, left first; a respawned pane gets a new one
+    virtual QStringList paneIds(const QString &sessionId) const
+    {
+        Q_UNUSED(sessionId);
+        return {};
+    }
+    virtual void emitEvent(const QString &kind, const QString &sessionId, const QJsonObject &payload)
+    {
+        Q_UNUSED(kind);
+        Q_UNUSED(sessionId);
+        Q_UNUSED(payload);
+    }
     virtual QJsonObject info(const QString &sessionId) = 0; // live process fields merged into session.info
     // mode show | hide | toggle, or "" with width > 0 to resize only
     virtual bool filePanel(const QString &mode, int width, QString *error)
@@ -91,6 +104,13 @@ QStringList dashboardCells(Store &store, const QStringList &targets, bool mru, Q
 // master's grid: cols = ceil(sqrt(n)), rows = ceil(n / cols); and the auto font factor for that shape
 std::pair<int, int> dashboardGrid(int count);
 double dashboardFontFactor(int cols, int rows);
+
+// commands.cpp: the commands added for master's catalog; *handled false when cmd is not one of them
+QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd, const QString &target, const QJsonObject &args, bool *handled);
+// master's "<cmd> is not supported on this platform" with why, for a feature agterm-qt lacks; "" for any other command
+QString unsupportedReason(const QString &cmd);
+QString pickArgsError(const QJsonObject &args); // "" when valid
+QString askArgsError(QJsonObject *args);       // "" when valid; adds the default OK/Cancel of an input or choice form
 
 // One request object ({cmd, target, args}) in, one response ({ok, result | error}) out.
 QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &request);

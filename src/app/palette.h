@@ -23,6 +23,10 @@ public:
     // cancel runs on Esc or a click outside, not after a pick; current = the row selected at open
     void open(const QString &placeholder, const QList<Item> &items, bool switcher = false, std::function<void()> cancel = {}, int current = -1);
     void step(int delta);
+    void setQuery(const QString &query); // after open: a prefilled, already filtered search
+    QString query() const;
+    // Enter with no enabled row runs this with the query (pick --allow-custom); open() clears it
+    std::function<void(const QString &)> custom;
     bool switching() const { return isVisible() && m_switcher; }
 
     static bool fuzzyMatch(const QString &needle, const QString &haystack); // case-insensitive subsequence

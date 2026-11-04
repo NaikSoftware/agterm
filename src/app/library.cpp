@@ -1,5 +1,7 @@
 #include "library.h"
 
+#include "hooks.h"
+
 #include "control.h"
 #include "mainwindow.h"
 #include "store.h"
@@ -91,6 +93,7 @@ void WindowLibrary::attach(Entry &e, bool minimized)
     e.window = new MainWindow(*e.store, path(e.id));
     e.window->library = this;
     e.window->windowId = e.id;
+    e.window->events()->window = e.id;
     e.window->restore(state.value("window").toObject());
     e.window->loadConfig();
     e.window->save(); // the replayed commands are gone from disk now, so a crash cannot run them twice

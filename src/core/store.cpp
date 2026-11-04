@@ -1,4 +1,6 @@
 #include "store.h"
+
+#include <QDateTime>
 #include "restore.h"
 
 #include <QDir>
@@ -300,7 +302,7 @@ void Store::removeSession(const QString &id)
     for (const QString &c : companionsOf(id))
         removeSession(c); // closing the parent closes the group
     const int i = indexIn(*w, id);
-    closed.prepend({w->id, w->sessions[i].name, w->sessions[i].cwd, i});
+    closed.prepend({w->id, w->sessions[i].name, w->sessions[i].cwd, i, w->sessions[i].id, QDateTime::currentMSecsSinceEpoch()});
     if (closed.size() > 20)
         closed.removeLast();
     w->sessions.removeAt(i);
@@ -414,7 +416,7 @@ void Store::finalizePending(int serial)
         for (int k = 0; k < c.workspace.sessions.size(); ++k)
             gone << Parked{c.workspace.id, k, c.workspace.sessions[k]};
         for (const Parked &p : std::as_const(gone)) {
-            closed.prepend({p.workspaceId, p.session.name, p.session.cwd, p.index});
+            closed.prepend({p.workspaceId, p.session.name, p.session.cwd, p.index, p.session.id, QDateTime::currentMSecsSinceEpoch()});
             Q_EMIT sessionRemoved(p.session.id);
         }
         while (closed.size() > 20)
@@ -445,11 +447,14 @@ bool Store::undoClose()
     return true;
 }
 
-QString Store::reopenClosed()
+QString Store::reopenClosed(const QString &closedId)
 {
-    if (closed.isEmpty())
+    qsizetype at = 0;
+    while (!closedId.isEmpty() && at < closed.size() && closed[at].id != closedId)
+        ++at;
+    if (at >= closed.size())
         return {};
-    const Closed c = closed.takeFirst();
+    const Closed c = closed.takeAt(at);
     QString ws = c.workspaceId;
     if (!workspace(ws))
         ws = workspaces.isEmpty() ? addWorkspace(QStringLiteral("main")) : workspaces.first().id;
@@ -797,13 +802,20 @@ void Store::setSplit(const QString &id, bool hasSplit, bool visible, const QStri
 QString Store::go(const QString &direction, QString *error)
 {
     static const QStringList known{"next", "prev", "first", "last", "next-attention", "prev-attention"};
-    if (!known.contains(direction)) {
-        *error = QStringLiteral("unknown direction '%1'").arg(direction);
+    const QString to = direction == QLatin1String("previous") ? QStringLiteral("prev")
+                       : direction == QLatin1String("previous-attention") ? QStringLiteral("prev-attention") : direction;
+    if (!known.contains(to)) {
+        *error = QStringLiteral("session.go requires --to next|prev|first|last|next-attention|prev-attention");
         return {};
     }
+    return goTo(to, error);
+}
+
+QString Store::goTo(const QString &direction, QString *error)
+{
     const auto all = navigableSessions();
     if (all.isEmpty()) {
-        *error = QStringLiteral("no sessions");
+        *error = QStringLiteral("no session to navigate");
         return {};
     }
     if (direction == QLatin1String("first") || direction == QLatin1String("last")) {
@@ -827,8 +839,9 @@ QString Store::go(const QString &direction, QString *error)
             return s->id;
         }
     }
-    *error = QStringLiteral("no session needs attention");
-    return {};
+    if (selected.isEmpty()) // nothing needs attention: the selection stays, as master
+        *error = QStringLiteral("no session to navigate");
+    return selected;
 }
 
 QString Store::takeReplay(const QString &id, bool split, const QStringList &denylist)
@@ -865,6 +878,8 @@ QJsonObject Store::toJson() const
                 so.insert("restoreCommand", *s.restorePin);
             if (s.splitRestorePin)
                 so.insert("splitRestoreCommand", *s.splitRestorePin);
+            if (!s.context.isEmpty())
+                so.insert("context", s.context);
             ss << so;
         }
         QJsonObject wo{{"id", w.id}, {"name", w.name}, {"folder", w.folder}, {"sessions", ss}};
@@ -897,6 +912,7 @@ void Store::fromJson(const QJsonObject &o)
                 s.name.clear();
             s.title = so.value("title").toString();
             s.flagged = so.value("flagged").toBool();
+            s.context = so.value("context").toString();
             s.parentId = so.value("parentId").toString();
             s.tint = tintFromJson(so.value("tint"));
             s.fontSize = so.value("fontSize").toDouble();

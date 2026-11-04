@@ -32,7 +32,7 @@
 #include <QToolBar>
 #include <QWheelEvent>
 
-#include <dlfcn.h>
+#include "konsoleprivate.h"
 
 static QString readText(const QString &path, QString *error)
 {
@@ -370,25 +370,10 @@ void MainWindow::playSound(const QString &name) const
             }
 }
 
-// Konsole::Session::emulation() is exported but not a meta-method; the plugin loads libkonsoleprivate privately,
-// so the symbol is found through the library that holds the Session's meta-object
-static QObject *emulationOf(QObject *session)
-{
-    Dl_info info{};
-    if (!session || !dladdr(session->metaObject(), &info) || !info.dli_fname)
-        return nullptr;
-    void *lib = dlopen(info.dli_fname, RTLD_NOW | RTLD_NOLOAD);
-    void *sym = lib ? dlsym(lib, "_ZNK7Konsole7Session9emulationEv") : nullptr;
-    if (lib)
-        dlclose(lib); // NOLOAD only took a reference
-    QObject *emulation = sym ? reinterpret_cast<QObject *(*)(const QObject *)>(sym)(session) : nullptr;
-    return emulation && emulation->inherits("Konsole::Emulation") ? emulation : nullptr;
-}
-
 void MainWindow::watchTerminalNotifications(KParts::ReadOnlyPart *part, PartBridge *bridge)
 {
     QObject *session = sessionOf(part);
-    QObject *emulation = emulationOf(session);
+    QObject *emulation = KonsolePrivate::emulation(session);
     if (!emulation)
         return; // a Konsole without that symbol: no OSC notifications, everything else unaffected
     bridge->session = session;
@@ -445,6 +430,9 @@ bool MainWindow::appCommand(const QString &cmd, const QString &sessionId, const 
         return overlayCommand(cmd, sessionId, args, result, error);
     if (cmd == QLatin1String("dashboard"))
         return dashboardCommand(args, result, error);
+    bool handled = false;
+    if (const bool done = uiCommand(cmd, sessionId, args, result, error, &handled); handled)
+        return done;
     auto diagnostics = [](const QList<KeymapDiagnostic> &list) {
         QJsonArray out;
         for (const auto &d : list)

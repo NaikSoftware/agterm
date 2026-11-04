@@ -112,6 +112,7 @@ void Palette::open(const QString &placeholder, const QList<Item> &items, bool sw
     m_items = items;
     m_switcher = switcher;
     m_cancel = std::move(cancel);
+    custom = {};
     m_initial = current;
     m_search->setPlaceholderText(placeholder);
     m_search->setVisible(!switcher);
@@ -167,6 +168,11 @@ void Palette::step(int delta)
 void Palette::runCurrent()
 {
     QListWidgetItem *row = m_list->currentItem();
+    if ((!row || !(row->flags() & Qt::ItemIsEnabled)) && custom) {
+        m_cancel = {};
+        hide();
+        return std::exchange(custom, {})(m_search->text());
+    }
     m_cancel = {};
     hide();
     if (row && (row->flags() & Qt::ItemIsEnabled))
@@ -228,4 +234,15 @@ void Palette::dismiss()
     hide();
     if (auto cancel = std::exchange(m_cancel, {}))
         cancel();
+}
+
+void Palette::setQuery(const QString &query)
+{
+    m_search->setText(query);
+    filter();
+}
+
+QString Palette::query() const
+{
+    return m_search->text();
 }

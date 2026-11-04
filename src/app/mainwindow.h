@@ -11,6 +11,7 @@
 #include <QPointer>
 #include <QTimer>
 
+class QDialog;
 class QFrame;
 class QKeyEvent;
 class QLabel;
@@ -40,7 +41,9 @@ public:
     QString windowId;
 
     bool type(const QString &sessionId, const QString &text, QString *error) override;
-    QString text(const QString &sessionId, QString *error) override;
+    QString text(const QString &sessionId, const QString &pane, bool scrollback, QString *error) override;
+    QStringList paneIds(const QString &sessionId) const override;
+    void emitEvent(const QString &kind, const QString &sessionId, const QJsonObject &payload) override;
     QJsonObject info(const QString &sessionId) override;
 
     bool save();
@@ -144,6 +147,23 @@ private:
     QJsonObject dashboardState() const;
     void applyLayout(const QString &id);
     void trackBlocked(const QString &id, const QString &status);
+    // controlui.cpp
+    bool uiCommand(const QString &cmd, const QString &id, const QJsonObject &args, QJsonObject *result, QString *error, bool *handled);
+    bool pickCommand(const QString &cmd, const QString &id, const QJsonObject &args, QJsonObject *result, QString *error);
+    bool askCommand(const QString &cmd, const QString &id, const QJsonObject &args, QJsonObject *result, QString *error);
+    void finishAsk(const QString &id, const QJsonObject &outcome);
+    KParts::ReadOnlyPart *panePart(const QString &id, const QString &pane) const; // left | right
+    QJsonObject controlExtras(const QString &id) const; // splitFocused, ask
+    QJsonObject controlChrome() const;                  // sidebarWidth, zoomedSurface, pickPending, askPending
+    QHash<QString, bool> m_splitFocused;
+    QString m_zoomSurface, m_pickId;
+    struct Ask {
+        QPointer<QDialog> dialog;
+        QString session, pane;
+        bool gui = false;
+    };
+    QHash<QString, Ask> m_asks;
+    QLabel *m_context = nullptr;
     QHash<QString, qint64> m_blockedSince; // when each blocked session entered blocked
     QSet<QString> m_followShown;           // blocks already shown once this episode
     QElapsedTimer m_idle;                  // since the last key or click in this window

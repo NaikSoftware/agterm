@@ -12,6 +12,7 @@
 #include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QTest>
+#include <QUuid>
 
 class FakeTerminals : public Terminals
 {
@@ -19,7 +20,13 @@ public:
     QString typed;
     QString screen = QStringLiteral("a\nb\nc\n\n");
     bool type(const QString &, const QString &text, QString *) override { return typed += text, true; }
-    QString text(const QString &, QString *) override { return screen; }
+    QString scrollback = QStringLiteral("old\na\nb\nc\n  \n");
+    QString lastPane;
+    QString text(const QString &, const QString &pane, bool history, QString *) override { return lastPane = pane, history ? scrollback : screen; }
+    QHash<QString, QStringList> panes; // session -> pane ids
+    QStringList paneIds(const QString &id) const override { return panes.value(id); }
+    QList<QJsonObject> events;
+    void emitEvent(const QString &kind, const QString &id, const QJsonObject &payload) override { events << QJsonObject{{"kind", kind}, {"session", id}, {"payload", payload}}; }
     QJsonObject info(const QString &) override { return {{"pid", 42}}; }
     QString appCmd;
     QJsonObject appArgs;
@@ -261,7 +268,9 @@ private Q_SLOTS:
         QCOMPARE(s.go("prev", &err), c);
         s.keyPressed(c, Store::Key::Plain);
         QCOMPARE(s.session(c)->status, QStringLiteral("idle"));
-        QVERIFY(s.go("next-attention", &err).isEmpty());
+        QCOMPARE(s.go("next-attention", &err), c); // nothing needs attention: the selection stays, as master
+        QCOMPARE(s.go("previous", &err), b);
+        QVERIFY(s.go("sideways", &err).isEmpty());
         Q_UNUSED(b);
     }
 
@@ -696,6 +705,202 @@ private Q_SLOTS:
         QVERIFY(!call(s, t, "nope")["ok"].toBool());
         QVERIFY(call(s, t, "workspace.delete", "main")["ok"].toBool());
         QVERIFY(s.workspaces.isEmpty() && s.selected.isEmpty());
+    }
+
+    void eventsReadWalksTheRing()
+    {
+        Store s;
+        FakeTerminals t;
+        EventSource events(s);
+        const QJsonObject boot = call(s, t, "events.read")["result"]["events"].toObject();
+        QVERIFY(boot["items"].toArray().isEmpty()); // subscribe from now
+        const QString run = boot["run"].toString();
+        const qint64 next = boot["next"].toInteger();
+        const QString id = call(s, t, "session.new")["result"]["id"].toString();
+        s.setStatus(id, "blocked");
+        QJsonObject r = call(s, t, "events.read", {}, {{"run", run}, {"after", QString::number(next)}, {"kinds", QJsonArray{"status"}}});
+        QCOMPARE(std::as_const(r)["result"]["events"]["items"].toArray().size(), 1);
+        QCOMPARE(std::as_const(r)["result"]["events"]["items"][0]["payload"]["status"].toString(), QStringLiteral("blocked"));
+        r = call(s, t, "events.read", {}, {{"run", run}, {"after", QString::number(next)}, {"limit", 1}});
+        QCOMPARE(std::as_const(r)["result"]["events"]["items"][0]["kind"].toString(), QStringLiteral("session.created"));
+        QCOMPARE(std::as_const(r)["result"]["events"]["next"].toInteger(), std::as_const(r)["result"]["events"]["items"][0]["seq"].toInteger());
+        QCOMPARE(call(s, t, "events.read", {}, {{"run", run}})["error"].toString(), QStringLiteral("events.read requires --run and --after together"));
+        QCOMPARE(call(s, t, "events.read", {}, {{"kinds", QJsonArray{"bogus"}}})["error"].toString(), QStringLiteral("invalid event kind: bogus"));
+        QCOMPARE(call(s, t, "events.read", {}, {{"limit", 0}})["error"].toString(), QStringLiteral("event limit must be between 1 and 1000"));
+        QCOMPARE(call(s, t, "events.read", {}, {{"run", run}, {"after", "999999999"}})["error"].toString(),
+                 QStringLiteral("event cursor is ahead of the current sequence"));
+        QCOMPARE(call(s, t, "events.read", {}, {{"run", QUuid::createUuid().toString(QUuid::WithoutBraces)}, {"after", "0"}})["error"].toString(),
+                 QStringLiteral("event run changed"));
+    }
+
+    void sessionTextExtents()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString id = call(s, t, "session.new")["result"]["id"].toString();
+        QCOMPARE(call(s, t, "session.text", id)["result"]["text"].toString(), t.screen); // the visible screen
+        QCOMPARE(call(s, t, "session.text", id, {{"all", true}})["result"]["text"].toString(), t.scrollback);
+        QCOMPARE(call(s, t, "session.text", id, {{"lines", 4}})["result"]["text"].toString(), QStringLiteral("old\na\nb\nc"));
+        QCOMPARE(call(s, t, "session.text", id, {{"all", true}, {"lines", 1}})["error"].toString(), QStringLiteral("use either --all or --lines, not both"));
+        QCOMPARE(call(s, t, "session.text", id, {{"lines", 0}})["error"].toString(), QStringLiteral("--lines must be greater than 0"));
+        QCOMPARE(call(s, t, "session.text", id, {{"pane", "split"}})["error"].toString(), QStringLiteral("session has no split pane"));
+        QCOMPARE(call(s, t, "session.text", id, {{"pane", "up"}})["error"].toString(), QStringLiteral("invalid pane: up"));
+        QCOMPARE(call(s, t, "session.text", id, {{"pane", "top"}})["result"]["pane"].toString(), QStringLiteral("left"));
+    }
+
+    void contextFlagCollapseAndWorkspaceGo()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString a = s.addWorkspace("a"), b = s.addWorkspace("b");
+        const QString a1 = s.addSession(a, "a1", {}), a2 = s.addSession(a, "a2", {}), b1 = s.addSession(b, "b1", {});
+        s.select(a1);
+        QCOMPARE(call(s, t, "session.context", a1, {{"mode", "set"}, {"text", "  PR #12  "}})["ok"].toBool(), true);
+        QCOMPARE(call(s, t, "tree")["result"]["tree"]["workspaces"][0]["sessions"][0]["context"].toString(), QStringLiteral("PR #12"));
+        QCOMPARE(call(s, t, "session.context", a1, {{"mode", "set"}, {"text", "a\nb"}})["error"].toString(),
+                 QStringLiteral("context must not contain control characters or line breaks"));
+        QCOMPARE(call(s, t, "session.context", a1, {{"mode", "set"}, {"text", "   "}})["error"].toString(),
+                 QStringLiteral("context must not be empty (use --clear to remove it)"));
+        QCOMPARE(call(s, t, "session.context", a1, {{"mode", "clear"}, {"text", "x"}})["error"].toString(), QStringLiteral("session.context clear takes no text"));
+        QCOMPARE(call(s, t, "session.context", a1, {})["error"].toString(), QStringLiteral("invalid context mode:  (set|clear)"));
+        QVERIFY(call(s, t, "session.context", a1, {{"mode", "clear"}})["ok"].toBool());
+        QVERIFY(s.session(a1)->context.isEmpty());
+
+        QVERIFY(call(s, t, "workspace.flag", a)["ok"].toBool());
+        QVERIFY(s.session(a1)->flagged && s.session(a2)->flagged);
+        QVERIFY(call(s, t, "workspace.flag", a)["ok"].toBool()); // all flagged: toggle unflags
+        QVERIFY(!s.session(a1)->flagged);
+        QCOMPARE(call(s, t, "workspace.flag", a, {{"mode", "maybe"}})["error"].toString(), QStringLiteral("invalid workspace flag mode: maybe"));
+
+        QVERIFY(call(s, t, "workspace.collapse", b)["ok"].toBool());
+        QVERIFY(call(s, t, "tree")["result"]["tree"]["workspaces"][1]["collapsed"].toBool());
+        QVERIFY(call(s, t, "workspace.expand", b)["ok"].toBool());
+        QVERIFY(!call(s, t, "tree")["result"]["tree"]["workspaces"][1].toObject().contains("collapsed"));
+        QCOMPARE(call(s, t, "session.collapse", a2)["error"].toString(), QStringLiteral("session has no companions"));
+        s.addCompanion(a1, {}, {});
+        QVERIFY(call(s, t, "session.collapse", a1)["ok"].toBool());
+        QVERIFY(call(s, t, "session.info", a1)["result"]["session"]["collapsed"].toBool());
+
+        QCOMPARE(call(s, t, "workspace.go", {}, {{"to", "next"}})["result"]["id"].toString(), b);
+        QCOMPARE(s.selected, b1);
+        QCOMPARE(call(s, t, "workspace.go", {}, {{"to", "next"}})["result"]["id"].toString(), a); // wraps
+        QCOMPARE(call(s, t, "workspace.go", {}, {{"to", "up"}})["error"].toString(), QStringLiteral("workspace.go requires --to next|prev"));
+        s.flaggedView = true;
+        QCOMPARE(call(s, t, "workspace.go", {}, {{"to", "prev"}})["error"].toString(), QStringLiteral("no other workspace to navigate to"));
+    }
+
+    void sidebarResizeRecentAndCompanions()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString ws = s.addWorkspace("w"), other = s.addWorkspace("o");
+        const QString id = s.addSession(ws, "one", "/tmp");
+        s.select(id);
+        QCOMPARE(call(s, t, "sidebar.mode", {}, {{"mode", "flagged"}})["result"]["sidebarMode"].toString(), QStringLiteral("flagged"));
+        QVERIFY(s.flaggedView);
+        QVERIFY(call(s, t, "sidebar.mode")["ok"].toBool()); // toggle
+        QVERIFY(!s.flaggedView);
+        QCOMPARE(call(s, t, "sidebar.flagged-layout")["result"]["text"].toString(), QStringLiteral("tree"));
+        QCOMPARE(call(s, t, "tree")["result"]["tree"]["sidebarFlaggedLayout"].toString(), QStringLiteral("tree"));
+        QCOMPARE(call(s, t, "sidebar.flagged-layout", {}, {{"mode", "x"}})["error"].toString(), QStringLiteral("invalid flagged layout: x"));
+        QVERIFY(call(s, t, "sidebar.collapse")["ok"].toBool());
+        QVERIFY(s.collapsed.contains(other) && !s.collapsed.contains(ws)); // the current workspace stays open
+        QVERIFY(call(s, t, "sidebar.expand")["ok"].toBool());
+        QVERIFY(s.collapsed.isEmpty());
+
+        QCOMPARE(call(s, t, "session.resize", id, {{"ratio", 0.3}})["error"].toString(), QStringLiteral("session has no split"));
+        s.setSplit(id, true, true, "vertical");
+        QCOMPARE(call(s, t, "session.resize", id, {{"ratio", 0.99}})["result"]["ratio"].toDouble(), 0.95);
+        QCOMPARE(call(s, t, "session.resize", id, {{"ratioDelta", -0.25}})["result"]["ratio"].toDouble(), 0.70);
+        QCOMPARE(call(s, t, "session.resize", id)["error"].toString(), QStringLiteral("session.resize requires --split-ratio, --grow-left, or --grow-right"));
+
+        QCOMPARE(call(s, t, "session.companion.new", id, {{"workspace", other}})["error"].toString(),
+                 QStringLiteral("a companion takes no workspace or placement: it lands under its parent"));
+        QCOMPARE(call(s, t, "session.companion.new", id, {{"wait", true}})["error"].toString(), QStringLiteral("--wait requires --command"));
+        const QJsonObject c = call(s, t, "session.companion.new", id, {{"noSelect", true}})["result"].toObject();
+        QCOMPARE(c["parent"].toString(), id);
+
+        QVERIFY(call(s, t, "session.close", c["id"].toString())["ok"].toBool());
+        const QJsonArray recent = call(s, t, "recent.list")["result"]["recent"].toArray();
+        QCOMPARE(recent.size(), 1);
+        QCOMPARE(recent[0]["id"].toString(), c["id"].toString());
+        QCOMPARE(call(s, t, "recent.list", "x")["error"].toString(), QStringLiteral("recent.list takes no target or --window"));
+        QCOMPARE(call(s, t, "recent.open", "zzz")["error"].toString(), QStringLiteral("no such recent item: zzz"));
+        QVERIFY(call(s, t, "recent.open", c["id"].toString().left(6))["ok"].toBool());
+        QVERIFY(call(s, t, "recent.list")["result"]["recent"].toArray().isEmpty());
+        QCOMPARE(call(s, t, "recent.open")["error"].toString(), QStringLiteral("no recently closed items"));
+        QVERIFY(call(s, t, "recent.clear")["ok"].toBool());
+
+        QCOMPARE(call(s, t, "notify", id, {{"title", "t"}})["error"].toString(), QStringLiteral("notify requires a body"));
+    }
+
+    void batchCloseAndMove()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString ws = s.addWorkspace("w"), other = s.addWorkspace("o");
+        const QString a = s.addSession(ws, "a", {}), b = s.addSession(ws, "b", {}), c = s.addSession(ws, "c", {});
+        QCOMPARE(call(s, t, "session.move", a, {{"targets", QJsonArray{a, b}}, {"workspace", other}})["result"]["affected"].toInt(), 2);
+        QCOMPARE(s.workspace(other)->sessions.size(), 2);
+        const QJsonObject r = call(s, t, "session.close", a, {{"targets", QJsonArray{a, c}}})["result"].toObject();
+        QCOMPARE(r["affected"].toInt(), 2);
+        QVERIFY(!s.session(a) && !s.session(c) && s.session(b));
+        QCOMPARE(call(s, t, "session.close", b, {{"targets", QJsonArray{}}})["error"].toString(), QStringLiteral("session.close requires at least one --target"));
+    }
+
+    void messagesBetweenPanes()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString ws = s.addWorkspace("w");
+        const QString a = s.addSession(ws, "a", {}), b = s.addSession(ws, "b", {});
+        const QString pa = QUuid::createUuid().toString(QUuid::WithoutBraces), pb = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        t.panes = {{a, {pa}}, {b, {pb}}};
+        const QString me = a + ":" + pa;
+        QCOMPARE(call(s, t, "msg.send", {}, {{"body", "hi"}})["error"].toString(), QStringLiteral("msg.send requires --to or --all"));
+        QCOMPARE(call(s, t, "msg.send", {}, {{"body", "hi"}, {"identity", a + ":left"}, {"all", true}})["error"].toString(),
+                 QStringLiteral("identity \"%1:left\" must name a pane id, not a role").arg(a));
+        QJsonObject r = call(s, t, "msg.send", {}, {{"body", "hi"}, {"identity", me}, {"recipients", QJsonArray{b + ":left", a + ":right"}}})["result"].toObject();
+        QCOMPARE(r["delivered"].toArray(), QJsonArray{b + ":" + pb});
+        QCOMPARE(r["rejected"][0]["reason"].toString(), QStringLiteral("unknown pane"));
+        QCOMPARE(t.events.last()["kind"].toString(), QStringLiteral("message"));
+        QVERIFY(call(s, t, "msg.send", {}, {{"body", "all"}, {"identity", me}, {"all", true}})["ok"].toBool()); // not to the sender
+        QCOMPARE(call(s, t, "msg.read", {}, {{"identity", me}})["result"]["messages"].toArray().size(), 0);
+        const QJsonObject inbox = call(s, t, "msg.read", {}, {{"identity", b + ":" + pb}})["result"].toObject();
+        QCOMPARE(inbox["messages"].toArray().size(), 2);
+        QCOMPARE(inbox["messages"][0]["from"].toString(), me);
+        QCOMPARE(inbox["messages"][0]["body"].toString(), QStringLiteral("hi"));
+        QCOMPARE(call(s, t, "msg.ack", {}, {{"identity", b + ":" + pb}, {"ids", QJsonArray{inbox["messages"][0]["id"]}}})["result"]["acked"].toArray().size(), 1);
+        const QJsonObject rest = call(s, t, "msg.read", {}, {{"identity", b + ":" + pb}, {"ack", true}})["result"].toObject();
+        QCOMPARE(rest["acked"].toArray().size(), 1);
+        QCOMPARE(call(s, t, "msg.read", {}, {{"identity", b + ":" + pb}})["result"]["messages"].toArray().size(), 0);
+        QCOMPARE(call(s, t, "msg.read")["error"].toString(), QStringLiteral("msg.read requires an identity: --as SESSION:PANE-ID"));
+    }
+
+    void absentFeaturesAndArgumentRules()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString id = call(s, t, "session.new")["result"]["id"].toString();
+        for (const char *cmd : {"zmx.list", "browser.links", "quick.type", "session.scratch", "session.background", "surface.cursor", "config.reload", "session.restart"})
+            QVERIFY2(call(s, t, cmd, id)["error"].toString().startsWith(QLatin1String(cmd) + QStringLiteral(" is not supported on this platform (")), cmd);
+        QVERIFY(call(s, t, "no.such")["error"].toString().startsWith(QStringLiteral("unknown command")));
+        QCOMPARE(pickArgsError({}), QStringLiteral("pick.open requires items"));
+        QCOMPARE(pickArgsError({{"items", QJsonArray{QJsonObject{{"id", "a"}, {"label", "A"}}, QJsonObject{{"id", "a"}, {"label", "B"}}}}}),
+                 QStringLiteral("pick item ids must be unique"));
+        QCOMPARE(pickArgsError({{"items", QJsonArray{QJsonObject{{"id", "a"}, {"label", "A"}}}}, {"selection", "z"}}), QStringLiteral("pick select must name an item id"));
+        QJsonObject ask{{"title", "Name?"}, {"input", "line"}};
+        QCOMPARE(askArgsError(&ask), QString());
+        QCOMPARE(ask["buttons"].toArray().size(), 2); // a form gets OK / Cancel
+        QJsonObject bad{{"title", "x"}, {"buttons", QJsonArray{QJsonObject{{"id", "y"}, {"label", "Y"}, {"hotkey", "yy"}}}}};
+        QCOMPARE(askArgsError(&bad), QStringLiteral("ask button hotkey must be one ASCII letter"));
+        QJsonObject none{{"title", "x"}};
+        QCOMPARE(askArgsError(&none), QStringLiteral("ask.open requires buttons"));
+        QCOMPARE(call(s, t, "ask.open", id, {{"title", ""}})["error"].toString(), QStringLiteral("ask.open requires a title"));
+        QVERIFY(call(s, t, "ask.open", id, ask)["ok"].toBool());
+        QCOMPARE(t.appCmd, QStringLiteral("ask.open"));
+        QCOMPARE(call(s, t, "pick.result")["error"].toString(), QStringLiteral("pick.result requires a pick id"));
+        QCOMPARE(call(s, t, "session.search", id, {{"to", "up"}})["error"].toString(), QStringLiteral("session.search --to must be next|prev|close"));
     }
 };
 

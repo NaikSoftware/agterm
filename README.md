@@ -97,7 +97,11 @@ clears its dot (Settings sets on the first key, on Enter, or never).
 
 ## Control API
 
-Every pane exports `AGTERM_WINDOW_ID`, `AGTERM_SESSION_ID`, `AGTERM_WORKSPACE_ID`, `AGTERM_PANE`, `AGTERM_SOCKET` and `AGTERMCTL`, so
+Every pane exports `AGTERM_WINDOW_ID`, `AGTERM_SESSION_ID`, `AGTERM_WORKSPACE_ID`, `AGTERM_PANE`, `AGTERM_PANE_ID`, `AGTERM_SOCKET`
+and `AGTERMCTL`, so
 `agtermctl` inside a pane addresses its own session. Targets are an id, a unique id prefix, an exact name, or
 `active`; `--window` picks a window other than the frontmost. `agtermctl --help` lists the commands; the wire format is agterm's (one JSON request line, one response
 line) on `<state dir>/agterm.sock`. The state dir is `~/.local/share/agterm-qt`, or `AGTERM_STATE_DIR`.
+Beyond sessions and workspaces it streams events (`agtermctl events`), shows pickers and questions (`pick`, `ask`),
+passes messages between panes (`msg`, addressed by `AGTERM_PANE_ID`), and reads a pane's screen or scrollback
+(`session text --all`). Commands for features agterm-qt lacks answer "not supported on this platform".

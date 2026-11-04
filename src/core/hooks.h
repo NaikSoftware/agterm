@@ -18,6 +18,10 @@ class EventSource : public QObject
 public:
     explicit EventSource(Store &store, QObject *parent = nullptr);
     void emitEvent(const QString &kind, const QString &workspace = {}, const QString &session = {}, const QJsonObject &payload = {});
+    QString window; // the window id stamped on its events
+    static const QStringList kinds;
+    // events.read over the app-wide ring: without a cursor, an empty batch anchored at now; "" error when valid
+    static QJsonObject read(const QJsonObject &args, QString *error);
 
 Q_SIGNALS:
     void event(const QJsonObject &event);
@@ -25,7 +29,6 @@ Q_SIGNALS:
 private:
     void snapshot();
     Store &m_store;
-    quint64 m_seq = 0;
     QHash<QString, QString> m_status, m_workspaceOf, m_names;
     QHash<QString, bool> m_splitShown;
     QString m_selected;

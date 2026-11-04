@@ -2,6 +2,7 @@
 #include "paths.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -11,7 +12,7 @@
 #include <QThread>
 #include <cstdio>
 
-static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--socket PATH] [--json]
+static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--socket PATH] [--window W] [--json]
 
   tree                                  workspaces and sessions
   version
@@ -20,32 +21,67 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   workspace tint <color|clear> [--on icon,name]   the workspace row only
   session tint <color|clear> [--on icon,name]     red|orange|yellow|green|blue|purple|gray
   workspace delete | select
+  workspace go --to next|prev            the next or previous visible workspace's first session
+  workspace collapse | expand
+  workspace flag [on|off|toggle]         flag or unflag every session in it
   workspace focus [on|off|toggle|add]   on: mark this one alone and apply the filter; add: mark without narrowing
   workspace filter [on|off|toggle]      apply or suspend the marked set (off keeps it)
   session new [--name N] [--cwd DIR] [--workspace W | --workspace-name N [--create-workspace]]
-              [--command CMD] [--no-select] [--parent SESSION]   (--parent makes a companion)
+              [--command CMD] [--no-select] [--parent SESSION]   (--parent makes a companion: session.companion.new)
               [--tint COLOR [--tint-on icon,name]]
   session close [--undoable]           with the GUI's undo grace when Settings allow it; prints (undoable)|(not undoable)
+                                        --target repeats for session close and session move
   session close | select | info         (--target: session id/prefix/name, default $AGTERM_SESSION_ID, then active)
-  session rename <name>                 empty name reverts to the directory name
+  session rename <name>                 an empty name unpins it (the running program's title, else "New session")
+  session context <text> | --clear      a short line of what the session is about, shown in the title bar
+  session reveal                        open the session's folder in the file manager
+  session collapse | expand             fold or unfold a parent's companions
   session duplicate [--no-select]
   session duplicate --companion [--no-select]   a companion copying the split layout and each pane's program
   session flag [on|off|toggle]
   session move <workspace> [--index N]
+  session focus [left|right|other]      move keyboard focus between the split panes
+  session resize --split-ratio R | --grow-left D | --grow-right D   (also --grow-top/-bottom/-primary/-split)
   workspace move --index N
   session split [on|off|toggle] [--axis vertical|horizontal]
   session split close
   session swap
   font inc|dec|reset [--pane left|right]   the session's terminal font size
-  recent open                           reopen the most recently closed session
+  recent list | clear
+  recent open [id]                      reopen a closed session (default: the most recent)
   filepanel [show|hide|toggle]          the session folder tree beside the sidebar
   filepanel width <px>
-  notify --title T [--body B]           desktop notification + unseen badge on the session
+  notify <body> [--title T]             desktop notification + unseen badge on the session
   session seen                          clear the session's unseen badge without focusing it
   session type <text> | --stdin
-  session text [--lines N]              full screen + scrollback
+  session text [--all | --lines N] [--pane left|right]   the visible screen; --all adds the scrollback;
+                                        --lines: the last N non-blank rows of screen + scrollback
+  session copy                          the pane's selected text
+  session paste [--pane left|right]     paste the clipboard into the pane
+  session select-all
+  session search [needle] [--next | --prev | --close]   Konsole's search bar; prints the match count
+  surface zoom [show|hide|toggle] [--target active|surface:<session>:left|right]
   session status <idle|active|completed|blocked> [--auto-reset] [--blink]
   session go --to next|prev|first|last|next-attention|prev-attention
+  sidebar [show|hide|toggle]
+  sidebar mode [tree|flagged|toggle]
+  sidebar flagged-layout [flat|plain|tree|toggle]
+  sidebar expand | collapse              every workspace (collapse keeps the current one open)
+  sidebar width <points>                160...560
+  events [--kind K]... [--run ID --after SEQ] [--limit N]   follow control events (--json: one event per line)
+  pick [open] [--prompt T] [--query T] [--select ID] [--allow-custom] [--follow] [--no-block]
+                                        items from stdin: lines, or a JSON array of {id,label,subtitle};
+                                        waits and prints the outcome JSON (exit 0 picked/custom, 2 cancelled)
+  pick result <id> | cancel <id>
+  ask [open] <title> [--message T] [--button ID=LABEL]... [--hotkey ID=LETTER]... [--default ID]
+             [--destructive ID] [--cancel ID] [--style terminal|gui] [--align left|center|right] [--width N]
+             [--input line|multiline [--value T] [--placeholder T]]
+             [--choice ID=LABEL... [--choice-subtitle ID=TEXT]... [--multiple] [--checked ID]... [--other PH]]
+             [--pane left|right] [--follow] [--no-block]   exit 0 answered, 2 cancelled, 3 escaped
+  ask result <id> | cancel <id>
+  msg send <text>|--stdin (--to SESSION:PANE... | --all [--workspace W]) [--as SESSION:PANE-ID]
+  msg read [--ack] [--wait [--timeout S]] [--as SESSION:PANE-ID]   identity defaults to $AGTERM_SESSION_ID:$AGTERM_PANE_ID
+  msg ack <id>... [--as SESSION:PANE-ID]
   keymap reload | list                  re-read keymap.conf; show what each built-in and custom command is bound to
   keymap run <name>                     start a custom command for the target session
   hooks reload | list                   re-read hooks.conf; show each hook's live state
@@ -76,6 +112,9 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   restore capture                       record each pane's foreground command now (rerun mode)
   restore clear                         forget every captured command
   session restore <command> | --none | --clear [--pane left|right]   pin what this pane re-runs (rerun mode)
+
+Not in agterm-qt (the app answers "<cmd> is not supported on this platform"): zmx, session restart/lead/background,
+surface cursor, config reload, browser, page overlays and companions, quick terminal, scratch terminal.
 )";
 
 static QByteArray roundTrip(const QString &path, const QJsonObject &request, QString *error)
@@ -100,13 +139,110 @@ static int die(const QString &message)
     return 1;
 }
 
+static QJsonObject exchange(const QString &path, const QJsonObject &req, QString *error)
+{
+    const QByteArray line = roundTrip(path, req, error);
+    return line.isEmpty() ? QJsonObject() : QJsonDocument::fromJson(line).object();
+}
+
+// pick / ask without --no-block: poll the result by id, print it as bare JSON, exit by outcome; an abandoned wait cancels
+static int awaitOutcome(const QString &path, const QString &kind, const QString &id)
+{
+    static const QHash<QString, int> codes{{"picked", 0}, {"custom", 0}, {"answered", 0}, {"cancelled", 2}, {"escaped", 3}};
+    for (int polls = 0;; ++polls) {
+        QString error;
+        const QJsonObject r = exchange(path, {{"cmd", kind + QStringLiteral(".result")}, {"target", id}}, &error);
+        const QJsonObject outcome = r.value("result").toObject().value(kind).toObject();
+        if (!r.value("ok").toBool() || outcome.isEmpty()) {
+            exchange(path, {{"cmd", kind + QStringLiteral(".cancel")}, {"target", id}}, &error);
+            return die(r.value("error").toString(error));
+        }
+        if (outcome.value("result").toString() != QLatin1String("pending")) {
+            printf("%s\n", QJsonDocument(outcome).toJson(QJsonDocument::Compact).constData());
+            return codes.value(outcome.value("result").toString(), 1);
+        }
+        QThread::msleep(polls < 10 ? 100 : 500);
+    }
+}
+
+static QString eventLine(const QJsonObject &e)
+{
+    const QJsonObject p = e.value("payload").toObject();
+    const QString kind = e.value("kind").toString(), name = p.value("name").toString(e.value("window").toString(QStringLiteral("-")));
+    QString line = QDateTime::fromMSecsSinceEpoch(qint64(e.value("ts").toDouble() * 1000)).toString(QStringLiteral("HH:mm:ss ")) + kind;
+    if (kind == QLatin1String("app.launched"))
+        return line;
+    line += QLatin1Char(' ') + name;
+    if (kind == QLatin1String("status")) {
+        line += QLatin1Char(' ') + p.value("status").toString();
+        for (const char *k : {"previous", "pane", "color", "shape"})
+            if (p.contains(QLatin1String(k)))
+                line += QStringLiteral(" %1=%2").arg(QLatin1String(k), p.value(QLatin1String(k)).toString());
+        if (p.value("blink").toBool())
+            line += QStringLiteral(" blink");
+    } else if (kind == QLatin1String("notify")) {
+        line += QStringLiteral(" %1: %2").arg(p.value("title").toString(), p.value("body").toString());
+    } else if (kind == QLatin1String("session.created") && p.contains("parent")) {
+        line += QStringLiteral(" parent=") + p.value("parent").toString();
+    } else if (kind == QLatin1String("session.selected")) {
+        line += QStringLiteral(" previous=") + p.value("previous").toString(QStringLiteral("-"));
+    } else if (kind.startsWith(QLatin1String("pane.")) && kind != QLatin1String("pane.focused")) {
+        line += QLatin1Char(' ') + p.value("status").toString();
+    } else if (kind == QLatin1String("pane.focused")) {
+        line += QStringLiteral(" %1 pane-id=%2").arg(p.value("pane").toString(), p.value("paneID").toString(QStringLiteral("-")));
+    } else if (kind == QLatin1String("message")) {
+        line += QStringLiteral(" pane-id=%1 from=%2 id=%3").arg(p.value("paneID").toString(QStringLiteral("-")), p.value("from").toString(QStringLiteral("-")),
+                                                              p.value("messageID").toString(QStringLiteral("-")));
+    }
+    return line;
+}
+
+// agtermctl events: polls events.read, keeping the cursor; a restart of the app ends the stream with its error
+static int followEvents(const QString &path, QJsonObject args, bool json)
+{
+    int backoff = 250, waited = 0;
+    for (;;) {
+        QString error;
+        const QJsonObject r = exchange(path, {{"cmd", "events.read"}, {"args", args}}, &error);
+        if (r.isEmpty()) {
+            if (!args.contains("run") || waited >= 30000) // reconnect only while holding a cursor
+                return die(error);
+            QThread::msleep(backoff);
+            waited += backoff;
+            backoff = qMin(backoff * 2, 4000);
+            continue;
+        }
+        backoff = 250, waited = 0;
+        if (!r.value("ok").toBool())
+            return die(r.value("error").toString());
+        const QJsonObject events = r.value("result").toObject().value("events").toObject();
+        const QJsonArray items = events.value("items").toArray();
+        for (const auto &v : items)
+            printf("%s\n", json ? QJsonDocument(v.toObject()).toJson(QJsonDocument::Compact).constData() : qPrintable(eventLine(v.toObject())));
+        fflush(stdout);
+        args.insert("run", events.value("run"));
+        args.insert("after", QString::number(events.value("next").toInteger()));
+        if (items.isEmpty())
+            QThread::msleep(250);
+    }
+}
+
+// ID=VALUE, or a bare token used as both
+static std::pair<QString, QString> pairOf(const QString &token)
+{
+    const qsizetype eq = token.indexOf(QLatin1Char('='));
+    return eq < 0 ? std::pair{token, token} : std::pair{token.left(eq), token.mid(eq + 1)};
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "undoable", "companion",
-                            "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized"};
+                            "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized",
+                            "next", "prev", "allow-custom", "no-block", "multiple", "ack"};
     QStringList pos;
     QHash<QString, QString> opt;
+    QHash<QString, QStringList> multi; // every value of a repeatable option, in order
     const QStringList in = app.arguments().mid(1);
     for (int i = 0; i < in.size(); ++i) {
         if (!in[i].startsWith(QLatin1String("--"))) {
@@ -119,7 +255,7 @@ int main(int argc, char **argv)
         if (flags.contains(name))
             opt.insert(name, QStringLiteral("1"));
         else if (i + 1 < in.size())
-            opt.insert(name, in[++i]);
+            opt.insert(name, in[++i]), multi[name] << in[i];
         else
             return die(QStringLiteral("--%1 needs a value").arg(name));
     }
@@ -127,8 +263,21 @@ int main(int argc, char **argv)
         return fputs(usage, stderr), 1;
 
     QString cmd = pos.takeFirst();
-    if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore", "window"}.contains(cmd) && !pos.isEmpty())
+    if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore", "window", "surface", "config", "msg", "zmx", "browser", "quick"}
+            .contains(cmd)
+        && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
+    // a verb whose bare form is a command of its own takes only its known subcommands
+    static const QHash<QString, QStringList> subs{{"pick", {"open", "result", "cancel"}}, {"ask", {"open", "result", "cancel"}},
+                                                   {"sidebar", {"mode", "flagged-layout", "expand", "collapse", "width"}}};
+    if (subs.contains(cmd))
+        cmd += subs[cmd].contains(pos.value(0)) ? QLatin1Char('.') + pos.takeFirst() : cmd == QLatin1String("sidebar") ? QString() : QStringLiteral(".open");
+    if (cmd == QLatin1String("events"))
+        cmd = QStringLiteral("events.read");
+    if (cmd == QLatin1String("session.select-all"))
+        cmd = QStringLiteral("session.selectall");
+    if (cmd == QLatin1String("session.new") && opt.contains(QStringLiteral("parent")))
+        cmd = QStringLiteral("session.companion.new");
     if (cmd == QLatin1String("filepanel") && pos.value(0) == QLatin1String("width"))
         cmd = QStringLiteral("filepanel.width"), pos.removeFirst();
     if (cmd == QLatin1String("session.duplicate") && opt.contains(QStringLiteral("companion")))
@@ -274,6 +423,12 @@ int main(int argc, char **argv)
         if (!arg.isEmpty())
             args.insert("command", arg);
     }
+    if (cmd == QLatin1String("msg.send") && opt.contains(QStringLiteral("stdin"))) {
+        QFile f;
+        if (!f.open(stdin, QIODevice::ReadOnly))
+            return die(QStringLiteral("cannot read stdin"));
+        args.insert("body", QString::fromUtf8(f.readAll()));
+    }
     if (cmd == QLatin1String("session.type")) {
         if (opt.contains(QStringLiteral("stdin"))) {
             QFile f;
@@ -285,10 +440,194 @@ int main(int argc, char **argv)
         }
     }
 
+
+    // commands added for master's catalog
+    QString idTarget; // pick/ask/recent ids travel as the target
+    if (cmd == QLatin1String("events.read")) {
+        if (opt.contains(QStringLiteral("run")) != opt.contains(QStringLiteral("after")))
+            return die(QStringLiteral("events.read requires --run and --after together"));
+        copy("run", "run");
+        copy("after", "after");
+        if (multi.contains(QStringLiteral("kind")))
+            args.insert("kinds", QJsonArray::fromStringList(multi.value(QStringLiteral("kind"))));
+        if (opt.contains(QStringLiteral("limit")))
+            args.insert("limit", opt.value(QStringLiteral("limit")).toInt());
+        return followEvents(opt.value(QStringLiteral("socket"), socketPath()), args, opt.contains(QStringLiteral("json")));
+    }
+    if (cmd == QLatin1String("workspace.flag") || cmd == QLatin1String("sidebar.mode") || cmd == QLatin1String("sidebar.flagged-layout")
+        || cmd == QLatin1String("sidebar") || cmd == QLatin1String("surface.zoom"))
+        args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
+    if (cmd == QLatin1String("sidebar.width")) {
+        bool number = false;
+        const double w = arg.toDouble(&number);
+        if (!number)
+            return die(QStringLiteral("points must be a number"));
+        args.insert("sidebarWidth", w);
+    }
+    if (cmd == QLatin1String("session.context")) {
+        if (arg.isEmpty() == !opt.contains(QStringLiteral("clear")))
+            return die(QStringLiteral("provide exactly one of a TEXT or --clear"));
+        args.insert("mode", arg.isEmpty() ? QStringLiteral("clear") : QStringLiteral("set"));
+        if (!arg.isEmpty())
+            args.insert("text", arg);
+    }
+    if (cmd == QLatin1String("session.focus"))
+        args.insert("pane", arg.isEmpty() ? QStringLiteral("other") : arg);
+    if (cmd == QLatin1String("session.resize")) {
+        static const QList<std::pair<const char *, double>> grow{{"grow-primary", 1}, {"grow-left", 1}, {"grow-top", 1}, {"grow-split", -1}, {"grow-right", -1}, {"grow-bottom", -1}};
+        int given = opt.contains(QStringLiteral("split-ratio")) ? 1 : 0;
+        for (const auto &[name, sign] : grow)
+            if (opt.contains(QLatin1String(name)))
+                ++given, args.insert("ratioDelta", sign * opt.value(QLatin1String(name)).toDouble());
+        if (given != 1)
+            return die(QStringLiteral("provide exactly one split ratio or grow option"));
+        if (opt.contains(QStringLiteral("split-ratio")))
+            args.insert("ratio", opt.value(QStringLiteral("split-ratio")).toDouble());
+    }
+    if (cmd == QLatin1String("session.text"))
+        flag("all", "all");
+    if (cmd == QLatin1String("session.search")) {
+        if (int(opt.contains(QStringLiteral("next"))) + opt.contains(QStringLiteral("prev")) + opt.contains(QStringLiteral("close")) > 1)
+            return die(QStringLiteral("--next, --prev, and --close are mutually exclusive"));
+        if (opt.contains(QStringLiteral("close")) && !arg.isEmpty())
+            return die(QStringLiteral("--close cannot be combined with a needle"));
+        if (!arg.isEmpty())
+            args.insert("text", arg);
+        for (const char *to : {"next", "prev", "close"})
+            if (opt.contains(QLatin1String(to)))
+                args.insert("to", QLatin1String(to));
+    }
+    if (cmd == QLatin1String("workspace.go"))
+        copy("to", "to");
+    if (cmd == QLatin1String("notify") && !arg.isEmpty())
+        args.insert("body", arg);
+    if (cmd == QLatin1String("recent.open") || cmd == QLatin1String("pick.result") || cmd == QLatin1String("pick.cancel") || cmd == QLatin1String("ask.result")
+        || cmd == QLatin1String("ask.cancel"))
+        idTarget = arg;
+    if (cmd == QLatin1String("pick.open")) {
+        QFile f;
+        if (!f.open(stdin, QIODevice::ReadOnly))
+            return die(QStringLiteral("cannot read stdin"));
+        const QByteArray raw = f.readAll();
+        const QString text = QString::fromUtf8(raw);
+        if (text.toUtf8() != raw)
+            return die(QStringLiteral("stdin must be UTF-8 text or a JSON item array"));
+        QJsonArray items;
+        if (text.trimmed().startsWith(QLatin1Char('['))) {
+            items = QJsonDocument::fromJson(raw).array();
+        } else {
+            for (const QString &l : text.split(QLatin1Char('\n')))
+                if (!l.trimmed().isEmpty())
+                    items << QJsonObject{{"id", l}, {"label", l}};
+        }
+        args.insert("items", items);
+        copy("prompt", "prompt");
+        copy("query", "query");
+        copy("select", "selection");
+        flag("allow-custom", "allowCustom");
+        flag("follow", "follow");
+    }
+    if (cmd == QLatin1String("ask.open")) {
+        args.insert("title", arg);
+        copy("message", "message");
+        copy("style", "style");
+        copy("align", "align");
+        copy("input", "input");
+        copy("value", "value");
+        copy("placeholder", "placeholder");
+        copy("other", "other");
+        copy("default", "defaultButton");
+        copy("destructive", "destructiveButton");
+        copy("cancel", "cancelButton");
+        flag("multiple", "multiple");
+        flag("follow", "follow");
+        if (opt.contains(QStringLiteral("width")))
+            args.insert("width", opt.value(QStringLiteral("width")).toInt());
+        if (!multi.contains(QStringLiteral("button")) && !opt.contains(QStringLiteral("input")) && !multi.contains(QStringLiteral("choice")))
+            return die(QStringLiteral("ask requires at least one --button"));
+        QJsonArray buttons, choices;
+        QStringList ids;
+        for (const QString &b : multi.value(QStringLiteral("button"))) {
+            const auto [id, label] = pairOf(b);
+            buttons << QJsonObject{{"id", id}, {"label", label}};
+            ids << id;
+        }
+        if (multi.contains(QStringLiteral("hotkey")) && buttons.isEmpty())
+            return die(QStringLiteral("--hotkey requires --button"));
+        for (const QString &h : multi.value(QStringLiteral("hotkey"))) {
+            if (!h.contains(QLatin1Char('=')))
+                return die(QStringLiteral("--hotkey requires ID=LETTER"));
+            const auto [id, key] = pairOf(h);
+            if (!ids.contains(id))
+                return die(QStringLiteral("unknown hotkey button: %1").arg(id));
+            QJsonObject b = buttons[ids.indexOf(id)].toObject();
+            if (b.contains("hotkey"))
+                return die(QStringLiteral("hotkey already assigned to button: %1").arg(id));
+            b.insert("hotkey", key);
+            buttons[ids.indexOf(id)] = b;
+        }
+        if (!buttons.isEmpty())
+            args.insert("buttons", buttons);
+        QStringList choiceIds;
+        for (const QString &c : multi.value(QStringLiteral("choice"))) {
+            const auto [id, label] = pairOf(c);
+            choices << QJsonObject{{"id", id}, {"label", label}};
+            choiceIds << id;
+        }
+        if ((multi.contains(QStringLiteral("choice-subtitle")) || opt.contains(QStringLiteral("other"))) && choices.isEmpty())
+            return die(multi.contains(QStringLiteral("choice-subtitle")) ? QStringLiteral("--choice-subtitle requires --choice") : QStringLiteral("--other requires --choice"));
+        for (const QString &c : multi.value(QStringLiteral("choice-subtitle"))) {
+            if (!c.contains(QLatin1Char('=')))
+                return die(QStringLiteral("--choice-subtitle requires ID=TEXT"));
+            const auto [id, text] = pairOf(c);
+            if (!choiceIds.contains(id))
+                return die(QStringLiteral("unknown subtitle choice: %1").arg(id));
+            QJsonObject o = choices[choiceIds.indexOf(id)].toObject();
+            if (o.contains("subtitle"))
+                return die(QStringLiteral("subtitle already set for choice: %1").arg(id));
+            o.insert("subtitle", text);
+            choices[choiceIds.indexOf(id)] = o;
+        }
+        if (!choices.isEmpty())
+            args.insert("choices", choices);
+        if (multi.contains(QStringLiteral("checked")))
+            args.insert("checked", QJsonArray::fromStringList(multi.value(QStringLiteral("checked"))));
+    }
+    if (cmd.startsWith(QLatin1String("msg."))) {
+        QString identity = opt.value(QStringLiteral("as"));
+        const QString sid = qEnvironmentVariable("AGTERM_SESSION_ID"), pid = qEnvironmentVariable("AGTERM_PANE_ID");
+        if (identity.isEmpty() && sid.isEmpty() != pid.isEmpty())
+            return die(QStringLiteral("incomplete pane identity: AGTERM_SESSION_ID and AGTERM_PANE_ID must both be set; pass --as SESSION:PANE-ID"));
+        if (identity.isEmpty() && !sid.isEmpty())
+            identity = sid + QLatin1Char(':') + pid;
+        if (!identity.isEmpty())
+            args.insert("identity", identity);
+        if (cmd == QLatin1String("msg.send")) {
+            if (arg.isEmpty() == !opt.contains(QStringLiteral("stdin")))
+                return die(QStringLiteral("provide the body as TEXT or --stdin, exactly one"));
+            if (!arg.isEmpty())
+                args.insert("body", arg);
+            if (multi.contains(QStringLiteral("to")))
+                args.insert("recipients", QJsonArray::fromStringList(multi.value(QStringLiteral("to"))));
+            flag("all", "all");
+        }
+        if (cmd == QLatin1String("msg.ack"))
+            args.insert("ids", QJsonArray::fromStringList(pos));
+        flag("ack", "ack");
+        if (opt.contains(QStringLiteral("timeout")) && !opt.contains(QStringLiteral("wait")))
+            return die(QStringLiteral("--timeout needs --wait"));
+        if (opt.contains(QStringLiteral("timeout")) && !(opt.value(QStringLiteral("timeout")).toDouble() > 0))
+            return die(QStringLiteral("--timeout must be a positive number of seconds"));
+    }
+    if ((cmd == QLatin1String("session.close") || cmd == QLatin1String("session.move")) && multi.value(QStringLiteral("target")).size() > 1)
+        args.insert("targets", QJsonArray::fromStringList(multi.value(QStringLiteral("target"))));
+
     QJsonObject request{{"cmd", cmd}, {"args", args}};
-    QString target = opt.value(QStringLiteral("target"));
+    QString target = idTarget.isEmpty() ? opt.value(QStringLiteral("target")) : idTarget;
+    if (cmd == QLatin1String("session.companion.new"))
+        target = opt.value(QStringLiteral("parent"));
     if (target.isEmpty() && (cmd.startsWith(QLatin1String("session.")) || cmd.startsWith(QLatin1String("font.")) || cmd == QLatin1String("notify") || cmd == QLatin1String("keymap.run"))
-        && cmd != QLatin1String("session.new"))
+        && cmd != QLatin1String("session.new") && cmd != QLatin1String("session.go") && cmd != QLatin1String("session.companion.new"))
         target = qEnvironmentVariable("AGTERM_SESSION_ID"); // a pane addresses itself by default
     if (cmd.startsWith(QLatin1String("window.")))
         target = windowTarget.isEmpty() ? opt.value(QStringLiteral("target")) : windowTarget;
@@ -297,9 +636,29 @@ int main(int argc, char **argv)
 
     const QString path = opt.value(QStringLiteral("socket"), socketPath());
     QString error;
+    if (cmd == QLatin1String("msg.read") && opt.contains(QStringLiteral("wait"))) { // poll while the mailbox is empty
+        const qint64 deadline = opt.contains(QStringLiteral("timeout")) ? QDateTime::currentMSecsSinceEpoch() + qint64(opt.value(QStringLiteral("timeout")).toDouble() * 1000) : 0;
+        for (;;) {
+            const QJsonObject r = exchange(path, {{"cmd", "msg.read"}, {"args", QJsonObject{{"identity", args.value("identity")}}}}, &error);
+            if (!r.value("ok").toBool() || !r["result"]["messages"].toArray().isEmpty())
+                break;
+            if (deadline && QDateTime::currentMSecsSinceEpoch() > deadline)
+                return fputs("timed out\n", stderr), 124;
+            QThread::msleep(250);
+        }
+    }
     const QByteArray line = roundTrip(path, request, &error);
     if (line.isEmpty())
         return die(error);
+    if ((cmd == QLatin1String("pick.result") || cmd == QLatin1String("ask.result")) && !opt.contains(QStringLiteral("json"))) {
+        const QJsonObject r = QJsonDocument::fromJson(line).object();
+        if (!r.value("ok").toBool())
+            return die(r.value("error").toString());
+        const QJsonObject outcome = r["result"][cmd.left(cmd.indexOf(QLatin1Char('.')))].toObject();
+        printf("%s\n", QJsonDocument(outcome).toJson(QJsonDocument::Compact).constData());
+        static const QHash<QString, int> codes{{"picked", 0}, {"custom", 0}, {"answered", 0}, {"pending", 1}, {"cancelled", 2}, {"escaped", 3}};
+        return codes.value(outcome.value("result").toString(), 1);
+    }
 
     if (opt.contains(QStringLiteral("json")))
         return fputs(line.constData(), stdout), 0;
@@ -307,6 +666,46 @@ int main(int argc, char **argv)
     if (!response.value("ok").toBool())
         return die(response.value("error").toString());
     const QJsonObject result = response.value("result").toObject();
+    if (cmd == QLatin1String("pick.open") || cmd == QLatin1String("ask.open")) {
+        if (opt.contains(QStringLiteral("no-block")))
+            return printf("%s\n", QJsonDocument(QJsonObject{{"id", result["id"]}}).toJson(QJsonDocument::Compact).constData()), 0;
+        return awaitOutcome(path, cmd.left(cmd.indexOf(QLatin1Char('.'))), result["id"].toString());
+    }
+    if (cmd == QLatin1String("msg.send")) {
+        for (const auto &v : result["rejected"].toArray())
+            fprintf(stderr, "rejected %s: %s\n", qPrintable(v.toObject()["address"].toString()), qPrintable(v.toObject()["reason"].toString()));
+        printf("%s\n", qPrintable(result["messageID"].toString()));
+        return result["rejected"].toArray().isEmpty() ? 0 : 1;
+    }
+    if (cmd == QLatin1String("msg.read")) {
+        QStringList ids;
+        for (const auto &v : result["messages"].toArray()) {
+            const QJsonObject m = v.toObject();
+            ids << m["id"].toString();
+            printf("%s from %s\n%s\n", qPrintable(m["id"].toString()), qPrintable(m["from"].toString(QStringLiteral("outside agterm"))), qPrintable(m["body"].toString()));
+        }
+        if (result["remaining"].toInt() > 0)
+            fprintf(stderr, "%d more pending\n", result["remaining"].toInt());
+        return 0;
+    }
+    if (cmd == QLatin1String("msg.ack"))
+        return printf("acked %lld\n", result["acked"].toArray().size()), 0;
+    if (result.contains("recent")) {
+        if (result["recent"].toArray().isEmpty())
+            return puts("no recently closed items"), 0;
+        for (const auto &v : result["recent"].toArray()) {
+            const QJsonObject r = v.toObject();
+            printf("%s  %s  %s%s\n", qPrintable(r["id"].toString()), qPrintable(r["kind"].toString()), qPrintable(r["title"].toString()),
+                   r["subtitle"].toString().isEmpty() ? "" : qPrintable(QStringLiteral(" (%1)").arg(r["subtitle"].toString())));
+        }
+        return 0;
+    }
+    if (result.contains("affected"))
+        return printf("%d session(s)\n", result["affected"].toInt()), 0;
+    if (result.contains("ratio"))
+        return printf("%s\n", qPrintable(QString::number(result["ratio"].toDouble(), 'f', 3))), 0; // C-locale digits, as master
+    if (result.contains("sidebarWidth") && cmd == QLatin1String("sidebar.width"))
+        return printf("%s\n", qPrintable(QString::number(result["sidebarWidth"].toDouble(), 'f', 1))), 0;
     if (cmd == QLatin1String("session.overlay.open") && opt.contains(QStringLiteral("block"))) {
         // exits with the program's status, printing none of its output
         QJsonObject pollArgs;
@@ -402,6 +801,8 @@ int main(int argc, char **argv)
             putchar('\n');
     } else if (result.contains("undoable")) {
         printf("ok %s\n", result["undoable"].toBool() ? "(undoable)" : "(not undoable)");
+    } else if (result.contains("count") && cmd == QLatin1String("session.search")) {
+        puts("ok");
     } else if (cmd.endsWith(QLatin1String(".new")) || cmd == QLatin1String("session.duplicate") || cmd == QLatin1String("session.companion.duplicate")
                || cmd == QLatin1String("recent.open")) {
         printf("%s\n", qPrintable(result["id"].toString()));

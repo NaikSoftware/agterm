@@ -40,6 +40,15 @@ static QJsonObject sessionNode(const Session &s, const QString &selected)
                     s.tint);
 }
 
+static QJsonObject withContext(QJsonObject node, const Session &s, const Store &store)
+{
+    if (!s.context.isEmpty())
+        node.insert("context", s.context);
+    if (store.collapsed.contains(s.id) && !const_cast<Store &>(store).companionsOf(s.id).isEmpty())
+        node.insert("collapsed", true); // a parent with its companions folded
+    return node;
+}
+
 static QJsonObject withRestore(QJsonObject node, const Session &s)
 {
     if (s.restorePin)
@@ -367,15 +376,20 @@ static QJsonObject tree(Store &store, const Terminals &terminals)
         QJsonArray ss;
         bool active = false;
         for (const auto &s : w.sessions) {
-            ss << merged(withRestore(sessionNode(s, store.selected), s), terminals.sessionExtras(s.id));
+            ss << merged(withContext(withRestore(sessionNode(s, store.selected), s), s, store), terminals.sessionExtras(s.id));
             active |= s.id == store.selected;
         }
         QJsonObject node = withTint({{"id", w.id}, {"name", w.name}, {"rememberedFolder", w.folder}, {"active", active}, {"sessions", ss}}, w.tint);
         if (store.focused.contains(w.id))
             node.insert("focused", true); // membership, whether or not the filter applies (workspaceFilter)
+        if (store.collapsed.contains(w.id))
+            node.insert("collapsed", true);
         ws << node;
     }
-    return {{"workspaces", ws}, {"workspaceFilter", store.focusEnabled}, {"sidebarMode", store.flaggedView ? "flagged" : "tree"}};
+    return {{"workspaces", ws},
+            {"workspaceFilter", store.focusEnabled},
+            {"sidebarMode", store.flaggedView ? "flagged" : "tree"},
+            {"sidebarFlaggedLayout", store.settings.flaggedViewLayout}};
 }
 
 // on | off | toggle against the current state; "" means toggle
@@ -479,6 +493,29 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             t.insert(it.key(), it.value());
         return ok({{"tree", t}});
     }
+    bool handled = false;
+    if (QJsonObject r = moreCommands(store, terminals, cmd, target, args, &handled); handled)
+        return r;
+    if (const QString why = unsupportedReason(cmd); !why.isEmpty())
+        return fail(why);
+    if (cmd == QLatin1String("session.companion.new")) {
+        for (const char *k : {"workspace", "workspaceName", "after", "before"})
+            if (args.contains(QLatin1String(k)))
+                return fail(QStringLiteral("a companion takes no workspace or placement: it lands under its parent"));
+        if (args.value("createWorkspace").toBool())
+            return fail(QStringLiteral("a companion takes no workspace or placement: it lands under its parent"));
+        if (args.value("wait").toBool() && args.value("command").toString().isEmpty())
+            return fail(QStringLiteral("--wait requires --command"));
+        QJsonObject a = args;
+        a.insert("parent", target);
+        QJsonObject r = sessionNew(store, a);
+        if (r.value("ok").toBool()) {
+            QJsonObject result = r.value("result").toObject();
+            result.insert("parent", store.session(result.value("id").toString())->parentId);
+            r.insert("result", result);
+        }
+        return r;
+    }
     if (cmd == QLatin1String("filepanel") || cmd == QLatin1String("filepanel.width")) {
         const QString mode = cmd == QLatin1String("filepanel") ? args.value("mode").toString(QStringLiteral("toggle")) : QString();
         const int width = args.value("width").toInt();
@@ -503,17 +540,6 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
     }
     if (cmd == QLatin1String("session.new"))
         return sessionNew(store, args);
-    if (cmd == QLatin1String("notify")) {
-        const QString id = store.resolveSession(target, &error);
-        if (id.isEmpty())
-            return fail(error);
-        if (args.value("title").toString().isEmpty() && args.value("body").toString().isEmpty())
-            return fail(QStringLiteral("a title or a body is required"));
-        store.notify(id, args.value("title").toString(), args.value("body").toString());
-        if (!store.settings.notificationsEnabled) // the badge still rises; only the banner is off
-            return ok({{"id", id}, {"text", QStringLiteral("notification banners are off in Settings > Notifications; no banner was shown")}});
-        return ok({{"id", id}});
-    }
     if (cmd.startsWith(QLatin1String("keymap.")) || cmd.startsWith(QLatin1String("hooks.")) || cmd.startsWith(QLatin1String("theme."))) {
         QString id;
         if (cmd == QLatin1String("keymap.run") && (id = store.resolveSession(target, &error)).isEmpty())
@@ -527,10 +553,6 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         return dashboard(store, terminals, args);
     if (cmd.startsWith(QLatin1String("restore.")))
         return restoreCommand(store, terminals, cmd, args);
-    if (cmd == QLatin1String("recent.open")) {
-        const QString id = store.reopenClosed();
-        return id.isEmpty() ? fail(QStringLiteral("nothing to reopen")) : ok({{"id", id}});
-    }
     if (cmd == QLatin1String("session.go")) {
         const QString id = store.go(args.value("to").toString(), &error);
         return id.isEmpty() ? fail(error) : ok({{"id", id}});
@@ -695,19 +717,9 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         } else if (cmd == QLatin1String("session.type")) {
             if (!terminals.type(id, args.value("text").toString(), &error))
                 return fail(error);
-        } else if (cmd == QLatin1String("session.text")) {
-            QString text = terminals.text(id, &error);
-            if (!error.isEmpty())
-                return fail(error);
-            if (const int lines = args.value("lines").toInt(); lines > 0) {
-                auto all = text.split(QLatin1Char('\n'));
-                while (!all.isEmpty() && all.last().isEmpty())
-                    all.removeLast();
-                text = all.mid(qMax(0, int(all.size()) - lines)).join(QLatin1Char('\n'));
-            }
-            return ok({{"id", id}, {"text", text}});
         } else if (cmd == QLatin1String("session.info")) {
-            QJsonObject node = merged(withRestore(sessionNode(*store.session(id), store.selected), *store.session(id)), terminals.sessionExtras(id));
+            QJsonObject node = merged(withContext(withRestore(sessionNode(*store.session(id), store.selected), *store.session(id)), *store.session(id), store),
+                                      terminals.sessionExtras(id));
             node.insert("workspace", store.workspaceOf(id)->id);
             const QJsonObject live = terminals.info(id);
             for (auto it = live.begin(); it != live.end(); ++it)

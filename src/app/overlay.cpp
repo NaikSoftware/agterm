@@ -432,7 +432,7 @@ bool MainWindow::overlayCommand(const QString &cmd, const QString &id, const QJs
 
 QJsonObject MainWindow::sessionExtras(const QString &id) const
 {
-    QJsonObject out;
+    QJsonObject out = controlExtras(id);
     const Overlay full = m_overlays.value(slotKey(id, {}));
     out.insert("overlay", bool(full.part));
     if (full.part && full.sizePercent > 0) {

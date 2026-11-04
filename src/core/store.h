@@ -37,6 +37,7 @@ struct Session {
     int unseen = 0;              // notifications raised while the session was not in front of you
     QString parentId;            // a companion is pinned to its parent, listed right after it
     Tint tint;
+    QString context; // a short line of what the session is about, set from outside (session.context)
     // re-run restore: argv captured at quit (persisted), its one-shot replay this launch (not persisted), and a pinned
     // command that beats both (persisted; "" = pinned to nothing)
     QStringList foreground, splitForeground, replay, splitReplay;
@@ -107,6 +108,8 @@ public:
     struct Closed {
         QString workspaceId, name, cwd;
         int index;
+        QString id;          // the closed session's id, which recent.open accepts
+        qint64 closedAt = 0; // ms since the epoch
     };
     QList<Closed> closed; // most recent first; Reopen Closed Item brings the shell back where it was
     // a close inside its undo grace: the sessions are out of the tree, their terminals still running
@@ -158,7 +161,7 @@ public:
     QString addCompanion(const QString &parentId, const QString &name, const QString &cwd, const QString &command = {});
     QStringList companionsOf(const QString &parentId) const;
     void removeSession(const QString &id);
-    QString reopenClosed(); // "" when nothing was closed
+    QString reopenClosed(const QString &closedId = {}); // "" when nothing (or no such item) was closed
     bool softClose(const QStringList &ids); // closes with the undo grace; finalized by a timer
     bool softRemoveWorkspace(const QString &id);
     bool undoClose();                       // the newest pending close back in place, shells intact
@@ -187,7 +190,7 @@ public:
     void requestSwap(const QString &id) { Q_EMIT swapRequested(id); }
     void notify(const QString &id, const QString &title, const QString &body) { Q_EMIT notified(id, title, body); }
     void setUnseen(const QString &id, int count);
-    QString go(const QString &direction, QString *error); // next | prev | first | last | next-attention | prev-attention
+    QString go(const QString &direction, QString *error); // next | prev | first | last | next-attention | prev-attention (and previous…)
 
     QJsonObject toJson() const;
     void fromJson(const QJsonObject &o);
@@ -208,6 +211,7 @@ Q_SIGNALS:
 
 private:
     static QString newId();
+    QString goTo(const QString &direction, QString *error);
     Tint *tintOf(const QString &id);
     int indexIn(const Workspace &w, const QString &sessionId) const;
     void commitFocus(QStringList ids, bool enabled);

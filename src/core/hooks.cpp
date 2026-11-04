@@ -6,6 +6,13 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QSet>
+#include <QUuid>
+
+// one sequence and ring for the whole app, so events.read sees every window
+static quint64 s_seq = 0;
+static QList<QJsonObject> s_ring;
+static const QString s_run = QUuid::createUuid().toString(QUuid::WithoutBraces);
 
 EventSource::EventSource(Store &store, QObject *parent)
     : QObject(parent), m_store(store)
@@ -78,12 +85,65 @@ void EventSource::snapshot()
 
 void EventSource::emitEvent(const QString &kind, const QString &workspace, const QString &session, const QJsonObject &payload)
 {
-    QJsonObject e{{"seq", qint64(++m_seq)}, {"ts", QDateTime::currentMSecsSinceEpoch() / 1000.0}, {"kind", kind}, {"payload", payload}};
+    QJsonObject e{{"seq", qint64(++s_seq)}, {"ts", QDateTime::currentMSecsSinceEpoch() / 1000.0}, {"kind", kind}, {"payload", payload}};
+    if (!window.isEmpty())
+        e.insert("window", window);
     if (!workspace.isEmpty())
         e.insert("workspace", workspace);
     if (!session.isEmpty())
         e.insert("session", session);
+    s_ring.append(e);
+    if (s_ring.size() > 4096)
+        s_ring.removeFirst();
     Q_EMIT event(e);
+}
+
+const QStringList EventSource::kinds{"status", "notify", "session.created", "session.closed", "session.selected", "tree.changed", "pane.split",
+                                     "pane.scratch", "pane.focused", "remote.opened", "remote.closed", "app.launched", "message"};
+
+QJsonObject EventSource::read(const QJsonObject &args, QString *error)
+{
+    const bool hasRun = args.contains("run"), hasAfter = args.contains("after");
+    const QJsonObject anchor{{"run", s_run}, {"next", qint64(s_seq)}, {"items", QJsonArray()}};
+    if (hasRun != hasAfter)
+        return *error = QStringLiteral("events.read requires --run and --after together"), anchor;
+    bool numeric = true;
+    const quint64 after = args.value("after").toString().toULongLong(&numeric);
+    if (hasRun && QUuid::fromString(args.value("run").toString()).isNull())
+        return *error = QStringLiteral("invalid event run id"), anchor;
+    if (hasAfter && !numeric)
+        return *error = QStringLiteral("invalid event cursor"), anchor;
+    const int limit = args.contains("limit") ? args.value("limit").toInt() : 100;
+    if (limit < 1 || limit > 1000)
+        return *error = QStringLiteral("event limit must be between 1 and 1000"), anchor;
+    QSet<QString> wanted;
+    for (const auto &v : args.value("kinds").toArray())
+        for (const QString &k : v.toString().split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+            if (!kinds.contains(k.trimmed()))
+                return *error = QStringLiteral("invalid event kind: %1").arg(k.trimmed()), anchor;
+            wanted << k.trimmed();
+        }
+    if (!hasRun)
+        return anchor; // subscribe from now: no history is replayed
+    if (args.value("run").toString() != s_run)
+        return *error = QStringLiteral("event run changed"), anchor;
+    if (after > s_seq)
+        return *error = QStringLiteral("event cursor is ahead of the current sequence"), anchor;
+    if (!s_ring.isEmpty() && after + 1 < quint64(s_ring.first().value("seq").toInteger()))
+        return *error = QStringLiteral("event cursor expired"), anchor;
+    QJsonArray items;
+    quint64 next = s_seq;
+    for (const QJsonObject &e : std::as_const(s_ring)) {
+        const quint64 seq = e.value("seq").toInteger();
+        if (seq <= after || (!wanted.isEmpty() && !wanted.contains(e.value("kind").toString())))
+            continue;
+        items << e;
+        if (items.size() == limit) {
+            next = seq;
+            break;
+        }
+    }
+    return {{"run", s_run}, {"next", qint64(next)}, {"items", items}};
 }
 
 HookRunner::HookRunner(QObject *parent)

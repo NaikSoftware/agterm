@@ -53,6 +53,7 @@
 #include <QStackedWidget>
 #include <QWheelEvent>
 #include <QWindow>
+#include <QUuid>
 #include <QStatusBar>
 #include <QToolBar>
 #include <QToolButton>
@@ -210,6 +211,10 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     m_title->setFont(tf);
     m_title->setContentsMargins(6, 0, 0, 0);
     m_chrome.insert(QStringLiteral("sessionName"), strip->addWidget(m_title));
+    m_context = new QLabel;
+    m_context->setContentsMargins(10, 0, 0, 0);
+    m_context->setForegroundRole(QPalette::PlaceholderText);
+    m_chrome.insert(QStringLiteral("sessionContext"), strip->addWidget(m_context));
     auto *spacer = new QWidget;
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     strip->addWidget(spacer);
@@ -680,6 +685,10 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
                      QStringLiteral("PATH=") + appDir + QLatin1Char(':') + qEnvironmentVariable("PATH")};
     if (!windowId.isEmpty())
         argv << QStringLiteral("AGTERM_WINDOW_ID=") + windowId;
+    if (pane == QLatin1String("main") || pane == QLatin1String("right")) { // msg.* addresses a pane by it; a respawn gets a new one
+        part->setProperty("agtermPaneId", QUuid::createUuid().toString(QUuid::WithoutBraces));
+        argv << QStringLiteral("AGTERM_PANE_ID=") + part->property("agtermPaneId").toString();
+    }
     argv << env << shell;
     if (!command.isEmpty())
         argv << QStringLiteral("-c") << command;
@@ -977,9 +986,9 @@ QJsonObject MainWindow::chromeState() const
                     {"idleMs", m_idle.elapsed()}};
     if (const qint64 follow = autoFollowMs())
         out.insert("autoFollowMs", follow);
-    const QJsonObject dash = dashboardState();
-    for (auto it = dash.begin(); it != dash.end(); ++it)
-        out.insert(it.key(), it.value());
+    for (const QJsonObject &extra : {dashboardState(), controlChrome()})
+        for (auto it = extra.begin(); it != extra.end(); ++it)
+            out.insert(it.key(), it.value());
     return out;
 }
 
@@ -1048,15 +1057,6 @@ bool MainWindow::type(const QString &sessionId, const QString &text, QString *er
     return true;
 }
 
-QString MainWindow::text(const QString &sessionId, QString *error)
-{
-    QString out;
-    QObject *s = konsoleSession(sessionId);
-    if (!s || !QMetaObject::invokeMethod(s, "getAllDisplayedText", Q_RETURN_ARG(QString, out), Q_ARG(bool, true)))
-        *error = QStringLiteral("terminal text unavailable (Konsole session not found on the D-Bus session bus)");
-    return out;
-}
-
 QJsonObject MainWindow::info(const QString &sessionId)
 {
     auto *t = terminal(sessionId);
@@ -1090,6 +1090,7 @@ void MainWindow::showSelected()
         m_filePanel->setRoot(liveCwd(m_store.selected)); // no-op while the folder is unchanged
     const QString name = s ? s->displayName() : QString();
     m_title->setText(name);
+    m_context->setText(s ? s->context : QString());
     m_workspaceLabel->setText(s ? m_store.workspaceOf(s->id)->name.left(24) + QStringLiteral("  /") : QString());
     setWindowTitle(name);
 }
@@ -1301,6 +1302,8 @@ void MainWindow::recentMenu()
 
 void MainWindow::syncChrome()
 {
+    if (m_flagButton->isChecked() != m_store.flaggedView)
+        m_flagButton->setChecked(m_store.flaggedView); // sidebar.mode changed it
     // the filter button is dimmed while nothing is marked: there is nothing to filter to
     const QColor ink = palette().color(QPalette::WindowText);
     m_filterButton->setIcon(chromeIcon(m_store.focusEnabled ? QStringLiteral("gridFilled") : QStringLiteral("grid"), ink));
@@ -1522,6 +1525,14 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     }
     if (dashboardEvent(watched, event))
         return true;
+    if (event->type() == QEvent::FocusIn && watched->isWidgetType())
+        for (auto it = m_panes.begin(); it != m_panes.end(); ++it)
+            if (it->right && it->main) {
+                if (it->right->widget()->isAncestorOf(static_cast<QWidget *>(watched)))
+                    m_splitFocused.insert(it.key(), true);
+                else if (it->main->widget()->isAncestorOf(static_cast<QWidget *>(watched)))
+                    m_splitFocused.insert(it.key(), false);
+            }
     if (event->type() == QEvent::Resize && watched->property("agtermOverlayHost").isValid())
         layoutOverlays(watched->property("agtermOverlayHost").toString());
     if ((event->type() == QEvent::KeyPress || event->type() == QEvent::MouseButtonPress || event->type() == QEvent::Wheel) && watched->isWidgetType()

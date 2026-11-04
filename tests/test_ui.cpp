@@ -22,6 +22,8 @@
 #include <QJsonArray>
 #include <QToolBar>
 #include <QTest>
+#include "control.h"
+#include <QPushButton>
 
 class TestUi : public QObject
 {
@@ -595,6 +597,85 @@ private Q_SLOTS:
         s.autoFollowStayOnActive = false;
         store.setSettings(s);
         QCOMPARE(w.autoFollowTick(6000), a);
+    }
+
+    void controlCommandsDriveTheWindow()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("control.json"));
+        w.restore({});
+        const QString id = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(id);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        auto call = [&](const QString &cmd, const QString &target = {}, const QJsonObject &args = {}) -> const QJsonObject {
+            return dispatch(store, w, {{"cmd", cmd}, {"target", target}, {"args", args}});
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(!call("session.text", id)["result"]["text"].toString().trimmed().isEmpty(), 5000); // the prompt
+        QVERIFY(call("session.type", id, {{"text", "seq 1 200\n"}})["ok"].toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(call("session.text", id, {{"lines", 2}})["result"]["text"].toString().contains("200"), 5000);
+        const QString all = call("session.text", id, {{"all", true}})["result"]["text"].toString();
+        QVERIFY(all.contains("\n1\n") && all.contains("\n200\n")); // scrollback beyond the screen
+        QVERIFY(!call("session.text", id)["result"]["text"].toString().contains("\n1\n"));
+        QCOMPARE(call("session.copy", id)["error"].toString(), QStringLiteral("no selection"));
+        QVERIFY(call("session.selectall", id)["ok"].toBool());
+        QVERIFY(call("session.copy", id)["result"]["text"].toString().contains("200"));
+        const QJsonObject found = call("session.search", id, {{"text", "199"}})["result"].toObject();
+        QVERIFY(found["count"].toInt() >= 1);
+        QVERIFY(call("session.search", id, {{"to", "close"}})["ok"].toBool());
+
+        QVERIFY(call("sidebar", {}, {{"mode", "hide"}})["ok"].toBool());
+        QVERIFY(!call("tree")["result"]["tree"]["sidebarVisible"].toBool());
+        QVERIFY(call("sidebar", {}, {{"mode", "show"}})["ok"].toBool());
+        QCOMPARE(call("sidebar.width", {}, {{"sidebarWidth", 300}})["result"]["sidebarWidth"].toDouble(), 300.0);
+        QCOMPARE(call("sidebar.width", {}, {})["error"].toString(), QStringLiteral("sidebar.width requires a width in points"));
+        QCOMPARE(call("session.focus", id)["error"].toString(), QStringLiteral("session has no split"));
+        QVERIFY(call("surface.zoom", {}, {{"mode", "show"}})["ok"].toBool());
+        QCOMPARE(call("tree")["result"]["tree"]["zoomedSurface"].toString(), QStringLiteral("surface:%1:left").arg(id));
+        QVERIFY(call("surface.zoom", {}, {{"mode", "hide"}})["ok"].toBool());
+        QVERIFY(!call("tree")["result"]["tree"].toObject().contains("zoomedSurface"));
+        QCOMPARE(call("surface.zoom", "quick")["error"].toString(), QStringLiteral("surface not available: quick"));
+        QVERIFY(call("session.context", id, {{"mode", "set"}, {"text", "issue 7"}})["ok"].toBool());
+
+        // pick: the palette, picked by Enter
+        const QString pick = call("pick.open", {}, {{"items", QJsonArray{QJsonObject{{"id", "a"}, {"label", "alpha"}}, QJsonObject{{"id", "b"}, {"label", "beta"}}}},
+                                                    {"query", "bet"}})["result"]["id"].toString();
+        QCOMPARE(call("tree")["result"]["tree"]["pickPending"].toString(), pick);
+        QCOMPARE(call("pick.result", pick)["result"]["pick"]["result"].toString(), QStringLiteral("pending"));
+        QTest::keyClick(QApplication::focusWidget(), Qt::Key_Return);
+        const QJsonObject picked = call("pick.result", pick)["result"]["pick"].toObject();
+        QCOMPARE(picked["id"].toString(), QStringLiteral("b"));
+        QCOMPARE(picked["index"].toInt(), 1);
+        const QString cancelled = call("pick.open", {}, {{"items", QJsonArray{QJsonObject{{"id", "a"}, {"label", "alpha"}}}}})["result"]["id"].toString();
+        QVERIFY(call("pick.cancel", cancelled)["ok"].toBool());
+        QCOMPARE(call("pick.result", cancelled)["result"]["pick"]["result"].toString(), QStringLiteral("cancelled"));
+
+        // ask: a dialog whose button answers
+        const QJsonObject askArgs{{"title", "Ship it?"}, {"buttons", QJsonArray{QJsonObject{{"id", "yes"}, {"label", "Yes"}}, QJsonObject{{"id", "no"}, {"label", "No"}}}}};
+        const QString ask = call("ask.open", id, askArgs)["result"]["id"].toString();
+        QCOMPARE(call("tree")["result"]["tree"]["workspaces"][0]["sessions"][0]["ask"]["id"].toString(), ask);
+        QCOMPARE(call("ask.open", id, askArgs)["error"].toString(), QStringLiteral("ask already pending"));
+        QPushButton *yes = nullptr;
+        for (QPushButton *b : w.findChild<QDialog *>("ask")->findChildren<QPushButton *>())
+            if (b->text() == QLatin1String("Yes"))
+                yes = b;
+        yes->click();
+        const QJsonObject answer = call("ask.result", ask)["result"]["ask"].toObject();
+        QCOMPARE(answer["result"].toString(), QStringLiteral("answered"));
+        QCOMPARE(answer["id"].toString(), QStringLiteral("yes"));
+        const QString form = call("ask.open", id, {{"title", "Name?"}, {"input", "line"}, {"value", "x"}})["result"]["id"].toString();
+        QVERIFY(call("ask.cancel", form)["ok"].toBool());
+        QCOMPARE(call("ask.result", form)["result"]["ask"]["result"].toString(), QStringLiteral("cancelled"));
+        QCOMPARE(call("ask.result", "nope")["error"].toString(), QStringLiteral("unknown ask: nope"));
+
+        // msg: panes have ids, and the event lands in the window's stream
+        const QStringList panes = w.paneIds(id);
+        QCOMPARE(panes.size(), 1);
+        QSignalSpy events(w.events(), &EventSource::event);
+        QVERIFY(call("msg.send", {}, {{"body", "hello"}, {"recipients", QJsonArray{id + ":left"}}})["ok"].toBool());
+        QCOMPARE(events.last().first().toJsonObject()["kind"].toString(), QStringLiteral("message"));
+        QCOMPARE(call("msg.read", {}, {{"identity", id + ":" + panes[0]}, {"ack", true}})["result"]["messages"][0]["body"].toString(), QStringLiteral("hello"));
     }
 };
 
