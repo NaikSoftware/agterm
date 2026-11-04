@@ -432,6 +432,14 @@ struct AppStoreTreeProjectionTests {
         #expect(store.controlTree(paneForeground: { _ in nil }, flaggedLayout: .flat).sidebarFlaggedLayout == "flat")
     }
 
+    @Test func controlTreeReportsThePassedSidebarDensityInEitherSidebarMode() {
+        let store = makeStore()
+        #expect(store.controlTree().sidebarDensity == nil)
+        #expect(store.controlTree(paneForeground: { _ in nil }, sidebarDensity: .compact).sidebarDensity == "compact")
+        store.setSidebarMode(.flagged)
+        #expect(store.controlTree(paneForeground: { _ in nil }, sidebarDensity: .standard).sidebarDensity == "default")
+    }
+
     @Test func controlTreeReportsTheSavedFlaggedOrderAndOmitsItWhenNothingIsFlagged() throws {
         let store = makeStore()
         let ws = store.addWorkspace(name: "work")
@@ -813,7 +821,7 @@ struct AppStoreTreeProjectionTests {
 
         let wide = HtmlOverlay(source: .file(path: "/tmp/a/wide.html", grantRoot: "/tmp/a"), navigation: true, javascript: true)
         let right = HtmlOverlay(source: .url(try #require(URL(string: "http://localhost:5173/"))), persistent: true,
-                                browse: true)
+                                browse: true, clicked: true)
         let left = HtmlOverlay(source: .file(path: "/tmp/a/bare.html", grantRoot: nil), chromeless: true)
         #expect(store.openHtmlOverlay(session.id, pane: .right, overlay: right, sizePercent: nil) == nil)
         #expect(store.openHtmlOverlay(session.id, pane: .left, overlay: left, sizePercent: nil) == nil)
@@ -832,7 +840,7 @@ struct AppStoreTreeProjectionTests {
             ControlHtmlOverlayNode(pane: "left", file: "/tmp/a/bare.html", state: "loading", error: nil, chromeless: true,
                                    id: left.id.uuidString),
             ControlHtmlOverlayNode(pane: "right", url: "http://localhost:5173/", state: "failed", error: "not found",
-                                   javascript: false, id: right.id.uuidString, persistent: true, browse: true),
+                                   javascript: false, id: right.id.uuidString, persistent: true, browse: true, clicked: true),
         ])
         let decoded = try JSONDecoder().decode(ControlTree.self, from: JSONEncoder().encode(store.controlTree()))
         #expect(decoded.workspaces[0].sessions[0] == node)
@@ -844,6 +852,8 @@ struct AppStoreTreeProjectionTests {
         #expect(json.contains(#""persistent":true"#))
         #expect(json.contains(#""browse":false"#))
         #expect(json.contains(#""browse":true"#))
+        #expect(json.components(separatedBy: #""clicked":true"#).count == 2)
+        #expect(!json.contains(#""clicked":false"#))
     }
 
     @Test func aPageNodeFromAnOlderServerDecodesAsNotBrowsing() throws {
@@ -851,6 +861,7 @@ struct AppStoreTreeProjectionTests {
             #"{"url":"http://localhost:5173/","state":"loaded","javascript":false}"#.utf8))
         #expect(!node.browse)
         #expect(node.hidden == nil)
+        #expect(node.clicked == nil)
     }
 
     @Test func hiddenOverlaysReportHiddenSlotsWhileOccupancyStays() throws {

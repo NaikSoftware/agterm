@@ -86,6 +86,7 @@ final class MockControlActions: ControlActions {
         case sidebarVisibility(ControlToggleMode)
         case sidebarViewMode(ControlSidebarViewMode)
         case flaggedViewLayout(ControlFlaggedLayoutMode)
+        case sidebarDensity(ControlSidebarDensityMode)
         case expand(window: String?)
         case collapse(window: String?)
         case sidebarWidth(points: Double, window: String?)
@@ -157,6 +158,7 @@ final class MockControlActions: ControlActions {
     var nextSidebarVisibilityResponse = ControlResponse(ok: true)
     var nextSidebarViewModeResponse = ControlResponse(ok: true)
     var nextFlaggedViewLayoutResponse = ControlResponse(ok: true)
+    var nextSidebarDensityResponse = ControlResponse(ok: true)
     var nextExpandResponse = ControlResponse(ok: true)
     var nextCollapseResponse = ControlResponse(ok: true)
     var nextSidebarWidthResponse = ControlResponse(ok: true)
@@ -639,6 +641,11 @@ final class MockControlActions: ControlActions {
     func setFlaggedViewLayout(_ mode: ControlFlaggedLayoutMode) -> ControlResponse {
         calls.append(.flaggedViewLayout(mode))
         return nextFlaggedViewLayoutResponse
+    }
+
+    func setSidebarDensity(_ mode: ControlSidebarDensityMode) -> ControlResponse {
+        calls.append(.sidebarDensity(mode))
+        return nextSidebarDensityResponse
     }
 
     func expandSidebar(window: String?) -> ControlResponse {

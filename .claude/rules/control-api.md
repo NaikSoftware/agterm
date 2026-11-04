@@ -179,8 +179,8 @@ renumbering. Do not reintroduce a count anywhere.
   `ask.open`, `ask.result`, `ask.cancel`
 - `quick`, `quick.type`, `quick.text`
 - `msg.send`, `msg.read`, `msg.ack`
-- `sidebar`, `sidebar.mode`, `sidebar.flagged-layout`, `sidebar.expand`, `sidebar.collapse`, `sidebar.width`,
-  `filepanel`, `filepanel.width`, `notify`
+- `sidebar`, `sidebar.mode`, `sidebar.flagged-layout`, `sidebar.density`, `sidebar.expand`, `sidebar.collapse`,
+  `sidebar.width`, `filepanel`, `filepanel.width`, `notify`
 - `font.inc`, `font.dec`, `font.reset`
 - `window.new`, `.list`, `.select`, `.go`, `.close`, `.rename`, `.delete`, `.resize`, `.move`, `.zoom`,
   `.fullscreen`, `.minimize`
@@ -560,7 +560,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   ask and a remote PROGRAM reservation are not hideable: an empty scope answers `no overlay`, a reserved one
   `overlay is shown on another Mac`. A page shown on the presenting Mac is in scope: the request goes to that
   Mac and the reply does not wait for it (Remote sessions owns the sequence rule). Opening into a hidden slot is refused `overlay hidden`, a HUD open
-  checking the session slot. Close or replace clears the bit; metadata updates and a `--wait` exit keep it.
+  checking the session slot; a terminal click over a hidden clicked page is the one replacement (link bullets below). Close or replace clears the bit; metadata updates and a `--wait` exit keep it.
   Occupancy predicates keep their meaning for lifecycle, results, `--block`, page lookup and reservations;
   focus, zoom, layout, deck gates, dashboard covers and font routing read the visible layer in
   `Session+OverlayVisibility` (`coverOverlayVisible`, `programOverlayVisible`, `htmlOverlayVisible`,
@@ -701,6 +701,13 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   `openSessionOverlay` refuses. The HUD and zoom checks come first because the store would ACCEPT those
   opens: one closes the HUD for good, the other shows nothing. A HUD, a program overlay and the quick
   terminal never route to the overlay.
+- The four click paths mark their pages `HtmlOverlay.clicked` (read back as `htmlOverlays[].clicked`; the
+  dispatcher never sets it, presentation frames never carry it), and a click replaces the session-wide page
+  only when it is marked and its `overlayHidden` bit is set: `AppStore.releaseHiddenClickedPage`, which also leaves a
+  slot `pageBelongsRemote` hands to the presenter. The read-back's `hidden` is `overlayOutOfSight` and a remote page
+  keeps its marker, so `clicked` plus `hidden` does not by itself mean the next click replaces it. Each path releases after every check that could still refuse its
+  open (the probe, the HUD and zoom recheck, the saved store for a web link), so a refused click keeps the old
+  page. A shown page, a hidden program and any CLI page keep the browser fallback.
 - libghostty also detects plain paths and hands them over as typed: absolute, `~/`, or a relative path it
   resolved because it exists. `LinkPolicy.isBarePath` takes them literally, never URL-parsed, so `%`, `#`
   and spaces stay in the name. A local path, bare or `file://`, with an `imageExtensions` extension routes to
@@ -711,7 +718,9 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   on the far Mac and are ignored, while its scratch stays `.scratch` because that shell is local.
 - libghostty keeps a `:line[:column]` suffix in the path it hands over and resolves a relative path only when that
   exact path exists, so `./main.go:42` arrives raw. `LinkPolicy.locations` lists the candidates for such a link, the
-  literal path first so a file named with a colon wins, then the path without the suffix; a relative link is joined to
+  literal path first so a file named with a colon wins, then the path without the suffix. libghostty keeps a sentence's
+  trailing `.`, `?`, `!` or `;` too, so a path ending in one also lists up to three spellings with one character
+  removed at a time (`trimmedSpellings`), each split for a suffix the same way; a relative link is joined to
   the clicking pane's session cwd before any scheme parse, and a first segment with a colon is never a directory, so
   `http://localhost:3000` stays a web link. The scratch, quick and overlay terminals pass no cwd. Every candidate has
   passed `guardedLocalPath` (absolute, no `//`, no automount root) and a remote pane offers none, so a refused path
@@ -1357,6 +1366,8 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   `ControlServer.buildTree` passes the `GhosttyApp` mirror the sidebars render from. The legacy
   `controlTree(foreground:)` overload reports nil, meaning the host supplied none. An outside
   `ControlActions` conformer gets the unsupported-host default.
+- `sidebar.density default|compact|toggle` follows the same app-wide contract through
+  `SettingsModel.setSidebarDensity`; `toggle` flips between the two, and the read-back is top-level `sidebarDensity`.
 - `sidebar.expand` and `.collapse` target optional open window, post object-scoped store notifications, and
   no-op under the flat flagged list. Collapse preserves/scrolls active workspace. GUI forms are frontmost only.
 - `sidebar.width <points>` targets an optional open window, unlike frontmost-only `sidebar`/`sidebar.mode`:

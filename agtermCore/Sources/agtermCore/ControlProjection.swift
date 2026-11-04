@@ -517,14 +517,19 @@ public struct ControlHtmlOverlayNode: Codable, Sendable, Equatable {
     public let remote: Bool?
     /// replica is true for a page shown here for the Mac that opened it, omitted otherwise.
     public let replica: Bool?
+    /// clicked is true for a page a terminal click opened, omitted otherwise. It names the origin only:
+    /// `AppStore.releaseHiddenClickedPage` decides whether a click replaces the page, and `hidden` here also
+    /// covers states it leaves alone.
+    public let clicked: Bool?
 
     public init(pane: String?, file: String? = nil, cwd: String? = nil, url: String? = nil, image: String? = nil,
                 markdown: String? = nil, text: ControlTextOverlayNode? = nil, state: String,
                 error: String?, page: String? = nil, title: String? = nil, canGoBack: Bool? = nil,
                 canGoForward: Bool? = nil, navigation: Bool? = nil, javascript: Bool = false, chromeless: Bool = false,
                 zoom: Double? = nil, id: String? = nil, persistent: Bool = false, browse: Bool = false,
-                hidden: Bool? = nil, remote: Bool? = nil, replica: Bool? = nil) {
+                hidden: Bool? = nil, remote: Bool? = nil, replica: Bool? = nil, clicked: Bool? = nil) {
         self.id = id
+        self.clicked = clicked
         self.hidden = hidden
         self.remote = remote
         self.replica = replica
@@ -551,7 +556,7 @@ public struct ControlHtmlOverlayNode: Codable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case pane, file, cwd, url, image, markdown, text, state, error, page, title, canGoBack, canGoForward, navigation, javascript
-        case chromeless, persistent, browse, zoom, id, hidden, remote, replica
+        case chromeless, persistent, browse, zoom, id, hidden, remote, replica, clicked
     }
 
     public init(from decoder: Decoder) throws {
@@ -579,6 +584,7 @@ public struct ControlHtmlOverlayNode: Codable, Sendable, Equatable {
         hidden = try c.decodeIfPresent(Bool.self, forKey: .hidden)
         remote = try c.decodeIfPresent(Bool.self, forKey: .remote)
         replica = try c.decodeIfPresent(Bool.self, forKey: .replica)
+        clicked = try c.decodeIfPresent(Bool.self, forKey: .clicked)
     }
 }
 
@@ -709,6 +715,9 @@ public struct ControlTree: Codable, Sendable, Equatable {
     /// is dormant. The read side of `sidebar.flagged-layout` and a term of the workspace-row visibility
     /// predicate on `ControlWorkspaceNode.focused`.
     public let sidebarFlaggedLayout: String?
+    /// sidebarDensity is the app-wide row spacing, `SidebarDensity.rawValue` (`default` | `compact`), the same on
+    /// every window's `tree`. The read side of `sidebar.density`.
+    public let sidebarDensity: String?
     /// flaggedOrder is the window's saved flagged order as session ids, the flat and plain rows' order and the
     /// read side of `session.flag move`; omitted when nothing is flagged.
     public let flaggedOrder: [String]?
@@ -782,8 +791,9 @@ public struct ControlTree: Codable, Sendable, Equatable {
                 dashboardHighlighted: String? = nil, dashboardFontSize: Double? = nil,
                 dashboardFontMode: String? = nil, pickPending: String? = nil, askPending: String? = nil,
                 app: AppIdentity? = nil, liveReset: ControlLiveResetReadback? = nil,
-                indexUnsaved: Bool? = nil, linkOpenMode: String? = nil) {
+                indexUnsaved: Bool? = nil, linkOpenMode: String? = nil, sidebarDensity: String? = nil) {
         self.workspaces = workspaces
+        self.sidebarDensity = sidebarDensity
         self.linkOpenMode = linkOpenMode
         self.liveReset = liveReset
         self.indexUnsaved = indexUnsaved

@@ -639,8 +639,8 @@ final class ControlServer {
                 .fontInc, .fontDec, .fontReset, .keymapReload, .keymapList, .keymapRun, .hooksReload, .hooksList, .browserClear,
                 .browserLinks,
                 .configReload, .themeSet, .themeList,
-                .sidebar, .sidebarMode, .sidebarFlaggedLayout, .sidebarExpand, .sidebarCollapse, .sidebarWidth,
-                .filePanel, .filePanelWidth,
+                .sidebar, .sidebarMode, .sidebarFlaggedLayout, .sidebarDensity, .sidebarExpand, .sidebarCollapse,
+                .sidebarWidth, .filePanel, .filePanelWidth,
                 .sessionType, .sessionCopy,
                 .sessionPaste, .sessionSelectAll,
                 .sessionSearch, .sessionOverlayOpen, .sessionOverlayClose, .sessionOverlayResize,
@@ -933,7 +933,8 @@ final class ControlServer {
             // the mirror the sidebars render from, so the read-back names what is on screen.
             flaggedLayout: GhosttyApp.shared.flaggedViewLayout,
             htmlZoom: HtmlOverlayRegistry.shared.zoom,
-            linkOpenMode: settingsModel.settings.effectiveLinkOpenMode
+            linkOpenMode: settingsModel.settings.effectiveLinkOpenMode,
+            sidebarDensity: GhosttyApp.shared.sidebarDensity
         )
     }
 
