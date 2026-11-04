@@ -86,11 +86,14 @@ ctrl+alt+shift), next to plain `ctrl`, `shift`, `alt` and `super`.
 | Ctrl+Alt+Shift+J | Hide / show overlays |
 | Ctrl+Alt+Shift+G | Dashboard: recent sessions' live panes in a grid (arrows, Enter, Esc) |
 
-## Agent status
+## Agent status, skill and CLI
 
-```sh
-scripts/install-claude-hooks.sh     # adds Claude Code hooks to ~/.claude/settings.json (backed up first)
-```
+Help ▸ Install Agent Status Hooks… copies the status package to `~/.config/agterm-qt/agent-status` and wires it into
+Claude Code (`~/.claude/settings.json`), Codex (`~/.codex/config.toml`), Pi, OpenCode and your shell rc files; each file
+it edits is backed up as `.bak`, and running it again changes nothing. Help ▸ Install Agent Skill… copies the agent
+skill (which teaches Claude Code and Codex to drive agterm-qt) into `~/.claude/skills` and `~/.codex/skills`, and
+Install Command Line Tool… links `agtermctl` into `~/.local/bin`. The first launch offers the skill and the hooks.
+From a shell: `agterm-qt --install agent-hooks|skill|cli [--home DIR]` (`scripts/install-claude-hooks.sh` runs the first).
 
 The hooks run agterm's own status adapter (a no-op outside agterm-qt). Typing into a blocked or completed session
 clears its dot (Settings sets on the first key, on Enter, or never).

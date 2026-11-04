@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "help.h"
 #include "hooks.h"
 #include "library.h"
 #include "sidebar.h"
@@ -13,6 +14,7 @@
 #include <QListWidget>
 #include <QDialog>
 #include <QMenu>
+#include <QMenuBar>
 #include <QTimer>
 #include <QPointer>
 #include <QTemporaryDir>
@@ -676,6 +678,29 @@ private Q_SLOTS:
         QVERIFY(call("msg.send", {}, {{"body", "hello"}, {"recipients", QJsonArray{id + ":left"}}})["ok"].toBool());
         QCOMPARE(events.last().first().toJsonObject()["kind"].toString(), QStringLiteral("message"));
         QCOMPARE(call("msg.read", {}, {{"identity", id + ":" + panes[0]}, {"ack", true}})["result"]["messages"][0]["body"].toString(), QStringLiteral("hello"));
+    }
+
+    void helpMenuAndWelcome()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("help.json"));
+        w.restore({});
+        QStringList help;
+        for (QAction *menu : w.menuBar()->actions())
+            if (menu->text() == QLatin1String("&Help"))
+                for (QAction *a : menu->menu()->actions())
+                    if (!a->isSeparator())
+                        help << a->text();
+        QCOMPARE(help, (QStringList{"Developer Documentation…", "Install Command Line Tool…", "Install Agent Status Hooks…", "Install Agent Skill…"}));
+        QVERIFY(!bundled("agent-status").isEmpty() && !bundled("skill/agterm").isEmpty());
+        showWelcome(&w);
+        auto *welcome = w.findChild<QDialog *>("welcome");
+        QVERIFY(welcome && welcome->isVisible());
+        QCOMPARE(welcome->findChildren<QCheckBox *>().size(), 2);
+        for (QPushButton *b : welcome->findChildren<QPushButton *>())
+            if (b->text() == QLatin1String("Later"))
+                b->click(); // installs nothing
+        QTRY_VERIFY(!w.findChild<QDialog *>("welcome"));
     }
 };
 

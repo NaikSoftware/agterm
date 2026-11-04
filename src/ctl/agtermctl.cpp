@@ -370,8 +370,14 @@ int main(int argc, char **argv)
         for (const auto &[from, to] : {std::pair{"width", "width"}, {"height", "height"}, {"hide-after", "hideAfter"}, {"font-size", "fontSize"}})
             if (opt.contains(QLatin1String(from)))
                 args.insert(QLatin1String(to), opt.value(QLatin1String(from)).toDouble());
-        if (cmd == QLatin1String("session.overlay.open") && !arg.isEmpty())
-            args.insert("command", arg);
+        if (cmd == QLatin1String("session.overlay.open")) {
+            copy("image", "image");
+            copy("text", "textFile");
+            if (opt.contains(QStringLiteral("markdown"))) // a flag for the HUD; with overlay open the file is the positional
+                args.insert("markdownFile", arg);
+            else if (!arg.isEmpty())
+                args.insert("command", arg);
+        }
         if (cmd == QLatin1String("session.hud.open") || cmd == QLatin1String("session.hud.update")) {
             if (opt.contains(QStringLiteral("file"))) {
                 QFile f(opt.value(QStringLiteral("file")));

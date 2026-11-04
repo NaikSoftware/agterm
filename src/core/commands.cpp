@@ -47,7 +47,7 @@ QString unsupportedReason(const QString &cmd)
     return {};
 }
 
-static const QStringList leftPane{"left", "top", "primary"}, rightPane{"right", "bottom", "split"};
+static const QStringList leftPane{"left", "top", "primary", "main"}, rightPane{"right", "bottom", "split"}; // main: AGTERM_PANE
 
 // workspace.go: the visible workspaces in order, wrapping; lands on the workspace's first session
 static QJsonObject workspaceGo(Store &store, const QJsonObject &args)

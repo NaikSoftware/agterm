@@ -15,9 +15,21 @@ start() {
 }
 stop() { kill "$pid"; wait "$pid" 2>/dev/null || true; }
 fail() { echo "FAIL: $*"; ctl tree || true; stop; exit 1; }
+fail0() { echo "FAIL: $*"; exit 1; } # before the app runs
 trap 'kill $pid 2>/dev/null || true; rm -rf "$AGTERM_STATE_DIR"' EXIT
 
 mkdir -p "$AGTERM_STATE_DIR/config" # an isolated state dir keeps keymap.conf and hooks.conf there too
+mkdir -p "$AGTERM_STATE_DIR/windows" # prior state: no first-launch welcome
+# the Help menu installers, run headless against a throwaway HOME
+fakehome=$AGTERM_STATE_DIR/home
+mkdir -p "$fakehome/.claude" "$fakehome/.codex"
+HOME=$fakehome SHELL=/bin/sh "$bin/agterm-qt" --install agent-hooks --home "$fakehome" | grep -q "Agent Status Hooks Installed" || fail0 "agent hooks installer"
+grep -q agterm-claude-status.sh "$fakehome/.claude/settings.json" || fail0 "claude hooks merged"
+grep -q "hooks.Stop" "$fakehome/.codex/config.toml" || fail0 "codex hooks merged"
+"$bin/agterm-qt" --install skill --home "$fakehome" | grep -q "Agent Skill Installed" || fail0 "skill installer"
+[ -f "$fakehome/.codex/skills/agterm/SKILL.md" ] || fail0 "codex skill copy"
+"$bin/agterm-qt" --install cli --home "$fakehome" >/dev/null
+[ "$(readlink "$fakehome/.local/bin/agtermctl")" = "$bin/agtermctl" ] || fail0 "command line tool link"
 cat >"$AGTERM_STATE_DIR/config/keymap.conf" <<EOF
 map ctrl+alt+l toggle_split
 command "Mark" ctrl+a>m echo "{AGT_SESSION_ID}" > "$AGTERM_STATE_DIR/mark"

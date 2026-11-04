@@ -1,4 +1,5 @@
 #include "control.h"
+#include "help.h"
 #include "hooks.h"
 #include "library.h"
 #include "mainwindow.h"
@@ -70,8 +71,24 @@ static void ensureProfile()
     entry.sync();
 }
 
+// agterm-qt --install agent-hooks|cli|skill [--home DIR]: the Help menu's installers without a window
+static int installFromCommandLine(int argc, char **argv)
+{
+    QCoreApplication app(argc, argv);
+    const QStringList args = app.arguments();
+    const qsizetype at = args.indexOf(QStringLiteral("--home"));
+    const QString home = at > 0 && at + 1 < args.size() ? args[at + 1] : QDir::homePath();
+    const Install::Report r = runInstaller(args.value(2), home, nullptr);
+    if (!r.error.isEmpty())
+        return fprintf(stderr, "Install Failed: %s\n", qPrintable(r.error)), 1;
+    printf("%s\n%s\n", qPrintable(r.title), qPrintable(r.text()));
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
+    if (argc > 1 && qstrcmp(argv[1], "--install") == 0)
+        return installFromCommandLine(argc, argv);
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("agterm-qt")); // also names the Konsole-part profile namespace
     app.setApplicationVersion(QLatin1String(appVersion));
@@ -89,6 +106,7 @@ int main(int argc, char **argv)
     }
 
     ensureProfile();
+    const bool firstLaunch = !Install::hasPriorState(dir); // read before the library writes anything there
     WindowLibrary library(dir);
     library.load(); // the windows open at the last quit, each with its saved frame
     MainWindow &window = *library.active();
@@ -117,6 +135,8 @@ int main(int argc, char **argv)
             w->save();
         library.saveIndex();
     });
+    if (firstLaunch) // after the socket binds: the dialog is window-modal, never in the request path
+        QTimer::singleShot(0, &window, [&window] { showWelcome(&window); });
     if (const QString shot = qEnvironmentVariable("AGTERM_SCREENSHOT"); !shot.isEmpty()) // dev aid for UI review
         QTimer::singleShot(6000, &window, [&window, shot] { window.grab().save(shot); });
 

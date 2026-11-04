@@ -517,7 +517,7 @@ QString starterHooks()
                "#   on <kind> <shell...>\n"
                "#\n"
                "# Kinds: %1.\n"
-               "# (pane.scratch, pane.focused, remote.* and message never fire in agterm-qt.)\n"
+               "# (pane.scratch, pane.focused and remote.* never fire in agterm-qt.)\n"
                "# Several lines per kind run independently; an identical kind+command line is skipped with a\n"
                "# diagnostic. Everything after the kind is passed to `/bin/sh -c` untouched, detached with no\n"
                "# terminal, one process per line at a time; further events for a busy line queue in order\n"

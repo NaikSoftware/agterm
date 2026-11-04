@@ -31,13 +31,13 @@ if(NOT TARGET KF6::Parts)
     INTERFACE_LINK_LIBRARIES "KF6::CoreAddons;KF6::XmlGui")
 endif()
 
-add_library(agterm-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp)
+add_library(agterm-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp)
 target_include_directories(agterm-core PUBLIC src/core)
 target_link_libraries(agterm-core PUBLIC Qt6::Core)
 
 find_package(KF6Config REQUIRED)
 find_package(KF6WidgetsAddons REQUIRED)
-add_library(agterm-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/settingsdialog.cpp src/app/sidebar.cpp src/app/palette.cpp src/app/overlay.cpp src/app/dashboard.cpp src/app/library.cpp src/app/attention.cpp src/app/konsoleprivate.cpp src/app/controlui.cpp
+add_library(agterm-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/settingsdialog.cpp src/app/sidebar.cpp src/app/palette.cpp src/app/overlay.cpp src/app/dashboard.cpp src/app/library.cpp src/app/attention.cpp src/app/konsoleprivate.cpp src/app/controlui.cpp src/app/help.cpp
   resources/resources.qrc)
 target_include_directories(agterm-ui PUBLIC src/app)
 find_package(KF6Notifications REQUIRED)
@@ -51,6 +51,7 @@ target_link_libraries(agtermctl PRIVATE agterm-core Qt6::Network)
 enable_testing()
 add_executable(test_core tests/test_core.cpp)
 target_link_libraries(test_core PRIVATE agterm-core Qt6::Test)
+target_compile_definitions(test_core PRIVATE AGTERM_SOURCE_SHARE="${CMAKE_SOURCE_DIR}/share")
 add_test(NAME core COMMAND test_core)
 add_executable(test_ui tests/test_ui.cpp)
 target_link_libraries(test_ui PRIVATE agterm-ui Qt6::Test)
@@ -69,5 +70,6 @@ install(TARGETS agterm-qt agtermctl RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 configure_file(packaging/agterm-qt.desktop.in agterm-qt.desktop @ONLY) # Exec is absolute: the Plasma menu does not see ~/.local/bin
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/agterm-qt.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(DIRECTORY resources/icons/ DESTINATION ${CMAKE_INSTALL_DATADIR}/icons)
-install(PROGRAMS share/agent-status/agterm-agent-status.sh share/agent-status/agterm-claude-status.sh
-  DESTINATION ${CMAKE_INSTALL_DATADIR}/agterm-qt/agent-status)
+install(DIRECTORY share/agent-status share/skill USE_SOURCE_PERMISSIONS DESTINATION ${CMAKE_INSTALL_DATADIR}/agterm-qt)
+# a build-tree run finds the shipped agent-status package and skill in the source tree
+target_compile_definitions(agterm-ui PRIVATE AGTERM_SOURCE_SHARE="${CMAKE_SOURCE_DIR}/share")

@@ -1,5 +1,6 @@
 #include "control.h"
 #include "hooks.h"
+#include "installers.h"
 #include "keymap.h"
 #include "launcher.h"
 #include "restore.h"
@@ -901,6 +902,127 @@ private Q_SLOTS:
         QCOMPARE(t.appCmd, QStringLiteral("ask.open"));
         QCOMPARE(call(s, t, "pick.result")["error"].toString(), QStringLiteral("pick.result requires a pick id"));
         QCOMPARE(call(s, t, "session.search", id, {{"to", "up"}})["error"].toString(), QStringLiteral("session.search --to must be next|prev|close"));
+    }
+
+    static QString slurp(const QString &path)
+    {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
+    }
+
+    static void spit(const QString &path, const QString &text)
+    {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(text.toUtf8());
+    }
+
+    void agentHooksInstallerMergesAndIsIdempotent()
+    {
+        QTemporaryDir tmp;
+        const QString home = tmp.path(), bundle = QStringLiteral(AGTERM_SOURCE_SHARE "/agent-status"), pkg = Install::packageDir(home);
+        const QString settings = home + "/.claude/settings.json";
+        spit(home + "/real-settings.json",
+             R"({"model":"opus","hooks":{"Stop":[{"hooks":[{"type":"command","command":"/old/share/agterm-qt/agent-status/agterm-claude-status.sh completed --auto-reset"}]}],)"
+             R"("PreCompact":[{"hooks":[{"type":"command","command":"mine"}]}]}})");
+        QDir().mkpath(home + "/.claude");
+        QVERIFY(QFile::link(home + "/real-settings.json", settings)); // a dotfiles-managed link
+        spit(home + "/.codex/config.toml", "model = \"o3\"\nnotify = [\"/x/codex-notify.sh\"]\n\n[profiles.a]\nmodel = \"x\"\n");
+        QDir().mkpath(home + "/.pi/agent");
+        QDir().mkpath(home + "/.config/opencode");
+        spit(home + "/.bashrc", "export A=1");
+
+        Install::Report r = Install::agentHooks(home, bundle, QCoreApplication::applicationFilePath(), {1, {}});
+        QVERIFY2(r.error.isEmpty(), qPrintable(r.error));
+        QCOMPARE(r.title, QStringLiteral("Agent Status Hooks Installed"));
+        QVERIFY(QFileInfo(settings).isSymLink());
+        const QJsonObject root = QJsonDocument::fromJson(slurp(settings).toUtf8()).object();
+        const QString adapter = Install::shellQuote(pkg + "/agterm-claude-status.sh");
+        QCOMPARE(root["model"].toString(), QStringLiteral("opus"));
+        QCOMPARE(root["hooks"]["Stop"].toArray().size(), 1); // the older install's hook migrated, not duplicated
+        QCOMPARE(root["hooks"]["Stop"][0]["hooks"][0]["command"].toString(), adapter + " completed --auto-reset");
+        QCOMPARE(root["hooks"]["Notification"][0]["matcher"].toString(), QStringLiteral("permission_prompt"));
+        QCOMPARE(root["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"].toString(), adapter + " active --blink");
+        QCOMPARE(root["hooks"]["PreCompact"][0]["hooks"][0]["command"].toString(), QStringLiteral("mine"));
+        QVERIFY(root["env"]["CLAUDE_CODE_PLUGIN_DIRS"].toString().endsWith("/claude-mods/swarm-companion"));
+        QVERIFY(slurp(settings + ".bak").contains("/old/share"));
+        QVERIFY(slurp(pkg + "/agterm-agent-status.sh").contains("AGTERMCTL=" + Install::shellQuote(QCoreApplication::applicationFilePath())));
+        QVERIFY(slurp(home + "/.bashrc").startsWith("export A=1\n\n# >>> agterm agent-status >>>\nsource "));
+        QVERIFY(slurp(home + "/.zshrc").contains("integration.sh"));
+        const QString toml = slurp(home + "/.codex/config.toml");
+        QVERIFY(!toml.contains("codex-notify.sh"));
+        QVERIFY(toml.contains("[[hooks.Stop.hooks]]") && toml.contains("agterm-codex-status.sh' stop\""));
+        QVERIFY(toml.contains("[profiles.a]"));
+        QVERIFY(QFileInfo::exists(home + "/.pi/agent/extensions/agterm-status.ts"));
+        QVERIFY(QFileInfo::exists(home + "/.config/opencode/plugins/agterm-status.js"));
+
+        const QString before = slurp(settings), rc = slurp(home + "/.bashrc");
+        spit(home + "/.codex/config.toml", toml + ""); // unchanged
+        r = Install::agentHooks(home, bundle, QCoreApplication::applicationFilePath(), {1, {}});
+        QCOMPARE(slurp(settings), before);
+        QCOMPARE(slurp(home + "/.bashrc"), rc);
+        QCOMPARE(slurp(home + "/.codex/config.toml"), toml);
+        QVERIFY(r.text().contains("Codex lifecycle hooks are already present"));
+        QVERIFY(r.text().contains("Pi lifecycle extension is already current"));
+
+        // v2 replaces the v1 plugin we own
+        QDir().mkpath(home + "/oc2");
+        r = Install::agentHooks(home, bundle, QCoreApplication::applicationFilePath(), {2, home + "/oc2"});
+        QVERIFY(QFileInfo::exists(home + "/oc2/plugins/agterm-v2/tui.js"));
+        QVERIFY(r.text().contains("OpenCode v2 status plugin installed"));
+    }
+
+    void agentHooksInstallerLeavesWhatItCannotMerge()
+    {
+        QTemporaryDir tmp;
+        const QString home = tmp.path();
+        spit(home + "/.claude/settings.json", "[1, 2]");
+        spit(home + "/.codex/config.toml", "[hooks]\nfoo = 1\n");
+        spit(home + "/.pi/agent/extensions/agterm-status.ts", "// my own\n");
+        const Install::Report r = Install::agentHooks(home, QStringLiteral(AGTERM_SOURCE_SHARE "/agent-status"), {}, {0, {}});
+        QVERIFY(r.warning);
+        QCOMPARE(slurp(home + "/.claude/settings.json"), QStringLiteral("[1, 2]"));
+        QCOMPARE(slurp(home + "/.codex/config.toml"), QStringLiteral("[hooks]\nfoo = 1\n"));
+        QCOMPARE(slurp(home + "/.pi/agent/extensions/agterm-status.ts"), QStringLiteral("// my own\n"));
+        QVERIFY(r.text().contains("NOT added") && r.text().contains("already defines its own hooks") && r.text().contains("user-owned"));
+        QVERIFY(r.text().contains("OpenCode status plugin installation was skipped."));
+        QCOMPARE(Install::agentHooks(home, home + "/nowhere", {}, {}).error, QStringLiteral("The agent-status scripts are not bundled in this build."));
+    }
+
+    void commandLineToolAndSkillInstallers()
+    {
+        QTemporaryDir tmp;
+        const QString home = tmp.path(), ctl = QCoreApplication::applicationFilePath();
+        Install::Report r = Install::commandLineTool(home, ctl);
+        QCOMPARE(QFileInfo(home + "/.local/bin/agtermctl").symLinkTarget(), ctl);
+        r = Install::commandLineTool(home, ctl);
+        QVERIFY(r.lines.first().contains("already"));
+        QFile::remove(home + "/.local/bin/agtermctl");
+        spit(home + "/.local/bin/agtermctl", "#!/bin/sh\n");
+        r = Install::commandLineTool(home, ctl);
+        QVERIFY(r.warning && r.lines.first().contains("left untouched"));
+        QCOMPARE(Install::commandLineTool(home, home + "/missing").error, QStringLiteral("agtermctl is not bundled in this build."));
+
+        const QString bundle = home + "/bundle";
+        spit(bundle + "/SKILL.md", "---\nname: agterm\n---\n<!-- agterm-skill -->\n");
+        spit(bundle + "/reference.md", "ref\n");
+        QDir().mkpath(home + "/.codex");
+        spit(home + "/.claude/skills/agterm/SKILL.md", "someone else's\n");
+        r = Install::skill(home, bundle);
+        QVERIFY(r.warning);
+        QCOMPARE(slurp(home + "/.claude/skills/agterm/SKILL.md"), QStringLiteral("someone else's\n"));
+        QCOMPARE(slurp(home + "/.codex/skills/agterm/reference.md"), QStringLiteral("ref\n"));
+        QVERIFY(r.text().contains("Codex: " + home + "/.codex/skills/agterm") && r.text().contains("left untouched"));
+        spit(home + "/.claude/skills/agterm/SKILL.md", "<!-- agterm-skill --> old\n"); // ours: replaced
+        r = Install::skill(home, bundle);
+        QVERIFY(!r.warning);
+        QVERIFY(QFileInfo::exists(home + "/.claude/skills/agterm/reference.md"));
+        QCOMPARE(Install::skill(home, home + "/none").error, QStringLiteral("The agent skill is not bundled in this build."));
+
+        QVERIFY(!Install::hasPriorState(home + "/state"));
+        QDir().mkpath(home + "/state/windows");
+        QVERIFY(Install::hasPriorState(home + "/state"));
     }
 };
 

@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 
 #include "filepanel.h"
+#include "help.h"
 #include "hooks.h"
 #include "launcher.h"
 #include "library.h"
@@ -580,6 +581,7 @@ void MainWindow::createMenus()
                                [this] { profileDialog("showEditCurrentProfileDialog"); }));
     settings->addAction(action(QStringLiteral("manage_profiles"), tr("Manage Profiles…"), QStringLiteral("configure-shortcuts"), {},
                                [this] { profileDialog("showManageProfilesDialog"); }));
+    addHelpMenu(menuBar()->addMenu(tr("&Help")), this);
 }
 
 bool MainWindow::isOwnShortcut(QKeyEvent *event) const

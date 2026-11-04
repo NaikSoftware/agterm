@@ -88,7 +88,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   `--repeat` is accepted with a diagnostic and not honoured yet; `--error-hud` opens a 10 s failure HUD with the last stderr line;
   `global-hotkey` is refused (it summons the removed quick terminal)
 - [x] Hooks (`hooks.conf`, File ▸ Edit/Reload Hooks, `hooks reload|list`): status, notify, session.created/closed/selected,
-  tree.changed, pane.split, app.launched fire; pane.scratch, pane.focused, remote.* and message parse but never fire
+  tree.changed, pane.split, app.launched, message fire; pane.scratch, pane.focused and remote.* parse but never fire
 - [ ] Page bridge
 - [x] Program overlays: `session overlay open|close|result|text|hide|show|toggle|resize` (full, `--size-percent`,
   `--width/--height`, `--pane left|right`, `--wait`, `--follow`, CLI `--block`), View ▸ Hide/Show Overlays Ctrl+Alt+Shift+J;
@@ -126,4 +126,11 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   Simplified: a terminal-style ask is a dialog over the window rather than drawn in the pane; pick rows show no status glyph;
   `msg send --all` reaches the addressed window only; search counts case-insensitive matches in the pane's history;
   `pane.focused` events are not emitted
-- [ ] Agent skill + hook installers for Claude/Codex/OpenCode/Pi
+- [x] Agent skill (`share/skill/agterm`, adapted to agterm-qt) and Help ▸ Developer Documentation…, Install Command Line Tool…
+  (links `~/.local/bin/agtermctl`; an agtermctl already there is left alone), Install Agent Status Hooks… (master's package and
+  merge rules: Claude Code hooks + the swarm-companion mod, shell rc integration, Codex `config.toml` block, Pi extension,
+  OpenCode v1/v2 plugin with the login-shell version probe; symlinks and modes kept, `.bak` backups, idempotent; an older
+  agterm-qt hook install is migrated), Install Agent Skill… (Claude Code and Codex, ownership marker), and master's
+  first-launch welcome (skipped when the state dir holds anything). `agterm-qt --install agent-hooks|skill|cli [--home DIR]`
+  runs them headless. The Codex adapter reads its hook JSON with python3 (master used macOS plutil). Not detected: an
+  unparseable `config.toml` (no TOML parser; a top-level `hooks` key is found line by line)
