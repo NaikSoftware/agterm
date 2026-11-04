@@ -86,7 +86,7 @@ int MainWindow::reloadKeymap()
     for (const CustomCommand &c : std::as_const(m_keymap.commands)) {
         auto *a = new QAction(c.name, this);
         a->setShortcuts(sequences(c.keys));
-        a->setShortcutContext(Qt::ApplicationShortcut);
+        a->setShortcutContext(Qt::WindowShortcut);
         a->setProperty("agtermCustom", true);
         connect(a, &QAction::triggered, this, [this, name = c.name] { runCustomCommand(name, m_store.selected); });
         addAction(a);

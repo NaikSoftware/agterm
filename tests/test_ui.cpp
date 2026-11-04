@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "hooks.h"
+#include "library.h"
 #include "sidebar.h"
 #include "store.h"
 
@@ -327,6 +328,44 @@ private Q_SLOTS:
         QTRY_COMPARE(w.chromeState()["dashboardMembers"].toArray(), (QJsonArray{b + ":left"}));
         QTest::keyClick(QApplication::focusWidget(), Qt::Key_Escape);
         QVERIFY(!w.chromeState().contains("dashboardMembers"));
+    }
+
+    void windowLibraryMigratesAndEachWindowKeepsItsOwnShortcuts()
+    {
+        QTemporaryDir state;
+        {
+            Store old;
+            old.select(old.addSession(old.addWorkspace("legacy"), "kept", {}));
+            QFile f(state.filePath("workspaces.json"));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(QJsonDocument(old.toJson()).toJson());
+        }
+        WindowLibrary lib(state.path());
+        lib.load();
+        QCOMPARE(lib.entries().size(), 1);
+        QCOMPARE(lib.entries()[0].store->workspaces.first().name, QStringLiteral("legacy")); // the old file became window 1
+        QVERIFY(!QFile::exists(state.filePath("workspaces.json")));
+        const QString second = lib.newWindow("second");
+        MainWindow *w2 = lib.entries()[1].window;
+        Store *s2 = lib.entries()[1].store;
+        w2->activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(w2));
+        QWidget *term = display(*w2);
+        QVERIFY(term && w2->isAncestorOf(term));
+        // a chord both windows bind fires in the focused one: application-wide copies would be ambiguous and fire neither
+        QTest::keyClick(term, Qt::Key_F, Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier);
+        QTRY_VERIFY(s2->session(s2->selected)->flagged);
+        QVERIFY(!lib.entries()[0].store->allSessions().first()->flagged);
+        const QString kept = s2->selected;
+        lib.close(second);
+        QTRY_VERIFY(!lib.entries()[1].open);
+        QCOMPARE(lib.openWindows().size(), 1);
+        QVERIFY(lib.select(second));
+        QVERIFY(lib.entries()[1].store->session(kept)); // reopened from its own file
+        QString error;
+        QVERIFY(lib.remove(second, &error));
+        QVERIFY(!lib.remove(lib.entries()[0].id, &error));
+        QCOMPARE(error, QStringLiteral("cannot delete last window"));
     }
 
     void selectingASessionUpdatesTheSidebarInPlace()

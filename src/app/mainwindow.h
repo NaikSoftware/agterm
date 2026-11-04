@@ -34,6 +34,8 @@ public:
     MainWindow(Store &store, const QString &statePath);
     ~MainWindow() override;
     void restore(const QJsonObject &window); // one terminal per stored session, plus saved geometry
+    class WindowLibrary *library = nullptr; // null for a lone window (tests)
+    QString windowId;
 
     bool type(const QString &sessionId, const QString &text, QString *error) override;
     QString text(const QString &sessionId, QString *error) override;

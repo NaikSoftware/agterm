@@ -1,5 +1,6 @@
 #include "control.h"
 #include "hooks.h"
+#include "library.h"
 #include "mainwindow.h"
 #include "paths.h"
 #include "store.h"
@@ -25,12 +26,12 @@
 #include <unistd.h>
 
 // One request line in, one response line out, then the connection closes.
-static void serve(QLocalServer &server, Store &store, Terminals &terminals)
+static void serve(QLocalServer &server, WindowLibrary &library)
 {
     QObject::connect(&server, &QLocalServer::newConnection, &server, [&] {
         while (QLocalSocket *socket = server.nextPendingConnection()) {
             QObject::connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-            QObject::connect(socket, &QLocalSocket::readyRead, socket, [socket, &store, &terminals] {
+            QObject::connect(socket, &QLocalSocket::readyRead, socket, [socket, &library] {
                 if (!socket->canReadLine()) {
                     if (socket->bytesAvailable() > maxRequestBytes)
                         socket->abort();
@@ -38,7 +39,7 @@ static void serve(QLocalServer &server, Store &store, Terminals &terminals)
                 }
                 QJsonParseError err{};
                 const auto doc = QJsonDocument::fromJson(socket->readLine(maxRequestBytes + 1), &err);
-                const QJsonObject response = doc.isObject() ? dispatch(store, terminals, doc.object())
+                const QJsonObject response = doc.isObject() ? library.dispatch(doc.object())
                                                             : QJsonObject{{"ok", false}, {"error", QStringLiteral("bad request: %1").arg(err.errorString())}};
                 socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
                 socket->disconnectFromServer();
@@ -88,22 +89,9 @@ int main(int argc, char **argv)
     }
 
     ensureProfile();
-    const QString statePath = dir + QStringLiteral("/workspaces.json");
-    QJsonObject state;
-    if (QFile f(statePath); f.open(QIODevice::ReadOnly))
-        state = QJsonDocument::fromJson(f.readAll()).object();
-
-    Store store;
-    store.fromJson(state);
-    MainWindow window(store, statePath);
-    window.restore(state.value("window").toObject());
-    window.save(); // the replayed commands are gone from disk now, so a crash cannot run them twice
-    window.loadConfig();
-    if (store.allSessions().isEmpty()) {
-        const QString ws = store.workspaces.isEmpty() ? store.addWorkspace(QStringLiteral("main")) : store.workspaces.first().id;
-        store.select(store.addSession(ws, {}, {}));
-    }
-    window.show();
+    WindowLibrary library(dir);
+    library.load(); // the windows open at the last quit, each with its saved frame
+    MainWindow &window = *library.active();
 
     QLocalServer server;
     QLocalServer::removeServer(socketPath()); // safe: the lock says no live instance owns it
@@ -111,8 +99,9 @@ int main(int argc, char **argv)
     const bool listening = server.listen(socketPath());
     if (!listening)
         qWarning("control socket %s: %s", qPrintable(socketPath()), qPrintable(server.errorString()));
-    window.setSocketStatus(listening, server.errorString());
-    serve(server, store, window);
+    for (MainWindow *w : library.openWindows())
+        w->setSocketStatus(listening, server.errorString());
+    serve(server, library);
     window.events()->emitEvent(QStringLiteral("app.launched")); // hooks loaded, socket accepting, sessions restored
 
     // SIGTERM (logout, kill) must save like a window close; a self-pipe moves it onto the event loop
@@ -123,7 +112,11 @@ int main(int argc, char **argv)
         for (int sig : {SIGTERM, SIGINT, SIGHUP})
             std::signal(sig, [](int) { [[maybe_unused]] auto n = ::write(sigFd[0], "x", 1); });
     }
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, &window, &MainWindow::save);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &library, [&library] {
+        for (MainWindow *w : library.openWindows())
+            w->save();
+        library.saveIndex();
+    });
     if (const QString shot = qEnvironmentVariable("AGTERM_SCREENSHOT"); !shot.isEmpty()) // dev aid for UI review
         QTimer::singleShot(6000, &window, [&window, shot] { window.grab().save(shot); });
 

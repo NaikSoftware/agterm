@@ -3,6 +3,7 @@
 #include "filepanel.h"
 #include "hooks.h"
 #include "launcher.h"
+#include "library.h"
 #include "palette.h"
 #include "restore.h"
 #include "paths.h"
@@ -319,7 +320,7 @@ QAction *MainWindow::action(const QString &name, const QString &text, const QStr
 {
     auto *a = new QAction(QIcon::fromTheme(icon), text, this);
     a->setShortcut(key);
-    a->setShortcutContext(Qt::ApplicationShortcut);
+    a->setShortcutContext(Qt::WindowShortcut); // each window has its own copy; application-wide copies would be ambiguous
     connect(a, &QAction::triggered, this, slot);
     addAction(a); // shortcuts work with the menu bar hidden
     m_actions.insert(name, a);
@@ -336,6 +337,37 @@ void MainWindow::createMenus()
                            QKeySequence(QStringLiteral("Ctrl+Alt+Shift+N")), [this] { newWorkspace(); }));
     file->addAction(action(QStringLiteral("open_directory"), tr("Open Directory…"), QStringLiteral("folder-open"),
                            QKeySequence(QStringLiteral("Ctrl+Shift+O")), [this] { openDirectory(); }));
+    file->addSeparator();
+    // ⌥⌘N would be Ctrl+Alt+Shift+N, which is ⌘⇧N (New Workspace) here, so New Window takes Ctrl+Alt+N
+    file->addAction(action(QStringLiteral("new_window"), tr("New Window"), QStringLiteral("window-new"), QKeySequence(QStringLiteral("Ctrl+Alt+N")), [this] {
+        if (library)
+            library->newWindow({});
+    }));
+    QMenu *openWindow = file->addMenu(QIcon::fromTheme(QStringLiteral("window")), tr("Open Window"));
+    connect(openWindow, &QMenu::aboutToShow, this, [this, openWindow] {
+        openWindow->clear();
+        if (library)
+            for (const auto &e : library->entries()) {
+                QAction *a = openWindow->addAction(e.name, this, [this, id = e.id] { library->select(id); });
+                a->setCheckable(true);
+                a->setChecked(e.open);
+            }
+    });
+    file->addAction(action(QStringLiteral("rename_window"), tr("Rename Window…"), QStringLiteral("edit-rename"), {}, [this] {
+        bool ok = false;
+        const QString name = library ? askName(tr("Rename Window"), &ok) : QString();
+        if (ok && !name.trimmed().isEmpty())
+            library->rename(windowId, name.trimmed());
+    }));
+    file->addAction(action(QStringLiteral("delete_window"), tr("Delete Window"), QStringLiteral("edit-delete"), {}, [this] {
+        QString error;
+        const int n = int(m_store.allSessions().size());
+        if (!library
+            || (n > 0 && QMessageBox::question(this, tr("Delete Window"), tr("Delete this window and close its %n session(s)?", nullptr, n)) != QMessageBox::Yes))
+            return;
+        if (!library->remove(windowId, &error))
+            statusBar()->showMessage(error, 3000);
+    }));
     file->addSeparator();
     file->addAction(action(QStringLiteral("close_session"), tr("Close Session"), QStringLiteral("tab-close"), QKeySequence(QStringLiteral("Ctrl+Shift+W")),
                            [this] { m_zoomed ? toggleZoom() : closeSessions({m_store.selected}); })); // ⌘W leaves zoom first
@@ -358,7 +390,7 @@ void MainWindow::createMenus()
     file->addAction(action(QStringLiteral("reload_hooks"), tr("Reload Hooks"), QStringLiteral("view-refresh"), {}, [this] { reloadHooks(); }));
     file->addSeparator();
     file->addAction(action(QStringLiteral("quit"), tr("Quit"), QStringLiteral("application-exit"), QKeySequence(QStringLiteral("Ctrl+Shift+Q")),
-                           [this] { close(); }));
+                           [this] { library ? library->quit() : void(close()); }));
 
     auto *session = menuBar()->addMenu(tr("&Session"));
     session->addAction(action(QStringLiteral("rename_session"), tr("Rename Session"), QStringLiteral("edit-rename"), {}, [this] {
@@ -509,6 +541,16 @@ void MainWindow::createMenus()
                           QKeySequence(QStringLiteral("Ctrl+Alt+Up")), [this] { go(QStringLiteral("prev-attention")); }));
     nav->addAction(action(QStringLiteral("next_attention_session"), tr("Next Attention Session"), QStringLiteral("go-down-skip"),
                           QKeySequence(QStringLiteral("Ctrl+Alt+Down")), [this] { go(QStringLiteral("next-attention")); }));
+    nav->addAction(action(QStringLiteral("previous_window"), tr("Previous Window"), {}, {}, [this] {
+        QString e;
+        if (library && !library->go(-1, &e))
+            statusBar()->showMessage(e, 2000);
+    }));
+    nav->addAction(action(QStringLiteral("next_window"), tr("Next Window"), {}, {}, [this] {
+        QString e;
+        if (library && !library->go(1, &e))
+            statusBar()->showMessage(e, 2000);
+    }));
     nav->addAction(action(QStringLiteral("first_session"), tr("First Session"), QStringLiteral("go-top"), {}, [this] { go(QStringLiteral("first")); }));
     nav->addAction(action(QStringLiteral("last_session"), tr("Last Session"), QStringLiteral("go-bottom"), {}, [this] { go(QStringLiteral("last")); }));
 
@@ -622,6 +664,8 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
                      QStringLiteral("AGTERM_SOCKET=") + socketPath(),
                      QStringLiteral("AGTERMCTL=") + appDir + QStringLiteral("/agtermctl"),
                      QStringLiteral("PATH=") + appDir + QLatin1Char(':') + qEnvironmentVariable("PATH")};
+    if (!windowId.isEmpty())
+        argv << QStringLiteral("AGTERM_WINDOW_ID=") + windowId;
     argv << env << shell;
     if (!command.isEmpty())
         argv << QStringLiteral("-c") << command;
@@ -1420,10 +1464,23 @@ MainWindow::~MainWindow()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    // closing one of several windows keeps its bundle for File > Open Window; the last one quits the app
+    if (library && event->spontaneous() && !library->quitting() && library->openWindows().size() > 1 && !m_store.allSessions().isEmpty()) {
+        QString name;
+        for (const auto &e : library->entries())
+            if (e.window == this)
+                name = e.name;
+        const int n = int(m_store.allSessions().size());
+        if (QMessageBox::question(this, tr("Close Window"),
+                                  tr("Close “%1”?").arg(name) + QStringLiteral("\n\n")
+                                      + tr("This ends %n running session(s). The window can be reopened from File ▸ Open Window.", nullptr, n))
+            != QMessageBox::Yes)
+            return event->ignore();
+    }
     m_saveTimer.stop();
     m_store.finalizePending(); // a close still inside its grace is final at quit
     if (m_store.settings.restoreMode != QLatin1String("none")) {
-        captureForeground(m_store, *this); // only a clean quit captures; SIGTERM saves without it
+        captureForeground(m_store, *this); // a quit or close captures; a crash or SIGKILL cannot
     } else {
         for (Session *s : m_store.allSessions())
             s->foreground.clear(), s->splitForeground.clear();
@@ -1431,6 +1488,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
     save();
     m_quitting = true; // parts die with the window from here on; their sessions must stay saved
     QMainWindow::closeEvent(event);
+    if (library)
+        library->windowClosed(this, event->spontaneous());
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)

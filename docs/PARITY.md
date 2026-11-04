@@ -51,7 +51,14 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Workspace filter / focus (`workspace focus on|off|toggle|add`, `workspace filter`; suspends on an outside select; navigation stays inside)
 - [x] Reopen closed session ⌘⇧T, `recent open`
 - [x] Undo close ⌘Z within the 3 s grace (sessions, batches with companions, workspaces; Settings switch; `session close --undoable`)
-- [ ] Multiple windows (library, restore frames)
+- [x] Multiple windows: a library of named windows, each its own tree (`windows.json` + `windows/<id>.json`; an older
+  `workspaces.json` becomes window 1), File ▸ New Window (Ctrl+Alt+N: ⌥⌘N maps to Ctrl+Alt+Shift+N, which is ⌘⇧N New Workspace here),
+  Open Window ▸, Rename Window…, Delete Window, Navigate ▸ Previous/Next Window; closing one of several windows asks and keeps it
+  reopenable, closing the last quits; windows open at quit reopen with their frames and the frontmost in front. Settings are app-wide.
+  `window new|list|select|go|close|rename|delete|resize|move|zoom|fullscreen|minimize`, `--window W` on session/workspace/tree
+  commands (a session id finds its window without it), panes export `AGTERM_WINDOW_ID`. Wayland: `window move` is refused and
+  `window list` omits x/y (a client can neither place nor locate its window there); resize, zoom, fullscreen and minimize work.
+  Not ported: palette "Open Window: <name>" entries, the auto-hide-sidebar-in-background-windows setting, the Dock menu
 - [x] Notifications: `notify`, unseen-count badge, banner click focuses the session, `session seen`
 - [x] Notifications from OSC 9 / 777 inside the terminal (two OSC 9s in one output burst arrive as the last one: Konsole coalesces an attribute); settings: banner, badge, sound, taskbar highlight for the Dock bounce
 - [x] Agent status: dot colours/shapes, blink, status reset (first key / Enter / off), blocked sound, attention includes active, Reset to defaults

@@ -64,6 +64,14 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session hud close
   dashboard <id[:left|:right]>… | --mru [--font-size N | --auto-size]   up to 9 live panes in a view-only grid
   dashboard --close
+  window new [name] [--minimized] | list
+  window select | close | delete | zoom | fullscreen [id]    (id, unique prefix, or active)
+  window rename <id> <name>
+  window go --to next|prev
+  window resize [id] --width W --height H
+  window move [id] --x X --y Y [--display N]   refused on Wayland, which does not let apps place windows
+  window minimize [id] [on|off|toggle]
+  --window W                            address a session/workspace/tree command to that window (default: frontmost)
   restore mode [none|rerun|live]        bare: configured / at launch / active; a mode applies from the next launch
   restore capture                       record each pane's foreground command now (rerun mode)
   restore clear                         forget every captured command
@@ -96,7 +104,7 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "undoable", "companion",
-                            "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close"};
+                            "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized"};
     QStringList pos;
     QHash<QString, QString> opt;
     const QStringList in = app.arguments().mid(1);
@@ -119,7 +127,7 @@ int main(int argc, char **argv)
         return fputs(usage, stderr), 1;
 
     QString cmd = pos.takeFirst();
-    if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore"}.contains(cmd) && !pos.isEmpty())
+    if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore", "window"}.contains(cmd) && !pos.isEmpty())
         cmd += QLatin1Char('.') + pos.takeFirst();
     if (cmd == QLatin1String("filepanel") && pos.value(0) == QLatin1String("width"))
         cmd = QStringLiteral("filepanel.width"), pos.removeFirst();
@@ -228,6 +236,29 @@ int main(int argc, char **argv)
         if (opt.contains(QStringLiteral("block")) && opt.contains(QStringLiteral("wait")))
             return die(QStringLiteral("--block is mutually exclusive with --wait"));
     }
+    copy("window", "window");
+    QString windowTarget;
+    if (cmd.startsWith(QLatin1String("window."))) {
+        static const QStringList modes{"on", "off", "toggle"};
+        if (cmd == QLatin1String("window.new")) {
+            if (!arg.isEmpty())
+                args.insert("name", arg);
+            flag("minimized", "minimized");
+        } else if (cmd == QLatin1String("window.minimize")) {
+            const bool idFirst = !pos.isEmpty() && !modes.contains(pos[0]);
+            windowTarget = idFirst ? pos[0] : QString();
+            if (const QString m = pos.value(idFirst ? 1 : 0); !m.isEmpty())
+                args.insert("mode", m);
+        } else {
+            windowTarget = arg;
+            if (cmd == QLatin1String("window.rename"))
+                args.insert("name", pos.value(1));
+        }
+        args.remove("window");
+        for (const char *k : {"width", "height", "x", "y", "display"})
+            if (opt.contains(QLatin1String(k)))
+                args.insert(QLatin1String(k), opt.value(QLatin1String(k)).toInt());
+    }
     if (cmd == QLatin1String("dashboard")) {
         args.insert("targets", QJsonArray::fromStringList(pos));
         flag("mru", "mru");
@@ -259,6 +290,8 @@ int main(int argc, char **argv)
     if (target.isEmpty() && (cmd.startsWith(QLatin1String("session.")) || cmd.startsWith(QLatin1String("font.")) || cmd == QLatin1String("notify") || cmd == QLatin1String("keymap.run"))
         && cmd != QLatin1String("session.new"))
         target = qEnvironmentVariable("AGTERM_SESSION_ID"); // a pane addresses itself by default
+    if (cmd.startsWith(QLatin1String("window.")))
+        target = windowTarget.isEmpty() ? opt.value(QStringLiteral("target")) : windowTarget;
     if (!target.isEmpty())
         request.insert("target", target);
 
@@ -289,6 +322,18 @@ int main(int argc, char **argv)
             QThread::msleep(200);
         }
     }
+    if (result.contains("windows")) {
+        for (const auto &v : result["windows"].toArray()) {
+            const QJsonObject w = v.toObject();
+            printf("%s %s  %-20s %s\n", w["active"].toBool() ? "*" : " ", qPrintable(w["id"].toString()), qPrintable(w["name"].toString()),
+                   w["open"].toBool() ? "open" : "closed");
+        }
+        return 0;
+    }
+    if (cmd == QLatin1String("window.new"))
+        return printf("%s\n", qPrintable(result["id"].toString())), 0;
+    if (cmd == QLatin1String("window.resize"))
+        return printf("%dx%d\n", result["width"].toInt(), result["height"].toInt()), 0;
     if (result.contains("restore")) {
         const QJsonObject r = result["restore"].toObject();
         printf("configured %s\nat launch  %s\nactive     %s%s\n", qPrintable(r["configured"].toString()), qPrintable(r["requestedAtLaunch"].toString()),

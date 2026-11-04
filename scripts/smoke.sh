@@ -153,6 +153,29 @@ ctl tree | grep -q undo && fail "an undoable close leaves the tree"
 ctl restore capture 2>/dev/null && fail "restore capture outside rerun mode"
 ctl restore mode rerun | grep -q '(restart required)' || fail "restore mode read-back"
 ctl restore capture | grep -q 'captured [1-9]' || fail "restore capture"
+w1=$(ctl window list | awk '$1=="*"{print $2}')
+w2=$(ctl window new second)
+[ "$(ctl window list | grep -c ' open$')" = 2 ] || fail "window new"
+inw2=$(ctl session new --name inw2 --window "$w2" --no-select)
+ctl tree --window "$w2" | grep -q inw2 || fail "session in the second window"
+ctl tree --window "$w1" | grep -q inw2 && fail "windows share a tree"
+ctl session info --target "$inw2" | grep -q '^name  *inw2' || fail "a session id reaches its window"
+ctl session type 'echo WIN=$AGTERM_WINDOW_ID'$'\n' --target "$inw2"
+sleep 1
+ctl session text --target "$inw2" | grep -q "WIN=$w2" || fail "AGTERM_WINDOW_ID"
+r=$(ctl window resize "$w2" --width 700 --height 500); [ "$r" = 700x500 ] || fail "window resize ($r)"
+ctl window rename "$w2" renamed-window
+ctl window list | grep -q renamed-window || fail "window rename"
+ctl window close "$w2"
+ctl window list | grep -q 'renamed-window *closed' || fail "window close keeps the bundle"
+ctl tree --window "$w2" 2>/dev/null && fail "a closed window answers tree"
+ctl window select "$w2"
+ctl tree --window "$w2" | grep -q inw2 || fail "a reopened window keeps its sessions"
+w3=$(ctl window new doomed)
+ctl window delete "$w3"
+ctl window list | grep -q doomed && fail "window delete"
+ctl window go --to next >/dev/null || fail "window go"
+ctl window select "$w1"
 cd /tmp
 ctl session type $'cd /usr\n' --target "$id"
 sleep 1
@@ -164,6 +187,8 @@ ctl tree | grep renamed | grep -q idle || fail "status must not survive a restar
 ctl tree | grep renamed | grep -q '/usr' || fail "cwd not tracked"
 ctl tree --json | grep -q '"tint":"red"' || fail "tint not restored"
 ctl restore mode | grep -q 'active     rerun' || fail "restore mode at launch"
+[ "$(ctl window list | grep -c ' open$')" = 2 ] || fail "open windows reopen at launch"
+ctl tree --window "$w2" | grep -q inw2 || fail "second window restored"
 for _ in $(seq 20); do ctl session info --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
 ctl session info --target src | grep -qE '^foreground +sleep' || fail "rerun restore replays the captured command"
 stop

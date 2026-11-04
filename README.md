@@ -45,6 +45,7 @@ cmake --install build && kbuildsycoca6 --noincremental
   shell commands with `{AGT_*}` tokens (Ctrl+Alt+O lists them), and run scripts on control events. Both files start
   as commented references; File ▸ Edit Keymap… / Reload Keymap and the Hooks pair apply them.
 - Programs in a pane can raise notifications with OSC 9 or OSC 777 (`printf '\e]9;done\a'`).
+- Several windows, each with its own workspaces (File ▸ New Window, Open Window); the ones open at quit come back.
 - A dashboard (Ctrl+Alt+Shift+G, or `agtermctl dashboard <ids>`) shows up to nine live panes side by side, view-only,
   with each session's name in its status colour; Enter or a click opens one.
 - Restore sessions (Settings ▸ General): fresh shells, or re-run commands, which records what each pane runs at quit
@@ -63,6 +64,7 @@ ctrl+alt+shift), next to plain `ctrl`, `shift`, `alt` and `super`.
 | Key | Action |
 | --- | --- |
 | Ctrl+Shift+N / Ctrl+Alt+Shift+N | New session / new workspace |
+| Ctrl+Alt+N | New window (agterm's ⌥⌘N; its literal mapping is taken by New Workspace) |
 | Ctrl+Shift+O | Open directory as a session |
 | Ctrl+Shift+W | Close session (leaves terminal zoom first) |
 | Ctrl+Shift+Z | Undo a close within its 3 s grace (Settings can turn the grace off) |
@@ -92,7 +94,7 @@ clears its dot (Settings sets on the first key, on Enter, or never).
 
 ## Control API
 
-Every pane exports `AGTERM_SESSION_ID`, `AGTERM_WORKSPACE_ID`, `AGTERM_PANE`, `AGTERM_SOCKET` and `AGTERMCTL`, so
+Every pane exports `AGTERM_WINDOW_ID`, `AGTERM_SESSION_ID`, `AGTERM_WORKSPACE_ID`, `AGTERM_PANE`, `AGTERM_SOCKET` and `AGTERMCTL`, so
 `agtermctl` inside a pane addresses its own session. Targets are an id, a unique id prefix, an exact name, or
-`active`. `agtermctl --help` lists the commands; the wire format is agterm's (one JSON request line, one response
+`active`; `--window` picks a window other than the frontmost. `agtermctl --help` lists the commands; the wire format is agterm's (one JSON request line, one response
 line) on `<state dir>/agterm.sock`. The state dir is `~/.local/share/agterm-qt`, or `AGTERM_STATE_DIR`.
