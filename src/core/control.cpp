@@ -9,6 +9,8 @@
 #include <QJsonArray>
 #include <QRegularExpression>
 
+#include <cmath>
+
 static QJsonObject ok(const QJsonObject &result = {})
 {
     return {{"ok", true}, {"result", result}};
@@ -60,6 +62,107 @@ int captureForeground(Store &store, Terminals &terminals)
 }
 
 static const char *const liveUnavailable = "live sessions need a detached session daemon (master uses zmx), which agterm-qt does not have";
+
+QStringList dashboardCells(Store &store, const QStringList &targets, bool mru, QString *notes, QString *error)
+{
+    static const QStringList left{"primary", "left", "top"}, right{"split", "right", "bottom"};
+    QList<std::pair<QString, QString>> wanted; // session target, "" | left | right
+    if (mru) {
+        for (const QString &id : store.recent)
+            if (store.session(id) && wanted.size() < 9)
+                wanted.append({id, {}});
+        if (wanted.isEmpty())
+            return *error = QStringLiteral("no recent sessions"), QStringList();
+    }
+    for (const QString &t : targets) {
+        const qsizetype colon = t.indexOf(QLatin1Char(':'));
+        const QString suffix = colon < 0 ? QString() : t.mid(colon + 1).toLower();
+        if (colon == 0 || (colon > 0 && !left.contains(suffix) && !right.contains(suffix)))
+            return *error = QStringLiteral("dashboard: invalid session id '%1' — use <id>, <id>:left, or <id>:right").arg(t), QStringList();
+        wanted.append({colon < 0 ? t : t.left(colon), suffix.isEmpty() ? QString() : left.contains(suffix) ? QStringLiteral("left") : QStringLiteral("right")});
+    }
+    QStringList cells, dropped;
+    for (const auto &[target, pane] : wanted) {
+        QString e;
+        const QString id = store.resolveSession(target, &e);
+        if (id.isEmpty() || (pane == QLatin1String("right") && !store.session(id)->hasSplit)) {
+            dropped << (id.isEmpty() ? e : QStringLiteral("%1 has no split").arg(target));
+            continue;
+        }
+        QStringList panes{pane.isEmpty() ? QStringLiteral("left") : pane};
+        if (pane.isEmpty() && store.session(id)->hasSplit)
+            panes << QStringLiteral("right");
+        for (const QString &p : panes)
+            if (!cells.contains(id + QLatin1Char(':') + p))
+                cells << id + QLatin1Char(':') + p;
+    }
+    QStringList parts;
+    if (!dropped.isEmpty())
+        parts << QStringLiteral("dropped %1").arg(dropped.join(QStringLiteral(", ")));
+    if (cells.size() > 9) {
+        parts << QStringLiteral("dropped %1 pane(s) beyond the 9-cell limit").arg(cells.size() - 9);
+        cells = cells.mid(0, 9);
+    }
+    *notes = parts.join(QStringLiteral("; "));
+    return cells;
+}
+
+std::pair<int, int> dashboardGrid(int count)
+{
+    const int n = qBound(1, count, 9);
+    const int cols = int(std::ceil(std::sqrt(double(n))));
+    return {cols, (n + cols - 1) / cols};
+}
+
+double dashboardFontFactor(int cols, int rows)
+{
+    if (cols == 1 && rows == 1)
+        return 1.0;
+    if (cols == 2 && rows == 1)
+        return 0.85;
+    if (cols == 2 && rows == 2)
+        return 0.75;
+    if (cols == 3 && rows == 2)
+        return 0.62;
+    return 0.55;
+}
+
+static QJsonObject dashboard(Store &store, Terminals &terminals, const QJsonObject &args)
+{
+    QStringList targets;
+    for (const auto &v : args.value("targets").toArray())
+        targets << v.toString();
+    const bool mru = args.value("mru").toBool(), autoSize = args.value("autoSize").toBool(), sized = args.contains("fontSize");
+    QString error, notes;
+    QJsonObject result;
+    if (args.value("close").toBool()) {
+        if (!targets.isEmpty() || mru || sized || autoSize)
+            return fail(QStringLiteral("dashboard --close takes no ids, --mru, or font options"));
+        return terminals.appCommand(QStringLiteral("dashboard"), {}, {{"close", true}}, &result, &error) ? ok(result) : fail(error);
+    }
+    if (sized && autoSize)
+        return fail(QStringLiteral("dashboard: --font-size is mutually exclusive with --auto-size"));
+    const double size = args.value("fontSize").toDouble();
+    if (sized && !(size > 0 && std::isfinite(size)))
+        return fail(QStringLiteral("dashboard --font-size must be a positive number"));
+    if (mru && !targets.isEmpty())
+        return fail(QStringLiteral("dashboard --mru cannot be combined with explicit session ids"));
+    if (!mru && targets.isEmpty())
+        return fail(QStringLiteral("dashboard requires at least one session id"));
+    const QStringList cells = dashboardCells(store, targets, mru, &notes, &error);
+    if (!error.isEmpty())
+        return fail(error);
+    if (cells.isEmpty())
+        return fail(notes.isEmpty() ? QStringLiteral("dashboard requires at least one session id") : notes);
+    QJsonObject app{{"cells", QJsonArray::fromStringList(cells)}, {"fontMode", sized ? "fixed" : autoSize ? "auto" : "untouched"}};
+    if (sized)
+        app.insert("fontSize", size);
+    if (!terminals.appCommand(QStringLiteral("dashboard"), {}, app, &result, &error))
+        return fail(error);
+    if (!notes.isEmpty())
+        result.insert("text", notes);
+    return ok(result);
+}
 
 static QJsonObject restoreCommand(Store &store, Terminals &terminals, const QString &cmd, const QJsonObject &args)
 {
@@ -420,6 +523,8 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             return fail(error);
         return ok(result);
     }
+    if (cmd == QLatin1String("dashboard"))
+        return dashboard(store, terminals, args);
     if (cmd.startsWith(QLatin1String("restore.")))
         return restoreCommand(store, terminals, cmd, args);
     if (cmd == QLatin1String("recent.open")) {

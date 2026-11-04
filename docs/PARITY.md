@@ -84,6 +84,12 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   `--width/--height`, `--pane left|right`, `--wait`, `--follow`, CLI `--block`), View ▸ Hide/Show Overlays Ctrl+Alt+Shift+J;
   read-back `overlay`, `overlaySizePercent`, `overlayWidth/Height`, `paneOverlays`, `hiddenOverlays`.
   `--background-color` tints the floating frame only (Konsole takes colours from the profile); `overlay copy` is not ported
+- [x] Dashboard Ctrl+Alt+Shift+G (Navigate ▸ Dashboard, palette: the MRU grid, auto-sized; again closes), `dashboard <id[:left|:right]>…
+  | --mru [--font-size N | --auto-size] | --close`; ≤9 cells, ceil(√n) columns, master's auto font factors; the cells are the live
+  Konsole panes themselves, re-hosted view-only (arrows without wrap, Enter or click opens that pane, Esc closes) with a name chip in
+  the status colour, pulsing while it blinks; members that go away are dropped. Read-back `dashboardMembers`, `dashboardHighlighted`,
+  `dashboardFontMode`, `dashboardFontSize`. Not ported: the title-bar grid button (an Interface element), the label shown for a
+  pane under an overlay (the overlay stays on the session page)
 - [ ] Page overlays (`--html`, `--url`, `--image`, `--markdown`, `--text`): blocked, they need Qt WebEngine (`qt6-webengine-dev`),
   which is not installed; the command refuses them with that reason
 - [x] HUD: `session hud open|update|close` (markdown, detail, spinner styles, nine positions, colours, font size, width percent,

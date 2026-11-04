@@ -9,6 +9,7 @@
 #include <QPointer>
 #include <QTimer>
 
+class QFrame;
 class QKeyEvent;
 class QLabel;
 class QMenu;
@@ -22,6 +23,9 @@ struct Session;
 class TerminalInterface;
 class PartBridge;
 namespace KParts { class ReadOnlyPart; }
+
+QWidget *terminalDisplay(KParts::ReadOnlyPart *part); // the part's Konsole::TerminalDisplay
+void zoomFontTo(QWidget *display, double points);
 
 class MainWindow : public QMainWindow, public Terminals
 {
@@ -102,6 +106,33 @@ private:
     QWidget *paneWidget(const QString &id, const QString &pane) const;
     QRect overlayTarget(const QString &id, const QString &pane) const;
     KParts::ReadOnlyPart *coverPart(const QString &id) const;
+    // dashboard.cpp
+    struct DashCell {
+        QString ref; // "<session>:left|right"
+        QPointer<QWidget> widget;
+        QPointer<QSplitter> home; // the session's splitter it returns to, at index
+        int index = 0;
+        bool wasVisible = true;
+        QFrame *frame = nullptr;
+        QLabel *chip = nullptr;
+        double font = 0; // the pane's size before the grid's transient one
+    };
+    QWidget *m_dashboard = nullptr;
+    QList<DashCell> m_dashCells;
+    int m_dashHighlight = 0;
+    QString m_dashFontMode;
+    double m_dashFontSize = 0;
+    QTimer m_dashBlink;
+    bool m_dashBlinkOn = false;
+    bool openDashboard(const QStringList &cells, const QString &fontMode, double fontSize, QString *error);
+    void closeDashboard();
+    void toggleDashboard();
+    void activateDashboardCell(int i);
+    void refreshDashboard();
+    void dashboardForget(const QString &id);
+    bool dashboardEvent(QObject *watched, QEvent *event);
+    bool dashboardCommand(const QJsonObject &args, QJsonObject *result, QString *error);
+    QJsonObject dashboardState() const;
     void applyLayout(const QString &id);
     void paneExited(const QString &id, KParts::ReadOnlyPart *part);
     void swapPanes(const QString &id);

@@ -79,6 +79,12 @@ ctl session hud 'building' --position top --spinner --target "$id"
 ctl tree --json | grep -q '"position":"top-center"' || fail "hud read-back"
 ctl session hud close --target "$id"
 ctl session hud close --target "$id" 2>/dev/null && fail "hud close is not idempotent"
+ctl dashboard "$first" "$id" --font-size 9 >/dev/null
+ctl tree --json | grep -qF "\"dashboardMembers\":[\"$first:left\",\"$id:left\"]" || fail "dashboard members"
+ctl tree --json | grep -q '"dashboardFontMode":"fixed"' || fail "dashboard font mode"
+ctl dashboard "$id:scratch" 2>/dev/null && fail "dashboard accepted a bad pane suffix"
+ctl dashboard --close
+ctl tree --json | grep -q dashboardMembers && fail "dashboard --close"
 bg=$(ctl session new --name bg --no-select) # a notification for the session in front of you is not a badge
 ctl notify --title smoke --body hi --target "$bg"
 ctl session info --target "$bg" | grep -qE '^unseen +1' || fail "unseen badge"

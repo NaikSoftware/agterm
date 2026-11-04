@@ -62,6 +62,8 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
               [--hide-after SECONDS] [--pane left|right]      a passive panel; the session stays typable
   session hud update <message> ...      replaces the whole panel (font size and background stay)
   session hud close
+  dashboard <id[:left|:right]>… | --mru [--font-size N | --auto-size]   up to 9 live panes in a view-only grid
+  dashboard --close
   restore mode [none|rerun|live]        bare: configured / at launch / active; a mode applies from the next launch
   restore capture                       record each pane's foreground command now (rerun mode)
   restore clear                         forget every captured command
@@ -94,7 +96,7 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "undoable", "companion",
-                            "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear"};
+                            "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close"};
     QStringList pos;
     QHash<QString, QString> opt;
     const QStringList in = app.arguments().mid(1);
@@ -225,6 +227,14 @@ int main(int argc, char **argv)
         }
         if (opt.contains(QStringLiteral("block")) && opt.contains(QStringLiteral("wait")))
             return die(QStringLiteral("--block is mutually exclusive with --wait"));
+    }
+    if (cmd == QLatin1String("dashboard")) {
+        args.insert("targets", QJsonArray::fromStringList(pos));
+        flag("mru", "mru");
+        flag("auto-size", "autoSize");
+        flag("close", "close");
+        if (opt.contains(QStringLiteral("font-size")))
+            args.insert("fontSize", opt.value(QStringLiteral("font-size")).toDouble());
     }
     if (cmd == QLatin1String("restore.mode") && !arg.isEmpty())
         args.insert("mode", arg);

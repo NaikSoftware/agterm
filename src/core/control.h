@@ -85,5 +85,12 @@ QString overlayArgsError(const QString &cmd, QJsonObject *args);
 // returns how many slots hold a command.
 int captureForeground(Store &store, Terminals &terminals);
 
+// Dashboard members as "<session>:left|right" in grid order: a bare id expands to its panes, duplicates and unknown
+// ids drop, at most 9 cells. *notes says what was dropped; "" with *error on a malformed request.
+QStringList dashboardCells(Store &store, const QStringList &targets, bool mru, QString *notes, QString *error);
+// master's grid: cols = ceil(sqrt(n)), rows = ceil(n / cols); and the auto font factor for that shape
+std::pair<int, int> dashboardGrid(int count);
+double dashboardFontFactor(int cols, int rows);
+
 // One request object ({cmd, target, args}) in, one response ({ok, result | error}) out.
 QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &request);

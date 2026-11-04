@@ -650,6 +650,40 @@ private Q_SLOTS:
         QCOMPARE(call(s, t, "restore.mode", {}, {{"mode", "live"}})["result"]["restore"]["active"].toString(), QStringLiteral("none"));
     }
 
+    void dashboardTargetsExpandDropAndTrim()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString ws = s.addWorkspace("w");
+        QStringList ids;
+        for (int i = 0; i < 10; ++i)
+            ids << s.addSession(ws, QStringLiteral("s%1").arg(i), {});
+        s.setSplit(ids[0], true, false, "vertical"); // a hidden split still gets its cell
+        QString notes, error;
+        QCOMPARE(dashboardCells(s, {ids[0], ids[1] + ":RIGHT", ids[1] + ":top", ids[0] + ":left"}, false, &notes, &error),
+                 (QStringList{ids[0] + ":left", ids[0] + ":right", ids[1] + ":left"}));
+        QVERIFY(notes.contains("has no split"));
+        dashboardCells(s, {ids[0] + ":scratch"}, false, &notes, &error);
+        QCOMPARE(error, QStringLiteral("dashboard: invalid session id '%1:scratch' — use <id>, <id>:left, or <id>:right").arg(ids[0]));
+        error.clear();
+        QCOMPARE(dashboardCells(s, ids, false, &notes, &error).size(), 9);
+        QCOMPARE(notes, QStringLiteral("dropped 2 pane(s) beyond the 9-cell limit"));
+        QCOMPARE(dashboardGrid(5), (std::pair<int, int>{3, 2}));
+        QCOMPARE(dashboardGrid(4), (std::pair<int, int>{2, 2}));
+        QCOMPARE(dashboardFontFactor(3, 2), 0.62);
+        auto err = [&](const QJsonObject &args) { return call(s, t, "dashboard", {}, args)["error"].toString(); };
+        QCOMPARE(err({}), QStringLiteral("dashboard requires at least one session id"));
+        QCOMPARE(err({{"mru", true}}), QStringLiteral("no recent sessions"));
+        QCOMPARE(err({{"close", true}, {"mru", true}}), QStringLiteral("dashboard --close takes no ids, --mru, or font options"));
+        QCOMPARE(err({{"targets", QJsonArray{ids[0]}}, {"fontSize", 10}, {"autoSize", true}}), QStringLiteral("dashboard: --font-size is mutually exclusive with --auto-size"));
+        QCOMPARE(err({{"targets", QJsonArray{ids[0]}}, {"fontSize", -1}}), QStringLiteral("dashboard --font-size must be a positive number"));
+        s.select(ids[2]);
+        QCOMPARE(err({{"targets", QJsonArray{ids[0]}}, {"mru", true}}), QStringLiteral("dashboard --mru cannot be combined with explicit session ids"));
+        QVERIFY(call(s, t, "dashboard", {}, {{"mru", true}, {"autoSize", true}})["ok"].toBool());
+        QCOMPARE(t.appArgs["cells"].toArray(), (QJsonArray{ids[2] + ":left"}));
+        QCOMPARE(t.appArgs["fontMode"].toString(), QStringLiteral("auto"));
+    }
+
     void treeAndUnknownCommand()
     {
         Store s;

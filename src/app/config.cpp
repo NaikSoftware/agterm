@@ -443,6 +443,8 @@ bool MainWindow::appCommand(const QString &cmd, const QString &sessionId, const 
 {
     if (cmd.startsWith(QLatin1String("session.overlay.")) || cmd.startsWith(QLatin1String("session.hud.")))
         return overlayCommand(cmd, sessionId, args, result, error);
+    if (cmd == QLatin1String("dashboard"))
+        return dashboardCommand(args, result, error);
     auto diagnostics = [](const QList<KeymapDiagnostic> &list) {
         QJsonArray out;
         for (const auto &d : list)

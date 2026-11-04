@@ -289,6 +289,46 @@ private Q_SLOTS:
         qunsetenv("VISUAL");
     }
 
+    void dashboardHostsTheLivePanesAndGivesThemBack()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("dash.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, {}, {});
+        const QString b = store.addSession(ws, {}, {});
+        store.select(a);
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QWidget *termA = display(w);
+        QVERIFY(termA);
+        QJsonObject result;
+        QString error;
+        QVERIFY2(w.appCommand("dashboard", {}, {{"cells", QJsonArray{a + ":left", b + ":left"}}, {"fontMode", "untouched"}}, &result, &error), qPrintable(error));
+        QCOMPARE(w.chromeState()["dashboardMembers"].toArray().size(), 2);
+        QWidget *grid = QApplication::focusWidget();
+        QVERIFY(grid && grid->isAncestorOf(termA)); // the live terminal, not a copy
+        QCOMPARE(w.windowTitle(), QStringLiteral("Dashboard"));
+        QTest::keyClick(grid, Qt::Key_Right);
+        QCOMPARE(w.chromeState()["dashboardHighlighted"].toString(), b + ":left");
+        QTest::keyClick(grid, Qt::Key_Right); // no wrap
+        QCOMPARE(w.chromeState()["dashboardHighlighted"].toString(), b + ":left");
+        QTest::keyClick(grid, Qt::Key_X); // typing goes nowhere
+        QTest::keyClick(grid, Qt::Key_Return);
+        QCOMPARE(store.selected, b);
+        QVERIFY(!w.chromeState().contains("dashboardMembers"));
+        for (QWidget *up = termA; up; up = up->parentWidget())
+            QVERIFY(up->objectName() != QLatin1String("dashCell")); // back in its own splitter
+
+        w.namedAction("dashboard")->trigger(); // the MRU grid with auto-size
+        QCOMPARE(w.chromeState()["dashboardFontMode"].toString(), QStringLiteral("auto"));
+        store.removeSession(a); // a member that goes away leaves the grid to the survivors
+        QTRY_COMPARE(w.chromeState()["dashboardMembers"].toArray(), (QJsonArray{b + ":left"}));
+        QTest::keyClick(QApplication::focusWidget(), Qt::Key_Escape);
+        QVERIFY(!w.chromeState().contains("dashboardMembers"));
+    }
+
     void selectingASessionUpdatesTheSidebarInPlace()
     {
         Store store;

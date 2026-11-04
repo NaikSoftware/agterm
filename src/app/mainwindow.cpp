@@ -57,7 +57,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-static QWidget *terminalDisplay(KParts::ReadOnlyPart *part)
+QWidget *terminalDisplay(KParts::ReadOnlyPart *part)
 {
     if (part)
         for (QWidget *w : part->widget()->findChildren<QWidget *>())
@@ -69,7 +69,7 @@ static QWidget *terminalDisplay(KParts::ReadOnlyPart *part)
 // The part exposes no font API and its zoom actions live only in Konsole's main window, so this drives
 // the display's own Ctrl+wheel zoom, one point per notch.
 // shortcut: a profile with MouseWheelZoomEnabled=false makes this a no-op; upgrade if the part grows a font API
-static void zoomFontTo(QWidget *display, double points)
+void zoomFontTo(QWidget *display, double points)
 {
     for (int guard = 0; display && guard < 200; ++guard) {
         const double now = display->font().pointSizeF();
@@ -229,6 +229,11 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     m_agentTimer.setInterval(2000);
     connect(&m_agentTimer, &QTimer::timeout, this, &MainWindow::sampleAgents);
     m_agentTimer.start();
+    m_dashBlink.setInterval(600);
+    connect(&m_dashBlink, &QTimer::timeout, this, [this] {
+        m_dashBlinkOn = !m_dashBlinkOn;
+        refreshDashboard();
+    });
 
     connect(&m_store, &Store::changed, this, [this] {
         syncChrome();
@@ -244,6 +249,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     connect(&m_store, &Store::sessionRemoved, this, [this](const QString &id) {
         m_sessions.remove(id);
         forgetOverlays(id);
+        dashboardForget(id); // its panes go back home first, so they die with the view
         // taken first, so the parts dying with their view are not mistaken for shells that exited
         if (Panes p = m_panes.take(id); p.view)
             p.view->deleteLater(); // closes the ptys, which hangs up the shells
@@ -492,6 +498,8 @@ void MainWindow::createMenus()
                                   m_palette->open({}, sessionItems(true), true);
                               m_palette->step(-1);
                           }));
+    nav->addAction(action(QStringLiteral("dashboard"), tr("Dashboard"), QStringLiteral("view-grid"), QKeySequence(QStringLiteral("Ctrl+Alt+Shift+G")),
+                          [this] { toggleDashboard(); }));
     nav->addSeparator();
     nav->addAction(action(QStringLiteral("previous_session"), tr("Previous Session"), QStringLiteral("go-up"),
                           QKeySequence(QStringLiteral("Ctrl+Alt+Shift+Up")), [this] { go(QStringLiteral("prev")); }));
@@ -748,6 +756,7 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
             m_store.removeSession(id);
         }
     }
+    dashboardForget(id);
 }
 
 void MainWindow::newCompanion(const QString &parentId)
@@ -868,6 +877,8 @@ void MainWindow::focusPane(bool right)
 void MainWindow::toggleZoom()
 {
     // a view mode: everything but the terminal hides, and comes back exactly as it was
+    if (m_dashboard && !m_zoomed)
+        closeDashboard();
     m_zoomed = !m_zoomed;
     if (m_zoomed) {
         m_zoomRestoreSidebar = m_sidebarPanel->isVisible();
@@ -903,8 +914,12 @@ bool MainWindow::filePanel(const QString &mode, int width, QString *)
 
 QJsonObject MainWindow::chromeState() const
 {
-    return {{"sidebarVisible", !m_sidebarPanel->isHidden()},
-            {"filePanel", QJsonObject{{"visible", !m_filePanel->isHidden()}, {"width", m_filePanelWidth}}}};
+    QJsonObject out{{"sidebarVisible", !m_sidebarPanel->isHidden()},
+                    {"filePanel", QJsonObject{{"visible", !m_filePanel->isHidden()}, {"width", m_filePanelWidth}}}};
+    const QJsonObject dash = dashboardState();
+    for (auto it = dash.begin(); it != dash.end(); ++it)
+        out.insert(it.key(), it.value());
+    return out;
 }
 
 TerminalInterface *MainWindow::terminal(const QString &id) const
@@ -995,6 +1010,11 @@ QJsonObject MainWindow::info(const QString &sessionId)
 
 void MainWindow::showSelected()
 {
+    if (m_dashboard) { // a status repaint keeps the grid; picking another session leaves it
+        if (m_store.selected == m_shownId)
+            return refreshDashboard();
+        return closeDashboard();
+    }
     const Session *s = m_store.session(m_store.selected);
     const Panes p = m_panes.value(m_store.selected);
     m_stack->setCurrentWidget(p.view ? p.view : m_empty);
@@ -1424,6 +1444,8 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         }
         return true;
     }
+    if (dashboardEvent(watched, event))
+        return true;
     if (event->type() == QEvent::Resize && watched->property("agtermOverlayHost").isValid())
         layoutOverlays(watched->property("agtermOverlayHost").toString());
     if (event->type() == QEvent::KeyPress && !m_quitting) {
