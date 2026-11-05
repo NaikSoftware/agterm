@@ -140,6 +140,7 @@ private Q_SLOTS:
         w.restore({});
         const QString ws = store.addWorkspace("w");
         const QString front = store.addSession(ws, {}, {}), back = store.addSession(ws, {}, {});
+        store.settings.notificationsEnabled = false; // the badge is under test, not the desktop banner
         store.select(front);
         w.show();
         w.activateWindow();
