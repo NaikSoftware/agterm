@@ -638,6 +638,16 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
     QTreeWidget::mousePressEvent(event);
 }
 
+QItemSelectionModel::SelectionFlags Sidebar::selectionCommand(const QModelIndex &index, const QEvent *event) const
+{
+    // the shown session always stays selected: a workspace row or a Ctrl-click on it would deselect it
+    const QItemSelectionModel::SelectionFlags command = QTreeWidget::selectionCommand(index, event);
+    if (!(index.flags() & Qt::ItemIsSelectable)
+        || (index.data(Id).toString() == m_store.selected && command & (QItemSelectionModel::Toggle | QItemSelectionModel::Deselect)))
+        return QItemSelectionModel::NoUpdate;
+    return command;
+}
+
 void Sidebar::mouseDoubleClickEvent(QMouseEvent *event)
 {
     if (QTreeWidgetItem *item = itemAt(event->position().toPoint())) {

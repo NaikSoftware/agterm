@@ -541,6 +541,28 @@ private Q_SLOTS:
         QVERIFY(!tree.topLevelItem(0)->isExpanded());
     }
 
+    void clicksNeverDeselectTheShownSession()
+    {
+        Store store;
+        const QString ws = store.addWorkspace("w");
+        const QString s1 = store.addSession(ws, "s1", {});
+        store.addSession(ws, "s2", {});
+        store.select(s1);
+        Sidebar tree(store);
+        tree.resize(300, 400);
+        tree.show();
+        tree.rebuild();
+        QVERIFY(QTest::qWaitForWindowExposed(&tree));
+        auto shown = [&] { return tree.selectedSessionIds() == QStringList{s1}; };
+        QVERIFY(shown());
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, QPoint(150, 390));
+        QVERIFY(shown());
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, Qt::ControlModifier, tree.visualItemRect(tree.topLevelItem(0)->child(0)).center());
+        QVERIFY(shown());
+        QTest::mouseClick(tree.viewport(), Qt::LeftButton, {}, tree.visualItemRect(tree.topLevelItem(0)).topLeft() + QPoint(5, 5));
+        QVERIFY(shown());
+    }
+
     void editorsFlagAndMarkLive()
     {
         Store store;
