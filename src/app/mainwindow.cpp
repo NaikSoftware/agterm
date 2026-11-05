@@ -710,7 +710,9 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
     if (!windowId.isEmpty())
         argv << QStringLiteral("AGTERM_WINDOW_ID=") + windowId;
     QString live;
-    if ((pane == QLatin1String("main") || pane == QLatin1String("right")) && m_store.restoreModeAtLaunch == QLatin1String("live"))
+    // without the host binary the pane would exit at once and take its session with it, so it gets a plain shell
+    if ((pane == QLatin1String("main") || pane == QLatin1String("right")) && m_store.restoreModeAtLaunch == QLatin1String("live")
+        && QFile::exists(appDir + QStringLiteral("/agterm-session-host")))
         live = Live::socket(stateDir(), id, pane), Live::makeDir(stateDir());
     const bool reattach = !live.isEmpty() && Live::alive(live);
     if (pane == QLatin1String("main") || pane == QLatin1String("right")) { // msg.* addresses a pane by it; a respawn gets a new one

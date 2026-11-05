@@ -205,8 +205,12 @@ struct Modes {
     if (child > 0)
         ::kill(-child, SIGHUP); // the shell leads its own session; closing the master hangs up the rest
     ::close(master);
-    if (child > 0)
+    for (int i = 0; child > 0 && i < 20 && ::waitpid(child, nullptr, WNOHANG) == 0; ++i)
+        ::usleep(50000);
+    if (child > 0 && ::waitpid(child, nullptr, WNOHANG) == 0) { // a shell ignoring SIGHUP must not keep the daemon
+        ::kill(-child, SIGKILL);
         ::waitpid(child, nullptr, 0);
+    }
     _exit(0);
 }
 

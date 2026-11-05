@@ -112,9 +112,13 @@ int main(int argc, char **argv)
     library.load(); // the windows open at the last quit, each with its saved frame
     MainWindow &window = *library.active();
     // Fresh shells and Re-run launches end every daemon a live run left, as master's reap; a live one has reattached
-    if (const auto &es = library.entries(); !es.isEmpty() && es.first().store && es.first().store->restoreModeAtLaunch != QLatin1String("live"))
-        for (const QString &live : Live::sockets(dir))
-            Live::kill(live);
+    for (const auto &e : library.entries())
+        if (e.store) { // a window closed at the last quit has no store loaded
+            if (e.store->restoreModeAtLaunch != QLatin1String("live"))
+                for (const QString &live : Live::sockets(dir))
+                    Live::kill(live);
+            break;
+        }
 
     QLocalServer server;
     QLocalServer::removeServer(socketPath()); // safe: the lock says no live instance owns it
