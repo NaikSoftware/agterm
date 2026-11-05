@@ -850,7 +850,7 @@ QString Store::takeReplay(const QString &id, bool split, const QStringList &deny
     if (!s)
         return {};
     const QStringList argv = std::exchange(split ? s->splitReplay : s->replay, {});
-    if (restoreModeAtLaunch != QLatin1String("rerun"))
+    if (restoreModeAtLaunch != QLatin1String("rerun") && restoreModeAtLaunch != QLatin1String("live")) // live: for a daemon that is gone
         return {};
     if (const auto &pin = split ? s->splitRestorePin : s->restorePin)
         return *pin; // typed verbatim, past the denylist

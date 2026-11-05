@@ -51,8 +51,9 @@ cmake --install build && kbuildsycoca6 --noincremental
 - Several windows, each with its own workspaces (File ▸ New Window, Open Window); the ones open at quit come back.
 - A dashboard (Ctrl+Alt+Shift+G, the title-bar grid button, or `agtermctl dashboard <ids>`) shows up to nine live panes side by side, view-only,
   with each session's name in its status colour; Enter or a click opens one.
-- Restore sessions (Settings ▸ General): fresh shells, or re-run commands, which records what each pane runs at quit
-  and types it into its new shell on the next launch (`restore-denylist.conf` lists programs to leave out).
+- Restore sessions (Settings ▸ General): fresh shells; re-run commands, which records what each pane runs at quit
+  and types it into its new shell on the next launch (`restore-denylist.conf` lists programs to leave out); or live
+  sessions, where each pane's shell keeps running in an `agterm-session-host` daemon and the next launch reattaches it.
 - Overlays: `agtermctl session overlay open <command>` runs a program in a temporary terminal over a session (full,
   floating with `--size-percent`, or one split pane with `--pane`); it closes when the program exits and
   `overlay result` (or `--block`) returns the status. Ctrl+Alt+Shift+J hides and shows them. `session hud` puts a

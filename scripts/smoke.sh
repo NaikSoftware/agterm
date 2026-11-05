@@ -16,7 +16,9 @@ start() {
 stop() { kill "$pid"; wait "$pid" 2>/dev/null || true; }
 fail() { echo "FAIL: $*"; ctl tree || true; stop; exit 1; }
 fail0() { echo "FAIL: $*"; exit 1; } # before the app runs
-trap 'kill $pid 2>/dev/null || true; rm -rf "$AGTERM_STATE_DIR"' EXIT
+livedir=${XDG_RUNTIME_DIR:-/tmp}/agterm-qt-$(printf %s "$AGTERM_STATE_DIR" | sha1sum | cut -c1-8)
+reap() { for s in "$livedir"/*.main "$livedir"/*.right; do [ -S "$s" ] && "$bin/agterm-session-host" --kill "$s"; done; rm -rf "$livedir"; }
+trap 'kill $pid 2>/dev/null || true; reap; rm -rf "$AGTERM_STATE_DIR"' EXIT
 
 mkdir -p "$AGTERM_STATE_DIR/config" # an isolated state dir keeps keymap.conf and hooks.conf there too
 mkdir -p "$AGTERM_STATE_DIR/windows" # prior state: no first-launch welcome
@@ -251,5 +253,29 @@ ctl restore mode | grep -q 'active     rerun' || fail "restore mode at launch"
 ctl tree --window "$w2" | grep -q inw2 || fail "second window restored"
 for _ in $(seq 20); do ctl session info --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
 ctl session info --target src | grep -qE '^foreground +sleep' || fail "rerun restore replays the captured command"
+ctl restore mode live >/dev/null
+stop
+
+start # live: every pane starts its daemon, and the captured sleep is replayed into the fresh shell once
+ctl restore mode | grep -q 'active     live' || fail "live mode at launch"
+for _ in $(seq 20); do ctl session info --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
+spid=$(ctl session info --target src | awk '/^foregroundPid /{print $2}')
+[ -n "$spid" ] && [ "$spid" -gt 0 ] || fail "live pane foreground"
+ctl session type $'LIVE_VAR=kept\n' --target renamed
+sleep 0.5
+stop
+kill -0 "$spid" 2>/dev/null || fail "a live pane's program outlives the app"
+
+start
+for _ in $(seq 20); do ctl session info --target src | grep -qE '^foreground +sleep' && break; sleep 0.2; done
+[ "$(ctl session info --target src | awk '/^foregroundPid /{print $2}')" = "$spid" ] || fail "live reattach keeps the same program"
+ctl session type 'echo "V=$LIVE_VAR"'$'\n' --target renamed
+for _ in $(seq 20); do ctl session text --target renamed --lines 5 | grep -q 'V=kept' && break; sleep 0.2; done
+ctl session text --target renamed --lines 5 | grep -q 'V=kept' || fail "live reattach keeps the shell"
+ctl restore mode none >/dev/null
+stop
+
+start # a Fresh shells launch ends what a live run left
+kill -0 "$spid" 2>/dev/null && fail "fresh launch reaps live daemons"
 stop
 echo "smoke OK"

@@ -23,8 +23,8 @@ static QJsonObject fail(const QString &error)
 QString unsupportedReason(const QString &cmd)
 {
     static const QList<std::pair<QString, QString>> absent{
-        {"zmx", "live sessions need a detached session daemon (master uses zmx), which agterm-qt does not have"},
-        {"session.restart", "it replaces a Live-mode shell, and agterm-qt has no live sessions"},
+        {"zmx", "agterm-qt's live sessions run on agterm-session-host, not zmx"},
+        {"session.restart", "it is not ported to agterm-qt's live sessions"},
         {"session.lead", "pane leads belong to remote sessions, which agterm-qt does not have"},
         {"browser", "agterm-qt has no built-in browser: page overlays need Qt WebEngine"},
         {"session.companion.page", "page companions need Qt WebEngine, which agterm-qt does not have"},

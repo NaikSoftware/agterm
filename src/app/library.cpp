@@ -3,6 +3,7 @@
 #include "hooks.h"
 
 #include "control.h"
+#include "livehost.h"
 #include "mainwindow.h"
 #include "store.h"
 
@@ -241,6 +242,11 @@ bool WindowLibrary::remove(const QString &id, QString *error)
                 break;
             }
     close(id);
+    if (QFile f(path(id)); f.open(QIODevice::ReadOnly)) // a deleted window's live daemons go with its sessions
+        for (const auto &w : QJsonDocument::fromJson(f.readAll()).object().value("workspaces").toArray())
+            for (const auto &s : w.toObject().value("sessions").toArray())
+                for (const char *pane : {"main", "right"})
+                    Live::kill(Live::socket(m_dir, s.toObject().value("id").toString(), QLatin1String(pane)));
     QFile::remove(path(id));
     m_entries.removeIf([&id](const Entry &x) { return x.id == id; });
     saveIndex();

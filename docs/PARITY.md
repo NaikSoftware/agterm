@@ -110,9 +110,12 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   re-run captures each pane's foreground group leader argv from /proc at a clean quit (idle shells skipped) and types it
   into the new shell once; `restore-denylist.conf` (starter: tmux, screen, zellij); `restore mode|capture|clear`,
   `session restore <cmd>|--none|--clear [--pane]` pins, read-back `restoreCommand`/`splitRestoreCommand`
-- [ ] Live sessions: not implemented. Master reattaches zmx daemons; zmx needs zig (absent here) and no other multiplexer
-  (tmux, dtach, abduco, screen) is installed, so there is no daemon to reattach. The option is shown disabled and
-  `restore mode live` reports `unavailableReason`, with the active mode falling back to fresh shells as master does
+- [x] Live sessions: each main/right pane runs under `agterm-session-host` (in place of master's zmx), a daemon in
+  `$XDG_RUNTIME_DIR/agterm-qt-<state hash>/` that keeps the pty across quits; the next launch reattaches, replaying the
+  last 4 MB of output plus the DEC modes in force and making the foreground program redraw. A daemon that is gone
+  falls back to the captured command, as master's create-only payload. Deleting a session, closing a split or deleting
+  a window ends its daemons; closing a window keeps them; a `none`/`rerun` launch reaps them all. Pane ids survive a
+  reattach. Not ported: `zmx.*`, `session restart`, a reset dialog; the replay is raw output, not a rendered screen
 - [x] Control API breadth: master's catalog with its argument names, errors and read-backs — `events` (an app-wide ring
   with run/after cursors; the CLI polls it), `workspace go|collapse|expand|flag`, `session context|reveal|collapse|expand|focus|resize|
   copy|paste|select-all|search`, `session text` (visible screen; `--all` and `--lines` page the scrollback through the view's

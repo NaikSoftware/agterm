@@ -3,6 +3,7 @@
 #include "installers.h"
 #include "keymap.h"
 #include "launcher.h"
+#include "livehost.h"
 #include "restore.h"
 #include "store.h"
 
@@ -10,6 +11,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QProcess>
 #include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QTest>
@@ -657,7 +659,39 @@ private Q_SLOTS:
         QCOMPARE(pinned.takeReplay(id, false, deny), QStringLiteral("tmux attach")); // a pin beats the capture and the denylist
         QVERIFY(call(s, t, "restore.clear")["ok"].toBool());
         QVERIFY(s.session(id)->foreground.isEmpty());
-        QCOMPARE(call(s, t, "restore.mode", {}, {{"mode", "live"}})["result"]["restore"]["active"].toString(), QStringLiteral("none"));
+        QCOMPARE(call(s, t, "restore.mode", {}, {{"mode", "live"}})["result"]["restore"]["configured"].toString(), QStringLiteral("live"));
+        Store live;
+        live.fromJson(s.toJson());
+        QCOMPARE(call(live, t, "restore.mode")["result"]["restore"]["active"].toString(), QStringLiteral("live"));
+    }
+
+    void liveDaemonOutlivesItsClientAndReplays()
+    {
+        QTemporaryDir state;
+        const QString sock = Live::socket(state.path(), QStringLiteral("s1"), QStringLiteral("main"));
+        Live::makeDir(state.path());
+        QProcess first;
+        first.start(QStringLiteral(AGTERM_SESSION_HOST), {sock, "--", "/bin/sh", "-c", "printf 'first\\033[?2004h'; exec cat"});
+        QByteArray seen;
+        QTRY_VERIFY((seen += first.readAllStandardOutput()).contains("first"));
+        QTRY_VERIFY(Live::alive(sock));
+        first.kill();
+        first.waitForFinished();
+        QVERIFY(Live::alive(sock));
+        QCOMPARE(Live::sockets(state.path()), QStringList{sock});
+
+        QProcess second;
+        second.start(QStringLiteral(AGTERM_SESSION_HOST), {sock, "--", "/bin/sh", "-c", "echo second"});
+        seen.clear();
+        QTRY_VERIFY((seen += second.readAllStandardOutput()).endsWith("\x1b[?2004h")); // the replay, then the modes in force
+        QVERIFY(seen.startsWith("first") && !seen.contains("second"));
+        second.write("ping\n");
+        QTRY_VERIFY((seen += second.readAllStandardOutput()).contains("ping"));
+
+        Live::kill(sock);
+        QVERIFY(!Live::alive(sock));
+        QVERIFY(!QFile::exists(Live::dir(state.path())));
+        QVERIFY(second.waitForFinished(3000));
     }
 
     void dashboardTargetsExpandDropAndTrim()

@@ -482,8 +482,7 @@ on status [ "$AGT_EVENT_STATUS" = blocked ] || exit 0; notify-send "$AGT_SESSION
 ## restore
 
 - `restore mode [none|rerun|live]`: bare, prints `configured`, `at launch`, `active`, `(restart required)` when
-  they differ, and `live unavailable: <reason>`. A value applies from the next launch. `live` is accepted but
-  has no daemon behind it here: the active mode falls back to `none`. `invalid restore mode: X`.
+  they differ. A value applies from the next launch. `invalid restore mode: X`.
 - `restore capture`: records each pane's foreground command now (rerun mode only; idle shells skipped); prints
   `captured N command(s)`. `restore.capture requires rerun mode; configured restore mode is X`.
 - `restore clear`: forgets every captured command.
@@ -502,8 +501,8 @@ The app answers `<cmd> is not supported on this platform (<reason>)` for:
 | --- | --- |
 | `quick …` | no quick terminal |
 | `session scratch` | no scratch terminal |
-| `zmx …` | live sessions need a detached session daemon |
-| `session restart` | it replaces a Live-mode shell |
+| `zmx …` | live sessions run on agterm-session-host, not zmx |
+| `session restart` | not ported to live sessions |
 | `session lead` | pane leads belong to remote sessions |
 | `session background` | Konsole takes a pane's background from its profile |
 | `surface cursor` | Konsole's terminal part does not expose the cursor |
