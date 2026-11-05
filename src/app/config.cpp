@@ -365,7 +365,8 @@ void MainWindow::playSound(const QString &name) const
             if (const QString file = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
                                                             QStringLiteral("sounds/%1/stereo/%2%3").arg(QLatin1String(theme), name, QLatin1String(ext)));
                 !file.isEmpty()) {
-                QProcess::startDetached(QStringLiteral("pw-play"), {file}) || QProcess::startDetached(QStringLiteral("paplay"), {file});
+                // pw-play never exits on the 48 kHz Ocean theme files; paplay (pipewire-pulse) plays them
+                QProcess::startDetached(QStringLiteral("paplay"), {file}) || QProcess::startDetached(QStringLiteral("pw-play"), {file});
                 return;
             }
 }
