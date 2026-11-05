@@ -16,6 +16,9 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <QSet>
+#include <algorithm>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QToolButton>
@@ -395,6 +398,30 @@ private Q_SLOTS:
         QCOMPARE(rowA->data(0, SidebarRole::Status).toString(), QStringLiteral("blocked"));
         store.addSession(ws, {}, {}); // a new row is a structural change
         QCOMPARE(tree->topLevelItem(0)->childCount(), 3);
+    }
+
+    void aBlinkingGlyphKeepsFadingThroughRebuilds()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("blink.json"));
+        w.restore({});
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, {}, {});
+        store.setStatus(a, "active", false, true);
+        w.show();
+        auto *tree = w.findChild<Sidebar *>();
+        QSet<int> seen;
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < 600) { // rebuilding faster than a frame must not freeze the fade
+            tree->rebuild();
+            QTest::qWait(10);
+            seen.insert(tree->blinkAlpha());
+        }
+        QVERIFY2(seen.size() > 3, "the fade never advanced");
+        QVERIFY(*std::min_element(seen.begin(), seen.end()) < 120); // fades down toward master's 0.2
+        store.setStatus(a, "idle");
+        QCOMPARE(tree->blinkAlpha(), 255);
     }
 
     void fontKeysZoomTheTerminalAndARelaunchKeepsIt()

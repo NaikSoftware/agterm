@@ -405,10 +405,11 @@ Sidebar::Sidebar(Store &store, QWidget *parent)
         Q_EMIT renameRequested(isSession ? QStringLiteral("session") : QStringLiteral("workspace"), item->data(0, Id).toString(),
                                item->text(0));
     });
-    m_blinkTimer.setInterval(50);
+    m_blinkTimer.setInterval(33);
     connect(&m_blinkTimer, &QTimer::timeout, this, [this] {
-        m_blinkPhase = (m_blinkPhase + 1) % 40;
-        m_blinkAlpha = 90 + int(165 * (0.5 + 0.5 * qCos(m_blinkPhase * M_PI / 20)));
+        // master's glyph: opacity 1.0 -> 0.2 over 0.5 s, autoreversed (a 1 s cycle)
+        m_blinkPhase = (m_blinkPhase + 1) % 30;
+        m_blinkAlpha = 51 + int(204 * (0.5 + 0.5 * qCos(m_blinkPhase * M_PI / 15)));
         viewport()->update();
     });
 }
@@ -571,7 +572,11 @@ void Sidebar::rebuild()
         setUpdatesEnabled(true);
     }
     viewport()->update();
-    blinking ? m_blinkTimer.start() : (m_blinkTimer.stop(), m_blinkAlpha = 255, void());
+    // start() on a running timer restarts it, so rebuilds faster than the interval would freeze the fade
+    if (!blinking)
+        m_blinkTimer.stop(), m_blinkAlpha = 255;
+    else if (!m_blinkTimer.isActive())
+        m_blinkTimer.start();
     m_rebuilding = false;
 }
 
