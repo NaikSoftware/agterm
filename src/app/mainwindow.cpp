@@ -1197,11 +1197,13 @@ void MainWindow::sampleAgents()
 
 QString MainWindow::askName(const QString &title, bool *ok)
 {
-    // QInputDialog sizes itself to its short label; a name field wants room
+    // QInputDialog's SetMinAndMaxSize layout overrides a dialog minimum width, so widen the field instead
     QInputDialog dlg(this);
     dlg.setWindowTitle(title);
     dlg.setLabelText(tr("Name:"));
-    dlg.setMinimumWidth(qMax(420, width() / 3));
+    dlg.setInputMode(QInputDialog::TextInput);
+    if (auto *edit = dlg.findChild<QLineEdit *>())
+        edit->setMinimumWidth(qMax(360, width() / 3));
     *ok = dlg.exec() == QDialog::Accepted;
     return dlg.textValue();
 }
