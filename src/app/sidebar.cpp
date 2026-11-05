@@ -607,6 +607,8 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
     QTreeWidgetItem *item = itemAt(pos);
     if (!item && m_store.flaggedView && !topLevelItemCount() && event->button() == Qt::LeftButton)
         return Q_EMIT editFlaggedRequested();
+    if (!item)
+        return; // a click on empty space would clear the selection; the shown session always stays selected
     if (item && item->data(0, HasCompanions).toBool() && !m_store.flaggedView && event->button() == Qt::LeftButton
         && pos.x() < visualItemRect(item).left() + 34) {
         const QString id = item->data(0, Id).toString(); // the parent's chevron folds its companions
@@ -634,6 +636,16 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
         item->setData(0, Expanded, item->isExpanded());
     }
     QTreeWidget::mousePressEvent(event);
+}
+
+QItemSelectionModel::SelectionFlags Sidebar::selectionCommand(const QModelIndex &index, const QEvent *event) const
+{
+    // the shown session always stays selected: a workspace row or a Ctrl-click on it would deselect it
+    const QItemSelectionModel::SelectionFlags command = QTreeWidget::selectionCommand(index, event);
+    if (!(index.flags() & Qt::ItemIsSelectable)
+        || (index.data(Id).toString() == m_store.selected && command & (QItemSelectionModel::Toggle | QItemSelectionModel::Deselect)))
+        return QItemSelectionModel::NoUpdate;
+    return command;
 }
 
 void Sidebar::mouseDoubleClickEvent(QMouseEvent *event)
