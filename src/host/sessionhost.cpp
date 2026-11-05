@@ -1,11 +1,13 @@
 // agterm-session-host <socket> -- <argv...>: attach to the pane daemon at <socket>, starting one that runs argv when none
 // answers. The daemon owns the pane's pty and outlives the app, so a later launch reattaches to the same shell (live
 // restore mode, master's zmx). On attach it replays the recent output plus the DEC modes in force, then makes the
-// foreground program redraw. agterm-session-host --kill <socket> ends that daemon and its shell.
+// foreground program redraw by nudging the width one column and back. agterm-session-host --kill <socket> ends that daemon and its shell.
 //
 // Client -> daemon frames: a type byte, a little-endian u32 length, the payload. 'd' input, 'w' rows+cols (u16 each), 'k' kill.
 // Daemon -> client: the pty's raw output.
+#include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
@@ -132,14 +134,19 @@ struct Modes {
     constexpr size_t cap = 4 << 20;
     int client = -1;
     bool redraw = false;
+    std::chrono::steady_clock::time_point nudged{}; // when the width goes back; zero when not nudged
     char buf[65536];
     while (child > 0) {
         pollfd fds[3] = {{listener, POLLIN, 0}, {master, POLLIN, 0}, {client, POLLIN, 0}};
-        if (::poll(fds, client >= 0 ? 3 : 2, -1) < 0) {
+        using namespace std::chrono;
+        const int wait = nudged == steady_clock::time_point{} ? -1 : int(std::max<long>(0, duration_cast<milliseconds>(nudged - steady_clock::now()).count()));
+        if (::poll(fds, client >= 0 ? 3 : 2, wait) < 0) {
             if (errno == EINTR)
                 continue;
             break;
         }
+        if (nudged != steady_clock::time_point{} && steady_clock::now() >= nudged)
+            nudged = {}, ::ioctl(master, TIOCSWINSZ, &ws); // back to the real width: a second SIGWINCH, a full repaint
         if (fds[1].revents) {
             const ssize_t n = ::read(master, buf, sizeof buf);
             if (n == 0 || (n < 0 && errno != EINTR && errno != EAGAIN))
@@ -184,10 +191,12 @@ struct Modes {
                 } else if (input[0] == 'w' && len == 4) {
                     ws.ws_row = uint16_t(uint8_t(p[0]) | uint8_t(p[1]) << 8);
                     ws.ws_col = uint16_t(uint8_t(p[2]) | uint8_t(p[3]) << 8);
-                    ::ioctl(master, TIOCSWINSZ, &ws);
-                    if (std::exchange(redraw, false)) // the same size raises no SIGWINCH of its own
-                        if (const pid_t fg = ::tcgetpgrp(master); fg > 0)
-                            ::kill(-fg, SIGWINCH);
+                    winsize at = ws;
+                    // A SIGWINCH at an unchanged size repaints nothing in TUIs such as Claude Code, leaving the
+                    // replay (drawn at whatever widths the history had) on screen; a real width change repaints it all.
+                    if (std::exchange(redraw, false) && ws.ws_col > 1)
+                        --at.ws_col, nudged = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+                    ::ioctl(master, TIOCSWINSZ, &at);
                 } else if (input[0] == 'k') {
                     kill = true;
                 }
