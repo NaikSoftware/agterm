@@ -5,6 +5,7 @@
 #include "hooks.h"
 #include "launcher.h"
 #include "library.h"
+#include "livehost.h"
 #include "palette.h"
 #include "restore.h"
 #include "paths.h"
@@ -59,6 +60,25 @@
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
+
+// A live pane's shell runs under its daemon, behind the attach client Konsole started; Konsole sees only the client.
+static int shellPid(KParts::ReadOnlyPart *part)
+{
+    auto *t = qobject_cast<TerminalInterface *>(part);
+    if (!t)
+        return -1;
+    const QString live = part->property("agtermLive").toString();
+    return live.isEmpty() ? t->terminalProcessId() : Live::shellPid(live);
+}
+
+static int foregroundPid(KParts::ReadOnlyPart *part)
+{
+    auto *t = qobject_cast<TerminalInterface *>(part);
+    if (!t)
+        return -1;
+    const QString live = part->property("agtermLive").toString();
+    return live.isEmpty() ? t->foregroundProcessId() : Live::foregroundPid(Live::shellPid(live));
+}
 
 QWidget *terminalDisplay(KParts::ReadOnlyPart *part)
 {
@@ -262,6 +282,9 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         // taken first, so the parts dying with their view are not mistaken for shells that exited
         if (Panes p = m_panes.take(id); p.view)
             p.view->deleteLater(); // closes the ptys, which hangs up the shells
+        for (const char *pane : {"main", "right"}) // a deleted session's daemons go with it; a closed window's stay
+            if (const QString live = Live::socket(stateDir(), id, QLatin1String(pane)); QFile::exists(live))
+                Live::kill(live);
     });
     connect(&m_store, &Store::selectionChanged, this, &MainWindow::showSelected);
     connect(&m_store, &Store::paneLayoutChanged, this, &MainWindow::applyLayout);
@@ -662,9 +685,8 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
         connect(part, &KParts::Part::setWindowCaption, this, [this, id, part](const QString &title) {
             // a title set by a running program (an agent naming its task) renames the session; the one a shell
             // prompt sets on every line (bash's user@host: dir) does not
-            auto *t = qobject_cast<TerminalInterface *>(part);
-            const int fg = t->foregroundProcessId();
-            if (fg > 0 && fg != t->terminalProcessId() && !title.trimmed().isEmpty())
+            const int fg = foregroundPid(part);
+            if (fg > 0 && fg != shellPid(part) && !title.trimmed().isEmpty())
                 m_store.setTitle(id, title);
         });
     // the part deletes itself when its shell exits
@@ -687,11 +709,27 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
                      QStringLiteral("PATH=") + appDir + QLatin1Char(':') + qEnvironmentVariable("PATH")};
     if (!windowId.isEmpty())
         argv << QStringLiteral("AGTERM_WINDOW_ID=") + windowId;
+    QString live;
+    // without the host binary the pane would exit at once and take its session with it, so it gets a plain shell
+    if ((pane == QLatin1String("main") || pane == QLatin1String("right")) && m_store.restoreModeAtLaunch == QLatin1String("live")
+        && QFile::exists(appDir + QStringLiteral("/agterm-session-host")))
+        live = Live::socket(stateDir(), id, pane), Live::makeDir(stateDir());
+    const bool reattach = !live.isEmpty() && Live::alive(live);
     if (pane == QLatin1String("main") || pane == QLatin1String("right")) { // msg.* addresses a pane by it; a respawn gets a new one
-        part->setProperty("agtermPaneId", QUuid::createUuid().toString(QUuid::WithoutBraces));
-        argv << QStringLiteral("AGTERM_PANE_ID=") + part->property("agtermPaneId").toString();
+        // a reattached shell keeps the id it was started with
+        const QString paneId = reattach && !Live::paneId(live).isEmpty() ? Live::paneId(live) : QUuid::createUuid().toString(QUuid::WithoutBraces);
+        if (!live.isEmpty() && !reattach)
+            Live::setPaneId(live, paneId);
+        part->setProperty("agtermPaneId", paneId);
+        argv << QStringLiteral("AGTERM_PANE_ID=") + paneId;
     }
-    argv << env << shell;
+    argv << env;
+    if (!live.isEmpty()) { // a surviving daemon ignores the rest of argv: its shell already runs
+        argv << appDir + QStringLiteral("/agterm-session-host") << live << QStringLiteral("--");
+        part->setProperty("agtermLive", live);
+        part->setProperty("agtermReattached", reattach);
+    }
+    argv << shell;
     if (!command.isEmpty())
         argv << QStringLiteral("-c") << command;
     qobject_cast<TerminalInterface *>(part)->startProgram(argv.first(), argv);
@@ -777,7 +815,10 @@ void MainWindow::applyLayout(const QString &id)
         p.split->handle(1)->setProperty("agtermSession", id);
     } else if (!s->hasSplit && p.right) {
         auto *right = std::exchange(p.right, nullptr);
+        const QString live = right->property("agtermLive").toString();
         delete right; // closes the split shell whatever it runs
+        if (!live.isEmpty())
+            Live::kill(live);
     }
     p.split->setOrientation(s->splitAxis == QLatin1String("horizontal") ? Qt::Vertical : Qt::Horizontal);
     if (p.right) {
@@ -810,6 +851,11 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
         if (p.right) { // the split survivor becomes the session's only shell
             p.main = std::exchange(p.right, nullptr);
             p.main->widget()->show();
+            if (const QString live = p.main->property("agtermLive").toString(); !live.isEmpty()) {
+                const QString main = Live::socket(stateDir(), id, QStringLiteral("main"));
+                Live::move(live, main);
+                p.main->setProperty("agtermLive", main);
+            }
             m_store.setSplit(id, false, false, m_store.session(id)->splitAxis);
         } else if (!m_store.companionsOf(id).isEmpty() && m_respawned.value(id).msecsTo(QDateTime::currentDateTime()) > 2000) {
             // a parent with companions gets a fresh shell; one that exits again within 2 s closes the group
@@ -876,11 +922,12 @@ bool MainWindow::panePlan(const QString &sessionId, const QString &pane, PanePla
     const Panes p = m_panes.value(sessionId);
     auto *t = qobject_cast<TerminalInterface *>(pane == QLatin1String("right") ? p.right : p.main);
     const QString name = pane == QLatin1String("right") ? QStringLiteral("right") : QStringLiteral("left");
-    if (!t || t->terminalProcessId() <= 0) {
+    KParts::ReadOnlyPart *part = pane == QLatin1String("right") ? p.right : p.main;
+    if (!t || shellPid(part) <= 0) {
         *error = QStringLiteral("%1 pane is not realized; nothing was created").arg(name);
         return false;
     }
-    const int shell = t->terminalProcessId(), fg = t->foregroundProcessId();
+    const int shell = shellPid(part), fg = foregroundPid(part);
     const int pid = fg > 0 ? fg : shell;
     out->cwd = QFile::symLinkTarget(QStringLiteral("/proc/%1/cwd").arg(pid));
     out->command.clear();
@@ -903,18 +950,19 @@ bool MainWindow::panePlan(const QString &sessionId, const QString &pane, PanePla
 void MainWindow::replay(const QString &id, KParts::ReadOnlyPart *part, bool split)
 {
     // typed into the login shell rather than exec'd, so the shell remains when the program ends
-    if (const QString line = m_store.takeReplay(id, split, m_denylist); !line.isEmpty() && part)
+    // a reattached live pane still runs it, so the capture is only the fallback for a daemon that is gone
+    if (const QString line = m_store.takeReplay(id, split, m_denylist); !line.isEmpty() && part && !part->property("agtermReattached").toBool())
         qobject_cast<TerminalInterface *>(part)->sendInput(line + QLatin1Char('\n'));
 }
 
 QStringList MainWindow::foregroundArgv(const QString &sessionId, const QString &pane)
 {
     const Panes p = m_panes.value(sessionId);
-    auto *t = qobject_cast<TerminalInterface *>(pane == QLatin1String("right") ? p.right : p.main);
-    if (!t)
+    KParts::ReadOnlyPart *part = pane == QLatin1String("right") ? p.right : p.main;
+    if (!part)
         return {};
     // the group leader; a pane whose program is the terminal process itself reports no foreground
-    const int pid = t->foregroundProcessId() > 0 ? t->foregroundProcessId() : t->terminalProcessId();
+    const int pid = foregroundPid(part) > 0 ? foregroundPid(part) : shellPid(part);
     QFile f(QStringLiteral("/proc/%1/cmdline").arg(pid));
     return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()).split(QChar(0), Qt::SkipEmptyParts) : QStringList();
 }
@@ -932,6 +980,12 @@ void MainWindow::swapPanes(const QString &id)
         return;
     p.split->insertWidget(0, p.right->widget()); // physical positions and the primary role move together
     std::swap(p.main, p.right);
+    const QString a = p.main->property("agtermLive").toString(), b = p.right->property("agtermLive").toString();
+    if (!a.isEmpty() && !b.isEmpty()) { // each daemon is named by its role
+        Live::swap(a, b);
+        p.main->setProperty("agtermLive", b);
+        p.right->setProperty("agtermLive", a);
+    }
     m_sessions.remove(id);
 }
 
@@ -1003,8 +1057,8 @@ TerminalInterface *MainWindow::terminal(const QString &id) const
 QString MainWindow::liveCwd(const QString &id) const
 {
     // Konsole refreshes its own answer only for the shown pane
-    auto *t = terminal(id);
-    return t ? QFile::symLinkTarget(QStringLiteral("/proc/%1/cwd").arg(t->terminalProcessId())) : QString();
+    const int pid = shellPid(m_panes.value(id).main);
+    return pid > 0 ? QFile::symLinkTarget(QStringLiteral("/proc/%1/cwd").arg(pid)) : QString();
 }
 
 void MainWindow::prime(QWidget *page)
@@ -1064,9 +1118,12 @@ QJsonObject MainWindow::info(const QString &sessionId)
     auto *t = terminal(sessionId);
     if (!t)
         return {};
-    return {{"pid", t->terminalProcessId()},
-            {"foreground", t->foregroundProcessName()},
-            {"foregroundPid", t->foregroundProcessId()},
+    KParts::ReadOnlyPart *part = m_panes.value(sessionId).main;
+    QFile comm(QStringLiteral("/proc/%1/comm").arg(foregroundPid(part)));
+    const bool live = !part->property("agtermLive").toString().isEmpty();
+    return {{"pid", shellPid(part)},
+            {"foreground", live && comm.open(QIODevice::ReadOnly) ? QString::fromUtf8(comm.readAll()).trimmed() : t->foregroundProcessName()},
+            {"foregroundPid", foregroundPid(part)},
             {"liveCwd", liveCwd(sessionId)},
             {"profile", t->currentProfileName()}};
 }
@@ -1181,8 +1238,10 @@ void MainWindow::sampleAgents()
         pid == pgid ? groups[pgid].prepend(pid) : groups[pgid].append(pid);
     }
     for (auto *s : m_store.allSessions()) {
-        auto *t = terminal(s->id);
-        const int fg = t ? t->foregroundProcessId() : -1;
+        KParts::ReadOnlyPart *part = m_panes.value(s->id).main;
+        const int fg = foregroundPid(part);
+        if (part && !part->property("agtermLive").toString().isEmpty())
+            m_store.setCwd(s->id, liveCwd(s->id)); // Konsole tracks only its own child, the attach client
         QList<QStringList> argvs;
         for (int pid : groups.value(fg)) {
             QFile f(QStringLiteral("/proc/%1/cmdline").arg(pid));

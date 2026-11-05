@@ -2,6 +2,7 @@
 #include "help.h"
 #include "hooks.h"
 #include "library.h"
+#include "livehost.h"
 #include "mainwindow.h"
 #include "paths.h"
 #include "store.h"
@@ -110,6 +111,14 @@ int main(int argc, char **argv)
     WindowLibrary library(dir);
     library.load(); // the windows open at the last quit, each with its saved frame
     MainWindow &window = *library.active();
+    // Fresh shells and Re-run launches end every daemon a live run left, as master's reap; a live one has reattached
+    for (const auto &e : library.entries())
+        if (e.store) { // a window closed at the last quit has no store loaded
+            if (e.store->restoreModeAtLaunch != QLatin1String("live"))
+                for (const QString &live : Live::sockets(dir))
+                    Live::kill(live);
+            break;
+        }
 
     QLocalServer server;
     QLocalServer::removeServer(socketPath()); // safe: the lock says no live instance owns it

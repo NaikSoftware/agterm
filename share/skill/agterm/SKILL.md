@@ -267,20 +267,22 @@ raw `events.read` reply, see reference.md). The app keeps 4096 events per run; `
 
 ## Restore
 
-Settings ▸ General ▸ Restore sessions, also `restore mode [none|rerun]`, applies from the next launch.
+Settings ▸ General ▸ Restore sessions, also `restore mode [none|rerun|live]`, applies from the next launch.
 `none` restores windows, workspaces, sessions, directories and splits with fresh shells; `rerun` also types each
 pane's captured foreground command into its new shell once. `restore capture` records commands now (rerun mode),
 `restore clear` forgets them, and `session restore <command> | --none | --clear [--pane left|right]` pins what a pane
 re-runs (read back as `restoreCommand`/`splitRestoreCommand`; the pin is stored shell code, so no secrets).
-`restore-denylist.conf` lists programs never re-run. `live` is accepted but unavailable: `restore mode` reports
-`unavailableReason` and the launch falls back to fresh shells.
+`restore-denylist.conf` lists programs never re-run. `live` keeps every pane's shell running in an
+`agterm-session-host` daemon across quits and reattaches it at launch with its recent output; a daemon that is gone
+(after a reboot) falls back to re-running the captured command. Deleting a session or window ends its daemons; a
+`none` or `rerun` launch ends them all.
 
 ## Not in agterm-qt
 
 These master agterm features are absent; their commands answer `<cmd> is not supported on this platform (<reason>)`:
 
 - quick terminal (`quick …`) and scratch terminal (`session scratch`);
-- live sessions and every `zmx …` command, remote sessions and pane leads (`session lead`), `session restart`;
+- every `zmx …` command (live sessions use their own daemon), remote sessions and pane leads (`session lead`), `session restart`;
 - `session background` (Konsole takes backgrounds from the profile), `surface cursor`;
 - `config reload` (no Ghostty config; Konsole profiles instead);
 - the built-in browser (`browser …`), page overlays (`session overlay open --html|--url`,

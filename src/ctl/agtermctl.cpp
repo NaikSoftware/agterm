@@ -743,8 +743,6 @@ int main(int argc, char **argv)
         const QJsonObject r = result["restore"].toObject();
         printf("configured %s\nat launch  %s\nactive     %s%s\n", qPrintable(r["configured"].toString()), qPrintable(r["requestedAtLaunch"].toString()),
                qPrintable(r["active"].toString()), r["restartRequired"].toBool() ? "\n(restart required)" : "");
-        if (r.contains("unavailableReason"))
-            printf("live unavailable: %s\n", qPrintable(r["unavailableReason"].toString()));
         return 0;
     }
     if (result.contains("exitCode"))

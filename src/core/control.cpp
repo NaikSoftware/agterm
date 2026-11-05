@@ -70,8 +70,6 @@ int captureForeground(Store &store, Terminals &terminals)
     return count;
 }
 
-static const char *const liveUnavailable = "live sessions need a detached session daemon (master uses zmx), which agterm-qt does not have";
-
 QStringList dashboardCells(Store &store, const QStringList &targets, bool mru, QString *notes, QString *error)
 {
     static const QStringList left{"primary", "left", "top"}, right{"split", "right", "bottom"};
@@ -191,10 +189,8 @@ static QJsonObject restoreCommand(Store &store, Terminals &terminals, const QStr
         const QString configured = store.settings.restoreMode, requested = store.restoreModeAtLaunch;
         QJsonObject r{{"configured", configured},
                       {"requestedAtLaunch", requested},
-                      {"active", requested == QLatin1String("live") ? QStringLiteral("none") : requested},
+                      {"active", requested},
                       {"restartRequired", configured != requested}};
-        if (requested == QLatin1String("live"))
-            r.insert("unavailableReason", QLatin1String(liveUnavailable));
         return ok({{"restore", r}});
     }
     if (cmd == QLatin1String("restore.capture")) {

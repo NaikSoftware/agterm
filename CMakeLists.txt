@@ -31,7 +31,7 @@ if(NOT TARGET KF6::Parts)
     INTERFACE_LINK_LIBRARIES "KF6::CoreAddons;KF6::XmlGui")
 endif()
 
-add_library(agterm-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp)
+add_library(agterm-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/livehost.cpp)
 target_include_directories(agterm-core PUBLIC src/core)
 target_link_libraries(agterm-core PUBLIC Qt6::Core)
 
@@ -45,13 +45,18 @@ target_link_libraries(agterm-ui PUBLIC agterm-core Qt6::Widgets Qt6::DBus Qt6::S
 add_executable(agterm-qt src/app/main.cpp)
 target_link_libraries(agterm-qt PRIVATE agterm-ui Qt6::Network KF6::ConfigCore)
 
+add_executable(agterm-session-host src/host/sessionhost.cpp) # plain POSIX: it outlives the app, so no Qt
+target_link_libraries(agterm-session-host PRIVATE util)
+add_dependencies(agterm-qt agterm-session-host) # spawned from the app's own directory
+
 add_executable(agtermctl src/ctl/agtermctl.cpp)
 target_link_libraries(agtermctl PRIVATE agterm-core Qt6::Network)
 
 enable_testing()
 add_executable(test_core tests/test_core.cpp)
 target_link_libraries(test_core PRIVATE agterm-core Qt6::Test)
-target_compile_definitions(test_core PRIVATE AGTERM_SOURCE_SHARE="${CMAKE_SOURCE_DIR}/share")
+target_compile_definitions(test_core PRIVATE AGTERM_SOURCE_SHARE="${CMAKE_SOURCE_DIR}/share" AGTERM_SESSION_HOST="$<TARGET_FILE:agterm-session-host>")
+add_dependencies(test_core agterm-session-host)
 add_test(NAME core COMMAND test_core)
 add_executable(test_ui tests/test_ui.cpp)
 target_link_libraries(test_ui PRIVATE agterm-ui Qt6::Test)
@@ -66,7 +71,7 @@ add_test(NAME filepanel COMMAND test_filepanel)
 set_tests_properties(filepanel PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 include(GNUInstallDirs)
-install(TARGETS agterm-qt agtermctl RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS agterm-qt agtermctl agterm-session-host RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 configure_file(packaging/agterm-qt.desktop.in agterm-qt.desktop @ONLY) # Exec is absolute: the Plasma menu does not see ~/.local/bin
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/agterm-qt.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(DIRECTORY resources/icons/ DESTINATION ${CMAKE_INSTALL_DATADIR}/icons)
