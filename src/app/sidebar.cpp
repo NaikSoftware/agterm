@@ -607,6 +607,8 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
     QTreeWidgetItem *item = itemAt(pos);
     if (!item && m_store.flaggedView && !topLevelItemCount() && event->button() == Qt::LeftButton)
         return Q_EMIT editFlaggedRequested();
+    if (!item)
+        return; // a click on empty space would clear the selection; the shown session always stays selected
     if (item && item->data(0, HasCompanions).toBool() && !m_store.flaggedView && event->button() == Qt::LeftButton
         && pos.x() < visualItemRect(item).left() + 34) {
         const QString id = item->data(0, Id).toString(); // the parent's chevron folds its companions
