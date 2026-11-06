@@ -1282,6 +1282,15 @@ void MainWindow::sampleAgents()
             m_store.setTitle(s->id, QString());
             m_commandTitle.remove(s->id);
         }
+        if (agent == QLatin1String("antigravity")) { // agy sets no terminal title; its conversation title names the session
+            static const QString agyData = QDir::homePath() + QStringLiteral("/.gemini/antigravity-cli");
+            for (int pid : groups.value(fg))
+                if (const QString t = antigravityTitle(QStringLiteral("/proc/%1/fd").arg(pid), agyData); !t.isEmpty()) {
+                    m_store.setTitle(s->id, t);
+                    m_titlePid.insert(s->id, fg);
+                    break;
+                }
+        }
     }
     if (!m_filePanel->isHidden()) // a cd in the active session moves the file panel with it
         m_filePanel->setRoot(liveCwd(m_store.selected));

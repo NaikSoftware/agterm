@@ -14,6 +14,8 @@
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QSignalSpy>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QTest>
 #include <QUuid>
 
@@ -380,6 +382,31 @@ private Q_SLOTS:
         s.select(y);
         s.removeSession(y); // back to the most recent session in the same workspace, not the adjacent row
         QCOMPARE(s.selected, z);
+    }
+
+    void antigravityTitleFromItsStore()
+    {
+        QTemporaryDir tmp;
+        const QString data = tmp.filePath("agy"), fds = tmp.filePath("fd"), id = "35cabcef-9530-4e7a-9cce-8c346cf404d5";
+        QVERIFY(QDir().mkpath(data + "/presence") && QDir().mkpath(fds));
+        QFile lock(data + "/presence/" + id + ".lock");
+        QVERIFY(lock.open(QIODevice::WriteOnly));
+        QVERIFY(QFile::link(tmp.filePath("agy/conversation_summaries.db"), fds + "/9"));
+        QCOMPARE(antigravityTitle(fds, data), QString()); // no presence lock among the fds: not agy
+        QVERIFY(QFile::link(lock.fileName(), fds + "/40"));
+        QCOMPARE(antigravityTitle(fds, data), QString()); // agy, but no store yet
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "fixture");
+            db.setDatabaseName(data + "/conversation_summaries.db");
+            QVERIFY(db.open());
+            QSqlQuery q(db);
+            QVERIFY(q.exec("CREATE TABLE conversation_summaries (conversation_id text PRIMARY KEY, title text NOT NULL DEFAULT '')"));
+            QVERIFY(q.exec("INSERT INTO conversation_summaries VALUES ('other', 'Other Task'), ('" + id + "', '')"));
+            QCOMPARE(antigravityTitle(fds, data), QString()); // not titled yet
+            QVERIFY(q.exec("UPDATE conversation_summaries SET title = 'Primary Colors Identification' WHERE conversation_id = '" + id + "'"));
+        }
+        QSqlDatabase::removeDatabase("fixture");
+        QCOMPARE(antigravityTitle(fds, data), QStringLiteral("Primary Colors Identification"));
     }
 
     void agentDetectionAndSpinnerStripping()

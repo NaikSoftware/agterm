@@ -1,5 +1,11 @@
 #include "launcher.h"
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+
 const QList<Launcher> &launchers()
 {
     static const QList<Launcher> all{{"terminal", "Terminal", {}},
@@ -69,6 +75,37 @@ QString commandTitle(QStringList argv)
             return argv[i].section(QLatin1Char('/'), -1);
     }
     return program;
+}
+
+QString antigravityTitle(const QString &fdDir, const QString &dataDir)
+{
+    QString id;
+    const QString presence = QDir(dataDir).absoluteFilePath(QStringLiteral("presence")) + QLatin1Char('/');
+    for (const QString &fd : QDir(fdDir).entryList(QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot)) {
+        const QString target = QFile::symLinkTarget(fdDir + QLatin1Char('/') + fd);
+        if (target.startsWith(presence) && target.endsWith(QLatin1String(".lock"))) {
+            id = QFileInfo(target).completeBaseName();
+            break;
+        }
+    }
+    if (id.isEmpty())
+        return {};
+    const QString connection = QStringLiteral("agterm-antigravity");
+    QString title;
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connection);
+        db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=100")); // never block agy's writes
+        db.setDatabaseName(QDir(dataDir).absoluteFilePath(QStringLiteral("conversation_summaries.db")));
+        if (db.open()) {
+            QSqlQuery q(db);
+            q.prepare(QStringLiteral("SELECT title FROM conversation_summaries WHERE conversation_id = ?"));
+            q.addBindValue(id);
+            if (q.exec() && q.next())
+                title = q.value(0).toString().trimmed();
+        }
+    }
+    QSqlDatabase::removeDatabase(connection);
+    return title;
 }
 
 QStringList availableLaunchers(const QString &path, const std::function<bool(const QString &)> &isExecutable)
