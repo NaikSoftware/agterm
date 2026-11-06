@@ -11,7 +11,8 @@ in Konsole.
 ## Build and install
 
 Needs Qt 6 (Widgets, Network, DBus, Svg), KDE Frameworks 6 (CoreAddons, XmlGui, Config, Notifications, KParts) and
-`konsole-kpart`.
+`konsole-kpart`. Install `wl-clipboard` (or `xclip` on X11) too: agents like Claude Code read a pasted image
+(Ctrl+V) through `wl-paste`/`xclip`, and without them the paste does nothing, in agterm-qt and plain Konsole alike.
 
 ```sh
 sudo apt install libkf6parts-dev   # or, without root: scripts/fetch-kparts-headers.sh
