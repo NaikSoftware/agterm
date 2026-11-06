@@ -55,6 +55,11 @@ void drawStatusGlyph(QPainter *p, const QPointF &c, qreal r, const QString &shap
     }
 }
 
+static int attentionRank(const QString &status)
+{
+    return status == QLatin1String("blocked") ? 0 : status == QLatin1String("active") ? 1 : 2;
+}
+
 static const char *sessionsMime = "application/x-agterm-sessions";
 static const char *workspaceMime = "application/x-agterm-workspace";
 
@@ -303,7 +308,10 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
     }
 
     qreal right = r.right() - 8;
-    if (session) {
+    // hover-only: the launcher menu "+" and, left of it, a repeat of the last choice
+    const bool buttons = !session && m_sidebar->hovered() == index && m_sidebar->settings().shows(QStringLiteral("workspaceAddSession"));
+    // a collapsed workspace rolls up its sessions' status and badge, as master does; an open one leaves them to its rows
+    if (session || (!buttons && !index.data(Expanded).toBool())) {
         const QString status = index.data(Status).toString();
         if (status != QLatin1String("idle")) {
             QColor c = statusColor(m_sidebar->settings(), status);
@@ -329,8 +337,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
             p->drawText(pill, Qt::AlignCenter, n);
             right -= w + 6;
         }
-    } else if (m_sidebar->hovered() == index && m_sidebar->settings().shows(QStringLiteral("workspaceAddSession"))) {
-        // hover-only: the launcher menu "+" and, left of it, a repeat of the last choice
+    } else if (buttons) {
         const QRect add = Sidebar::addButtonRect(opt.rect), rep = Sidebar::repeatButtonRect(opt.rect);
         p->setPen(QPen(dim, 1.4, Qt::SolidLine, Qt::RoundCap));
         const QPointF c = QRectF(add).center();
@@ -540,6 +547,18 @@ void Sidebar::rebuild()
             continue;
         QTreeWidgetItem *wi = topItem();
         int child = 0;
+        // the most urgent rendered child's status (blocked > active > completed), the first on a tie
+        const ::Session *urgent = nullptr;
+        int unseen = 0;
+        for (const auto &s : w.sessions)
+            if (!flaggedTree || s.flagged) {
+                unseen += s.unseen;
+                if (s.status != QLatin1String("idle") && (!urgent || attentionRank(s.status) < attentionRank(urgent->status)))
+                    urgent = &s;
+            }
+        wi->setData(0, Status, urgent ? urgent->status : QStringLiteral("idle"));
+        wi->setData(0, Blink, urgent && urgent->blink);
+        wi->setData(0, Unseen, unseen);
         wi->setText(0, w.name);
         wi->setData(0, Focused, m_store.focused.contains(w.id));
         wi->setData(0, Id, w.id);
