@@ -5,6 +5,7 @@
 #include "livehost.h"
 #include "mainwindow.h"
 #include "paths.h"
+#include "smoothwheel.h"
 #include "store.h"
 
 #include <KConfig>
@@ -91,6 +92,7 @@ int main(int argc, char **argv)
     if (argc > 1 && qstrcmp(argv[1], "--install") == 0)
         return installFromCommandLine(argc, argv);
     QApplication app(argc, argv);
+    app.installEventFilter(new SmoothWheel(&app));
     app.setApplicationName(QStringLiteral("agterm-qt")); // also names the Konsole-part profile namespace
     app.setApplicationVersion(QLatin1String(appVersion));
     app.setDesktopFileName(QStringLiteral("agterm-qt"));
