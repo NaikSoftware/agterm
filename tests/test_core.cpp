@@ -334,7 +334,7 @@ private Q_SLOTS:
     {
         Store s;
         const QString a = s.addSession(s.addWorkspace("w"), {}, QDir::tempPath());
-        QCOMPARE(s.session(a)->displayName(), QStringLiteral("New session"));
+        QCOMPARE(s.session(a)->displayName(), QFileInfo(QDir::tempPath()).fileName()); // the folder until a program names it
         s.setTitle(a, QString::fromUtf8("✳ Fix the login bug"));
         QCOMPARE(s.session(a)->displayName(), QStringLiteral("Fix the login bug"));
         s.renameSession(a, "pinned");
@@ -388,6 +388,11 @@ private Q_SLOTS:
         QCOMPARE(agentForArgv({"node", "--max-old-space-size=4096", "/opt/codex/bin/codex"}), QStringLiteral("codex"));
         QCOMPARE(agentForArgv({"-zsh"}), QString());
         QCOMPARE(agentForGroup({{"bash", "run.sh"}, {"agy"}}), QStringLiteral("antigravity"));
+        QCOMPARE(commandTitle({"/usr/bin/htop"}), QStringLiteral("htop"));
+        QCOMPARE(commandTitle({"python3", "-u", "/srv/tools/serve.py", "--port", "8000"}), QStringLiteral("serve.py"));
+        QCOMPARE(commandTitle({"python3", "-m", "http.server"}), QStringLiteral("http.server"));
+        QCOMPARE(commandTitle({"sh", "-c", "printf hi; sleep 3"}), QStringLiteral("sh"));
+        QCOMPARE(commandTitle({"-bash"}), QStringLiteral("bash"));
         QCOMPARE(availableLaunchers("/a:/b", [](const QString &f) { return f == "/b/claude"; }), QStringList({"terminal", "claude"}));
         QCOMPARE(Store::stripTitleSpinner(QString::fromUtf8("✳ Claude Code")), QStringLiteral("Claude Code"));
         QCOMPARE(Store::stripTitleSpinner(QString::fromUtf8("⠋ build")), QStringLiteral("build"));

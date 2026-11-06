@@ -24,7 +24,7 @@ struct Session {
     bool blink = false;
     bool autoReset = false; // a completed status clears once the session is viewed
     bool flagged = false;
-    QString title;   // last title a program running in the session set, spinner glyphs stripped
+    QString title;   // last title a program running in the session set (or its command's name), spinner glyphs stripped
     QString agent;   // launcher id of the coding agent in the foreground, "" for none; not persisted
     QString command; // run instead of a shell at creation, not persisted
     QString splitCwd, splitCommand; // the same for the split pane's first spawn, not persisted

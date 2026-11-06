@@ -51,10 +51,15 @@ static Tint tintFromJson(const QJsonValue &v)
 
 QString Session::displayName() const
 {
-    // a pinned name, else the title the session's program set, as in agterm; "New session" until one does
+    // a pinned name, else the title its program set (or the command it runs), else the folder it is in
     if (!name.isEmpty())
         return name;
-    return title.trimmed().isEmpty() ? QStringLiteral("New session") : title.trimmed();
+    if (!title.trimmed().isEmpty())
+        return title.trimmed();
+    if (QDir::cleanPath(cwd) == QDir::homePath())
+        return QStringLiteral("~");
+    const QString folder = QFileInfo(cwd).fileName();
+    return folder.isEmpty() ? QStringLiteral("New session") : folder;
 }
 
 QString Store::newId()
@@ -690,7 +695,7 @@ void Store::setTitle(const QString &id, const QString &title)
 {
     const QString t = stripTitleSpinner(title);
     if (auto *s = session(id); s && s->title != t) {
-        s->title = t; // the window passes only titles a running program set, so this is rare enough to save
+        s->title = t; // a program's title or a command's name: once per command at most, so saving is cheap
         Q_EMIT changed();
     }
 }

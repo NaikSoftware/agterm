@@ -71,6 +71,12 @@ static int shellPid(KParts::ReadOnlyPart *part)
     return live.isEmpty() ? t->terminalProcessId() : Live::shellPid(live);
 }
 
+// Konsole's foregroundProcessId lags a command starting; the shell's tty says who is in front right now
+static int freshForegroundPid(KParts::ReadOnlyPart *part)
+{
+    return Live::foregroundPid(shellPid(part));
+}
+
 static int foregroundPid(KParts::ReadOnlyPart *part)
 {
     auto *t = qobject_cast<TerminalInterface *>(part);
@@ -682,13 +688,8 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
     connect(part, SIGNAL(currentDirectoryChanged(QString)), bridge, SLOT(currentDirectoryChanged(QString)));
     connect(part, SIGNAL(overrideShortcut(QKeyEvent *, bool &)), bridge, SLOT(overrideShortcut(QKeyEvent *, bool &)));
     if (pane == QLatin1String("main"))
-        connect(part, &KParts::Part::setWindowCaption, this, [this, id, part](const QString &title) {
-            // a title set by a running program (an agent naming its task) renames the session; the one a shell
-            // prompt sets on every line (bash's user@host: dir) does not
-            const int fg = foregroundPid(part);
-            if (fg > 0 && fg != shellPid(part) && !title.trimmed().isEmpty())
-                m_store.setTitle(id, title);
-        });
+        // the OSC itself names the session; the caption is the fallback for a Konsole whose emulation we cannot reach
+        connect(part, &KParts::Part::setWindowCaption, this, [this, id, part](const QString &title) { paneTitle(id, part, title); });
     // the part deletes itself when its shell exits
     connect(part, &QObject::destroyed, this, [this, id, part] {
         if (!m_quitting)
@@ -1079,6 +1080,24 @@ void MainWindow::showEvent(QShowEvent *event)
         prime(p.view);
 }
 
+void MainWindow::paneTitle(const QString &id, QObject *part, const QString &title)
+{
+    // a title set by a running program (an agent naming its task) renames the session; the one a shell prompt sets
+    // on every line (bash's user@host: dir) does not. Konsole sends the caption lazily, often only once the next
+    // command is in front, so the prompt's title is remembered to tell it apart.
+    auto *p = qobject_cast<KParts::ReadOnlyPart *>(part);
+    if (!p || p != m_panes.value(id).main)
+        return;
+    const int fg = freshForegroundPid(p);
+    if (fg <= 0 || fg == shellPid(p))
+        m_shellTitle.insert(id, title);
+    else if (!title.trimmed().isEmpty() && title != m_shellTitle.value(id)) {
+        m_store.setTitle(id, title);
+        m_titlePid.insert(id, fg); // the sampler leaves a program's own title alone
+        m_commandTitle.remove(id);
+    }
+}
+
 QObject *MainWindow::konsoleSession(const QString &id)
 {
     // Konsole::Session is owned by Konsole's session manager, not the part; it registers on the
@@ -1248,7 +1267,21 @@ void MainWindow::sampleAgents()
             if (f.open(QIODevice::ReadOnly))
                 argvs << QString::fromUtf8(f.readAll()).split(QChar(0), Qt::SkipEmptyParts);
         }
-        m_store.setAgent(s->id, agentForGroup(argvs));
+        const QString agent = agentForGroup(argvs);
+        m_store.setAgent(s->id, agent);
+        // a plain command names the session while it runs (an agent names itself); idle, the folder does
+        const int shell = shellPid(part);
+        if (fg > 0 && fg != shell && agent.isEmpty() && !argvs.isEmpty() && fg != m_titlePid.value(s->id)) {
+            const QString name = commandTitle(argvs.first());
+            m_store.setTitle(s->id, name);
+            m_titlePid.insert(s->id, fg);
+            m_commandTitle.insert(s->id, name);
+        } else if ((fg <= 0 || fg == shell) && !s->title.isEmpty()
+                   // after a restart only the argv captured at quit tells a command's name from a program's title
+                   && (s->title == m_commandTitle.value(s->id) || s->title == commandTitle(s->foreground))) {
+            m_store.setTitle(s->id, QString());
+            m_commandTitle.remove(s->id);
+        }
     }
     if (!m_filePanel->isHidden()) // a cd in the active session moves the file panel with it
         m_filePanel->setRoot(liveCwd(m_store.selected));

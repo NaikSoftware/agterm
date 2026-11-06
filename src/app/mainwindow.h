@@ -50,6 +50,7 @@ public:
     bool saveNow(QString *error) override;
     QStringList foregroundArgv(const QString &sessionId, const QString &pane) override;
     bool isOwnShortcut(QKeyEvent *event) const;
+    void paneTitle(const QString &id, QObject *part, const QString &title); // an OSC 0/2 title, or the caption
     void setSocketStatus(bool ok, const QString &error);
     QStringList availableLaunchers() const { return m_launchers; }
     bool filePanel(const QString &mode, int width, QString *error) override;
@@ -164,6 +165,9 @@ private:
     };
     QHash<QString, Ask> m_asks;
     QLabel *m_context = nullptr;
+    QHash<QString, QString> m_shellTitle;   // session -> the last title its shell's prompt set
+    QHash<QString, int> m_titlePid;          // session -> the foreground pid that set or named its title
+    QHash<QString, QString> m_commandTitle; // session -> the command name the sampler gave it, cleared when it ends
     QHash<QString, qint64> m_blockedSince; // when each blocked session entered blocked
     QSet<QString> m_followShown;           // blocks already shown once this episode
     QElapsedTimer m_idle;                  // since the last key or click in this window
