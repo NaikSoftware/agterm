@@ -50,7 +50,7 @@ public:
     bool saveNow(QString *error) override;
     QStringList foregroundArgv(const QString &sessionId, const QString &pane) override;
     bool isOwnShortcut(QKeyEvent *event) const;
-    void oscTitle(const QString &id, QObject *part, const QString &title); // OSC 0/2 as the emulation reads it
+    void paneTitle(const QString &id, QObject *part, const QString &title); // an OSC 0/2 title, or the caption
     void setSocketStatus(bool ok, const QString &error);
     QStringList availableLaunchers() const { return m_launchers; }
     bool filePanel(const QString &mode, int width, QString *error) override;

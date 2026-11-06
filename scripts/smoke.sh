@@ -123,7 +123,7 @@ ctl tree | grep "$named" | grep -qF -- "$folder" || fail "a plain shell is named
 ctl session type "sleep 4"$'\n' --target "$named"
 sleep 3
 ctl tree | grep "$named" | grep -q 'sleep' || fail "a running command names the session"
-sleep 3
+sleep 4 # the sampler ticks every 2 s
 ctl tree | grep "$named" | grep -qF -- "$folder" || fail "the folder names the session again once the command ends"
 ctl session type "sh -c 'printf \"\\033]0;Agent task\\007\"; sleep 3'"$'\n' --target "$named"
 sleep 2

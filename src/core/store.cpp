@@ -695,7 +695,7 @@ void Store::setTitle(const QString &id, const QString &title)
 {
     const QString t = stripTitleSpinner(title);
     if (auto *s = session(id); s && s->title != t) {
-        s->title = t; // the window passes only titles a running program set, so this is rare enough to save
+        s->title = t; // a program's title or a command's name: once per command at most, so saving is cheap
         Q_EMIT changed();
     }
 }

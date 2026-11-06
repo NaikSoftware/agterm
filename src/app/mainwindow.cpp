@@ -688,19 +688,8 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
     connect(part, SIGNAL(currentDirectoryChanged(QString)), bridge, SLOT(currentDirectoryChanged(QString)));
     connect(part, SIGNAL(overrideShortcut(QKeyEvent *, bool &)), bridge, SLOT(overrideShortcut(QKeyEvent *, bool &)));
     if (pane == QLatin1String("main"))
-        connect(part, &KParts::Part::setWindowCaption, this, [this, id, part](const QString &title) {
-            // a title set by a running program (an agent naming its task) renames the session; the one a shell
-            // prompt sets on every line (bash's user@host: dir) does not
-            // Konsole re-sends the prompt's title when a command starts, so that one is not the program's either
-            const int fg = freshForegroundPid(part);
-            if (fg <= 0 || fg == shellPid(part))
-                m_shellTitle.insert(id, title);
-            else if (!title.trimmed().isEmpty() && title != m_shellTitle.value(id)) {
-                m_store.setTitle(id, title);
-                m_titlePid.insert(id, fg); // the sampler leaves a program's own title alone
-                m_commandTitle.remove(id);
-            }
-        });
+        // the OSC itself names the session; the caption is the fallback for a Konsole whose emulation we cannot reach
+        connect(part, &KParts::Part::setWindowCaption, this, [this, id, part](const QString &title) { paneTitle(id, part, title); });
     // the part deletes itself when its shell exits
     connect(part, &QObject::destroyed, this, [this, id, part] {
         if (!m_quitting)
@@ -1091,14 +1080,22 @@ void MainWindow::showEvent(QShowEvent *event)
         prime(p.view);
 }
 
-void MainWindow::oscTitle(const QString &id, QObject *part, const QString &title)
+void MainWindow::paneTitle(const QString &id, QObject *part, const QString &title)
 {
-    // Konsole sends the caption lazily, often only once the next command is in front, so the prompt's title is
-    // caught here, as the shell writes it, for the caption handler to tell apart
+    // a title set by a running program (an agent naming its task) renames the session; the one a shell prompt sets
+    // on every line (bash's user@host: dir) does not. Konsole sends the caption lazily, often only once the next
+    // command is in front, so the prompt's title is remembered to tell it apart.
     auto *p = qobject_cast<KParts::ReadOnlyPart *>(part);
+    if (!p || p != m_panes.value(id).main)
+        return;
     const int fg = freshForegroundPid(p);
-    if (p && p == m_panes.value(id).main && (fg <= 0 || fg == shellPid(p)))
+    if (fg <= 0 || fg == shellPid(p))
         m_shellTitle.insert(id, title);
+    else if (!title.trimmed().isEmpty() && title != m_shellTitle.value(id)) {
+        m_store.setTitle(id, title);
+        m_titlePid.insert(id, fg); // the sampler leaves a program's own title alone
+        m_commandTitle.remove(id);
+    }
 }
 
 QObject *MainWindow::konsoleSession(const QString &id)
