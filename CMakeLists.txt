@@ -37,7 +37,7 @@ target_link_libraries(agterm-core PUBLIC Qt6::Core PRIVATE Qt6::Sql)
 
 find_package(KF6Config REQUIRED)
 find_package(KF6WidgetsAddons REQUIRED)
-add_library(agterm-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/settingsdialog.cpp src/app/sidebar.cpp src/app/palette.cpp src/app/overlay.cpp src/app/dashboard.cpp src/app/library.cpp src/app/attention.cpp src/app/konsoleprivate.cpp src/app/controlui.cpp src/app/help.cpp
+add_library(agterm-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/settingsdialog.cpp src/app/sidebar.cpp src/app/palette.cpp src/app/overlay.cpp src/app/dashboard.cpp src/app/library.cpp src/app/attention.cpp src/app/konsoleprivate.cpp src/app/controlui.cpp src/app/help.cpp src/app/smoothwheel.cpp
   resources/resources.qrc)
 target_include_directories(agterm-ui PUBLIC src/app)
 find_package(KF6Notifications REQUIRED)

@@ -19,6 +19,7 @@
 #include <QElapsedTimer>
 #include <QSet>
 #include <algorithm>
+#include <numeric>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QToolButton>
@@ -29,6 +30,22 @@
 #include <QTest>
 #include "control.h"
 #include <QPushButton>
+#include <QWheelEvent>
+#include "smoothwheel.h"
+
+namespace Konsole
+{
+// stands in for the part's display: SmoothWheel picks its target by this class name
+class TerminalDisplay : public QWidget
+{
+    Q_OBJECT
+public:
+    QList<int> deltas;
+
+protected:
+    void wheelEvent(QWheelEvent *e) override { deltas << e->angleDelta().y(); }
+};
+}
 
 class TestUi : public QObject
 {
@@ -37,6 +54,38 @@ class TestUi : public QObject
     QTemporaryDir dir;
 
 private Q_SLOTS:
+
+    void smoothWheelReplaysNotchesLineByLine()
+    {
+        QCOMPARE(SmoothWheel::factor(500), 1.5);
+        QCOMPARE(SmoothWheel::factor(10), 6.0);
+        QCOMPARE(SmoothWheel::chunk(60), 40);
+        QCOMPARE(SmoothWheel::chunk(30), 30);
+        QCOMPARE(SmoothWheel::chunk(-1000), -350);
+
+        Konsole::TerminalDisplay display;
+        QWidget other;
+        SmoothWheel filter;
+        qApp->installEventFilter(&filter);
+        auto wheel = [](QWidget *to, int dy, Qt::KeyboardModifiers mods = Qt::NoModifier) {
+            QWheelEvent e(QPointF(5, 5), QPointF(5, 5), {}, QPoint(0, dy), Qt::NoButton, mods, Qt::NoScrollPhase, false);
+            return QApplication::sendEvent(to, &e) && e.isAccepted();
+        };
+        wheel(&display, 120); // one slow notch: 180 units, a line now and the rest over the next frames
+        QCOMPARE(display.deltas, QList<int>{SmoothWheel::chunk(180)});
+        QTRY_COMPARE(std::accumulate(display.deltas.begin(), display.deltas.end(), 0), 180);
+        QVERIFY(display.deltas.size() > 2);
+
+        display.deltas.clear();
+        wheel(&display, 120, Qt::ControlModifier); // zoom passes through as it came
+        QCOMPARE(display.deltas, QList<int>{120});
+
+        display.deltas.clear();
+        for (int i = 0; i < 6; ++i)
+            wheel(&display, -120); // a fast spin accelerates past 1.5 per notch
+        QTRY_VERIFY(std::accumulate(display.deltas.begin(), display.deltas.end(), 0) < -6 * 180);
+        qApp->removeEventFilter(&filter);
+    }
 
     // the config dir follows AGTERM_STATE_DIR (set by ctest), so nothing here touches ~/.config
     static QString writeConfig(const QString &name, const QString &text)
