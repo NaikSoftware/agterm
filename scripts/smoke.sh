@@ -117,7 +117,14 @@ ctl session new --parent "$id" --name logs --no-select >/dev/null
 ctl tree --json | grep -q "\"parent\":\"$id\"" || fail "companion"
 named=$(ctl session new --no-select)
 sleep 1.5
-ctl tree | grep "$named" | grep -q 'New session' || fail "a plain shell is a New session (its prompt title is not a name)"
+folder=$(basename "$(ctl session info --target "$named" | awk '$1 == "cwd" {print $2}')")
+[ "$folder" = "$(basename "$HOME")" ] && folder="~"
+ctl tree | grep "$named" | grep -qF -- "$folder" || fail "a plain shell is named after its folder (its prompt title is not a name)"
+ctl session type "sleep 4"$'\n' --target "$named"
+sleep 3
+ctl tree | grep "$named" | grep -q 'sleep' || fail "a running command names the session"
+sleep 3
+ctl tree | grep "$named" | grep -qF -- "$folder" || fail "the folder names the session again once the command ends"
 ctl session type "sh -c 'printf \"\\033]0;Agent task\\007\"; sleep 3'"$'\n' --target "$named"
 sleep 2
 ctl tree | grep "$named" | grep -q 'Agent task' || fail "a running program's title names the session"

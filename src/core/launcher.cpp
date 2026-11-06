@@ -52,6 +52,25 @@ QString agentForGroup(const QList<QStringList> &group)
     return {};
 }
 
+QString commandTitle(QStringList argv)
+{
+    if (argv.isEmpty())
+        return {};
+    if (argv[0].startsWith(QLatin1Char('-')))
+        argv[0] = argv[0].mid(1);
+    const QString program = argv[0].section(QLatin1Char('/'), -1);
+    static const QStringList interpreters{"python", "python3", "node", "bun", "deno", "ruby", "perl", "php", "bash", "sh", "zsh", "fish"};
+    if (!interpreters.contains(program))
+        return program;
+    for (int i = 1; i < argv.size(); ++i) {
+        if (argv[i] == QLatin1String("-c") || argv[i] == QLatin1String("-e"))
+            break;
+        if (!argv[i].startsWith(QLatin1Char('-')))
+            return argv[i].section(QLatin1Char('/'), -1);
+    }
+    return program;
+}
+
 QStringList availableLaunchers(const QString &path, const std::function<bool(const QString &)> &isExecutable)
 {
     const QStringList dirs = path.split(QLatin1Char(':'), Qt::SkipEmptyParts);

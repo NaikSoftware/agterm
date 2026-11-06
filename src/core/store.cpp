@@ -51,10 +51,15 @@ static Tint tintFromJson(const QJsonValue &v)
 
 QString Session::displayName() const
 {
-    // a pinned name, else the title the session's program set, as in agterm; "New session" until one does
+    // a pinned name, else the title its program set (or the command it runs), else the folder it is in
     if (!name.isEmpty())
         return name;
-    return title.trimmed().isEmpty() ? QStringLiteral("New session") : title.trimmed();
+    if (!title.trimmed().isEmpty())
+        return title.trimmed();
+    if (QDir::cleanPath(cwd) == QDir::homePath())
+        return QStringLiteral("~");
+    const QString folder = QFileInfo(cwd).fileName();
+    return folder.isEmpty() ? QStringLiteral("New session") : folder;
 }
 
 QString Store::newId()

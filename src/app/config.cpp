@@ -387,6 +387,8 @@ void MainWindow::watchTerminalNotifications(KParts::ReadOnlyPart *part, PartBrid
 
 void PartBridge::sessionAttribute(int what, const QString &text)
 {
+    if (what == 0 || what == 2)
+        m_window->oscTitle(m_id, parent(), text);
     if (what == 9 && !text.isEmpty() && !text.startsWith(QLatin1String("4;"))) // 9;4 is ConEmu's progress report, not a message
         m_store.notify(m_id, {}, text);
 }
