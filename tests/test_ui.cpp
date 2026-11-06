@@ -424,6 +424,26 @@ private Q_SLOTS:
         QCOMPARE(tree->blinkAlpha(), 255);
     }
 
+    void aWorkspaceRowRollsUpTheMostUrgentStatus()
+    {
+        Store store;
+        const QString ws = store.addWorkspace("w");
+        const QString a = store.addSession(ws, {}, {}), b = store.addSession(ws, {}, {});
+        Sidebar tree(store);
+        tree.rebuild();
+        auto *row = tree.topLevelItem(0);
+        QCOMPARE(row->data(0, SidebarRole::Status).toString(), QStringLiteral("idle"));
+        store.setStatus(a, "completed");
+        store.setStatus(b, "active", false, true);
+        tree.rebuild();
+        QCOMPARE(row->data(0, SidebarRole::Status).toString(), QStringLiteral("active")); // active outranks completed
+        QVERIFY(row->data(0, SidebarRole::Blink).toBool());
+        store.setStatus(a, "blocked");
+        tree.rebuild();
+        QCOMPARE(row->data(0, SidebarRole::Status).toString(), QStringLiteral("blocked"));
+        QVERIFY(!row->data(0, SidebarRole::Blink).toBool());
+    }
+
     void fontKeysZoomTheTerminalAndARelaunchKeepsIt()
     {
         QJsonObject saved;
