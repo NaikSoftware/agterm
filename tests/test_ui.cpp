@@ -59,11 +59,12 @@ private Q_SLOTS:
     {
         QCOMPARE(SmoothWheel::factor(500), 1.5);
         QCOMPARE(SmoothWheel::factor(10), 6.0);
-        QCOMPARE(SmoothWheel::chunk(60), 40);
-        QCOMPARE(SmoothWheel::chunk(30), 30);
-        QCOMPARE(SmoothWheel::chunk(-1000), -350);
+        QCOMPARE(SmoothWheel::chunk(60, 40), 40);
+        QCOMPARE(SmoothWheel::chunk(-1000, 40), -320);
+        QCOMPARE(SmoothWheel::chunk(240, 120), 120);
 
         Konsole::TerminalDisplay display;
+        display.setCursor(Qt::IBeamCursor); // Konsole's cursor when the program does not track the mouse
         QWidget other;
         SmoothWheel filter;
         qApp->installEventFilter(&filter);
@@ -71,10 +72,16 @@ private Q_SLOTS:
             QWheelEvent e(QPointF(5, 5), QPointF(5, 5), {}, QPoint(0, dy), Qt::NoButton, mods, Qt::NoScrollPhase, false);
             return QApplication::sendEvent(to, &e) && e.isAccepted();
         };
-        wheel(&display, 120); // one slow notch: 180 units, a line now and the rest over the next frames
-        QCOMPARE(display.deltas, QList<int>{SmoothWheel::chunk(180)});
-        QTRY_COMPARE(std::accumulate(display.deltas.begin(), display.deltas.end(), 0), 180);
+        wheel(&display, 120); // one slow notch: 1.5x in whole lines, one now and the rest over the next frames
+        QCOMPARE(display.deltas, QList<int>{40});
+        QTRY_COMPARE(std::accumulate(display.deltas.begin(), display.deltas.end(), 0), 160);
         QVERIFY(display.deltas.size() > 2);
+
+        display.deltas.clear();
+        display.setCursor(Qt::ArrowCursor); // the program tracks the mouse: whole notches, the first one at once
+        QTest::qWait(500);
+        wheel(&display, 120);
+        QCOMPARE(display.deltas, QList<int>{120});
 
         display.deltas.clear();
         wheel(&display, 120, Qt::ControlModifier); // zoom passes through as it came

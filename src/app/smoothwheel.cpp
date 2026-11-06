@@ -20,10 +20,9 @@ double SmoothWheel::factor(double msPerNotch)
     return 1.5 + t * 4.5;
 }
 
-int SmoothWheel::chunk(int pending)
+int SmoothWheel::chunk(int pending, int unit)
 {
-    const int line = 40; // Konsole: 120 is 3 lines, or one mouse-tracking event per 3 of these
-    const int size = std::max(line, int(std::abs(pending) * 0.35));
+    const int size = std::max(unit, int(std::abs(pending) * 0.35) / unit * unit);
     return pending > 0 ? std::min(size, pending) : std::max(-size, pending);
 }
 
@@ -42,7 +41,11 @@ bool SmoothWheel::eventFilter(QObject *watched, QEvent *event)
     if (!sameRun || m_last.elapsed() > 400) { // a pause starts a fresh, slow run
         if (!sameRun)
             m_pending = 0;
+        m_carry = 0;
         m_msPerNotch = 200;
+        // Konsole shows an arrow while the program tracks the mouse (TerminalDisplay::resetCursor); it then sends one
+        // event per 120 units, so whole notches go out, else 40 units, one line of scrollback or one arrow key
+        m_unit = display->cursor().shape() == Qt::ArrowCursor ? 120 : 40;
     } else {
         // high-resolution wheels send fractions of a notch, so time is measured per whole notch, smoothed
         const double perNotch = double(m_last.elapsed()) * 120.0 / std::abs(dy);
@@ -52,7 +55,10 @@ bool SmoothWheel::eventFilter(QObject *watched, QEvent *event)
     m_inverted = wheel->inverted();
     m_at = wheel->position();
     m_last.start();
-    m_pending += int(std::lround(dy * factor(m_msPerNotch)));
+    m_carry += dy * factor(m_msPerNotch);
+    const int whole = int(m_carry / m_unit) * m_unit; // only whole units, so every step moves something
+    m_carry -= whole;
+    m_pending += whole;
     if (!m_frame.isActive()) {
         tick(); // the first line moves now, not a frame later
         m_frame.start();
@@ -67,7 +73,7 @@ void SmoothWheel::tick()
         m_frame.stop();
         return;
     }
-    const int step = chunk(m_pending);
+    const int step = chunk(m_pending, m_unit);
     m_pending -= step;
     QWheelEvent wheel(m_at, m_target->mapToGlobal(m_at), {}, QPoint(0, step), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, m_inverted);
     m_sending = true;
