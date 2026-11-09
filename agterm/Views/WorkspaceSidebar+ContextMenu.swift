@@ -257,6 +257,13 @@ extension WorkspaceSidebar.Coordinator {
         actions.closeSessions(request.sessionIDs, in: store)
     }
 
+    @objc func closeSessionButtonClicked(_ sender: NSButton) {
+        guard let outline = outlineView else { return }
+        let row = outline.row(for: sender)
+        guard row >= 0, let node = outline.item(atRow: row) as? SidebarNode, node.kind == .session else { return }
+        actions.closeSessions([node.id], in: store)
+    }
+
     @objc private func menuClearStatus(_ sender: NSMenuItem) {
         guard let request = sender.representedObject as? SessionBatchRequest else { return }
         for id in request.sessionIDs { store.setAgentIndicator(AgentIndicator(), forSession: id) }

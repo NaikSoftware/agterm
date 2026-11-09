@@ -49,6 +49,8 @@ paths:
 - The footer provides workspace creation and New Session/Open Directory. Workspace row menus repeat the
   session actions. Hover shows `workspace-add-session` only when `InterfaceElement.workspaceAddSession`
   is enabled.
+- Hover shows `session-close` on a session row only while it has no badge, status glyph or companion marker,
+  so it never covers one; it runs the menu's Close. No Interface toggle, by the owner's call.
 - A workspace-row click toggles expansion through the outline action, excluding the disclosure frame.
   Defer by `NSEvent.doubleClickInterval` and cancel on double-click so rename does not flicker through a
   toggle. This click routing is keep-in-sync exempt. `GhosttyApp.workspaceRowClickExpands` (default on)

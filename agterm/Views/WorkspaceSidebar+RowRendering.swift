@@ -72,6 +72,7 @@ extension WorkspaceSidebar.Coordinator {
         // glyph: each branch assigns it in full, and an idle round-trip restarts the blink on reload.
         applyBadge(toCell: cell, count: 0)
         cell.setAddButtonVisible(false)
+        cell.setCloseButtonVisible(false)
         cell.notice = nil
         cell.setIconVisible(!GhosttyApp.shared.hiddenInterfaceElements.contains(node.kind.iconElement))
         switch node.kind {
@@ -256,7 +257,6 @@ extension WorkspaceSidebar.Coordinator {
             // width is owned by StatusIconView (0 when idle, glyph-width otherwise) so an idle row
             // reclaims the slot; only the height is pinned here.
             statusIcon.heightAnchor.constraint(equalToConstant: 16),
-            badge.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
             badge.centerYAnchor.constraint(equalTo: center),
         ]
 
@@ -281,6 +281,7 @@ extension WorkspaceSidebar.Coordinator {
             cell.repeatButtonWidthConstraint = repeatWidth
             repeatBtn.isHidden = true
             constraints += [
+                badge.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
                 field.trailingAnchor.constraint(equalTo: repeatBtn.leadingAnchor, constant: -6),
                 repeatBtn.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor),
                 repeatBtn.centerYAnchor.constraint(equalTo: center),
@@ -303,7 +304,24 @@ extension WorkspaceSidebar.Coordinator {
             cell.companionMarker = marker
             let width = marker.widthAnchor.constraint(equalToConstant: 0)
             cell.companionMarkerWidthConstraint = width
+            let closeBtn = makeRowButton(identifier: "session-close", label: "Close Session",
+                                         action: #selector(closeSessionButtonClicked(_:)))
+            closeBtn.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Session")?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold))
+            closeBtn.image?.isTemplate = true
+            closeBtn.imageScaling = .scaleNone
+            closeBtn.toolTip = "Close Session"
+            closeBtn.isHidden = true
+            cell.addSubview(closeBtn)
+            cell.closeButton = closeBtn
+            let closeWidth = closeBtn.widthAnchor.constraint(equalToConstant: 0)
+            cell.closeButtonWidthConstraint = closeWidth
             constraints += [
+                badge.trailingAnchor.constraint(equalTo: closeBtn.leadingAnchor),
+                closeBtn.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
+                closeBtn.centerYAnchor.constraint(equalTo: center),
+                closeBtn.heightAnchor.constraint(equalToConstant: 16),
+                closeWidth,
                 field.trailingAnchor.constraint(equalTo: marker.leadingAnchor, constant: -6),
                 marker.trailingAnchor.constraint(equalTo: statusIcon.leadingAnchor),
                 marker.centerYAnchor.constraint(equalTo: center),
