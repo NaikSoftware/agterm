@@ -54,6 +54,10 @@ class SidebarCellView: NSTableCellView {
     var repeatButtonWidthConstraint: NSLayoutConstraint?
     var repeatLauncher: (() -> SessionLauncher)?
 
+    /// Hover-revealed close button at the trailing edge, session cells only (nil for workspace cells).
+    var closeButton: NSButton?
+    var closeButtonWidthConstraint: NSLayoutConstraint?
+
     var iconWidthConstraint: NSLayoutConstraint?
     var iconGapConstraint: NSLayoutConstraint?
 
@@ -104,6 +108,15 @@ class SidebarCellView: NSTableCellView {
         repeatButtonWidthConstraint.constant = visible ? Self.addButtonWidth + 6 : 0
     }
 
+    /// Reveals or collapses the session row's close button. It shows only while the row has no badge, status
+    /// glyph or companion marker, so it never covers one; configure resets it hidden.
+    func setCloseButtonVisible(_ visible: Bool) {
+        guard let closeButton, let closeButtonWidthConstraint else { return }
+        let show = visible && badge.count == 0 && !statusIcon.showsGlyph && companionMarker?.isHidden != false
+        closeButton.isHidden = !show
+        closeButtonWidthConstraint.constant = show ? Self.addButtonWidth : 0
+    }
+
     override func layout() {
         super.layout()
         updateNameTooltip()
@@ -123,11 +136,11 @@ class SidebarCellView: NSTableCellView {
         field.toolTip = parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
 
-    // hover tracking for the "+" reveal, workspace cells only (session cells have no button to show)
+    // hover tracking for the workspace "+" and the session close button
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea); self.hoverTrackingArea = nil }
-        guard addButton != nil else { return }
+        guard addButton != nil || closeButton != nil else { return }
         let area = NSTrackingArea(
             rect: bounds,
             options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
@@ -139,6 +152,7 @@ class SidebarCellView: NSTableCellView {
 
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
+        setCloseButtonVisible(true)
         // the "+" is a toggleable Interface element, gated at hover time only: a live Settings flip takes
         // effect on the next hover, and a "+" already on screen lingers until the next mouse exit/enter —
         // accepted for a hover-only affordance that clears on the next mouse move.
@@ -149,6 +163,7 @@ class SidebarCellView: NSTableCellView {
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         setAddButtonVisible(false)
+        setCloseButtonVisible(false)
     }
 
     /// setColors tints row text and icons from the theme for the row's real selection state, except the parts
@@ -162,6 +177,7 @@ class SidebarCellView: NSTableCellView {
         imageView?.contentTintColor = tint?.shows(.icon) == true ? tintColor : color.withAlphaComponent(iconAlpha)
         addButton?.contentTintColor = color.withAlphaComponent(iconAlpha)
         repeatButton?.contentTintColor = color.withAlphaComponent(iconAlpha)
+        closeButton?.contentTintColor = color.withAlphaComponent(iconAlpha)
     }
 
     /// themeTextColor is the row text color the theme gives for a selection state, never a row tint.
@@ -293,7 +309,7 @@ final class StatusIconView: NSImageView {
         didSet { applyVisibility() }
     }
 
-    private var showsGlyph = false {
+    private(set) var showsGlyph = false {
         didSet { applyVisibility() }
     }
 
