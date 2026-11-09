@@ -267,9 +267,32 @@ public struct PresentationOverlayChange: Codable, Equatable, Sendable {
 
 /// PresentationPageSource is a handed-over page's full source on the origin: a file the viewer fetches over the
 /// page channel, with the grant that bounds which files it may ask for, or a complete URL it loads itself.
+/// The image, markdown and text cases are pages the viewer builds itself from bytes it fetches over the channel;
+/// they go only to a presenter listing `PresentationHub.pageContentKind`, since an older one fails the whole
+/// stream on a case it cannot decode.
 public enum PresentationPageSource: Codable, Equatable, Sendable {
     case file(path: String, grantRoot: String?)
     case url(String)
+    /// image carries the picture's oriented pixel size, which the viewer turns into points for its own screen.
+    case image(path: String, width: Int, height: Int)
+    case markdown(path: String)
+    case text(path: String, line: Int?)
+    /// document goes only to a presenter also listing `PresentationHub.pageDocumentKind`, for the same reason.
+    case document(path: String)
+
+    /// usesChannel says the viewer fetches this page over a page channel, which a single-use claim opens.
+    public var usesChannel: Bool {
+        if case .url = self { return false }
+        return true
+    }
+
+    /// isContent says this is a page the viewer builds from fetched bytes rather than loads as HTML.
+    public var isContent: Bool {
+        switch self {
+        case .file, .url: return false
+        case .image, .markdown, .text, .document: return true
+        }
+    }
 }
 
 /// PresentationPage asks the presenter to show a page the origin opened. `page` is the origin's page id, which
@@ -292,11 +315,14 @@ public struct PresentationPage: Codable, Equatable, Sendable {
     public var width: Int?
     public var height: Int?
     public var follow: Bool
+    /// markdownLinks is the link grant the origin froze at open; nil, and left out of the frame, for any other page.
+    public var markdownLinks: MarkdownLinkGrant?
 
     public init(page: String, token: String, source: PresentationPageSource, identity: String, chromeless: Bool,
                 javascript: Bool, navigation: Bool, browse: Bool, persistent: Bool, backgroundColor: String?,
                 pane: PresentationPane?, sizePercent: Int?, points: OverlayPointSize = OverlayPointSize(),
-                follow: Bool) {
+                follow: Bool, markdownLinks: MarkdownLinkGrant? = nil) {
+        self.markdownLinks = markdownLinks
         self.page = page
         self.token = token
         self.source = source
@@ -343,15 +369,19 @@ public struct PresentationPageCommand: Codable, Equatable, Sendable {
     public var sizePercent: Int?
     public var width: Int?
     public var height: Int?
+    /// merge asks a resize to keep the axes it does not name, for a picture the presenter sized itself; nil, and
+    /// left out of the frame, for every other command, which replaces the size whole.
+    public var merge: Bool?
 
     public init(page: String, seq: Int, action: PresentationPageAction, sizePercent: Int? = nil,
-                points: OverlayPointSize = OverlayPointSize()) {
+                points: OverlayPointSize = OverlayPointSize(), merge: Bool? = nil) {
         self.page = page
         self.seq = seq
         self.action = action
         self.sizePercent = sizePercent
         width = points.width
         height = points.height
+        self.merge = merge
     }
 
     public var points: OverlayPointSize { OverlayPointSize(width: width, height: height) }
@@ -398,6 +428,57 @@ public struct PresentationRespawns: Codable, Equatable, Sendable {
     public init(epoch: String, generations: [String: Int]) {
         self.epoch = epoch
         self.generations = generations
+    }
+}
+
+/// PresentationLinkClick is a path clicked in a pane the presenter shows, for the origin to open. `pane` is the
+/// origin's identity of that pane. The mode decodes leniently, an unknown one as `overlay`, because a frame that
+/// fails to decode closes the whole stream.
+public struct PresentationLinkClick: Codable, Equatable, Sendable {
+    public var raw: String
+    public var pane: UUID
+    public var mode: LinkOpenMode
+
+    private enum CodingKeys: String, CodingKey { case raw, pane, mode }
+
+    public init(raw: String, pane: UUID, mode: LinkOpenMode) {
+        self.raw = raw
+        self.pane = pane
+        self.mode = mode
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        raw = try container.decode(String.self, forKey: .raw)
+        pane = try container.decode(UUID.self, forKey: .pane)
+        mode = (try? container.decode(String.self, forKey: .mode)).flatMap(LinkOpenMode.init(rawValue:)) ?? .overlay
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(raw, forKey: .raw)
+        try container.encode(pane, forKey: .pane)
+        try container.encode(mode.rawValue, forKey: .mode)
+    }
+}
+
+/// PresentationLinkRefusal is the origin's answer to a forwarded click it did not open. An unknown reason decodes as
+/// `notOpened`, for the same reason the click's mode decodes leniently.
+public struct PresentationLinkRefusal: Codable, Equatable, Sendable {
+    public var reason: RemoteLinkRefusal
+
+    private enum CodingKeys: String, CodingKey { case reason }
+
+    public init(reason: RemoteLinkRefusal) { self.reason = reason }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        reason = (try? container.decode(String.self, forKey: .reason)).flatMap(RemoteLinkRefusal.init(rawValue:)) ?? .notOpened
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(reason.rawValue, forKey: .reason)
     }
 }
 
@@ -480,6 +561,10 @@ public struct PresentationFrame: Equatable, Sendable {
         case pageState(PresentationPageState)
         /// The origin respawned a pane's shell under the same daemon name; carries that pane's new count alone.
         case respawn(PresentationRespawns)
+        /// linkClick: the presenter forwards a path clicked in one of the session's panes for the origin to open.
+        case linkClick(PresentationLinkClick)
+        /// linkRefused: the origin did not open a forwarded click.
+        case linkRefused(PresentationLinkRefusal)
         /// A kind this build does not speak. Kept, with its ordering, so a newer peer does not break the stream.
         case unknown(String)
 
@@ -515,6 +600,8 @@ public struct PresentationFrame: Equatable, Sendable {
             case .pageCommand: return "page.command"
             case .pageState: return "page.state"
             case .respawn: return "pane.respawn"
+            case .linkClick: return "link.click"
+            case .linkRefused: return "link.refused"
             case .unknown(let kind): return kind
             }
         }
@@ -533,7 +620,7 @@ public struct PresentationFrame: Equatable, Sendable {
 
 extension PresentationFrame: Codable {
     private enum CodingKeys: String, CodingKey {
-        case kind, gen, rev, hello, snapshot, status, context, info, layout, hud, notify, sound, ask, overlay, page, respawn
+        case kind, gen, rev, hello, snapshot, status, context, info, layout, hud, notify, sound, ask, overlay, page, respawn, link
     }
 
     public init(from decoder: Decoder) throws {
@@ -573,6 +660,8 @@ extension PresentationFrame: Codable {
         case "page.command": body = .pageCommand(try container.decode(PresentationPageCommand.self, forKey: .page))
         case "page.state": body = .pageState(try container.decode(PresentationPageState.self, forKey: .page))
         case "pane.respawn": body = .respawn(try container.decode(PresentationRespawns.self, forKey: .respawn))
+        case "link.click": body = .linkClick(try container.decode(PresentationLinkClick.self, forKey: .link))
+        case "link.refused": body = .linkRefused(try container.decode(PresentationLinkRefusal.self, forKey: .link))
         default: body = .unknown(kind)
         }
     }
@@ -605,6 +694,8 @@ extension PresentationFrame: Codable {
         case .pageCommand(let command): try container.encode(command, forKey: .page)
         case .pageState(let state): try container.encode(state, forKey: .page)
         case .respawn(let respawns): try container.encode(respawns, forKey: .respawn)
+        case .linkClick(let click): try container.encode(click, forKey: .link)
+        case .linkRefused(let refusal): try container.encode(refusal, forKey: .link)
         case .ping, .ack, .presenterAcquire, .presenterGranted, .presenterRefused, .unknown: break
         }
     }

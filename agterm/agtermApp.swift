@@ -124,6 +124,9 @@ struct agtermApp: App {
         // built before the control server so it can drive `keymap.reload`, safe since both need only the library.
         let settingsModel = SettingsModel(library: library, settingsStore: settingsStore)
         _settingsModel = State(initialValue: settingsModel)
+        // here, not in the scene `.task`: the menu's first evaluation reads remotes through it, and a later
+        // assignment invalidates nothing, leaving File ▸ Attach Remote disabled until an unrelated rebuild.
+        actions.settingsModel = settingsModel
         captureOnExit = AppDelegate.makeExitCapture(
             settingsModel: settingsModel, zmxResolver: restored.foregroundResolver)
         welcomeDue = FirstRunWelcome.isDue(welcomeShown: settingsModel.settings.welcomeShown,
@@ -140,6 +143,7 @@ struct agtermApp: App {
         SessionLaunchers.refresh()
         SessionAgentMonitor.start(library: library, zmxResolver: restored.foregroundResolver)
         LinkOpener.shared.mode = { settingsModel.settings.effectiveLinkOpenMode }
+        controlServer.installRemoteLinkClicks()
         LinkOpener.shared.overlay = { [weak controlServer] url, session, percent in
             controlServer?.openLinkOverlay(url, session: session, sizePercent: percent) ?? false
         }
@@ -154,6 +158,10 @@ struct agtermApp: App {
         LinkOpener.shared.text = { [weak controlServer] link, done in
             guard let controlServer else { return done(false) }
             controlServer.openTextLink(link, completion: done)
+        }
+        LinkOpener.shared.document = { [weak controlServer] url, session, percent, done in
+            guard let controlServer else { return done(false) }
+            controlServer.openDocumentLink(url, session: session, sizePercent: percent, completion: done)
         }
         let liveReset = LiveResetCoordinator(settingsModel: settingsModel,
                                              selection: { [weak controlServer] in controlServer?.liveResetSelection() })
@@ -283,9 +291,6 @@ struct agtermApp: App {
                         library.emitAppLaunched(ready: controlServer.boundSocketPath != nil)
                         appDelegate.drainPendingOpenDirectories()
                         customCommandRunner.start()
-                        // wire the keymap + runner into the action hub for the command palette's custom
-                        // commands; both are built after `actions`, so not in `init`.
-                        actions.settingsModel = settingsModel
                         // seed the per-window settings into every open store now the model is wired: idempotent
                         // and order-independent of resolveStore/onAppear (later windows seed in resolveStore).
                         settingsModel.applyWindowSettingsToAllWindows()

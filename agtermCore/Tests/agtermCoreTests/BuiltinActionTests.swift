@@ -34,6 +34,8 @@ struct BuiltinActionTests {
         #expect(BuiltinAction.newCompanion.rawValue == "new_companion")
         #expect(BuiltinAction.newCompanion.defaultChord == nil)
         #expect(BuiltinAction.duplicateCompanion.rawValue == "duplicate_companion")
+        #expect(BuiltinAction.convertCompanion.rawValue == "convert_companion")
+        #expect(BuiltinAction.convertCompanion.defaultChord == nil)
         #expect(BuiltinAction.previousWorkspace.rawValue == "previous_workspace")
         #expect(BuiltinAction.nextWorkspace.rawValue == "next_workspace")
         #expect(BuiltinAction.toggleWorkspaceCollapse.rawValue == "toggle_workspace_collapse")
@@ -43,7 +45,7 @@ struct BuiltinActionTests {
         #expect(BuiltinAction.editFlaggedSessions.rawValue == "edit_flagged_sessions")
         #expect(BuiltinAction.editFocusedWorkspaces.rawValue == "edit_focused_workspaces")
         #expect(BuiltinAction.toggleFilePanel.rawValue == "toggle_file_panel")
-        #expect(BuiltinAction.allCases.count == 55)
+        #expect(BuiltinAction.allCases.count == 56)
     }
 
     @Test func rejectsUnknownName() {
@@ -99,6 +101,7 @@ struct BuiltinActionTests {
             .duplicateSession: nil,
             .newCompanion: nil,
             .duplicateCompanion: nil,
+            .convertCompanion: nil,
             .closeSession: Chord(mods: [.command], key: "w"),
             .reopenRecent: Chord(mods: [.command, .shift], key: "t"),
             .undoClose: Chord(mods: [.command], key: "z"),
@@ -204,6 +207,7 @@ struct BuiltinActionTests {
         let keyless: Set<BuiltinAction> = [
             .renameWindow, .deleteWindow, .renameWorkspace, .deleteWorkspace, .renameSession, .duplicateSession, .newCompanion,
             .duplicateCompanion,
+            .convertCompanion,
             .clearStatus, .firstSession, .lastSession, .selectTheme, .toggleFlaggedView, .focusWorkspace,
             .toggleWorkspaceFilter, .previousWorkspace, .nextWorkspace, .toggleWorkspaceCollapse,
             .previousWindow, .nextWindow, .editFlaggedSessions, .editFocusedWorkspaces,

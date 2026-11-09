@@ -303,7 +303,7 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     public let parent: String?
     /// True for a parent whose companions are folded; omitted otherwise.
     public let collapsed: Bool?
-    /// `page` for a page companion, which has no terminal; omitted for a terminal session.
+    /// `page` for a page session, which has no terminal; omitted for a terminal session.
     public let content: String?
     /// info is the sidebar info line's source as set (`Session.effectiveInfo`, so an attached row without a local
     /// line shows its origin's). The three info fields are all present while a line is set, all omitted otherwise.
@@ -351,6 +351,8 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     /// The host a teleported session is attached to; nil/omitted for a local one. Live-only — a remote
     /// session is never persisted, so this never survives a relaunch.
     public let remoteHost: String?
+    /// The origin's id for the session an attached row shows, the id `zmx attach` takes; omitted for a local one.
+    public let remoteSessionID: String?
 
     /// This Mac's presentation stream to the session's origin, on an attached session only. `state` is
     /// `connecting`, `connected`, `unsupported` for an origin that predates the stream, or `failed` with
@@ -393,7 +395,8 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
                 remoteOverlays: [ControlRemoteOverlayNode]? = nil, htmlOverlays: [ControlHtmlOverlayNode]? = nil,
                 hiddenOverlays: [String]? = nil, lastSelectedAt: Double? = nil,
                 tint: String? = nil, tintOn: [String]? = nil, parent: String? = nil, collapsed: Bool? = nil,
-                content: String? = nil, info: SessionInfo? = nil) {
+                content: String? = nil, info: SessionInfo? = nil, remoteSessionID: String? = nil) {
+        self.remoteSessionID = remoteSessionID
         self.content = content
         self.info = info?.source
         self.infoMarkdown = info?.markdown
@@ -458,6 +461,30 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     }
 }
 
+/// ControlTextSearchNode is a text page's query with the page's last count of matches and the current one, 0 for none.
+public struct ControlTextSearchNode: Codable, Sendable, Equatable {
+    public let query: String
+    public let matches: Int
+    public let current: Int
+
+    public init(query: String, matches: Int, current: Int) {
+        self.query = query
+        self.matches = matches
+        self.current = current
+    }
+}
+
+/// ControlTextChangesNode is a diff page's count of changes and the one it last stepped to, 0 before any step.
+public struct ControlTextChangesNode: Codable, Sendable, Equatable {
+    public let count: Int
+    public let current: Int
+
+    public init(count: Int, current: Int) {
+        self.count = count
+        self.current = current
+    }
+}
+
 /// ControlTextOverlayNode is a text page's source: the file, the highlight.js language its name maps to
 /// (omitted when unmapped, and still reported for a file too large to highlight), and the line it was
 /// opened at, not the line in view.
@@ -465,11 +492,35 @@ public struct ControlTextOverlayNode: Codable, Sendable, Equatable {
     public let file: String
     public let language: String?
     public let line: Int?
+    /// tail is a log page's line limit; the other log fields are its live state, all omitted on a plain text page.
+    public let tail: Int?
+    public let following: Bool?
+    public let lines: Int?
+    public let clipped: Bool?
+    public let waiting: Bool?
+    public let unreadable: Bool?
+    /// search is the page's search, omitted with no query.
+    public let search: ControlTextSearchNode?
+    /// changes is a diff page's change count and current change, omitted until the page reports and on other pages.
+    public let changes: ControlTextChangesNode?
+    /// wrap is true while the page wraps long lines, omitted while it does not.
+    public let wrap: Bool?
 
-    public init(file: String, language: String?, line: Int?) {
+    public init(file: String, language: String?, line: Int?, tail: Int? = nil, following: Bool? = nil, lines: Int? = nil,
+                clipped: Bool? = nil, waiting: Bool? = nil, unreadable: Bool? = nil, search: ControlTextSearchNode? = nil,
+                changes: ControlTextChangesNode? = nil, wrap: Bool? = nil) {
+        self.search = search
+        self.wrap = wrap
+        self.changes = changes
         self.file = file
         self.language = language
         self.line = line
+        self.tail = tail
+        self.following = following
+        self.lines = lines
+        self.clipped = clipped
+        self.waiting = waiting
+        self.unreadable = unreadable
     }
 }
 
@@ -478,13 +529,15 @@ public struct ControlTextOverlayNode: Codable, Sendable, Equatable {
 public struct ControlHtmlOverlayNode: Codable, Sendable, Equatable {
     /// pane is the pane role, omitted for the session-wide slot.
     public let pane: String?
-    /// file, url, image, markdown and text name the source; exactly one is set.
+    /// file, url, image, markdown, document and text name the source; exactly one is set.
     public let file: String?
     /// cwd is a file page's read grant, omitted when it has none.
     public let cwd: String?
     public let url: String?
     public let image: String?
     public let markdown: String?
+    /// document is an HTML file a terminal click opened, shown with no file grant or bridge.
+    public let document: String?
     public let text: ControlTextOverlayNode?
     /// state is `loading`, `loaded` or `failed`.
     public let state: String
@@ -523,7 +576,7 @@ public struct ControlHtmlOverlayNode: Codable, Sendable, Equatable {
     public let clicked: Bool?
 
     public init(pane: String?, file: String? = nil, cwd: String? = nil, url: String? = nil, image: String? = nil,
-                markdown: String? = nil, text: ControlTextOverlayNode? = nil, state: String,
+                markdown: String? = nil, document: String? = nil, text: ControlTextOverlayNode? = nil, state: String,
                 error: String?, page: String? = nil, title: String? = nil, canGoBack: Bool? = nil,
                 canGoForward: Bool? = nil, navigation: Bool? = nil, javascript: Bool = false, chromeless: Bool = false,
                 zoom: Double? = nil, id: String? = nil, persistent: Bool = false, browse: Bool = false,
@@ -539,6 +592,7 @@ public struct ControlHtmlOverlayNode: Codable, Sendable, Equatable {
         self.url = url
         self.image = image
         self.markdown = markdown
+        self.document = document
         self.text = text
         self.state = state
         self.error = error
@@ -555,7 +609,7 @@ public struct ControlHtmlOverlayNode: Codable, Sendable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case pane, file, cwd, url, image, markdown, text, state, error, page, title, canGoBack, canGoForward, navigation, javascript
+        case pane, file, cwd, url, image, markdown, document, text, state, error, page, title, canGoBack, canGoForward, navigation, javascript
         case chromeless, persistent, browse, zoom, id, hidden, remote, replica, clicked
     }
 
@@ -567,6 +621,7 @@ public struct ControlHtmlOverlayNode: Codable, Sendable, Equatable {
         url = try c.decodeIfPresent(String.self, forKey: .url)
         image = try c.decodeIfPresent(String.self, forKey: .image)
         markdown = try c.decodeIfPresent(String.self, forKey: .markdown)
+        document = try c.decodeIfPresent(String.self, forKey: .document)
         text = try c.decodeIfPresent(ControlTextOverlayNode.self, forKey: .text)
         state = try c.decode(String.self, forKey: .state)
         error = try c.decodeIfPresent(String.self, forKey: .error)
@@ -780,6 +835,9 @@ public struct ControlTree: Codable, Sendable, Equatable {
     /// indexUnsaved is true while the last `windows.json` write failed, omitted otherwise. App-global like
     /// `app`.
     public let indexUnsaved: Bool?
+    /// snapshotUnsaved is true after this window's AppStore save fails until its next successful save,
+    /// omitted otherwise. Per window, unlike `indexUnsaved`.
+    public let snapshotUnsaved: Bool?
 
     public init(workspaces: [ControlWorkspaceNode], idleMs: Int? = nil, autoFollowMs: Int? = nil,
                 attentionIncludesActive: Bool? = nil, attentionNavigationAcrossWindows: Bool? = nil,
@@ -791,8 +849,10 @@ public struct ControlTree: Codable, Sendable, Equatable {
                 dashboardHighlighted: String? = nil, dashboardFontSize: Double? = nil,
                 dashboardFontMode: String? = nil, pickPending: String? = nil, askPending: String? = nil,
                 app: AppIdentity? = nil, liveReset: ControlLiveResetReadback? = nil,
-                indexUnsaved: Bool? = nil, linkOpenMode: String? = nil, sidebarDensity: String? = nil) {
+                indexUnsaved: Bool? = nil, snapshotUnsaved: Bool? = nil, linkOpenMode: String? = nil,
+                sidebarDensity: String? = nil) {
         self.workspaces = workspaces
+        self.snapshotUnsaved = snapshotUnsaved
         self.sidebarDensity = sidebarDensity
         self.linkOpenMode = linkOpenMode
         self.liveReset = liveReset

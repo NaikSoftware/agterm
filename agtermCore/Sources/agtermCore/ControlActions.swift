@@ -15,8 +15,12 @@ public protocol ControlActions {
     func createCompanion(_ target: String?, options: CompanionOptions, window: String?) async -> ControlResponse
     /// Creates a page companion of the target session showing `options.page` full size.
     func createPageCompanion(_ target: String?, window: String?, options: ControlSessionOverlayOpenOptions) async -> ControlResponse
+    /// createPageSession opens `options.page` as a top-level page session after the target's group.
+    func createPageSession(_ target: String?, window: String?, options: ControlSessionOverlayOpenOptions) async -> ControlResponse
     /// Creates a companion copying the target's layout and running another copy of each pane's program.
     func duplicateAsCompanion(_ target: String?, window: String?, select: Bool) async -> ControlResponse
+    /// convertToCompanion nests the target and its companions under a fresh session in its slot.
+    func convertToCompanion(_ target: String?, window: String?) -> ControlResponse
     /// Hands out one attachment of the target page companion to another Mac.
     func attachCompanionPage(_ target: String?, window: String?) -> ControlResponse
     /// Folds or unfolds a parent's companions in the sidebar tree.
@@ -149,6 +153,14 @@ public protocol ControlActions {
     func selectAllSession(_ target: String?, window: String?) -> ControlResponse
     func searchSession(_ target: String?, window: String?,
                        text: String?, to: String?) async -> ControlResponse
+    /// searchSessionOverlay sets, steps or closes the search on the text page in the addressed slot; a step answers
+    /// `N of M` for the match it reached.
+    func searchSessionOverlay(_ target: String?, window: String?, pane: OverlayPane?,
+                              request: TextSearchRequest) async -> ControlResponse
+    /// stepSessionOverlayChanges moves the diff page in the addressed slot to its next or previous change and answers
+    /// `N of M`.
+    func stepSessionOverlayChanges(_ target: String?, window: String?, pane: OverlayPane?,
+                                   forward: Bool) async -> ControlResponse
     func openSessionOverlay(_ target: String?, window: String?,
                             options: ControlSessionOverlayOpenOptions) -> ControlResponse
     func closeSessionOverlay(_ target: String?, window: String?, pane: OverlayPane?) -> ControlResponse
@@ -163,6 +175,14 @@ public protocol ControlActions {
     /// Hides, shows or toggles the session's overlays, or one pane's; a hidden overlay keeps running.
     func setSessionOverlayVisibility(_ target: String?, window: String?, pane: OverlayPane?,
                                      mode: OverlayVisibilityMode) -> ControlResponse
+    /// setSessionOverlayFollow sets whether the log page in the addressed slot follows its file; `result.text` names
+    /// the state left.
+    func setSessionOverlayFollow(_ target: String?, window: String?, pane: OverlayPane?,
+                                 mode: ControlToggleMode) -> ControlResponse
+    /// setSessionOverlayWrap sets whether the text page in the addressed slot wraps long lines; `result.text` names
+    /// the state left.
+    func setSessionOverlayWrap(_ target: String?, window: String?, pane: OverlayPane?,
+                               mode: ControlToggleMode) -> ControlResponse
     /// Answers the page in the addressed slot with `value` and closes it; `session.overlay.result --page` reads it.
     func submitSessionOverlay(_ target: String?, window: String?, pane: OverlayPane?, value: String) -> ControlResponse
     /// The selector outcome of page `pageID`, readable after the page and its session are gone.

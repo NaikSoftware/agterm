@@ -150,6 +150,8 @@ public final class AppStore {
     @ObservationIgnored let persistence: PersistenceStore
     /// snapshotDidSave runs after each snapshot write that landed.
     @ObservationIgnored let snapshotDidSave: (() -> Void)?
+    /// snapshotUnsaved is true from a failed snapshot write until the next one that lands.
+    @ObservationIgnored var snapshotUnsaved = false
     @ObservationIgnored let recentClosedStore: RecentClosedStore?
     @ObservationIgnored var recentClosedDidChange: (() -> Void)?
     @ObservationIgnored let controlEventSink: ((ControlEventDraft) -> Void)?
@@ -415,7 +417,8 @@ public final class AppStore {
                                           tint: session.tint?.color.rawValue, tintOn: session.tint?.parts.map(\.rawValue),
                                           parent: session.parentID?.uuidString,
                                           collapsed: !session.isExpanded && parents.contains(session.id) ? true : nil,
-                                          content: session.content == .page ? "page" : nil, info: session.effectiveInfo)
+                                          content: session.content == .page ? "page" : nil, info: session.effectiveInfo,
+                                          remoteSessionID: session.remoteSessionID)
             }
             return ControlWorkspaceNode(id: workspace.id.uuidString, name: workspace.name,
                                         active: workspace.id == activeWorkspaceID,
@@ -439,7 +442,8 @@ public final class AppStore {
                            dashboardFontSize: dashboardFontSize(),
                            dashboardFontMode: dashboardFontMode(),
                            pickPending: pickPending(), askPending: askPending(), app: app, liveReset: liveReset,
-                           indexUnsaved: indexUnsaved ? true : nil, linkOpenMode: linkOpenMode?.rawValue,
+                           indexUnsaved: indexUnsaved ? true : nil, snapshotUnsaved: snapshotUnsaved ? true : nil,
+                           linkOpenMode: linkOpenMode?.rawValue,
                            sidebarDensity: sidebarDensity?.rawValue)
     }
 
@@ -512,7 +516,8 @@ public final class AppStore {
     @discardableResult
     public func addSession(toWorkspace workspaceID: UUID, cwd: String, command: String? = nil,
                            name: String? = nil, wait: Bool = false, at index: Int? = nil, select: Bool = true,
-                           remoteHost: String? = nil, tint: SidebarTint? = nil, parentID: UUID? = nil,
+                           remoteHost: String? = nil, remoteSessionID: String? = nil, tint: SidebarTint? = nil,
+                           parentID: UUID? = nil,
                            content: SessionContent = .terminal) -> Session? {
         guard let wsIndex = workspaces.firstIndex(where: { $0.id == workspaceID }) else { return nil }
         // both reach a custom command's expansion — cwd through initialCwd, name through customName — so
@@ -520,7 +525,7 @@ public final class AppStore {
         // `remoteHost` arrives here rather than being assigned after, because this call saves.
         let session = Session(initialCwd: TerminalText.sanitized(cwd),
                               customName: name.map(TerminalText.sanitized)?.trimmedOrNil,
-                              remoteHost: remoteHost, content: content)
+                              remoteHost: remoteHost, remoteSessionID: remoteSessionID, content: content)
         session.initialCommand = command
         session.commandWait = wait
         session.tint = tint
@@ -594,14 +599,17 @@ public final class AppStore {
     public func closeSession(_ sessionID: UUID, alreadyFinalized: UUID? = nil) {
         // a parent closes with its companions; one Recent Closed entry carries the whole group
         let companions = companions(of: sessionID)
+        // recorded before the companions close, which takes a page companion's page with it
+        let recorded = companions.filter(\.isPersistable).map(sessionSnapshot)
         for companion in companions.reversed() {
             closeSession(companion.id, alreadyFinalized: alreadyFinalized, recordsRecent: false)
         }
-        closeSession(sessionID, alreadyFinalized: alreadyFinalized, recordsRecent: true, companions: companions)
-        finalizeParkedCompanions(of: [sessionID])
+        closeSession(sessionID, alreadyFinalized: alreadyFinalized, recordsRecent: true, companions: recorded)
+        // a converted companion can still own a parked companion recorded under it
+        finalizeParkedCompanions(of: [sessionID] + companions.map(\.id))
     }
 
-    private func closeSession(_ sessionID: UUID, alreadyFinalized: UUID?, recordsRecent: Bool, companions: [Session] = []) {
+    private func closeSession(_ sessionID: UUID, alreadyFinalized: UUID?, recordsRecent: Bool, companions: [SessionSnapshot] = []) {
         guard let location = location(ofSession: sessionID) else { return }
         let wasActive = selectedSessionID == sessionID
         let workspace = workspaces[location.workspaceIndex]

@@ -31,12 +31,13 @@ public struct ControlDispatcher {
                 .sessionCopy, .sessionPaste, .sessionSelectAll, .sessionSearch, .sessionOverlayOpen,
                 .sessionOverlayClose, .sessionOverlayResize, .sessionOverlayReload, .sessionOverlayNavigate,
                 .sessionOverlayResult, .sessionOverlaySubmit, .sessionOverlayCopy, .sessionOverlayText,
-                .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle,
-                .sessionBackground, .sessionText:
+                .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle, .sessionOverlayFollow,
+                .sessionOverlaySearch, .sessionOverlayChanges, .sessionOverlayWrap, .sessionBackground, .sessionText:
             return await dispatchSessionSurfaceCommand(request)
         case .sessionOverlayJobRun, .sessionOverlayPageServe:
             return dispatchSessionOverlayCommand(request)
-        case .sessionCompanionNew, .sessionCompanionPage, .sessionCompanionDuplicate, .sessionCompanionPageAttach, .sessionCollapse, .sessionExpand:
+        case .sessionCompanionNew, .sessionCompanionPage, .sessionPage, .sessionCompanionDuplicate, .sessionCompanionConvert,
+                .sessionCompanionPageAttach, .sessionCollapse, .sessionExpand:
             return await dispatchCompanionCommand(request)
         case .workspaceNew, .workspaceSelect, .workspaceGo, .workspaceRename, .workspaceDelete,
                 .workspaceMove, .workspaceFocus, .workspaceFilter, .workspaceCollapse, .workspaceExpand,
@@ -420,9 +421,14 @@ public struct ControlDispatcher {
         case .sessionSearch:
             return await actions.searchSession(request.target, window: request.args?.window,
                                                text: request.args?.text, to: request.args?.to)
+        case .sessionOverlaySearch:
+            return await dispatchSessionOverlaySearch(request)
+        case .sessionOverlayChanges:
+            return await dispatchSessionOverlayChanges(request)
         case .sessionOverlayOpen, .sessionOverlayClose, .sessionOverlayResize, .sessionOverlayReload,
              .sessionOverlayNavigate, .sessionOverlayResult, .sessionOverlaySubmit, .sessionOverlayCopy,
-             .sessionOverlayText, .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle:
+             .sessionOverlayText, .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle, .sessionOverlayFollow,
+             .sessionOverlayWrap:
             return dispatchSessionOverlayCommand(request)
         case .sessionBackground:
             return dispatchSessionBackground(request)
