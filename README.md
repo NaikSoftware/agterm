@@ -2,6 +2,8 @@
 
 [![Build Status](https://github.com/umputun/agterm/workflows/build/badge.svg)](https://github.com/umputun/agterm/actions) [![Coverage Status](https://coveralls.io/repos/github/umputun/agterm/badge.svg?branch=master)](https://coveralls.io/github/umputun/agterm?branch=master)
 
+> **Linux:** a Qt6/KDE implementation of this fork lives in [NaikSoftware/agterm-qt](https://github.com/NaikSoftware/agterm-qt).
+
 **[agterm.com](https://agterm.com)** · [Documentation](https://agterm.com/docs) · [Command reference](https://agterm.com/commands) · [Cookbook](cookbook/)
 
 `agterm` is a native macOS terminal with a deliberately small interface and a full control API. Shells are organized into named workspaces, each holding the sessions for one project or context, and that hierarchy is the whole model: there is nothing else to learn before it is useful. Everything it holds is also an object a script can address. The bundled `agtermctl` creates sessions and types into them, reads a pane's text back, runs a program in an overlay and returns its exit status, sets a session's status glyph, opens the native picker, moves windows, and reads all of that state back out over a local socket.
