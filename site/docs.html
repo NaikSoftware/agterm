@@ -886,7 +886,7 @@
                   >›</span
                 >A workspace can pin a project folder. A session a script starts with
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">session new --cwd DIR</span> and no other placement lands in the workspace whose folder is
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">DIR</span> or holds it, in any open window; the deepest pin wins. A new session in a workspace with a project folder opens there. On first launch, and from
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">DIR</span> or holds it, in any open window; the deepest pin wins. A new session in a workspace with a project folder opens there unless Settings sends new sessions home or to a fixed folder. On first launch, and from
                 <strong style="color: #e6e1d7">File ▸ Set Up Workspaces…</strong>, a guide offers one workspace per project
                 folder it finds. Pin or clear a folder with <span style="font-family: &quot;JetBrains Mono&quot;, monospace">workspace folder</span>. Remote windows do not carry
                 project folders yet.
@@ -1718,8 +1718,8 @@
                 Collapse/Expand Workspace always do), a
                 <strong style="color: #e6e1d7">Flagged view layout</strong> that picks a flat list, with or without each row's workspace name, or a workspace tree for the
                 flagged view in every window (the tree shares each workspace's collapse state with the ordinary tree, so
-                folding a group folds that workspace in both), where a new session opens (your home
-                directory by default, the current session's directory, or a fixed folder you pick), whether New Session adds
+                folding a group folds that workspace in both), where a new session opens (by default the
+                workspace's project folder, else the current session's directory; or your home directory, or a fixed folder you pick), whether New Session adds
                 it at the end of the workspace or right after the current session, a restore mode for fresh shells,
                 re-run commands, or live sessions, an opt-in confirm before closing a session, and
                 whether to load your global Ghostty config.

@@ -431,7 +431,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// workspaceRowClickExpands says whether clicking a workspace row folds it; nil = on. The disclosure
     /// triangle and the row icon fold regardless.
     public var workspaceRowClickExpands: Bool?
-    /// Which directory a new (⌘T) session opens in, a `NewSessionDirectory` raw value; nil = `home`. Read
+    /// Which directory a new (⌘T) session opens in, a `NewSessionDirectory` raw value; nil = `currentSession`. Read
     /// by `AppActions.newSession()` through `resolveNewSessionCwd`.
     public var newSessionDirectory: String?
     /// The fixed directory used when `newSessionDirectory` is `custom`; nil/empty falls back to home.
@@ -679,16 +679,16 @@ public struct AppSettings: Codable, Equatable, Sendable {
     }
 
     /// The working directory a new session opens in, resolving `newSessionDirectory` against the target
-    /// workspace's remembered folder, the active session's focused-pane cwd and home. An unknown/nil mode, a
-    /// blank `currentSessionCwd`, or a blank custom path all fall back to home. Host-free so `AppActions` and
-    /// the tests share one resolution. An existing `projectFolder` (the workspace's pin) wins in every mode.
+    /// workspace's pinned project folder, its remembered folder, the active session's focused-pane cwd and home.
+    /// A blank `currentSessionCwd` or a blank custom path falls back to home. Host-free so `AppActions` and
+    /// the tests share one resolution.
     public func resolveNewSessionCwd(rememberedFolder: String? = nil, projectFolder: String? = nil, currentSessionCwd: String?,
                                      home: String, directoryExists: (String) -> Bool = AppSettings.directoryExists) -> String {
-        if let projectFolder, directoryExists(projectFolder) { return projectFolder }
-        switch NewSessionDirectory(rawValue: newSessionDirectory ?? "") ?? .home {
+        switch effectiveNewSessionDirectory {
         case .home:
             return home
         case .currentSession:
+            if let projectFolder, directoryExists(projectFolder) { return projectFolder }
             if let folder = usableRememberedFolder(rememberedFolder, directoryExists: directoryExists) { return folder }
             guard let cwd = currentSessionCwd, !cwd.isEmpty else { return home }
             return cwd
@@ -698,8 +698,13 @@ public struct AppSettings: Codable, Equatable, Sendable {
         }
     }
 
-    /// Whether new sessions use each workspace's remembered folder: only the `currentSession` mode does.
-    public var usesRememberedFolder: Bool { newSessionDirectory == NewSessionDirectory.currentSession.rawValue }
+    /// The new-session directory mode; nil or an unknown raw value is `currentSession`.
+    public var effectiveNewSessionDirectory: NewSessionDirectory {
+        NewSessionDirectory(rawValue: newSessionDirectory ?? "") ?? .currentSession
+    }
+
+    /// Whether new sessions use each workspace's project and remembered folders: only the `currentSession` mode does.
+    public var usesRememberedFolder: Bool { effectiveNewSessionDirectory == .currentSession }
 
     /// `folder` when the mode uses remembered folders and the directory still exists, else nil. A vanished
     /// folder is skipped, not cleared.
@@ -718,7 +723,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// server's default: the current row's directory and a custom directory are sent as they are, and home is the
     /// server account's own.
     public func remoteNewSessionCwd(currentSessionCwd: String?) -> String? {
-        let cwd: String? = switch NewSessionDirectory(rawValue: newSessionDirectory ?? "") ?? .home {
+        let cwd: String? = switch effectiveNewSessionDirectory {
         case .home: nil
         case .currentSession: currentSessionCwd
         case .custom: newSessionCustomDirectory

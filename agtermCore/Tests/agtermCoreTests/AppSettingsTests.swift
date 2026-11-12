@@ -687,7 +687,7 @@ struct AppSettingsTests {
         #expect(original.ghosttyConfigLines() == ["mouse-scroll-multiplier = 3", "right-click-action = paste"])
     }
 
-    @Test(arguments: [(nil, "/srv/app", nil), ("home", "/srv/app", nil), ("custom", "/srv/app", "/Users/me/work"),
+    @Test(arguments: [(nil, "/srv/app", "/srv/app"), ("home", "/srv/app", nil), ("custom", "/srv/app", "/Users/me/work"),
                       ("currentSession", "/srv/app", "/srv/app"), ("currentSession", "", nil), ("currentSession", nil, nil)]
           as [(String?, String?, String?)])
     func aRemoteNewSessionSendsTheCurrentRowsOrTheCustomDirectory(_ mode: String?, _ current: String?, _ expected: String?) {
@@ -696,15 +696,16 @@ struct AppSettingsTests {
         #expect(settings.remoteNewSessionCwd(currentSessionCwd: current) == expected)
     }
 
-    @Test func resolveNewSessionCwdHomeIsDefault() {
-        #expect(AppSettings().resolveNewSessionCwd(currentSessionCwd: "/proj", home: "/home") == "/home")
+    @Test func resolveNewSessionCwdCurrentSessionIsDefaultAndHomeIsExplicit() {
+        #expect(AppSettings().effectiveNewSessionDirectory == .currentSession)
+        #expect(AppSettings(newSessionDirectory: "future").effectiveNewSessionDirectory == .currentSession)
+        #expect(AppSettings().usesRememberedFolder)
         #expect(AppSettings(newSessionDirectory: "home").resolveNewSessionCwd(currentSessionCwd: "/proj", home: "/home") == "/home")
-        // an unknown future mode falls back to home.
-        #expect(AppSettings(newSessionDirectory: "future").resolveNewSessionCwd(currentSessionCwd: "/proj", home: "/home") == "/home")
     }
 
-    @Test func resolveNewSessionCwdCurrentSessionInheritsOrFallsBack() {
-        let settings = AppSettings(newSessionDirectory: "currentSession")
+    @Test(arguments: [nil, "currentSession", "future"] as [String?])
+    func resolveNewSessionCwdCurrentSessionInheritsOrFallsBack(_ mode: String?) {
+        let settings = AppSettings(newSessionDirectory: mode)
         #expect(settings.resolveNewSessionCwd(currentSessionCwd: "/proj", home: "/home") == "/proj")
         #expect(settings.resolveNewSessionCwd(currentSessionCwd: nil, home: "/home") == "/home")
         #expect(settings.resolveNewSessionCwd(currentSessionCwd: "", home: "/home") == "/home")
@@ -721,7 +722,7 @@ struct AppSettingsTests {
     }
 
     @Test func rememberedFolderIsIgnoredOutsideCurrentSessionMode() {
-        for settings in [AppSettings(), AppSettings(newSessionDirectory: "custom", newSessionCustomDirectory: "/fixed")] {
+        for settings in [AppSettings(newSessionDirectory: "home"), AppSettings(newSessionDirectory: "custom", newSessionCustomDirectory: "/fixed")] {
             let resolved = settings.resolveNewSessionCwd(rememberedFolder: "/ws", currentSessionCwd: "/proj", home: "/home",
                                                          directoryExists: { _ in true })
             #expect(resolved != "/ws")
@@ -732,15 +733,24 @@ struct AppSettingsTests {
         #expect(AppSettings(newSessionDirectory: "currentSession").usableRememberedFolder(nil) == nil)
     }
 
-    @Test(arguments: [AppSettings(), AppSettings(newSessionDirectory: "currentSession"),
-                      AppSettings(newSessionDirectory: "custom", newSessionCustomDirectory: "/fixed")])
-    func resolveNewSessionCwdPrefersAnExistingProjectFolderInEveryMode(settings: AppSettings) {
+    @Test(arguments: [nil, "currentSession"] as [String?])
+    func resolveNewSessionCwdCurrentSessionPrefersAnExistingProjectFolder(_ mode: String?) {
+        let settings = AppSettings(newSessionDirectory: mode)
         #expect(settings.resolveNewSessionCwd(rememberedFolder: "/ws", projectFolder: "/pin", currentSessionCwd: "/proj",
                                               home: "/home", directoryExists: { _ in true }) == "/pin")
-        let fallback = settings.resolveNewSessionCwd(rememberedFolder: "/ws", currentSessionCwd: "/proj", home: "/home",
-                                                     directoryExists: { $0 != "/gone" })
         #expect(settings.resolveNewSessionCwd(rememberedFolder: "/ws", projectFolder: "/gone", currentSessionCwd: "/proj",
-                                              home: "/home", directoryExists: { $0 != "/gone" }) == fallback)
+                                              home: "/home", directoryExists: { $0 != "/gone" }) == "/ws")
+        #expect(settings.resolveNewSessionCwd(rememberedFolder: "/gone", projectFolder: "/gone", currentSessionCwd: "/proj",
+                                              home: "/home", directoryExists: { $0 != "/gone" }) == "/proj")
+        #expect(settings.resolveNewSessionCwd(rememberedFolder: "/gone", projectFolder: "/gone", currentSessionCwd: nil,
+                                              home: "/home", directoryExists: { $0 != "/gone" }) == "/home")
+    }
+
+    @Test func projectFolderIsIgnoredInExplicitHomeAndCustomModes() {
+        #expect(AppSettings(newSessionDirectory: "home").resolveNewSessionCwd(projectFolder: "/pin", currentSessionCwd: "/proj",
+                                                                              home: "/home", directoryExists: { _ in true }) == "/home")
+        #expect(AppSettings(newSessionDirectory: "custom", newSessionCustomDirectory: "/fixed")
+            .resolveNewSessionCwd(projectFolder: "/pin", currentSessionCwd: "/proj", home: "/home", directoryExists: { _ in true }) == "/fixed")
     }
 
     @Test func resolveNewSessionCwdCustomUsesPathElseHome() {

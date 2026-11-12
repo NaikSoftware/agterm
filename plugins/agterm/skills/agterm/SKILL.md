@@ -365,9 +365,9 @@ omitted when expanded).
   create right after the current session. `--no-select` creates the session in the BACKGROUND — it is
   added to the sidebar but NOT selected or focused, leaving the current selection untouched (the new node
   is not `active` in `tree`); omit it for the default select-and-focus behavior.
-  When Settings > New session directory is "Current session's directory", each workspace remembers the
+  When Settings > New session directory is "Current session's directory" (the default), each workspace remembers the
   last directory its local panes reported (`rememberedFolder` on the tree workspace node; set by `cd`, no
-  setter): `--cwd` defaults to it (else `$HOME`), and a `--cwd` with no `--workspace`/`--workspace-name`/
+  setter): `--cwd` defaults to the workspace's pinned `projectFolder`, else to it (else `$HOME`), and a `--cwd` with no `--workspace`/`--workspace-name`/
   `--after`/`--before` joins the first workspace whose folder is that exact path. A pinned project folder holding
   `--cwd` wins first, in every mode and any open window unless `--window` narrows it.
 - `session duplicate [--target]` — create a fresh session (a plain login shell) in the target's workspace, right

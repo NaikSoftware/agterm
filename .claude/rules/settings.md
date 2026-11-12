@@ -245,7 +245,8 @@ paths:
   `restore.capture`, `restore.clear` and tree foreground fields are the control surface; the tree fields
   report the live process, not the captured slot, which [[control-api]] keeps read-back-free by design.
 - `newSessionDirectory` is raw `home|currentSession|custom`, with fixed custom path. Unknown/blank/missing
-  values fall back home. Every GUI creation path resolves once from the `focusedCwd` of
+  values mean `currentSession` (`effectiveNewSessionDirectory`), which tries the workspace's existing pinned
+  project folder, then its remembered folder; an explicit `home` or `custom` ignores both. Every GUI creation path resolves once from the `focusedCwd` of
   `newSessionDirectorySource`: the selection only when it is in the destination workspace, else that
   workspace's most recent session (its first when none is recent); only an empty workspace takes the
   selection. Setters save only. Control `session.new --cwd` remains explicit and ignores this setting.

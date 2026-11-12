@@ -389,7 +389,7 @@ buys nothing. A caller with no tree uses `version`.
   A `session new --cwd` with no `--workspace`, `--workspace-name` or anchor lands in the workspace whose
   project folder is that directory or holds it (the deepest pin wins), in every new-session mode and every open
   local window unless `--window` narrows it, before the remembered-folder match. DIR must be an existing directory, not `/` or `~`; a relative DIR is taken from your
-  current directory. A new session in that workspace with no `--cwd` opens in the folder while it exists, in every new-session mode.
+  current directory. A new session in that workspace with no `--cwd` opens in the folder while it exists, in the default "Current session's directory" mode.
   Read back as the workspace node's `projectFolder`. A remote window refuses this and
   `workspace new --folder`.
 - `workspace rename <name> [--target] [--window W]`.
