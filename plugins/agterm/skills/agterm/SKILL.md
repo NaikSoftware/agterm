@@ -73,7 +73,7 @@ Code background sessions have no status") passes them in through `--settings`.
 
 ## Running agtermctl
 
-`agtermctl` must be on PATH (install it from agterm's **Help ▸ Install Command Line Tool…**). If it
+`agtermctl` must be on PATH (agterm links it into `/usr/local/bin` on first launch and after each update). If it
 is not on PATH, the user can install it, or you invoke it by absolute path.
 
 - When `AGTERM_SOCKET` is set, pass `--socket "$AGTERM_SOCKET"` on every call: `agtermctl` never reads it

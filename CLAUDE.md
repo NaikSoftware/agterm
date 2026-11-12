@@ -61,10 +61,6 @@ C-boundary concurrency before changing the bridge.
   saving is off.
   Launch through `env -u NAME ...` naming every such variable, which drops `AGTERM_STATE_DIR` too, so pass
   the isolated one back with `open -n --env AGTERM_STATE_DIR=...`; verify with `ps eww -p <pid>`.
-- A fresh isolated state dir reads as a first launch and opens the welcome alert.
-  `mkdir -p "$AGTERM_STATE_DIR/windows"` before launching to skip it: `FirstRunWelcome.hasPriorState`
-  looks for `settings.json`, `workspaces.json`, or `windows` before the app writes anything.
-  Leave the marker out only when the welcome itself is under test.
 - The control socket binds from the window scene's task, so a backgrounded `open -n -g` can leave the app
   running with no socket until a window renders.
   If the socket is still absent 10 s after launch, activate the instance; never leave a socket wait unbounded.
@@ -230,8 +226,9 @@ C-boundary concurrency before changing the bridge.
   Never type a bare `claude` into one. Always send `cd <dir> && claude` with a directory Claude Code
   already trusts, `~/dev.umputun/agterm` by default. A session rooted at `$HOME` treats every dotfile and
   repo as its project, and it stops on the folder-trust prompt, which is never yours to answer.
-- Never run the Help ▸ Install installers (agent hooks, CLI, agent skill) from a Debug or worktree
-  instance, and never invoke `AgentHooksInstaller` in a manual run. They write `~/.config/agterm/`,
+- The automatic installers never run in Debug builds.
+  Never invoke `AgentHooksInstaller`, `SkillInstaller` or `CLIInstaller` from a Debug or worktree
+  instance in a manual run. They write `~/.config/agterm/`,
   `~/.claude/settings.json`, and `~/.codex/`, which `AGTERM_STATE_DIR` does not isolate, and bake
   `Bundle.main`'s `agtermctl` path into the installed wrappers. A Debug install silently repoints the
   user's live hooks at DerivedData, and removing the worktree leaves them dead with no error.

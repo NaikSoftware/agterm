@@ -18,12 +18,12 @@ What it does:
 - **Companions.** Keep a log tail, a watcher, a second shell, or an HTML page pinned under a session in the sidebar: companions move, fold, and close with it. Duplicate as Companion copies a session's split layout and starts another copy of each pane's program. They work on sessions attached from another Mac too. An HTML page can also be a session of its own, holding companions and coming back after a relaunch.
 - **Live sessions.** Quit, update, or relaunch agterm while the processes in primary and split panes keep running, an agent mid-turn included. The next launch reattaches to them with their text and TUI state. It is one of three restore modes in Settings ▸ General ▸ Restore sessions, next to fresh shells and re-running the commands captured at quit. Live mode takes effect after restarting agterm and requires zsh or fish as the macOS login shell, or as the absolute path in the ghostty `command` agterm loads.
 - **Remote sessions.** Open a session running on another Mac as a row in this sidebar, split and companions included, from File ▸ Attach Remote… or with `agtermctl zmx attach --companions`. Its status, notifications, HUD, and title-bar context follow it to this Mac, and its panes take this Mac's size. The other Mac runs agterm in Live sessions mode and is reached over key-based ssh. The menu item lists the Macs named in `remotes.conf`; [Remote sessions](https://agterm.com/docs#remote-sessions) covers the setup.
-- **Agent skill.** An installable skill (Help ▸ Install Agent Skill…) teaches Claude Code or Codex the control model and the `agtermctl` commands, so an agent running inside agterm can build its own layout, run overlays, manage windows, and show images inline without you explaining the API.
-- **Agent status.** A coding agent reports its state (active, blocked, or completed) onto its session's row, so you can see which of many running agents needs you. Status hooks for Claude Code, Codex, Pi, OpenCode, and other agents install from Help ▸ Install Agent Status Hooks….
+- **Agent skill.** An agent skill, installed automatically, teaches Claude Code or Codex the control model and the `agtermctl` commands, so an agent running inside agterm can build its own layout, run overlays, manage windows, and show images inline without you explaining the API.
+- **Agent status.** A coding agent reports its state (active, blocked, or completed) onto its session's row, so you can see which of many running agents needs you. Status hooks for Claude Code, Codex, Pi, OpenCode, and other agents install automatically.
 
 A lot of "does it have X?" questions have the same answer: bind X yourself. A `command` line in `keymap.conf` turns any shell line into a key chord, and an overlay gives an interactive program a real terminal over the session, so a file manager, a git UI, or a database browser is one line away. Bigger workflows become scripts, which is what the [cookbook](cookbook/) collects.
 
-You are not meant to write those lines by hand. Install the agent skill (Help ▸ Install Agent Skill…) and ask the agent in your session for what you want, and it writes the line with the right syntax, targeting, and PATH handling. [Extend agterm](https://agterm.com/docs#extend) shows that, and teaches enough of the model to read and change what comes back.
+You are not meant to write those lines by hand. Agterm installs the agent skill for you; ask the agent in your session for what you want, and it writes the line with the right syntax, targeting, and PATH handling. [Extend agterm](https://agterm.com/docs#extend) shows that, and teaches enough of the model to read and change what comes back.
 
 For the real terminal work, rendering, VT parsing, and shell I/O, `agterm` embeds [Ghostty](https://ghostty.org)'s engine (libghostty); everything above is `agterm`'s own.
 
@@ -75,7 +75,7 @@ Direct download:
 
 Download the latest `.dmg` from the [releases page](https://github.com/umputun/agterm/releases), open it, and drag `agterm.app` into `/Applications`.
 
-The Homebrew cask already installs the `agtermctl` command-line tool; from the DMG, put it on your `PATH` with **Help ▸ Install Command Line Tool…**. The same **Help** menu also installs the agent status hooks and the agent skill, both optional and safe to rerun.
+The Homebrew cask already installs the `agtermctl` command-line tool; a DMG build links it into `/usr/local/bin` on first launch and after each update. The same step installs the agent status hooks and the agent skill, and it stays silent unless you must act.
 
 The skill is also published as a plugin from this repository, which puts it wherever your agent looks for one:
 

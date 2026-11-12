@@ -1,6 +1,6 @@
 // agterm-opencode-v2-status-plugin
 //
-// OpenCode v2 CLI plugin installed by agterm's Help ▸ Install Agent Status Hooks… command.
+// OpenCode v2 CLI plugin installed by agterm on install and update.
 // Reports agent status through the installed agterm wrapper; a clean no-op outside agterm.
 //
 // Runs in the terminal client, not the shared server: only the client has this pane's AGTERM_* env.

@@ -1,6 +1,6 @@
 // agterm-pi-status-extension
 //
-// Pi lifecycle extension installed by agterm's Help ▸ Install Agent Status Hooks… command.
+// Pi lifecycle extension installed by agterm on install and update.
 // It uses the installed agterm wrapper for session, pane, socket, and CLI resolution, so it is
 // a harmless no-op outside agterm.
 

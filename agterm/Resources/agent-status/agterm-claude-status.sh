@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code status adapter installed by agterm's Help ▸ Install Agent Status Hooks command.
+# Claude Code status adapter installed by agterm on install and update.
 #
 # A worker agent spawned from inside a session (headless `claude -p` from a tool call, a second CLI
 # agent) inherits the spawner's AGTERM_* environment, so its own hooks would repaint the SPAWNER's

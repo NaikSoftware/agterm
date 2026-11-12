@@ -490,9 +490,6 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// htmlOverlayZoom is the page zoom every HTML overlay shows at, nil for actual size; read it through
     /// `effectiveHtmlOverlayZoom`.
     public var htmlOverlayZoom: Double?
-    /// Whether the first-launch pointer at the Help menu extras has been shown; nil/false = not yet.
-    /// Written once, by the launch that shows it. See `FirstRunWelcome`.
-    public var welcomeShown: Bool?
 
     public init(fontFamily: String? = nil, fontSize: Double? = nil, theme: String? = nil,
                 darkTheme: String? = nil, followSystemAppearance: Bool? = nil,
@@ -521,7 +518,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 hiddenInterfaceElements: [String]? = nil, shownInterfaceElements: [String]? = nil,
                 autoHideSidebarInactiveWindows: Bool? = nil, flaggedViewLayout: String? = nil,
                 linkOpenMode: String? = nil, terminalInputSource: String? = nil,
-                htmlOverlayZoom: Double? = nil, welcomeShown: Bool? = nil, sessionInfoDisplay: String? = nil,
+                htmlOverlayZoom: Double? = nil, sessionInfoDisplay: String? = nil,
                 sidebarDensity: String? = nil) {
         self.sessionInfoDisplay = sessionInfoDisplay
         self.sidebarDensity = sidebarDensity
@@ -578,7 +575,6 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.linkOpenMode = linkOpenMode
         self.terminalInputSource = terminalInputSource
         self.htmlOverlayZoom = htmlOverlayZoom
-        self.welcomeShown = welcomeShown
     }
 
     /// The configured mode, including an object decoded from the legacy boolean schema.

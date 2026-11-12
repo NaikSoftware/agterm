@@ -95,7 +95,7 @@ enum AgentHooksInstaller {
         }
     }
 
-    /// Run the install and show a result alert.
+    /// Run the install, alerting only on a warning or a failure.
     static func run() {
         guard !isRunning else { return }
         isRunning = true
@@ -103,8 +103,8 @@ enum AgentHooksInstaller {
             defer { isRunning = false }
             do {
                 let outcome = try await install()
-                present(style: outcome.isWarning ? .warning : .informational,
-                        title: outcome.isWarning ? "Agent Status Hooks Installed — with a warning" : "Agent Status Hooks Installed",
+                guard outcome.isWarning else { return }
+                present(style: .warning, title: "Agent Status Hooks Installed — with a warning",
                         text: successText(outcome),
                         docs: outcome.codex.needsManualMerge ? codexManualDocsURL : nil)
             } catch let error as InstallError {
@@ -399,7 +399,7 @@ enum AgentHooksInstaller {
         let claudeLine = outcome.settingsSkipped
             ? "Your ~/.claude/settings.json couldn't be safely read or merged, so the Claude Code hooks were NOT added "
               + "(the file was left untouched). It is unreadable, not valid JSON, or has a hooks entry in a shape we "
-              + "don't recognize. Fix it and run this again, or add the hooks manually."
+              + "don't recognize. Fix it and agterm retries on its next update, or add the hooks manually."
             : "Claude Code hooks and the teammates companion mod merged into ~/.claude/settings.json."
         return """
         Scripts installed to \(destinationFolder.path).
@@ -428,11 +428,11 @@ enum AgentHooksInstaller {
         case .hooksExist:
             return "Your ~/.codex/config.toml already defines its own hooks, so agterm left it untouched. " + manual
         case .unparseable:
-            return "Your ~/.codex/config.toml isn't valid TOML, so agterm left it untouched. Fix it and run this again. " + manual
+            return "Your ~/.codex/config.toml isn't valid TOML, so agterm left it untouched. Fix it and agterm retries on its next update. " + manual
         case .unreadable:
             return "Your ~/.codex/config.toml exists but couldn't be read, so agterm left it untouched."
         case .noCodex:
-            return "No ~/.codex found, so Codex hooks were skipped. Install Codex, then run this again."
+            return "No ~/.codex found, so Codex hooks were skipped. Install Codex, then agterm retries on its next update."
         }
     }
 
@@ -450,7 +450,7 @@ enum AgentHooksInstaller {
         case .writeFailed:
             return "Pi's lifecycle extension couldn't be written to ~/.pi/agent/extensions/ (check that directory's permissions), so it was skipped."
         case .noPi:
-            return "No ~/.pi/agent found, so Pi's lifecycle extension was skipped. Start Pi once, then run this again."
+            return "No ~/.pi/agent found, so Pi's lifecycle extension was skipped. Start Pi once, then agterm retries on its next update."
         }
     }
 
@@ -468,13 +468,13 @@ enum AgentHooksInstaller {
         case .writeFailed(let version, let path):
             return "OpenCode \(version.rawValue) plugin couldn't be written to \(path) (check permissions), so it was skipped."
         case .noOpenCode(let directory):
-            return "No \(directory) found, so the OpenCode plugin was skipped. Start OpenCode once, then run this again. "
+            return "No \(directory) found, so the OpenCode plugin was skipped. Start OpenCode once, then agterm retries on its next update. "
                 + "Coarse shell detection for opencode is off by default."
         case .skipped:
             return "OpenCode status plugin installation was skipped."
         case .v2ConfigUnavailable:
             return "OpenCode v2 installation was skipped because its configuration directory could not be determined from your login shell. "
-                + "Check shell startup and OPENCODE_CONFIG_DIR, then run this again."
+                + "Check shell startup and OPENCODE_CONFIG_DIR, then agterm retries on its next update."
         case .v1CleanupUserOwned(let path):
             return "OpenCode v2 status plugin is installed, but "
                 + "\(path) is user-owned and was left untouched."
@@ -483,7 +483,7 @@ enum AgentHooksInstaller {
                 + "\(path) could not be read and was left untouched."
         case .v1CleanupFailed(let path):
             return "OpenCode v2 status plugin is installed, but the v1 plugin at "
-                + "\(path) could not be safely removed. Check permissions and run this again."
+                + "\(path) could not be safely removed. Check permissions and agterm retries on its next update."
         }
     }
 

@@ -1,6 +1,6 @@
 // agterm-opencode-status-plugin
 //
-// OpenCode lifecycle plugin installed by agterm's Help ▸ Install Agent Status Hooks… command.
+// OpenCode lifecycle plugin installed by agterm on install and update.
 // Reports agent status through the installed agterm wrapper; a clean no-op outside agterm.
 //
 // IMPORTANT: this module must export ONLY plugin function(s). OpenCode's legacy loader treats
