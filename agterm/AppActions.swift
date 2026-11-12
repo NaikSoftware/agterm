@@ -136,6 +136,7 @@ final class AppActions {
         let source = store.newSessionDirectorySource(inWorkspace: workspaceID)
         let current = source.map { $0.localWorkingDirectory(reported: $0.focusedCwd, homeDirectory: home) }
         return settingsModel?.settings.resolveNewSessionCwd(rememberedFolder: store.rememberedFolder(ofWorkspace: workspaceID),
+                                                            projectFolder: store.workspaces.first { $0.id == workspaceID }?.projectFolder,
                                                             currentSessionCwd: current, home: home) ?? home
     }
 

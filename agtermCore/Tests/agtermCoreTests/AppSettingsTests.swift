@@ -732,6 +732,17 @@ struct AppSettingsTests {
         #expect(AppSettings(newSessionDirectory: "currentSession").usableRememberedFolder(nil) == nil)
     }
 
+    @Test(arguments: [AppSettings(), AppSettings(newSessionDirectory: "currentSession"),
+                      AppSettings(newSessionDirectory: "custom", newSessionCustomDirectory: "/fixed")])
+    func resolveNewSessionCwdPrefersAnExistingProjectFolderInEveryMode(settings: AppSettings) {
+        #expect(settings.resolveNewSessionCwd(rememberedFolder: "/ws", projectFolder: "/pin", currentSessionCwd: "/proj",
+                                              home: "/home", directoryExists: { _ in true }) == "/pin")
+        let fallback = settings.resolveNewSessionCwd(rememberedFolder: "/ws", currentSessionCwd: "/proj", home: "/home",
+                                                     directoryExists: { $0 != "/gone" })
+        #expect(settings.resolveNewSessionCwd(rememberedFolder: "/ws", projectFolder: "/gone", currentSessionCwd: "/proj",
+                                              home: "/home", directoryExists: { $0 != "/gone" }) == fallback)
+    }
+
     @Test func resolveNewSessionCwdCustomUsesPathElseHome() {
         #expect(AppSettings(newSessionDirectory: "custom", newSessionCustomDirectory: "/fixed")
             .resolveNewSessionCwd(currentSessionCwd: "/proj", home: "/home") == "/fixed")

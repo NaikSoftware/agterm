@@ -681,9 +681,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// The working directory a new session opens in, resolving `newSessionDirectory` against the target
     /// workspace's remembered folder, the active session's focused-pane cwd and home. An unknown/nil mode, a
     /// blank `currentSessionCwd`, or a blank custom path all fall back to home. Host-free so `AppActions` and
-    /// the tests share one resolution.
-    public func resolveNewSessionCwd(rememberedFolder: String? = nil, currentSessionCwd: String?, home: String,
-                                     directoryExists: (String) -> Bool = AppSettings.directoryExists) -> String {
+    /// the tests share one resolution. An existing `projectFolder` (the workspace's pin) wins in every mode.
+    public func resolveNewSessionCwd(rememberedFolder: String? = nil, projectFolder: String? = nil, currentSessionCwd: String?,
+                                     home: String, directoryExists: (String) -> Bool = AppSettings.directoryExists) -> String {
+        if let projectFolder, directoryExists(projectFolder) { return projectFolder }
         switch NewSessionDirectory(rawValue: newSessionDirectory ?? "") ?? .home {
         case .home:
             return home
