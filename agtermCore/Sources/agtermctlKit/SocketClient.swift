@@ -248,6 +248,16 @@ struct SocketClient {
     /// a bare `ok`. Never JSON: `--json` prints the server's own line through `printResponse`, and a
     /// re-encoding here would drop every field this build does not model. Pure so it can be unit-tested
     /// directly; `printResponse` routes it to stdout/stderr.
+    /// The `version` reply: the running identity, the installed one when it differs, and a server's versions.
+    static func formatVersion(_ app: AppIdentity, result: ControlResult?) -> String {
+        var lines = [formatIdentity(app)]
+        if let installed = result?.installed, installed != app { lines.append("installed: \(formatIdentity(installed))") }
+        if let versions = result?.versions {
+            lines.append("server: \(versions.server), protocol: \(versions.protocolVersion), catalog: \(versions.catalog)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     static func formatResponse(_ response: ControlResponse, echoID: Bool = false) -> String {
         if let receipt = response.result?.receipt { return formatResponse(response, receipt: receipt, echoID: echoID) }
         if !response.ok {
@@ -286,12 +296,7 @@ struct SocketClient {
             return open.complete ? reopened : reopened + " (incomplete: the entry stays in the list)"
         }
         if let app = response.result?.app {
-            var lines = [formatIdentity(app)]
-            if let installed = response.result?.installed, installed != app { lines.append("installed: \(formatIdentity(installed))") }
-            if let versions = response.result?.versions {
-                lines.append("server: \(versions.server), protocol: \(versions.protocolVersion), catalog: \(versions.catalog)")
-            }
-            return lines.joined(separator: "\n")
+            return formatVersion(app, result: response.result)
         }
         if let text = response.result?.text {
             return text

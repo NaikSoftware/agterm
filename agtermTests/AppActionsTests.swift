@@ -180,12 +180,12 @@ final class AppActionsTests: XCTestCase {
         let local = try XCTUnwrap(store.activeSession)
         local.currentCwd = "/nowhere/local"
         let other = store.addWorkspace(name: "other", revealNewWorkspace: false).id
-        XCTAssertEqual(actions.resolvedNewSessionCwd(inWorkspace: other), "/nowhere/local")
+        XCTAssertEqual(actions.resolvedNewSessionCwd(in: other, store: store), "/nowhere/local")
 
         let reporter = try XCTUnwrap(store.addSession(toWorkspace: other, cwd: home, select: false))
         store.rememberFolder(stateDir.path, reportedBy: reporter.id)
-        XCTAssertEqual(actions.resolvedNewSessionCwd(inWorkspace: other), stateDir.path)
-        XCTAssertEqual(actions.resolvedNewSessionCwd(), "/nowhere/local")
+        XCTAssertEqual(actions.resolvedNewSessionCwd(in: other, store: store), stateDir.path)
+        XCTAssertEqual(actions.resolvedNewSessionCwd(in: try XCTUnwrap(store.currentWorkspaceID), store: store), "/nowhere/local")
     }
 
     func testNewSessionCwdCustomModeIgnoresTheActiveSessionsRemoteness() throws {
