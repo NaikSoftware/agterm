@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Codex lifecycle hook installed by agterm's Help ▸ Install Agent Status Hooks command.
+# Codex lifecycle hook installed by agterm on install and update.
 #
 # Codex fires PermissionRequest before Auto Review decides whether a person must approve. Treating
 # that raw event as blocked therefore false-flags automatically reviewed tools. This hook keeps the

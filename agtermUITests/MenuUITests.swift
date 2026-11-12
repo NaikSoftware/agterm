@@ -59,12 +59,12 @@ final class MenuUITests: XCTestCase {
         XCTAssertGreaterThan(increased, baseline)
     }
 
-    func testHelpMenuOffersInstallCLI() throws {
+    func testHelpMenuOffersNoInstallers() throws {
         XCTAssertTrue(app.staticTexts["session-row"].firstMatch.waitForExistence(timeout: 20), "seeded session should exist")
         app.menuBars.menuBarItems["Help"].click()
-        let item = app.menuItems["Install Command Line Tool…"]
-        XCTAssertTrue(item.waitForExistence(timeout: 5), "Help menu should offer Install Command Line Tool")
-        // don't click it — that would perform a real /usr/local/bin symlink (and maybe an admin prompt).
+        XCTAssertTrue(app.menuItems["Developer Documentation…"].waitForExistence(timeout: 5), "Help menu should be open")
+        let installers = app.menuItems.matching(NSPredicate(format: "title BEGINSWITH %@", "Install "))
+        XCTAssertEqual(installers.count, 0, "the installers run after install and update instead")
         app.typeKey(.escape, modifierFlags: [])
     }
 

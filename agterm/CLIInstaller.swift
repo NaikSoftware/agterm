@@ -17,22 +17,22 @@ enum CLIInstaller {
     /// (e.g. a bare `swift build`).
     static var bundledTool: URL? { Bundle.main.url(forAuxiliaryExecutable: CLIInstall.toolName) }
 
-    /// Run the install and show a result alert (a cancelled admin prompt shows nothing).
+    /// Run the install, alerting only on a failure.
     static func run() {
-        switch install() {
-        case .installed(let path):
-            present(style: .informational, title: "Command Line Tool Installed",
-                    text: "agtermctl was linked into \(path). Open a new terminal and run “agtermctl --help”.")
-        case .failed(let message):
-            present(style: .warning, title: "Install Failed", text: message)
-        case .cancelled:
-            break
+        if case .failed(let message) = install() {
+            present(style: .warning, title: "Command Line Tool Not Installed", text: message)
         }
     }
 
     private static func install() -> InstallResult {
         guard let source = bundledTool?.path else {
             return .failed("\(CLIInstall.toolName) is not bundled in this build.")
+        }
+        // already linked here, or by the Homebrew cask: relinking would only add an admin prompt
+        let fm = FileManager.default
+        if (try? fm.destinationOfSymbolicLink(atPath: CLIInstall.installPath)) == source
+            || fm.fileExists(atPath: CLIInstall.homebrewPath) {
+            return .installed(path: CLIInstall.installPath)
         }
         if directSymlink(source: source) { return .installed(path: CLIInstall.installPath) }
         return elevatedSymlink(source: source)

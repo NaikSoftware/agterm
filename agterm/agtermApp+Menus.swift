@@ -470,10 +470,6 @@ extension agtermApp {
                         NSWorkspace.shared.open(url)
                     }
                 }
-                Divider()
-                Button("Install Command Line Tool…") { CLIInstaller.run() }
-                Button("Install Agent Status Hooks…") { AgentHooksInstaller.run() }
-                Button("Install Agent Skill…") { SkillInstaller.run() }
             }
     }
 

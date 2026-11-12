@@ -36,8 +36,10 @@ paths:
 ## Installation and agent integrations
 
 - Xcode's CLI phase builds Release, copies/signs `agtermctl`, then deep re-signs the app; shallow signing
-  fails with `agterm.debug.dylib`. The Help installer links into `/usr/local/bin`, directly or through one
+  fails with `agterm.debug.dylib`. The automatic installer links into `/usr/local/bin`, directly or through one
   admin prompt. Host-free `CLIInstall` owns paths/quoting; app code owns filesystem/auth.
+- `ExtrasAutoInstaller` runs the CLI, hooks and skill installers once per build (version, commit and bundle
+  path, kept in UserDefaults), Release only, alerting only when the user must act.
 - Agent Hooks installation copies generic, Claude, Codex, Pi, OpenCode, and shell assets under
   `~/.config/agterm/agent-status`, baking the bundled CLI. Marker merges are idempotent and preserve
   unrelated config; unreadable config is never treated as absent.

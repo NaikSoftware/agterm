@@ -29,10 +29,6 @@ struct agtermApp: App {
     @State private var wakeObserver: SystemWakeObserver
     @State private var linkObserver: RemoteLinkObserver
 
-    /// Whether this launch owes the user the first-run welcome. Decided in `init()`, because the first
-    /// launch writes its own window snapshot moments after the scene appears and that write would read back
-    /// as prior state.
-    private let welcomeDue: Bool
     private let zmxForegroundResolver: ZmxForegroundResolver?
     private let captureOnExit: AppDelegate.ExitCapture?
 
@@ -101,9 +97,6 @@ struct agtermApp: App {
         Self.claimStateDirectory(stateDirectory)
         liveResetMarkerStore = LiveResetMarkerStore(directory: stateDirectory)
         HtmlOverlayRegistry.shared.profile = BrowserProfile(directory: stateDirectory)
-        // before anything else reads or writes the state directory (the lock adds only `agterm.lock`):
-        // `WindowLibrary`'s bootstrap seeds a window and saves it, which would read as an earlier launch.
-        let hadPriorState = FirstRunWelcome.hasPriorState(in: stateDirectory)
         // restoredRuntime's first GhosttyApp.shared touch loads this file once, so it must be current first;
         // the seeded default theme lives only in memory, never in settings.json.
         let settingsStore = SettingsStore(directory: stateDirectory)
@@ -129,8 +122,6 @@ struct agtermApp: App {
         actions.settingsModel = settingsModel
         captureOnExit = AppDelegate.makeExitCapture(
             settingsModel: settingsModel, zmxResolver: restored.foregroundResolver)
-        welcomeDue = FirstRunWelcome.isDue(welcomeShown: settingsModel.settings.welcomeShown,
-                                           hasPriorState: hadPriorState)
         let controlServer = ControlServer(library: library, actions: actions, settingsModel: settingsModel,
                                           identity: Self.appIdentity,
                                           zmxForegroundResolver: restored.foregroundResolver,
@@ -359,9 +350,9 @@ struct agtermApp: App {
                         wakeObserver.start()
                         linkObserver.start()
                         linkObserver.watchPath()
-                        // last: a modal here blocks the rest of the task, and the window behind it should be
-                        // fully wired before it opens. `presentOnce` latches, so the per-window .task is safe.
-                        if welcomeDue { WelcomeAlert.presentOnce(settingsModel: settingsModel) }
+                        // last: an installer alert blocks the rest of the task, and the window behind it should
+                        // be fully wired before it opens. `runIfDue` latches, so the per-window .task is safe.
+                        ExtrasAutoInstaller.runIfDue(identity: Self.appIdentity)
                     }
             }
         }

@@ -443,30 +443,31 @@
                 margin: 28px 0 12px;
               "
             >
-              Optional Help-menu installers
+              Automatic installers
             </h3>
             <p style="font-size: 15px; line-height: 1.65; color: #949ba4; margin: 0 0 14px">
-              None are needed to use agterm as a terminal; each connects it to a wider workflow, and you can run any of them later. The
-              first launch on a machine points them out in a welcome dialog, which offers the skill and the status hooks and never
-              appears again.
+              None are needed to use agterm as a terminal; each connects it to a wider workflow. A release build installs all three
+              once per installed build: on the first launch after a fresh install and after each update. It runs silently and
+              shows an alert only when you must act, for example after a failure or a skipped agent. An agent you install later gets
+              its hooks and skill on the next agterm update.
             </p>
             <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px">
               <li style="font-size: 15px; line-height: 1.6; color: #cbc6bc; padding-left: 22px; position: relative">
                 <span
                   style="position: absolute; left: 0; top: 1px; color: #6d82f3; font-family: &quot;JetBrains Mono&quot;, monospace"
                   >›</span
-                ><strong style="color: #e6e1d7">Install Command Line Tool…</strong> puts the bundled
+                ><strong style="color: #e6e1d7">The command line tool</strong> puts the bundled
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">agtermctl</span> on your PATH (a
                 symlink in <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">/usr/local/bin</span>)
                 so you can script the app. When that directory is writable by you it links with no prompt; when it is root-owned,
-                which is the case on a clean Apple Silicon Mac, macOS asks once for an administrator password. The Homebrew cask
-                already installs it.
+                which is the case on a clean Apple Silicon Mac, macOS asks once for an administrator password. The link is
+                skipped when it already points at the running app or when the Homebrew cask link exists.
               </li>
               <li style="font-size: 15px; line-height: 1.6; color: #cbc6bc; padding-left: 22px; position: relative">
                 <span
                   style="position: absolute; left: 0; top: 1px; color: #6d82f3; font-family: &quot;JetBrains Mono&quot;, monospace"
                   >›</span
-                ><strong style="color: #e6e1d7">Install Agent Status Hooks…</strong> lets a coding agent (Claude Code, Codex, Pi, OpenCode, or
+                ><strong style="color: #e6e1d7">The agent status hooks</strong> let a coding agent (Claude Code, Codex, Pi, OpenCode, or
                 others) report its state onto its session's row, so you can tell which of several running agents is active,
                 blocked, or finished.
               </li>
@@ -474,12 +475,12 @@
                 <span
                   style="position: absolute; left: 0; top: 1px; color: #6d82f3; font-family: &quot;JetBrains Mono&quot;, monospace"
                   >›</span
-                ><strong style="color: #e6e1d7">Install Agent Skill…</strong> teaches Claude Code or Codex how to drive agterm
+                ><strong style="color: #e6e1d7">The agent skill</strong> teaches Claude Code or Codex how to drive agterm
                 through <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">agtermctl</span>, so an
                 agent inside a session can build its own layout, run overlays, and manage windows without you explaining the API.
                 It also knows the cookbook, so you can ask it to list the available recipes, set one up for you, or read one for
                 reference when a workflow is hard to get right.
-                It drives the app through the CLI, so install that one too. The same skill is also published as a plugin from the
+                It drives the app through the CLI, which is installed with it. The same skill is also published as a plugin from the
                 repository — <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc"
                   >claude plugin marketplace add umputun/agterm</span
                 >
@@ -597,8 +598,8 @@
                 line-height: 1.65;
               "
             >
-              <strong style="color: #e6e1d7">You are not expected to write these by hand.</strong> Install the agent skill from
-              <strong style="color: #e6e1d7">Help &#9656; Install Agent Skill&hellip;</strong> and ask the agent in your session
+              <strong style="color: #e6e1d7">You are not expected to write these by hand.</strong> agterm installs the agent skill
+              for you; ask the agent in your session
               for what you want; it knows the syntax, the command catalog, and the traps below.
               <a href="#extend-agent" style="color: #6d82f3">Step 4</a> shows exactly that. The three steps before it are not the
               long way round: they are what let you read the line the agent writes, change it later, and tell a working answer
@@ -803,8 +804,8 @@
               4. Have the agent write it
             </h3>
             <p style="font-size: 16px; line-height: 1.7; color: #cbc6bc; margin: 0 0 16px">
-              This is the normal way to add things, not a shortcut for people who dislike config files. Install the agent skill
-              from <strong style="color: #e6e1d7">Help &#9656; Install Agent Skill&hellip;</strong>, then ask the agent running
+              This is the normal way to add things, not a shortcut for people who dislike config files. agterm installs the agent skill
+              for you. Ask the agent running
               in one of your sessions:
             </p>
             <div
@@ -3857,8 +3858,7 @@ for (const ws of tree.workspaces) for (const s of ws.sessions) {
               name: the row no longer shows the live terminal title.
             </p>
             <p style="font-size: 15px; line-height: 1.65; color: #949ba4; margin: 16px 0 0">
-              To wire it up automatically, <strong style="color: #e6e1d7">Help ▸ Install Agent Status Hooks…</strong> installs a
-              hooks package: a generic bash/zsh/fish shell integration (flags
+              agterm installs a hooks package automatically: a generic bash/zsh/fish shell integration (flags
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">active</span> while a command
               matching <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">AGTERM_AGENT_RE</span> runs;
               the default set is gemini, cursor-agent, aider, crush, goose), five Claude Code hooks (prompt → active,

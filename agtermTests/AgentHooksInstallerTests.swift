@@ -71,7 +71,7 @@ final class AgentHooksInstallerTests: XCTestCase {
     func testMissingOpenCodeDoesNotNameAVersion() {
         let result = AgentHooksInstaller.OpenCodeResult.noOpenCode(directory: "/custom/opencode")
         let text = AgentHooksInstaller.opencodeText(result)
-        XCTAssertEqual(text, "No /custom/opencode found, so the OpenCode plugin was skipped. Start OpenCode once, then run this again. "
+        XCTAssertEqual(text, "No /custom/opencode found, so the OpenCode plugin was skipped. Start OpenCode once, then agterm retries on its next update. "
                        + "Coarse shell detection for opencode is off by default.")
         XCTAssertFalse(result.isWarning)
     }

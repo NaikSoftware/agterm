@@ -23,12 +23,12 @@ enum SkillInstaller {
         var freshSkillsDir = false
     }
 
-    /// Run the install and show a result alert.
+    /// Run the install, alerting only when an agent was skipped.
     static func run() {
         do {
             let report = try install()
-            let problem = report.installed.isEmpty || !report.skipped.isEmpty
-            present(style: problem ? .warning : .informational,
+            guard report.installed.isEmpty || !report.skipped.isEmpty else { return }
+            present(style: .warning,
                     title: report.installed.isEmpty ? "Skill Not Installed" : "Agent Skill Installed",
                     text: message(report))
         } catch let error as InstallError {
@@ -82,9 +82,6 @@ enum SkillInstaller {
         } else {
             lines.append("Installed for:")
             for entry in report.installed { lines.append("  • \(entry.agent): \(entry.path)") }
-            lines.append("")
-            lines.append("The agent uses it automatically when you ask it to control agterm. It drives the "
-                + "app via the agtermctl CLI, so install that too if you haven't: Help ▸ Install Command Line Tool…")
         }
         if !report.skipped.isEmpty {
             lines.append("")

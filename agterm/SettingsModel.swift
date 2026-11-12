@@ -363,8 +363,6 @@ final class SettingsModel {
         try? settingsStore.save(settings)
         applyHtmlOverlayZoom()
     }
-    /// Persist that the first-run welcome has been shown, so it never appears again on this state directory.
-    func setWelcomeShown(_ value: Bool?) { settings.welcomeShown = value; try? settingsStore.save(settings) }
     /// Persist the user-idle auto-follow timeout (nil = off) and push it into every open window's `AppStore`
     /// (a newly opened window seeds itself via `applyWindowSettings(to:)`).
     func setAutoFollowAttention(_ value: String?) {

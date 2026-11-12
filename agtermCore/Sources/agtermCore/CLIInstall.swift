@@ -12,6 +12,9 @@ public enum CLIInstall {
     /// The full symlink path an install creates.
     public static var installPath: String { installDirectory + "/" + toolName }
 
+    /// Where the Homebrew cask links the tool on Apple Silicon.
+    public static var homebrewPath: String { "/opt/homebrew/bin/" + toolName }
+
     /// The shell command creating the symlink with elevated privileges, run via `osascript … with
     /// administrator privileges` when `installDirectory` isn't user-writable. Creates the directory first
     /// (a clean Apple Silicon Mac may lack it) and overwrites any existing link.
