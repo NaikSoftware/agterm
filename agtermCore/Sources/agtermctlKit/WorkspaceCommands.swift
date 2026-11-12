@@ -7,13 +7,15 @@ struct Workspace: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Workspace commands.",
         subcommands: [New.self, Rename.self, Delete.self, Detach.self, Reattach.self, Select.self, Go.self, Move.self, Focus.self, Filter.self,
-                      FlagCommand.self, Collapse.self, Expand.self, Tint.self]
+                      FlagCommand.self, Collapse.self, Expand.self, Tint.self, Folder.self]
     )
 
     struct New: RequestCommand {
         static let configuration = CommandConfiguration(abstract: "Create a workspace.")
         @Argument(help: "Workspace name (defaults to the auto-generated name).") var name: String?
         @Flag(name: .long, help: "Create the workspace collapsed in the sidebar.") var collapsed = false
+        @Option(name: .long, help: "Pin the workspace's project folder: new sessions started in it or below land here.")
+        var folder: String?
         @OptionGroup var tint: TintCreateOptions
         @OptionGroup var options: ClientOptions
         @OptionGroup var operation: OperationOptions
@@ -21,7 +23,26 @@ struct Workspace: ParsableCommand {
 
         func makeRequest() throws -> ControlRequest {
             operation.stamp(ControlRequest(cmd: .workspaceNew, args: options.withWindow(tint.apply(to:
-                ControlArgs(name: name, collapsed: collapsed ? true : nil)))))
+                ControlArgs(name: name, collapsed: collapsed ? true : nil, folder: folder)))))
+        }
+    }
+
+    struct Folder: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Set or clear a workspace's project folder.",
+            discussion: "A new session whose directory is the folder or inside it lands in that workspace.")
+        @Argument(help: "set or clear.") var mode: String
+        @Argument(help: "The project folder (set only).") var dir: String?
+        @OptionGroup var target: TargetOptions
+        @OptionGroup var options: ClientOptions
+
+        func validate() throws {
+            guard ["set", "clear"].contains(mode) else { throw ValidationError("mode must be set or clear") }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .workspaceFolder, target: target.target,
+                           args: options.withWindow(ControlArgs(mode: mode, folder: dir)))
         }
     }
 

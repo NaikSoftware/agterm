@@ -140,7 +140,7 @@ extension RemoteOperation {
              (args.wait == true, "--wait"), (tinted, "--tint")]
         case .sessionCompanionNew: [(args.wait == true, "--wait"), (tinted, "--tint")]
         case .sessionClose: [(args.undoable == true, "--undoable")]
-        case .workspaceNew: [(args.collapsed == true, "--collapsed"), (tinted, "--tint")]
+        case .workspaceNew: [(args.collapsed == true, "--collapsed"), (tinted, "--tint"), (args.folder != nil, "--folder")]
         default: []
         }
         return fields.first { $0.0 }?.1

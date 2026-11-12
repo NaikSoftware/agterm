@@ -327,6 +327,17 @@ public extension ControlActions {
         return createWorkspace(window: window, name: name, collapsed: collapsed)
     }
 
+    func createWorkspace(window: String?, name: String?, collapsed: Bool, tint: SidebarTint?, projectFolder: String?) -> ControlResponse {
+        guard projectFolder == nil else {
+            return ControlResponse(ok: false, error: ControlActionsUnsupported.message("workspace.new --folder"))
+        }
+        return createWorkspace(window: window, name: name, collapsed: collapsed, tint: tint)
+    }
+
+    func setWorkspaceProjectFolder(_: String?, window _: String?, folder _: String?) -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("workspace.folder"))
+    }
+
     func windowGo(direction _: WorkspaceNavigation) -> ControlResponse {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("window.go"))
     }

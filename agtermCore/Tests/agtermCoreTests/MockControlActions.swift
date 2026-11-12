@@ -20,6 +20,7 @@ final class MockControlActions: ControlActions {
         case sessionRename(target: String?, window: String?, String)
         case sessionReveal(target: String?, window: String?)
         case workspaceNew(window: String?, String?, collapsed: Bool)
+        case workspaceNewFolder(String)
         case workspaceSelect(target: String?, window: String?)
         case workspaceGo(window: String?, WorkspaceNavigation)
         case workspaceRename(target: String?, window: String?, String)
@@ -290,6 +291,12 @@ final class MockControlActions: ControlActions {
     func createWorkspace(window: String?, name: String?, collapsed: Bool) -> ControlResponse {
         calls.append(.workspaceNew(window: window, name, collapsed: collapsed))
         return ControlResponse(ok: true)
+    }
+
+    // records the folder, then takes the default tint path so the host-default chain stays exercised
+    func createWorkspace(window: String?, name: String?, collapsed: Bool, tint: SidebarTint?, projectFolder: String?) -> ControlResponse {
+        if let projectFolder { calls.append(.workspaceNewFolder(projectFolder)) }
+        return createWorkspace(window: window, name: name, collapsed: collapsed, tint: tint)
     }
 
     func selectWorkspace(_ target: String?, window: String?) -> ControlResponse {

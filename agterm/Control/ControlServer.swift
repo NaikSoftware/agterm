@@ -674,7 +674,7 @@ final class ControlServer {
                 .sessionSplit, .sessionSplitClose, .sessionSwap, .sessionLead, .sessionRestart, .sessionScratch, .sessionFocus,
                 .sessionResize, .surfaceZoom,
                 .surfaceCursor,
-                .sessionStatus, .sessionFlag, .sessionContext, .sessionInfo, .sessionTint, .workspaceTint, .sessionSeen, .sessionRestore, .notify,
+                .sessionStatus, .sessionFlag, .sessionContext, .sessionInfo, .sessionTint, .workspaceTint, .workspaceFolder, .sessionSeen, .sessionRestore, .notify,
                 .fontInc, .fontDec, .fontReset, .keymapReload, .keymapList, .keymapRun, .hooksReload, .hooksList, .browserClear,
                 .browserLinks,
                 .configReload, .themeSet, .themeList,

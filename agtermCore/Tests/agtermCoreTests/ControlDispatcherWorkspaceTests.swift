@@ -163,4 +163,66 @@ struct ControlDispatcherWorkspaceTests {
         #expect(response == ControlResponse(ok: false, error: "invalid workspace flag mode: clear"))
         #expect(actions.calls.isEmpty)
     }
+
+    @Test func workspaceNewForwardsNormalizedFolder() async {
+        let actions = MockControlActions()
+
+        let response = await ControlDispatcher(actions: actions).dispatch(ControlRequest(
+            cmd: .workspaceNew, args: ControlArgs(name: "api", folder: "/tmp/proj/")))
+
+        #expect(response == ControlResponse(ok: true))
+        #expect(actions.calls == [.workspaceNewFolder("/tmp/proj"), .workspaceNew(window: nil, "api", collapsed: false)])
+    }
+
+    @Test func workspaceNewRefusesRootFolder() async {
+        let actions = MockControlActions()
+
+        let response = await ControlDispatcher(actions: actions).dispatch(ControlRequest(
+            cmd: .workspaceNew, args: ControlArgs(folder: "/")))
+
+        #expect(response == ControlResponse(ok: false, error: ProjectFolderRejection.rootOrHome.message))
+        #expect(actions.calls.isEmpty)
+    }
+
+    @Test func workspaceFolderSetRequiresFolder() async {
+        let actions = MockControlActions()
+
+        let response = await ControlDispatcher(actions: actions).dispatch(ControlRequest(
+            cmd: .workspaceFolder, args: ControlArgs(mode: "set")))
+
+        #expect(response == ControlResponse(ok: false, error: "workspace.folder set requires a folder"))
+        #expect(actions.calls.isEmpty)
+    }
+
+    @Test func workspaceFolderClearRefusesFolder() async {
+        let actions = MockControlActions()
+
+        let response = await ControlDispatcher(actions: actions).dispatch(ControlRequest(
+            cmd: .workspaceFolder, args: ControlArgs(mode: "clear", folder: "/tmp/proj")))
+
+        #expect(response == ControlResponse(ok: false, error: "workspace.folder clear takes no folder"))
+        #expect(actions.calls.isEmpty)
+    }
+
+    @Test func workspaceFolderRejectsUnknownMode() async {
+        let response = await ControlDispatcher(actions: MockControlActions()).dispatch(ControlRequest(
+            cmd: .workspaceFolder, args: ControlArgs(mode: "pin")))
+
+        #expect(response == ControlResponse(ok: false, error: "invalid folder mode: pin (set|clear)"))
+    }
+
+    @Test func workspaceFolderSetRefusesHomeBeforeTheHost() async {
+        let response = await ControlDispatcher(actions: MockControlActions()).dispatch(ControlRequest(
+            cmd: .workspaceFolder, args: ControlArgs(mode: "set", folder: NSHomeDirectory())))
+
+        #expect(response == ControlResponse(ok: false, error: ProjectFolderRejection.rootOrHome.message))
+    }
+
+    @Test(arguments: [ControlArgs(mode: "set", folder: "/tmp/proj"), ControlArgs(mode: "clear")])
+    func workspaceFolderDefaultHostRefuses(args: ControlArgs) async {
+        let response = await ControlDispatcher(actions: MockControlActions()).dispatch(ControlRequest(
+            cmd: .workspaceFolder, args: args))
+
+        #expect(response == ControlResponse(ok: false, error: ControlActionsUnsupported.message("workspace.folder")))
+    }
 }

@@ -273,8 +273,10 @@ extension ControlServer: ControlActions {
                 }
                 return makeSessionResponse(in: store, workspaceID: workspace.id, options: options, tint: tint)
             }
-            // id addressing (default: in `currentSession` mode the first workspace remembering `--cwd`, else `active`).
-            let target = options.workspace ?? remembering(options.cwd, in: store)?.uuidString ?? "active"
+            // id addressing (default: the workspace whose project folder holds `--cwd`, then in `currentSession` mode the
+            // first workspace remembering it, else `active`).
+            let target = options.workspace ?? options.cwd.flatMap(store.workspaceID(owningFolder:))?.uuidString
+                ?? remembering(options.cwd, in: store)?.uuidString ?? "active"
             return resolver.resolve(target, candidates: store.workspaces.map(\.id),
                            active: store.currentWorkspaceID, noun: "workspace") { workspaceID in
                 makeSessionResponse(in: store, workspaceID: workspaceID, options: options, tint: tint)
