@@ -14,8 +14,11 @@ enum ExtrasAutoInstaller {
         #if !DEBUG
         guard !checked, !ContentView.isUITestLaunch else { return }
         checked = true
+        let path = Bundle.main.bundlePath
+        // a mounted DMG or a translocated copy disappears, and the hooks and CLI link would point at nothing
+        guard !path.hasPrefix("/Volumes/"), !path.contains("/AppTranslocation/") else { return }
         // the bundle path re-bakes the hooks' agtermctl path when the app moves
-        let build = "\(identity.version) \(identity.commit ?? "") \(Bundle.main.bundlePath)"
+        let build = "\(identity.version) \(identity.commit ?? "") \(path)"
         let defaults = UserDefaults.standard
         guard defaults.string(forKey: installedBuildKey) != build else { return }
         // recorded first, so a cancelled admin prompt or a failure does not repeat on every launch
