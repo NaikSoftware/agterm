@@ -23,8 +23,7 @@ enum ExtrasAutoInstaller {
         // hop out of the scene task before any modal: started inside it, `runModal()` draws nothing
         DispatchQueue.main.async {
             CLIInstaller.run()
-            SkillInstaller.run()
-            AgentHooksInstaller.run()
+            Task { await AgentInstallers.run(skill: true, hooks: true) }
         }
         #endif
     }

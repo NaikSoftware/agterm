@@ -23,14 +23,22 @@ public struct RemoteBinding: Equatable, Sendable {
     public let presentationVersion: Int?
     /// Nil for a binding built without one, which can then not be attached again.
     public let origin: Origin?
+    /// catalogOwned marks a row of a remote window: its server's catalog is the only writer of its pane
+    /// structure, so presentation layout never moves, hides or closes its panes.
+    public let catalogOwned: Bool
+    /// originHeadless marks an origin with no screen of its own, which keeps what this Mac cannot show yet for
+    /// this Mac rather than taking it back.
+    public let originHeadless: Bool
     private let localByRemotePane: [UUID: UUID]
     private let daemonsByLocalPane: [UUID: String]
 
     /// `daemonsByLocalPane` is what an attach knows: the daemon each local pane runs `zmx attach` against.
     /// A daemon name encodes the origin's pane identity, so the mapping is decoded once, here.
     public init(remoteSessionID: String, daemonsByLocalPane: [UUID: String], presentationVersion: Int?,
-                origin: Origin? = nil) {
+                origin: Origin? = nil, catalogOwned: Bool = false, originHeadless: Bool = false) {
         self.remoteSessionID = remoteSessionID
+        self.catalogOwned = catalogOwned
+        self.originHeadless = originHeadless
         self.presentationVersion = presentationVersion
         self.origin = origin
         self.daemonsByLocalPane = daemonsByLocalPane
@@ -42,6 +50,13 @@ public struct RemoteBinding: Equatable, Sendable {
     }
 
     public func localPane(forRemote identity: UUID) -> UUID? { localByRemotePane[identity] }
+
+    /// replacingOrigin is this binding reached through `origin`, every pane mapping and flag kept.
+    func replacingOrigin(_ origin: Origin) -> RemoteBinding {
+        RemoteBinding(remoteSessionID: remoteSessionID, daemonsByLocalPane: daemonsByLocalPane,
+                      presentationVersion: presentationVersion, origin: origin, catalogOwned: catalogOwned,
+                      originHeadless: originHeadless)
+    }
 
     /// daemonsByPane is the origin daemon each local pane attaches to.
     public var daemonsByPane: [UUID: String] { daemonsByLocalPane }
@@ -76,7 +91,7 @@ public enum RemotePresentationConnection: Equatable, Sendable {
 
 /// RemotePresentationState is everything a viewer keeps about one attached session's presentation.
 public struct RemotePresentationState: Equatable, Sendable {
-    public let binding: RemoteBinding
+    public internal(set) var binding: RemoteBinding
     public var connection: RemotePresentationConnection
     public var mode: PresentationMode = .mirror
     var layout: PresentationLayout?

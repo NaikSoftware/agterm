@@ -33,8 +33,11 @@ paths:
   hidden and in the flat and plain flagged lists, which never draw a level-0 triangle. Level-0 triangles then get
   an empty frame and a companion parent's ends at its content; never hide one through
   `shouldShowOutlineCellForItem`, which makes AppKit refuse to collapse that item. A dropped strip also narrows
-  the scroll view's left inset from 8 to 6, keyed on the flag, never the setting. Every workspace row menu offers Collapse/Expand Workspace through the
-  row click's `toggleExpansion`, so a hidden chevron with row click off still leaves a mouse fold.
+  the scroll view's left inset from 8 to 6, keyed on the flag, never the setting.
+  The flat and plain lists (`listsSessionsFlat`) also start the selection pill at the row edge and their cells at 6,
+  so the icon keeps the tree's 8pt padding inside it; a hidden-chevron tree keeps the 8pt pill.
+  Every workspace row menu offers Collapse/Expand Workspace through the row click's
+  `toggleExpansion`, so a hidden chevron with row click off still leaves a mouse fold.
 - macOS 27 hides `NSMenuItem` images under the default `preferredImageVisibility` (`.automatic`), which is
   how the Tint submenu's swatches vanished. Any menu item whose image carries meaning sets `.visible`, by key
   (`setValue(1, forKey: "preferredImageVisibility")`) while CI builds with the macOS 26 SDK, which lacks the property.
@@ -66,7 +69,10 @@ paths:
   toggle. This click routing is keep-in-sync exempt. `GhosttyApp.workspaceRowClickExpands` (default on)
   gates the whole-row target only; the disclosure triangle toggles natively and stays unconditional.
   The deferred item re-reads that mirror when it fires, so turning the setting off inside the deferral
-  window cancels the pending toggle. Route the row-click toggle through `outline.animator()` so it animates
+  window cancels the pending toggle.
+  The row icon acts like the triangle: a click toggles at once whatever the setting, and the second click of
+  a double-click arrives only as `doubleAction`, which toggles back instead of renaming.
+  Route the row-click toggle through `outline.animator()` so it animates
   like the triangle; a bare `expandItem`/`collapseItem` silently drops the animation. Do not gate that on
   Reduce Motion — both hit targets reach the same AppKit animation, so a gate would re-split them. Every
   other expand/collapse site stays unanimated: bulk or programmatic. Control expansion instead persists through
@@ -142,11 +148,11 @@ paths:
 - In tree mode, flagged rows swap to `terminal.fill` or `rectangle.split.2x1.fill`; flagged mode retains
   unfilled base icons because every row is flagged. This same-size symbol swap avoids layout shift.
   `RowContent.flagged` limits reload to the changed row.
-- A remote row (`Session.remoteHost != nil`) takes `cloud` instead, and
-  there a heavier WEIGHT means split rather than flagged: a hidden split is state nothing else reveals,
-  while the fill is tree-mode decoration the flat flagged view already passes `flagged: false` for.
-  Weight rather than `.fill` because `.fill` is what every other row icon spends on FLAGGED, so a filled
-  cloud would read as a flag; the focused-workspace icon distinguishes itself the same way.
+- A remote row (`Session.remoteHost != nil`, an attached row or a remote window's) takes `cloud` instead,
+  `icloud.slash` while it shows a notice, each filled when flagged as every other row icon is.
+  A heavier WEIGHT marks its split, since a hidden split is state nothing else reveals and `.fill` is
+  already the flag; the focused-workspace icon distinguishes itself the same way. On a filled cloud the
+  bold weight is barely distinguishable, an accepted trade-off.
   The split axis is not distinguished — no cloud symbol carries both arrangements. The title bar draws
   the same `cloud` beside the host, gated by `InterfaceElement.remoteHost`.
   See [[control-api]].

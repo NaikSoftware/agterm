@@ -110,7 +110,7 @@ paths:
   Session info picker (`sessionInfoDisplay`, owned by [[sidebar]]) and the Multiple Windows toggle sharing the
   Sidebar section's last row, since the grid's eight toggles leave no half-cell, plus the quick terminal's panel size,
   which sits there rather than under Appearance's Window because the panel belongs to no window.
-  Notifications holds banner/badge/attention/bounce/sound. Agent Status holds colors/shapes, sound,
+  Notifications holds banner/badge/badge reset/attention/bounce/sound. Agent Status holds colors/shapes, sound,
   status reset, Navigation (attention-includes-active, attention-across-windows, auto-follow), and Reset,
   and must not scroll:
   `testAttentionIncludesActiveTogglePersists` requires Reset not to move when scrolled. Key Mapping holds the keyboard layout lock,
@@ -124,6 +124,9 @@ paths:
 - `statusReset` stores a raw `StatusReset` (`firstKey`|`enter`|`never`), nil for the default `firstKey`,
   resolved by `effectiveStatusReset` and mirrored to `GhosttyApp.statusReset`, which the surface factories'
   keystroke-clear closure reads at keystroke time. Reset to defaults clears it with the glyph settings.
+- `badgeReset` stores a raw `StatusReset` the same way, resolved by `effectiveBadgeReset` and mirrored to
+  `GhosttyApp.badgeReset` for `wirePane`'s input closure ([[notifications]]). Its picker sits in the
+  Notifications tab, so Agent Status's Reset leaves it alone.
 - Keep titlebar construction in `WindowContentView+Titlebar.swift` so `WindowContentView.swift` remains
   below the 1000-line limit. The Appearance tab lives in `AppearanceSettingsView.swift` for the same reason.
 - Keep Agent Status shape pickers in a trailing-aligned 80-point column wider than the 64.5...68-point
@@ -226,8 +229,10 @@ paths:
   `restore-denylist.conf`, seeded with `tmux`, `screen`, and `zellij`. A control character anywhere in the
   argv also refuses, matching what `session.restore set` rejects a pin for: the line is typed, so the line
   editor reads the byte before the shell parser and quoting cannot protect it. U+FFFD refuses with it,
-  since `parseProcArgs` decodes lossily and replaying it would run a different argument. Both refuse at
-  RENDER, keeping `hadForeground` true so a stale `initialCommand` stays preempted. A pin loaded from a
+  since `parseProcArgs` decodes lossily and replaying it would run a different argument. A `!` refuses when
+  the line is typed into csh or tcsh (`LaunchSeedPolicy.receivingShell`: ghostty `command`'s program, else
+  the account's login shell), which expand history even inside single quotes; Live's zsh and fish wrappers
+  keep it literal, and a deliberate pin is not checked. All refuse at RENDER, keeping `hadForeground` true so a stale `initialCommand` stays preempted. A pin loaded from a
   snapshot never passed the dispatcher's check, so `restoreInput` applies it again at the sink; both share
   `CommandRestore.hasControlCharacter`. Feed captured argv once through
   shell-quoted `config.initial_input` in rerun mode, then nil it. A wrapped live pane consumes the pending
@@ -240,9 +245,10 @@ paths:
   `restore.capture`, `restore.clear` and tree foreground fields are the control surface; the tree fields
   report the live process, not the captured slot, which [[control-api]] keeps read-back-free by design.
 - `newSessionDirectory` is raw `home|currentSession|custom`, with fixed custom path. Unknown/blank/missing
-  values fall back home. Resolve once from active session's `focusedCwd` for every GUI creation path,
-  including a right-clicked workspace; setters save only. Control `session.new --cwd` remains explicit
-  and ignores this setting.
+  values fall back home. Every GUI creation path resolves once from the `focusedCwd` of
+  `newSessionDirectorySource`: the selection only when it is in the destination workspace, else that
+  workspace's most recent session (its first when none is recent); only an empty workspace takes the
+  selection. Setters save only. Control `session.new --cwd` remains explicit and ignores this setting.
 - `cursorStyle` is a raw string that `effectiveCursorStyle` recognizes only as `block|bar|underline`, and
   `cursorBlink` is ghostty's own `?bool`. Unlike the two keys above, neither is emitted unconditionally:
   only a RECOGNIZED style emits `cursor-style`, and `cursorBlink` emits whenever it is non-nil.

@@ -117,14 +117,21 @@ public enum CommandRestore {
         return others.filter { $0.ppid == pgid }.map(\.pid).sorted()
     }
 
-    /// Whether a captured argv should be re-run on restore: false for an empty argv, one whose `argv[0]`
-    /// basename is in the user-editable `restore-denylist.conf` (`parseDenylist` builds it, no built-in
-    /// entries), or one carrying an `isUnreplayable` scalar. Refusing HERE rather than at capture keeps
-    /// `hadForeground` true, so `restorePlan` still preempts a stale `initialCommand`.
-    public static func shouldRestore(argv: [String], denylist: Set<String>) -> Bool {
+    /// shouldRestore says whether a captured `argv` replays as typed into `receivingShell`, the interactive shell,
+    /// nil when nothing types it. Refusing here rather than at capture keeps `hadForeground` true, so
+    /// `restorePlan` still preempts a stale `initialCommand`.
+    public static func shouldRestore(argv: [String], denylist: Set<String>, receivingShell: String? = nil) -> Bool {
         guard let first = argv.first, !first.isEmpty else { return false }
         if argv.contains(where: { $0.unicodeScalars.contains(where: isUnreplayable) }) { return false }
+        if let receivingShell, expandsHistoryInsideQuotes(receivingShell), argv.contains(where: { $0.contains("!") }) {
+            return false
+        }
         return !denylist.contains(basename(first))
+    }
+
+    /// expandsHistoryInsideQuotes: interactive csh and tcsh substitute `!` history even inside single quotes.
+    private static func expandsHistoryInsideQuotes(_ shell: String) -> Bool {
+        ["tcsh", "csh"].contains(basename(shell))
     }
 
     /// Two unrelated reasons, one predicate because both end at the same plain shell: a control character
@@ -237,15 +244,29 @@ public enum CommandRestore {
     }
 
     /// Render an argv into one POSIX shell command line, single-quoting each argument (so spaces, `$`,
-    /// globs and quotes survive intact) and space-joining; fed to a restored login shell via
-    /// `initial_input`. Quoting is a PARSER escape, so it inverts capture only for what `shouldRestore` accepted.
+    /// globs and quotes survive intact) and space-joining.
+    /// Quoting is a PARSER escape, so it inverts capture only for what `shouldRestore` accepted.
     public static func shellQuotedLine(_ argv: [String]) -> String {
         argv.map(shellQuote).joined(separator: " ")
     }
 
+    /// Quote one word that sh, zsh, tcsh and fish all read alike: an apostrophe or a backslash goes
+    /// outside the quotes, escaped, since fish treats both specially inside single quotes.
+    public static func accountShellQuoted(_ value: String) -> String {
+        var quoted = "'"
+        for scalar in value.unicodeScalars {
+            switch scalar {
+            case "'": quoted += "'\\''"
+            case "\\": quoted += "'\\\\'"
+            default: quoted.unicodeScalars.append(scalar)
+            }
+        }
+        return quoted + "'"
+    }
+
     /// POSIX single-quote one argument: wrap in `'…'`, and render each embedded `'` as `'\''`.
     private static func shellQuote(_ arg: String) -> String {
-        "'" + arg.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        "'" + arg.replacingOccurrences(of: "'", with: "'\\''", options: .literal) + "'"
     }
 
     /// Parse a macOS `KERN_PROCARGS2` blob into the process's argv. Layout: a host-order `Int32` argc,

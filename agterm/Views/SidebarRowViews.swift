@@ -338,7 +338,8 @@ final class StatusIconView: NSImageView {
         guard status != .idle else { return nil } // unreachable: `apply` returns early on `.idle` before drawing
         // symbol + color come from the shared resolvers, so this glyph and the SwiftUI StatusGlyph stay
         // identical, per-call `--shape`/`--color` overrides included.
-        let config = NSImage.SymbolConfiguration(pointSize: Self.glyphPointSize, weight: .regular)
+        let weight = GhosttyApp.shared.statusSymbolWeight(for: status, override: shape)
+        let config = NSImage.SymbolConfiguration(pointSize: Self.glyphPointSize, weight: weight)
             .applying(NSImage.SymbolConfiguration(paletteColors: [GhosttyApp.shared.statusColor(for: status, override: colorHex)]))
         let symbol = GhosttyApp.shared.statusSymbolName(for: status, override: shape)
         return NSImage(systemSymbolName: symbol, accessibilityDescription: status.rawValue)?
@@ -396,11 +397,15 @@ class SidebarRowView: NSTableRowView {
             (GhosttyApp.shared.terminalForegroundColor ?? .white)
                 .withAlphaComponent(isEmphasized ? Self.keyAlpha : Self.inactiveAlpha).setFill()
         }
-        Self.pill(in: bounds).fill()
+        NSBezierPath(roundedRect: selectionRect, xRadius: 7, yRadius: 7).fill()
     }
 
-    static func pill(in bounds: NSRect) -> NSBezierPath {
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 8, dy: GhosttyApp.shared.sidebarDensity.selectionInset), xRadius: 7, yRadius: 7)
+    /// selectionRect is the pill's frame in the row.
+    var selectionRect: NSRect {
+        let minX = (superview as? SidebarOutlineView)?.selectionMinX ?? 8
+        let inset = GhosttyApp.shared.sidebarDensity.selectionInset
+        let pill = bounds.insetBy(dx: 0, dy: inset)
+        return NSRect(x: pill.minX + minX, y: pill.minY, width: pill.width - minX - 8, height: pill.height)
     }
 }
 

@@ -92,6 +92,30 @@ struct AppStoreTreeProjectionTests {
         #expect(store.controlTree().workspaces.first?.sessions.first?.backedByZmx == false)
     }
 
+    @Test func surfacelessDaemonBackedPanesProjectAsBacked() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "server")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.hasSplit = true
+        session.splitPaneIdentity = UUID()
+        session.daemonBackedPanes = [session.paneIdentity, session.splitPaneIdentity!]
+
+        let node = try #require(store.controlTree().workspaces.first?.sessions.first)
+        #expect(node.backedByZmx == true)
+        #expect(node.surfaces?.map(\.paneID) == [session.paneIdentity.uuidString, session.splitPaneIdentity!.uuidString])
+    }
+
+    @Test func aSurfacelessSessionWithoutDaemonsStaysUnbacked() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.hasSplit = true
+        session.splitPaneIdentity = UUID()
+        session.daemonBackedPanes = [session.paneIdentity]
+
+        #expect(store.controlTree().workspaces.first?.sessions.first?.backedByZmx == false)
+    }
+
     @Test func paneBackgroundsProjectOverridesOnlyNeverTheInheritedDefault() throws {
         let store = makeStore()
         let workspace = store.addWorkspace(name: "work")
@@ -108,6 +132,40 @@ struct AppStoreTreeProjectionTests {
         let overridden = try #require(store.controlTree().workspaces.first?.sessions.first)
         #expect(overridden.background == tint)
         #expect(overridden.paneBackgrounds == PaneBackgrounds(right: peer))
+    }
+
+    @Test func liveHostStaleIsReportedPerPaneAndOmittedWhenFalse() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "live")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = SpySurface(backedByZmx: true)
+        session.hasSplit = true
+        session.isSplit = true
+        let split = UUID()
+        session.splitPaneIdentity = split
+        session.splitSurface = SpySurface(backedByZmx: true)
+        let tree = store.controlTree(paneForeground: { _ in nil }, liveAttribution: { _ in .supervisor },
+                                     liveHostStale: { $0 == split })
+        let node = try #require(tree.workspaces.first?.sessions.first)
+        #expect(node.liveHostStale == nil)
+        #expect(node.splitLiveHostStale == true)
+        let json = String(decoding: try JSONEncoder().encode(tree), as: UTF8.self)
+        #expect(json.contains(#""splitLiveHostStale":true"#))
+        #expect(!json.contains(#""liveHostStale""#))
+    }
+
+    @Test func liveHostStaleIsOmittedForOrdinaryAndRemotePanes() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "ordinary")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = SpySurface()
+        let remote = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp", remoteHost: "example"))
+        remote.surface = SpySurface(backedByZmx: true)
+        let tree = store.controlTree(paneForeground: { _ in nil }, liveAttribution: { _ in .supervisor },
+                                     liveHostStale: { _ in true })
+        let json = String(decoding: try JSONEncoder().encode(tree), as: UTF8.self)
+        #expect(!json.contains("LiveHostStale"))
+        #expect(!json.contains("liveHostStale"))
     }
 
     @Test func attributionIsOmittedForOrdinaryAndRemotePanes() throws {

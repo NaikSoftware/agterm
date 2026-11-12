@@ -173,6 +173,21 @@ public struct ControlSessionAsk: Codable, Sendable, Equatable {
     }
 }
 
+/// The session-bound pick in flight for a session; a window's own pick is the tree's top-level `pickPending`.
+public struct ControlSessionPick: Codable, Sendable, Equatable {
+    public let id: String
+    /// True while a viewer presenting the session draws the pick; omitted when this Mac does.
+    public let remote: Bool?
+    /// True on a viewer for a replica of a pick its origin owns; the id is the origin's.
+    public let replica: Bool?
+
+    public init(id: String, remote: Bool? = nil, replica: Bool? = nil) {
+        self.id = id
+        self.remote = remote
+        self.replica = replica
+    }
+}
+
 /// A session as projected into the `tree` response.
 public struct ControlSessionNode: Codable, Sendable, Equatable {
     public let id: String
@@ -201,6 +216,10 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     /// Process attribution for each local Live pane; this does not describe permission grants.
     public let liveAttribution: String?
     public let splitLiveAttribution: String?
+    /// liveHostStale is true when the pane's session host is from an earlier helper build or login session;
+    /// omitted otherwise.
+    public let liveHostStale: Bool?
+    public let splitLiveHostStale: Bool?
     /// Divider direction for a live split (`vertical`=left/right, `horizontal`=top/bottom); nil without one.
     public let splitAxis: String?
     /// The primary-pane fraction (0.05...0.95) of the pane area below the titlebar band, for a session that
@@ -233,8 +252,18 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     public let hud: ControlHudNode?
     /// Pending terminal ask; GUI asks are exposed at the tree's top level.
     public let ask: ControlSessionAsk?
+    public let pick: ControlSessionPick?
     public let scratch: Bool
     public let flagged: Bool
+    /// True for a headless origin's session left with no live pane; omitted otherwise.
+    public let ended: Bool?
+    /// pending is a remote window row's operation state: `pending` while one is on its way to the server, `unknown`
+    /// when one's outcome could not be learned; omitted otherwise.
+    public let pending: String?
+    /// scratchBacked is true while a remote window row's scratch is the server's daemon; omitted otherwise.
+    public let scratchBacked: Bool?
+    /// interactions are the asks, picks, pages and jobs the session holds for a presenter, omitted when there are none.
+    public let interactions: [ControlInteraction]?
     /// What the session is FOR: `Session.effectiveContext`, so the local `session.context` value or, on an
     /// attached row without one, the origin's mirrored context. Nil/omitted when neither is set.
     public let context: String?
@@ -379,7 +408,9 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
                 splitRatio: Double? = nil, splitFocused: Bool? = nil,
                 overlay: Bool = false, overlaySizePercent: Int? = nil, overlayWidth: Double? = nil,
                 overlayHeight: Double? = nil, paneOverlays: [String]? = nil,
-                hud: ControlHudNode? = nil, ask: ControlSessionAsk? = nil, scratch: Bool = false, flagged: Bool = false,
+                hud: ControlHudNode? = nil, ask: ControlSessionAsk? = nil, pick: ControlSessionPick? = nil,
+                scratch: Bool = false, flagged: Bool = false, ended: Bool? = nil, pending: String? = nil, scratchBacked: Bool? = nil,
+                interactions: [ControlInteraction]? = nil,
                 commandWait: Bool? = nil, splitCommandWait: Bool? = nil,
                 foreground: [String]? = nil, splitForeground: [String]? = nil,
                 foregroundShell: String? = nil, splitForegroundShell: String? = nil,
@@ -391,6 +422,7 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
                 surfaces: [ControlSurfaceNode]? = nil, realized: Bool? = nil,
                 context: String? = nil, remoteHost: String? = nil, splitCwd: String? = nil,
                 liveAttribution: String? = nil, splitLiveAttribution: String? = nil,
+                liveHostStale: Bool? = nil, splitLiveHostStale: Bool? = nil,
                 presentation: ControlPresentationNode? = nil, presenters: ControlPresentersNode? = nil,
                 remoteOverlays: [ControlRemoteOverlayNode]? = nil, htmlOverlays: [ControlHtmlOverlayNode]? = nil,
                 hiddenOverlays: [String]? = nil, lastSelectedAt: Double? = nil,
@@ -421,8 +453,13 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
         self.paneOverlays = paneOverlays
         self.hud = hud
         self.ask = ask
+        self.pick = pick
         self.scratch = scratch
         self.flagged = flagged
+        self.ended = ended
+        self.pending = pending
+        self.scratchBacked = scratchBacked
+        self.interactions = interactions
         self.context = context
         self.commandWait = commandWait
         self.splitCommandWait = splitCommandWait
@@ -453,6 +490,8 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
         self.remoteHost = remoteHost
         self.liveAttribution = liveAttribution
         self.splitLiveAttribution = splitLiveAttribution
+        self.liveHostStale = liveHostStale
+        self.splitLiveHostStale = splitLiveHostStale
         self.presentation = presentation
         self.presenters = presenters
         self.remoteOverlays = remoteOverlays
@@ -829,6 +868,8 @@ public struct ControlTree: Codable, Sendable, Equatable {
     /// agent already reading the tree gets its version floor without a second round-trip; `version` answers
     /// the same question for a caller that has no tree, no window, and no JSON parser.
     public let app: AppIdentity?
+    /// remote is the server a remote window mirrors and its connection; nil/omitted for a local window.
+    public var remote: ControlRemoteWindow?
     /// The Live sessions reset state: app-global like `app`, omitted when nothing is pending and no launch
     /// has consumed a marker. The read side of `zmx.reset`.
     public let liveReset: ControlLiveResetReadback?
@@ -907,9 +948,8 @@ public struct ControlWindowNode: Codable, Sendable, Equatable {
     public let name: String
     public let open: Bool
     public let active: Bool
-    /// The window's auto-follow-blocked timeout in milliseconds; nil/omitted when disabled. As of the last
-    /// cache refresh — `window.list` answers from a nonisolated fast path, so a just-changed setting lags
-    /// until the next command; the live `idleMs` is kept off `window.list` (tree-only) for that reason.
+    /// The window's auto-follow-blocked timeout in milliseconds; nil/omitted when disabled. The live
+    /// `idleMs` stays tree-only, since the cached `window.list` copy would go stale.
     public let autoFollowMs: Int?
     /// Whether this window's sidebar is visible; nil/omitted for a CLOSED window with no live store. Read
     /// from the open window's store, mirroring `autoFollowMs`. The read side of `sidebar`, per window.
@@ -931,6 +971,8 @@ public struct ControlWindowNode: Codable, Sendable, Equatable {
     /// notifications so ⌘M or a Dock click shows too. A minimized window still reports its `geometry` (where
     /// it comes back to).
     public let minimized: Bool?
+    /// remote is the server a remote window mirrors; its `state` is omitted for a closed window, which has no stream.
+    public var remote: ControlRemoteWindow?
 
     public init(id: String, name: String, open: Bool, active: Bool, autoFollowMs: Int? = nil,
                 sidebarVisible: Bool? = nil, geometry: ControlWindowFrame? = nil,

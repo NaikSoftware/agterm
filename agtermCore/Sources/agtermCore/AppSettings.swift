@@ -421,12 +421,15 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// Raw `StatusReset`: which keystroke clears a blocked or completed glyph. nil = `firstKey`, resolved by
     /// `effectiveStatusReset`.
     public var statusReset: String?
+    /// badgeReset is the raw `StatusReset` for which keystroke clears a session's unseen badge, nil for
+    /// `firstKey`.
+    public var badgeReset: String?
     /// Whether a right-click pastes the clipboard (ghostty `right-click-action`); nil = on, since agterm
     /// forwards right-/middle-click to libghostty. agterm has no terminal context menu, so paste-or-off is
     /// the whole meaningful choice.
     public var rightClickPaste: Bool?
-    /// Whether clicking anywhere on a workspace row expands or collapses it; nil = on. The disclosure
-    /// triangle toggles regardless of this setting.
+    /// workspaceRowClickExpands says whether clicking a workspace row folds it; nil = on. The disclosure
+    /// triangle and the row icon fold regardless.
     public var workspaceRowClickExpands: Bool?
     /// Which directory a new (⌘T) session opens in, a `NewSessionDirectory` raw value; nil = `home`. Read
     /// by `AppActions.newSession()` through `resolveNewSessionCwd`.
@@ -506,7 +509,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 restoreRunningCommand: Bool? = nil,
                 inheritGlobalGhosttyConfig: Bool? = nil, attentionButtonEnabled: Bool? = nil,
                 dockBounce: String? = nil, notificationSoundName: String? = nil,
-                blockedStatusSoundName: String? = nil, statusReset: String? = nil, rightClickPaste: Bool? = nil,
+                blockedStatusSoundName: String? = nil, statusReset: String? = nil, badgeReset: String? = nil,
+                rightClickPaste: Bool? = nil,
                 workspaceRowClickExpands: Bool? = nil,
                 newSessionDirectory: String? = nil, newSessionCustomDirectory: String? = nil,
                 newSessionPlacement: String? = nil,
@@ -554,6 +558,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.notificationSoundName = notificationSoundName
         self.blockedStatusSoundName = blockedStatusSoundName
         self.statusReset = statusReset
+        self.badgeReset = badgeReset
         self.rightClickPaste = rightClickPaste
         self.workspaceRowClickExpands = workspaceRowClickExpands
         self.newSessionDirectory = newSessionDirectory
@@ -634,6 +639,11 @@ public struct AppSettings: Codable, Equatable, Sendable {
         statusReset.flatMap(StatusReset.init(rawValue:)) ?? .firstKey
     }
 
+    /// effectiveBadgeReset resolves `badgeReset`, an unknown raw value to `firstKey`.
+    public var effectiveBadgeReset: StatusReset {
+        badgeReset.flatMap(StatusReset.init(rawValue:)) ?? .firstKey
+    }
+
     /// The resolved Dock-bounce mode: the explicit `dockBounce` when a KNOWN raw value, else `off`. The
     /// single read point.
     public var effectiveDockBounce: DockBounce {
@@ -698,6 +708,18 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public static func directoryExists(_ path: String) -> Bool {
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
+    }
+
+    /// remoteNewSessionCwd is the directory a new session in a remote window asks its server for, nil for the
+    /// server's default: the current row's directory and a custom directory are sent as they are, and home is the
+    /// server account's own.
+    public func remoteNewSessionCwd(currentSessionCwd: String?) -> String? {
+        let cwd: String? = switch NewSessionDirectory(rawValue: newSessionDirectory ?? "") ?? .home {
+        case .home: nil
+        case .currentSession: currentSessionCwd
+        case .custom: newSessionCustomDirectory
+        }
+        return cwd?.isEmpty == false ? cwd : nil
     }
 
     /// The SwiftUI overlay opacity for an inactive-pane mute strength, clamped and scaled by 0.08 (the

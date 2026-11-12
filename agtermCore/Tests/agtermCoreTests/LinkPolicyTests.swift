@@ -3,6 +3,49 @@ import Testing
 @testable import agtermCore
 
 struct LinkPolicyTests {
+    private static let linkID = UUID(uuidString: "0F5C1E2A-3B4D-4E6F-8A9B-0C1D2E3F4A5B")!
+    private static let sessionLinks = [
+        "agterm://session/0F5C1E2A-3B4D-4E6F-8A9B-0C1D2E3F4A5B",
+        "agterm://session/0f5c1e2a-3b4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "AGTERM://SESSION/0F5C1E2A-3B4D-4E6F-8A9B-0C1D2E3F4A5B",
+    ]
+    private static let rejectedSessionLinks: [String] = {
+        let id = linkID.uuidString
+        let valid = "agterm://session/" + id
+        return [valid + "/", valid + "?", valid + "#", valid + "?a=1",
+                "agterm://@session/" + id, "agterm://u:p@session/" + id,
+                "agterm://session:80/" + id, "agterm://session:/" + id,
+                "agterm://session//" + id, "agterm://session/x/" + id,
+                "agterm:///session/" + id, "agterm:session/" + id,
+                "agterm://session/" + id.replacingOccurrences(of: "-", with: ""),
+                "agterm://session/{" + id + "}", "agterm://session/%30" + id.dropFirst(),
+                "agterm://window/" + id, "agterm://session", "agterm://session/",
+                valid + " ", " " + valid, "agterm://session/not-a-uuid"]
+    }()
+
+    @Test(arguments: sessionLinks)
+    func exactSessionLinksParseWithoutChangingDisposition(_ raw: String) {
+        #expect(LinkPolicy.sessionLink(raw) == Self.linkID)
+        #expect(LinkPolicy.disposition(for: raw) == .ignore)
+    }
+
+    @Test(arguments: LinkOpenMode.allCases, sessionLinks)
+    func sessionLinksSelectOnlyFromShellOrigins(_ mode: LinkOpenMode, _ raw: String) {
+        for origin in [LinkPolicy.ClickOrigin.pane(Self.session), .remotePane(Self.session), .scratch(Self.session)] {
+            #expect(LinkPolicy.route(for: raw, mode: mode, origin: origin) == .selectSession(Self.linkID))
+        }
+        for origin in [LinkPolicy.ClickOrigin.hud, .programOverlay, .quick] {
+            #expect(LinkPolicy.route(for: raw, mode: mode, origin: origin) == .ignore)
+        }
+    }
+
+    @Test(arguments: rejectedSessionLinks, LinkOpenMode.allCases)
+    func malformedSessionLinksAreIgnoredEverywhere(_ raw: String, _ mode: LinkOpenMode) {
+        #expect(LinkPolicy.sessionLink(raw) == nil)
+        for origin in [LinkPolicy.ClickOrigin.pane(Self.session), .remotePane(Self.session), .scratch(Self.session), .hud, .programOverlay, .quick] {
+            #expect(LinkPolicy.route(for: raw, mode: mode, origin: origin) == .ignore)
+        }
+    }
     // MARK: disposition (open / reveal / ignore)
 
     /// The garbage suffixes model a `String(cString:)` over-read past `len`: the trailing space + junk
@@ -51,13 +94,11 @@ struct LinkPolicyTests {
     @Test(arguments: [
         "file:///net/server/share/x.bin",         // /net (-hosts) auto-mount root
         "file:///Network/Servers/host/share",     // /Network auto-mount root
-        "file:///home/someone/x.bin",              // /home (auto_home) auto-mount root
         "file://localhost/net/server/share",      // local host but an auto-mount path
         "file:///tmp/../net/server/share",        // dot segments resolve INTO /net — must still ignore
         "file:///tmp/%2E%2E/net/server/share",    // percent-encoded `..` decodes BEFORE normalization — still ignore
         "file:///NET/server/share",               // auto-mount match is case-insensitive
         "file:///net",                            // bare root (no child) — exercises the `lower == root` branch
-        "file:///home",                           // bare root
         "file:///network",                        // bare root
         "file:///System/Volumes/Data/home/someone/x.bin",     // canonical Data path where auto_home really mounts
         "file:///System/Volumes/Data/net/server/share",      // canonical Data /net
@@ -190,7 +231,6 @@ struct LinkPolicyTests {
         "//server/share/x.png",
         "/net/host/x.png",
         "/tmp/../net/x.png",
-        "/home/someone/x.png",
         "~",
         "~user/x.png",
         "src/x.png",
@@ -489,7 +529,7 @@ struct LinkPolicyTests {
         #expect(Self.locations(raw).isEmpty)
     }
 
-    @Test(arguments: ["/net.", "/net/host/a.md.", "/Network.", "/home/me/a.md?", "//host/share/a.md.", "/tmp/../net/a.md."])
+    @Test(arguments: ["/net.", "/net/host/a.md.", "/Network.", "//host/share/a.md.", "/tmp/../net/a.md."])
     func aTrimmedSpellingInsideARefusedRootIsNeverOffered(_ raw: String) {
         #expect(!Self.locations(raw).contains { LinkPolicy.isAutomountPath($0.path) || $0.path.hasPrefix("//") })
     }
@@ -510,7 +550,7 @@ struct LinkPolicyTests {
         #expect(Self.locations(raw, cwd: "/w").isEmpty)
     }
 
-    @Test(arguments: ["/net/x/a.go:3", "/Network/a.go:3", "/home/me/a.go:3", "/tmp/../net/x/a.go:3",
+    @Test(arguments: ["/net/x/a.go:3", "/Network/a.go:3", "/tmp/../net/x/a.go:3",
                       "//host/share/a.go:3", "/System/Volumes/Data/home/me/a.go:3"])
     func refusedAbsolutePathsOfferNothingToStat(_ raw: String) {
         #expect(Self.locations(raw, cwd: "/w").isEmpty)
@@ -524,8 +564,27 @@ struct LinkPolicyTests {
 
     @Test func aRelativePathEscapingIntoAnAutomountRootOffersNothing() {
         #expect(Self.locations("../../net/x/a.go:3", cwd: "/w/app").isEmpty)
+    }
+
+    #if os(macOS)
+    @Test(arguments: ["file:///home/someone/x.bin", "file:///home"])
+    func homeIsAnAutoMountRootOnMacOS(_ raw: String) {
+        #expect(LinkPolicy.disposition(for: raw, localHosts: Self.localHosts) == .ignore)
+    }
+
+    @Test(arguments: ["/home/someone/x.png", "/home/me/a.md?", "/home/me/a.go:3"])
+    func aHomePathOffersNothingToStatOnMacOS(_ raw: String) {
+        #expect(Self.locations(raw, cwd: "/w").isEmpty)
         #expect(Self.locations("../../../home/x/a.go:3", cwd: "/w/a/b").isEmpty)
     }
+    #else
+    // regression: the macOS auto_home root refused every Linux user's files, so a click in agterm-server's panes opened nothing
+    @Test func aHomePathIsAnOrdinaryFileOnLinux() {
+        #expect(Self.locations("./notes.md:3", cwd: "/home/agterm").contains { $0.path == "/home/agterm/notes.md" })
+        #expect(LinkPolicy.disposition(for: "file:///home/agterm/x.bin", localHosts: Self.localHosts)
+            == .reveal(URL(fileURLWithPath: "/home/agterm/x.bin", isDirectory: false)))
+    }
+    #endif
 
     @Test func aRemotePaneOffersNothingToStat() {
         #expect(Self.locations("/x/a.go:42", origin: .remotePane(Self.session)).isEmpty)
@@ -620,6 +679,7 @@ struct LinkPolicyTests {
         #expect(LinkPolicy.Route.browser(web).localFile == nil)
         #expect(LinkPolicy.Route.overlay(web, session: session, sizePercent: nil).localFile == nil)
         #expect(LinkPolicy.Route.ignore.localFile == nil)
+        #expect(LinkPolicy.Route.selectSession(session).localFile == nil)
     }
 
     @Test(arguments: [("/x/app.log", nil, true), ("/x/run.OUT", nil, true), ("/x/app.log", 42, false), ("/x/notes.txt", nil, false),

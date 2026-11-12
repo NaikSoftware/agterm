@@ -75,6 +75,26 @@ struct AppStoreRemoteAskTests {
         }
     }
 
+    @Test func aHeadlessOriginHandsAnAskToItsPresenterWithNoFollowingPane() throws {
+        let (headless, session) = makeHeadlessSession(split: true)
+        headless.presentationHub = hub
+        let hello = PresentationHello(version: 1, kinds: [], mode: .presenter)
+        let id = try hub.subscribe(session: session.id, hello: hello, sink: presenter) {
+            PresentationSnapshot(status: nil, hud: nil)
+        }
+        hub.receive(PresentationFrame(gen: presenter.frames[0].gen, rev: 0, body: .presenterAcquire), from: id)
+
+        #expect(headless.presentAskRemotely(ask(), in: session, paneIdentity: nil, window: Self.window) == true)
+        #expect(presenter.bodies.contains { if case .askRequest = $0 { true } else { false } })
+    }
+
+    @Test func aHeadlessOriginWithoutAPresenterKeepsTheAsk() {
+        let (headless, session) = makeHeadlessSession(split: false)
+        headless.presentationHub = hub
+
+        #expect(headless.presentAskRemotely(ask(), in: session, paneIdentity: nil, window: Self.window) == nil)
+    }
+
     @Test(arguments: [nil, .unowned, .leader, .follower] as [ZmxLeadRole?], OverlayPane.allCases)
     func aPaneAskUsesOnlyItsOwnLead(role: ZmxLeadRole?, pane: OverlayPane) throws {
         let (session, _) = try origin(split: true)
@@ -489,7 +509,8 @@ private let remoteCheckboxesOther = AskChoiceForm(choices: [ControlAskChoice(id:
 private let remoteCheckboxes = AskChoiceForm(choices: [ControlAskChoice(id: "a", label: "A"), ControlAskChoice(id: "b", label: "B")],
                                              multiple: true)
 
-struct RemoteFormAnswer: Sendable {
+// a 65 KB argument line made CI's log drop every later line of the run, failures included
+struct RemoteFormAnswer: Sendable, CustomTestStringConvertible {
     let form: AskForm
     let button: String?
     let text: String?
@@ -500,6 +521,11 @@ struct RemoteFormAnswer: Sendable {
         self.button = button
         self.text = text
         self.selected = selected
+    }
+
+    var testDescription: String {
+        let shown = text.map { $0.count > 80 ? "\($0.count) characters" : $0.debugDescription } ?? "nil"
+        return "form: \(form), button: \(button ?? "nil"), text: \(shown), selected: \(selected.map { "\($0)" } ?? "nil")"
     }
 
     func frame(id: String, owner: Int) -> PresentationAskAnswer {

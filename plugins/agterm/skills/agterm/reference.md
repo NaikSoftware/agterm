@@ -165,10 +165,13 @@ the bundled persistent host, `app` the running agterm, `orphaned` a self-respons
 dead responsible process, and `unknown` an unavailable reading or an unrelated live responsible process;
 omitted for non-Live and remote panes; the split field includes hidden splits and is omitted without a
 split; these describe attribution, not permission grants),
+`liveHostStale` and `splitLiveHostStale` (true for a `supervisor` pane whose host is from an earlier agterm
+build or login, which `zmx reset` moves to the current one; omitted otherwise),
 `remoteHost` (the machine an attached session came from — the read side of `zmx attach`; omitted for a
-local session, and never present after a relaunch because a remote session is never written to disk),
+local session; a remote row is never written to disk, so a per-session attach is gone after a relaunch, while a
+remote window rebuilds its rows from the server's catalog),
 `remoteSessionID` (the origin's id for the session an attached row shows, companions and page rows included,
-the id `zmx attach` takes; omitted for a local session),
+the id `zmx attach` takes; on a remote window's row it equals the row's `id`; omitted for a local session),
 `presentation` (on an attached session only: `state` is `connecting`, `connected`, `unsupported` for an
 origin too old to stream, or `failed` with the reason in `error`, and `mode` is `presenter` when this
 row's stream holds the presenter role (see Remote sessions) or `mirror` when it does not; it says whether the stream is up,
@@ -236,7 +239,7 @@ as `status`, so it is never reported without a `status`), `statusBlink` (`true` 
 set to blink — the `--blink` value; omitted when idle or not blinking), `statusColor` (the `#rrggbb`
 glyph-tint override — the `--color` value; omitted when idle or using the configured color) and
 `statusShape` (the glyph silhouette override — the `--shape` value, one of
-`circle`|`square`|`triangle`|`triangle-down`|`play`|`diamond`|`capsule`|`seal`|`star`|`bolt`|`bell`;
+`circle`|`square`|`triangle`|`triangle-down`|`play`|`diamond`|`capsule`|`seal`|`star`|`bolt`|`bell`|`checkmark`;
 omitted when idle or using the configured shape.
 Like `statusColor` it reports the PER-CALL override only, so a shape picked in Settings reads back as
 absent), `statusChangedAt` (when the status was last SET, in epoch seconds — the same clock an event's
@@ -475,9 +478,10 @@ buys nothing. A caller with no tree uses `version`.
   errors if no workspace has that name unless `--create-workspace` is also passed, which reuses an
   existing one or creates it when absent (idempotent). `--command` runs that command as the session's
   process instead of the login shell (no echoed command line; the session closes when the command
-  exits). It runs argv-style (tokenized, quotes respected, but NO shell), so shell operators (`;`,
-  `&&`, `$VAR`, redirects, globs) are not interpreted, and it inherits the app's GUI `PATH` (the launchd
-  default — no `/opt/homebrew/bin`), so a bare Homebrew or other non-default binary fails with exit 127.
+  exits). libghostty runs it under bash as `exec <line>`: quotes, `$VAR`, redirects, pipes and globs
+  work; wrap a `;` or `&&` list in `sh -c`. It inherits the
+  app's GUI `PATH` (the launchd default — no `/opt/homebrew/bin`), so a bare Homebrew or other
+  non-default binary fails with exit 127.
   Wrap in a login shell for both — `--command "zsh -lc 'htop'"` — or give an absolute path
   (`/opt/homebrew/bin/htop`). All of that describes Fresh shells and Re-run commands. In Live sessions
   mode the command is instead a create-only zmx payload the pane's Live shell runs, so
@@ -606,13 +610,15 @@ buys nothing. A caller with no tree uses `version`.
 - `session rename <name> [--target] [--window W]`.
 - `session reveal [--target] [--window W]` — select the target session's focused-pane working
   directory in Finder. Errors when that directory no longer exists.
-- `session go --to next|prev|first|last|next-attention|prev-attention [--window W]` — move the
+- `session go --to next|prev|first|last|next-attention|prev-attention|N [--window W]` — move the
   selection relative to the CURRENT one (no `--target`). Operates over the VISIBLE/FILTERED set: the
   flagged sessions in flagged mode, the marked workspaces' sessions while the focus filter is applied,
   else all sessions (clearing the flag / suspending the filter restores the full set). next/prev wrap around at the ends (last→first,
   first→last); first/last jump to the ends of that set; next-attention/prev-attention step only through the filtered
   sessions needing attention (status blocked/completed, plus active when the tree reports
-  `attentionIncludesActive: true`), wrapping, always within the addressed window. Returns the newly selected id.
+  `attentionIncludesActive: true`), wrapping, always within the addressed window. A number `N` selects the
+  Nth session of that set in sidebar order, 1-based, sessions in a collapsed workspace included; past the end it
+  errors `no session at position N: M navigable` and leaves the selection alone. Returns the newly selected id.
 - `session move <workspace> [--target] [--window W]` — relocate the session to another workspace
   (appends). OR `session move --to up|down|top|bottom [--target]` — reorder within its workspace. OR
   `session move --after SID | --before SID [--target]` — place the session directly after / before an
@@ -752,7 +758,8 @@ error keeps those names for compatibility.
   on screen starts it there without switching and without taking the keyboard, which goes to the
   scratch once that session is selected; `--follow` selects the target, as on `session overlay open`.
   `--command` (only when showing) runs that program as the
-  scratch's process instead of a login shell — argv-style (no shell, and inheriting the app's GUI
+  scratch's process instead of a login shell — run as `session new --command` runs it (wrap a `;` or `&&`
+  list in `sh -c`, and it inherits the app's GUI
   `PATH`, so the same exit-127 caveat as `session new --command`: wrap in `"zsh -lc '…'"` or use an
   absolute path) and RUN-ONCE like `session new --command` (after it exits, the next `on` is a plain
   shell). A scratch is expendable, so passing `--command` while one is already open respawns it. Not
@@ -770,14 +777,16 @@ error keeps those names for compatibility.
   `0.05..0.95` and persisted, and the applied (clamped) fraction is printed (and returned as `result.ratio`
   under `--json`). Errors when the session has no split. Resizing a hidden split updates the stored
   fraction; it takes effect when the split is next shown.
-- `session status <idle|active|completed|blocked> [--blink] [--auto-reset] [--sound NAME] [--color #rrggbb] [--shape circle|square|triangle|triangle-down|play|diamond|capsule|seal|star|bolt|bell] [--pane left|right|scratch] [--pane-id TOKEN] [--target] [--window W]` —
-  set the sidebar agent-status glyph. Every ACCEPTED call stamps the session node's
+- `session status <idle|active|completed|blocked> [--blink] [--auto-reset] [--if-idle] [--sound NAME] [--color #rrggbb] [--shape circle|square|triangle|triangle-down|play|diamond|capsule|seal|star|bolt|bell|checkmark] [--pane left|right|scratch] [--pane-id TOKEN] [--target] [--window W]` —
+  set the sidebar agent-status glyph. Every APPLIED write stamps the session node's
   `statusChangedAt`, including idle and one that re-pushes the same status, so a poller can read the last
   set time without keeping state of its own; a call refused by the pane-precedence rule
   changes nothing, the stamp included. `--blink` requests an attention pulse; macOS Reduce Motion
   suppresses the repeating sidebar and dashboard animation while keeping the status visible, and the
   pulse resumes when Reduce Motion is disabled. `--auto-reset` clears it back to idle once the session
-  is visited (use for a one-shot completion flash). `--sound` plays a
+  is visited (use for a one-shot completion flash). `--if-idle` applies the status only while the
+  session is idle; on any other status it changes nothing, stamp and sound included, and still answers
+  ok, so a background worker's `active` cannot overwrite the main agent's status. `--sound` plays a
   one-shot sound when the status is set: `default` (the system alert sound) or a system sound name
   (`Basso`, `Blow`, `Bottle`, `Frog`, `Funk`, `Glass`, `Hero`, `Morse`, `Ping`, `Pop`, `Purr`,
   `Sosumi`, `Submarine`, `Tink`; also any custom sound in `~/Library/Sounds`) — an unknown name errors.
@@ -790,7 +799,7 @@ error keeps those names for compatibility.
   `session status` without `--color` reverts to the Settings-configured color (a malformed hex errors).
   Use it to distinguish states beyond the fixed palette (e.g. a caller-specific blocked color).
   `--shape` (`circle`, `square`, `triangle`, `triangle-down`, `play`, `diamond`, `capsule`, `seal`, `star`, `bolt`,
-  `bell`) overrides the glyph SILHOUETTE
+  `bell`, `checkmark`) overrides the glyph SILHOUETTE
   the same way — it rides the status, so the next `session status` without `--shape` reverts to the
   Settings-configured shape, else the built-in plain circle (an unknown name errors, listing the accepted names).
   Shape is a second channel alongside the tint, so a session stays distinguishable at a glance and for a
@@ -909,8 +918,8 @@ error keeps those names for compatibility.
   tinted) and the palette's "Tint Session: <Color>" / "Tint Session: None" for the active session.
 - `session seen [--target] [--window W]` — clear the session's unseen-notification badge without changing
   the selection, focus, or agent status. It is the focus-free counterpart to `notify`: `notify` (and a
-  terminal's own OSC 9/777) raise the red badge, and until now the only way to clear it was visiting the
-  session. Idempotent — a no-op when the badge is already zero. Read the current count from the tree node's
+  terminal's own OSC 9/777) raise the red badge, which otherwise clears only when the session is visited or
+  typed in (as Settings ▸ Notifications ▸ Badge reset allows). Idempotent — a no-op when the badge is already zero. Read the current count from the tree node's
   `unseen` field. This lets an orchestrator acknowledge a driven session's notifications over the socket
   while keeping the badge a real attention signal on the sessions a human tends.
 - `session restore (<command> | --none | --clear) [--pane left|right] [--pane-id TOKEN] [--target] [--window W]`
@@ -1522,6 +1531,43 @@ shell (no controlling terminal — `/dev/tty` errors). See examples.md for usage
 
 `window resize`/`move` are control-native (no GUI equivalent — the title bar already drags-to-resize).
 
+## remote server
+
+A remote window mirrors agterm-server's catalog on a Linux host (docs: agterm.com/docs#remote-server). The
+window commands run on the Mac; `catalog` is served only by agterm-server.
+
+- `window remote open HOST`: open a window mirroring HOST's agterm-server (an ssh destination), or raise
+  the one already showing it; prints the window id. The window's node in `tree` and `window list` carries
+  `remote`: `host`, `catalogID`, `state` (`connecting`, `connected`, `disconnected`, `refused`, with
+  `reason` for the last two; omitted for a closed window), `detachedSessions`, `detachedWorkspaces` and
+  `operations` (`{id, action, session?, workspace?, state}` for an action still on its way or whose outcome
+  was lost), each omitted when empty. Its session rows add `ended` (the server lost the primary and split panes; a
+  scratch may still run),
+  `pending` (`pending` or `unknown`) and `scratchBacked` (the scratch is the server's daemon).
+- `window remote dismiss [ID]`: drop the marks for actions whose outcome was lost; it neither undoes nor
+  resends them. The window settles a mark through `catalog op` by itself when the server still knows it.
+- `session detach [--target T ...]` / `workspace detach [--target T]`: hide a remote window's rows on this
+  Mac, leaving them running on the server; a parent takes its companions. `session close` ends them instead.
+- `session reattach --target ID` / `workspace reattach --target ID`: show a detached row again; ID as
+  `remote.detachedSessions` / `detachedWorkspaces` list it (`active` and an ended session are refused;
+  `session close` removes an ended one).
+- `catalog subscribe`: the stream a remote window runs over ssh; not for use by hand.
+- `catalog op OPID [--epoch E --rev N]`: what became of an operation id: `applied` (with its revision),
+  `noop`, `refused` (with the error), `fenced` or `unknown`; an id the server does not hold is recorded so
+  the command is refused if it arrives later.
+- Operation ids: the session and workspace structure commands take `--op-id ID --epoch E`; the server keeps
+  the last 512 receipts, so the same id within them is not run twice, and answers `result.receipt` `{opID, epoch, outcome, rev?, error?}`; `--expect-panes ID,ID` and `session
+  scratch --expect-scratch ID|none` refuse a target that changed; all need `--op-id`. A Mac app refuses an
+  operation id.
+- On agterm-server: one window (the catalog, `--window` takes its id or `active`); `NAME is not available
+  on agterm-server` for every command it does not serve (window mutations, sidebar, font, theme, keymap,
+  quick, dashboard, zoom and more; `window list` and the presenter bridges `zmx present`, `run-job` and
+  `page-serve` are served); no `--wait` on `session new`; `ask open --style gui` needs `--target`; a pick
+  needs a session, from `--session` or the calling pane's own. Asks, picks, pages and overlay jobs are held
+  until a Mac presents the session, listed in its `interactions` (`{kind, id, state, deadline?}`); only an
+  ask or pick ends unanswered, at its `--timeout`. `version` adds `headless: true` and
+  `versions`.
+
 ## surface
 
 `agtermctl surface zoom [show|hide|toggle] [--target SURFACE_ID|active|quick] [--window W]` — zoom one
@@ -1631,10 +1677,12 @@ Invalid invocations error (rejected at the CLI and re-checked server-side): `--f
 
 ## pick
 
-`agtermctl pick [--prompt TEXT] [--query TEXT] [--select ID] [--allow-custom] [--follow] [--window W] [--no-block]`
+`agtermctl pick [--prompt TEXT] [--query TEXT] [--select ID] [--allow-custom] [--session S] [--timeout SECONDS] [--follow] [--window W] [--no-block]`
 reads choices from stdin and opens a native fuzzy picker in the target window. `pick` defaults to the open
 subcommand, so `agtermctl pick open` is not required. Stdin is read unconditionally, so a call that supplies
-no items needs `< /dev/null` or it blocks.
+no items needs `< /dev/null` or it blocks. `--session S` binds the picker to a session, so it shows wherever
+that session is presented, a remote window included, and reads back as `pick` on the session row.
+`--timeout SECONDS` (at most 86400) cancels it unanswered after that long.
 
 The first non-whitespace input byte selects the format. `[` starts a JSON array of objects with required
 `id` and `label` strings plus an optional `subtitle` and an optional trailing status glyph: `status`
@@ -1704,6 +1752,7 @@ precedence over the role, and the pane must be laid out by its session at open.
 terminal area, excluding the sidebar. An explicit GUI target must be selected in its window;
 GUI pane selectors require it. Terminal asks can coexist with GUI asks and picks.
 `--window W` selects the window; `--follow` raises it without changing session selection.
+`--timeout SECONDS` (at most 86400) cancels the dialog unanswered after that long.
 
 Supply one to six buttons with unique ids and nonempty labels; a question with a field or a list may omit
 them. A token without `=` is both id and label;
@@ -2323,12 +2372,14 @@ before the session host existed keeps its own macOS permission identity, so ever
 it asks for the microphone again; the reset ends those sessions' processes at the next launch and recreates
 them under the host, starting their captured commands again where possible. It also covers every session
 whose daemon predates the recorded first launch with this zmx build: live sessions keep the zmx they started
-with through updates, so they miss a zmx change until recreated. agterm quits and reopens itself
+with through updates, so they miss a zmx change until recreated. It also moves every session still under
+the session host of an earlier agterm build or login, which can block local network access after an
+update, to the current host; at every launch agterm asks each earlier host to stop, and one stops once no live session runs under it. agterm quits and reopens itself
 right after answering, so running work in the affected sessions stops and agent conversations may need to be
 resumed by hand; run from inside one of those sessions it kills the calling shell. Other supervised
 sessions are left alone. It refuses outside Live sessions mode, while a mode change waits for a restart,
 on an incomplete pane inventory, and when nothing needs resetting. The reply carries `result.liveReset`
-with the session and pane counts, plus `outdated` sessions when any; the next launch re-checks every session and only ever resets fewer than
+with the session and pane counts, plus `outdated` and `staleHost` sessions when any; the next launch re-checks every session and only ever resets fewer than
 confirmed, and the tree's top-level `liveReset` reports `pending` until the quit and `last` for the launch
 that consumed the reset.
 
@@ -2516,11 +2567,12 @@ its persisted snapshots against what zmx reports. With agterm stopped there is n
 
 Which programs are NOT re-run is controlled by `restore-denylist.conf` in the config directory (one
 command name per line, seeded with the terminal multiplexers `tmux`/`screen`/`zellij`). It is a plain
-user-edited file read at launch — there is no control command for it. Two more things are skipped
+user-edited file read at launch — there is no control command for it. Three more things are skipped
 whatever the denylist says, and the pane starts a plain shell. A control character in the command's
 name or any argument: the restored line is typed, so the line editor reads that byte as an editing key
 rather than as text. A byte sequence that was not valid UTF-8: it is captured lossily, so replaying it
-would run an argument the process never had.
+would run an argument the process never had. A `!` anywhere in a command re-run mode types into a csh or
+tcsh pane: those shells expand it as history even inside quotes.
 
 For a PER-SESSION, per-pane override that pins (or suppresses) what a pane restores, use
 `session restore` (in the session section above): it wins over the captured foreground, bypasses the
@@ -2606,6 +2658,25 @@ the signal when ssh was killed), and 64 for a usage error. Failures before the c
   by `ssh exited 3; xterm-ghostty was not installed`.
 - `ssh exited N; xterm-ghostty was not installed` — any other remote failure; ssh's own stderr above it
   says what happened.
+
+## server
+
+`agtermctl server install DESTINATION [--from FILE] [-p PORT] [-i FILE ...] [-J HOST] [-F FILE]` — macOS only: install or
+upgrade agterm-server on a Linux host. Local-only like `terminfo install`, with the same `DESTINATION`, the
+same four ssh options, the same installer-owned execution settings and the same interactive connection.
+
+- It installs the release matching the app bundle this `agtermctl` belongs to: `uname -m` on the host picks
+  `aarch64` or `x86_64`, the tarball comes from that version's GitHub release, and no archive bytes are
+  sent to the host until its sha256 matches the line in the bundle's `Contents/Resources/agterm-server.sha256`.
+- The tarball unpacks into `~/.local/lib/agterm-server` by rename, so a running server keeps its binary,
+  then its `install.sh` sets up the systemd user service, lingering and the agent hooks.
+- `--from FILE` uses a tarball already on this Mac instead of downloading one: its bytes are read once into a private
+  file, and that copy must match the same sha256 line for the host's architecture.
+- A CLI with no checksum file (a development build, or a copy outside the app) is refused;
+  `scripts/install-server.sh HOST` installs from a checkout.
+- Installation outcomes: exit 0 installed (`installed agterm-server VERSION on DESTINATION`), 3 installed with
+  the agent hooks incomplete, 1 for any refusal or failure with the reason on stderr. A usage error keeps the
+  parser's own exit code.
 
 ## version
 
@@ -2698,9 +2769,9 @@ restore; a `session restore --pane right` on a session with no split also return
 `window not open`
 (resize/move/`--window`), `unknown theme: <name>` (theme set), `unknown sound: <name>` (session status --sound),
 `invalid color (expected #rrggbb)` (session status --color),
-`invalid shape: <value> (circle|square|triangle|triangle-down|play|diamond|capsule|seal|star|bolt|bell)` (session status --shape over the
+`invalid shape: <value> (circle|square|triangle|triangle-down|play|diamond|capsule|seal|star|bolt|bell|checkmark)` (session status --shape over the
 raw socket; the `agtermctl` CLI rejects the same value locally with
-`shape must be one of: circle, square, triangle, triangle-down, play, diamond, capsule, seal, star, bolt, bell`),
+`shape must be one of: circle, square, triangle, triangle-down, play, diamond, capsule, seal, star, bolt, bell, checkmark`),
 `--pane must be left, right, or scratch` (the `--pane` value check; the message intentionally lists the
 canonical read-back names while the role and position aliases documented above are accepted. The
 `agtermctl` CLI rejects a bad pane with this for session status/type/text/paste, and over the raw socket

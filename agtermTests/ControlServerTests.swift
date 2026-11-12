@@ -116,6 +116,22 @@ final class ControlServerTests: XCTestCase {
         XCTAssertEqual(next.boundSocketPath, socketPath)
     }
 
+    // a child spawned on another thread holds a copy of the lock's descriptor until it execs
+    func testStopReleasesTheLockWhileACopyOfItsDescriptorIsOpen() throws {
+        let owner = makeServer()
+        let resolved = try XCTUnwrap(realpath(ControlResolve.ownershipLockPath(forSocket: socketPath), nil))
+        let lockPath = String(cString: resolved)
+        free(resolved)
+        let held = try XCTUnwrap(descriptor(openOn: lockPath))
+        let copy = dup(held)
+        XCTAssertGreaterThanOrEqual(copy, 0)
+        defer { close(copy) }
+
+        owner.stop()
+
+        XCTAssertEqual(makeServer().resolvedSocketPath, socketPath, "the stopped owner's lock should be free")
+    }
+
     /// `start()` re-runs from every window scene's task, so a server refused while the owner was alive
     /// reaches it again once the owner quits. It must then serve — and advertise — the real path.
     func testAServerThatBindsAfterRefusingAdvertisesTheRealPath() {
@@ -317,6 +333,138 @@ final class ControlServerTests: XCTestCase {
         store.closeOverlay(session.id)
     }
 
+    func testPolledReadsSkipTheWindowCacheRebuildOtherCommandsKeepIt() async throws {
+        let library = WindowLibrary(directory: stateDir)
+        let store = try XCTUnwrap(library.activeStore)
+        let windowID = try XCTUnwrap(library.windowID(for: store))
+        let server = makeServer(library: library)
+        server.start()
+        func cachedName() -> String? {
+            server.fastPathResponse(for: ControlRequest(cmd: .windowList))?.result?.windows?.first { $0.id == windowID.uuidString }?.name
+        }
+
+        _ = await send(#"{"cmd":"version"}"#)
+        let before = try XCTUnwrap(cachedName())
+        library.renameWindow(windowID, to: "renamed-behind-the-cache")
+
+        let events = try JSONDecoder().decode(ControlResponse.self, from: Data((await send(#"{"cmd":"events.read"}"#) ?? "").utf8))
+        let messages = try JSONDecoder().decode(ControlResponse.self, from: Data((await send(#"{"cmd":"msg.read"}"#) ?? "").utf8))
+        XCTAssertTrue(events.ok, events.error ?? "")
+        XCTAssertEqual(messages.error, "msg.read requires an identity: --as SESSION:PANE-ID")
+        XCTAssertEqual(cachedName(), before)
+
+        _ = await send(#"{"cmd":"version"}"#)
+        XCTAssertEqual(cachedName(), "renamed-behind-the-cache")
+    }
+
+    func testSettingsAutoFollowChangeRefreshesTheCachedWindowList() async throws {
+        let library = WindowLibrary(directory: stateDir)
+        let store = try XCTUnwrap(library.activeStore)
+        let windowID = try XCTUnwrap(library.windowID(for: store))
+        let server = makeServer(library: library)
+        server.start()
+        let settings = SettingsModel(library: library, settingsStore: SettingsStore(directory: stateDir))
+        func cachedAutoFollow() -> Int? {
+            server.fastPathResponse(for: ControlRequest(cmd: .windowList))?.result?.windows?.first { $0.id == windowID.uuidString }?.autoFollowMs
+        }
+
+        _ = await send(#"{"cmd":"version"}"#)
+        XCTAssertNil(cachedAutoFollow())
+
+        settings.setAutoFollowAttention(AppSettings.AutoFollowAttention.s10.rawValue)
+        XCTAssertEqual(cachedAutoFollow(), 10_000)
+
+        settings.setAutoFollowAttention(AppSettings.AutoFollowAttention.off.rawValue)
+        XCTAssertNil(cachedAutoFollow())
+    }
+
+    func testGUIDeleteOfTheActiveWindowRefreshesTheCachedWindowList() async throws {
+        let library = WindowLibrary(directory: stateDir)
+        let keptID = try XCTUnwrap(library.activeWindowID)
+        let deletedID = library.newWindow().id
+        let deletedStore = try XCTUnwrap(library.store(for: deletedID))
+        for session in deletedStore.workspaces.flatMap(\.sessions) { deletedStore.closeSession(session.id) }
+        XCTAssertEqual(deletedStore.workspaces.reduce(0) { $0 + $1.sessions.count }, 0)
+        XCTAssertEqual(library.activeWindowID, deletedID)
+        let server = makeServer(library: library)
+        server.start()
+        func cachedIDs() -> [String]? {
+            server.fastPathResponse(for: ControlRequest(cmd: .windowList))?.result?.windows?.map(\.id)
+        }
+
+        _ = await send(#"{"cmd":"version"}"#)
+        XCTAssertEqual(Set(try XCTUnwrap(cachedIDs())), [keptID.uuidString, deletedID.uuidString])
+
+        server.actions.deleteActiveWindow()
+        XCTAssertEqual(cachedIDs(), [keptID.uuidString])
+    }
+
+    func testGUICloseOfABackgroundWindowRefreshesTheCachedWindowList() async throws {
+        let library = WindowLibrary(directory: stateDir)
+        let closingID = try XCTUnwrap(library.activeWindowID)
+        let store = try XCTUnwrap(library.activeStore)
+        let frontmostID = library.newWindow().id
+        let server = makeServer(library: library)
+        server.start()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = WindowAccessor.TitleProbeView(windowID: closingID, library: library, store: store)
+        func cachedNode(_ id: UUID) -> ControlWindowNode? {
+            server.fastPathResponse(for: ControlRequest(cmd: .windowList))?.result?.windows?.first { $0.id == id.uuidString }
+        }
+
+        _ = await send(#"{"cmd":"version"}"#)
+        let before = try XCTUnwrap(cachedNode(closingID))
+        XCTAssertTrue(before.open)
+        XCTAssertNotNil(before.geometry)
+
+        window.close()
+        let after = try XCTUnwrap(cachedNode(closingID))
+        XCTAssertFalse(after.open)
+        XCTAssertNil(after.geometry)
+        XCTAssertEqual(cachedNode(frontmostID)?.active, true)
+    }
+
+    func testRemoteCatalogDuplicateRemovalRefreshesTheCachedWindowList() async throws {
+        let library = WindowLibrary(directory: stateDir)
+        let existingID = try XCTUnwrap(library.activeWindowID)
+        let duplicateID = library.newWindow().id
+        let server = makeServer(library: library)
+        server.start()
+        func cachedIDs() -> [String]? {
+            server.fastPathResponse(for: ControlRequest(cmd: .windowList))?.result?.windows?.map(\.id)
+        }
+
+        _ = await send(#"{"cmd":"version"}"#)
+        XCTAssertEqual(cachedIDs(), [existingID.uuidString, duplicateID.uuidString])
+
+        server.remoteCatalogDuplicate(duplicateID, of: existingID)
+        let deadline = Date().addingTimeInterval(2)
+        while library.windows.contains(where: { $0.id == duplicateID }), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(library.windows.contains { $0.id == duplicateID })
+        XCTAssertEqual(cachedIDs(), [existingID.uuidString])
+    }
+
+    func testControlTakeFrontmostRefreshesTheCachedActiveWindow() async throws {
+        let library = WindowLibrary(directory: stateDir)
+        let backgroundID = try XCTUnwrap(library.activeWindowID)
+        let frontmostID = library.newWindow().id
+        let server = makeServer(library: library)
+        server.start()
+        func cachedActive() -> [String]? {
+            server.fastPathResponse(for: ControlRequest(cmd: .windowList))?.result?.windows?.filter(\.active).map(\.id)
+        }
+
+        _ = await send(#"{"cmd":"version"}"#)
+        XCTAssertEqual(cachedActive(), [frontmostID.uuidString])
+
+        server.takeFrontmost(backgroundID)
+        XCTAssertEqual(cachedActive(), [backgroundID.uuidString])
+    }
+
     private func send(_ line: String) async -> String? {
         let path = socketPath!
         return await withCheckedContinuation { continuation in
@@ -453,6 +601,15 @@ final class ControlServerTests: XCTestCase {
             }
         }
         return addr
+    }
+
+    private func descriptor(openOn path: String) -> Int32? {
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: "/dev/fd")) ?? []
+        for fd in entries.compactMap({ Int32($0) }) {
+            var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            if fcntl(fd, F_GETPATH, &buffer) == 0, String(cString: buffer) == path { return fd }
+        }
+        return nil
     }
 
     private func connects(to path: String) -> Bool {

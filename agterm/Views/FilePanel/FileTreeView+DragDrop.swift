@@ -48,6 +48,6 @@ extension FileTreeOutline.Coordinator {
 final class FileTreeRowView: SidebarRowView {
     override func drawDraggingDestinationFeedback(in _: NSRect) {
         (GhosttyApp.shared.terminalSelectionBackgroundColor ?? GhosttyApp.shared.terminalForegroundColor ?? .white).withAlphaComponent(0.3).setFill()
-        Self.pill(in: bounds).fill()
+        NSBezierPath(roundedRect: selectionRect, xRadius: 7, yRadius: 7).fill()
     }
 }
