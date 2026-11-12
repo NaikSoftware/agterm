@@ -136,4 +136,27 @@ struct AppStoreProjectFolderTests {
         #expect(store.workspaces.map(\.name) == ["api", "pinned", "cli"])
         #expect(store.workspaces.map(\.projectFolder) == ["/p/api", "/p/web", "/p/cli"])
     }
+
+    @Test func importNeverMovesAPinGainedAfterTheScan() {
+        let store = makeStore()
+        let api = store.addWorkspace(name: "api")
+        let candidate = ProjectCandidate(name: "api", path: "/p/api", isGitRepository: true, existing: .named(api.id, "api"))
+        store.setProjectFolder("/elsewhere/api", ofWorkspace: api.id)
+
+        #expect(store.importProjects([candidate]) == 1)
+        #expect(store.workspaces.map(\.projectFolder) == ["/elsewhere/api", "/p/api"])
+    }
+
+    @Test func importRevealsNewWorkspacesIntoAnAppliedFocusSetWithoutRetargeting() throws {
+        let store = makeStore()
+        let work = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: work.id, cwd: "/a"))
+        store.selectSession(session.id)
+        store.setFocusedWorkspace(work.id)
+
+        store.importProjects([ProjectCandidate(name: "cli", path: "/p/cli", isGitRepository: true, existing: .none)])
+
+        #expect(store.visibleWorkspaces.map(\.name) == ["work", "cli"])
+        #expect(store.selectedSessionID == session.id && store.currentWorkspaceID == work.id)
+    }
 }

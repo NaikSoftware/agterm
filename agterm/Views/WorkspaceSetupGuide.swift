@@ -77,7 +77,7 @@ struct WorkspaceSetupGuide: View {
             Text("Choose your projects").font(.title2.bold())
             HStack {
                 Text("Projects folder")
-                Text(root)
+                Text(root ?? "")
                     .font(.system(size: 12).monospaced())
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -163,7 +163,7 @@ struct WorkspaceSetupGuide: View {
     }
 
     private func rescan() {
-        candidates = ProjectFolderScan.candidates(in: root, workspaces: store.workspaces)
+        candidates = root.map { ProjectFolderScan.candidates(in: $0, workspaces: store.workspaces) } ?? []
         checked = Set(candidates.filter(\.preselected).map(\.path))
     }
 
@@ -172,7 +172,7 @@ struct WorkspaceSetupGuide: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath: root, isDirectory: true)
+        panel.directoryURL = root.map { URL(fileURLWithPath: $0, isDirectory: true) }
         panel.prompt = "Choose"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         root = url.path

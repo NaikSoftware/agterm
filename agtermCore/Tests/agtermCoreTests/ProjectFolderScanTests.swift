@@ -68,6 +68,6 @@ final class ProjectFolderScanTests {
         let bare = try makeRoot(dirs: ["src"], files: ["Projects"])
         #expect(ProjectFolderScan.defaultRoot(home: bare) == "\(bare)/src")
         let empty = try makeRoot()
-        #expect(ProjectFolderScan.defaultRoot(home: empty) == empty)
+        #expect(ProjectFolderScan.defaultRoot(home: empty) == nil)
     }
 }

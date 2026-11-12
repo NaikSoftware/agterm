@@ -248,7 +248,12 @@ extension ControlServer: ControlActions {
     }
 
     func createSession(_ options: ControlSessionCreateOptions, tint: SidebarTint?) -> ControlResponse {
-        resolver.resolvePlacementStore(options.window) { store in
+        // with no window or placement, a pin in any open window claims the cwd before the frontmost window is asked.
+        if trimmed(options.window) == nil, options.workspace == nil, options.workspaceName == nil,
+           options.after == nil, options.before == nil, let cwd = options.cwd, let owner = pinOwner(of: cwd) {
+            return makeSessionResponse(in: owner.store, workspaceID: owner.workspace, options: options, tint: tint)
+        }
+        return resolver.resolvePlacementStore(options.window) { store in
             // anchor-relative placement: the anchor names its own workspace, bypassing `--workspace`/
             // `--workspace-name`. `before` takes the anchor's slot, `after` the next (clamped in `addSession`).
             if let anchor = options.after ?? options.before {

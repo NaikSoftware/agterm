@@ -56,9 +56,10 @@ public enum ProjectFolderScan {
             }
     }
 
-    /// The first conventional projects folder under `home` that exists, else `home`.
-    public static func defaultRoot(home: String, fileManager: FileManager = .default) -> String {
-        rootNames.map { "\(home)/\($0)" }.first { isDirectory($0, fileManager) } ?? home
+    /// The first conventional projects folder under `home` that exists. Nil otherwise: scanning home itself would
+    /// stat inside Desktop, Documents and Downloads and raise privacy prompts.
+    public static func defaultRoot(home: String, fileManager: FileManager = .default) -> String? {
+        rootNames.map { "\(home)/\($0)" }.first { isDirectory($0, fileManager) }
     }
 
     private static func isDirectory(_ path: String, _ fileManager: FileManager) -> Bool {

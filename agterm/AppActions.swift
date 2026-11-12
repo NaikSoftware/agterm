@@ -172,7 +172,7 @@ final class AppActions {
             NotificationManager.shared.notifyCommandFailure(name: "Open Directory", detail: "a remote window shows only its server's sessions")
             return true
         }
-        guard let store, let workspaceID = store.currentWorkspaceID,
+        guard let store, let workspaceID = store.workspaceID(owningFolder: directory) ?? store.currentWorkspaceID,
               let session = store.addSession(toWorkspace: workspaceID, cwd: directory)
         else { return false }
         store.noteUserActivity()

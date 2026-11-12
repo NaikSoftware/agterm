@@ -56,6 +56,19 @@ struct WorkspaceCommandsTests {
         #expect(try request(["workspace", "folder", "set", "~/proj"]).args?.folder == "~/proj")
     }
 
+    @Test func blankFolderPassesThroughForTheAppToRefuse() throws {
+        #expect(try request(["workspace", "folder", "set", ""]).args?.folder == "")
+        #expect(try request(["workspace", "new", "--folder", " "]).args?.folder == " ")
+    }
+
+    @Test func relativeSessionCwdIsMadeAbsoluteSoItCanHitAPin() throws {
+        let cwd = FileManager.default.currentDirectoryPath
+        #expect(try request(["session", "new", "--cwd", "."]).args?.cwd == cwd)
+        #expect(try request(["session", "new", "--cwd", "proj/src"]).args?.cwd == "\(cwd)/proj/src")
+        #expect(try request(["session", "new", "--parent", "p1", "--cwd", "proj"]).args?.cwd == "\(cwd)/proj")
+        #expect(try request(["session", "new", "--cwd", "~/proj"]).args?.cwd == "~/proj")
+    }
+
     @Test func workspaceFolderRejectsBadMode() {
         #expect(validationMessage(["workspace", "folder", "pin"]) == "mode must be set or clear")
     }

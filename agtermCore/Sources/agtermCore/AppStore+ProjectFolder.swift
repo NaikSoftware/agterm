@@ -48,8 +48,9 @@ extension AppStore {
         return best?.id
     }
 
-    /// Creates a workspace per unmatched candidate and pins a same-named one; pinned candidates are skipped.
-    /// Returns how many workspaces were created or linked.
+    /// Creates a workspace per unmatched candidate and pins a same-named one that is still unpinned; pinned candidates
+    /// are skipped. New workspaces join an applied focus set without becoming current. Returns how many were created
+    /// or linked.
     @discardableResult
     public func importProjects(_ candidates: [ProjectCandidate]) -> Int {
         var count = 0
@@ -57,10 +58,11 @@ extension AppStore {
             switch candidate.existing {
             case .pinned:
                 continue
-            case .named(let id, _):
-                guard setProjectFolder(candidate.path, ofWorkspace: id) else { continue }
-            case .none:
-                _ = addWorkspace(name: candidate.name, revealNewWorkspace: false, projectFolder: candidate.path)
+            case .named(let id, _) where workspaces.contains { $0.id == id && $0.projectFolder == nil }:
+                setProjectFolder(candidate.path, ofWorkspace: id)
+            case .named, .none:
+                let workspace = addWorkspace(name: candidate.name, revealNewWorkspace: false, projectFolder: candidate.path)
+                revealNewFocusMember(workspace.id)
             }
             count += 1
         }

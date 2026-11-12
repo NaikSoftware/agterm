@@ -387,8 +387,8 @@ buys nothing. A caller with no tree uses `version`.
   creates nothing. `--folder` pins its project folder as `workspace folder set` does.
 - `workspace folder set DIR|clear [--target] [--window W]` — pin or clear the workspace's project folder.
   A `session new --cwd` with no `--workspace`, `--workspace-name` or anchor lands in the workspace whose
-  project folder is that directory or holds it (the deepest pin wins), in every new-session mode, before the
-  remembered-folder match. DIR must be an existing directory, not `/` or `~`; a relative DIR is taken from your
+  project folder is that directory or holds it (the deepest pin wins), in every new-session mode and every open
+  local window unless `--window` narrows it, before the remembered-folder match. DIR must be an existing directory, not `/` or `~`; a relative DIR is taken from your
   current directory. Read back as the workspace node's `projectFolder`. A remote window refuses this and
   `workspace new --folder`.
 - `workspace rename <name> [--target] [--window W]`.
@@ -479,7 +479,8 @@ buys nothing. A caller with no tree uses `version`.
 
 - `session new [--cwd DIR] [--workspace W] [--workspace-name NAME] [--create-workspace] [--command CMD] [--wait] [--name NAME] [--after SID | --before SID] [--no-select] [--tint COLOR [--tint-on PARTS]] [--window W]`
   — create a session and focus it; returns the new id. `--cwd` sets the start directory (default
-  `$HOME`). The destination workspace is addressed one of two mutually-exclusive ways: `--workspace`
+  `$HOME`); with no other placement it first joins the workspace whose pinned project folder holds it, in any
+  open window unless `--window` narrows it. The destination workspace is addressed one of two mutually-exclusive ways: `--workspace`
   (id / unique prefix / `active`, the default) or `--workspace-name` (the sidebar label) — the latter
   errors if no workspace has that name unless `--create-workspace` is also passed, which reuses an
   existing one or creates it when absent (idempotent). `--command` runs that command as the session's

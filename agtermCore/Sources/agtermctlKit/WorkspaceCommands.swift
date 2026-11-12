@@ -1,6 +1,13 @@
 import ArgumentParser
 import agtermCore
 
+/// The app cannot see the caller's cwd, so a relative path is made absolute here; `~` and a blank path, which the
+/// app refuses, pass through.
+func callerPath(_ path: String) -> String {
+    path.hasPrefix("/") || path.hasPrefix("~") || path.trimmingCharacters(in: .whitespaces).isEmpty
+        ? path : Session.Overlay.absolutePath(path)
+}
+
 // MARK: - workspace
 
 struct Workspace: ParsableCommand {
@@ -21,14 +28,9 @@ struct Workspace: ParsableCommand {
         @OptionGroup var operation: OperationOptions
         var echoesResultID: Bool { true }
 
-        /// The app cannot see the caller's cwd, so a relative path is made absolute here; `~` is left to the app.
-        static func callerPath(_ path: String) -> String {
-            path.hasPrefix("/") || path.hasPrefix("~") ? path : Session.Overlay.absolutePath(path)
-        }
-
         func makeRequest() throws -> ControlRequest {
             operation.stamp(ControlRequest(cmd: .workspaceNew, args: options.withWindow(tint.apply(to:
-                ControlArgs(name: name, collapsed: collapsed ? true : nil, folder: folder.map(Self.callerPath))))))
+                ControlArgs(name: name, collapsed: collapsed ? true : nil, folder: folder.map(callerPath))))))
         }
     }
 
@@ -47,7 +49,7 @@ struct Workspace: ParsableCommand {
 
         func makeRequest() throws -> ControlRequest {
             ControlRequest(cmd: .workspaceFolder, target: target.target,
-                           args: options.withWindow(ControlArgs(mode: mode, folder: dir.map(New.callerPath))))
+                           args: options.withWindow(ControlArgs(mode: mode, folder: dir.map(callerPath))))
         }
     }
 

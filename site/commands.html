@@ -820,7 +820,7 @@
               <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">workspace.folder</div>
               <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
                 Pin or clear the workspace's project folder. A <span style="font-family: &quot;JetBrains Mono&quot;, monospace; white-space: nowrap">session new --cwd</span> with no other placement lands in the workspace whose
-                project folder is that directory or holds it; the deepest pin wins. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">DIR</span> must be an existing directory, not
+                project folder is that directory or holds it; the deepest pin wins, across every open window unless <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--window</span> narrows it. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">DIR</span> must be an existing directory, not
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">/</span> or the home folder; a relative path is taken from your current directory. A remote window refuses it.
                 <strong style="color: #bfbab0">Returns</strong> <span style="font-family: &quot;JetBrains Mono&quot;, monospace">result.id</span>. Read back via the workspace node's
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">projectFolder</span>.
@@ -1069,7 +1069,7 @@
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--cwd</span> sets the start directory (default
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">$HOME</span>; with New session directory set to Current session's directory, the target workspace's
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">rememberedFolder</span> when it still exists). A <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--cwd</span> with no other placement joins the workspace whose
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">projectFolder</span> is that directory or holds it, in every mode. Otherwise, with Current session's directory, a <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--cwd</span> with no other placement joins the first
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">projectFolder</span> is that directory or holds it, in every mode and any open window unless <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--window</span> narrows it. Otherwise, with Current session's directory, a <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--cwd</span> with no other placement joins the first
                 workspace whose <span style="font-family: &quot;JetBrains Mono&quot;, monospace">rememberedFolder</span> is that exact path. The destination workspace is addressed
                 either by <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--workspace</span> (id / prefix /
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">active</span>) or by

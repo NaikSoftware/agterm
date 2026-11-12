@@ -373,7 +373,8 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   - `--after`/`--before` anchor, which supplies workspace and insertion index.
   Reject both anchors, placement plus workspace, name plus ID, create without name, and missing name without
   create. Insert indices are clamped.
-- With no destination, `--cwd` routes to the workspace whose `projectFolder` holds it, in every mode, before the
+- With no destination, `--cwd` routes to the workspace whose `projectFolder` holds it, in every mode and, without
+  `--window`, across every open local window (`ControlServer.pinOwner`; the longest pin wins), before the
   remembered-folder match; `workspace.folder` and `workspace.new --folder` validate in the dispatcher and are
   refused in remote windows. The workspace setup guide is GUI over `workspace.new --folder`, no command of its own.
 - Outside Live sessions `--command` becomes raw libghostty `config.command`, which on macOS runs under

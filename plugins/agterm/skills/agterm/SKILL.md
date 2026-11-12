@@ -368,7 +368,8 @@ omitted when expanded).
   When Settings > New session directory is "Current session's directory", each workspace remembers the
   last directory its local panes reported (`rememberedFolder` on the tree workspace node; set by `cd`, no
   setter): `--cwd` defaults to it (else `$HOME`), and a `--cwd` with no `--workspace`/`--workspace-name`/
-  `--after`/`--before` joins the first workspace whose folder is that exact path.
+  `--after`/`--before` joins the first workspace whose folder is that exact path. A pinned project folder holding
+  `--cwd` wins first, in every mode and any open window unless `--window` narrows it.
 - `session duplicate [--target]` — create a fresh session (a plain login shell) in the target's workspace, right
   after it, rooted at the target's focused-pane cwd; selects + focuses it and returns the new id. ONLY the
   directory carries over — no custom name, command, split, scratch, status, flag, font size, or background.
