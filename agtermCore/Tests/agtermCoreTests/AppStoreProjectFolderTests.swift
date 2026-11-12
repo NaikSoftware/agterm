@@ -37,7 +37,7 @@ struct AppStoreProjectFolderTests {
         #expect(store.workspaceID(owningFolder: "/p/web/src") == first.id)
     }
 
-    @Test func normalizesTrailingSlashAndTilde() throws {
+    @Test func normalizesTrailingSlashAndTilde() {
         let store = makeStore()
         let work = store.addWorkspace(name: "work")
         #expect(store.setProjectFolder("~/proj/", ofWorkspace: work.id))

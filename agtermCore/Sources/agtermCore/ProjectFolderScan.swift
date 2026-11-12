@@ -44,7 +44,7 @@ public enum ProjectFolderScan {
                 let existing: ProjectCandidate.Existing
                 if let pinned = workspaces.first(where: { $0.projectFolder == path }) {
                     existing = .pinned(pinned.id)
-                } else if let named = workspaces.first(where: { $0.name == name }) {
+                } else if let named = workspaces.first(where: { $0.name == name && $0.projectFolder == nil }) {
                     existing = .named(named.id, named.name)
                 } else {
                     existing = .none

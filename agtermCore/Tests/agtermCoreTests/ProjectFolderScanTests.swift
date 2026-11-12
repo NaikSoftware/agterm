@@ -3,11 +3,15 @@ import Testing
 @testable import agtermCore
 
 @MainActor
-struct ProjectFolderScanTests {
+final class ProjectFolderScanTests {
     private let fm = FileManager.default
+    private let base = FileManager.default.temporaryDirectory.appendingPathComponent("agterm-scan-\(UUID().uuidString)").path
+
+    deinit { try? FileManager.default.removeItem(atPath: base) }
 
     private func makeRoot(dirs: [String] = [], files: [String] = []) throws -> String {
-        let root = fm.temporaryDirectory.appendingPathComponent("agterm-scan-\(UUID().uuidString)").path
+        let root = "\(base)/\(UUID().uuidString)"
+        try fm.createDirectory(atPath: root, withIntermediateDirectories: true)
         for dir in dirs { try fm.createDirectory(atPath: "\(root)/\(dir)", withIntermediateDirectories: true) }
         for file in files { #expect(fm.createFile(atPath: "\(root)/\(file)", contents: Data())) }
         return Workspace.normalizedFolder(root) ?? root
@@ -38,6 +42,12 @@ struct ProjectFolderScanTests {
         let named = Workspace(name: "api")
         let existing = ProjectFolderScan.candidates(in: root, workspaces: [pinned, named]).map(\.existing)
         #expect(existing == [.named(named.id, "api"), .none, .pinned(pinned.id)])
+    }
+
+    @Test func namedMatchIgnoresWorkspacePinnedElsewhere() throws {
+        let root = try makeRoot(dirs: ["api"])
+        let elsewhere = Workspace(name: "api", projectFolder: "/other/api")
+        #expect(ProjectFolderScan.candidates(in: root, workspaces: [elsewhere]).map(\.existing) == [.none])
     }
 
     @Test func preselectsGitOnlyAndNeverPinned() throws {
