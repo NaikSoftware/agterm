@@ -163,6 +163,47 @@ final class RecentClosedTests {
         #expect(reopened.pendingSplitRestoreCommand == nil)
     }
 
+    @Test func sessionEntryWithoutAgentFieldsStillDecodes() throws {
+        let data = try JSONEncoder().encode(RecentClosedState(items: [sessionItem(title: "old")]))
+        #expect(!String(decoding: data, as: UTF8.self).contains("resumeLine"))
+        try data.write(to: fileURL)
+
+        let loaded = RecentClosedStore(directory: directory).load()
+        #expect(loaded.count == 1)
+        #expect(loaded[0].session?.agent == nil)
+        #expect(loaded[0].session?.resumeLine == nil)
+    }
+
+    @MainActor
+    @Test func closingAnAgentSessionRecordsItsResumeLineAndTheReopenArmsItOnce() throws {
+        let (store, recentClosed, _) = makeStoreWithRecentClosed()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/a"))
+        session.runningAgent = .claude
+        session.resumeLine = "claude --resume abc"
+        store.closeSession(session.id)
+
+        let item = try #require(recentClosed.load().first { $0.session?.snapshot.id == session.id })
+        #expect(item.session?.agent == "claude")
+        #expect(item.session?.resumeLine == "claude --resume abc")
+        let control = ControlRecentItem(item)
+        #expect(control.agent == "claude")
+        #expect(control.resume == "claude --resume abc")
+
+        #expect(store.restoreRecentClosed(item))
+        let reopened = try #require(store.session(withID: session.id))
+        #expect(reopened.resumeLine == "claude --resume abc")
+        #expect(reopened.takePendingResumeLine(pane: .right) == nil)
+        #expect(reopened.takePendingResumeLine(pane: .left) == "claude --resume abc")
+        #expect(reopened.takePendingResumeLine(pane: .left) == nil)
+    }
+
+    @Test func controlItemOmitsAgentKeysForAPlainSession() throws {
+        let json = String(decoding: try JSONEncoder().encode(ControlRecentItem(sessionItem(title: "plain"))), as: UTF8.self)
+        #expect(!json.contains("agent"))
+        #expect(!json.contains("resume"))
+    }
+
     @MainActor
     private struct PageGroup {
         let store: AppStore

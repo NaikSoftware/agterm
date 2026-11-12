@@ -315,8 +315,10 @@ paths:
   below 1000 lines. They use
   `SessionPopoverRow`: trailing status glyph, hover selection color, full-row hit target, terminal
   background, and chrome text.
-- Clock lists up to `maxCandidates` recent visible sessions excluding active and enables only with at
-  least two sessions. Selection records activity, selects, and focuses.
+- Clock lists up to `maxCandidates` recent visible sessions excluding active, each with its agent icon, then
+  up to 15 Recent Closed session entries; it enables when either list has a row. Selection records activity,
+  selects, and focuses; a closed row runs `openRecentClosed`, which types a recorded Claude resume line once
+  (`Session.pendingResumeLine`, a create-only payload under Live).
 - Bell lists all non-idle sessions across open windows, current included. Selection uses the same
   pane-aware reveal as the palette; see [[notifications]] for the cross-window raise.
 - Popover opens are keep-in-sync exempt. Synthesized XCUITest clicks inside `NSPopover` do not fire the

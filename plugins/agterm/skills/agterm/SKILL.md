@@ -742,7 +742,8 @@ NEXT launch; setting it changes nothing in the running app, because a pane is wr
 at the moment it is created.
 
 **recent** - `recent list` - the File ▸ Open Recent entries, newest first, each with its full id, kind,
-title and the session ids it restores; the last 20 only · `recent open [ID] [--window W]` - reopen an
+title and the session ids it restores, plus `agent`/`resume` for a closed agent session (a reopened Claude
+Code session runs `claude --resume` once); the last 20 only · `recent open [ID] [--window W]` - reopen an
 entry by id or prefix, the newest with no id; the session keeps its id, goes to the window that already
 holds its session or workspace when one does, and the window is not raised; `complete` false means the
 entry stayed in the list · `recent clear` - empty the list. `list` and `clear` refuse a target or `--window`.

@@ -185,6 +185,30 @@ final class LaunchSeedTests: XCTestCase {
                       "a failed list must pace every replaying pane")
     }
 
+    // MARK: - Recent Closed resume line
+
+    func testAResumeLineIsTypedOnceIntoTheMainPaneWhateverTheRestoreMode() {
+        let session = restoredSession()
+        session.initialCommand = "htop"
+        session.pendingResumeLine = "claude --resume abc"
+
+        XCTAssertNil(ordinaryProvider(session: session, pane: .right).resolve(.right).initialInput)
+        let seed = ordinaryProvider(session: session, pane: .left, restoreEnabled: false).resolve(.left)
+        XCTAssertEqual(seed, LaunchSeed(command: nil, initialInput: "claude --resume abc\n", waitAfterCommand: false))
+        XCTAssertNil(session.pendingResumeLine)
+        XCTAssertNotEqual(ordinaryProvider(session: session, pane: .left, restoreEnabled: false).resolve(.left), seed)
+    }
+
+    func testALiveResumeLineIsACreateOnlyPayload() {
+        let session = restoredSession()
+        session.initialCommand = "htop"
+        session.pendingResumeLine = "claude --resume abc"
+
+        XCTAssertEqual(wrappedProvider(session: session, pane: .left).resolve(.left).command,
+                       ZmxSupport.attachCommand(configuration, replaying: nil, creationCommand: "claude --resume abc", denylist: []))
+        XCTAssertNil(session.pendingResumeLine)
+    }
+
     // MARK: - fallback
 
     func testFallbackIsNeverPacedAndLeavesThePinAndCapturePending() {

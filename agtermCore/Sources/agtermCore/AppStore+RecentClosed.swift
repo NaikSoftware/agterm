@@ -36,6 +36,8 @@ extension AppStore {
             }
             let session = session(from: recent.snapshot)
             session.parentID = parentID
+            session.resumeLine = recent.resumeLine
+            session.pendingResumeLine = recent.resumeLine
             let insertAt = insertionIndex(for: session, near: recent.sessionIndex, in: workspaces[index].sessions)
             workspaces[index].sessions.insert(session, at: insertAt)
             emitSessionCreated(session, workspace: workspaces[index].id)
@@ -221,7 +223,9 @@ extension AppStore {
                                          workspaceIndex: workspaceIndex,
                                          sessionIndex: sessionIndex,
                                          snapshot: sessionSnapshot(session),
-                                         companions: companionSnapshots.isEmpty ? nil : companionSnapshots)
+                                         companions: companionSnapshots.isEmpty ? nil : companionSnapshots,
+                                         agent: session.runningAgent?.rawValue,
+                                         resumeLine: session.resumeLine)
         ))
         recentClosedDidChange?()
         return id

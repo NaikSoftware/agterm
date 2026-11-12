@@ -2537,6 +2537,9 @@ the oldest dropped silently.
 workspace itself otherwise) and `sessionIDs`, the sessions a reopen brings back. Human output prints one
 row per entry with the full id. This is the read-back for `open` and `clear`. A parent entry's
 `sessionIDs` lists the parent then its companions, and its human row ends with `+N companion(s)`.
+A session entry closed while a coding agent ran adds `agent` (`claude`, `codex`, ...) and, for Claude
+Code, `resume`: the `cd DIR && claude --resume ID` line its reopen types once into the main pane. Its
+human row ends with the agent and `resumable` in brackets, either one alone when only it is set.
 
 `agtermctl recent open [ID] [--window W]` — reopen the entry with that id or unique prefix, or the newest
 with no id. The session returns under its original id. It goes to `--window` or the frontmost window,

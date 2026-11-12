@@ -977,12 +977,21 @@ struct SocketClientTests {
                               workspaceID: "W", sessionIDs: ["S"]),
             ControlRecentItem(id: "R3", kind: "workspace", title: "work", subtitle: "2 sessions", closedAt: 0,
                               workspaceID: "W", sessionIDs: ["A", "B"]),
+            ControlRecentItem(id: "R4", kind: "session", title: "ai", subtitle: nil, closedAt: 0,
+                              workspaceID: "W", sessionIDs: ["S2"], agent: "claude", resume: "claude --resume x"),
+            ControlRecentItem(id: "R5", kind: "session", title: "cx", subtitle: nil, closedAt: 0,
+                              workspaceID: "W", sessionIDs: ["S3"], agent: "codex"),
+            ControlRecentItem(id: "R6", kind: "session", title: "sh", subtitle: nil, closedAt: 0,
+                              workspaceID: "W", sessionIDs: ["S4"], resume: "claude --resume y"),
         ]
 
         #expect(SocketClient.formatRecent(items) == """
         R1  session  api (work) +2 companion(s)
         R2  session  db
         R3  workspace  work (2 sessions)
+        R4  session  ai  [claude, resumable]
+        R5  session  cx  [codex]
+        R6  session  sh  [resumable]
         """)
     }
 
