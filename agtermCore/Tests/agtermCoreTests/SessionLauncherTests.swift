@@ -47,6 +47,7 @@ struct SessionLauncherTests {
         (#"{"sessionId":"","cwd":"/tmp"}"#, nil),
         (#"{"sessionId":"абв","cwd":"/tmp"}"#, nil),
         (#"{"sessionId":"ab12","cwd":"/tmp/x\u0003\nrm -rf ~"}"#, nil),
+        (#"{"sessionId":"ab12","cwd":"/tmp/a\\';touch x #"}"#, nil),
         (#"{"cwd":"/tmp"}"#, nil),
         ("not json", nil)
     ] as [(String, String?)])

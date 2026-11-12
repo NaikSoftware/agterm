@@ -54,10 +54,10 @@ public enum SessionLauncher: String, CaseIterable, Sendable {
               id.unicodeScalars.allSatisfy({ $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "_-".unicodeScalars.contains($0)) })
         else { return nil }
         let cwd = object["cwd"] as? String ?? ""
-        // a control character would act as a line-editor key even inside quotes
-        guard cwd.isEmpty || CommandRestore.shouldRestore(argv: [cwd], denylist: []) else { return nil }
-        // shortcut: fish reads a backslash inside single quotes as an escape, so such a folder breaks there; quote per
-        // shell if that shows up
+        // a control character would act as a line-editor key even inside quotes, and fish reads a backslash inside
+        // single quotes as an escape, so either could end the quoting and run the rest of the folder name
+        guard cwd.isEmpty || (CommandRestore.shouldRestore(argv: [cwd], denylist: []) && !cwd.contains("\\"))
+        else { return nil }
         return (cwd.isEmpty ? "" : "cd \(CommandRestore.shellQuotedLine([cwd])) && ") + "claude --resume \(id)"
     }
 
