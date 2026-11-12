@@ -359,6 +359,7 @@ struct agtermApp: App {
                         // last: an installer alert blocks the rest of the task, and the window behind it should
                         // be fully wired before it opens. `runIfDue` latches, so the per-window .task is safe.
                         ExtrasAutoInstaller.runIfDue(identity: Self.appIdentity)
+                        WorkspaceSetupGuidePresenter.presentIfDue(actions: actions)
                     }
             }
         }

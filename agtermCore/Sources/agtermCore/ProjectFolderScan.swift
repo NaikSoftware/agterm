@@ -31,16 +31,17 @@ public struct ProjectCandidate: Equatable, Sendable {
 public enum ProjectFolderScan {
     static let rootNames = ["Projects", "Developer", "IdeaProjects", "code", "src", "dev"]
 
-    /// The visible immediate subdirectories of `root` (symlinks to directories included), in Finder order.
-    public static func candidates(in root: String, workspaces: [Workspace],
+    /// The visible immediate subdirectories of `root` (symlinks to directories included), in Finder order,
+    /// minus any a pin would refuse (scanning `/Users` offers the home folder).
+    public static func candidates(in root: String, workspaces: [Workspace], home: String = NSHomeDirectory(),
                                   fileManager: FileManager = .default) -> [ProjectCandidate] {
         guard let root = Workspace.normalizedFolder(root),
               let names = try? fileManager.contentsOfDirectory(atPath: root) else { return [] }
         return names
             .filter { !$0.hasPrefix(".") && isDirectory("\(root)/\($0)", fileManager) }
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-            .map { name in
-                let path = Workspace.normalizedFolder("\(root)/\(name)") ?? "\(root)/\(name)"
+            .compactMap { name in
+                guard case .success(let path) = Workspace.validatedProjectFolder("\(root)/\(name)", home: home) else { return nil }
                 let existing: ProjectCandidate.Existing
                 if let pinned = workspaces.first(where: { $0.projectFolder == path }) {
                     existing = .pinned(pinned.id)

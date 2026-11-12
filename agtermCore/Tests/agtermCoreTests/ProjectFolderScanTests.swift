@@ -57,6 +57,11 @@ final class ProjectFolderScanTests {
         #expect(preselected == [true, false, false])
     }
 
+    @Test func dropsHomeAndRootCandidates() throws {
+        let root = try makeRoot(dirs: ["me", "web"])
+        #expect(ProjectFolderScan.candidates(in: root, workspaces: [], home: "\(root)/me").map(\.name) == ["web"])
+    }
+
     @Test func defaultRootPrefersProjects() throws {
         let home = try makeRoot(dirs: ["code", "Projects"])
         #expect(ProjectFolderScan.defaultRoot(home: home) == "\(home)/Projects")
