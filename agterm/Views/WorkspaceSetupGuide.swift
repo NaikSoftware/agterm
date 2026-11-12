@@ -54,7 +54,8 @@ struct WorkspaceSetupGuide: View {
 
     private var illustration: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach([("web-app", ["claude", "dev server"]), ("api-server", ["zsh"]), ("mobile-app", ["claude"])], id: \.0) { name, sessions in
+            ForEach([("web-app", ["Fix login redirect", "Dev server"]), ("api-server", ["Review PR #128"]),
+                     ("mobile-app", ["Push notifications"])], id: \.0) { name, sessions in
                 VStack(alignment: .leading, spacing: 2) {
                     Label(name, systemImage: "square.grid.2x2").fontWeight(.medium)
                     Text("~/Projects/\(name)").font(.caption).foregroundStyle(.secondary).padding(.leading, 22)
