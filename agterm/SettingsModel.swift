@@ -220,6 +220,8 @@ final class SettingsModel {
     func setCursorBlink(_ value: Bool?) { settings.cursorBlink = value; persistAndApply() }
     // sidebar behavior, not a ghostty key; the Coordinator reads the mirror on the next click.
     func setWorkspaceRowClickExpands(_ value: Bool?) { settings.workspaceRowClickExpands = value; persistAndApply() }
+    // nothing renders it, so it saves without the appearance broadcast `persistAndApply` posts
+    func setWorkspaceGuideDone(_ value: Bool?) { settings.workspaceGuideDone = value; try? settingsStore.save(settings) }
     func setInactivePaneMuteStrength(_ value: Int?) { settings.inactivePaneMuteStrength = value; persistAndApply() }
     func setSidebarBackgroundShift(_ value: Int?) { settings.sidebarBackgroundShift = value; persistAndApply() }
     func setSidebarFontSize(_ value: Double?) { settings.sidebarFontSize = value; persistAndApply() }

@@ -31,6 +31,30 @@ extension ControlDispatcher {
         return actions.setSessionContext(request.target, window: args?.window, context: context)
     }
 
+    /// `workspace.folder`: `set` takes a folder validated here, `clear` takes none.
+    func dispatchWorkspaceFolder(_ request: ControlRequest) -> ControlResponse {
+        let args = request.args
+        let folder: String?
+        switch args?.mode ?? "" {
+        case "set":
+            guard let raw = args?.folder else {
+                return ControlResponse(ok: false, error: "workspace.folder set requires a folder")
+            }
+            switch Workspace.validatedProjectFolder(raw) {
+            case .success(let value): folder = value
+            case .failure(let rejection): return ControlResponse(ok: false, error: rejection.message)
+            }
+        case "clear":
+            guard args?.folder == nil else {
+                return ControlResponse(ok: false, error: "workspace.folder clear takes no folder")
+            }
+            folder = nil
+        default:
+            return ControlResponse(ok: false, error: "invalid folder mode: \(args?.mode ?? "") (set|clear)")
+        }
+        return actions.setWorkspaceProjectFolder(request.target, window: args?.window, folder: folder)
+    }
+
     /// `session.info`: `set` takes `text` plus optional `markdown` and `hideAfter`, `clear` takes none of them.
     /// The whole value is built and validated here, so a refused set reaches no action and leaves the line and
     /// its timer standing.

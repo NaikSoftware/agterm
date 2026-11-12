@@ -29,6 +29,16 @@ struct ServerActionsWorkspacesTests {
         #expect(harness.store.workspaces.map(\.id).last == first)
     }
 
+    @Test func aHostWithoutProjectFoldersRefusesThem() {
+        let target = harness.store.workspaces[0].id.uuidString
+
+        #expect(harness.actions.setWorkspaceProjectFolder(target, window: nil, folder: "/tmp")
+            == ControlResponse(ok: false, error: ControlActionsUnsupported.message("workspace.folder")))
+        #expect(harness.actions.createWorkspace(window: nil, name: "p", collapsed: false, tint: nil, projectFolder: "/tmp")
+            == ControlResponse(ok: false, error: ControlActionsUnsupported.message("workspace.new --folder")))
+        #expect(harness.store.workspaces.count == 1)
+    }
+
     @Test func theLastWorkspaceCannotBeDeleted() {
         let only = harness.store.workspaces[0].id.uuidString
 

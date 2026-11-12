@@ -248,7 +248,12 @@ extension ControlServer: ControlActions {
     }
 
     func createSession(_ options: ControlSessionCreateOptions, tint: SidebarTint?) -> ControlResponse {
-        resolver.resolvePlacementStore(options.window) { store in
+        // with no window or placement, a pin in any open window claims the cwd before the frontmost window is asked.
+        if trimmed(options.window) == nil, options.workspace == nil, options.workspaceName == nil,
+           options.after == nil, options.before == nil, let cwd = options.cwd, let owner = pinOwner(of: cwd) {
+            return makeSessionResponse(in: owner.store, workspaceID: owner.workspace, options: options, tint: tint)
+        }
+        return resolver.resolvePlacementStore(options.window) { store in
             // anchor-relative placement: the anchor names its own workspace, bypassing `--workspace`/
             // `--workspace-name`. `before` takes the anchor's slot, `after` the next (clamped in `addSession`).
             if let anchor = options.after ?? options.before {
@@ -273,8 +278,10 @@ extension ControlServer: ControlActions {
                 }
                 return makeSessionResponse(in: store, workspaceID: workspace.id, options: options, tint: tint)
             }
-            // id addressing (default: in `currentSession` mode the first workspace remembering `--cwd`, else `active`).
-            let target = options.workspace ?? remembering(options.cwd, in: store)?.uuidString ?? "active"
+            // id addressing (default: the workspace whose project folder holds `--cwd`, then in `currentSession` mode the
+            // first workspace remembering it, else `active`).
+            let target = options.workspace ?? options.cwd.flatMap(store.workspaceID(owningFolder:))?.uuidString
+                ?? remembering(options.cwd, in: store)?.uuidString ?? "active"
             return resolver.resolve(target, candidates: store.workspaces.map(\.id),
                            active: store.currentWorkspaceID, noun: "workspace") { workspaceID in
                 makeSessionResponse(in: store, workspaceID: workspaceID, options: options, tint: tint)

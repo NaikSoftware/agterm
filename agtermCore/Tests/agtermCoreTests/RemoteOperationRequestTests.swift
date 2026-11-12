@@ -117,7 +117,7 @@ struct RemoteOperationRequestTests {
     @Test(arguments: [
         (Command.sessionNew, "--workspace-name"), (.sessionNew, "--create-workspace"), (.sessionNew, "--wait"), (.sessionNew, "--tint"),
         (.sessionCompanionNew, "--wait"), (.sessionCompanionNew, "--tint"), (.sessionClose, "--undoable"), (.workspaceNew, "--collapsed"),
-        (.workspaceNew, "--tint"),
+        (.workspaceNew, "--tint"), (.workspaceNew, "--folder"),
     ])
     func aFieldTheServerCannotBeAskedForIsRefusedByName(_ cmd: Command, _ field: String) {
         let parsed = parse(cmd, target: first.id.uuidString) { args in
@@ -127,6 +127,7 @@ struct RemoteOperationRequestTests {
             case "--wait": args.wait = true
             case "--tint": args.tint = "red"
             case "--undoable": args.undoable = true
+            case "--folder": args.folder = "/tmp/proj"
             default: args.collapsed = true
             }
         }

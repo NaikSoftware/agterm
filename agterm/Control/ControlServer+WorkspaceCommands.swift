@@ -12,15 +12,37 @@ extension ControlServer {
     }
 
     func createWorkspace(window: String?, name: String?, collapsed: Bool, tint: SidebarTint?) -> ControlResponse {
+        createWorkspace(window: window, name: name, collapsed: collapsed, tint: tint, projectFolder: nil)
+    }
+
+    func createWorkspace(window: String?, name: String?, collapsed: Bool, tint: SidebarTint?, projectFolder: String?) -> ControlResponse {
+        if let refusal = missingDirectory(projectFolder) { return refusal }
         // `collapsed` seeds the workspace closed so a script can fill it with `session.new --no-select`
         // without it opening, and for the same reason keeps it OUT of the focus set — widening a script's
         // marked set would contradict the flag. a plain create keeps the auto-reveal, matching the GUI's New
         // Workspace button: a foreground create must not land invisibly behind an applied filter.
-        resolver.resolvePlacementStore(window) { store in
+        return resolver.resolvePlacementStore(window) { store in
             let name = trimmed(name) ?? store.defaultWorkspaceName
-            let workspace = store.addWorkspace(name: name, collapsed: collapsed, revealNewWorkspace: !collapsed, tint: tint)
+            let workspace = store.addWorkspace(name: name, collapsed: collapsed, revealNewWorkspace: !collapsed, tint: tint,
+                                               projectFolder: projectFolder)
             return ControlResponse(ok: true, result: ControlResult(id: workspace.id.uuidString))
         }
+    }
+
+    /// `folder` arrives validated by `ControlDispatcher`; nil clears.
+    func setWorkspaceProjectFolder(_ target: String?, window: String?, folder: String?) -> ControlResponse {
+        if let refusal = missingDirectory(folder) { return refusal }
+        return resolver.resolveWorkspace(target, window: window) { store, id in
+            store.setProjectFolder(folder, ofWorkspace: id)
+            return ControlResponse(ok: true, result: ControlResult(id: id.uuidString))
+        }
+    }
+
+    private func missingDirectory(_ folder: String?) -> ControlResponse? {
+        guard let folder else { return nil }
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: folder, isDirectory: &isDirectory), isDirectory.boolValue { return nil }
+        return ControlResponse(ok: false, error: "no such directory: \(folder)")
     }
 
     func selectWorkspace(_ target: String?, window: String?) -> ControlResponse {

@@ -54,6 +54,8 @@ final class ControlServerRememberedFolderTests: XCTestCase {
         let (store, _, other) = try twoWorkspaces(otherFolder: folder)
         let target = other.uuidString
 
+        XCTAssertEqual(try cwd(of: newSession(workspace: target), in: store), folder)
+        settings.setNewSessionDirectory(AppSettings.NewSessionDirectory.home.rawValue)
         XCTAssertEqual(try cwd(of: newSession(workspace: target), in: store), NSHomeDirectory())
         settings.setNewSessionDirectory(AppSettings.NewSessionDirectory.currentSession.rawValue)
         XCTAssertEqual(try cwd(of: newSession(workspace: target), in: store), folder)

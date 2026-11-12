@@ -27,8 +27,9 @@ struct Session: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Create a session.")
         @Option(name: .long, help: """
             Working directory (defaults to the workspace's remembered folder in the Current session's directory mode, else $HOME). \
-            In that mode, without --workspace/--workspace-name/--after/--before, the session joins the first workspace whose \
-            remembered folder equals it.
+            Without --workspace/--workspace-name/--after/--before, the session joins the workspace whose pinned project folder \
+            holds it, in any open window unless --window narrows it; else, in that mode, the first workspace whose remembered \
+            folder equals it.
             """) var cwd: String?
         @Option(name: .long, help: "Target workspace by id/prefix/active (defaults to the current one). Mutually exclusive with --workspace-name.") var workspace: String?
         @Option(name: .long, help: "Target workspace by name; errors if not found unless --create-workspace. Mutually exclusive with --workspace.") var workspaceName: String?
@@ -76,11 +77,11 @@ struct Session: ParsableCommand {
             if let parent {
                 return operation.stamp(ControlRequest(cmd: .sessionCompanionNew, target: parent,
                                                       args: options.withWindow(tint.apply(to:
-                    ControlArgs(name: name, cwd: cwd, noSelect: noSelect ? true : nil, command: command,
+                    ControlArgs(name: name, cwd: cwd.map(callerPath), noSelect: noSelect ? true : nil, command: command,
                                 wait: wait ? true : nil)))))
             }
             return operation.stamp(ControlRequest(cmd: .sessionNew, args: options.withWindow(tint.apply(to:
-                ControlArgs(name: name, cwd: cwd, workspace: workspace, workspaceName: workspaceName,
+                ControlArgs(name: name, cwd: cwd.map(callerPath), workspace: workspace, workspaceName: workspaceName,
                             createWorkspace: createWorkspace ? true : nil, noSelect: noSelect ? true : nil,
                             command: command, wait: wait ? true : nil, after: after, before: before)))))
         }

@@ -218,8 +218,8 @@ private struct GeneralSettingsView: View {
 
     /// The new-session directory mode; nil (the default) or an unknown stored value resolves to `.home`.
     private var newSessionDirectory: Binding<AppSettings.NewSessionDirectory> {
-        Binding(get: { AppSettings.NewSessionDirectory(rawValue: model.settings.newSessionDirectory ?? "") ?? .home },
-                set: { model.setNewSessionDirectory($0 == .home ? nil : $0.rawValue) })
+        Binding(get: { model.settings.effectiveNewSessionDirectory },
+                set: { model.setNewSessionDirectory($0 == .currentSession ? nil : $0.rawValue) })
     }
 
     private var newSessionPlacement: Binding<AppSettings.NewSessionPlacement> {

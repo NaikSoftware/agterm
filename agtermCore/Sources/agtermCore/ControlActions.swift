@@ -37,6 +37,10 @@ public protocol ControlActions {
     func createWorkspace(window: String?, name: String?, collapsed: Bool) -> ControlResponse
     /// createWorkspace with a creation tint; the default keeps tintless hosts working and refuses a tint.
     func createWorkspace(window: String?, name: String?, collapsed: Bool, tint: SidebarTint?) -> ControlResponse
+    /// createWorkspace pinned to a validated project folder; the default refuses a folder.
+    func createWorkspace(window: String?, name: String?, collapsed: Bool, tint: SidebarTint?, projectFolder: String?) -> ControlResponse
+    /// `workspace.folder`: pins a validated folder, nil clears; the default refuses.
+    func setWorkspaceProjectFolder(_ target: String?, window: String?, folder: String?) -> ControlResponse
     func selectWorkspace(_ target: String?, window: String?) -> ControlResponse
     /// Step the placement store's CURRENT workspace one place through the sidebar's visible order, selecting
     /// the destination's first session when it has one — an EMPTY destination becomes current with the

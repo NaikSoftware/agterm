@@ -45,7 +45,7 @@ public struct ControlDispatcher {
             return await dispatchCompanionCommand(request)
         case .workspaceNew, .workspaceSelect, .workspaceGo, .workspaceRename, .workspaceDelete,
                 .workspaceMove, .workspaceFocus, .workspaceFilter, .workspaceCollapse, .workspaceExpand,
-                .workspaceFlag:
+                .workspaceFlag, .workspaceFolder:
             return dispatchWorkspaceCommand(request)
         case .quick, .fontInc, .fontDec, .fontReset, .keymapReload, .keymapList, .keymapRun,
                 .configReload, .notify, .themeSet, .themeList, .sidebar, .sidebarMode, .sidebarFlaggedLayout,
@@ -307,9 +307,18 @@ public struct ControlDispatcher {
             case .failure(let rejection):
                 return ControlResponse(ok: false, error: rejection.message)
             case .success(let tint):
+                var folder: String?
+                if let raw = request.args?.folder {
+                    switch Workspace.validatedProjectFolder(raw) {
+                    case .success(let value): folder = value
+                    case .failure(let rejection): return ControlResponse(ok: false, error: rejection.message)
+                    }
+                }
                 return actions.createWorkspace(window: request.args?.window, name: request.args?.name,
-                                               collapsed: request.args?.collapsed ?? false, tint: tint)
+                                               collapsed: request.args?.collapsed ?? false, tint: tint, projectFolder: folder)
             }
+        case .workspaceFolder:
+            return dispatchWorkspaceFolder(request)
         case .workspaceSelect:
             return actions.selectWorkspace(request.target, window: request.args?.window)
         case .workspaceGo:

@@ -23,6 +23,7 @@ public enum Command: String, Codable, Sendable {
     case workspaceExpand = "workspace.expand"
     case workspaceFlag = "workspace.flag"
     case workspaceTint = "workspace.tint"
+    case workspaceFolder = "workspace.folder"
     case sessionType = "session.type"
     case sessionStatus = "session.status"
     case sessionFlag = "session.flag"
@@ -509,6 +510,8 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     public var ack: Bool?
     /// ids are the message ids `msg.ack` removes.
     public var ids: [String]?
+    /// The project folder for `workspace.new` and `workspace.folder` mode `set`.
+    public var folder: String?
 
     public init(name: String? = nil, cwd: String? = nil, targets: [String]? = nil,
                 workspace: String? = nil, workspaceName: String? = nil,
@@ -544,7 +547,7 @@ public struct ControlArgs: Codable, Sendable, Equatable {
                 placeholder: String? = nil, choices: [ControlAskChoice]? = nil, multiple: Bool? = nil,
                 checked: [String]? = nil, other: String? = nil, undoable: Bool? = nil,
                 tint: String? = nil, tintOn: [String]? = nil, recipients: [String]? = nil,
-                identity: String? = nil, ack: Bool? = nil, ids: [String]? = nil) {
+                identity: String? = nil, ack: Bool? = nil, ids: [String]? = nil, folder: String? = nil) {
         self.name = name
         self.cwd = cwd
         self.targets = targets
@@ -653,6 +656,7 @@ public struct ControlArgs: Codable, Sendable, Equatable {
         self.identity = identity
         self.ack = ack
         self.ids = ids
+        self.folder = folder
     }
 }
 

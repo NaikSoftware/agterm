@@ -15,25 +15,30 @@ public struct Workspace: Identifiable {
     /// The last directory any local pane of this workspace reported over OSC 7, normalized; kept when the
     /// workspace empties. The `currentSession` new-session mode opens new sessions here.
     public var rememberedFolder: String?
+    /// The folder the user pinned this workspace to, normalized; sessions started under it belong here.
+    /// Unlike `rememberedFolder`, OSC 7 never changes it.
+    public var projectFolder: String?
 
     public init(name: String, sessions: [Session] = [], isExpanded: Bool = true, tint: SidebarTint? = nil,
-                rememberedFolder: String? = nil) {
+                rememberedFolder: String? = nil, projectFolder: String? = nil) {
         id = UUID()
         self.name = name
         self.sessions = sessions
         self.isExpanded = isExpanded
         self.tint = tint
         self.rememberedFolder = rememberedFolder
+        self.projectFolder = projectFolder
     }
 
     public init(id: UUID, name: String, sessions: [Session] = [], isExpanded: Bool = true, tint: SidebarTint? = nil,
-                rememberedFolder: String? = nil) {
+                rememberedFolder: String? = nil, projectFolder: String? = nil) {
         self.id = id
         self.name = name
         self.sessions = sessions
         self.isExpanded = isExpanded
         self.tint = tint
         self.rememberedFolder = rememberedFolder
+        self.projectFolder = projectFolder
     }
 
     /// `path` with `~` expanded and `.`/`..`/trailing slashes standardized, the one form a remembered folder

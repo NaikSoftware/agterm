@@ -129,19 +129,22 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
     public var tint: SidebarTint?
     /// The workspace's remembered folder; nil = none, and absent from the file like `tint`.
     public var rememberedFolder: String?
+    /// The workspace's pinned project folder; nil = none, and absent from the file like `tint`.
+    public var projectFolder: String?
 
     public init(id: UUID, name: String, sessions: [SessionSnapshot], collapsed: Bool? = nil,
-                tint: SidebarTint? = nil, rememberedFolder: String? = nil) {
+                tint: SidebarTint? = nil, rememberedFolder: String? = nil, projectFolder: String? = nil) {
         self.id = id
         self.name = name
         self.sessions = sessions
         self.collapsed = collapsed
         self.tint = tint
         self.rememberedFolder = rememberedFolder
+        self.projectFolder = projectFolder
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, sessions, collapsed, tint, rememberedFolder
+        case id, name, sessions, collapsed, tint, rememberedFolder, projectFolder
     }
 
     /// Custom decode so `collapsed` is LOSSY, matching the other two snapshot types: the synthesized
@@ -155,6 +158,7 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
         collapsed = (try? c.decodeIfPresent(Bool.self, forKey: .collapsed)) ?? nil
         tint = (try? c.decodeIfPresent(SidebarTint.self, forKey: .tint)) ?? nil
         rememberedFolder = (try? c.decodeIfPresent(String.self, forKey: .rememberedFolder)) ?? nil
+        projectFolder = (try? c.decodeIfPresent(String.self, forKey: .projectFolder)) ?? nil
     }
 }
 

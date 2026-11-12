@@ -8,10 +8,11 @@ enum RemoteRoute: Sendable {
 }
 
 extension ControlServer {
-    /// localOnlyCommands make shells or rows on this Mac, which a remote window shows only from its server.
+    /// localOnlyCommands make shells or rows on this Mac, which a remote window shows only from its server, or pin a
+    /// project folder, which a remote workspace does not carry.
     static let localOnlyCommands: Set<Command> = [
         .sessionCompanionDuplicate, .sessionCompanionPage, .sessionCompanionConvert, .sessionPage, .zmxAttach, .zmxAttachGroup,
-        .recentOpen,
+        .recentOpen, .workspaceFolder,
     ]
 
     /// remoteRoute reads `request` once, on the main actor, before it is dispatched: nil runs it here as usual; a
@@ -73,7 +74,7 @@ extension ControlServer {
         switch request.cmd {
         case .sessionNew, .workspaceNew, .zmxAttach, .zmxAttachGroup, .recentOpen:
             return resolver.placementStore(window)
-        case .workspaceRename, .workspaceDelete, .workspaceMove:
+        case .workspaceRename, .workspaceDelete, .workspaceMove, .workspaceFolder:
             return resolver.workspaceStore(request.target, window: window)
         default:
             let target = request.args?.targets?.first ?? request.target

@@ -320,7 +320,7 @@ mode with the filter ON narrows visibility to the members), and `collapsed` (whe
 when expanded, so an all-expanded tree carries no `collapsed` keys), and `tint`/`tintOn` (the workspace row's own
 tint, the read side of `workspace tint`; both omitted when untinted), and `rememberedFolder` (the last
 directory a local pane of the workspace reported, kept when it empties; set only by the shell's `cd`, no
-setter; omitted when none).
+setter; omitted when none), and `projectFolder` (the pinned project folder from `workspace folder`; omitted when none).
 
 The tree object itself carries these top-level read-only fields: `idleMs` (milliseconds since the last
 user input in the window, omitted before any activity), `autoFollowMs` (the window's Auto-follow
@@ -375,7 +375,7 @@ buys nothing. A caller with no tree uses `version`.
 
 ## workspace
 
-- `workspace new [name] [--collapsed] [--tint COLOR [--tint-on PARTS]] [--window W]` — create a workspace; returns its id. Name defaults
+- `workspace new [name] [--collapsed] [--tint COLOR [--tint-on PARTS]] [--folder DIR] [--window W]` — create a workspace; returns its id. Name defaults
   to an auto-generated one. `--collapsed` creates it CLOSED in the sidebar tree so a script can build a
   workspace and fill it with `session new --no-select` without it ever opening (a fresh workspace is
   expanded by default), and for the same reason a `--collapsed` create is kept OUT of the workspace focus
@@ -384,7 +384,14 @@ buys nothing. A caller with no tree uses `version`.
   same auto-reveal the GUI's New Workspace button has). Read the state back from the tree workspace
   node's `collapsed` flag, and the membership from its `focused` flag. `--tint`/`--tint-on` create it with a
   row tint, as `workspace tint` sets one; `--tint-on` without `--tint` is refused, and an invalid value
-  creates nothing.
+  creates nothing. `--folder` pins its project folder as `workspace folder set` does.
+- `workspace folder set DIR|clear [--target] [--window W]` — pin or clear the workspace's project folder.
+  A `session new --cwd` with no `--workspace`, `--workspace-name` or anchor lands in the workspace whose
+  project folder is that directory or holds it (the deepest pin wins), in every new-session mode and every open
+  local window unless `--window` narrows it, before the remembered-folder match. DIR must be an existing directory, not `/` or `~`; a relative DIR is taken from your
+  current directory. A new session in that workspace with no `--cwd` opens in the folder while it exists, in the default "Current session's directory" mode.
+  Read back as the workspace node's `projectFolder`. A remote window refuses this and
+  `workspace new --folder`.
 - `workspace rename <name> [--target] [--window W]`.
 - `workspace delete [--target] [--window W]` — keep-at-least-one; deleting the last workspace errors.
 - `workspace select [--target] [--window W]`.
@@ -473,7 +480,8 @@ buys nothing. A caller with no tree uses `version`.
 
 - `session new [--cwd DIR] [--workspace W] [--workspace-name NAME] [--create-workspace] [--command CMD] [--wait] [--name NAME] [--after SID | --before SID] [--no-select] [--tint COLOR [--tint-on PARTS]] [--window W]`
   — create a session and focus it; returns the new id. `--cwd` sets the start directory (default
-  `$HOME`). The destination workspace is addressed one of two mutually-exclusive ways: `--workspace`
+  `$HOME`); with no other placement it first joins the workspace whose pinned project folder holds it, in any
+  open window unless `--window` narrows it. The destination workspace is addressed one of two mutually-exclusive ways: `--workspace`
   (id / unique prefix / `active`, the default) or `--workspace-name` (the sidebar label) — the latter
   errors if no workspace has that name unless `--create-workspace` is also passed, which reuses an
   existing one or creates it when absent (idempotent). `--command` runs that command as the session's

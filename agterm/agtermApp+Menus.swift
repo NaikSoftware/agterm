@@ -108,6 +108,8 @@ extension agtermApp {
                 Button("New Workspace") { actions.newWorkspace() }
                     .keyboardShortcut(shortcut(for: .newWorkspace))
                     .disabled(!PaletteCommand.newWorkspace.isEnabled(in: context))
+                Button("Set Up Workspaces…") { actions.showWorkspaceSetupGuide() }
+                    .disabled(modalActive || context.remoteWindow)
                 Button("Rename Workspace") { actions.renameActiveWorkspace() }
                     .keyboardShortcut(shortcut(for: .renameWorkspace))
                     .disabled(!PaletteCommand.renameWorkspace.isEnabled(in: context))

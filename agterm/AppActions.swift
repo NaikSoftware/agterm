@@ -136,6 +136,7 @@ final class AppActions {
         let source = store.newSessionDirectorySource(inWorkspace: workspaceID)
         let current = source.map { $0.localWorkingDirectory(reported: $0.focusedCwd, homeDirectory: home) }
         return settingsModel?.settings.resolveNewSessionCwd(rememberedFolder: store.rememberedFolder(ofWorkspace: workspaceID),
+                                                            projectFolder: store.workspaces.first { $0.id == workspaceID }?.projectFolder,
                                                             currentSessionCwd: current, home: home) ?? home
     }
 
@@ -172,7 +173,7 @@ final class AppActions {
             NotificationManager.shared.notifyCommandFailure(name: "Open Directory", detail: "a remote window shows only its server's sessions")
             return true
         }
-        guard let store, let workspaceID = store.currentWorkspaceID,
+        guard let store, let workspaceID = store.workspaceID(owningFolder: directory) ?? store.currentWorkspaceID,
               let session = store.addSession(toWorkspace: workspaceID, cwd: directory)
         else { return false }
         store.noteUserActivity()
