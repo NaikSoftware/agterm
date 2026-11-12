@@ -74,7 +74,7 @@ extension ControlServer {
         switch request.cmd {
         case .sessionNew, .workspaceNew, .zmxAttach, .zmxAttachGroup, .recentOpen:
             return resolver.placementStore(window)
-        case .workspaceRename, .workspaceDelete, .workspaceMove:
+        case .workspaceRename, .workspaceDelete, .workspaceMove, .workspaceFolder:
             return resolver.workspaceStore(request.target, window: window)
         default:
             let target = request.args?.targets?.first ?? request.target

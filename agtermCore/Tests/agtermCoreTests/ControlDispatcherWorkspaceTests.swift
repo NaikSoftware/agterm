@@ -218,11 +218,15 @@ struct ControlDispatcherWorkspaceTests {
         #expect(response == ControlResponse(ok: false, error: ProjectFolderRejection.rootOrHome.message))
     }
 
-    @Test(arguments: [ControlArgs(mode: "set", folder: "/tmp/proj"), ControlArgs(mode: "clear")])
-    func workspaceFolderDefaultHostRefuses(args: ControlArgs) async {
-        let response = await ControlDispatcher(actions: MockControlActions()).dispatch(ControlRequest(
-            cmd: .workspaceFolder, args: args))
+    @Test func workspaceFolderForwardsNormalizedSetAndClear() async {
+        let actions = MockControlActions()
+        let dispatcher = ControlDispatcher(actions: actions)
 
-        #expect(response == ControlResponse(ok: false, error: ControlActionsUnsupported.message("workspace.folder")))
+        _ = await dispatcher.dispatch(ControlRequest(cmd: .workspaceFolder, target: "ws",
+                                                     args: ControlArgs(mode: "set", window: "win", folder: "/tmp/proj/")))
+        _ = await dispatcher.dispatch(ControlRequest(cmd: .workspaceFolder, target: "ws", args: ControlArgs(mode: "clear")))
+
+        #expect(actions.calls == [.workspaceFolder(target: "ws", window: "win", folder: "/tmp/proj"),
+                                  .workspaceFolder(target: "ws", window: nil, folder: nil)])
     }
 }

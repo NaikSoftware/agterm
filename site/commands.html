@@ -821,7 +821,7 @@
               <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
                 Pin or clear the workspace's project folder. A <span style="font-family: &quot;JetBrains Mono&quot;, monospace; white-space: nowrap">session new --cwd</span> with no other placement lands in the workspace whose
                 project folder is that directory or holds it; the deepest pin wins. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">DIR</span> must be an existing directory, not
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">/</span> or the home folder; pass it absolute or with <span style="font-family: &quot;JetBrains Mono&quot;, monospace">~</span>, since the app resolves it, not your shell. A remote window refuses it.
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">/</span> or the home folder; a relative path is taken from your current directory. A remote window refuses it.
                 <strong style="color: #bfbab0">Returns</strong> <span style="font-family: &quot;JetBrains Mono&quot;, monospace">result.id</span>. Read back via the workspace node's
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">projectFolder</span>.
               </p>

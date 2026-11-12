@@ -49,6 +49,13 @@ struct WorkspaceCommandsTests {
             == ControlRequest(cmd: .workspaceFolder, target: "active", args: ControlArgs(mode: "clear")))
     }
 
+    @Test func relativeFolderIsMadeAbsoluteAgainstTheCallersDirectory() throws {
+        let cwd = FileManager.default.currentDirectoryPath
+        #expect(try request(["workspace", "new", "--folder", "proj"]).args?.folder == "\(cwd)/proj")
+        #expect(try request(["workspace", "folder", "set", "./a/../proj"]).args?.folder == "\(cwd)/proj")
+        #expect(try request(["workspace", "folder", "set", "~/proj"]).args?.folder == "~/proj")
+    }
+
     @Test func workspaceFolderRejectsBadMode() {
         #expect(validationMessage(["workspace", "folder", "pin"]) == "mode must be set or clear")
     }

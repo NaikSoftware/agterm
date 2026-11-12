@@ -42,6 +42,7 @@ final class MockControlActions: ControlActions {
         case sessionFlag(target: String?, window: String?, String?)
         case flaggedMove(target: String?, window: String?, anchor: String, FlaggedOrderPlacement)
         case sessionContext(target: String?, window: String?, context: String?)
+        case workspaceFolder(target: String?, window: String?, folder: String?)
         case sessionInfo(target: String?, window: String?, info: SessionInfo?)
         case sessionTint(target: String?, window: String?, ControlTintUpdate)
         case workspaceTint(target: String?, window: String?, ControlTintUpdate)
@@ -416,6 +417,11 @@ final class MockControlActions: ControlActions {
 
     func setWorkspaceTint(_ target: String?, window: String?, update: ControlTintUpdate) -> ControlResponse {
         calls.append(.workspaceTint(target: target, window: window, update))
+        return ControlResponse(ok: true)
+    }
+
+    func setWorkspaceProjectFolder(_ target: String?, window: String?, folder: String?) -> ControlResponse {
+        calls.append(.workspaceFolder(target: target, window: window, folder: folder))
         return ControlResponse(ok: true)
     }
 

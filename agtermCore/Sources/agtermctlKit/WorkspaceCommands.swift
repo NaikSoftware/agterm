@@ -14,16 +14,21 @@ struct Workspace: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Create a workspace.")
         @Argument(help: "Workspace name (defaults to the auto-generated name).") var name: String?
         @Flag(name: .long, help: "Create the workspace collapsed in the sidebar.") var collapsed = false
-        @Option(name: .long, help: "Pin the workspace's project folder: new sessions started in it or below land here.")
+        @Option(name: .long, help: "Pin the project folder. A `session new --cwd` inside it, with no other placement, lands here.")
         var folder: String?
         @OptionGroup var tint: TintCreateOptions
         @OptionGroup var options: ClientOptions
         @OptionGroup var operation: OperationOptions
         var echoesResultID: Bool { true }
 
+        /// The app cannot see the caller's cwd, so a relative path is made absolute here; `~` is left to the app.
+        static func callerPath(_ path: String) -> String {
+            path.hasPrefix("/") || path.hasPrefix("~") ? path : Session.Overlay.absolutePath(path)
+        }
+
         func makeRequest() throws -> ControlRequest {
             operation.stamp(ControlRequest(cmd: .workspaceNew, args: options.withWindow(tint.apply(to:
-                ControlArgs(name: name, collapsed: collapsed ? true : nil, folder: folder)))))
+                ControlArgs(name: name, collapsed: collapsed ? true : nil, folder: folder.map(Self.callerPath))))))
         }
     }
 
@@ -42,7 +47,7 @@ struct Workspace: ParsableCommand {
 
         func makeRequest() throws -> ControlRequest {
             ControlRequest(cmd: .workspaceFolder, target: target.target,
-                           args: options.withWindow(ControlArgs(mode: mode, folder: dir)))
+                           args: options.withWindow(ControlArgs(mode: mode, folder: dir.map(New.callerPath))))
         }
     }
 

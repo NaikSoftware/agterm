@@ -388,8 +388,8 @@ buys nothing. A caller with no tree uses `version`.
 - `workspace folder set DIR|clear [--target] [--window W]` — pin or clear the workspace's project folder.
   A `session new --cwd` with no `--workspace`, `--workspace-name` or anchor lands in the workspace whose
   project folder is that directory or holds it (the deepest pin wins), in every new-session mode, before the
-  remembered-folder match. DIR must be an existing directory, not `/` or `~`; the app resolves it, so pass it
-  absolute or with `~`. Read back as the workspace node's `projectFolder`. A remote window refuses this and
+  remembered-folder match. DIR must be an existing directory, not `/` or `~`; a relative DIR is taken from your
+  current directory. Read back as the workspace node's `projectFolder`. A remote window refuses this and
   `workspace new --folder`.
 - `workspace rename <name> [--target] [--window W]`.
 - `workspace delete [--target] [--window W]` — keep-at-least-one; deleting the last workspace errors.
