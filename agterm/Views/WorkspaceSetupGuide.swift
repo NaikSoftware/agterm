@@ -58,7 +58,6 @@ struct WorkspaceSetupGuide: View {
                      ("mobile-app", ["Push notifications"])], id: \.0) { name, sessions in
                 VStack(alignment: .leading, spacing: 2) {
                     Label(name, systemImage: "square.grid.2x2").fontWeight(.medium)
-                    Text("~/Projects/\(name)").font(.caption).foregroundStyle(.secondary).padding(.leading, 22)
                     ForEach(sessions, id: \.self) { Label($0, systemImage: "terminal").padding(.leading, 14) }
                 }
             }
