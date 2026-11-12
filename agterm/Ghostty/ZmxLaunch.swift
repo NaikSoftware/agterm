@@ -109,7 +109,10 @@ enum ZmxLaunch {
         guard case .wrapped(let configuration) = disposition else { return nil }
         let captured = session.takePendingForegroundCommand(pane: pane)
         let replay = suppressed ? nil : captured
-        let paneCommand: String? = if replay == nil, !suppressed {
+        // a Recent Closed reopen's resume line runs as a create-only payload: closing killed the daemon, so it
+        // runs once, and a daemon that survived ignores it
+        let resume = session.takePendingResumeLine(pane: pane).flatMap { replay == nil && !suppressed ? $0 : nil }
+        let paneCommand: String? = if replay == nil, resume == nil, !suppressed {
             switch pane {
             case .left: session.initialCommand
             case .right: session.splitInitialCommand
@@ -118,7 +121,7 @@ enum ZmxLaunch {
         } else { nil }
         return SurfaceSeed(
             command: ZmxSupport.attachCommand(
-                configuration, replaying: replay, paneCommand: paneCommand, denylist: denylist
+                configuration, replaying: replay, creationCommand: resume, paneCommand: paneCommand, denylist: denylist
             ),
             initialInput: nil
         )

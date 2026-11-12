@@ -41,6 +41,11 @@ public final class Session: Identifiable {
     /// The coding agent the focused pane runs in the foreground, sampled by the app; the sidebar row shows its
     /// logo. Ephemeral, and nil again once the agent exits.
     public var runningAgent: SessionLauncher?
+    /// The line resuming the last Claude Code conversation seen in the focused pane. Kept after claude exits so a
+    /// later close still records it; never persisted.
+    @ObservationIgnored public var resumeLine: String?
+    /// A Recent Closed reopen's resume line, typed once into the main pane; see `takePendingResumeLine`.
+    @ObservationIgnored public var pendingResumeLine: String?
 
     /// Last time the status was set, idle and repeated values included; nil before any set, never persisted.
     /// Must stay a wall-clock `Date`: `controlTree` ships it as epoch seconds compared against `ControlEvent.ts`,
@@ -885,6 +890,13 @@ public final class Session: Identifiable {
         }
     }
 
+    /// Takes the reopen's resume line for the main pane only, clearing it so a rebuilt surface never types it twice.
+    public func takePendingResumeLine(pane: StatusPane) -> String? {
+        guard pane == .left else { return nil }
+        defer { pendingResumeLine = nil }
+        return pendingResumeLine
+    }
+
     /// Drops the unconsumed CAPTURE payloads only, leaving the persisted and pending `session.restore` pins
     /// armed. The pending half of `clearCapturedForegroundCommands()`; public because agterm-linux calls it.
     public func clearPendingForegroundCommands() {
@@ -908,6 +920,7 @@ public final class Session: Identifiable {
     public func clearPendingRestoreOverrides() {
         pendingRestoreCommand = nil
         pendingSplitRestoreCommand = nil
+        pendingResumeLine = nil
         clearPendingForegroundCommands()
     }
 

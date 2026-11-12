@@ -16,12 +16,17 @@ extension WindowContentView {
         store.navigableRecentSessions(limit: SessionSwitcher.maxCandidates)
     }
 
+    /// The newest closed sessions the popover offers to reopen, below the open ones.
+    private var recentClosedSessions: [RecentClosedItem] {
+        Array(library.recentClosedItems.lazy.filter { $0.kind == .session }.prefix(15))
+    }
+
     /// Title-bar button opening the recent-sessions popover — the mouse equivalent of the Ctrl-Tab switcher.
-    /// Lists the window's most-recently-used OTHER sessions; disabled/dimmed when there is nothing to switch to
-    /// (only the current session). Opening a popover is interactive-only, so it is control-API keep-in-sync
+    /// Lists the window's most-recently-used OTHER sessions, then recently closed ones; disabled/dimmed when both
+    /// lists are empty. Opening a popover is interactive-only, so it is control-API keep-in-sync
     /// exempt, like the bell opening the attention palette.
     var recentSessionsButton: some View {
-        let enabled = !recentSessions.isEmpty && !pick.modalPending
+        let enabled = !(recentSessions.isEmpty && recentClosedSessions.isEmpty) && !pick.modalPending
         return Button {
             guard !pick.modalPending else { return }
             recentSessionsShown.toggle()
@@ -45,9 +50,9 @@ extension WindowContentView {
             // suppression stays balanced across open/close and with the attention popover.
             if shown { store.suppressAutoFollow() } else { store.resumeAutoFollow() }
         }
-        .onChange(of: recentSessions.isEmpty) { _, empty in
+        .onChange(of: recentSessions.isEmpty && recentClosedSessions.isEmpty) { _, empty in
             // the only listed session exiting on its own fires no outside-click dismiss, so close the popover
-            // ourselves when the list empties — else an empty sliver lingers under a now-disabled button.
+            // ourselves when both lists empty — else an empty sliver lingers under a now-disabled button.
             if empty { recentSessionsShown = false }
         }
     }
@@ -55,20 +60,68 @@ extension WindowContentView {
     /// The recent-sessions popover body: the MRU OTHER sessions as full rows (the shared two-line
     /// `SessionSwitcherRow`). Each row highlights on hover and, on a click anywhere in the row, commits the
     /// switch (`noteUserActivity` + `selectSession` + focus, like the Ctrl-Tab release) then closes the popover
-    /// — the palette-row feel. Tinted to the terminal theme (`terminalColor` panel, `chromeText` text,
-    /// selection-color hover) so it matches the themed chrome rather than the system popover look.
+    /// — the palette-row feel. A "Recently closed" section follows, each row reopening its entry through
+    /// `openRecentClosed`. Tinted to the terminal theme (`terminalColor` panel, `chromeText` text,
+    /// selection-color hover) so it matches the themed chrome rather than the system popover look. Measured and
+    /// capped like the attention popover.
     private var recentSessionsPopover: some View {
+        let metrics = GhosttyApp.shared.interfaceMetrics
         // no `.accessibilityIdentifier` on this container: a SwiftUI identifier on a parent propagates to and
         // OVERRIDES its descendants', clobbering the per-row `recent-session-row` ids the tests read.
-        VStack(spacing: 2) {
-            ForEach(recentSessions, id: \.self) { id in
-                recentSessionRow(id)
+        return ScrollView {
+            VStack(spacing: 2) {
+                ForEach(recentSessions, id: \.self) { id in
+                    recentSessionRow(id)
+                }
+                if !recentClosedSessions.isEmpty {
+                    Text("Recently closed")
+                        .font(.system(size: metrics.secondary))
+                        .foregroundStyle(chromeText.opacity(0.6))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, metrics.scaled(12))
+                        .padding(.top, recentSessions.isEmpty ? 0 : metrics.scaled(6))
+                    ForEach(recentClosedSessions) { item in
+                        SessionPopoverRow(
+                            title: item.title,
+                            subtitle: item.subtitle ?? "",
+                            remote: false,
+                            status: nil,
+                            statusColorHex: nil,
+                            statusShape: nil,
+                            foreground: chromeText,
+                            hoverColor: popoverHoverColor,
+                            accessibilityID: "recent-closed-row",
+                            // a resume line reopens into claude even when claude had exited before the close
+                            icon: (item.session?.agent.flatMap(SessionLauncher.init(rawValue:))
+                                   ?? (item.session?.resumeLine == nil ? .terminal : .claude))
+                                .image(pointSize: metrics.scaled(15))
+                        ) { reopenRecentClosed(item.id) }
+                    }
+                }
             }
+            .background(
+                GeometryReader { rows in
+                    Color.clear.preference(key: RowsHeightKey.self, value: rows.size.height)
+                }
+            )
+        }
+        .frame(height: metrics.measuredPanelHeight(rowsHeight: recentRowsHeight,
+                                                   maxRowsHeight: metrics.scaled(Self.attentionRowsCap)).map { CGFloat($0) })
+        .scrollBounceBehavior(.basedOnSize)
+        .onPreferenceChange(RowsHeightKey.self) { height in
+            recentRowsHeight = height
         }
         .padding(6)
-        .frame(width: GhosttyApp.shared.interfaceMetrics.scaled(320))
+        .frame(width: metrics.scaled(320))
         .background(terminalColor)
         .presentationBackground(terminalColor)
+    }
+
+    /// The popover closes first and the reopen runs on the next turn, since it may raise another window.
+    private func reopenRecentClosed(_ id: RecentClosedItem.ID) {
+        guard !pick.modalPending else { return }
+        recentSessionsShown = false
+        DispatchQueue.main.async { actions.openRecentClosed(id) }
     }
 
     @ViewBuilder private func recentSessionRow(_ id: UUID) -> some View {
@@ -82,7 +135,8 @@ extension WindowContentView {
                 statusShape: session.agentIndicator.shape,
                 foreground: chromeText,
                 hoverColor: popoverHoverColor,
-                accessibilityID: "recent-session-row"
+                accessibilityID: "recent-session-row",
+                icon: (session.runningAgent ?? .terminal).image(pointSize: GhosttyApp.shared.interfaceMetrics.scaled(15))
             ) { selectRecent(id) }
         }
     }
@@ -219,6 +273,7 @@ private struct SessionPopoverRow: View {
     let foreground: Color
     let hoverColor: Color
     let accessibilityID: String
+    var icon: NSImage?
     var isEnabled = true
     let onSelect: () -> Void
     @State private var hovering = false
@@ -226,7 +281,8 @@ private struct SessionPopoverRow: View {
     var body: some View {
         Button(action: onSelect) {
             SessionSwitcherRow(title: title, subtitle: subtitle, foreground: foreground,
-                               status: status, statusColorHex: statusColorHex, statusShape: statusShape, remote: remote)
+                               status: status, statusColorHex: statusColorHex, statusShape: statusShape, remote: remote,
+                               icon: icon)
                 .background(hovering && isEnabled ? hoverColor : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .contentShape(Rectangle())

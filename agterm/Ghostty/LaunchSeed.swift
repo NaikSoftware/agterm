@@ -52,6 +52,11 @@ extension LaunchSeedProvider {
     @MainActor
     private static func seed(session: Session, pane: StatusPane, disposition: ZmxLaunch.Disposition,
                              policy: LaunchSeedPolicy) -> LaunchSeed {
+        // a Recent Closed reopen types its resume line once, past the restore mode; `surfaceSeed` handles Live
+        let wrapped = if case .wrapped = disposition { true } else { false }
+        if !wrapped, let line = session.takePendingResumeLine(pane: pane) {
+            return LaunchSeed(command: nil, initialInput: line + "\n", waitAfterCommand: false)
+        }
         switch disposition {
         case .wrapped(let configuration):
             guard let seed = ZmxLaunch.surfaceSeed(disposition: disposition, session: session, pane: pane,

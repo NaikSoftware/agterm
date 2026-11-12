@@ -68,9 +68,14 @@ enum ForegroundProcess {
     /// Every readable argv in the pane's foreground process group, leader first, for agent detection.
     @MainActor
     static func groupArgvs(for view: GhosttySurfaceView, zmxResolver: ZmxForegroundResolver? = nil) -> [[String]] {
+        groupPIDs(for: view, zmxResolver: zmxResolver).compactMap(procArgs(pid:))
+    }
+
+    /// The pids of the pane's foreground process group, leader first.
+    @MainActor
+    static func groupPIDs(for view: GhosttySurfaceView, zmxResolver: ZmxForegroundResolver? = nil) -> [pid_t] {
         guard let pgid = foregroundGroup(of: view, zmxResolver: zmxResolver) else { return [] }
-        let members = processGroup(pgid: pgid).map(\.pid).filter { $0 != pgid }.sorted()
-        return ([pgid] + members).compactMap(procArgs(pid:))
+        return [pgid] + processGroup(pgid: pgid).map(\.pid).filter { $0 != pgid }.sorted()
     }
 
     @MainActor
@@ -125,7 +130,7 @@ enum ForegroundProcess {
 
     /// Fetch and parse a process's argv via `sysctl(KERN_PROCARGS2)`; nil on any syscall failure, which is
     /// what a process owned by another user (setuid `login`, `sudo`) returns.
-    private static func procArgs(pid: pid_t) -> [String]? {
+    static func procArgs(pid: pid_t) -> [String]? {
         procArgsBlob(pid: pid).flatMap(CommandRestore.parseProcArgs)
     }
 

@@ -1,3 +1,5 @@
+import Foundation
+
 /// SessionLauncher is what a workspace row's "+" menu starts: a plain shell, or a coding agent typed into one.
 public enum SessionLauncher: String, CaseIterable, Sendable {
     case terminal, claude, codex, opencode, antigravity
@@ -41,6 +43,22 @@ public enum SessionLauncher: String, CaseIterable, Sendable {
     /// so an agent it starts shares the script's group without leading it.
     public static func agent(group: [[String]]) -> SessionLauncher? {
         group.lazy.compactMap { agent(argv: CommandRestore.stripLoginDash($0)) }.first
+    }
+
+    /// The line that resumes a Claude Code conversation, from its `~/.claude/sessions/<pid>.json`. Nil when the
+    /// file does not parse or the id is not a plain token, since the line is typed into a shell. The `cd` comes
+    /// first because claude finds a conversation under the folder it began in.
+    public static func claudeResumeLine(json: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
+              let id = object["sessionId"] as? String, !id.isEmpty,
+              id.unicodeScalars.allSatisfy({ $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "_-".unicodeScalars.contains($0)) })
+        else { return nil }
+        let cwd = object["cwd"] as? String ?? ""
+        // a control character would act as a line-editor key even inside quotes
+        guard cwd.isEmpty || CommandRestore.shouldRestore(argv: [cwd], denylist: []) else { return nil }
+        // shortcut: fish reads a backslash inside single quotes as an escape, so such a folder breaks there; quote per
+        // shell if that shows up
+        return (cwd.isEmpty ? "" : "cd \(CommandRestore.shellQuotedLine([cwd])) && ") + "claude --resume \(id)"
     }
 
     /// Terminal plus every agent whose command is an executable in one of `path`'s directories.

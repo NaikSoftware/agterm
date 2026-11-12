@@ -2,7 +2,7 @@ import XCTest
 
 /// End-to-end tests for the title-bar recent-sessions button — the mouse equivalent of the Ctrl-Tab
 /// switcher. It opens a popover of the window's most-recently-used sessions; clicking a row commits the
-/// switch. The button is disabled until there are at least two sessions to switch between.
+/// switch. The button is disabled while there is neither another session nor a recently closed one.
 ///
 /// SCOPE NOTE: the row CLICK → session switch cannot be driven from XCUITest — a synthesized click (element
 /// OR coordinate) on a SwiftUI `Button` inside an `NSPopover` does not fire the button's action (confirmed
@@ -39,6 +39,24 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
                       "the jump row should be the previously-selected (renamed) session, got label: \(jumpRow.label)")
         XCTAssertEqual(app.buttons.matching(identifier: "recent-session-row").count, 1,
                        "the popover should list only the single other session, not the current one")
+    }
+
+    func testRecentButtonListsAClosedSessionAlone() throws {
+        let created = try sendCommand(#"{"cmd":"session.new"}"#)
+        let newID = try XCTUnwrap((created["result"] as? [String: Any])?["id"] as? String)
+        XCTAssertEqual(try sendCommand(#"{"cmd":"session.rename","target":"\#(newID)","args":{"name":"closedone"}}"#)["ok"] as? Bool, true)
+        XCTAssertEqual(try sendCommand(#"{"cmd":"session.close","target":"\#(newID)"}"#)["ok"] as? Bool, true)
+
+        let button = app.buttons["recent-sessions-button"]
+        XCTAssertTrue(pollEnabled(button, true, timeout: 8), "a closed session alone should enable the button")
+        let row = app.buttons["recent-closed-row"]
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline, !row.exists {
+            button.click()
+            _ = row.waitForExistence(timeout: 1)
+        }
+        XCTAssertTrue(row.label.contains("closedone"), "closed row: \(row.label)")
+        XCTAssertEqual(app.buttons.matching(identifier: "recent-session-row").count, 0)
     }
 
     func testPopoversNameACompanionAfterItsParent() throws {

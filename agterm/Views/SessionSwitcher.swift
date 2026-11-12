@@ -240,6 +240,8 @@ struct SessionSwitcherRow: View {
     var statusShape: StatusShape?
     /// Leads the title with the sidebar's cloud glyph, for a session attached from another Mac.
     var remote = false
+    /// A leading template image tinted like the title; nil draws none (the Ctrl-Tab overlay and attention rows).
+    var icon: NSImage?
 
     /// Read from the non-observable `GhosttyApp` — both the Ctrl-Tab overlay and the popovers mount fresh
     /// on every open, so neither renders a stale size.
@@ -251,6 +253,9 @@ struct SessionSwitcherRow: View {
 
     var body: some View {
         HStack {
+            if let icon {
+                Image(nsImage: icon).renderingMode(.template).foregroundStyle(foreground ?? Color.primary)
+            }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: metrics.scaled(4)) {
                     if remote { Image(systemName: "cloud").accessibilityLabel("Remote") }

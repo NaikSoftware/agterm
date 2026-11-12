@@ -443,7 +443,9 @@ struct SocketClient {
             let subtitle = item.subtitle.map { " (\($0))" } ?? ""
             let companions = item.kind == "session" && item.sessionIDs.count > 1
                 ? " +\(item.sessionIDs.count - 1) companion(s)" : ""
-            return "\(item.id)  \(item.kind)  \(item.title)\(subtitle)\(companions)"
+            let tags = [item.agent, item.resume.map { _ in "resumable" }].compactMap(\.self)
+            let agent = tags.isEmpty ? "" : "  [\(tags.joined(separator: ", "))]"
+            return "\(item.id)  \(item.kind)  \(item.title)\(subtitle)\(companions)\(agent)"
         }.joined(separator: "\n")
     }
 

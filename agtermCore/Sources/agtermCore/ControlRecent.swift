@@ -12,9 +12,12 @@ public struct ControlRecentItem: Codable, Sendable, Equatable {
     public let closedAt: Double
     public let workspaceID: String
     public let sessionIDs: [String]
+    /// A session entry's agent (`SessionLauncher` raw value) and the line its reopen types; absent otherwise.
+    public let agent: String?
+    public let resume: String?
 
     public init(id: String, kind: String, title: String, subtitle: String?, closedAt: Double,
-                workspaceID: String, sessionIDs: [String]) {
+                workspaceID: String, sessionIDs: [String], agent: String? = nil, resume: String? = nil) {
         self.id = id
         self.kind = kind
         self.title = title
@@ -22,6 +25,8 @@ public struct ControlRecentItem: Codable, Sendable, Equatable {
         self.closedAt = closedAt
         self.workspaceID = workspaceID
         self.sessionIDs = sessionIDs
+        self.agent = agent
+        self.resume = resume
     }
 
     public init(_ item: RecentClosedItem) {
@@ -37,7 +42,7 @@ public struct ControlRecentItem: Codable, Sendable, Equatable {
         }
         self.init(id: item.id.uuidString, kind: item.kind.rawValue, title: item.title, subtitle: item.subtitle,
                   closedAt: item.closedAt.timeIntervalSince1970, workspaceID: workspaceID?.uuidString ?? "",
-                  sessionIDs: sessionIDs.map(\.uuidString))
+                  sessionIDs: sessionIDs.map(\.uuidString), agent: item.session?.agent, resume: item.session?.resumeLine)
     }
 }
 

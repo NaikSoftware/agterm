@@ -53,14 +53,22 @@ public struct RecentClosedSession: Codable, Equatable, Sendable {
     /// companions are reopened under the parent; optional so an older `recent-closed.json` still decodes.
     public let companions: [SessionSnapshot]?
 
+    /// The `SessionLauncher` raw value running at close, nil for a plain shell. Optional like `companions`.
+    public let agent: String?
+    /// Typed once into the reopened main pane; see `Session.resumeLine`. Optional like `companions`.
+    public let resumeLine: String?
+
     public init(workspaceID: UUID, workspaceName: String, workspaceIndex: Int, sessionIndex: Int,
-                snapshot: SessionSnapshot, companions: [SessionSnapshot]? = nil) {
+                snapshot: SessionSnapshot, companions: [SessionSnapshot]? = nil,
+                agent: String? = nil, resumeLine: String? = nil) {
         self.workspaceID = workspaceID
         self.workspaceName = workspaceName
         self.workspaceIndex = workspaceIndex
         self.sessionIndex = sessionIndex
         self.snapshot = snapshot
         self.companions = companions
+        self.agent = agent
+        self.resumeLine = resumeLine
     }
 }
 

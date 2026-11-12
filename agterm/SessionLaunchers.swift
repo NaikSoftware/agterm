@@ -96,10 +96,20 @@ final class SessionAgentMonitor {
         for window in library.windows {
             guard let store = library.store(for: window.id) else { continue }
             for session in store.workspaces.flatMap(\.sessions) where session.remoteHost == nil {
-                let agent = (session.activeSurface as? GhosttySurfaceView)
-                    .flatMap { SessionLauncher.agent(group: ForegroundProcess.groupArgvs(for: $0, zmxResolver: zmxResolver)) }
+                let view = session.activeSurface as? GhosttySurfaceView
+                let pids = view.map { ForegroundProcess.groupPIDs(for: $0, zmxResolver: zmxResolver) } ?? []
+                let agent = SessionLauncher.agent(group: pids.compactMap(ForegroundProcess.procArgs(pid:)))
                 if session.runningAgent != agent { session.runningAgent = agent }
+                // only a new line replaces the old, so a session closed after claude exits still resumes it
+                if agent == .claude, let line = pids.lazy.compactMap(Self.claudeResumeLine(pid:)).first {
+                    session.resumeLine = line
+                }
             }
         }
+    }
+
+    private static func claudeResumeLine(pid: pid_t) -> String? {
+        let file = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/sessions/\(pid).json")
+        return (try? Data(contentsOf: file)).flatMap(SessionLauncher.claudeResumeLine(json:))
     }
 }

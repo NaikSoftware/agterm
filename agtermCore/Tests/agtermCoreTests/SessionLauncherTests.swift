@@ -1,4 +1,5 @@
 import agtermCore
+import Foundation
 import Testing
 
 struct SessionLauncherTests {
@@ -36,6 +37,21 @@ struct SessionLauncherTests {
 
     @Test func availableKeepsTerminalWithNothingInstalled() {
         #expect(SessionLauncher.available(path: "") { _ in true } == [.terminal])
+    }
+
+    @Test(arguments: [
+        (#"{"pid":1,"sessionId":"ab-12_C","cwd":"/Users/me/it's here"}"#, #"cd '/Users/me/it'\''s here' && claude --resume ab-12_C"#),
+        (#"{"sessionId":"ab12"}"#, "claude --resume ab12"),
+        (#"{"sessionId":"ab12","cwd":""}"#, "claude --resume ab12"),
+        (#"{"sessionId":"ab;rm -rf ~","cwd":"/tmp"}"#, nil),
+        (#"{"sessionId":"","cwd":"/tmp"}"#, nil),
+        (#"{"sessionId":"абв","cwd":"/tmp"}"#, nil),
+        (#"{"sessionId":"ab12","cwd":"/tmp/x\u0003\nrm -rf ~"}"#, nil),
+        (#"{"cwd":"/tmp"}"#, nil),
+        ("not json", nil)
+    ] as [(String, String?)])
+    func claudeResumeLineQuotesTheFolderAndRefusesAnUnsafeID(json: String, expected: String?) {
+        #expect(SessionLauncher.claudeResumeLine(json: Data(json.utf8)) == expected)
     }
 }
 
