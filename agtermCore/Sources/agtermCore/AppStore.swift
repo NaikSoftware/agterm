@@ -473,9 +473,9 @@ public final class AppStore {
                                         active: workspace.id == activeWorkspaceID,
                                         focused: focusedWorkspaceIDs.contains(workspace.id) ? true : nil,
                                         collapsed: workspace.isExpanded ? nil : true,
-                                        tint: workspace.tint?.color.rawValue,
-                                        tintOn: workspace.tint?.parts.map(\.rawValue),
-                                        rememberedFolder: workspace.rememberedFolder, sessions: sessions)
+                                        tint: workspace.tint?.color.rawValue, tintOn: workspace.tint?.parts.map(\.rawValue),
+                                        rememberedFolder: workspace.rememberedFolder, projectFolder: workspace.projectFolder,
+                                        sessions: sessions)
         }
         return ControlTree(workspaces: nodes, idleMs: idleMs(), autoFollowMs: autoFollowMs,
                            attentionIncludesActive: attentionIncludesActive,
@@ -526,9 +526,9 @@ public final class AppStore {
     /// false leaves the target where it is. `ensureWorkspace(named:revealNewWorkspace:)` forwards both.
     @discardableResult
     public func addWorkspace(name: String, collapsed: Bool = false, revealNewWorkspace: Bool = true,
-                             tint: SidebarTint? = nil) -> Workspace {
+                             tint: SidebarTint? = nil, projectFolder: String? = nil) -> Workspace {
         // the name feeds {AGT_WORKSPACE_NAME}; see TerminalText.
-        let workspace = Workspace(name: TerminalText.sanitized(name), isExpanded: !collapsed, tint: tint)
+        let workspace = Workspace(name: TerminalText.sanitized(name), isExpanded: !collapsed, tint: tint, projectFolder: projectFolder.flatMap(Workspace.normalizedFolder))
         workspaces.append(workspace)
         if revealNewWorkspace {
             revealNewFocusMember(workspace.id)

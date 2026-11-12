@@ -77,7 +77,7 @@ extension AppStore {
         WorkspaceSnapshot(id: workspace.id, name: workspace.name,
                           sessions: workspace.sessions.filter(\.isPersistable).map(sessionSnapshot),
                           collapsed: workspace.isExpanded ? nil : true, tint: workspace.tint,
-                          rememberedFolder: workspace.rememberedFolder)
+                          rememberedFolder: workspace.rememberedFolder, projectFolder: workspace.projectFolder)
     }
 
     /// Rebuilds one session from its snapshot. `launchRestore` marks an APP-BOOTSTRAP restore, the only path
@@ -164,7 +164,7 @@ extension AppStore {
         Workspace(id: snapshot.id, name: snapshot.name,
                   sessions: Self.regroupedCompanions(snapshot.sessions.map { session(from: $0) }),
                   isExpanded: !(snapshot.collapsed ?? false), tint: snapshot.tint,
-                  rememberedFolder: snapshot.rememberedFolder)
+                  rememberedFolder: snapshot.rememberedFolder, projectFolder: snapshot.projectFolder)
     }
 
     /// Rebuilds the tree from a snapshot: fresh `Session`s (surfaces and shells spawn lazily on first
@@ -197,7 +197,8 @@ extension AppStore {
             restored.append(Workspace(id: workspaceSnapshot.id, name: workspaceSnapshot.name, sessions: sessions,
                                       isExpanded: !(workspaceSnapshot.collapsed ?? false),
                                       tint: workspaceSnapshot.tint,
-                                      rememberedFolder: workspaceSnapshot.rememberedFolder))
+                                      rememberedFolder: workspaceSnapshot.rememberedFolder,
+                                      projectFolder: workspaceSnapshot.projectFolder))
         }
         for index in workspaces.indices {
             workspaces[index].sessions = Self.regroupedCompanions(workspaces[index].sessions)

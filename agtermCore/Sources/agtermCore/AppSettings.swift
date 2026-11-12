@@ -493,6 +493,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// htmlOverlayZoom is the page zoom every HTML overlay shows at, nil for actual size; read it through
     /// `effectiveHtmlOverlayZoom`.
     public var htmlOverlayZoom: Double?
+    /// Whether the first-launch workspace setup guide was finished or dismissed; nil = still due.
+    public var workspaceGuideDone: Bool?
 
     public init(fontFamily: String? = nil, fontSize: Double? = nil, theme: String? = nil,
                 darkTheme: String? = nil, followSystemAppearance: Bool? = nil,
@@ -523,7 +525,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 autoHideSidebarInactiveWindows: Bool? = nil, flaggedViewLayout: String? = nil,
                 linkOpenMode: String? = nil, terminalInputSource: String? = nil,
                 htmlOverlayZoom: Double? = nil, sessionInfoDisplay: String? = nil,
-                sidebarDensity: String? = nil) {
+                sidebarDensity: String? = nil, workspaceGuideDone: Bool? = nil) {
         self.sessionInfoDisplay = sessionInfoDisplay
         self.sidebarDensity = sidebarDensity
         self.fontFamily = fontFamily
@@ -580,6 +582,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.linkOpenMode = linkOpenMode
         self.terminalInputSource = terminalInputSource
         self.htmlOverlayZoom = htmlOverlayZoom
+        self.workspaceGuideDone = workspaceGuideDone
     }
 
     /// The configured mode, including an object decoded from the legacy boolean schema.
