@@ -16,8 +16,8 @@
 #
 # It fails OPEN (reports) whenever the chain is unreadable or severed, e.g. a detached worker whose
 # spawner already exited: a missed guard is the behavior without this adapter, while a false silence
-# is a bug with no symptom. The argv is forwarded to the shared wrapper verbatim, so the adapter adds
-# a guard and changes nothing else; it never reads stdin, so a payload another hook wants is intact.
+# is a bug with no symptom. The argv reaches the shared wrapper unchanged except for the two payload
+# rewrites at the end.
 set -u
 
 [ -n "${AGTERM_SESSION_ID:-}" ] || exit 0
@@ -80,5 +80,31 @@ for _ in 1 2 3 4 5 6 7 8; do
   case "$base" in login | agterm | agterm-qt) break ;; esac # reached the pane boundary
   p=$ppid
 done
+
+# master's background-subagent rewrites (#959): a subagent's active posts --if-idle so it never overwrites the
+# main thread's blocked or completed, and a Stop while background_tasks lists a running subagent or workflow
+# posts active --blink instead of completed. The rewrite drops the caller's flags: a carried --auto-reset would
+# idle the row on the next visit while a background agent still runs. stdin is read only when it is not a
+# terminal, and briefly, so an inherited open pipe never hangs a hook. python3 reads the payload where master
+# uses plutil or jq; without it, or with an unreadable payload, argv posts as before.
+payload=
+[ -t 0 ] || IFS= read -r -d '' -t 2 payload || true
+
+if [ -n "$payload" ]; then
+  kind=$(printf '%s' "$payload" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+if d.get("agent_id"):
+    print("subagent")
+elif d.get("hook_event_name") == "Stop" and any(
+        isinstance(t, dict) and t.get("status") == "running" and t.get("type") in ("subagent", "workflow")
+        for t in d.get("background_tasks") or []):
+    print("background")
+' 2>/dev/null)
+  case "$kind:${1:-}" in
+    subagent:active) set -- "$@" --if-idle ;;
+    background:completed) set -- active --blink ;;
+  esac
+fi
 
 exec "$status_wrapper" "$@"

@@ -16,7 +16,7 @@ result back. Errors are quoted as the app returns them; the CLI prints them as `
 - Without `--json`: errors go to stderr with exit 1; `cannot connect to <path>: … (is agterm-qt running?)` when no
   app owns the socket. Create commands print the new id; batch close/move print `N session(s)`; reads print text.
 - Options take a value unless they are flags; flags are `--json --stdin --all --no-select --create-workspace
-  --auto-reset --blink --undoable --companion --wait --block --follow --full --markdown --sticky --no-frame
+  --auto-reset --blink --if-idle --undoable --companion --wait --block --follow --full --markdown --sticky --no-frame
   --spinner --none --clear --mru --auto-size --close --minimized --next --prev --allow-custom --no-block
   --multiple --ack`. An option missing its value fails with `--<name> needs a value`.
 - `--help` prints usage and touches no socket.
@@ -165,9 +165,10 @@ All take `--target` (workspace id, prefix, name, `active`) and `--window`.
 
 ## session: status and notifications
 
-- `session status <idle|active|completed|blocked> [--blink] [--auto-reset]`
+- `session status <idle|active|completed|blocked> [--blink] [--auto-reset] [--if-idle]`
   - `--blink` pulses the dot (ignored for `idle`). `--auto-reset` returns `completed` to idle when the user
-    selects the session.
+    selects the session. `--if-idle` applies the write only while the row is idle; on any other status it is an ok
+    no-op that keeps the status and its flags.
   - Typing into the session clears `blocked`/`completed` per Settings ▸ Agent Status (first key, Enter, or never);
     `session type` text with a newline counts as Enter.
   - A same-value set emits nothing. Each change emits `status` with `previous`.

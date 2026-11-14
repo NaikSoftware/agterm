@@ -572,11 +572,13 @@ void Store::select(const QString &id)
     Q_EMIT changed();
 }
 
-bool Store::setStatus(const QString &id, const QString &status, bool autoReset, bool blink)
+bool Store::setStatus(const QString &id, const QString &status, bool autoReset, bool blink, bool ifIdle)
 {
     auto *s = session(id);
     if (!s || !statuses.contains(status))
         return false;
+    if (ifIdle && s->status != QLatin1String("idle"))
+        return true;
     const bool same = s->status == status && s->blink == blink;
     s->autoReset = autoReset;
     s->blink = blink && status != QLatin1String("idle");
