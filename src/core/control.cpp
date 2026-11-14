@@ -644,7 +644,7 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             store.renameSession(id, args.value("name").toString()); // empty reverts to the directory name
         } else if (cmd == QLatin1String("session.status")) {
             const QString status = args.value("status").toString();
-            if (!store.setStatus(id, status, args.value("autoReset").toBool(), args.value("blink").toBool()))
+            if (!store.setStatus(id, status, args.value("autoReset").toBool(), args.value("blink").toBool(), args.value("ifIdle").toBool()))
                 return fail(QStringLiteral("status must be one of %1").arg(Store::statuses.join(QLatin1String(", "))));
         } else if (cmd == QLatin1String("session.flag")) {
             const QString mode = args.value("mode").toString(QStringLiteral("toggle"));

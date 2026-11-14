@@ -73,18 +73,28 @@ static void ensureProfile()
     entry.sync();
 }
 
-// agterm-qt --install agent-hooks|cli|skill [--home DIR]: the Help menu's installers without a window
+// agterm-qt --install agent-hooks|cli|skill|all [--home DIR]: the extras the launch installs, run by hand
 static int installFromCommandLine(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     const QStringList args = app.arguments();
     const qsizetype at = args.indexOf(QStringLiteral("--home"));
     const QString home = at > 0 && at + 1 < args.size() ? args[at + 1] : QDir::homePath();
-    const Install::Report r = runInstaller(args.value(2), home, nullptr);
-    if (!r.error.isEmpty())
-        return fprintf(stderr, "Install Failed: %s\n", qPrintable(r.error)), 1;
-    printf("%s\n%s\n", qPrintable(r.title), qPrintable(r.text()));
-    return 0;
+    const QString which = args.value(2);
+    int failed = 0;
+    for (const QString &one : which == QLatin1String("all") ? QStringList{"cli", "agent-hooks", "skill"} : QStringList{which}) {
+        const Install::Report r = runInstaller(one, home);
+        if (!r.error.isEmpty())
+            fprintf(stderr, "Install Failed: %s\n", qPrintable(r.error)), ++failed;
+        else
+            printf("%s\n%s\n\n", qPrintable(r.title), qPrintable(r.text()));
+    }
+    if (which == QLatin1String("all") && at < 0 && !failed) { // the launch's stamp names this user's home only
+        QDir().mkpath(stateDir());
+        if (QFile stamp(extrasStamp()); stamp.open(QIODevice::WriteOnly | QIODevice::Truncate))
+            stamp.write(extrasFingerprint() + '\n');
+    }
+    return failed ? 1 : 0;
 }
 
 int main(int argc, char **argv)
@@ -109,7 +119,6 @@ int main(int argc, char **argv)
     }
 
     ensureProfile();
-    const bool firstLaunch = !Install::hasPriorState(dir); // read before the library writes anything there
     WindowLibrary library(dir);
     library.load(); // the windows open at the last quit, each with its saved frame
     MainWindow &window = *library.active();
@@ -146,8 +155,7 @@ int main(int argc, char **argv)
             w->save();
         library.saveIndex();
     });
-    if (firstLaunch) // after the socket binds: the dialog is window-modal, never in the request path
-        QTimer::singleShot(0, &window, [&window] { showWelcome(&window); });
+    installExtrasOnUpdate(); // first launch or a new install: hooks, skill and the agtermctl link follow the build
     if (const QString shot = qEnvironmentVariable("AGTERM_SCREENSHOT"); !shot.isEmpty()) // dev aid for UI review
         QTimer::singleShot(6000, &window, [&window, shot] { window.grab().save(shot); });
 

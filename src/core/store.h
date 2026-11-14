@@ -179,7 +179,8 @@ public:
     bool moveSession(const QString &id, const QString &workspaceId, int index); // index -1 = end
     bool moveWorkspace(const QString &id, int index);
     void select(const QString &id);
-    bool setStatus(const QString &id, const QString &status, bool autoReset = false, bool blink = false);
+    // ifIdle: applies only while the row is idle, else an ok no-op that leaves status and flags untouched (master's --if-idle)
+    bool setStatus(const QString &id, const QString &status, bool autoReset = false, bool blink = false, bool ifIdle = false);
     void setFlag(const QString &id, bool flagged);
     bool focusWorkspace(const QString &id, const QString &mode); // on | off | toggle | add; false on another mode
     void setFilter(bool on);

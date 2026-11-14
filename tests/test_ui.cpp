@@ -884,7 +884,7 @@ private Q_SLOTS:
         QCOMPARE(call("msg.read", {}, {{"identity", id + ":" + panes[0]}, {"ack", true}})["result"]["messages"][0]["body"].toString(), QStringLiteral("hello"));
     }
 
-    void helpMenuAndWelcome()
+    void helpMenuHoldsOnlyTheDocs()
     {
         Store store;
         MainWindow w(store, dir.filePath("help.json"));
@@ -895,16 +895,10 @@ private Q_SLOTS:
                 for (QAction *a : menu->menu()->actions())
                     if (!a->isSeparator())
                         help << a->text();
-        QCOMPARE(help, (QStringList{"Developer Documentation…", "Install Command Line Tool…", "Install Agent Status Hooks…", "Install Agent Skill…"}));
+        QCOMPARE(help, QStringList{"Developer Documentation…"}); // the installers run on install or update instead
         QVERIFY(!bundled("agent-status").isEmpty() && !bundled("skill/agterm").isEmpty());
-        showWelcome(&w);
-        auto *welcome = w.findChild<QDialog *>("welcome");
-        QVERIFY(welcome && welcome->isVisible());
-        QCOMPARE(welcome->findChildren<QCheckBox *>().size(), 2);
-        for (QPushButton *b : welcome->findChildren<QPushButton *>())
-            if (b->text() == QLatin1String("Later"))
-                b->click(); // installs nothing
-        QTRY_VERIFY(!w.findChild<QDialog *>("welcome"));
+        QCOMPARE(extrasFingerprint(), extrasFingerprint());
+        QCOMPARE(extrasFingerprint().size(), 64);
     }
 };
 

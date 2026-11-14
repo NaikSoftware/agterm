@@ -61,7 +61,7 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session select-all
   session search [needle] [--next | --prev | --close]   Konsole's search bar; prints the match count
   surface zoom [show|hide|toggle] [--target active|surface:<session>:left|right]
-  session status <idle|active|completed|blocked> [--auto-reset] [--blink]
+  session status <idle|active|completed|blocked> [--auto-reset] [--blink] [--if-idle]
   session go --to next|prev|first|last|next-attention|prev-attention
   sidebar [show|hide|toggle]
   sidebar mode [tree|flagged|toggle]
@@ -237,7 +237,7 @@ static std::pair<QString, QString> pairOf(const QString &token)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
-    const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "undoable", "companion",
+    const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "if-idle", "undoable", "companion",
                             "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized",
                             "next", "prev", "allow-custom", "no-block", "multiple", "ack"};
     QStringList pos;
@@ -313,6 +313,7 @@ int main(int argc, char **argv)
     flag("no-select", "noSelect");
     flag("auto-reset", "autoReset");
     flag("blink", "blink");
+    flag("if-idle", "ifIdle");
     flag("undoable", "undoable");
     if (opt.contains(QStringLiteral("lines")))
         args.insert("lines", opt.value(QStringLiteral("lines")).toInt());

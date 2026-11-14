@@ -112,10 +112,11 @@ and `profile` for one session.
 
 ## Reporting agent status
 
-`agtermctl session status <idle|active|completed|blocked> [--blink] [--auto-reset]` sets the status dot on the
-session's sidebar row; `blocked` and `completed` count as needing attention for `session go --to next-attention`
+`agtermctl session status <idle|active|completed|blocked> [--blink] [--auto-reset] [--if-idle]` sets the status dot
+on the session's sidebar row; `blocked` and `completed` count as needing attention for `session go --to next-attention`
 and the auto-follow setting. `--blink` pulses the dot; `--auto-reset` turns a `completed` back to idle when the user
-selects the session. Typing into the session also clears `blocked`/`completed` (Settings ▸ Agent Status picks
+selects the session; `--if-idle` applies the write only while the row is idle (a worker's activity must not hide the
+main agent's `blocked` or `completed`). Typing into the session also clears `blocked`/`completed` (Settings ▸ Agent Status picks
 first key, Enter, or never). Read back as the node's `status` and `blink`; each change emits a `status` event.
 
 Prefer status over `notify` for "I need you": it stays on the row until acted on.
@@ -124,6 +125,8 @@ Keep `notify <body> [--title T]` for a one-off desktop notification; it also rai
 Claude Code: `scripts/install-claude-hooks.sh` (from the agterm-qt checkout) points Claude Code's hooks at the
 installed adapter `~/.local/share/agterm-qt/agent-status/agterm-claude-status.sh`
 (prompt submit and tool use → `active --blink`, stop → `completed --auto-reset`, permission prompt → `blocked`).
+The adapter reads the hook payload with `python3`: a subagent's `active` gets `--if-idle`, and a stop while a
+background subagent or workflow still runs posts `active --blink` instead of `completed`.
 Any other agent can call `agterm-agent-status.sh <state> [--blink|--auto-reset]` from the same directory;
 outside agterm-qt it is a silent no-op.
 

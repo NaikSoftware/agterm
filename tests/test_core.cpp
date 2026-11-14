@@ -12,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QSqlDatabase>
@@ -288,6 +289,59 @@ private Q_SLOTS:
         s.setStatus(b, "completed", true);
         s.select(b);
         QCOMPARE(s.session(b)->status, QStringLiteral("idle"));
+    }
+
+    void statusIfIdleNeverOverwritesABusyRow()
+    {
+        Store s;
+        FakeTerminals t;
+        const QString ws = s.addWorkspace("w");
+        const QString a = s.addSession(ws, "a", {}), b = s.addSession(ws, "b", {});
+        s.select(a);
+        QVERIFY(call(s, t, "session.status", b, {{"status", "active"}, {"ifIdle", true}})["ok"].toBool());
+        QCOMPARE(s.session(b)->status, QStringLiteral("active")); // an idle row takes the write
+        s.setStatus(b, "blocked");
+        QVERIFY(call(s, t, "session.status", b, {{"status", "active"}, {"ifIdle", true}, {"blink", true}})["ok"].toBool());
+        QCOMPARE(s.session(b)->status, QStringLiteral("blocked")); // a subagent must not erase the main agent's prompt
+        QVERIFY(!s.session(b)->blink);
+        s.setStatus(b, "completed", true);
+        QVERIFY(call(s, t, "session.status", b, {{"status", "active"}, {"ifIdle", true}})["ok"].toBool());
+        s.select(b);
+        QCOMPARE(s.session(b)->status, QStringLiteral("idle")); // the skipped write kept --auto-reset
+        QVERIFY(!call(s, t, "session.status", b, {{"status", "bogus"}, {"ifIdle", true}})["ok"].toBool());
+    }
+
+    void claudeAdapterRewritesForSubagents()
+    {
+        if (QStandardPaths::findExecutable("python3").isEmpty())
+            QSKIP("the adapter reads the payload with python3");
+        QTemporaryDir tmp;
+        const QString log = tmp.filePath("argv"), stub = tmp.filePath("stub.sh");
+        spit(stub, QStringLiteral("#!/bin/sh\necho \"$*\" > '%1'\n").arg(log));
+        QFile::setPermissions(stub, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        const auto run = [&](const QStringList &argv, const QByteArray &payload) {
+            QFile::remove(log);
+            QProcess p;
+            QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+            env.insert("AGTERM_SESSION_ID", "s1");
+            env.insert("AGTERM_STATUS_WRAPPER", stub);
+            p.setProcessEnvironment(env);
+            p.start("bash", QStringList{QStringLiteral(AGTERM_SOURCE_SHARE "/agent-status/agterm-claude-status.sh")} + argv);
+            p.write(payload);
+            p.closeWriteChannel();
+            p.waitForFinished(5000);
+            return slurp(log).trimmed();
+        };
+        const QByteArray running = R"({"hook_event_name":"Stop","background_tasks":[{"id":"t","type":"subagent","status":"running"}]})";
+        QCOMPARE(run({"active", "--blink"}, R"({"hook_event_name":"PostToolUse","agent_id":"x"})"), QStringLiteral("active --blink --if-idle"));
+        QCOMPARE(run({"blocked"}, R"({"hook_event_name":"PermissionRequest","agent_id":"x"})"), QStringLiteral("blocked"));
+        QCOMPARE(run({"completed", "--auto-reset"}, running), QStringLiteral("active --blink"));
+        QCOMPARE(run({"completed", "--auto-reset"}, R"({"hook_event_name":"Stop","background_tasks":[{"type":"subagent","status":"completed"}]})"),
+                 QStringLiteral("completed --auto-reset"));
+        QCOMPARE(run({"completed", "--auto-reset"}, R"({"hook_event_name":"Stop"})"), QStringLiteral("completed --auto-reset"));
+        QCOMPARE(run({"active", "--blink"}, R"({"hook_event_name":"PostToolUse"})"), QStringLiteral("active --blink"));
+        QCOMPARE(run({"completed", "--auto-reset"}, "not json"), QStringLiteral("completed --auto-reset"));
+        QCOMPARE(run({"completed", "--auto-reset"}, {}), QStringLiteral("completed --auto-reset"));
     }
 
     void typeTextAndLines()
@@ -1122,10 +1176,6 @@ private Q_SLOTS:
         QVERIFY(!r.warning);
         QVERIFY(QFileInfo::exists(home + "/.claude/skills/agterm/reference.md"));
         QCOMPARE(Install::skill(home, home + "/none").error, QStringLiteral("The agent skill is not bundled in this build."));
-
-        QVERIFY(!Install::hasPriorState(home + "/state"));
-        QDir().mkpath(home + "/state/windows");
-        QVERIFY(Install::hasPriorState(home + "/state"));
     }
 };
 
