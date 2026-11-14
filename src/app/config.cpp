@@ -446,9 +446,6 @@ void MainWindow::applyGlass()
     update();
     if (windowHandle())
         KWindowEffects::enableBlurBehind(windowHandle(), clear && s.windowBlur);
-    m_glass->setVisible(s.windowGlass);
-    if (s.windowGlass)
-        m_glass->raise();
 }
 
 bool MainWindow::appCommand(const QString &cmd, const QString &sessionId, const QJsonObject &args, QJsonObject *result, QString *error)

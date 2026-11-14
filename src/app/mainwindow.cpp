@@ -100,64 +100,6 @@ private:
     QColor m_color;
 };
 
-// Liquid-glass edge light over the whole window: a specular line and a soft inner glow lit from the top left,
-// a colour fringe where a lens would split light, a faint shade bottom right. It stays inside the few pixels
-// of margin every surface keeps, so text is never under it; it lets every mouse event through.
-// shortcut: imitates the lit rim only; bending what is behind the window needs a KWin effect, the client cannot see it.
-class GlassRim : public QWidget
-{
-public:
-    explicit GlassRim(QWidget *over)
-        : QWidget(over)
-    {
-        setAttribute(Qt::WA_TransparentForMouseEvents);
-        setFocusPolicy(Qt::NoFocus);
-        over->installEventFilter(this);
-        hide();
-    }
-
-protected:
-    bool eventFilter(QObject *, QEvent *e) override
-    {
-        if (e->type() == QEvent::Resize)
-            setGeometry(parentWidget()->rect());
-        else if (e->type() == QEvent::ChildAdded && isVisible())
-            raise();
-        return false;
-    }
-    void paintEvent(QPaintEvent *) override
-    {
-        QPainter p(this);
-        const QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-        const auto light = [](int a) { return QColor(255, 255, 255, a); };
-        constexpr qreal band = 6;
-        auto glow = [&](QRectF area, QPointF from, QPointF to, QColor c) {
-            QLinearGradient g(from, to);
-            g.setColorAt(0, c);
-            c.setAlpha(0);
-            g.setColorAt(1, c);
-            p.fillRect(area, g);
-        };
-        glow({r.left(), r.top(), r.width(), band}, r.topLeft(), r.topLeft() + QPointF(0, band), light(60));
-        glow({r.left(), r.top(), band, r.height()}, r.topLeft(), r.topLeft() + QPointF(band, 0), light(28));
-        glow({r.left(), r.bottom() - band, r.width(), band}, r.bottomLeft(), r.bottomLeft() - QPointF(0, band), QColor(0, 0, 0, 26));
-        glow({r.right() - band, r.top(), band, r.height()}, r.topRight(), r.topRight() - QPointF(band, 0), QColor(0, 0, 0, 18));
-        // the specular line: brightest at the top-left corner, again (dimmer) at the bottom-right, clear between
-        QLinearGradient spec(r.topLeft(), r.bottomRight());
-        spec.setColorAt(0, light(190));
-        spec.setColorAt(0.35, light(20));
-        spec.setColorAt(0.65, light(10));
-        spec.setColorAt(1, light(80));
-        p.setPen(QPen(spec, 1));
-        p.drawRect(r);
-        // dispersion: cool just inside the lit edges, warm inside the shaded ones
-        p.setPen(QPen(QColor(120, 200, 255, 70), 1));
-        p.drawPolyline(QPolygonF{r.bottomLeft() + QPointF(2, -2), r.topLeft() + QPointF(2, 2), r.topRight() + QPointF(-2, 2)});
-        p.setPen(QPen(QColor(255, 160, 120, 60), 1));
-        p.drawPolyline(QPolygonF{r.topRight() + QPointF(-2, 2), r.bottomRight() + QPointF(-2, -2), r.bottomLeft() + QPointF(2, -2)});
-    }
-};
-
 static int shellPid(KParts::ReadOnlyPart *part)
 {
     auto *t = qobject_cast<TerminalInterface *>(part);
@@ -318,7 +260,6 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     setCentralWidget(m_split);
     // an alpha surface from the start, so Settings can make the backgrounds see-through without recreating the window
     setAttribute(Qt::WA_TranslucentBackground);
-    m_glass = new GlassRim(this);
     resize(1200, 760);
     // messages only: an idle status bar would be chrome agterm doesn't have
     statusBar()->hide();

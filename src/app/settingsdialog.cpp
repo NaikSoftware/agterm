@@ -208,7 +208,6 @@ void MainWindow::showSettings()
     clearRow->addWidget(clearLabel);
     window->addRow(tr("Background transparency"), clearRow);
     window->addRow(check(tr("Blur what shows through"), cur.windowBlur, [](Settings &s, bool v) { s.windowBlur = v; }));
-    window->addRow(check(tr("Glass edges"), cur.windowGlass, [](Settings &s, bool v) { s.windowGlass = v; }));
     page(tr("Appearance"), QStringLiteral("preferences-desktop-color"), {group(tr("Terminal"), terminal), group(tr("Window"), window)});
 
     // Interface: chrome this port has, by master's InterfaceElement names

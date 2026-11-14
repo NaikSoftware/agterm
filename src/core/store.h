@@ -74,7 +74,7 @@ struct Settings {
     QString cursorBlink; // blink | steady
     double sidebarFontSize = 0, interfaceFontSize = 0;
     double windowTransparency = 0;          // percent see-through of the window and terminal backgrounds; 0 = opaque
-    bool windowBlur = false, windowGlass = false; // blur what shows through (KWin); a lit glass rim on the window's edges
+    bool windowBlur = false;                // KWin blurs what shows through
     // Interface: master's InterfaceElement raw names; workspaceName and customCommands are off until shown
     QStringList hiddenInterfaceElements, shownInterfaceElements;
     bool shows(const QString &element) const;
