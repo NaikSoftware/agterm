@@ -193,21 +193,32 @@ void MainWindow::showSettings()
     window->addRow(tr("Sidebar font size"), sizeSpin(cur.sidebarFontSize, [](Settings &s, double v) { s.sidebarFontSize = v; }));
     window->addRow(tr("Palette and switcher font size"), sizeSpin(cur.interfaceFontSize, [](Settings &s, double v) { s.interfaceFontSize = v; }));
     // backgrounds only: text stays solid, as macOS and iOS glass does
-    auto *clear = new QSlider(Qt::Horizontal);
-    clear->setRange(0, 90); // fully clear would leave text floating on the desktop
-    clear->setValue(int(cur.windowTransparency));
-    auto *clearLabel = new QLabel;
-    auto showClear = [clearLabel](int v) { clearLabel->setText(v ? QStringLiteral("%1%").arg(v) : tr("Opaque")); };
-    showClear(clear->value());
-    connect(clear, &QSlider::valueChanged, dlg, [update, showClear](int v) {
-        showClear(v);
-        update([v](Settings &s) { s.windowTransparency = v; });
-    });
-    auto *clearRow = new QHBoxLayout;
-    clearRow->addWidget(clear, 1);
-    clearRow->addWidget(clearLabel);
-    window->addRow(tr("Background transparency"), clearRow);
-    window->addRow(check(tr("Blur what shows through"), cur.windowBlur, [](Settings &s, bool v) { s.windowBlur = v; }));
+    auto percent = [&](double value, int max, const QString &zero, std::function<void(Settings &, double)> apply) {
+        auto *slider = new QSlider(Qt::Horizontal);
+        slider->setRange(0, max);
+        slider->setValue(int(value));
+        auto *label = new QLabel;
+        label->setMinimumWidth(label->fontMetrics().horizontalAdvance(zero + QStringLiteral("00")));
+        auto show = [label, zero](int v) { label->setText(v ? QStringLiteral("%1%").arg(v) : zero); };
+        show(slider->value());
+        connect(slider, &QSlider::valueChanged, dlg, [update, apply, show](int v) {
+            show(v);
+            update([&](Settings &s) { apply(s, v); });
+        });
+        auto *row = new QHBoxLayout;
+        row->addWidget(slider, 1);
+        row->addWidget(label);
+        return row;
+    };
+    // fully clear would leave text floating on the desktop
+    window->addRow(tr("Background transparency"), percent(cur.windowTransparency, 90, tr("Opaque"), [](Settings &s, double v) { s.windowTransparency = v; }));
+    window->addRow(tr("Blur"), percent(cur.windowBlur, 100, tr("Off"), [](Settings &s, double v) { s.windowBlur = v; }));
+    window->addRow(tr("Glass edges"), percent(cur.windowGlass, 100, tr("Off"), [](Settings &s, double v) { s.windowGlass = v; }));
+    auto *glassHint = new QLabel(tr("Blur and glass show through transparent backgrounds. Their strength and the refracting edges come from "
+                                    "agterm's KWin effect; without it KWin's own blur is used."));
+    glassHint->setWordWrap(true);
+    glassHint->setForegroundRole(QPalette::PlaceholderText);
+    window->addRow(QString(), glassHint);
     page(tr("Appearance"), QStringLiteral("preferences-desktop-color"), {group(tr("Terminal"), terminal), group(tr("Window"), window)});
 
     // Interface: chrome this port has, by master's InterfaceElement names

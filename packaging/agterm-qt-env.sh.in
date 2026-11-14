@@ -1,0 +1,2 @@
+# Installed by agterm-qt: Plasma sources this at login, so KWin finds agterm's glass effect under a home prefix.
+export QT_PLUGIN_PATH="@AGTERM_QT_PLUGIN_DIR@${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"

@@ -1,0 +1,10 @@
+{
+    "KPlugin": {
+        "Authors": [{ "Name": "KWin development team" }, { "Name": "NaikSoftware" }],
+        "Category": "Appearance",
+        "Description": "Blur and refracting glass behind agterm-qt windows, set from agterm's settings",
+        "EnabledByDefault": false,
+        "License": "GPL",
+        "Name": "agterm glass"
+    }
+}

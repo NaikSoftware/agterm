@@ -21,6 +21,9 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusReply>
+#include <QDBusInterface>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -444,8 +447,26 @@ void MainWindow::applyGlass()
     for (QAbstractScrollArea *view : views)
         view->viewport()->setAutoFillBackground(!clear);
     update();
+    // agterm's own KWin effect (src/kwin-glass) gives the blur a strength and the glass a refracting edge; where it
+    // is not installed, or not built for this KWin, KWin's plain blur stands in at its desktop-wide strength.
+    // shortcut: the effect styles every window of this process alike, the last one applied wins; key it per window
+    // if windows ever need different glass.
+    const int blur = clear ? int(qBound(0.0, s.windowBlur, 100.0)) : 0, glass = clear ? int(qBound(0.0, s.windowGlass, 100.0)) : 0;
+    QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"), QStringLiteral("org.kde.kwin.Effects"));
+    bool own = false;
+    if (effects.isValid() && (blur || glass || m_glassApplied)) {
+        own = QDBusReply<bool>(effects.call(QStringLiteral("isEffectLoaded"), QStringLiteral("agtermglass"))).value()
+              || QDBusReply<bool>(effects.call(QStringLiteral("loadEffect"), QStringLiteral("agtermglass"))).value();
+        if (own) {
+            QDBusMessage call = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/org/agterm/Glass"), QStringLiteral("org.agterm.Glass"),
+                                                               QStringLiteral("setGlass"));
+            call << blur << glass;
+            QDBusConnection::sessionBus().asyncCall(call);
+            m_glassApplied = blur || glass;
+        }
+    }
     if (windowHandle())
-        KWindowEffects::enableBlurBehind(windowHandle(), clear && s.windowBlur);
+        KWindowEffects::enableBlurBehind(windowHandle(), !own && blur > 0);
 }
 
 bool MainWindow::appCommand(const QString &cmd, const QString &sessionId, const QJsonObject &args, QJsonObject *result, QString *error)
