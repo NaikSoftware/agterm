@@ -225,10 +225,16 @@ private Q_SLOTS:
         s.windowTransparency = 40;
         store.setSettings(s);
         QTRY_COMPARE(KonsolePrivate::terminalOpacity(term), 0.6);
+        const QColor scheme = term->palette().color(QPalette::Window);
         s.theme = "DarkPastels"; // a scheme change resets Konsole's opacity to the scheme's own
         store.setSettings(s);
-        QTRY_VERIFY(term->palette().color(QPalette::Window) != QColor());
+        QTRY_VERIFY(term->palette().color(QPalette::Window) != scheme);
         QTest::qWait(50);
+        QCOMPARE(KonsolePrivate::terminalOpacity(term), 0.6);
+        // Konsole's own profile dialogs re-apply a scheme without asking the window: the new colours reach the view
+        KonsolePrivate::setTerminalOpacity(term, 1.0);
+        QEvent recolored(QEvent::PaletteChange);
+        QApplication::sendEvent(term, &recolored);
         QCOMPARE(KonsolePrivate::terminalOpacity(term), 0.6);
         s.windowTransparency = 0;
         store.setSettings(s);

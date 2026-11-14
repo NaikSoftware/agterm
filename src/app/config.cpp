@@ -1,6 +1,7 @@
 // MainWindow's config side: keymap.conf, hooks.conf, the theme picker, appearance and terminal notifications.
 #include "mainwindow.h"
 
+#include "filepanel.h"
 #include "hooks.h"
 #include "palette.h"
 #include "paths.h"
@@ -15,6 +16,7 @@
 #include <KWindowEffects>
 #include <kde_terminal_interface.h>
 
+#include <QAbstractScrollArea>
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
@@ -197,7 +199,7 @@ void MainWindow::applyAppearance(KParts::ReadOnlyPart *part)
             part->setProperty("agtermLookOverridden", overrides);
         }
     // after the scheme: Konsole resets the view's opacity to the scheme's own whenever it applies one
-    KonsolePrivate::setTerminalOpacity(terminalDisplay(part), 1 - s.windowTransparency / 100);
+    KonsolePrivate::setTerminalOpacity(terminalDisplay(part), 1 - qBound(0.0, s.windowTransparency, 90.0) / 100);
 
     // a Font= profile command does not reach the display; setFont does, and a Ctrl+wheel there and back relays the grid out
     QWidget *display = nullptr;
@@ -436,20 +438,12 @@ void MainWindow::applyGlass()
 {
     const Settings &s = m_store.settings;
     const bool clear = s.windowTransparency > 0;
-    // only surfaces get alpha; text roles stay solid, as on macOS. The window paints the one surface; views
-    // (sidebar, file panel) let it through rather than stacking a second translucent fill on it.
-    QPalette pal;
-    if (clear) {
-        pal = QApplication::palette();
-        for (auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
-            QColor c = pal.color(group, QPalette::Window);
-            c.setAlphaF(1 - s.windowTransparency / 100);
-            pal.setColor(group, QPalette::Window, c);
-            pal.setColor(group, QPalette::Base, Qt::transparent);
-            pal.setColor(group, QPalette::AlternateBase, Qt::transparent);
-        }
-    }
-    setPalette(pal); // a default QPalette goes back to the app's, so a theme switch still reaches an opaque window
+    // one translucent surface, painted by the window under its menus and toolbars; the side views let it through
+    // instead of filling their own. Text, and the widgets that float over the terminal, keep the solid app palette.
+    const QList<QAbstractScrollArea *> views = m_filePanel->findChildren<QAbstractScrollArea *>() << m_tree;
+    for (QAbstractScrollArea *view : views)
+        view->viewport()->setAutoFillBackground(!clear);
+    update();
     if (windowHandle())
         KWindowEffects::enableBlurBehind(windowHandle(), clear && s.windowBlur);
     m_glass->setVisible(s.windowGlass);

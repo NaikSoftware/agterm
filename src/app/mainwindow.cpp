@@ -1189,7 +1189,9 @@ void MainWindow::paintEvent(QPaintEvent *event)
     // a translucent window paints no background of its own; this is the surface under the menus and toolbars
     QPainter p(this);
     p.setCompositionMode(QPainter::CompositionMode_Source);
-    p.fillRect(event->rect(), palette().window());
+    QColor surface = palette().color(QPalette::Window);
+    surface.setAlphaF(1 - qBound(0.0, m_store.settings.windowTransparency, 90.0) / 100);
+    p.fillRect(event->rect(), surface);
 }
 
 void MainWindow::showEvent(QShowEvent *event)
@@ -1818,6 +1820,9 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         }
         return true;
     }
+    if (event->type() == QEvent::PaletteChange && watched->inherits("Konsole::TerminalDisplay") && static_cast<QWidget *>(watched)->window() == this)
+        // a scheme applied anywhere (Konsole's profile dialogs too) resets the view's opacity to the scheme's own
+        KonsolePrivate::setTerminalOpacity(static_cast<QWidget *>(watched), 1 - qBound(0.0, m_store.settings.windowTransparency, 90.0) / 100);
     if (dashboardEvent(watched, event))
         return true;
     if ((event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) && watched->inherits("Konsole::TerminalDisplay")) {
