@@ -45,14 +45,16 @@ static Install::OpenCode probeOpenCode(const QString &home)
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.remove(QStringLiteral("AGTERM_SESSION_ID"));
     env.insert(QStringLiteral("HOME"), home);
+    // the login shell only sets up the environment; sh reads it, since fish rejects ${VAR-} (the user's shell may be fish)
+    env.insert(QStringLiteral("AGTERM_OPENCODE_PROBE"), QStringLiteral("printf '\\nagterm-opencode-probe\\n%s\\n%s\\n' \"${OPENCODE_CONFIG_DIR-}\" \"${XDG_CONFIG_HOME:-$HOME/.config}\"; "
+                                                                      "exec /usr/bin/env opencode --version"));
     p.setProcessEnvironment(env);
-    p.start(qEnvironmentVariable("SHELL", QStringLiteral("/bin/sh")),
-            {QStringLiteral("-ilc"), QStringLiteral("printf '%s\\n%s\\n' \"${OPENCODE_CONFIG_DIR-}\" \"${XDG_CONFIG_HOME:-$HOME/.config}\"; "
-                                                    "exec /usr/bin/env opencode --version")});
+    p.start(qEnvironmentVariable("SHELL", QStringLiteral("/bin/sh")), {QStringLiteral("-ilc"), QStringLiteral("exec /bin/sh -c \"$AGTERM_OPENCODE_PROBE\"")});
     const bool ran = p.waitForFinished(3000);
     if (!ran)
         p.kill();
-    const QStringList out = QString::fromUtf8(p.readAllStandardOutput()).split(QLatin1Char('\n'));
+    QStringList out = QString::fromUtf8(p.readAllStandardOutput()).split(QLatin1Char('\n'));
+    out = out.mid(out.lastIndexOf(QStringLiteral("agterm-opencode-probe")) + 1); // drops what rc files print first
     Install::OpenCode oc;
     const QString override = out.value(0).trimmed(), xdg = out.value(1).trimmed();
     oc.v2Dir = !override.isEmpty() ? QDir(home).absoluteFilePath(override) : xdg.isEmpty() ? QString() : xdg + QStringLiteral("/opencode");

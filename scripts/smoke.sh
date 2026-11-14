@@ -30,7 +30,8 @@ grep -q "hooks.Stop" "$fakehome/.codex/config.toml" || fail0 "codex hooks merged
 "$bin/agterm-qt" --install skill --home "$fakehome" | grep -q "Agent Skill Installed" || fail0 "skill installer"
 [ -f "$fakehome/.codex/skills/agterm/SKILL.md" ] || fail0 "codex skill copy"
 "$bin/agterm-qt" --install cli --home "$fakehome" >/dev/null
-rm -rf "$fakehome/.local" && HOME=$fakehome SHELL=/bin/sh "$bin/agterm-qt" --install all --home "$fakehome" | grep -q "Command Line Tool Installed" || fail0 "install all"
+rm -rf "$fakehome/.local" && HOME=$fakehome SHELL=/bin/sh "$bin/agterm-qt" --install all | grep -q "Command Line Tool Installed" || fail0 "install all"
+[ -s "$AGTERM_STATE_DIR/extras-installed" ] || fail0 "install all writes the launch stamp"
 [ "$(readlink "$fakehome/.local/bin/agtermctl")" = "$bin/agtermctl" ] || fail0 "command line tool link"
 cat >"$AGTERM_STATE_DIR/config/keymap.conf" <<EOF
 map ctrl+alt+l toggle_split
