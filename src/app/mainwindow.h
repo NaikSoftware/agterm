@@ -89,6 +89,7 @@ public:
 protected:
     void closeEvent(QCloseEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
@@ -198,6 +199,7 @@ private:
     void profileDialog(const char *slot);
     void editConfigFile(const QString &path);
     void applyAppearance(KParts::ReadOnlyPart *part);
+    void applyGlass(); // the window's see-through surfaces, blur behind them and the glass rim
     void watchTerminalNotifications(KParts::ReadOnlyPart *part, PartBridge *bridge);
     void stripPartShortcuts();
     void notifyFailure(const QString &title, const QString &body);
@@ -237,6 +239,7 @@ private:
     QStackedWidget *m_stack;
     QWidget *m_empty;
     QWidget *m_wash; // a TintWash over the terminal
+    QWidget *m_glass; // a GlassRim over the whole window
     QHash<QString, QAction *> m_actions;
     struct Panes {
         QWidget *view = nullptr;          // the session's page in m_stack

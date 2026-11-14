@@ -24,6 +24,7 @@
 #include <QListWidget>
 #include <QPainter>
 #include <QPushButton>
+#include <QSlider>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QToolButton>
@@ -191,6 +192,23 @@ void MainWindow::showSettings()
     auto *window = new QFormLayout;
     window->addRow(tr("Sidebar font size"), sizeSpin(cur.sidebarFontSize, [](Settings &s, double v) { s.sidebarFontSize = v; }));
     window->addRow(tr("Palette and switcher font size"), sizeSpin(cur.interfaceFontSize, [](Settings &s, double v) { s.interfaceFontSize = v; }));
+    // backgrounds only: text stays solid, as macOS and iOS glass does
+    auto *clear = new QSlider(Qt::Horizontal);
+    clear->setRange(0, 90); // fully clear would leave text floating on the desktop
+    clear->setValue(int(cur.windowTransparency));
+    auto *clearLabel = new QLabel;
+    auto showClear = [clearLabel](int v) { clearLabel->setText(v ? QStringLiteral("%1%").arg(v) : tr("Opaque")); };
+    showClear(clear->value());
+    connect(clear, &QSlider::valueChanged, dlg, [update, showClear](int v) {
+        showClear(v);
+        update([v](Settings &s) { s.windowTransparency = v; });
+    });
+    auto *clearRow = new QHBoxLayout;
+    clearRow->addWidget(clear, 1);
+    clearRow->addWidget(clearLabel);
+    window->addRow(tr("Background transparency"), clearRow);
+    window->addRow(check(tr("Blur what shows through"), cur.windowBlur, [](Settings &s, bool v) { s.windowBlur = v; }));
+    window->addRow(check(tr("Glass edges"), cur.windowGlass, [](Settings &s, bool v) { s.windowGlass = v; }));
     page(tr("Appearance"), QStringLiteral("preferences-desktop-color"), {group(tr("Terminal"), terminal), group(tr("Window"), window)});
 
     // Interface: chrome this port has, by master's InterfaceElement names

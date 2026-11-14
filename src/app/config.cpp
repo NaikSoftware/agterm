@@ -12,6 +12,7 @@
 #include <KNotification>
 #include <KParts/ReadOnlyPart>
 #include <KSharedConfig>
+#include <KWindowEffects>
 #include <kde_terminal_interface.h>
 
 #include <QAction>
@@ -195,6 +196,8 @@ void MainWindow::applyAppearance(KParts::ReadOnlyPart *part)
             QMetaObject::invokeMethod(ks, "profileChangeCommandReceived", Q_ARG(QString, command));
             part->setProperty("agtermLookOverridden", overrides);
         }
+    // after the scheme: Konsole resets the view's opacity to the scheme's own whenever it applies one
+    KonsolePrivate::setTerminalOpacity(terminalDisplay(part), 1 - s.windowTransparency / 100);
 
     // a Font= profile command does not reach the display; setFont does, and a Ctrl+wheel there and back relays the grid out
     QWidget *display = nullptr;
@@ -417,7 +420,9 @@ void MainWindow::applySettings()
         paletteFont.setPointSizeF(s.interfaceFontSize);
     m_palette->setFont(paletteFont);
     m_tree->viewport()->update();
-    const QString look = QStringList{s.theme, s.fontFamily, QString::number(s.fontSize), s.cursorStyle, s.cursorBlink}.join(QLatin1Char('\n'));
+    applyGlass();
+    const QString look = QStringList{s.theme, s.fontFamily, QString::number(s.fontSize), s.cursorStyle, s.cursorBlink, QString::number(s.windowTransparency)}
+                             .join(QLatin1Char('\n'));
     if (look != m_appliedAppearance) {
         m_appliedAppearance = look;
         for (KParts::ReadOnlyPart *part : parts())
@@ -425,6 +430,31 @@ void MainWindow::applySettings()
     }
     if (property("agtermConfigDir").isValid() && property("agtermConfigDir").toString() != configDir())
         loadConfig(); // a new config directory reloads both files
+}
+
+void MainWindow::applyGlass()
+{
+    const Settings &s = m_store.settings;
+    const bool clear = s.windowTransparency > 0;
+    // only surfaces get alpha; text roles stay solid, as on macOS. The window paints the one surface; views
+    // (sidebar, file panel) let it through rather than stacking a second translucent fill on it.
+    QPalette pal;
+    if (clear) {
+        pal = QApplication::palette();
+        for (auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
+            QColor c = pal.color(group, QPalette::Window);
+            c.setAlphaF(1 - s.windowTransparency / 100);
+            pal.setColor(group, QPalette::Window, c);
+            pal.setColor(group, QPalette::Base, Qt::transparent);
+            pal.setColor(group, QPalette::AlternateBase, Qt::transparent);
+        }
+    }
+    setPalette(pal); // a default QPalette goes back to the app's, so a theme switch still reaches an opaque window
+    if (windowHandle())
+        KWindowEffects::enableBlurBehind(windowHandle(), clear && s.windowBlur);
+    m_glass->setVisible(s.windowGlass);
+    if (s.windowGlass)
+        m_glass->raise();
 }
 
 bool MainWindow::appCommand(const QString &cmd, const QString &sessionId, const QJsonObject &args, QJsonObject *result, QString *error)

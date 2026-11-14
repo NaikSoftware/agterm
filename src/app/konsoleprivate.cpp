@@ -89,4 +89,30 @@ bool usesMouseTracking(QWidget *display, bool *ok)
     return *ok && get(display);
 }
 
+static QObject *terminalColor(QWidget *display)
+{
+    if (display)
+        for (QObject *c : display->children())
+            if (c->inherits("Konsole::TerminalColor"))
+                return c;
+    return nullptr;
+}
+
+double terminalOpacity(QWidget *display)
+{
+    QObject *c = terminalColor(display);
+    auto get = fn<double (*)(const QObject *)>(c, "_ZNK7Konsole13TerminalColor7opacityEv");
+    return get ? get(c) : -1;
+}
+
+void setTerminalOpacity(QWidget *display, double opacity)
+{
+    QObject *c = terminalColor(display);
+    auto set = fn<void (*)(QObject *, double)>(c, "_ZN7Konsole13TerminalColor10setOpacityEd");
+    if (set && !qFuzzyCompare(terminalOpacity(display), opacity)) {
+        set(c, opacity);
+        display->update();
+    }
+}
+
 }

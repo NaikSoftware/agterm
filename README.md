@@ -16,7 +16,7 @@ in Konsole.
 ## Build and install
 
 Needs Qt 6 (Widgets, Network, DBus, Svg), KDE Frameworks 6 (CoreAddons, XmlGui, Config, Notifications, KParts,
-SyntaxHighlighting) and `konsole-kpart`. Install `wl-clipboard` (or `xclip` on X11) too: agents like Claude Code read a pasted image
+SyntaxHighlighting, WindowSystem) and `konsole-kpart`. Install `wl-clipboard` (or `xclip` on X11) too: agents like Claude Code read a pasted image
 (Ctrl+V) through `wl-paste`/`xclip`, and without them the paste does nothing, in agterm-qt and plain Konsole alike.
 
 ```sh
@@ -51,6 +51,8 @@ cmake --install build && kbuildsycoca6 --noincremental
   Kate does, clipboard, drag and drop).
 - Settings (Ctrl+Shift+,) with agterm's six pages; terminal font, colour scheme and cursor apply to every open
   terminal on top of the Konsole profile. View ▸ Select Theme… previews schemes live (Enter keeps, Esc reverts).
+- Glass window (Settings ▸ Appearance ▸ Window): see-through backgrounds while text stays solid, KWin blur behind them,
+  and a lit glass rim on the window's edges. The rim imitates edge light; it does not bend what is behind the window.
 - `keymap.conf` and `hooks.conf` in `~/.config/agterm-qt/` (or `$AGTERM_STATE_DIR/config`): rebind built-ins, add custom
   shell commands with `{AGT_*}` tokens (Ctrl+Alt+O lists them), and run scripts on control events. Both files start
   as commented references; File ▸ Edit Keymap… / Reload Keymap and the Hooks pair apply them.
