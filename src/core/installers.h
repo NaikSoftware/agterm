@@ -3,7 +3,7 @@
 #include <QString>
 #include <QStringList>
 
-// Help ▸ Install … : master's installers, writing under an explicit home so tests and smoke run them in a temp dir.
+// master's installers, run unattended on install or update; an explicit home lets tests and smoke use a temp dir.
 namespace Install {
 
 struct Report {
@@ -27,8 +27,6 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &agt
 Report commandLineTool(const QString &home, const QString &agtermctl);
 // copies the skill into <home>/.claude/skills/agterm and <home>/.codex/skills/agterm (whichever agents exist)
 Report skill(const QString &home, const QString &bundle);
-// master's FirstRunWelcome: any state at all means this is not a first launch
-bool hasPriorState(const QString &stateDir);
 
 QString packageDir(const QString &home);
 QString shellQuote(const QString &s);

@@ -322,7 +322,7 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &agt
     QString piLine;
     bool warn = !claude || codex == Codex::HooksExist || codex == Codex::Unreadable;
     if (!QFileInfo(home + QStringLiteral("/.pi/agent")).isDir()) {
-        piLine = QStringLiteral("No ~/.pi/agent found, so Pi's lifecycle extension was skipped. Start Pi once, then run this again.");
+        piLine = QStringLiteral("No ~/.pi/agent found, so Pi's lifecycle extension was skipped. Start Pi once, then run agterm-qt --install agent-hooks.");
     } else {
         const Plugin pi = installOwned(bundle + QStringLiteral("/pi/agterm-status.ts"), home + QStringLiteral("/.pi/agent/extensions/agterm-status.ts"),
                                        QStringLiteral("// agterm-pi-status-extension"));
@@ -342,12 +342,12 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &agt
         openCodeLine = QStringLiteral("OpenCode status plugin installation was skipped.");
     } else if (openCode.version == 2 && openCode.v2Dir.isEmpty()) {
         openCodeLine = QStringLiteral("OpenCode v2 installation was skipped because its configuration directory could not be determined from your login shell. "
-                                      "Check shell startup and OPENCODE_CONFIG_DIR, then run this again.");
+                                      "Check shell startup and OPENCODE_CONFIG_DIR, then run agterm-qt --install agent-hooks.");
         warn = true;
     } else {
         const QString cfg = openCode.version == 2 ? openCode.v2Dir : legacy;
         if (openCode.version < 1 || !QFileInfo(cfg).isDir()) {
-            openCodeLine = QStringLiteral("No %1 found, so the OpenCode plugin was skipped. Start OpenCode once, then run this again. "
+            openCodeLine = QStringLiteral("No %1 found, so the OpenCode plugin was skipped. Start OpenCode once, then run agterm-qt --install agent-hooks. "
                                           "Coarse shell detection for opencode is off by default.").arg(tilde(home, cfg));
         } else {
             const bool v2 = openCode.version == 2;
@@ -371,7 +371,7 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &agt
                 else if (!oldText.contains(QLatin1String("// agterm-opencode-status-plugin")))
                     openCodeLine = QStringLiteral("OpenCode v2 status plugin is installed, but %1 is user-owned and was left untouched.").arg(old);
                 else if (!QFile::remove(old))
-                    openCodeLine = QStringLiteral("OpenCode v2 status plugin is installed, but the v1 plugin at %1 could not be safely removed. Check permissions and run this again.").arg(old);
+                    openCodeLine = QStringLiteral("OpenCode v2 status plugin is installed, but the v1 plugin at %1 could not be safely removed. Check permissions and run agterm-qt --install agent-hooks.").arg(old);
                 else
                     warn = false;
             }
@@ -385,7 +385,7 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &agt
         {Codex::AlreadyConfigured, "Codex lifecycle hooks are already present in ~/.codex/config.toml. "},
         {Codex::HooksExist, "Your ~/.codex/config.toml already defines its own hooks, so agterm left it untouched. "},
         {Codex::Unreadable, "Your ~/.codex/config.toml exists but couldn't be read, so agterm left it untouched."},
-        {Codex::NoCodex, "No ~/.codex found, so Codex hooks were skipped. Install Codex, then run this again."}};
+        {Codex::NoCodex, "No ~/.codex found, so Codex hooks were skipped. Install Codex, then run agterm-qt --install agent-hooks."}};
     QString codexLine = codexLines.value(codex);
     if (codex == Codex::Merged || codex == Codex::AlreadyConfigured)
         codexLine += approve;
@@ -474,21 +474,12 @@ Report skill(const QString &home, const QString &bundle)
         r.lines << QStringLiteral("The skill was not installed.");
     else
         r.lines << QStringLiteral("Installed for:") << installed << QString()
-                << QStringLiteral("The agent uses it automatically when you ask it to control agterm-qt. It drives the app via the agtermctl CLI, so install "
-                                  "that too if you haven't: Help ▸ Install Command Line Tool…");
+                << QStringLiteral("The agent uses it automatically when you ask it to control agterm-qt. It drives the app via the agtermctl CLI.");
     if (!skipped.isEmpty())
         r.lines << QString() << QStringLiteral("Skipped:") << skipped;
     if (fresh && !installed.isEmpty())
         r.lines << QString() << QStringLiteral("A skills directory was created for the first time — restart any running agent session so it picks up the new skill.");
     return r;
-}
-
-bool hasPriorState(const QString &stateDir)
-{
-    for (const char *name : {"settings.json", "workspaces.json", "windows.json", "windows"})
-        if (QFileInfo::exists(stateDir + QLatin1Char('/') + QLatin1String(name)))
-            return true;
-    return false;
 }
 
 }

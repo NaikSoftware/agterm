@@ -3,11 +3,12 @@
 #include "installers.h"
 
 class QMenu;
-class QWidget;
 
 QString bundled(const QString &name); // agent-status | skill/agterm; "" when not shipped
-// agent-hooks | cli | skill under home; parent null runs without asking (agterm-qt --install)
-Install::Report runInstaller(const QString &which, const QString &home, QWidget *parent);
-void showReport(QWidget *parent, const Install::Report &report);
-void addHelpMenu(QMenu *help, QWidget *window); // Developer Documentation…, then the three installers
-void showWelcome(QWidget *window);              // master's FirstRunWelcome dialog
+Install::Report runInstaller(const QString &which, const QString &home); // agent-hooks | cli | skill under home, unattended
+QByteArray extrasFingerprint(); // changes with the shipped hooks and skill and with the binary's path
+QString extrasStamp();          // the fingerprint of the last unattended install of all three
+// an installed build whose fingerprint differs from the stamp (first launch, update, moved prefix) runs
+// `agterm-qt --install all` in the background, logging to extras-install.log in the state dir
+void installExtrasOnUpdate();
+void addHelpMenu(QMenu *help); // Developer Documentation…

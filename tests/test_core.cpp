@@ -1176,10 +1176,6 @@ private Q_SLOTS:
         QVERIFY(!r.warning);
         QVERIFY(QFileInfo::exists(home + "/.claude/skills/agterm/reference.md"));
         QCOMPARE(Install::skill(home, home + "/none").error, QStringLiteral("The agent skill is not bundled in this build."));
-
-        QVERIFY(!Install::hasPriorState(home + "/state"));
-        QDir().mkpath(home + "/state/windows");
-        QVERIFY(Install::hasPriorState(home + "/state"));
     }
 };
 

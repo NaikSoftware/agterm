@@ -1,24 +1,22 @@
-// Help ▸ Install … and master's first-launch welcome that points them out.
+// The agent extras (agtermctl link, agent status hooks, agent skill), installed unattended whenever this installed
+// build differs from the one that last installed them, and the Help menu.
 #include "help.h"
 
 #include "installers.h"
+#include "paths.h"
 
-#include <QCheckBox>
 #include <QCoreApplication>
 #include <QDesktopServices>
-#include <QDialog>
-#include <QDialogButtonBox>
+#include <QCryptographicHash>
 #include <QDir>
+#include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
-#include <QLabel>
 #include <QMenu>
-#include <QMessageBox>
 #include <QProcess>
-#include <QPushButton>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QUrl>
-#include <QVBoxLayout>
 
 // the shipped package: installed under share/agterm-qt, or the source tree for a build-tree run
 QString bundled(const QString &name)
@@ -40,8 +38,8 @@ static QString agtermctl()
     return QCoreApplication::applicationDirPath() + QStringLiteral("/agtermctl");
 }
 
-// master's probe: the login shell says which OpenCode it runs and where v2 keeps its config; asks when it cannot tell
-Install::OpenCode probeOpenCode(const QString &home, QWidget *parent)
+// master's probe: the login shell says which OpenCode it runs and where v2 keeps its config
+static Install::OpenCode probeOpenCode(const QString &home)
 {
     QProcess p;
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
@@ -66,89 +64,69 @@ Install::OpenCode probeOpenCode(const QString &home, QWidget *parent)
         return oc.version = major, oc;
     if (!legacy && !QFileInfo(oc.v2Dir).isDir())
         return oc.version = -1, oc;
-    if (!parent)
-        return oc.version = 0, oc; // --install: nobody to ask
-    QMessageBox box(QMessageBox::Question, QObject::tr("Choose OpenCode Version"),
-                    QObject::tr("Could not determine the OpenCode version in your login shell (opencode --version). Choose the version you use, or skip "
-                                "OpenCode and install the other hooks."),
-                    QMessageBox::NoButton, parent);
-    QPushButton *skip = box.addButton(QObject::tr("Skip OpenCode"), QMessageBox::RejectRole);
-    QPushButton *v1 = box.addButton(QObject::tr("OpenCode v1"), QMessageBox::AcceptRole);
-    box.addButton(QObject::tr("OpenCode v2"), QMessageBox::AcceptRole);
-    box.exec();
-    oc.version = box.clickedButton() == skip ? 0 : box.clickedButton() == v1 ? 1 : 2;
-    return oc;
+    return oc.version = 0, oc; // a version it cannot tell is skipped, not asked: the install runs unattended
 }
 
-Install::Report runInstaller(const QString &which, const QString &home, QWidget *parent)
+Install::Report runInstaller(const QString &which, const QString &home)
 {
     if (which == QLatin1String("agent-hooks"))
-        return Install::agentHooks(home, bundled(QStringLiteral("agent-status")), agtermctl(), probeOpenCode(home, parent));
+        return Install::agentHooks(home, bundled(QStringLiteral("agent-status")), agtermctl(), probeOpenCode(home));
     if (which == QLatin1String("cli"))
         return Install::commandLineTool(home, agtermctl());
     if (which == QLatin1String("skill"))
         return Install::skill(home, bundled(QStringLiteral("skill/agterm")));
     Install::Report r;
-    r.error = QStringLiteral("unknown installer '%1' (agent-hooks, cli, skill)").arg(which);
+    r.error = QStringLiteral("unknown installer '%1' (agent-hooks, cli, skill, all)").arg(which);
     return r;
 }
 
-void showReport(QWidget *parent, const Install::Report &r)
+// what the extras were installed from and into: the shipped files, where this binary lives (the hooks bake its agtermctl
+// path), and which agents exist, so an agent installed after agterm-qt gets its hooks and skill on the next launch
+QByteArray extrasFingerprint()
 {
-    if (!r.error.isEmpty())
-        return void(QMessageBox::critical(parent, QObject::tr("Install Failed"), r.error));
-    QMessageBox box(r.warning ? QMessageBox::Warning : QMessageBox::Information, r.title, r.text(), QMessageBox::Ok, parent);
-    box.exec();
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    hash.addData(QCoreApplication::applicationFilePath().toUtf8());
+    for (const char *agent : {"/.claude", "/.codex", "/.pi/agent", "/.config/opencode", "/.config/fish"})
+        hash.addData(QFileInfo(QDir::homePath() + QLatin1String(agent)).isDir() ? "1" : "0");
+    for (const QString &dir : {bundled(QStringLiteral("agent-status")), bundled(QStringLiteral("skill/agterm"))}) {
+        QStringList files;
+        for (QDirIterator it(dir, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories); it.hasNext();)
+            files << it.next();
+        files.sort(); // directory order is not stable
+        for (const QString &f : std::as_const(files)) {
+            QFile file(f);
+            hash.addData(f.toUtf8());
+            if (file.open(QIODevice::ReadOnly))
+                hash.addData(file.readAll());
+        }
+    }
+    return hash.result().toHex();
 }
 
-void addHelpMenu(QMenu *help, QWidget *window)
+QString extrasStamp()
 {
-    help->addAction(QObject::tr("Developer Documentation…"), window, [] { QDesktopServices::openUrl(QUrl(QStringLiteral("https://agterm.com/docs#agtermctl"))); });
-    help->addSeparator();
-    for (const auto &[which, title] : {std::pair{"cli", "Install Command Line Tool…"}, {"agent-hooks", "Install Agent Status Hooks…"}, {"skill", "Install Agent Skill…"}})
-        help->addAction(QObject::tr(title), window, [window, which] { showReport(window, runInstaller(QLatin1String(which), QDir::homePath(), window)); });
+    return stateDir() + QStringLiteral("/extras-installed");
 }
 
-void showWelcome(QWidget *window)
+void installExtrasOnUpdate()
 {
-    auto *dlg = new QDialog(window);
-    dlg->setAttribute(Qt::WA_DeleteOnClose);
-    dlg->setObjectName(QStringLiteral("welcome"));
-    dlg->setWindowTitle(QObject::tr("Welcome to agterm"));
-    auto *layout = new QVBoxLayout(dlg);
-    auto *title = new QLabel(QObject::tr("Welcome to agterm"));
-    QFont f = title->font();
-    f.setWeight(QFont::DemiBold);
-    f.setPointSizeF(f.pointSizeF() * 1.2);
-    title->setFont(f);
-    layout->addWidget(title);
-    auto *text = new QLabel(QObject::tr("agterm ships optional extras. These two install from here, and all of them from the Help menu at any time:\n\n"
-                                        "The agent skill teaches Claude Code and Codex to drive agterm over its control socket.\n\n"
-                                        "The agent status hooks make an agent session report active, blocked or completed in the sidebar.\n\n"
-                                        "The command line tool puts agtermctl on your PATH. An install with cmake --install already has it, so that "
-                                        "one is only for running from a build."));
-    text->setWordWrap(true);
-    layout->addWidget(text);
-    auto *skill = new QCheckBox(QObject::tr("Install the agent skill"));
-    auto *hooks = new QCheckBox(QObject::tr("Install the agent status hooks"));
-    skill->setChecked(true);
-    hooks->setChecked(true);
-    layout->addWidget(skill);
-    layout->addWidget(hooks);
-    auto *buttons = new QDialogButtonBox;
-    QPushButton *install = buttons->addButton(QObject::tr("Install"), QDialogButtonBox::AcceptRole);
-    buttons->addButton(QObject::tr("Later"), QDialogButtonBox::RejectRole);
-    install->setDefault(true);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
-    QObject::connect(buttons, &QDialogButtonBox::accepted, dlg, [=] {
-        const bool wantSkill = skill->isChecked(), wantHooks = hooks->isChecked();
-        dlg->accept();
-        if (wantSkill)
-            showReport(window, runInstaller(QStringLiteral("skill"), QDir::homePath(), window));
-        if (wantHooks)
-            showReport(window, runInstaller(QStringLiteral("agent-hooks"), QDir::homePath(), window));
-    });
-    layout->addWidget(buttons);
-    dlg->resize(520, dlg->sizeHint().height());
-    dlg->open();
+    // only an installed copy: a build-tree run must not repoint the user's hooks at a build that may go away
+    if (!QFileInfo(QCoreApplication::applicationDirPath() + QStringLiteral("/../share/agterm-qt")).isDir())
+        return;
+    QFile stamp(extrasStamp());
+    if (stamp.open(QIODevice::ReadOnly) && stamp.readAll().trimmed() == extrasFingerprint())
+        return;
+    // a child process: the login-shell probe can take seconds, and the window must not wait for it
+    QProcess p;
+    p.setProgram(QCoreApplication::applicationFilePath());
+    p.setArguments({QStringLiteral("--install"), QStringLiteral("all")});
+    p.setStandardOutputFile(stateDir() + QStringLiteral("/extras-install.log"));
+    p.setStandardErrorFile(stateDir() + QStringLiteral("/extras-install.log"), QIODevice::Append);
+    if (!p.startDetached())
+        qWarning("could not start the agent extras installer: %s", qPrintable(p.errorString()));
+}
+
+void addHelpMenu(QMenu *help)
+{
+    help->addAction(QObject::tr("Developer Documentation…"), help, [] { QDesktopServices::openUrl(QUrl(QStringLiteral("https://agterm.com/docs#agtermctl"))); });
 }

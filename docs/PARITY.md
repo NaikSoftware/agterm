@@ -129,11 +129,12 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   Simplified: a terminal-style ask is a dialog over the window rather than drawn in the pane; pick rows show no status glyph;
   `msg send --all` reaches the addressed window only; search counts case-insensitive matches in the pane's history;
   `pane.focused` events are not emitted
-- [x] Agent skill (`share/skill/agterm`, adapted to agterm-qt) and Help ▸ Developer Documentation…, Install Command Line Tool…
-  (links `~/.local/bin/agtermctl`; an agtermctl already there is left alone), Install Agent Status Hooks… (master's package and
+- [x] Agent skill (`share/skill/agterm`, adapted to agterm-qt) and Help ▸ Developer Documentation…. Unlike master, the
+  installers are not in the Help menu: an installed build runs all three in the background on its first launch and after
+  each update (fingerprint of the shipped files and the binary path in `extras-installed`). Command line tool
+  (links `~/.local/bin/agtermctl`; an agtermctl already there is left alone), agent status hooks (master's package and
   merge rules: Claude Code hooks + the swarm-companion mod, shell rc integration, Codex `config.toml` block, Pi extension,
   OpenCode v1/v2 plugin with the login-shell version probe; symlinks and modes kept, `.bak` backups, idempotent; an older
-  agterm-qt hook install is migrated), Install Agent Skill… (Claude Code and Codex, ownership marker), and master's
-  first-launch welcome (skipped when the state dir holds anything). `agterm-qt --install agent-hooks|skill|cli [--home DIR]`
-  runs them headless. The Codex adapter reads its hook JSON with python3 (master used macOS plutil). Not detected: an
+  agterm-qt hook install is migrated), agent skill (Claude Code and Codex, ownership marker); no first-launch welcome.
+  `agterm-qt --install agent-hooks|skill|cli|all [--home DIR]` runs them by hand. The Codex adapter reads its hook JSON with python3 (master used macOS plutil). Not detected: an
   unparseable `config.toml` (no TOML parser; a top-level `hooks` key is found line by line)
