@@ -33,6 +33,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSplitter>
+#include <QTimer>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QToolBar>
@@ -455,15 +456,19 @@ void MainWindow::applyGlass()
     QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"), QStringLiteral("org.kde.kwin.Effects"));
     bool own = false;
     if (effects.isValid() && (blur || glass || m_glassApplied)) {
-        own = QDBusReply<bool>(effects.call(QStringLiteral("isEffectLoaded"), QStringLiteral("agtermglass"))).value()
-              || QDBusReply<bool>(effects.call(QStringLiteral("loadEffect"), QStringLiteral("agtermglass"))).value();
+        if (!QDBusReply<bool>(effects.call(QStringLiteral("isEffectLoaded"), QStringLiteral("agtermglass"))).value())
+            effects.call(QStringLiteral("loadEffect"), QStringLiteral("agtermglass"));
+        // the effect's own object answers only once its shaders compiled; loaded but broken must fall back too
+        QDBusInterface glassEffect(QStringLiteral("org.kde.KWin"), QStringLiteral("/org/agterm/Glass"), QStringLiteral("org.agterm.Glass"));
+        own = QDBusReply<QString>(glassEffect.call(QStringLiteral("version"))).isValid();
         if (own) {
-            QDBusMessage call = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/org/agterm/Glass"), QStringLiteral("org.agterm.Glass"),
-                                                               QStringLiteral("setGlass"));
-            call << blur << glass;
-            QDBusConnection::sessionBus().asyncCall(call);
+            glassEffect.asyncCall(QStringLiteral("setGlass"), blur, glass);
             m_glassApplied = blur || glass;
         }
+    }
+    if (!own && (blur || glass) && !m_glassRetried) {
+        m_glassRetried = true; // a freshly loaded effect may not answer yet
+        QTimer::singleShot(2000, this, &MainWindow::applyGlass);
     }
     if (windowHandle())
         KWindowEffects::enableBlurBehind(windowHandle(), !own && blur > 0);

@@ -94,7 +94,7 @@ private:
     Pass m_downsamplePass, m_upsamplePass;
     struct : Pass
     {
-        int box = -1, cornerRadius = -1, opacity = -1, refraction = -1, edge = -1, texSize = -1;
+        int box = -1, cornerRadius = -1, opacity = -1, refraction = -1, edge = -1, texSize = -1, valid = -1;
     } m_glassPass;
     struct : Pass
     {

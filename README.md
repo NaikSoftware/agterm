@@ -57,7 +57,7 @@ cmake --install build && kbuildsycoca6 --noincremental
   edges come from agterm's own KWin effect (`src/kwin-glass`, GPL-2.0-or-later, a fork of KWin's blur), built when
   KWin's development files are found. KWin loads only an effect built for its exact version, so rebuild agterm after
   a Plasma update; until then KWin's plain blur stands in. A `~/.local` install adds
-  `~/.config/plasma-workspace/env/agterm-qt.sh` so KWin finds the effect, which takes one new login.
+  `~/.config/plasma-workspace/env/agterm-qt-env.sh` so KWin finds the effect, which takes one new login.
 - `keymap.conf` and `hooks.conf` in `~/.config/agterm-qt/` (or `$AGTERM_STATE_DIR/config`): rebind built-ins, add custom
   shell commands with `{AGT_*}` tokens (Ctrl+Alt+O lists them), and run scripts on control events. Both files start
   as commented references; File ▸ Edit Keymap… / Reload Keymap and the Hooks pair apply them.

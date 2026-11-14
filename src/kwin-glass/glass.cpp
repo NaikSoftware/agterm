@@ -34,8 +34,8 @@ namespace KWin
 {
 
 static const QString s_path = QStringLiteral("/org/agterm/Glass");
-static constexpr float s_bevel = 32; // logical pixels of curved glass along each edge
-static constexpr float s_bend = 48; // logical pixels the rim pulls its picture from at full refraction
+static constexpr float s_bevel = 44; // logical pixels of curved glass along each edge
+static constexpr float s_reach = 70; // logical pixels beyond the edge the rim shows at full refraction
 static constexpr float s_hairline = 1.2;
 
 GlassEffect::GlassEffect()
@@ -65,6 +65,7 @@ GlassEffect::GlassEffect()
     m_glassPass.refraction = m_glassPass.shader->uniformLocation("refraction");
     m_glassPass.edge = m_glassPass.shader->uniformLocation("edge");
     m_glassPass.texSize = m_glassPass.shader->uniformLocation("texSize");
+    m_glassPass.valid = m_glassPass.shader->uniformLocation("valid");
     m_rimPass.box = m_rimPass.shader->uniformLocation("box");
     m_rimPass.cornerRadius = m_rimPass.shader->uniformLocation("cornerRadius");
     m_rimPass.opacity = m_rimPass.shader->uniformLocation("opacity");
@@ -181,9 +182,11 @@ void GlassEffect::update(EffectWindow *w)
     if (!data.blurItem) {
         data.blurItem = std::make_unique<BackgroundEffectItem>(w->windowItem());
     }
-    const int expand = data.look.blur ? blurOffsets[blurStrengthValues[data.look.blur - 1].iteration - 1].expandSize : 0;
-    data.blurItem->setPixelsToExpandRepaintsBelowOpaqueRegions(expand);
-    data.blurItem->setEffectBoundingRect(w->contentsRect());
+    // what changes under the window reaches it through the blur kernel and, further, through the bent rim
+    const int blurReach = data.look.blur ? blurOffsets[blurStrengthValues[data.look.blur - 1].iteration - 1].expandSize : 0;
+    const int reach = int(std::ceil(s_reach * 1.2 * data.look.refraction)) + 2;
+    data.blurItem->setPixelsToExpandRepaintsBelowOpaqueRegions(std::max(blurReach, reach));
+    data.blurItem->setEffectBoundingRect(w->contentsRect().adjusted(-reach, -reach, reach, reach));
     w->addRepaintFull();
 }
 
@@ -266,7 +269,9 @@ void GlassEffect::blur(const RenderTarget &renderTarget, const RenderViewport &v
     // the whole client area is glass; the server-side title bar paints over its own part
     RegionF blurShape(w->contentsRect());
     blurShape.translate(w->pos());
-    const Rect backgroundRect = blurShape.boundingRect().rounded();
+    // the rim shows what lies just beyond the edge, so the captured background reaches past the window
+    const int margin = int(std::ceil(s_reach * 1.2 * glass.look.refraction));
+    const Rect backgroundRect = blurShape.boundingRect().rounded().adjusted(-margin, -margin, margin, margin);
     const Rect scaledBackgroundRect = backgroundRect.scaled(viewport.scale()).rounded();
     const Rect deviceBackgroundRect = viewport.mapToDeviceCoordinates(backgroundRect).rounded();
     const auto opacity = w->opacity() * data.opacity();
@@ -376,7 +381,13 @@ void GlassEffect::blur(const RenderTarget &renderTarget, const RenderViewport &v
     m_glassPass.shader->setUniform(m_glassPass.box, QVector4D(nativeBox.center().x(), nativeBox.center().y(), nativeBox.width() * 0.5, nativeBox.height() * 0.5));
     m_glassPass.shader->setUniform(m_glassPass.cornerRadius, cornerRadius.toVector());
     m_glassPass.shader->setUniform(m_glassPass.opacity, float(opacity * opacity));
-    m_glassPass.shader->setUniform(m_glassPass.refraction, float(glass.look.refraction * s_bend * viewport.scale()));
+    m_glassPass.shader->setUniform(m_glassPass.refraction, float(glass.look.refraction * (s_bevel + s_reach) * viewport.scale()));
+    // past the screen's edge nothing was captured: samples stay on the part of the background that is on screen
+    const RectF onScreen = RectF(backgroundRect).intersected(viewport.renderRect());
+    m_glassPass.shader->setUniform(m_glassPass.valid, QVector4D((onScreen.left() - backgroundRect.x()) / backgroundRect.width(),
+                                                                1.0 - (onScreen.bottom() - backgroundRect.y()) / backgroundRect.height(),
+                                                                (onScreen.right() - backgroundRect.x()) / backgroundRect.width(),
+                                                                1.0 - (onScreen.top() - backgroundRect.y()) / backgroundRect.height()));
     m_glassPass.shader->setUniform(m_glassPass.edge, float(s_bevel * viewport.scale()));
     m_glassPass.shader->setUniform(m_glassPass.texSize, QVector2D(scaledBackgroundRect.width(), scaledBackgroundRect.height()));
     read->colorAttachment()->bind();

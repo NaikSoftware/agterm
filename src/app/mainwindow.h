@@ -215,6 +215,7 @@ private:
     mutable QList<QKeyCombination> m_chordPrefix; // a leader sequence in progress
     QString m_previewTheme, m_appliedAppearance;
     bool m_glassApplied = false; // agterm's KWin effect holds a look for this process
+    bool m_glassRetried = false;
     QLabel *m_workspaceLabel;
     QHash<QString, QAction *> m_chrome; // interface element -> its title-strip action
     QHash<QString, QWidget *> m_footer; // interface element -> its footer button
