@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QJsonObject>
+#include <QSize>
 #include <QString>
 
 class Store;
@@ -18,6 +19,13 @@ public:
     virtual bool type(const QString &sessionId, const QString &pane, const QString &text, QString *error) = 0; // pane left | right
     // pane left | right; the visible screen, or the whole history with scrollback
     virtual QString text(const QString &sessionId, const QString &pane, bool scrollback, QString *error) = 0;
+    // the pane's terminal grid, columns x rows as the program sees it; invalid when unknown
+    virtual QSize gridSize(const QString &sessionId, const QString &pane)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        return {};
+    }
     // the live panes' ids (AGTERM_PANE_ID) by role, left first; a respawned pane gets a new one
     virtual QStringList paneIds(const QString &sessionId) const
     {

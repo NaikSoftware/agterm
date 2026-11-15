@@ -137,7 +137,10 @@ static QJsonObject sessionText(Store &store, Terminals &terminals, const QString
             rows.removeLast();
         text = rows.mid(qMax(qsizetype(0), rows.size() - lines)).join(QLatin1Char('\n'));
     }
-    return ok({{"id", id}, {"text", text}, {"pane", pane}});
+    QJsonObject out{{"id", id}, {"text", text}, {"pane", pane}};
+    if (const QSize grid = terminals.gridSize(id, pane); grid.isValid())
+        out.insert("columns", grid.width()), out.insert("rows", grid.height());
+    return ok(out);
 }
 
 static QJsonObject sidebarCommand(Store &store, const QString &cmd, const QJsonObject &args)

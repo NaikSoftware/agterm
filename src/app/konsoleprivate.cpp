@@ -52,11 +52,11 @@ static QObject *ownWindow(QObject *session)
     return w;
 }
 
-int columns(QObject *session)
+QSize gridSize(QObject *session)
 {
     QObject *e = emulation(session);
     auto size = fn<QSize (*)(const QObject *)>(e, "_ZNK7Konsole9Emulation9imageSizeEv");
-    return size ? size(e).width() : -1;
+    return size ? size(e) : QSize();
 }
 
 QString scrollback(QObject *session, QWidget *display, bool *ok)

@@ -94,6 +94,7 @@ class _SessionScreenState extends State<SessionScreen> {
       final rows = scrollback ? 2000 : m.fitted.containsKey(_fitKey) ? (_height / (_fit * 1.3)).floor() : 0;
       final r = await m.call('session.text', target: widget.sessionId, args: {'pane': pane, if (rows > 0) 'lines': rows});
       final t = _trimEnd('${r['text'] ?? ''}');
+      _columns = (r['columns'] as num?)?.toInt();
       if (mounted && (t != text || error != null)) setState(() => (text = t, error = null));
       if (s != null && s!.unseen > 0) unawaited(m.act('session.seen', target: widget.sessionId));
     } on AgtermError catch (e) {
@@ -232,15 +233,16 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   double _fit = 11, _width = 360, _height = 600;
+  int? _columns; // the computer's grid width, from session.text; older agterm-qt sends none
 
   Widget _terminal() => Container(
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         decoration: BoxDecoration(color: C.term, border: Border.all(color: const Color(0xFF1A1C24)), borderRadius: BorderRadius.circular(12)),
         clipBehavior: Clip.antiAlias,
         child: LayoutBuilder(builder: (context, box) {
-          final widest = text.split('\n').fold<int>(20, (a, l) => max(a, l.runes.length));
-          // fitted, lines from before the fit may still be wider: they wrap rather than shrink everything back
-          final cols = m.fitted.containsKey(_fitKey) ? min(widest, _fitColumns()) : widest;
+          // the computer's own grid width, so a full-width row fills one phone row exactly; history written at a wider
+          // size (before Fit to phone) wraps rather than shrinking everything
+          final cols = max(20, _columns ?? text.split('\n').fold<int>(20, (a, l) => max(a, l.runes.length)));
           // JetBrains Mono advances 0.6 em
           _width = box.maxWidth - 24;
           _height = box.maxHeight - 24;

@@ -74,6 +74,13 @@ QString MainWindow::text(const QString &sessionId, const QString &pane, bool scr
     return out;
 }
 
+QSize MainWindow::gridSize(const QString &sessionId, const QString &pane)
+{
+    KParts::ReadOnlyPart *part = panePart(sessionId, pane);
+    QObject *s = part ? sessionOf(part) : nullptr;
+    return s ? KonsolePrivate::gridSize(s) : QSize();
+}
+
 void MainWindow::emitEvent(const QString &kind, const QString &sessionId, const QJsonObject &payload)
 {
     const Workspace *w = m_store.workspaceOf(sessionId);

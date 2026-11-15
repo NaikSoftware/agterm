@@ -184,7 +184,8 @@ All take `--target` (workspace id, prefix, name, `active`) and `--window`.
 
 - `session text [--all | --lines N] [--pane left|right]`: the visible screen of the main pane by default;
   `--all` adds the scrollback; `--lines N` keeps the last N non-blank rows of screen plus scrollback.
-  `result.pane` names the pane read. Errors: `use either --all or --lines, not both`,
+  `result.pane` names the pane read; `result.columns`/`result.rows` give its grid as the program sees it.
+  Errors: `use either --all or --lines, not both`,
   `--lines must be greater than 0`, `invalid pane: X`, `session has no split pane`, `session not realized`.
   Text under an overlay is the covered shell's, not the overlay's (use `session overlay text`).
 - `session type <text> | --stdin [--pane left|right]`: sends the text to the main pane (or `--pane`) as keyboard input;
