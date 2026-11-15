@@ -28,10 +28,12 @@ void main() {
     await pumpUntil(t, find.byKey(const Key('pairLink')));
 
     await t.enterText(find.byKey(const Key('pairLink')), 'not a link');
+    await t.ensureVisible(find.byKey(const Key('connect')));
     await t.tap(find.byKey(const Key('connect')));
     await pumpUntil(t, find.byKey(const Key('pairError')));
 
     await t.enterText(find.byKey(const Key('pairLink')), link);
+    await t.ensureVisible(find.byKey(const Key('connect')));
     await t.tap(find.byKey(const Key('connect')));
     await pumpUntil(t, find.text('WORKSPACES'));
     await pumpUntil(t, find.text('phone-target'));
@@ -50,6 +52,7 @@ void main() {
     await t.tap(find.byKey(const Key('newSession')));
     await pumpUntil(t, find.byKey(const Key('newName')));
     await t.enterText(find.byKey(const Key('newName')), 'made-on-phone');
+    await t.ensureVisible(find.byKey(const Key('createSession')));
     await t.tap(find.byKey(const Key('createSession')));
     await pumpUntil(t, find.byKey(const Key('composer')));
     await t.pageBack();

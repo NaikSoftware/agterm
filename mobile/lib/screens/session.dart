@@ -60,7 +60,7 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load()); // _load asks the route, which initState may not
     // shortcut: polls the plain-text screen; a streamed, coloured terminal needs a pty tap in agterm-qt
     poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _load());
     m.addListener(_onModel);
