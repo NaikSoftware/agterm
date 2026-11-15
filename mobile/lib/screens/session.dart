@@ -116,7 +116,8 @@ class _SessionScreenState extends State<SessionScreen> {
         await m.call('font.set', target: widget.sessionId, args: {'pane': pane, 'size': m.fitted[key]});
         m.fitted.remove(key);
       } else {
-        final columns = max(20, (_width / (readable * 0.6)).floor()); // JetBrains Mono advances 0.6 em
+        // JetBrains Mono advances 0.6 em; a larger system font size asks for fewer, bigger columns
+        final columns = max(20, (_width / (MediaQuery.textScalerOf(context).scale(readable) * 0.6)).floor());
         final r = await m.call('font.fit', target: widget.sessionId, args: {'pane': pane, 'columns': columns});
         m.fitted[key] = (r['previousFontSize'] as num?)?.toDouble() ?? 0;
       }
@@ -242,6 +243,8 @@ class _SessionScreenState extends State<SessionScreen> {
           final body = SelectableText(
             error != null && text.isEmpty ? error! : withGridGlyphs(text),
             key: const Key('screen'),
+            // the size above is already the one whose rows fit; Android's font scale on top would wrap every full row
+            textScaler: TextScaler.noScaling,
             style: TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: size, height: 1.3, color: error != null && text.isEmpty ? C.danger : C.termText),
           );
           return SingleChildScrollView(
