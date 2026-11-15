@@ -75,6 +75,7 @@ protected:
     void drawBranches(QPainter *, const QRect &, const QModelIndex &) const override { }
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
     void leaveEvent(QEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     QItemSelectionModel::SelectionFlags selectionCommand(const QModelIndex &index, const QEvent *event) const override;
@@ -100,6 +101,8 @@ private:
     Store &m_store;
     bool m_rebuilding = false;
     QModelIndex m_hovered;
+    QString m_pressedId; // a session row pressed but not yet selected: shown on release, or dragged
+    QPoint m_pressPos;
     QTimer m_blinkTimer;
     int m_blinkAlpha = 255;
     int m_blinkPhase = 0;

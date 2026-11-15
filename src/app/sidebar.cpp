@@ -673,7 +673,22 @@ void Sidebar::mouseMoveEvent(QMouseEvent *event)
         m_hovered = at;
         viewport()->update();
     }
+    if (!m_pressedId.isEmpty()) { // a pressed, not yet shown row: dragging it leaves the shown terminal as the drop target
+        if ((event->position().toPoint() - m_pressPos).manhattanLength() >= QApplication::startDragDistance())
+            startDrag(Qt::MoveAction);
+        return;
+    }
     QTreeWidget::mouseMoveEvent(event);
+}
+
+void Sidebar::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (const QString id = std::exchange(m_pressedId, {}); !id.isEmpty()) {
+        if (QTreeWidgetItem *item = itemAt(event->position().toPoint()); item && item->data(0, Id).toString() == id)
+            setCurrentItem(item); // a click without a drag shows the session, on release
+        return;
+    }
+    QTreeWidget::mouseReleaseEvent(event);
 }
 
 void Sidebar::leaveEvent(QEvent *event)
@@ -718,6 +733,13 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
         m_store.collapsed.contains(id) ? m_store.collapsed.remove(id) : (m_store.collapsed.insert(id), true);
         item->setExpanded(!m_store.collapsed.contains(id));
         item->setData(0, Expanded, item->isExpanded());
+    }
+    // a plain press on another session selects on release, so a drag of it doesn't switch the terminal away first
+    if (item->data(0, Kind).toInt() == SessionRow && item != currentItem() && event->button() == Qt::LeftButton
+        && !(event->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier))) {
+        m_pressedId = item->data(0, Id).toString();
+        m_pressPos = pos;
+        return;
     }
     QTreeWidget::mousePressEvent(event);
 }
@@ -765,12 +787,21 @@ void Sidebar::mouseDoubleClickEvent(QMouseEvent *event)
 void Sidebar::startDrag(Qt::DropActions)
 {
     auto *mime = new QMimeData;
-    QTreeWidgetItem *item = currentItem();
+    const QString pressed = std::exchange(m_pressedId, {});
+    QTreeWidgetItem *item = pressed.isEmpty() ? currentItem() : nullptr;
     if (item && item->data(0, Kind).toInt() == WorkspaceRow)
         mime->setData(workspaceMime, item->data(0, Id).toString().toUtf8());
-    else if (const QStringList ids = selectedSessionIds(); !ids.isEmpty())
+    else if (const QStringList ids = pressed.isEmpty() || selectedSessionIds().contains(pressed) ? selectedSessionIds() : QStringList{pressed};
+             !ids.isEmpty()) {
         mime->setData(sessionsMime, ids.join(QLatin1Char(',')).toUtf8());
-    else
+        // dropped on a terminal, a session types its id: the claude conversation it runs (resume ends in the id), else agterm's
+        QStringList text;
+        for (const QString &id : ids) {
+            const Session *s = m_store.session(id);
+            text << (s && !s->resume.isEmpty() ? s->resume.section(QLatin1Char(' '), -1) : id);
+        }
+        mime->setText(text.join(QLatin1Char(' ')));
+    } else
         return delete mime;
     auto *drag = new QDrag(this);
     drag->setMimeData(mime);

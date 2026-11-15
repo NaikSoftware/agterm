@@ -42,7 +42,8 @@ cmake --install build && kbuildsycoca6 --noincremental
 - Tint a session or workspace row (row menu ▸ Tint: seven colours, on the icon, the name, the background, or any mix).
   A background tint washes the row and the session's terminal; a workspace's wash reaches its sessions.
 - Rename inline (double-click), multi-select, drag to reorder or move between workspaces, and drop folders from the
-  file manager to open sessions there. The footer has New Session, New Workspace, the workspace filter and the
+  file manager to open sessions there. Drop a session on a terminal to type its id: the Claude Code conversation id
+  it runs (or ran last), else agterm's session id. The footer has New Session, New Workspace, the workspace filter and the
   flagged view. Mark workspaces with Focus / Add to Focus in their row menu; the grid button applies or suspends
   the filter, and selecting a session outside it suspends it.
 - The flagged view is a flat list (with or without workspace names) or a workspace tree (Settings ▸ General); View ▸
@@ -80,6 +81,8 @@ What agterm-qt adds on top of agterm and Konsole:
 - The file viewer highlights source code with Kate's syntax engine and numbers its lines in a gutter.
 - Rows of sessions with an agent at work drift with a soft aurora; a quiet row shows its close button on hover.
 - Background tint on rows and terminals (see above).
+- Drop a session row on a terminal to type its Claude Code conversation id; a click selects on release, so the
+  drag leaves the shown terminal in place.
 - Smooth, accelerated mouse-wheel scrolling in terminal panes, where Konsole jumps whole lines.
 - The dashboard hides the sidebar and file panel while it is open and gives them back on close.
 - Live sessions run in agterm-qt's own `agterm-session-host` daemon rather than zmx.
