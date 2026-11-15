@@ -117,8 +117,31 @@ and `AGTERMCTL`, so
 `active`; `--window` picks a window other than the frontmost. `agtermctl --help` lists the commands; the wire format is agterm's (one JSON request line, one response
 line) on `<state dir>/agterm.sock`. The state dir is `~/.local/share/agterm-qt`, or `AGTERM_STATE_DIR`.
 Beyond sessions and workspaces it streams events (`agtermctl events`), shows pickers and questions (`pick`, `ask`),
-passes messages between panes (`msg`, addressed by `AGTERM_PANE_ID`), and reads a pane's screen or scrollback
-(`session text --all`). Commands for features agterm-qt lacks answer "not supported on this platform".
+passes messages between panes (`msg`, addressed by `AGTERM_PANE_ID`), reads a pane's screen or scrollback
+(`session text --all`), and types into either pane (`session type --pane right`). Commands for features agterm-qt
+lacks answer "not supported on this platform".
+
+## Phone app
+
+agterm Mobile ([mobile/](mobile/README.md), Flutter) watches and drives agterm-qt from a phone: the session tree with
+status dots and the sessions that need you, a session's screen, typing into it (an agent's question shows as answer
+buttons), and the sidebar's row menus. It speaks the control API through a relay that runs only while you want it:
+
+```sh
+agtermctl mobile serve [--port 8765] [--bind ADDR] [--host NAME] [--no-qr]
+```
+
+It prints a QR code and an `agterm://pair?…` link; scan the code in the app or paste the link. Nothing listens unless
+`serve` runs, and Ctrl+C stops it.
+
+- The connection is TLS with a self-signed certificate (made with the `openssl` CLI on the first run, kept in
+  `<state dir>/mobile/`); the phone pins its SHA-256 fingerprint from the link, so no CA is involved.
+- Each connection must first present the link's 256-bit token (`<state dir>/mobile/token`, mode 0600). Anyone with
+  the link controls your terminals: `agtermctl mobile reset` makes a new token and cuts off every phone holding the old
+  one at once.
+- `serve` listens on all interfaces by default; `--bind` restricts it. It reaches the phone over your LAN or a VPN such
+  as Tailscale; `--host` only sets the address written into the link (e.g. the machine's Tailscale name or IP).
+- The session view is a polled plain-text snapshot of the pane (`session text`), not a terminal emulator.
 
 ## Credits and license
 

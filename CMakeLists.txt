@@ -51,7 +51,7 @@ add_executable(agterm-session-host src/host/sessionhost.cpp) # plain POSIX: it o
 target_link_libraries(agterm-session-host PRIVATE util)
 add_dependencies(agterm-qt agterm-session-host) # spawned from the app's own directory
 
-add_executable(agtermctl src/ctl/agtermctl.cpp)
+add_executable(agtermctl src/ctl/agtermctl.cpp src/ctl/mobile.cpp src/ctl/qrcodegen/qrcodegen.cpp)
 target_link_libraries(agtermctl PRIVATE agterm-core Qt6::Network)
 
 enable_testing()

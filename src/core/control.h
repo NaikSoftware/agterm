@@ -15,7 +15,7 @@ class Terminals
 {
 public:
     virtual ~Terminals() = default;
-    virtual bool type(const QString &sessionId, const QString &text, QString *error) = 0;
+    virtual bool type(const QString &sessionId, const QString &pane, const QString &text, QString *error) = 0; // pane left | right
     // pane left | right; the visible screen, or the whole history with scrollback
     virtual QString text(const QString &sessionId, const QString &pane, bool scrollback, QString *error) = 0;
     // the live panes' ids (AGTERM_PANE_ID) by role, left first; a respawned pane gets a new one

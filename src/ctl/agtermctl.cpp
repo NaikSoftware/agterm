@@ -1,4 +1,5 @@
 // agtermctl: drive a running agterm-qt over its control socket.
+#include "mobile.h"
 #include "paths.h"
 
 #include <QCoreApplication>
@@ -53,7 +54,7 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   filepanel width <px>
   notify <body> [--title T]             desktop notification + unseen badge on the session
   session seen                          clear the session's unseen badge without focusing it
-  session type <text> | --stdin
+  session type <text> | --stdin [--pane left|right]
   session text [--all | --lines N] [--pane left|right]   the visible screen; --all adds the scrollback;
                                         --lines: the last N non-blank rows of screen + scrollback
   session copy                          the pane's selected text
@@ -108,6 +109,10 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   window move [id] --x X --y Y [--display N]   refused on Wayland, which does not let apps place windows
   window minimize [id] [on|off|toggle]
   --window W                            address a session/workspace/tree command to that window (default: frontmost)
+  mobile serve [--port N] [--bind ADDR] [--host NAME] [--no-qr]
+                                        let the agterm Mobile app drive this agterm-qt over TLS (default port 8765);
+                                        prints a pairing QR code and link (--host: the address put in it)
+  mobile reset                          new pairing token: phones paired before are cut off
   restore mode [none|rerun|live]        bare: configured / at launch / active; a mode applies from the next launch
   restore capture                       record each pane's foreground command now (rerun mode)
   restore clear                         forget every captured command
@@ -239,7 +244,7 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "if-idle", "undoable", "companion",
                             "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized",
-                            "next", "prev", "allow-custom", "no-block", "multiple", "ack"};
+                            "next", "prev", "allow-custom", "no-block", "multiple", "ack", "no-qr"};
     QStringList pos;
     QHash<QString, QString> opt;
     QHash<QString, QStringList> multi; // every value of a repeatable option, in order
@@ -263,6 +268,8 @@ int main(int argc, char **argv)
         return fputs(usage, stderr), 1;
 
     QString cmd = pos.takeFirst();
+    if (cmd == QLatin1String("mobile"))
+        return mobileCommand(pos.value(0), opt.value(QStringLiteral("socket"), socketPath()), opt);
     if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore", "window", "surface", "config", "msg", "zmx", "browser", "quick"}
             .contains(cmd)
         && !pos.isEmpty())

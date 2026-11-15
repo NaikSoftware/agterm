@@ -1182,9 +1182,9 @@ QObject *MainWindow::konsoleSession(const QString &id)
     return nullptr;
 }
 
-bool MainWindow::type(const QString &sessionId, const QString &text, QString *error)
+bool MainWindow::type(const QString &sessionId, const QString &pane, const QString &text, QString *error)
 {
-    auto *t = terminal(sessionId);
+    auto *t = qobject_cast<TerminalInterface *>(panePart(sessionId, pane));
     if (!t) {
         *error = QStringLiteral("session has no terminal");
         return false;
@@ -1267,7 +1267,7 @@ void MainWindow::launch(const QString &launcherId, const QString &workspaceId)
     newSession(workspaceId);
     if (!l->command.isEmpty()) {
         QString error;
-        type(m_store.selected, l->command + QLatin1Char('\n'), &error); // typed into the shell, so the shell remains when it exits
+        type(m_store.selected, QStringLiteral("left"), l->command + QLatin1Char('\n'), &error); // typed into the shell, so the shell remains when it exits
     }
 }
 

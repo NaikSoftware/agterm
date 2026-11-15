@@ -23,9 +23,9 @@
 class FakeTerminals : public Terminals
 {
 public:
-    QString typed;
+    QString typed, typedPane;
     QString screen = QStringLiteral("a\nb\nc\n\n");
-    bool type(const QString &, const QString &text, QString *) override { return typed += text, true; }
+    bool type(const QString &, const QString &pane, const QString &text, QString *) override { return typed += text, typedPane = pane, true; }
     QString scrollback = QStringLiteral("old\na\nb\nc\n  \n");
     QString lastPane;
     QString text(const QString &, const QString &pane, bool history, QString *) override { return lastPane = pane, history ? scrollback : screen; }
@@ -351,6 +351,9 @@ private Q_SLOTS:
         const QString id = call(s, t, "session.new")["result"]["id"].toString();
         QVERIFY(call(s, t, "session.type", id, {{"text", "ls\n"}})["ok"].toBool());
         QCOMPARE(t.typed, QStringLiteral("ls\n"));
+        QCOMPARE(t.typedPane, QStringLiteral("left"));
+        QVERIFY(!call(s, t, "session.type", id, {{"text", "x"}, {"pane", "right"}})["ok"].toBool()); // no split pane
+        QVERIFY(!call(s, t, "session.type", id, {{"text", "x"}, {"pane", "up"}})["ok"].toBool());
         QCOMPARE(call(s, t, "session.text", id, {{"lines", 2}})["result"]["text"].toString(), QStringLiteral("b\nc"));
         QCOMPARE(call(s, t, "session.info", id)["result"]["session"]["pid"].toInt(), 42);
     }

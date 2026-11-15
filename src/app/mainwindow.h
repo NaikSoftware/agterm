@@ -41,7 +41,7 @@ public:
     class WindowLibrary *library = nullptr; // null for a lone window (tests)
     QString windowId;
 
-    bool type(const QString &sessionId, const QString &text, QString *error) override;
+    bool type(const QString &sessionId, const QString &pane, const QString &text, QString *error) override;
     QString text(const QString &sessionId, const QString &pane, bool scrollback, QString *error) override;
     QStringList paneIds(const QString &sessionId) const override;
     void emitEvent(const QString &kind, const QString &sessionId, const QJsonObject &payload) override;

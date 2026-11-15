@@ -235,7 +235,7 @@ agtermctl ask "Deploy to $env?" --button yes=Deploy --button no=Cancel --default
 
 - `session text [--all | --lines N] [--pane left|right]`: the visible screen; `--all` adds the scrollback;
   `--lines N` the last N non-blank rows. Read the other pane with `--pane right`.
-- `session type <text> | --stdin`: keystrokes into the main pane.
+- `session type <text> | --stdin [--pane left|right]`: keystrokes into the main pane, or the other with `--pane right`.
 - `session copy` (the selection), `session paste`, `session select-all`.
 - `session search [needle] [--next | --prev | --close]`: Konsole's search bar; selects the session and prints the
   match count.

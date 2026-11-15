@@ -257,7 +257,7 @@ private Q_SLOTS:
         QSignalSpy notified(&store, &Store::notified);
         QString error;
         QTest::qWait(500); // the shell is up
-        w.type(back, QStringLiteral("printf '\\033]9;nine\\007'; printf '\\033]777;notify;Title;Body\\007'\n"), &error);
+        w.type(back, QStringLiteral("left"), QStringLiteral("printf '\\033]9;nine\\007'; printf '\\033]777;notify;Title;Body\\007'\n"), &error);
         QTRY_COMPARE_WITH_TIMEOUT(notified.size(), 2, 5000);
         QStringList got;
         for (const auto &n : notified)

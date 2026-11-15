@@ -187,8 +187,8 @@ All take `--target` (workspace id, prefix, name, `active`) and `--window`.
   `result.pane` names the pane read. Errors: `use either --all or --lines, not both`,
   `--lines must be greater than 0`, `invalid pane: X`, `session has no split pane`, `session not realized`.
   Text under an overlay is the covered shell's, not the overlay's (use `session overlay text`).
-- `session type <text> | --stdin`: sends the text to the main pane as keyboard input; a newline submits.
-  `session has no terminal` when the pane is gone.
+- `session type <text> | --stdin [--pane left|right]`: sends the text to the main pane (or `--pane`) as keyboard input;
+  a newline submits. Errors: `invalid pane: X`, `session has no split pane`, `session has no terminal` when the pane is gone.
 - `session copy`: prints the pane's selected text; `no selection` when none. Does not touch the clipboard.
 - `session paste [--pane left|right]`: pastes the clipboard into the pane, as Konsole's paste action.
 - `session select-all`: selects the whole buffer (read it with `session copy`).

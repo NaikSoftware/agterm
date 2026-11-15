@@ -7,6 +7,7 @@ export AGTERM_STATE_DIR=$(mktemp -d /tmp/agq.XXXX)
 unset AGTERM_SESSION_ID AGTERM_SOCKET
 ctl() { "$bin/agtermctl" "$@"; }
 pid=
+mpid=
 start() {
   QT_QPA_PLATFORM=offscreen "$bin/agterm-qt" >"$AGTERM_STATE_DIR/app.log" 2>&1 &
   pid=$!
@@ -18,7 +19,7 @@ fail() { echo "FAIL: $*"; ctl tree || true; stop; exit 1; }
 fail0() { echo "FAIL: $*"; exit 1; } # before the app runs
 livedir=${XDG_RUNTIME_DIR:-/tmp}/agterm-qt-$(printf %s "$AGTERM_STATE_DIR" | sha1sum | cut -c1-8)
 reap() { for s in "$livedir"/*.main "$livedir"/*.right; do [ -S "$s" ] && "$bin/agterm-session-host" --kill "$s"; done; rm -rf "$livedir"; }
-trap 'kill $pid 2>/dev/null || true; reap; rm -rf "$AGTERM_STATE_DIR"' EXIT
+trap 'kill $pid $mpid 2>/dev/null || true; reap; rm -rf "$AGTERM_STATE_DIR"' EXIT
 
 mkdir -p "$AGTERM_STATE_DIR/config" # an isolated state dir keeps keymap.conf and hooks.conf there too
 # the installers the launch runs on install or update, run headless against a throwaway HOME
@@ -245,6 +246,27 @@ ctl tree | grep -q batch2 || fail "recent open by id"
 err=$(ctl zmx list 2>&1) && fail "zmx list answered"
 [[ $err == *'zmx.list is not supported on this platform'* ]] || fail "absent feature error"
 ctl notify 2>/dev/null && fail "notify without a body"
+# the phone relay: TLS pinned by the link's fingerprint, the token first, then agtermctl requests answered under their id
+port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+"$bin/agtermctl" mobile serve --no-qr --port "$port" --bind 127.0.0.1 --host 127.0.0.1 >"$AGTERM_STATE_DIR/relay.log" 2>&1 &
+mpid=$!
+for _ in $(seq 50); do grep -q 'agterm://' "$AGTERM_STATE_DIR/relay.log" && break; sleep 0.1; done
+link=$(grep -om1 'agterm://[^ ]*' "$AGTERM_STATE_DIR/relay.log") || fail "relay link: $(cat "$AGTERM_STATE_DIR/relay.log")"
+[[ $link == "agterm://pair?h=127.0.0.1&p=$port&"* ]] || fail "relay link host and port ($link)"
+tok=$(sed 's/.*[?&]t=\([^&]*\).*/\1/' <<<"$link")
+pin=$(openssl s_client -connect "127.0.0.1:$port" </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d : | tr A-F a-f)
+[[ $link == *"&f=$pin&"* ]] || fail "the link pins the served certificate ($pin)"
+phone() { { printf '%s\n' "$@"; sleep 1; } | timeout 5 openssl s_client -quiet -no_ign_eof -connect "127.0.0.1:$port" 2>/dev/null || true; }
+out=$(phone "{\"auth\":\"$tok\",\"id\":0}" '{"id":1,"cmd":"tree"}')
+grep -q '^{"id":0,"ok":true,"result":{"host"' <<<"$out" || fail "relay auth ($out)"
+grep -q '^{"id":1,"ok":true,"result":{"tree"' <<<"$out" || fail "relay forwards tree under its id ($out)"
+out=$(phone '{"auth":"wrong","id":0}' '{"id":1,"cmd":"tree"}')
+grep -q '"error":"unauthorized"' <<<"$out" || fail "relay refuses a wrong token ($out)"
+grep -q '"id":1,' <<<"$out" && fail "relay answered after a wrong token"
+ctl mobile reset >/dev/null
+grep -q '"error":"unauthorized"' <<<"$(phone "{\"auth\":\"$tok\"}")" || fail "mobile reset revokes the old token"
+grep -q '"ok":true' <<<"$(phone "{\"auth\":\"$(cat "$AGTERM_STATE_DIR/mobile/token")\"}")" || fail "the new token after reset"
+kill "$mpid"; wait "$mpid" 2>/dev/null || true
 cd /tmp
 ctl session type $'cd /usr\n' --target "$id"
 sleep 1
