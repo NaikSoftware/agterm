@@ -85,6 +85,7 @@ What agterm-qt adds on top of agterm and Konsole:
 - Live sessions run in agterm-qt's own `agterm-session-host` daemon rather than zmx.
 - The agent hooks, skill and `agtermctl` link install themselves on the first launch and after each update (below),
   instead of from the Help menu.
+- A phone app, agterm Mobile, paired from Settings ▸ Connect a Phone… ([below](#phone-app)).
 
 ## Keys
 
