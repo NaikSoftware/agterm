@@ -711,7 +711,12 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
                 store.select(copy);
             return ok({{"id", copy}});
         } else if (cmd == QLatin1String("session.type")) {
-            if (!terminals.type(id, args.value("text").toString(), &error))
+            const QString pane = args.value("pane").toString(QStringLiteral("left"));
+            if (pane != QLatin1String("left") && pane != QLatin1String("right"))
+                return fail(QStringLiteral("invalid pane: %1").arg(pane));
+            if (pane == QLatin1String("right") && !store.session(id)->hasSplit)
+                return fail(QStringLiteral("session has no split pane"));
+            if (!terminals.type(id, pane, args.value("text").toString(), &error))
                 return fail(error);
         } else if (cmd == QLatin1String("session.info")) {
             QJsonObject node = merged(withContext(withRestore(sessionNode(*store.session(id), store.selected), *store.session(id)), *store.session(id), store),

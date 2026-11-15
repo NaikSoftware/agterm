@@ -10,6 +10,7 @@
 #include "palette.h"
 #include "restore.h"
 #include "paths.h"
+#include "phone.h"
 #include "sidebar.h"
 #include "store.h"
 
@@ -506,6 +507,11 @@ void MainWindow::createMenus()
         if (m_store.session(m_store.selected))
             duplicateCompanion(m_store.selected);
     }));
+    QAction *restoreSize = action(QStringLiteral("restore_terminal_size"), tr("Restore Terminal Size"), QStringLiteral("view-restore"), {},
+                                  [this] { restoreTerminalSize(m_store.selected); });
+    restoreSize->setToolTip(tr("Give the terminal back the window's size after a phone's Fit to phone"));
+    session->addAction(restoreSize);
+    connect(session, &QMenu::aboutToShow, restoreSize, [this, restoreSize] { restoreSize->setEnabled(hasPhoneGrid(m_store.selected)); });
     session->addAction(action(QStringLiteral("clear_status"), tr("Clear Status"), QStringLiteral("edit-clear"), {},
                               [this] { m_store.setStatus(m_store.selected, QStringLiteral("idle")); }));
     session->addAction(action(QStringLiteral("toggle_flag"), tr("Flag"), QStringLiteral("flag"), QKeySequence(QStringLiteral("Ctrl+Alt+Shift+F")), [this] {
@@ -662,6 +668,7 @@ void MainWindow::createMenus()
                                [this] { profileDialog("showEditCurrentProfileDialog"); }));
     settings->addAction(action(QStringLiteral("manage_profiles"), tr("Manage Profiles…"), QStringLiteral("configure-shortcuts"), {},
                                [this] { profileDialog("showManageProfilesDialog"); }));
+    settings->addAction(action(QStringLiteral("connect_phone"), tr("Connect a Phone…"), QStringLiteral("smartphone"), {}, [this] { showPhoneDialog(this); }));
     addHelpMenu(menuBar()->addMenu(tr("&Help")));
 }
 
@@ -1114,12 +1121,14 @@ QString MainWindow::liveCwd(const QString &id) const
     return pid > 0 ? QFile::symLinkTarget(QStringLiteral("/proc/%1/cwd").arg(pid)) : QString();
 }
 
-void MainWindow::prime(QWidget *page)
+void MainWindow::prime(QWidget *page, QWidget *pane)
 {
-    // a never-shown terminal has no screen size, so it would read back empty; one synchronous show sizes it
-    if (!isVisible() || page->property("primed").toBool())
+    // a never-shown terminal has no screen size, so it would read back empty; one synchronous show sizes it.
+    // Marked per pane: a split added to a page shown before is still unsized.
+    QWidget *mark = pane ? pane : page;
+    if (!isVisible() || mark->property("primed").toBool())
         return;
-    page->setProperty("primed", true);
+    mark->setProperty("primed", true);
     QWidget *current = m_stack->currentWidget();
     m_stack->setCurrentWidget(page);
     m_stack->setCurrentWidget(current);
@@ -1182,9 +1191,9 @@ QObject *MainWindow::konsoleSession(const QString &id)
     return nullptr;
 }
 
-bool MainWindow::type(const QString &sessionId, const QString &text, QString *error)
+bool MainWindow::type(const QString &sessionId, const QString &pane, const QString &text, QString *error)
 {
-    auto *t = terminal(sessionId);
+    auto *t = qobject_cast<TerminalInterface *>(panePart(sessionId, pane));
     if (!t) {
         *error = QStringLiteral("session has no terminal");
         return false;
@@ -1267,7 +1276,7 @@ void MainWindow::launch(const QString &launcherId, const QString &workspaceId)
     newSession(workspaceId);
     if (!l->command.isEmpty()) {
         QString error;
-        type(m_store.selected, l->command + QLatin1Char('\n'), &error); // typed into the shell, so the shell remains when it exits
+        type(m_store.selected, QStringLiteral("left"), l->command + QLatin1Char('\n'), &error); // typed into the shell, so the shell remains when it exits
     }
 }
 
@@ -1627,6 +1636,8 @@ void MainWindow::sidebarMenu(const QPoint &pos)
             menu.addAction(tr("Duplicate Session"), this, [this, id] { m_store.select(m_store.duplicateSession(id, liveCwd(id))); });
             menu.addAction(tr("New Companion"), this, [this, id] { newCompanion(id); });
             menu.addAction(tr("Duplicate as Companion"), this, [this, id] { duplicateCompanion(id); });
+            if (hasPhoneGrid(id)) // fitted to a phone: the row offers the way back
+                menu.addAction(QIcon::fromTheme(QStringLiteral("view-restore")), tr("Restore Terminal Size"), this, [this, id] { restoreTerminalSize(id); });
         }
         fillMoveMenu(menu.addMenu(tr("Move to")), ids);
         bool allFlagged = true;

@@ -29,6 +29,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Close-session reselection by MRU within the workspace
 - [x] Shortcuts: new session ⌘N, new workspace ⌘⇧N, open directory ⌘O, close ⌘W, prev/next session ⌥⌘↑↓, attention ⌃⌥↑↓, toggle sidebar ⌘⌃S, flag ⌘⇧F
 - [x] Shortcuts: reopen ⌘⇧T, font ⌘+ ⌘− ⌘0 (`font inc|dec|reset`, sizes persisted; driven through Konsole's Ctrl+wheel zoom)
+- [x] A pane's grid apart from its window (agterm-qt only, the phone's Fit to phone): `session grid <cols>x<rows> | --reset`;
+  wheel notches into a pane (agterm-qt only, the phone's drag): `session scroll <lines>`
 
 ## Phase 2: terminals
 
@@ -138,3 +140,6 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   agterm-qt hook install is migrated), agent skill (Claude Code and Codex, ownership marker); no first-launch welcome.
   `agterm-qt --install agent-hooks|skill|cli|all [--home DIR]` runs them by hand. The Codex adapter reads its hook JSON with python3 (master used macOS plutil). Not detected: an
   unparseable `config.toml` (no TOML parser; a top-level `hooks` key is found line by line)
+- [x] Phone relay (agterm-qt only): Settings ▸ Connect a Phone… or `agtermctl mobile serve|reset` for the agterm Mobile app
+  (`mobile/`): the control protocol over TLS, pinned by the certificate's SHA-256 and gated by a 256-bit token, paired by
+  QR code or `agterm://pair` link; `session type --pane` types into either pane

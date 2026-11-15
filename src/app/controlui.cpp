@@ -9,7 +9,10 @@
 #include <KActionCollection>
 #include <KParts/ReadOnlyPart>
 
+#include <QStackedWidget>
+#include <QStatusBar>
 #include <QApplication>
+#include <QWheelEvent>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QDesktopServices>
@@ -63,7 +66,7 @@ QString MainWindow::text(const QString &sessionId, const QString &pane, bool scr
     KParts::ReadOnlyPart *part = panePart(sessionId, pane);
     if (!part)
         return *error = QStringLiteral("session not realized"), QString();
-    prime(m_panes.value(sessionId).view);
+    prime(m_panes.value(sessionId).view, part->widget());
     QObject *s = sessionOf(part);
     QString out;
     bool ok = false;
@@ -72,6 +75,71 @@ QString MainWindow::text(const QString &sessionId, const QString &pane, bool scr
     if (!ok && (!s || !QMetaObject::invokeMethod(s, "getAllDisplayedText", Q_RETURN_ARG(QString, out), Q_ARG(bool, true))))
         *error = QStringLiteral("failed to read surface buffer");
     return out;
+}
+
+QSize MainWindow::gridSize(const QString &sessionId, const QString &pane)
+{
+    KParts::ReadOnlyPart *part = panePart(sessionId, pane);
+    QObject *s = part ? sessionOf(part) : nullptr;
+    return s ? KonsolePrivate::gridSize(s) : QSize();
+}
+
+bool MainWindow::setGrid(const QString &sessionId, const QString &pane, const QSize &grid, QString *error)
+{
+    const Panes p = m_panes.value(sessionId);
+    KParts::ReadOnlyPart *part = pane == QLatin1String("right") ? p.right : p.main;
+    QObject *s = part ? sessionOf(part) : nullptr;
+    QObject *e = s ? KonsolePrivate::emulation(s) : nullptr;
+    if (!e)
+        return *error = QStringLiteral("pane has no terminal"), false;
+    const QString key = sessionId + QLatin1Char('/') + pane;
+    if (grid.isValid()) { // Konsole only resizes the emulation again when a shown view changes size
+        if (!QMetaObject::invokeMethod(e, "setImageSize", Q_ARG(int, grid.height()), Q_ARG(int, grid.width())))
+            return *error = QStringLiteral("cannot resize the terminal"), false;
+        m_phoneGrids.insert(key, grid);
+        return true;
+    }
+    m_phoneGrids.remove(key);
+    // back to the view's size; Konsole counts only shown views, so the page is current meanwhile, as in prime()
+    QWidget *current = m_stack->currentWidget();
+    m_stack->setCurrentWidget(p.view);
+    const bool fitted = KonsolePrivate::fitToView(s);
+    m_stack->setCurrentWidget(current);
+    return fitted || (*error = QStringLiteral("cannot resize the terminal"), false);
+}
+
+bool MainWindow::scroll(const QString &sessionId, const QString &pane, int lines, QString *error)
+{
+    KParts::ReadOnlyPart *part = panePart(sessionId, pane);
+    QWidget *display = part ? terminalDisplay(part) : nullptr;
+    if (!display)
+        return *error = QStringLiteral("pane has no terminal"), false;
+    // Konsole's own wheel handling picks the right effect (mouse report, arrow keys or scrollback); a notch is 3 lines
+    const QPointF at = QRectF(display->rect()).center();
+    for (int n = qMax(1, (std::abs(lines) + 1) / 3); n > 0; --n) {
+        QWheelEvent wheel(at, display->mapToGlobal(at), {}, QPoint(0, lines < 0 ? 120 : -120), Qt::NoButton, Qt::NoModifier,
+                          Qt::ScrollUpdate, false); // a phase keeps SmoothWheel from re-timing it
+        QApplication::sendEvent(display, &wheel);
+    }
+    return true;
+}
+
+// still on a phone's grid: Konsole hands the pane back to its view on its own when the view is resized or shown
+bool MainWindow::hasPhoneGrid(const QString &id) const
+{
+    auto *self = const_cast<MainWindow *>(this);
+    for (const QString pane : {QStringLiteral("left"), QStringLiteral("right")})
+        if (const QSize set = m_phoneGrids.value(id + QLatin1Char('/') + pane); set.isValid() && self->gridSize(id, pane) == set)
+            return true;
+    return false;
+}
+
+// Session ▸ Restore Terminal Size: takes a pane back from a phone's Fit to phone
+void MainWindow::restoreTerminalSize(const QString &id)
+{
+    for (const QString pane : {QStringLiteral("left"), QStringLiteral("right")})
+        if (QString error; m_phoneGrids.contains(id + QLatin1Char('/') + pane) && !setGrid(id, pane, QSize(), &error))
+            statusBar()->showMessage(error, 3000);
 }
 
 void MainWindow::emitEvent(const QString &kind, const QString &sessionId, const QJsonObject &payload)

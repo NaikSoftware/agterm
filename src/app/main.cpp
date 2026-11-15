@@ -5,6 +5,7 @@
 #include "livehost.h"
 #include "mainwindow.h"
 #include "paths.h"
+#include "phone.h"
 #include "smoothwheel.h"
 #include "store.h"
 
@@ -140,6 +141,7 @@ int main(int argc, char **argv)
     for (MainWindow *w : library.openWindows())
         w->setSocketStatus(listening, server.errorString());
     serve(server, library);
+    PhoneRelay::instance(); // phone access switched on in Connect a Phone comes back with the app
     window.events()->emitEvent(QStringLiteral("app.launched")); // hooks loaded, socket accepting, sessions restored
 
     // SIGTERM (logout, kill) must save like a window close; a self-pipe moves it onto the event loop

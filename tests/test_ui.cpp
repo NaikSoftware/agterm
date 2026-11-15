@@ -32,6 +32,7 @@
 #include <QPushButton>
 #include <QWheelEvent>
 #include "smoothwheel.h"
+#include "phone.h"
 #include "konsoleprivate.h"
 
 namespace Konsole
@@ -55,6 +56,19 @@ class TestUi : public QObject
     QTemporaryDir dir;
 
 private Q_SLOTS:
+
+    void phoneCodeShowsTheChosenAddress()
+    {
+        const QString link = QStringLiteral("agterm://pair?h=172.17.0.1&p=8765&t=tok-en_&f=ab12&n=my%20pc");
+        const QString moved = pairLinkWithHost(link, QStringLiteral(" pc.tail1234.ts.net "));
+        QCOMPARE(moved, QStringLiteral("agterm://pair?h=pc.tail1234.ts.net&p=8765&t=tok-en_&f=ab12&n=my%20pc"));
+        QCOMPARE(pairLinkWithHost(link, QString()), link); // no choice keeps what serve printed
+        const QImage code = qrImage(link);
+        QCOMPARE(code.width(), code.height());
+        QVERIFY(code.width() >= 21 + 8);                       // the smallest QR plus a four-module quiet zone
+        QCOMPARE(code.pixel(0, 0), qRgb(255, 255, 255));        // light border on any theme
+        QCOMPARE(code.pixel(4, 4), qRgb(0, 0, 0));              // the top-left finder starts inside it
+    }
 
     void smoothWheelReplaysNotchesLineByLine()
     {
@@ -257,7 +271,7 @@ private Q_SLOTS:
         QSignalSpy notified(&store, &Store::notified);
         QString error;
         QTest::qWait(500); // the shell is up
-        w.type(back, QStringLiteral("printf '\\033]9;nine\\007'; printf '\\033]777;notify;Title;Body\\007'\n"), &error);
+        w.type(back, QStringLiteral("left"), QStringLiteral("printf '\\033]9;nine\\007'; printf '\\033]777;notify;Title;Body\\007'\n"), &error);
         QTRY_COMPARE_WITH_TIMEOUT(notified.size(), 2, 5000);
         QStringList got;
         for (const auto &n : notified)
@@ -403,6 +417,41 @@ private Q_SLOTS:
         QCOMPARE(w.sessionExtras(id)["overlaySizePercent"].toInt(), 95);
         QTRY_VERIFY_WITH_TIMEOUT(!w.sessionExtras(id)["overlay"].toBool(), 5000);
         qunsetenv("VISUAL");
+    }
+
+    void restoreTerminalSizeTakesBackAPhoneGrid()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("grid.json"));
+        w.restore({});
+        const QString a = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(a);
+        w.show();
+        QTRY_VERIFY_WITH_TIMEOUT(w.gridSize(a, "left").isValid(), 5000);
+        const QSize own = w.gridSize(a, "left");
+        QMenu *menu = nullptr;
+        for (QAction *m : w.menuBar()->actions())
+            if (m->text() == QLatin1String("&Session"))
+                menu = m->menu();
+        QAction *restore = w.namedAction("restore_terminal_size");
+        Q_EMIT menu->aboutToShow();
+        QVERIFY(!restore->isEnabled()); // not on a phone's grid
+
+        QString error;
+        QVERIFY(w.setGrid(a, "left", QSize(40, 60), &error));
+        QCOMPARE(w.gridSize(a, "left"), QSize(40, 60));
+        Q_EMIT menu->aboutToShow();
+        QVERIFY(restore->isEnabled());
+        restore->trigger();
+        QCOMPARE(w.gridSize(a, "left"), own); // the window's own size again
+        Q_EMIT menu->aboutToShow();
+        QVERIFY(!restore->isEnabled());
+
+        QVERIFY(w.setGrid(a, "left", QSize(40, 60), &error));
+        w.resize(w.size() + QSize(80, 40)); // the window takes the grid back on its own: nothing left to restore
+        QTRY_VERIFY(w.gridSize(a, "left") != QSize(40, 60));
+        Q_EMIT menu->aboutToShow();
+        QVERIFY(!restore->isEnabled());
     }
 
     void dashboardHostsTheLivePanesAndGivesThemBack()

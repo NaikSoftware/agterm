@@ -6,6 +6,7 @@
 
 #include <QDateTime>
 #include <algorithm>
+#include <cstdlib>
 #include <QJsonArray>
 #include <QRegularExpression>
 #include <QUuid>
@@ -113,6 +114,42 @@ static QJsonObject sessionResize(Store &store, const QString &id, const QJsonObj
     return ok({{"id", id}, {"ratio", s->splitRatio}});
 }
 
+static QJsonObject sessionGrid(Store &store, Terminals &terminals, const QString &id, const QJsonObject &args)
+{
+    const QString raw = args.value("pane").toString(QStringLiteral("left"));
+    if (!leftPane.contains(raw) && !rightPane.contains(raw))
+        return fail(QStringLiteral("invalid pane: %1").arg(raw));
+    const QString pane = leftPane.contains(raw) ? QStringLiteral("left") : QStringLiteral("right");
+    if (pane == QLatin1String("right") && !store.session(id)->hasSplit)
+        return fail(QStringLiteral("session has no split pane"));
+    const bool reset = args.value("reset").toBool();
+    const QSize grid(args.value("columns").toInt(), args.value("rows").toInt());
+    if (reset == (args.contains("columns") || args.contains("rows")))
+        return fail(QStringLiteral("session.grid takes columns and rows, or reset"));
+    if (!reset && (grid.width() < 20 || grid.width() > 1000 || grid.height() < 5 || grid.height() > 1000))
+        return fail(QStringLiteral("session.grid: columns must be 20...1000 and rows 5...1000"));
+    QString error;
+    if (!terminals.setGrid(id, pane, reset ? QSize() : grid, &error))
+        return fail(error);
+    const QSize now = terminals.gridSize(id, pane);
+    return ok({{"id", id}, {"pane", pane}, {"columns", now.width()}, {"rows", now.height()}});
+}
+
+static QJsonObject sessionScroll(Store &store, Terminals &terminals, const QString &id, const QJsonObject &args)
+{
+    const QString raw = args.value("pane").toString(QStringLiteral("left"));
+    if (!leftPane.contains(raw) && !rightPane.contains(raw))
+        return fail(QStringLiteral("invalid pane: %1").arg(raw));
+    const QString pane = leftPane.contains(raw) ? QStringLiteral("left") : QStringLiteral("right");
+    if (pane == QLatin1String("right") && !store.session(id)->hasSplit)
+        return fail(QStringLiteral("session has no split pane"));
+    const int lines = args.value("lines").toInt();
+    if (lines == 0 || std::abs(lines) > 1000)
+        return fail(QStringLiteral("session.scroll: lines must be -1000...1000 and not 0"));
+    QString error;
+    return terminals.scroll(id, pane, lines, &error) ? ok({{"id", id}, {"pane", pane}, {"lines", lines}}) : fail(error);
+}
+
 static QJsonObject sessionText(Store &store, Terminals &terminals, const QString &id, const QJsonObject &args)
 {
     const bool all = args.value("all").toBool();
@@ -137,7 +174,10 @@ static QJsonObject sessionText(Store &store, Terminals &terminals, const QString
             rows.removeLast();
         text = rows.mid(qMax(qsizetype(0), rows.size() - lines)).join(QLatin1Char('\n'));
     }
-    return ok({{"id", id}, {"text", text}, {"pane", pane}});
+    QJsonObject out{{"id", id}, {"text", text}, {"pane", pane}};
+    if (const QSize grid = terminals.gridSize(id, pane); grid.isValid())
+        out.insert("columns", grid.width()), out.insert("rows", grid.height());
+    return ok(out);
 }
 
 static QJsonObject sidebarCommand(Store &store, const QString &cmd, const QJsonObject &args)
@@ -574,7 +614,7 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
         }
         return ok({{"id", id}});
     }
-    static const QStringList sessionCmds{"session.context", "session.collapse", "session.expand", "session.resize", "session.text", "session.focus",
+    static const QStringList sessionCmds{"session.context", "session.collapse", "session.expand", "session.resize", "session.grid", "session.scroll", "session.text", "session.focus",
                                          "session.copy", "session.paste", "session.selectall", "session.search", "session.reveal", "ask.open"};
     if (!sessionCmds.contains(cmd)) {
         *handled = false;
@@ -591,6 +631,10 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
         return sessionResize(store, id, args);
     if (cmd == QLatin1String("session.text"))
         return sessionText(store, terminals, id, args);
+    if (cmd == QLatin1String("session.grid"))
+        return sessionGrid(store, terminals, id, args);
+    if (cmd == QLatin1String("session.scroll"))
+        return sessionScroll(store, terminals, id, args);
     if (cmd == QLatin1String("session.collapse") || cmd == QLatin1String("session.expand")) {
         if (store.companionsOf(id).isEmpty())
             return fail(QStringLiteral("session has no companions"));

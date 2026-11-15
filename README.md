@@ -85,6 +85,7 @@ What agterm-qt adds on top of agterm and Konsole:
 - Live sessions run in agterm-qt's own `agterm-session-host` daemon rather than zmx.
 - The agent hooks, skill and `agtermctl` link install themselves on the first launch and after each update (below),
   instead of from the Help menu.
+- A phone app, agterm Mobile, paired from Settings ▸ Connect a Phone… ([below](#phone-app)).
 
 ## Keys
 
@@ -136,8 +137,60 @@ and `AGTERMCTL`, so
 `active`; `--window` picks a window other than the frontmost. `agtermctl --help` lists the commands; the wire format is agterm's (one JSON request line, one response
 line) on `<state dir>/agterm.sock`. The state dir is `~/.local/share/agterm-qt`, or `AGTERM_STATE_DIR`.
 Beyond sessions and workspaces it streams events (`agtermctl events`), shows pickers and questions (`pick`, `ask`),
-passes messages between panes (`msg`, addressed by `AGTERM_PANE_ID`), and reads a pane's screen or scrollback
-(`session text --all`). Commands for features agterm-qt lacks answer "not supported on this platform".
+passes messages between panes (`msg`, addressed by `AGTERM_PANE_ID`), reads a pane's screen or scrollback
+(`session text --all`), types into either pane (`session type --pane right`), and zooms a pane's font
+(`font inc|dec|reset`), sets a pane's grid apart from its window (`session grid <cols>x<rows>`, `--reset`), and wheels a pane as a mouse
+would (`session scroll <lines>`). Commands for features agterm-qt
+lacks answer "not supported on this platform".
+
+## Phone app
+
+agterm Mobile ([mobile/](mobile/README.md), Flutter, Android) watches and drives agterm-qt from a phone, over a relay
+on the computer that runs only while you want it.
+
+<p align="center">
+  <img src="docs/images/mobile-sessions.png" width="270" alt="Sessions: a blocked agent's question with answer buttons, a finished session, workspaces of agent sessions">
+  <img src="docs/images/mobile-new-session.png" width="270" alt="New session: pick Terminal, Claude Code, Codex, OpenCode or Antigravity, a workspace and a folder">
+  <img src="docs/images/mobile-session.png" width="270" alt="A Claude Code session fitted to the phone">
+</p>
+
+- **Sessions.** The workspace tree with status dots (a working agent's dot pulses, as in the sidebar), agent logos and
+  context lines. Needs you leads with the sessions that wait for you: an agent's question shows the screen's tail and
+  its options as answer buttons, so a permission prompt is one tap; finished sessions follow. Filters for blocked,
+  done and flagged sessions.
+- **New session.** Terminal or any agent, in a workspace and folder, quietly or also selected on the computer; a new
+  workspace on the way. The row and workspace menus (rename, flag, tint, move, split, companion, close) match the
+  sidebar's.
+- **A session's screen.** The pane's text, refreshed while you look; a key bar (esc, tab, ⇧tab, ^C, arrows, …) and a
+  composer that types into it; both panes of a split; Scrollback for the history.
+- **Fit to phone** gives the program the phone's own grid (`session grid`): as many columns and rows as the phone shows
+  at a readable size, so it redraws for the phone and nothing wraps, while the computer's font stays as it was. While
+  fitted, dragging the screen scrolls the program itself (wheel notches through `session scroll`), so Claude Code
+  scrolls its own transcript. Restore PC size gives the grid back; on the computer, Session ▸ Restore Terminal Size
+  (also on the row's right-click menu while it applies) does the same, and is disabled once the window has taken the
+  grid back by itself (resized or shown).
+- **Alerts in the background.** A notification per session when its agent blocks, finishes or notifies; tapping one
+  opens that session.
+
+Settings ▸ Connect a Phone… switches it on: the window shows the QR code to scan in the app, the `agterm://pair?…` link
+to copy, the address the code points the phone at (pick your LAN or VPN address, or type a name such as the machine's
+Tailscale name) and the port, and Revoke Paired Phones. While switched on, the relay starts with agterm-qt and stops with
+it. The same relay runs from a terminal too, while the command runs:
+
+```sh
+agtermctl mobile serve [--port 8765] [--bind ADDR] [--host NAME] [--no-qr]
+```
+
+It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one of the two runs.
+
+- The connection is TLS with a self-signed certificate (made with the `openssl` CLI on the first run, kept in
+  `<state dir>/mobile/`); the phone pins its SHA-256 fingerprint from the link, so no CA is involved.
+- Each connection must first present the link's 256-bit token (`<state dir>/mobile/token`, mode 0600). Anyone with
+  the link controls your terminals: Revoke Paired Phones (or `agtermctl mobile reset`) makes a new token and cuts off every phone holding the old
+  one at once.
+- `serve` listens on all interfaces by default; `--bind` restricts it. It reaches the phone over your LAN or a VPN such
+  as Tailscale; `--host` only sets the address written into the link (e.g. the machine's Tailscale name or IP).
+- The session view is a polled plain-text snapshot of the pane (`session text`), not a terminal emulator.
 
 ## Credits and license
 

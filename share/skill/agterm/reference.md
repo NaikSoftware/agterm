@@ -184,11 +184,12 @@ All take `--target` (workspace id, prefix, name, `active`) and `--window`.
 
 - `session text [--all | --lines N] [--pane left|right]`: the visible screen of the main pane by default;
   `--all` adds the scrollback; `--lines N` keeps the last N non-blank rows of screen plus scrollback.
-  `result.pane` names the pane read. Errors: `use either --all or --lines, not both`,
+  `result.pane` names the pane read; `result.columns`/`result.rows` give its grid as the program sees it.
+  Errors: `use either --all or --lines, not both`,
   `--lines must be greater than 0`, `invalid pane: X`, `session has no split pane`, `session not realized`.
   Text under an overlay is the covered shell's, not the overlay's (use `session overlay text`).
-- `session type <text> | --stdin`: sends the text to the main pane as keyboard input; a newline submits.
-  `session has no terminal` when the pane is gone.
+- `session type <text> | --stdin [--pane left|right]`: sends the text to the main pane (or `--pane`) as keyboard input;
+  a newline submits. Errors: `invalid pane: X`, `session has no split pane`, `session has no terminal` when the pane is gone.
 - `session copy`: prints the pane's selected text; `no selection` when none. Does not touch the clipboard.
 - `session paste [--pane left|right]`: pastes the clipboard into the pane, as Konsole's paste action.
 - `session select-all`: selects the whole buffer (read it with `session copy`).
@@ -206,6 +207,16 @@ All take `--target` (workspace id, prefix, name, `active`) and `--window`.
 - `session swap`: exchanges the two terminals' positions without restarting them; `session has no split`.
 - `session focus [left|right|other]`: moves keyboard focus between the panes (default `other`);
   `session has no split`, `invalid pane: X`. Read back as `splitFocused`.
+- `session grid <cols>x<rows> | --reset [--pane left|right]`: gives the program that grid (what `stty size` shows) apart from
+  the window, e.g. a phone's, until `--reset` or the pane's view is resized or shown; the computer's view keeps its
+  font, so rows beyond it are read with `session text --lines N`. Answers `result.columns`/`result.rows`. Errors:
+  `session.grid takes columns and rows, or reset`, `session.grid: columns must be 20...1000 and rows 5...1000`,
+  `invalid pane: X`, `session has no split pane`, `cannot resize the terminal`.
+- `session scroll <lines> [--pane left|right]`: wheels the pane as a mouse over it would, one notch per 3 lines (at
+  least one); negative scrolls up (older). Konsole picks the effect: mouse reports to a program tracking the mouse
+  (Claude Code scrolls its transcript), arrow keys on the alternate screen, else the view moves through the scrollback
+  (then `session text` reads the scrolled view). Errors: `session.scroll: lines must be -1000...1000 and not 0`,
+  `invalid pane: X`, `session has no split pane`, `pane has no terminal`.
 - `session resize --split-ratio R | --grow-left D | --grow-right D` (also `--grow-top`, `--grow-bottom`,
   `--grow-primary`, `--grow-split`): sets the main pane's fraction (clamped 0.05–0.95) or moves it by D.
   Prints the applied ratio (`result.ratio`). Errors: `provide exactly one split ratio or grow option`,

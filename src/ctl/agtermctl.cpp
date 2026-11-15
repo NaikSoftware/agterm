@@ -1,4 +1,5 @@
 // agtermctl: drive a running agterm-qt over its control socket.
+#include "mobile.h"
 #include "paths.h"
 
 #include <QCoreApplication>
@@ -41,6 +42,8 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session flag [on|off|toggle]
   session move <workspace> [--index N]
   session focus [left|right|other]      move keyboard focus between the split panes
+  session scroll <lines> [--pane left|right]   wheel the pane like a mouse over it; negative = up (older)
+  session grid <cols>x<rows> | --reset [--pane left|right]   the program's grid apart from the window (a phone's) | back
   session resize --split-ratio R | --grow-left D | --grow-right D   (also --grow-top/-bottom/-primary/-split)
   workspace move --index N
   session split [on|off|toggle] [--axis vertical|horizontal]
@@ -53,7 +56,7 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   filepanel width <px>
   notify <body> [--title T]             desktop notification + unseen badge on the session
   session seen                          clear the session's unseen badge without focusing it
-  session type <text> | --stdin
+  session type <text> | --stdin [--pane left|right]
   session text [--all | --lines N] [--pane left|right]   the visible screen; --all adds the scrollback;
                                         --lines: the last N non-blank rows of screen + scrollback
   session copy                          the pane's selected text
@@ -108,6 +111,10 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   window move [id] --x X --y Y [--display N]   refused on Wayland, which does not let apps place windows
   window minimize [id] [on|off|toggle]
   --window W                            address a session/workspace/tree command to that window (default: frontmost)
+  mobile serve [--port N] [--bind ADDR] [--host NAME] [--no-qr]
+                                        let the agterm Mobile app drive this agterm-qt over TLS (default port 8765);
+                                        prints a pairing QR code and link (--host: the address put in it)
+  mobile reset                          new pairing token: phones paired before are cut off
   restore mode [none|rerun|live]        bare: configured / at launch / active; a mode applies from the next launch
   restore capture                       record each pane's foreground command now (rerun mode)
   restore clear                         forget every captured command
@@ -239,7 +246,7 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "if-idle", "undoable", "companion",
                             "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized",
-                            "next", "prev", "allow-custom", "no-block", "multiple", "ack"};
+                            "next", "prev", "allow-custom", "no-block", "multiple", "ack", "no-qr", "reset"};
     QStringList pos;
     QHash<QString, QString> opt;
     QHash<QString, QStringList> multi; // every value of a repeatable option, in order
@@ -263,6 +270,8 @@ int main(int argc, char **argv)
         return fputs(usage, stderr), 1;
 
     QString cmd = pos.takeFirst();
+    if (cmd == QLatin1String("mobile"))
+        return mobileCommand(pos.value(0), opt.value(QStringLiteral("socket"), socketPath()), opt);
     if (QStringList{"workspace", "session", "recent", "font", "keymap", "hooks", "theme", "restore", "window", "surface", "config", "msg", "zmx", "browser", "quick"}
             .contains(cmd)
         && !pos.isEmpty())
@@ -321,6 +330,14 @@ int main(int argc, char **argv)
         args.insert("index", opt.value(QStringLiteral("index")).toInt());
     if (cmd == QLatin1String("filepanel.width"))
         args.insert("width", arg.toInt());
+    if (cmd == QLatin1String("session.scroll"))
+        args.insert("lines", arg.toInt());
+    if (cmd == QLatin1String("session.grid")) {
+        if (opt.contains(QStringLiteral("reset")))
+            args.insert("reset", true);
+        else if (const QStringList cr = arg.split(QLatin1Char('x')); cr.size() == 2)
+            args.insert("columns", cr[0].toInt()), args.insert("rows", cr[1].toInt());
+    }
     if (cmd == QLatin1String("filepanel"))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
     if (QStringList{"session.flag", "session.split", "workspace.focus", "workspace.filter"}.contains(cmd))
