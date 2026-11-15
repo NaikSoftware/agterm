@@ -4,6 +4,7 @@
 #include <QMetaObject>
 #include <QPointer>
 #include <QScrollBar>
+#include <QSize>
 #include <QStringList>
 #include <QWidget>
 
@@ -49,6 +50,13 @@ static QObject *ownWindow(QObject *session)
     QObject *w = create ? create(e) : nullptr;
     windows.insert(session, w);
     return w;
+}
+
+int columns(QObject *session)
+{
+    QObject *e = emulation(session);
+    auto size = fn<QSize (*)(const QObject *)>(e, "_ZNK7Konsole9Emulation9imageSizeEv");
+    return size ? size(e).width() : -1;
 }
 
 QString scrollback(QObject *session, QWidget *display, bool *ok)

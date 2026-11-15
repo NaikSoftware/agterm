@@ -267,6 +267,16 @@ ctl mobile reset >/dev/null
 grep -q '"error":"unauthorized"' <<<"$(phone "{\"auth\":\"$tok\"}")" || fail "mobile reset revokes the old token"
 grep -q '"ok":true' <<<"$(phone "{\"auth\":\"$(cat "$AGTERM_STATE_DIR/mobile/token")\"}")" || fail "the new token after reset"
 kill "$mpid"; wait "$mpid" 2>/dev/null || true
+# font fit: the phone's "fit to phone" zooms a pane, shown or not, until the program sees at most that many columns
+fit=$(ctl session new --name fitme --no-select)
+sleep 1
+ctl font fit 60 --target "$fit" >/dev/null || fail "font fit"
+ctl session type $'tput cols\r' --target "$fit"
+for _ in $(seq 20); do cols=$(ctl session text --target "$fit" | grep -E '^[0-9]+$' | tail -1); [ -n "$cols" ] && break; sleep 0.2; done
+[ -n "$cols" ] && [ "$cols" -le 60 ] && [ "$cols" -ge 45 ] || fail "font fit gives a background pane 45-60 columns ($cols)"
+prev=$(ctl --json font set 0 --target "$fit")
+[[ $prev == *'"previousFontSize":'[1-9]* ]] || fail "font set reports the fitted size it replaced ($prev)"
+ctl session close --target "$fit" >/dev/null
 # Settings ▸ Connect a Phone switched on: the app runs the relay itself from launch and ends it with itself
 printf '{"on":true,"port":%s}\n' "$port" >"$AGTERM_STATE_DIR/mobile/desktop.json"
 cd /tmp

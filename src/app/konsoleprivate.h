@@ -12,6 +12,8 @@ QObject *emulation(QObject *session);
 // the whole history plus the screen, paged through the view (display) and scrolled back; empty on failure
 QString scrollback(QObject *session, QWidget *display, bool *ok);
 QString selectedText(QObject *session);
+// the emulation's width in columns (what the program sees); -1 when the symbol is missing
+int columns(QObject *session);
 // whether the program in the view asked for mouse reports; *ok is false when the symbol is missing
 bool usesMouseTracking(QWidget *display, bool *ok);
 // the view's background alpha, 0..1 (Konsole takes it from the colour scheme); -1 when the symbol is missing

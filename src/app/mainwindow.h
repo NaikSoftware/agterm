@@ -62,7 +62,7 @@ public:
                      double height, const QString &color, bool wait, std::function<void()> onClose, QString *error);
     bool openHud(const QString &id, const QJsonObject &spec, QString *error);
     bool panePlan(const QString &sessionId, const QString &pane, PanePlan *out, QString *error) override;
-    bool font(const QString &sessionId, const QString &pane, const QString &op, QString *error) override;
+    bool font(const QString &sessionId, const QString &pane, const QString &op, double value, QString *error) override;
     bool appCommand(const QString &cmd, const QString &sessionId, const QJsonObject &args, QJsonObject *result, QString *error) override;
 
     // config.cpp: keymap.conf, hooks.conf, appearance, the theme picker

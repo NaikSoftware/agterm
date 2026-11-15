@@ -314,7 +314,7 @@ private Q_SLOTS:
         store.setSettings(s);
         QTRY_COMPARE(term->font().pointSizeF(), size + 4);
         QString error;
-        QVERIFY(w.font(store.selected, "main", "reset", &error)); // reset returns to the Settings size, not the profile's
+        QVERIFY(w.font(store.selected, "main", "reset", 0, &error)); // reset returns to the Settings size, not the profile's
         QCOMPARE(term->font().pointSizeF(), size + 4);
         dlg->close();
     }
@@ -608,7 +608,7 @@ private Q_SLOTS:
             QCOMPARE(term->font().pointSizeF(), base);
             QCOMPARE(store.session(store.selected)->fontSize, 0.0);
             QString e;
-            QVERIFY(w.font(store.selected, "main", "dec", &e));
+            QVERIFY(w.font(store.selected, "main", "dec", 0, &e));
             QCOMPARE(store.session(store.selected)->fontSize, base - 1);
             saved = store.toJson();
         }

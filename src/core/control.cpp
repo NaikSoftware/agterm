@@ -560,17 +560,24 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
             return fail(error);
         const QString op = cmd.mid(5), p = args.value("pane").toString(QStringLiteral("left"));
         static const QStringList left{"left", "main", "primary", "top"}, right{"right", "split", "bottom"};
-        if (!QStringList{"inc", "dec", "reset"}.contains(op))
+        if (!QStringList{"inc", "dec", "reset", "set", "fit"}.contains(op))
             return fail(QStringLiteral("unknown command '%1'").arg(cmd));
         if (!left.contains(p) && !right.contains(p))
             return fail(QStringLiteral("pane must be left or right"));
         const bool split = right.contains(p);
         if (split && !store.session(id)->hasSplit)
             return fail(QStringLiteral("session has no split"));
-        if (!terminals.font(id, split ? QStringLiteral("right") : QStringLiteral("main"), op, &error))
+        double value = 0;
+        if (op == QLatin1String("fit") && ((value = args.value("columns").toInt()) < 20 || value > 1000))
+            return fail(QStringLiteral("font.fit: columns must be 20...1000"));
+        if (op == QLatin1String("set") && ((value = args.value("size").toDouble()) < 0 || (value > 0 && (value < 4 || value > 96))))
+            return fail(QStringLiteral("font.set: size must be 4...96 points, or 0 for the default"));
+        const double before = split ? store.session(id)->splitFontSize : store.session(id)->fontSize;
+        if (!terminals.font(id, split ? QStringLiteral("right") : QStringLiteral("main"), op, value, &error))
             return fail(error);
         const Session *s = store.session(id);
-        return ok({{"id", id}, {"fontSize", split ? s->splitFontSize : s->fontSize}});
+        // previousFontSize lets a caller put back what it changed: font.set with it (0 = the default size)
+        return ok({{"id", id}, {"fontSize", split ? s->splitFontSize : s->fontSize}, {"previousFontSize", before}});
     }
     if (cmd == QLatin1String("workspace.filter")) { // the window's filter, not one workspace
         bool on = false;

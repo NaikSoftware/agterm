@@ -50,7 +50,7 @@ class _SessionScreenState extends State<SessionScreen> {
   bool scrollback = false, sending = false;
   String text = '';
   String? error;
-  double? fontSize; // null: fit the widest row to the screen
+  bool fitting = false;
   Timer? poll;
   bool polling = false;
 
@@ -103,6 +103,33 @@ class _SessionScreenState extends State<SessionScreen> {
     }
   }
 
+  // "Fit to phone": the computer's pane zooms until it is as narrow as this screen shows at a readable size, so the
+  // program redraws at that width and nothing wraps; the button then puts back the size it had (0 = its default)
+  static const readable = 12.0;
+  String get _fitKey => '${widget.sessionId}/$pane';
+
+  Future<void> toggleFit() async {
+    setState(() => fitting = true);
+    final key = _fitKey;
+    try {
+      if (m.fitted.containsKey(key)) {
+        await m.call('font.set', target: widget.sessionId, args: {'pane': pane, 'size': m.fitted[key]});
+        m.fitted.remove(key);
+      } else {
+        final columns = max(20, (_width / (readable * 0.6)).floor()); // JetBrains Mono advances 0.6 em
+        final r = await m.call('font.fit', target: widget.sessionId, args: {'pane': pane, 'columns': columns});
+        m.fitted[key] = (r['previousFontSize'] as num?)?.toDouble() ?? 0;
+      }
+    } on AgtermError catch (e) {
+      if (mounted) report(context, e.message);
+    } on TimeoutException {
+      if (mounted) report(context, 'The computer did not answer.');
+    }
+    if (!mounted) return;
+    setState(() => fitting = false);
+    Future.delayed(const Duration(milliseconds: 300), _load); // the program redraws at its new width
+  }
+
   String _trimEnd(String t) => t.split('\n').map((l) => l.trimRight()).join('\n').replaceFirst(RegExp(r'\n+$'), '');
 
   Future<void> type(String keys) async {
@@ -140,7 +167,7 @@ class _SessionScreenState extends State<SessionScreen> {
               style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
         ]),
         actions: [
-          StatusChip(s.status),
+          StatusChip(s.status, blink: s.blink),
           IconButton(
             key: const Key('sessionMenu'),
             tooltip: 'Session actions',
@@ -198,23 +225,13 @@ class _SessionScreenState extends State<SessionScreen> {
           setState(() => scrollback = !scrollback);
           _load();
         }, key: const Key('scrollback')),
-        IconButton(
-          tooltip: 'Smaller text',
-          visualDensity: VisualDensity.compact,
-          onPressed: () => setState(() => fontSize = max(6, (fontSize ?? _fit) - 1)),
-          icon: const Icon(Icons.text_decrease, size: 20, color: C.muted),
-        ),
-        IconButton(
-          tooltip: fontSize == null ? 'Larger text' : 'Fit to width',
-          visualDensity: VisualDensity.compact,
-          onPressed: () => setState(() => fontSize = fontSize == null ? min(20, _fit + 1) : null),
-          icon: Icon(fontSize == null ? Icons.text_increase : Icons.fit_screen, size: 20, color: C.muted),
-        ),
+        seg(m.fitted.containsKey(_fitKey) ? 'Restore PC size' : 'Fit to phone', m.fitted.containsKey(_fitKey), fitting ? () {} : toggleFit,
+            key: const Key('fitPhone')),
       ]),
     );
   }
 
-  double _fit = 11;
+  double _fit = 11, _width = 360;
 
   Widget _terminal() => Container(
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -223,8 +240,9 @@ class _SessionScreenState extends State<SessionScreen> {
         child: LayoutBuilder(builder: (context, box) {
           final cols = text.split('\n').fold<int>(20, (a, l) => max(a, l.runes.length));
           // JetBrains Mono advances 0.6 em
-          _fit = ((box.maxWidth - 24) / (cols * 0.6)).clamp(5.5, 13).toDouble();
-          final size = fontSize ?? _fit;
+          _width = box.maxWidth - 24;
+          _fit = (_width / (cols * 0.6)).clamp(5.5, 13).toDouble();
+          final size = _fit;
           final body = SelectableText(
             error != null && text.isEmpty ? error! : text,
             key: const Key('screen'),
@@ -234,9 +252,7 @@ class _SessionScreenState extends State<SessionScreen> {
             controller: vScroll,
             reverse: true, // the newest rows stay in view
             padding: const EdgeInsets.all(12),
-            child: fontSize == null
-                ? SizedBox(width: double.infinity, child: body)
-                : SingleChildScrollView(scrollDirection: Axis.horizontal, child: SizedBox(width: max(box.maxWidth - 24, cols * size * 0.6 + 8), child: body)),
+            child: SizedBox(width: double.infinity, child: body),
           );
         }),
       );

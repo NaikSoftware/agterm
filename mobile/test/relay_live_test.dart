@@ -17,6 +17,9 @@ void main() {
     await Future.delayed(const Duration(milliseconds: 800));
     final text = await c.call('session.text', target: created['id']);
     expect('$text', contains('phone-ok'));
+    final fit = await c.call('font.fit', target: created['id'], args: {'columns': 40});
+    final back = await c.call('font.set', target: created['id'], args: {'size': fit['previousFontSize']});
+    expect(back['fontSize'], fit['previousFontSize']); // Fit to phone puts the computer's size back
     await expectLater(c.call('session.info', target: 'nope'), throwsA(isA<AgtermError>()));
     c.close();
     final bad = Pairing(name: 'x', host: p.host, port: p.port, token: 'A' * 43, fingerprint: p.fingerprint);

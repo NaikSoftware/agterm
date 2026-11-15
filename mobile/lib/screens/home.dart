@@ -412,7 +412,7 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: EdgeInsets.only(left: indent - 8, right: 12),
         decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: s.active ? C.surface : null),
         child: Row(children: [
-          StatusDot(s.status),
+          StatusDot(s.status, blink: s.blink),
           const SizedBox(width: 12),
           Expanded(
             child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -484,7 +484,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       overflow: TextOverflow.ellipsis),
                 ]),
               ),
-              StatusChip(s.status),
+              StatusChip(s.status, blink: s.blink),
             ]),
             if (blocked && snippet.trim().isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -535,8 +535,9 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class StatusChip extends StatelessWidget {
-  const StatusChip(this.status, {super.key});
+  const StatusChip(this.status, {super.key, this.blink = false});
   final String status;
+  final bool blink;
 
   @override
   Widget build(BuildContext context) {
@@ -551,7 +552,7 @@ class StatusChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        StatusDot(status, size: 7),
+        StatusDot(status, size: 7, blink: blink),
         const SizedBox(width: 6),
         Text(statusLabel(status), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
       ]),

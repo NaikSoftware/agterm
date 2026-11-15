@@ -266,7 +266,7 @@ raw `events.read` reply, see reference.md). The app keeps 4096 events per run; `
   `dashboard <id[:left|:right]>… | --mru [--font-size N | --auto-size] | --close`.
 - Windows: `window new|list|select|go|close|rename|delete|resize|move|zoom|fullscreen|minimize`.
   On Wayland `window move` is refused and `window list` omits `x`/`y`.
-- `font inc|dec|reset [--pane left|right]`, `theme list|set [name]` (Konsole colour schemes).
+- `font inc|dec|reset [--pane left|right]`, `font set <points>` (0 = default), `font fit <columns>` (smallest size at most that wide), `theme list|set [name]` (Konsole colour schemes).
 
 ## Restore
 

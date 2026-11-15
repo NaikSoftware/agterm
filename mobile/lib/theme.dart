@@ -1,4 +1,6 @@
 // The look from the "agterm Mobile" design canvas: terminal-native dark, Inter for UI, JetBrains Mono for terminal text.
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -110,21 +112,59 @@ ThemeData buildTheme() {
 
 const sectionLabel = TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1, color: C.muted);
 
-class StatusDot extends StatelessWidget {
-  const StatusDot(this.status, {super.key, this.size = 8});
+class StatusDot extends StatefulWidget {
+  const StatusDot(this.status, {super.key, this.size = 8, this.blink = false});
   final String status;
   final double size;
+  final bool blink; // the agent asked for a pulse (`active --blink` while it works)
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: statusColor(status),
-          border: status == 'idle' || status.isEmpty ? Border.all(color: C.dim, width: 1.5) : null,
-        ),
-      );
+  State<StatusDot> createState() => _StatusDotState();
+}
+
+// the desktop sidebar's fade: one cosine cycle a second, alpha 0.2 to 1
+class _StatusDotState extends State<StatusDot> with SingleTickerProviderStateMixin {
+  late final pulse = AnimationController(vsync: this, duration: const Duration(seconds: 1));
+
+  bool get _pulsing => widget.blink && widget.status != 'idle' && widget.status.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_pulsing) pulse.repeat();
+  }
+
+  @override
+  void didUpdateWidget(StatusDot old) {
+    super.didUpdateWidget(old);
+    if (_pulsing && !pulse.isAnimating) pulse.repeat();
+    if (!_pulsing && pulse.isAnimating) pulse.reset();
+  }
+
+  @override
+  void dispose() {
+    pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dot = Container(
+      width: widget.size,
+      height: widget.size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: statusColor(widget.status),
+        border: widget.status == 'idle' || widget.status.isEmpty ? Border.all(color: C.dim, width: 1.5) : null,
+      ),
+    );
+    if (!_pulsing) return dot;
+    return AnimatedBuilder(
+      animation: pulse,
+      builder: (_, child) => Opacity(opacity: 0.2 + 0.8 * (0.5 + 0.5 * cos(pulse.value * 2 * pi)), child: child),
+      child: dot,
+    );
+  }
 }
 
 const agentNames = {'claude': 'Claude Code', 'codex': 'Codex', 'opencode': 'OpenCode', 'antigravity': 'Antigravity'};
