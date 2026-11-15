@@ -11,6 +11,7 @@
 
 #include <QStackedWidget>
 #include <QApplication>
+#include <QWheelEvent>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QDesktopServices>
@@ -99,6 +100,22 @@ bool MainWindow::setGrid(const QString &sessionId, const QString &pane, const QS
     const bool fitted = KonsolePrivate::fitToView(s);
     m_stack->setCurrentWidget(current);
     return fitted || (*error = QStringLiteral("cannot resize the terminal"), false);
+}
+
+bool MainWindow::scroll(const QString &sessionId, const QString &pane, int lines, QString *error)
+{
+    KParts::ReadOnlyPart *part = panePart(sessionId, pane);
+    QWidget *display = part ? terminalDisplay(part) : nullptr;
+    if (!display)
+        return *error = QStringLiteral("pane has no terminal"), false;
+    // Konsole's own wheel handling picks the right effect (mouse report, arrow keys or scrollback); a notch is 3 lines
+    const QPointF at = QRectF(display->rect()).center();
+    for (int n = qMax(1, (std::abs(lines) + 1) / 3); n > 0; --n) {
+        QWheelEvent wheel(at, display->mapToGlobal(at), {}, QPoint(0, lines < 0 ? 120 : -120), Qt::NoButton, Qt::NoModifier,
+                          Qt::ScrollUpdate, false); // a phase keeps SmoothWheel from re-timing it
+        QApplication::sendEvent(display, &wheel);
+    }
+    return true;
 }
 
 void MainWindow::emitEvent(const QString &kind, const QString &sessionId, const QJsonObject &payload)

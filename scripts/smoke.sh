@@ -276,6 +276,13 @@ for _ in $(seq 20); do out=$(ctl session text --lines 70 --target "$fit"); [[ $o
 [ "$(head -1 <<<"$out")" = "70 48" ] || fail "session grid: the program sees 70x48, the first row reads back ($(head -2 <<<"$out"))"
 ctl session grid --reset --target "$fit" >/dev/null
 ctl --json session text --target "$fit" | grep -q '"columns":48' && fail "session grid --reset gives the grid back to the view"
+# session scroll: wheel notches as a mouse would send; a shell's view scrolls back through its history
+ctl session type $'clear; seq 1 300\r' --target "$fit"
+sleep 0.6
+ctl session scroll -30 --target "$fit" >/dev/null || fail "session scroll"
+last=$(ctl session text --target "$fit" | grep -v '^$' | tail -1)
+[[ $last =~ ^2[0-9][0-9]$ ]] || fail "session scroll -30 shows older rows (last row $last)"
+ctl session scroll 30 --target "$fit" >/dev/null
 ctl session close --target "$fit" >/dev/null
 # Settings ▸ Connect a Phone switched on: the app runs the relay itself from launch and ends it with itself
 printf '{"on":true,"port":%s}\n' "$port" >"$AGTERM_STATE_DIR/mobile/desktop.json"

@@ -119,7 +119,8 @@ line) on `<state dir>/agterm.sock`. The state dir is `~/.local/share/agterm-qt`,
 Beyond sessions and workspaces it streams events (`agtermctl events`), shows pickers and questions (`pick`, `ask`),
 passes messages between panes (`msg`, addressed by `AGTERM_PANE_ID`), reads a pane's screen or scrollback
 (`session text --all`), types into either pane (`session type --pane right`), and zooms a pane's font
-(`font inc|dec|reset`), and sets a pane's grid apart from its window (`session grid <cols>x<rows>`, `--reset`). Commands for features agterm-qt
+(`font inc|dec|reset`), sets a pane's grid apart from its window (`session grid <cols>x<rows>`, `--reset`), and wheels a pane as a mouse
+would (`session scroll <lines>`). Commands for features agterm-qt
 lacks answer "not supported on this platform".
 
 ## Phone app
@@ -129,7 +130,8 @@ status dots (a working agent's dot pulses, as in the sidebar) and the sessions t
 into it (an agent's question shows as answer buttons), and the sidebar's row menus. Fit to phone on a session's screen
 gives the program the phone's own grid (`session grid`): as many columns and rows as the phone shows at a readable
 size, so it redraws for the phone and nothing wraps, while the computer's font stays as it was; Restore PC size gives
-the grid back to the computer's window. It speaks the control API through a relay that runs only while you want it.
+the grid back to the computer's window. While fitted, dragging the screen scrolls the program itself (wheel notches
+through `session scroll`), so Claude Code scrolls its own transcript. It speaks the control API through a relay that runs only while you want it.
 
 Settings ▸ Connect a Phone… switches it on: the window shows the QR code to scan in the app, the `agterm://pair?…` link
 to copy, the address the code points the phone at (pick your LAN or VPN address, or type a name such as the machine's

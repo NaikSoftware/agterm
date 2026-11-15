@@ -255,7 +255,7 @@ raw `events.read` reply, see reference.md). The app keeps 4096 events per run; `
 ## Layout, windows and navigation
 
 - Splits: `session split [on|off|toggle] [--axis vertical|horizontal]` (off hides, the shell lives),
-  `session split close`, `session swap`, `session focus [left|right|other]`, `session resize --split-ratio R`, `session grid <cols>x<rows> | --reset`.
+  `session split close`, `session swap`, `session focus [left|right|other]`, `session resize --split-ratio R`, `session grid <cols>x<rows> | --reset`, `session scroll <lines>` (wheel; negative = up).
 - Navigation: `session go --to next|prev|first|last|next-attention|prev-attention`, `workspace go --to next|prev`,
   `session select`, `workspace select`, `recent list|open [id]|clear`.
 - Sidebar: `sidebar [show|hide|toggle]`, `sidebar mode tree|flagged`, `sidebar flagged-layout flat|plain|tree`,

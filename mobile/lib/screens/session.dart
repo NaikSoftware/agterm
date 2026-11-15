@@ -52,6 +52,8 @@ class _SessionScreenState extends State<SessionScreen> {
   String? error;
   bool fitting = false;
   Timer? poll;
+  double _dragRows = 0; // a drag's distance in rows not sent yet
+  bool _scrolling = false;
   bool polling = false;
 
   AgtermModel get m => widget.model;
@@ -237,6 +239,28 @@ class _SessionScreenState extends State<SessionScreen> {
   double _fit = 11, _width = 360, _height = 600;
   int? _columns; // the computer's grid width, from session.text; older agterm-qt sends none
 
+  // fitted, the phone shows the program's whole grid, so a drag scrolls the program itself: it reaches the computer as
+  // wheel notches (session scroll), which a TUI such as Claude Code reads as its own scrolling
+  bool get _remoteScroll => !scrollback && m.fitted.containsKey(_fitKey);
+
+  void _drag(DragUpdateDetails d) {
+    _dragRows += d.delta.dy / (_fit * 1.3);
+    if (!_scrolling) _sendScroll();
+  }
+
+  Future<void> _sendScroll() async {
+    final rows = _dragRows.truncate(); // dragging down shows older rows: up in the terminal
+    if (rows == 0) return;
+    _dragRows -= rows;
+    _scrolling = true;
+    final err = await m.act('session.scroll', target: widget.sessionId, args: {'pane': pane, 'lines': -rows});
+    _scrolling = false;
+    if (!mounted) return;
+    if (err != null) return report(context, err);
+    unawaited(_load());
+    _sendScroll(); // what the finger moved meanwhile
+  }
+
   Widget _terminal() => Container(
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         decoration: BoxDecoration(color: C.term, border: Border.all(color: const Color(0xFF1A1C24)), borderRadius: BorderRadius.circular(12)),
@@ -257,12 +281,14 @@ class _SessionScreenState extends State<SessionScreen> {
             textScaler: TextScaler.noScaling,
             style: TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: size, height: 1.3, color: error != null && text.isEmpty ? C.danger : C.termText),
           );
-          return SingleChildScrollView(
+          final view = SingleChildScrollView(
             controller: vScroll,
             reverse: true, // the newest rows stay in view
+            physics: _remoteScroll ? const NeverScrollableScrollPhysics() : null,
             padding: const EdgeInsets.all(12),
             child: SizedBox(width: double.infinity, child: body),
           );
+          return _remoteScroll ? GestureDetector(onVerticalDragUpdate: _drag, child: view) : view;
         }),
       );
 

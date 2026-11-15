@@ -2,7 +2,7 @@
 
 The phone app for agterm-qt (Flutter, Android): the session tree with status dots (pulsing while an agent works), a
 session's screen with Fit to phone (gives the program the phone's columns and rows, so it redraws for the phone and
-nothing wraps; Restore PC size gives the grid back to the computer), typing into it, the sidebar's row menus, and notifications when an agent blocks or finishes while the app is in the background, over
+nothing wraps, and a drag scrolls the program itself; Restore PC size gives the grid back to the computer), typing into it, the sidebar's row menus, and notifications when an agent blocks or finishes while the app is in the background, over
 the TLS relay that `agtermctl mobile serve` runs on the computer. The project
 README's [Phone app](../README.md#phone-app) section covers the relay and its security model.
 

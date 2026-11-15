@@ -45,6 +45,7 @@ public:
     QString text(const QString &sessionId, const QString &pane, bool scrollback, QString *error) override;
     QSize gridSize(const QString &sessionId, const QString &pane) override;
     bool setGrid(const QString &sessionId, const QString &pane, const QSize &grid, QString *error) override;
+    bool scroll(const QString &sessionId, const QString &pane, int lines, QString *error) override;
     QStringList paneIds(const QString &sessionId) const override;
     void emitEvent(const QString &kind, const QString &sessionId, const QJsonObject &payload) override;
     QJsonObject info(const QString &sessionId) override;

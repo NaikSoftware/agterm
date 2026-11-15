@@ -35,6 +35,16 @@ public:
         *error = QStringLiteral("no terminals");
         return false;
     }
+    // wheel notches into the pane, as a mouse over it would: the program's own scrolling when it tracks the mouse or is
+    // on the alternate screen, else the scrollback; lines < 0 scrolls up (older)
+    virtual bool scroll(const QString &sessionId, const QString &pane, int lines, QString *error)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        Q_UNUSED(lines);
+        *error = QStringLiteral("no terminals");
+        return false;
+    }
     // the live panes' ids (AGTERM_PANE_ID) by role, left first; a respawned pane gets a new one
     virtual QStringList paneIds(const QString &sessionId) const
     {

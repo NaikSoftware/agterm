@@ -29,7 +29,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Close-session reselection by MRU within the workspace
 - [x] Shortcuts: new session ⌘N, new workspace ⌘⇧N, open directory ⌘O, close ⌘W, prev/next session ⌥⌘↑↓, attention ⌃⌥↑↓, toggle sidebar ⌘⌃S, flag ⌘⇧F
 - [x] Shortcuts: reopen ⌘⇧T, font ⌘+ ⌘− ⌘0 (`font inc|dec|reset`, sizes persisted; driven through Konsole's Ctrl+wheel zoom)
-- [x] A pane's grid apart from its window (agterm-qt only, the phone's Fit to phone): `session grid <cols>x<rows> | --reset`
+- [x] A pane's grid apart from its window (agterm-qt only, the phone's Fit to phone): `session grid <cols>x<rows> | --reset`;
+  wheel notches into a pane (agterm-qt only, the phone's drag): `session scroll <lines>`
 
 ## Phase 2: terminals
 

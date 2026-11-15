@@ -42,6 +42,7 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session flag [on|off|toggle]
   session move <workspace> [--index N]
   session focus [left|right|other]      move keyboard focus between the split panes
+  session scroll <lines> [--pane left|right]   wheel the pane like a mouse over it; negative = up (older)
   session grid <cols>x<rows> | --reset [--pane left|right]   the program's grid apart from the window (a phone's) | back
   session resize --split-ratio R | --grow-left D | --grow-right D   (also --grow-top/-bottom/-primary/-split)
   workspace move --index N
@@ -329,6 +330,8 @@ int main(int argc, char **argv)
         args.insert("index", opt.value(QStringLiteral("index")).toInt());
     if (cmd == QLatin1String("filepanel.width"))
         args.insert("width", arg.toInt());
+    if (cmd == QLatin1String("session.scroll"))
+        args.insert("lines", arg.toInt());
     if (cmd == QLatin1String("session.grid")) {
         if (opt.contains(QStringLiteral("reset")))
             args.insert("reset", true);

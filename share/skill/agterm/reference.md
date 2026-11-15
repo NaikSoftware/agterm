@@ -212,6 +212,11 @@ All take `--target` (workspace id, prefix, name, `active`) and `--window`.
   font, so rows beyond it are read with `session text --lines N`. Answers `result.columns`/`result.rows`. Errors:
   `session.grid takes columns and rows, or reset`, `session.grid: columns must be 20...1000 and rows 5...1000`,
   `invalid pane: X`, `session has no split pane`, `cannot resize the terminal`.
+- `session scroll <lines> [--pane left|right]`: wheels the pane as a mouse over it would, one notch per 3 lines (at
+  least one); negative scrolls up (older). Konsole picks the effect: mouse reports to a program tracking the mouse
+  (Claude Code scrolls its transcript), arrow keys on the alternate screen, else the view moves through the scrollback
+  (then `session text` reads the scrolled view). Errors: `session.scroll: lines must be -1000...1000 and not 0`,
+  `invalid pane: X`, `session has no split pane`, `pane has no terminal`.
 - `session resize --split-ratio R | --grow-left D | --grow-right D` (also `--grow-top`, `--grow-bottom`,
   `--grow-primary`, `--grow-split`): sets the main pane's fraction (clamped 0.05–0.95) or moves it by D.
   Prints the applied ratio (`result.ratio`). Errors: `provide exactly one split ratio or grow option`,

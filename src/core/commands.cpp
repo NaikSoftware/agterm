@@ -6,6 +6,7 @@
 
 #include <QDateTime>
 #include <algorithm>
+#include <cstdlib>
 #include <QJsonArray>
 #include <QRegularExpression>
 #include <QUuid>
@@ -132,6 +133,21 @@ static QJsonObject sessionGrid(Store &store, Terminals &terminals, const QString
         return fail(error);
     const QSize now = terminals.gridSize(id, pane);
     return ok({{"id", id}, {"pane", pane}, {"columns", now.width()}, {"rows", now.height()}});
+}
+
+static QJsonObject sessionScroll(Store &store, Terminals &terminals, const QString &id, const QJsonObject &args)
+{
+    const QString raw = args.value("pane").toString(QStringLiteral("left"));
+    if (!leftPane.contains(raw) && !rightPane.contains(raw))
+        return fail(QStringLiteral("invalid pane: %1").arg(raw));
+    const QString pane = leftPane.contains(raw) ? QStringLiteral("left") : QStringLiteral("right");
+    if (pane == QLatin1String("right") && !store.session(id)->hasSplit)
+        return fail(QStringLiteral("session has no split pane"));
+    const int lines = args.value("lines").toInt();
+    if (lines == 0 || std::abs(lines) > 1000)
+        return fail(QStringLiteral("session.scroll: lines must be -1000...1000 and not 0"));
+    QString error;
+    return terminals.scroll(id, pane, lines, &error) ? ok({{"id", id}, {"pane", pane}, {"lines", lines}}) : fail(error);
 }
 
 static QJsonObject sessionText(Store &store, Terminals &terminals, const QString &id, const QJsonObject &args)
@@ -598,7 +614,7 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
         }
         return ok({{"id", id}});
     }
-    static const QStringList sessionCmds{"session.context", "session.collapse", "session.expand", "session.resize", "session.grid", "session.text", "session.focus",
+    static const QStringList sessionCmds{"session.context", "session.collapse", "session.expand", "session.resize", "session.grid", "session.scroll", "session.text", "session.focus",
                                          "session.copy", "session.paste", "session.selectall", "session.search", "session.reveal", "ask.open"};
     if (!sessionCmds.contains(cmd)) {
         *handled = false;
@@ -617,6 +633,8 @@ QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd,
         return sessionText(store, terminals, id, args);
     if (cmd == QLatin1String("session.grid"))
         return sessionGrid(store, terminals, id, args);
+    if (cmd == QLatin1String("session.scroll"))
+        return sessionScroll(store, terminals, id, args);
     if (cmd == QLatin1String("session.collapse") || cmd == QLatin1String("session.expand")) {
         if (store.companionsOf(id).isEmpty())
             return fail(QStringLiteral("session has no companions"));
