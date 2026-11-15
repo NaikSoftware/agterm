@@ -1,9 +1,0 @@
-<!DOCTYPE RCC><RCC version="1.0">
-<qresource prefix="/effects/agtermglass/">
-  <file>shaders/downsample.frag</file>
-  <file>shaders/upsample.frag</file>
-  <file>shaders/vertex.vert</file>
-  <file>shaders/glass.vert</file>
-  <file>shaders/glass.frag</file>
-</qresource>
-</RCC>
