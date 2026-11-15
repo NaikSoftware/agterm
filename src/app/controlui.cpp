@@ -63,7 +63,7 @@ QString MainWindow::text(const QString &sessionId, const QString &pane, bool scr
     KParts::ReadOnlyPart *part = panePart(sessionId, pane);
     if (!part)
         return *error = QStringLiteral("session not realized"), QString();
-    prime(m_panes.value(sessionId).view);
+    prime(m_panes.value(sessionId).view, part->widget());
     QObject *s = sessionOf(part);
     QString out;
     bool ok = false;

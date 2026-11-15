@@ -1114,12 +1114,14 @@ QString MainWindow::liveCwd(const QString &id) const
     return pid > 0 ? QFile::symLinkTarget(QStringLiteral("/proc/%1/cwd").arg(pid)) : QString();
 }
 
-void MainWindow::prime(QWidget *page)
+void MainWindow::prime(QWidget *page, QWidget *pane)
 {
-    // a never-shown terminal has no screen size, so it would read back empty; one synchronous show sizes it
-    if (!isVisible() || page->property("primed").toBool())
+    // a never-shown terminal has no screen size, so it would read back empty; one synchronous show sizes it.
+    // Marked per pane: a split added to a page shown before is still unsized.
+    QWidget *mark = pane ? pane : page;
+    if (!isVisible() || mark->property("primed").toBool())
         return;
-    page->setProperty("primed", true);
+    mark->setProperty("primed", true);
     QWidget *current = m_stack->currentWidget();
     m_stack->setCurrentWidget(page);
     m_stack->setCurrentWidget(current);

@@ -221,7 +221,7 @@ private:
     void detectLaunchers();
     TerminalInterface *terminal(const QString &id) const;
     QString liveCwd(const QString &id) const;
-    void prime(QWidget *page);
+    void prime(QWidget *page, QWidget *pane = nullptr); // pane: mark that one terminal as sized, not the whole page
     QObject *konsoleSession(const QString &id);
 
     Store &m_store;
