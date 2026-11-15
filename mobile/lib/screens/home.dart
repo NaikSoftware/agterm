@@ -445,7 +445,21 @@ class _HomeScreenState extends State<HomeScreen> {
     final blocked = s.status == 'blocked';
     final snippet = snippets[s.id] ?? '';
     final options = blocked ? promptOptions(snippet) : const <PromptOption>[];
-    Future<void> send(String keys) async => reportOf(context, m.act('session.type', target: s.id, args: {'text': keys}));
+    // the card's text is up to 2 s old: answer only if the question on screen is still the one shown
+    Future<void> send(String keys) async {
+      try {
+        final now = '${(await m.call('session.text', target: s.id, args: {'lines': 12}))['text'] ?? ''}';
+        if (promptTail(now) != promptTail(snippet)) {
+          if (!mounted) return;
+          setState(() => snippets[s.id] = now);
+          return report(context, 'The question changed. Check it and answer again.');
+        }
+      } catch (_) {
+        // can't re-read: the send below reports the same failure
+      }
+      if (mounted) await reportOf(context, m.act('session.type', target: s.id, args: {'text': keys}));
+    }
+
     return Material(
       color: blocked ? C.blockedBg : C.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: blocked ? C.blockedLine : C.line)),
