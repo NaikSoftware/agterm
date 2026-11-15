@@ -13,6 +13,8 @@ HTML companions, `browser.*` and remote sessions are missing).
 Each terminal is a Konsole KPart, so Konsole's profiles, colour schemes, scrollback, search and copy/paste work as
 in Konsole.
 
+![agterm-qt: workspaces of agent sessions with status dots, a split session running Claude Code and tests](docs/images/agterm-qt.png)
+
 ## Build and install
 
 Needs Qt 6 (Widgets, Network, DBus, Svg), KDE Frameworks 6 (CoreAddons, XmlGui, Config, Notifications, KParts,
