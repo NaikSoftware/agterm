@@ -145,15 +145,32 @@ lacks answer "not supported on this platform".
 
 ## Phone app
 
-agterm Mobile ([mobile/](mobile/README.md), Flutter) watches and drives agterm-qt from a phone: the session tree with
-status dots (a working agent's dot pulses, as in the sidebar) and the sessions that need you, a session's screen, typing
-into it (an agent's question shows as answer buttons), and the sidebar's row menus. Fit to phone on a session's screen
-gives the program the phone's own grid (`session grid`): as many columns and rows as the phone shows at a readable
-size, so it redraws for the phone and nothing wraps, while the computer's font stays as it was; Restore PC size gives
-the grid back to the computer's window. While fitted, dragging the screen scrolls the program itself (wheel notches
-through `session scroll`), so Claude Code scrolls its own transcript. On the computer, Session ▸ Restore Terminal Size
-(also on the row's right-click menu while it applies) takes a fitted session back; it is disabled once the window
-has taken the grid back by itself (resized or shown). It speaks the control API through a relay that runs only while you want it.
+agterm Mobile ([mobile/](mobile/README.md), Flutter, Android) watches and drives agterm-qt from a phone, over a relay
+on the computer that runs only while you want it.
+
+<p align="center">
+  <img src="docs/images/mobile-sessions.png" width="270" alt="Sessions: a blocked agent's question with answer buttons, a finished session, workspaces of agent sessions">
+  <img src="docs/images/mobile-new-session.png" width="270" alt="New session: pick Terminal, Claude Code, Codex, OpenCode or Antigravity, a workspace and a folder">
+  <img src="docs/images/mobile-session.png" width="270" alt="A Claude Code session fitted to the phone">
+</p>
+
+- **Sessions.** The workspace tree with status dots (a working agent's dot pulses, as in the sidebar), agent logos and
+  context lines. Needs you leads with the sessions that wait for you: an agent's question shows the screen's tail and
+  its options as answer buttons, so a permission prompt is one tap; finished sessions follow. Filters for blocked,
+  done and flagged sessions.
+- **New session.** Terminal or any agent, in a workspace and folder, quietly or also selected on the computer; a new
+  workspace on the way. The row and workspace menus (rename, flag, tint, move, split, companion, close) match the
+  sidebar's.
+- **A session's screen.** The pane's text, refreshed while you look; a key bar (esc, tab, ⇧tab, ^C, arrows, …) and a
+  composer that types into it; both panes of a split; Scrollback for the history.
+- **Fit to phone** gives the program the phone's own grid (`session grid`): as many columns and rows as the phone shows
+  at a readable size, so it redraws for the phone and nothing wraps, while the computer's font stays as it was. While
+  fitted, dragging the screen scrolls the program itself (wheel notches through `session scroll`), so Claude Code
+  scrolls its own transcript. Restore PC size gives the grid back; on the computer, Session ▸ Restore Terminal Size
+  (also on the row's right-click menu while it applies) does the same, and is disabled once the window has taken the
+  grid back by itself (resized or shown).
+- **Alerts in the background.** A notification per session when its agent blocks, finishes or notifies; tapping one
+  opens that session.
 
 Settings ▸ Connect a Phone… switches it on: the window shows the QR code to scan in the app, the `agterm://pair?…` link
 to copy, the address the code points the phone at (pick your LAN or VPN address, or type a name such as the machine's

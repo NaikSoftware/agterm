@@ -30,7 +30,7 @@ class _PairScreenState extends State<PairScreen> {
     } on AgtermError catch (e) {
       setState(() => error = e.message);
     } catch (_) {
-      setState(() => error = 'Cannot reach ${p.host}:${p.port}. Check that `agtermctl mobile serve` is running and the phone is on the same network.');
+      setState(() => error = 'Cannot reach ${p.host}:${p.port}. Check that phone access is on (Settings ▸ Connect a Phone…) and the phone is on the same network.');
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -73,7 +73,7 @@ class _PairScreenState extends State<PairScreen> {
             const Text('Pair with agterm-qt', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, height: 1.2)),
             const SizedBox(height: 14),
             const Text(
-              'On your computer, run the command below in any terminal. It prints a pairing code and keeps the link open while it runs.',
+              'On your computer, open Settings ▸ Connect a Phone… in agterm-qt and switch it on, or run the command below in any terminal. Either shows a pairing code.',
               style: TextStyle(fontSize: 15, height: 1.5, color: C.muted),
             ),
             const SizedBox(height: 24),

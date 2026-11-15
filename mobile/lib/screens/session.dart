@@ -96,10 +96,12 @@ class _SessionScreenState extends State<SessionScreen> {
       final rows = scrollback ? 2000 : m.fitted[_fitKey]?.$2 ?? 0;
       final r = await m.call('session.text', target: widget.sessionId, args: {'pane': pane, if (rows > 0) 'lines': rows});
       final t = _trimEnd('${r['text'] ?? ''}');
-      _columns = (r['columns'] as num?)?.toInt();
+      final columns = (r['columns'] as num?)?.toInt();
       // the computer took the grid back (Restore Terminal Size, or its window resized): no longer fitted
-      if (_columns != null && m.fitted[_fitKey] != null && m.fitted[_fitKey]!.$1 != _columns) m.fitted.remove(_fitKey);
-      if (mounted && (t != text || error != null)) setState(() => (text = t, error = null));
+      final lost = columns != null && m.fitted[_fitKey] != null && m.fitted[_fitKey]!.$1 != columns;
+      if (lost) m.fitted.remove(_fitKey);
+      // a new grid width resizes the text even when the screen's text is the same (an idle shell)
+      if (mounted && (t != text || error != null || columns != _columns || lost)) setState(() => (text = t, error = null, _columns = columns));
       if (s != null && s!.unseen > 0) unawaited(m.act('session.seen', target: widget.sessionId));
     } on AgtermError catch (e) {
       if (mounted) setState(() => error = e.message);
@@ -114,7 +116,26 @@ class _SessionScreenState extends State<SessionScreen> {
   // computer's view, so it redraws for the phone; the button then gives the grid back to the computer's view
   static const readable = 12.0;
   String get _fitKey => '${widget.sessionId}/$pane';
-  int _fitColumns() => max(20, (_width / (MediaQuery.textScalerOf(context).scale(readable) * 0.6)).floor());
+  int _fitColumns() => max(20, (_width / _advance(MediaQuery.textScalerOf(context).scale(readable))).floor());
+
+  // one column's width at this size as the engine lays it out: glyph advances snap to device pixels, so 0.6 em is not
+  // exact and a full row could wrap
+  static double _advance(double size) {
+    final tp = TextPainter(
+        text: TextSpan(text: 'M' * 100, style: TextStyle(fontFamily: mono, fontSize: size)), textDirection: TextDirection.ltr, textScaler: TextScaler.noScaling)
+      ..layout();
+    return tp.width / 100;
+  }
+
+  // the largest size, from `top` down, at which `cols` columns fit the width; half a column spare for the caret
+  // SelectableText keeps at the line's end
+  double _sizeFor(int cols, double top) {
+    var size = top;
+    while (size > 2 && _advance(size) * (cols + 0.5) > _width) {
+      size -= 0.1;
+    }
+    return size;
+  }
 
   Future<void> toggleFit() async {
     setState(() => fitting = true);
@@ -126,7 +147,7 @@ class _SessionScreenState extends State<SessionScreen> {
       } else {
         // JetBrains Mono advances 0.6 em; a larger system font size asks for fewer, bigger columns
         final columns = _fitColumns();
-        final size = _width / (columns * 0.6);
+        final size = _sizeFor(columns, 13);
         final rows = max(5, (_height / (size * 1.3)).floor()); // the text's line height is 1.3
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'columns': columns, 'rows': rows});
         m.fitted[key] = (columns, rows);
@@ -274,14 +295,16 @@ class _SessionScreenState extends State<SessionScreen> {
           // JetBrains Mono advances 0.6 em
           _width = box.maxWidth - 24;
           _height = box.maxHeight - 24;
-          _fit = (_width / (cols * 0.6)).clamp(5.5, 13).toDouble();
+          // tiny when the computer's grid is wide, but whole rows, so the layout stays the program's (Fit to phone reads it)
+          _fit = _sizeFor(cols, min(13, _width / (cols * 0.6)));
           final size = _fit;
           final body = SelectableText(
             error != null && text.isEmpty ? error! : withGridGlyphs(text),
             key: const Key('screen'),
             // the size above is already the one whose rows fit; Android's font scale on top would wrap every full row
             textScaler: TextScaler.noScaling,
-            style: TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: size, height: 1.3, color: error != null && text.isEmpty ? C.danger : C.termText),
+            // letterSpacing 0: the theme's body text adds 0.25 per glyph, which would wrap every full row
+            style: TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: size, height: 1.3, letterSpacing: 0, color: error != null && text.isEmpty ? C.danger : C.termText),
           );
           final view = SingleChildScrollView(
             controller: vScroll,
