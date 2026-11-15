@@ -262,6 +262,7 @@ void showPhoneDialog(QWidget *parent)
     code->setWordWrap(true);
     auto *hosts = new QComboBox;
     hosts->setEditable(true);
+    hosts->setMinimumContentsLength(24); // a full IPv4 address or a Tailscale name
     hosts->setToolTip(QObject::tr("The address the phone reaches this computer at; type a name for a VPN such as Tailscale"));
     auto *port = new QSpinBox;
     port->setRange(1024, 65535);
@@ -282,6 +283,7 @@ void showPhoneDialog(QWidget *parent)
     linkRow->addWidget(link, 1);
     linkRow->addWidget(copy);
     auto *form = new QFormLayout;
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow); // Breeze keeps a combo at its hint, too narrow for an address
     form->addRow(QObject::tr("Address:"), hosts);
     form->addRow(QObject::tr("Port:"), port);
     form->addRow(QObject::tr("Link:"), linkRow);
