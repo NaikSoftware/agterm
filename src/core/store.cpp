@@ -911,8 +911,12 @@ QJsonObject Store::toJson() const
             wo.insert("tint", tintJson(w.tint));
         ws << wo;
     }
+    QJsonArray cl;
+    for (const auto &c : closed)
+        cl << QJsonObject{{"id", c.id},       {"workspaceId", c.workspaceId}, {"name", c.name},     {"cwd", c.cwd},
+                          {"index", c.index}, {"closedAt", c.closedAt},       {"title", c.title}, {"resume", c.resume}};
     const QJsonObject st = settings.toJson();
-    return {{"version", 2},      {"selected", selected}, {"recent", QJsonArray::fromStringList(recent)},
+    return {{"version", 2},      {"closed", cl},      {"selected", selected}, {"recent", QJsonArray::fromStringList(recent)},
             {"settings", st},    {"workspaces", ws},     {"focusedWorkspaces", QJsonArray::fromStringList(focused)},
             {"focusEnabled", focusEnabled}};
 }
@@ -958,6 +962,13 @@ void Store::fromJson(const QJsonObject &o)
                 w.sessions << s;
         }
         workspaces << w;
+    }
+    closed.clear();
+    for (const auto &cv : o.value("closed").toArray()) {
+        const auto co = cv.toObject();
+        if (!co.value("id").toString().isEmpty())
+            closed << Closed{co.value("workspaceId").toString(), co.value("name").toString(), co.value("cwd").toString(), co.value("index").toInt(-1),
+                             co.value("id").toString(),          qint64(co.value("closedAt").toDouble()), co.value("title").toString(), co.value("resume").toString()};
     }
     settings = Settings::fromJson(o.value("settings").toObject());
     if (!std::exchange(m_loaded, true))

@@ -50,7 +50,7 @@ cmake --install build && kbuildsycoca6 --noincremental
 - Auto-follow (Settings ▸ Agent Status) moves to the oldest blocked session once you have been idle for a chosen time.
 - Splits, terminal zoom, full screen.
 - Session (Ctrl+P) and action (Ctrl+Shift+P) palettes, a Ctrl-Tab recent-session switcher, and its title-bar clock
-  menu, which also reopens recently closed sessions (a Claude Code one resumes its conversation). A close can be undone
+  menu, which also reopens recently closed sessions, kept across restarts (a Claude Code one resumes its conversation). A close can be undone
   for 3 seconds.
 - A file panel (the session folder as a tree with file-type icons, a built-in viewer that highlights source code as
   Kate does, clipboard, drag and drop).
