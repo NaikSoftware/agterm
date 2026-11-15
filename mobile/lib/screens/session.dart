@@ -90,7 +90,9 @@ class _SessionScreenState extends State<SessionScreen> {
     if (polling || m.state != LinkState.connected || m.background || ModalRoute.of(context)?.isCurrent != true) return;
     polling = true;
     try {
-      final r = await m.call('session.text', target: widget.sessionId, args: {'pane': pane, if (scrollback) 'lines': 2000});
+      // fitted, the computer's pane has few rows at its big font: the lines above them fill the phone's height
+      final rows = scrollback ? 2000 : m.fitted.containsKey(_fitKey) ? (_height / (_fit * 1.3)).floor() : 0;
+      final r = await m.call('session.text', target: widget.sessionId, args: {'pane': pane, if (rows > 0) 'lines': rows});
       final t = _trimEnd('${r['text'] ?? ''}');
       if (mounted && (t != text || error != null)) setState(() => (text = t, error = null));
       if (s != null && s!.unseen > 0) unawaited(m.act('session.seen', target: widget.sessionId));
@@ -107,6 +109,7 @@ class _SessionScreenState extends State<SessionScreen> {
   // program redraws at that width and nothing wraps; the button then puts back the size it had (0 = its default)
   static const readable = 12.0;
   String get _fitKey => '${widget.sessionId}/$pane';
+  int _fitColumns() => max(20, (_width / (MediaQuery.textScalerOf(context).scale(readable) * 0.6)).floor());
 
   Future<void> toggleFit() async {
     setState(() => fitting = true);
@@ -117,7 +120,7 @@ class _SessionScreenState extends State<SessionScreen> {
         m.fitted.remove(key);
       } else {
         // JetBrains Mono advances 0.6 em; a larger system font size asks for fewer, bigger columns
-        final columns = max(20, (_width / (MediaQuery.textScalerOf(context).scale(readable) * 0.6)).floor());
+        final columns = _fitColumns();
         final r = await m.call('font.fit', target: widget.sessionId, args: {'pane': pane, 'columns': columns});
         m.fitted[key] = (r['previousFontSize'] as num?)?.toDouble() ?? 0;
       }
@@ -228,16 +231,19 @@ class _SessionScreenState extends State<SessionScreen> {
     ]);
   }
 
-  double _fit = 11, _width = 360;
+  double _fit = 11, _width = 360, _height = 600;
 
   Widget _terminal() => Container(
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         decoration: BoxDecoration(color: C.term, border: Border.all(color: const Color(0xFF1A1C24)), borderRadius: BorderRadius.circular(12)),
         clipBehavior: Clip.antiAlias,
         child: LayoutBuilder(builder: (context, box) {
-          final cols = text.split('\n').fold<int>(20, (a, l) => max(a, l.runes.length));
+          final widest = text.split('\n').fold<int>(20, (a, l) => max(a, l.runes.length));
+          // fitted, lines from before the fit may still be wider: they wrap rather than shrink everything back
+          final cols = m.fitted.containsKey(_fitKey) ? min(widest, _fitColumns()) : widest;
           // JetBrains Mono advances 0.6 em
           _width = box.maxWidth - 24;
+          _height = box.maxHeight - 24;
           _fit = (_width / (cols * 0.6)).clamp(5.5, 13).toDouble();
           final size = _fit;
           final body = SelectableText(
