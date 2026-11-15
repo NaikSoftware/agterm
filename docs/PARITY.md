@@ -82,7 +82,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 
 - [x] Settings dialog: General, Appearance, Interface, Notifications, Agent Status, Key Mapping (KPageDialog, every control live).
   Not here, with their features: flagged view layout, link opening, scroll speed, right-click paste, Ghostty config,
-  toolbar mode, opacity/blur, sidebar tint, inactive-pane mute, follow system appearance, window/remote/dashboard/scratch/overlay
+  toolbar mode, sidebar tint, inactive-pane mute, follow system appearance, window/remote/dashboard/scratch/overlay
   title-bar elements, session info line, multiple-window sidebar, attention indicator, crossing windows, keyboard-layout lock
 - [x] Theme picker with live preview (Konsole colour schemes applied per session at runtime, no profile file written; `theme list|set`)
 - [x] keymap.conf: built-in rebinding, alternatives, leader sequences, `command "Name" chord shell…`, AGT_* tokens and env, diagnostics,
