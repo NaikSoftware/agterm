@@ -3,12 +3,13 @@
 A terminal for Linux/KDE organised as named workspaces of sessions, with a control API so coding agents and scripts
 can drive it and report whether they are working, blocked, or done.
 
-agterm-qt is a Qt6/KDE Frameworks 6 implementation of [agterm](https://github.com/umputun/agterm) by
-[@umputun](https://github.com/umputun), a native macOS terminal. It follows agterm's model, keys (translated to Linux
-conventions), config files, agent-status hooks and `agtermctl` wire protocol, including the features of the
-[NaikSoftware/agterm](https://github.com/NaikSoftware/agterm) fork. It is an independent project: report bugs here,
-not upstream. [docs/PARITY.md](docs/PARITY.md) tracks what is ported and what is not yet (web-page overlays,
-HTML companions, `browser.*` and remote sessions are missing).
+agterm-qt is a Qt6/KDE Frameworks 6 port of [agterm](https://github.com/umputun/agterm) by
+[@umputun](https://github.com/umputun), a native macOS terminal. It tracks our macOS fork,
+[NaikSoftware/agterm](https://github.com/NaikSoftware/agterm), which adds the file panel, agent logos and launchers,
+remembered workspace folders and more on top of upstream. It follows agterm's model, keys (translated to Linux
+conventions), config files, agent-status hooks and `agtermctl` wire protocol, so agents and scripts written for agterm
+work here. It is an independent project: report bugs here, not upstream. [docs/PARITY.md](docs/PARITY.md) tracks what
+is ported and what is not yet (web-page overlays, HTML companions, `browser.*` and remote sessions are missing).
 
 Each terminal is a Konsole KPart, so Konsole's profiles, colour schemes, scrollback, search and copy/paste work as
 in Konsole.
@@ -38,7 +39,8 @@ cmake --install build && kbuildsycoca6 --noincremental
 - A session row shows the logo of the agent running in it, its status dot (active, blocked, completed), an unseen
   notification count, and a filled icon when flagged. Companions sit indented under their parent; Duplicate as
   Companion copies a session's split layout and the program in each pane.
-- Tint a session or workspace row (row menu ▸ Tint: seven colours, on the icon, the name, or both).
+- Tint a session or workspace row (row menu ▸ Tint: seven colours, on the icon, the name, the background, or any mix).
+  A background tint washes the row and the session's terminal; a workspace's wash reaches its sessions.
 - Rename inline (double-click), multi-select, drag to reorder or move between workspaces, and drop folders from the
   file manager to open sessions there. The footer has New Session, New Workspace, the workspace filter and the
   flagged view. Mark workspaces with Focus / Add to Focus in their row menu; the grid button applies or suspends
@@ -47,20 +49,22 @@ cmake --install build && kbuildsycoca6 --noincremental
   Edit Flagged Sessions… and Edit Focused Workspaces… tick rows on and off.
 - Auto-follow (Settings ▸ Agent Status) moves to the oldest blocked session once you have been idle for a chosen time.
 - Splits, terminal zoom, full screen.
-- Session (Ctrl+P) and action (Ctrl+Shift+P) palettes, a Ctrl-Tab recent-session switcher and its title-bar clock menu, which also reopens recently closed sessions (a Claude Code one resumes its conversation)
-  button, undo of a close for 3 seconds, and reopen-closed.
+- Session (Ctrl+P) and action (Ctrl+Shift+P) palettes, a Ctrl-Tab recent-session switcher, and its title-bar clock
+  menu, which also reopens recently closed sessions (a Claude Code one resumes its conversation). A close can be undone
+  for 3 seconds.
 - A file panel (the session folder as a tree with file-type icons, a built-in viewer that highlights source code as
   Kate does, clipboard, drag and drop).
 - Settings (Ctrl+Shift+,) with agterm's six pages; terminal font, colour scheme and cursor apply to every open
   terminal on top of the Konsole profile. View ▸ Select Theme… previews schemes live (Enter keeps, Esc reverts).
-- Glass window (Settings ▸ Appearance ▸ Window): see-through backgrounds while text stays solid, and KWin blur behind them.
+- Glass window (Settings ▸ Appearance ▸ Window): background transparency (0–90%) while text stays solid, and KWin's
+  blur behind it.
 - `keymap.conf` and `hooks.conf` in `~/.config/agterm-qt/` (or `$AGTERM_STATE_DIR/config`): rebind built-ins, add custom
   shell commands with `{AGT_*}` tokens (Ctrl+Alt+O lists them), and run scripts on control events. Both files start
   as commented references; File ▸ Edit Keymap… / Reload Keymap and the Hooks pair apply them.
 - Programs in a pane can raise notifications with OSC 9 or OSC 777 (`printf '\e]9;done\a'`).
 - Several windows, each with its own workspaces (File ▸ New Window, Open Window); the ones open at quit come back.
-- A dashboard (Ctrl+Alt+Shift+G, the title-bar grid button, or `agtermctl dashboard <ids>`) shows up to nine live panes side by side, view-only,
-  with each session's name in its status colour; Enter or a click opens one.
+- A dashboard (Ctrl+Alt+Shift+G, the title-bar grid button, or `agtermctl dashboard <ids>`) shows up to nine live panes
+  side by side, view-only, with each session's name in its status colour; Enter or a click opens one.
 - Restore sessions (Settings ▸ General): fresh shells; re-run commands, which records what each pane runs at quit
   and types it into its new shell on the next launch (`restore-denylist.conf` lists programs to leave out); or live
   sessions, where each pane's shell keeps running in an `agterm-session-host` daemon and the next launch reattaches it.
@@ -68,6 +72,19 @@ cmake --install build && kbuildsycoca6 --noincremental
   floating with `--size-percent`, or one split pane with `--pane`); it closes when the program exits and
   `overlay result` (or `--block`) returns the status. Ctrl+Alt+Shift+J hides and shows them. `session hud` puts a
   passive message panel over a session that stays typable; keymap `--error-hud` commands report failures in one.
+
+## Beyond agterm
+
+What agterm-qt adds on top of agterm and Konsole:
+
+- The file viewer highlights source code with Kate's syntax engine and numbers its lines in a gutter.
+- Rows of sessions with an agent at work drift with a soft aurora; a quiet row shows its close button on hover.
+- Background tint on rows and terminals (see above).
+- Smooth, accelerated mouse-wheel scrolling in terminal panes, where Konsole jumps whole lines.
+- The dashboard hides the sidebar and file panel while it is open and gives them back on close.
+- Live sessions run in agterm-qt's own `agterm-session-host` daemon rather than zmx.
+- The agent hooks, skill and `agtermctl` link install themselves on the first launch and after each update (below),
+  instead of from the Help menu.
 
 ## Keys
 
