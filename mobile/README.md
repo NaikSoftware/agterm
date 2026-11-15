@@ -52,4 +52,5 @@ flutter test integration_test/app_test.dart -d emulator-5554 --dart-define=PAIR_
 
 It uninstalls the app when it finishes.
 
-Fonts: Inter and JetBrains Mono, SIL Open Font License 1.1 (`assets/fonts/OFL-*.txt`).
+Fonts: Inter, JetBrains Mono and Noto Sans Symbols 2 (the fallback for agent glyphs JetBrains Mono lacks), SIL Open Font
+License 1.1 (`assets/fonts/OFL-*.txt`).

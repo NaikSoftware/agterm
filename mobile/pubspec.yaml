@@ -32,3 +32,6 @@ flutter:
     - family: JetBrainsMono
       fonts:
         - asset: assets/fonts/JetBrainsMono.ttf
+    - family: NotoSansSymbols2 # the agents' glyphs JetBrains Mono lacks: ✻ ✳ ✔ ✘, braille spinners
+      fonts:
+        - asset: assets/fonts/NotoSansSymbols2.ttf

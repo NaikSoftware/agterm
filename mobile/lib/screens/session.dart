@@ -179,8 +179,8 @@ class _SessionScreenState extends State<SessionScreen> {
       ),
       body: SafeArea(
         child: Column(children: [
-          _toolbar(s),
-          Expanded(child: _terminal()),
+          // the buttons float over the screen's top edge, so the terminal takes the whole height
+          Expanded(child: Stack(children: [Positioned.fill(child: _terminal()), Positioned(top: 14, right: 18, child: _toolbar(s))])),
           if (options.isNotEmpty) _answers(options),
           _keyBar(),
           _composer(),
@@ -191,14 +191,14 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Widget _toolbar(Session s) {
     Widget seg(String label, bool on, VoidCallback onTap, {Key? key}) => Padding(
-          padding: const EdgeInsets.only(right: 6),
+          padding: const EdgeInsets.only(left: 6),
           child: OutlinedButton(
             key: key,
             onPressed: onTap,
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(0, 34),
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              backgroundColor: on ? C.surface2 : Colors.transparent,
+              backgroundColor: (on ? C.surface2 : C.surface).withValues(alpha: 0.92),
               foregroundColor: on ? C.text : C.muted,
               side: BorderSide(color: on ? C.line : C.surface2),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -213,22 +213,18 @@ class _SessionScreenState extends State<SessionScreen> {
       });
       _load();
     }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 0),
-      child: Row(children: [
+    return Row(mainAxisSize: MainAxisSize.min, children: [
         if (s.hasSplit) ...[
           seg('Left pane', pane == 'left', () => setPane('left')),
           seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
         ],
-        const Spacer(),
         seg('Scrollback', scrollback, () {
           setState(() => scrollback = !scrollback);
           _load();
         }, key: const Key('scrollback')),
         seg(m.fitted.containsKey(_fitKey) ? 'Restore PC size' : 'Fit to phone', m.fitted.containsKey(_fitKey), fitting ? () {} : toggleFit,
             key: const Key('fitPhone')),
-      ]),
-    );
+    ]);
   }
 
   double _fit = 11, _width = 360;
@@ -244,9 +240,9 @@ class _SessionScreenState extends State<SessionScreen> {
           _fit = (_width / (cols * 0.6)).clamp(5.5, 13).toDouble();
           final size = _fit;
           final body = SelectableText(
-            error != null && text.isEmpty ? error! : text,
+            error != null && text.isEmpty ? error! : withGridGlyphs(text),
             key: const Key('screen'),
-            style: TextStyle(fontFamily: mono, fontSize: size, height: 1.3, color: error != null && text.isEmpty ? C.danger : C.termText),
+            style: TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: size, height: 1.3, color: error != null && text.isEmpty ? C.danger : C.termText),
           );
           return SingleChildScrollView(
             controller: vScroll,

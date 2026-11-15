@@ -27,6 +27,10 @@ abstract final class C {
 }
 
 const mono = 'JetBrainsMono';
+const monoFallback = ['NotoSansSymbols2'];
+
+// Claude Code's ⏺ and ⎿ have no glyph in either font; these look the same and keep the grid
+String withGridGlyphs(String text) => text.replaceAll('⏺', '●').replaceAll('⎿', '└');
 
 // agterm's seven tint names → swatches
 const tints = {
