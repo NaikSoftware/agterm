@@ -1,6 +1,7 @@
 // MainWindow's config side: keymap.conf, hooks.conf, the theme picker, appearance and terminal notifications.
 #include "mainwindow.h"
 
+#include "filepanel.h"
 #include "hooks.h"
 #include "palette.h"
 #include "paths.h"
@@ -12,12 +13,17 @@
 #include <KNotification>
 #include <KParts/ReadOnlyPart>
 #include <KSharedConfig>
+#include <KWindowEffects>
 #include <kde_terminal_interface.h>
 
+#include <QAbstractScrollArea>
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
 #include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusReply>
+#include <QDBusInterface>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -27,6 +33,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSplitter>
+#include <QTimer>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QToolBar>
@@ -195,6 +202,8 @@ void MainWindow::applyAppearance(KParts::ReadOnlyPart *part)
             QMetaObject::invokeMethod(ks, "profileChangeCommandReceived", Q_ARG(QString, command));
             part->setProperty("agtermLookOverridden", overrides);
         }
+    // after the scheme: Konsole resets the view's opacity to the scheme's own whenever it applies one
+    KonsolePrivate::setTerminalOpacity(terminalDisplay(part), 1 - qBound(0.0, s.windowTransparency, 90.0) / 100);
 
     // a Font= profile command does not reach the display; setFont does, and a Ctrl+wheel there and back relays the grid out
     QWidget *display = nullptr;
@@ -417,7 +426,9 @@ void MainWindow::applySettings()
         paletteFont.setPointSizeF(s.interfaceFontSize);
     m_palette->setFont(paletteFont);
     m_tree->viewport()->update();
-    const QString look = QStringList{s.theme, s.fontFamily, QString::number(s.fontSize), s.cursorStyle, s.cursorBlink}.join(QLatin1Char('\n'));
+    applyGlass();
+    const QString look = QStringList{s.theme, s.fontFamily, QString::number(s.fontSize), s.cursorStyle, s.cursorBlink, QString::number(s.windowTransparency)}
+                             .join(QLatin1Char('\n'));
     if (look != m_appliedAppearance) {
         m_appliedAppearance = look;
         for (KParts::ReadOnlyPart *part : parts())
@@ -425,6 +436,42 @@ void MainWindow::applySettings()
     }
     if (property("agtermConfigDir").isValid() && property("agtermConfigDir").toString() != configDir())
         loadConfig(); // a new config directory reloads both files
+}
+
+void MainWindow::applyGlass()
+{
+    const Settings &s = m_store.settings;
+    const bool clear = s.windowTransparency > 0;
+    // one translucent surface, painted by the window under its menus and toolbars; the side views let it through
+    // instead of filling their own. Text, and the widgets that float over the terminal, keep the solid app palette.
+    const QList<QAbstractScrollArea *> views = m_filePanel->findChildren<QAbstractScrollArea *>() << m_tree;
+    for (QAbstractScrollArea *view : views)
+        view->viewport()->setAutoFillBackground(!clear);
+    update();
+    // agterm's own KWin effect (src/kwin-glass) gives the blur a strength; where it is not installed, or not built
+    // for this KWin, KWin's plain blur stands in at its desktop-wide strength.
+    // shortcut: the effect styles every window of this process alike, the last one applied wins; key it per window
+    // if windows ever need different glass.
+    const int blur = clear ? int(qBound(0.0, s.windowBlur, 100.0)) : 0;
+    QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"), QStringLiteral("org.kde.kwin.Effects"));
+    bool own = false;
+    if (effects.isValid() && (blur || m_glassApplied)) {
+        if (!QDBusReply<bool>(effects.call(QStringLiteral("isEffectLoaded"), QStringLiteral("agtermglass"))).value())
+            effects.call(QStringLiteral("loadEffect"), QStringLiteral("agtermglass"));
+        // the effect's own object answers only once its shaders compiled; loaded but broken must fall back too
+        QDBusInterface glassEffect(QStringLiteral("org.kde.KWin"), QStringLiteral("/org/agterm/Glass"), QStringLiteral("org.agterm.Glass"));
+        own = QDBusReply<QString>(glassEffect.call(QStringLiteral("version"))).isValid();
+        if (own) {
+            glassEffect.asyncCall(QStringLiteral("setBlur"), blur);
+            m_glassApplied = blur;
+        }
+    }
+    if (!own && blur && !m_glassRetried) {
+        m_glassRetried = true; // a freshly loaded effect may not answer yet
+        QTimer::singleShot(2000, this, &MainWindow::applyGlass);
+    }
+    if (windowHandle())
+        KWindowEffects::enableBlurBehind(windowHandle(), !own && blur > 0);
 }
 
 bool MainWindow::appCommand(const QString &cmd, const QString &sessionId, const QJsonObject &args, QJsonObject *result, QString *error)

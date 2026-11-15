@@ -14,4 +14,7 @@ QString scrollback(QObject *session, QWidget *display, bool *ok);
 QString selectedText(QObject *session);
 // whether the program in the view asked for mouse reports; *ok is false when the symbol is missing
 bool usesMouseTracking(QWidget *display, bool *ok);
+// the view's background alpha, 0..1 (Konsole takes it from the colour scheme); -1 when the symbol is missing
+double terminalOpacity(QWidget *display);
+void setTerminalOpacity(QWidget *display, double opacity);
 }

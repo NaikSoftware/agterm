@@ -42,7 +42,8 @@ add_library(agterm-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/s
 target_include_directories(agterm-ui PUBLIC src/app)
 find_package(KF6Notifications REQUIRED)
 find_package(KF6SyntaxHighlighting REQUIRED)
-target_link_libraries(agterm-ui PUBLIC agterm-core Qt6::Widgets Qt6::DBus Qt6::Svg KF6::Parts KF6::Notifications KF6::SyntaxHighlighting KF6::ConfigCore KF6::WidgetsAddons ${CMAKE_DL_LIBS})
+find_package(KF6WindowSystem REQUIRED)
+target_link_libraries(agterm-ui PUBLIC agterm-core Qt6::Widgets Qt6::DBus Qt6::Svg KF6::Parts KF6::Notifications KF6::SyntaxHighlighting KF6::WindowSystem KF6::ConfigCore KF6::WidgetsAddons ${CMAKE_DL_LIBS})
 add_executable(agterm-qt src/app/main.cpp)
 target_link_libraries(agterm-qt PRIVATE agterm-ui Qt6::Network KF6::ConfigCore)
 
@@ -71,7 +72,22 @@ target_link_libraries(test_filepanel PRIVATE agterm-ui Qt6::Test)
 add_test(NAME filepanel COMMAND test_filepanel)
 set_tests_properties(filepanel PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# the glass effect needs KWin's development files: the real packages, or scripts/fetch-kwin-headers.sh
+list(APPEND CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/.deps/usr)
+find_package(KWin CONFIG QUIET)
+find_package(KDecoration3 CONFIG QUIET)
 include(GNUInstallDirs)
+if(TARGET KWin::kwin AND TARGET KDecoration3::KDecoration)
+  add_subdirectory(src/kwin-glass)
+  # KWin looks for effects on the system plugin path only; a home prefix needs it extended at login
+  if(CMAKE_INSTALL_PREFIX MATCHES "^$ENV{HOME}/")
+    set(AGTERM_QT_PLUGIN_DIR ${CMAKE_INSTALL_FULL_LIBDIR}/qt6/plugins)
+    configure_file(packaging/agterm-qt-env.sh.in agterm-qt-env.sh @ONLY)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/agterm-qt-env.sh DESTINATION $ENV{HOME}/.config/plasma-workspace/env)
+  endif()
+else()
+  message(STATUS "KWin development files not found: agterm's glass effect is not built (run scripts/fetch-kwin-headers.sh)")
+endif()
 install(TARGETS agterm-qt agtermctl agterm-session-host RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 configure_file(packaging/agterm-qt.desktop.in agterm-qt.desktop @ONLY) # Exec is absolute: the Plasma menu does not see ~/.local/bin
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/agterm-qt.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)

@@ -739,7 +739,7 @@ void Store::setSettings(const Settings &s)
     X(configDirectory) X(restoreMode) X(autoFollowAttention) X(flaggedViewLayout)
 #define AGTERM_SETTINGS_BOOLS(X)                                                                                                  \
     X(confirmCloseSession) X(closeUndo) X(workspaceRowClickExpands) X(notificationsEnabled) X(notificationBadgeEnabled) X(attentionIncludesActive) X(autoFollowStayOnActive)
-#define AGTERM_SETTINGS_DOUBLES(X) X(fontSize) X(sidebarFontSize) X(interfaceFontSize)
+#define AGTERM_SETTINGS_DOUBLES(X) X(fontSize) X(sidebarFontSize) X(interfaceFontSize) X(windowTransparency) X(windowBlur)
 #define AGTERM_SETTINGS_LISTS(X) X(hiddenInterfaceElements) X(shownInterfaceElements)
 
 QJsonObject Settings::toJson() const

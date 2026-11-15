@@ -258,6 +258,8 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     });
     m_sidebarPanel->setMinimumWidth(160);
     setCentralWidget(m_split);
+    // an alpha surface from the start, so Settings can make the backgrounds see-through without recreating the window
+    setAttribute(Qt::WA_TranslucentBackground);
     resize(1200, 760);
     // messages only: an idle status bar would be chrome agterm doesn't have
     statusBar()->hide();
@@ -1123,9 +1125,20 @@ void MainWindow::prime(QWidget *page)
     m_stack->setCurrentWidget(current);
 }
 
+void MainWindow::paintEvent(QPaintEvent *event)
+{
+    // a translucent window paints no background of its own; this is the surface under the menus and toolbars
+    QPainter p(this);
+    p.setCompositionMode(QPainter::CompositionMode_Source);
+    QColor surface = palette().color(QPalette::Window);
+    surface.setAlphaF(1 - qBound(0.0, m_store.settings.windowTransparency, 90.0) / 100);
+    p.fillRect(event->rect(), surface);
+}
+
 void MainWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
+    applyGlass(); // blur asks the compositor, so it needs the native window
     for (const Panes &p : std::as_const(m_panes))
         prime(p.view);
 }
@@ -1748,6 +1761,9 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         }
         return true;
     }
+    if (event->type() == QEvent::PaletteChange && watched->inherits("Konsole::TerminalDisplay") && static_cast<QWidget *>(watched)->window() == this)
+        // a scheme applied anywhere (Konsole's profile dialogs too) resets the view's opacity to the scheme's own
+        KonsolePrivate::setTerminalOpacity(static_cast<QWidget *>(watched), 1 - qBound(0.0, m_store.settings.windowTransparency, 90.0) / 100);
     if (dashboardEvent(watched, event))
         return true;
     if ((event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) && watched->inherits("Konsole::TerminalDisplay")) {

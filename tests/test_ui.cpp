@@ -32,6 +32,7 @@
 #include <QPushButton>
 #include <QWheelEvent>
 #include "smoothwheel.h"
+#include "konsoleprivate.h"
 
 namespace Konsole
 {
@@ -205,6 +206,39 @@ private Q_SLOTS:
         QVERIFY(!w.appCommand("theme.set", {}, {{"name", "NoSuchScheme"}}, &result, &error));
         QVERIFY(w.appCommand("theme.set", {}, {}, &result, &error));
         QTRY_COMPARE(term->palette().color(QPalette::Window), before); // back to the profile's scheme
+    }
+
+    void windowTransparencyReachesTheTerminalAndSurvivesAThemeChange()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("glass.json"));
+        w.restore({});
+        store.select(store.addSession(store.addWorkspace("w"), {}, {}));
+        w.show();
+        w.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&w));
+        QWidget *term = display(w);
+        QVERIFY(term);
+        QVERIFY(w.testAttribute(Qt::WA_TranslucentBackground));
+        QCOMPARE(KonsolePrivate::terminalOpacity(term), 1.0);
+        Settings s = store.settings;
+        s.windowTransparency = 40;
+        store.setSettings(s);
+        QTRY_COMPARE(KonsolePrivate::terminalOpacity(term), 0.6);
+        const QColor scheme = term->palette().color(QPalette::Window);
+        s.theme = "DarkPastels"; // a scheme change resets Konsole's opacity to the scheme's own
+        store.setSettings(s);
+        QTRY_VERIFY(term->palette().color(QPalette::Window) != scheme);
+        QTest::qWait(50);
+        QCOMPARE(KonsolePrivate::terminalOpacity(term), 0.6);
+        // Konsole's own profile dialogs re-apply a scheme without asking the window: the new colours reach the view
+        KonsolePrivate::setTerminalOpacity(term, 1.0);
+        QEvent recolored(QEvent::PaletteChange);
+        QApplication::sendEvent(term, &recolored);
+        QCOMPARE(KonsolePrivate::terminalOpacity(term), 0.6);
+        s.windowTransparency = 0;
+        store.setSettings(s);
+        QTRY_COMPARE(KonsolePrivate::terminalOpacity(term), 1.0);
     }
 
     void oscNotificationsRaiseTheBadge()

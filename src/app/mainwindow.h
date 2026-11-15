@@ -89,6 +89,7 @@ public:
 protected:
     void closeEvent(QCloseEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
@@ -198,6 +199,7 @@ private:
     void profileDialog(const char *slot);
     void editConfigFile(const QString &path);
     void applyAppearance(KParts::ReadOnlyPart *part);
+    void applyGlass(); // the window's see-through surfaces and the blur behind them
     void watchTerminalNotifications(KParts::ReadOnlyPart *part, PartBridge *bridge);
     void stripPartShortcuts();
     void notifyFailure(const QString &title, const QString &body);
@@ -212,6 +214,8 @@ private:
     class EventSource *m_events;
     mutable QList<QKeyCombination> m_chordPrefix; // a leader sequence in progress
     QString m_previewTheme, m_appliedAppearance;
+    bool m_glassApplied = false; // agterm's KWin effect holds a look for this process
+    bool m_glassRetried = false;
     QLabel *m_workspaceLabel;
     QHash<QString, QAction *> m_chrome; // interface element -> its title-strip action
     QHash<QString, QWidget *> m_footer; // interface element -> its footer button
