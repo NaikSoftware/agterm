@@ -25,6 +25,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Session context menu: Tint (None, seven colours, Show On icon/name/background; batch), palette Tint Session items, `session|workspace tint`, `--tint` on new
 - [x] Drag to reorder sessions and workspaces; drag a session to another workspace; multi-select
 - [x] Drop folders from the file manager onto the tree to open sessions there
+- [x] Drop a session row on a terminal to type its Claude Code conversation id, else its agterm id (agterm-qt only)
 - [x] Strip agent spinner glyphs (✳ ◑ braille) from terminal titles (fork)
 - [x] Close-session reselection by MRU within the workspace
 - [x] Shortcuts: new session ⌘N, new workspace ⌘⇧N, open directory ⌘O, close ⌘W, prev/next session ⌥⌘↑↓, attention ⌃⌥↑↓, toggle sidebar ⌘⌃S, flag ⌘⇧F
