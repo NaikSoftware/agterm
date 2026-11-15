@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'client.dart';
+import 'watch.dart';
 
 class Session {
   Session(Map m, this.workspaceId, this.workspaceName)
@@ -61,6 +62,18 @@ class AgWindow {
 class Alert {
   Alert(this.sessionId, this.title, this.body, this.status);
   final String sessionId, title, body, status;
+
+  /// The alert an app event raises, if any.
+  static Alert? of(Map<String, dynamic> e) {
+    final p = (e['payload'] as Map?)?.cast<String, dynamic>() ?? {};
+    final sid = e['session'] as String? ?? '';
+    return switch (e['kind']) {
+      'status' when p['status'] == 'blocked' || p['status'] == 'completed' =>
+        Alert(sid, '${p['name'] ?? 'Session'}', p['status'] == 'blocked' ? 'needs your input' : 'finished', p['status']),
+      'notify' => Alert(sid, '${p['title'] ?? p['name'] ?? 'Notification'}', '${p['body'] ?? ''}', 'notify'),
+      _ => null,
+    };
+  }
 }
 
 /// The pairings live in the platform keystore: each one carries the secret token.
@@ -81,7 +94,7 @@ enum LinkState { connecting, connected, offline }
 
 class AgtermModel extends ChangeNotifier {
   AgtermModel(this.pairing) {
-    _lifecycle = AppLifecycleListener(onResume: resume, onPause: pause);
+    _lifecycle = AppLifecycleListener(onResume: resume, onPause: _background);
   }
 
   final Pairing pairing;
@@ -96,7 +109,10 @@ class AgtermModel extends ChangeNotifier {
   final _alerts = StreamController<Alert>.broadcast();
   Stream<Alert> get alerts => _alerts.stream;
   bool _running = false, _disposed = false;
+  bool background = false; // in the background with the connection kept up for alerts: screens stop polling
   int _generation = 0; // bumps on every (re)connect, so a stale loop stops
+  String? _run; // the events cursor outlives a reconnect, so what happened while offline still alerts
+  String _next = '0';
   Timer? _refreshSoon;
 
   Iterable<Session> get sessions => workspaces.expand((w) => w.sessions);
@@ -111,12 +127,24 @@ class AgtermModel extends ChangeNotifier {
 
   void pause() {
     _running = false;
+    _run = null; // not watching: back in the foreground, only new events matter
     _generation++;
     _c?.close();
     _c = null;
   }
 
-  void resume() => start();
+  void resume() {
+    if (background) Watch.stop();
+    background = false;
+    Watch.check();
+    start();
+  }
+
+  void _background() {
+    if (!Watch.on) return pause();
+    background = true;
+    Watch.start(pairing.name).onError((_, _) => pause()); // not allowed to start from the background here: plain pause
+  }
 
   Future<void> _connectLoop() async {
     var backoff = 1;
@@ -124,8 +152,9 @@ class AgtermModel extends ChangeNotifier {
       final gen = ++_generation;
       _set(LinkState.connecting);
       try {
-        _c = await Connection.open(pairing);
-        if (gen != _generation) return _c?.close();
+        final c = await Connection.open(pairing);
+        if (gen != _generation) return c.close();
+        _c = c;
         error = null;
         backoff = 1;
         _set(LinkState.connected);
@@ -138,8 +167,11 @@ class AgtermModel extends ChangeNotifier {
         error = 'Cannot reach ${pairing.host}:${pairing.port}. Is `agtermctl mobile serve` running?';
       }
       if (gen != _generation || _disposed) return;
+      _c?.close(); // a failure after connecting (e.g. in refresh) must not leak the connection
+      _c = null;
       _set(LinkState.offline);
       await Future.delayed(Duration(seconds: backoff));
+      if (gen != _generation || _disposed) return; // paused and resumed meanwhile: the new loop runs
       backoff = (backoff * 2).clamp(1, 15);
     }
   }
@@ -200,14 +232,12 @@ class AgtermModel extends ChangeNotifier {
 
   // polls events.read with agtermctl's cursor rules: anchor with no cursor, then {run, after: "<next>"}
   Future<void> _eventLoop(int gen) async {
-    String? run;
-    var next = '0';
     while (gen == _generation && !_disposed) {
       try {
-        final r = await call('events.read', args: run == null ? {} : {'run': run, 'after': next, 'limit': 200}, windowed: false);
+        final r = await call('events.read', args: _run == null ? {} : {'run': _run, 'after': _next, 'limit': 200}, windowed: false);
         final ev = r['events'] as Map;
-        run = ev['run'];
-        next = '${ev['next']}';
+        _run = ev['run'];
+        _next = '${ev['next']}';
         final items = ev['items'] as List? ?? const [];
         if (items.isNotEmpty) {
           for (final e in items) {
@@ -218,24 +248,23 @@ class AgtermModel extends ChangeNotifier {
         await Future.delayed(Duration(milliseconds: items.isEmpty ? 1000 : 150));
       } on AgtermError catch (e) {
         if (e.message == 'Disconnected' || e.message == 'Not connected') return;
-        run = null; // "event run changed" (the app restarted) or "event cursor expired": start over
+        _run = null; // "event run changed" (the app restarted) or "event cursor expired": start over
         scheduleRefresh(Duration.zero);
         await Future.delayed(const Duration(seconds: 1));
       } on TimeoutException {
+        await Future.delayed(const Duration(seconds: 1));
+      } catch (_) {
+        _run = null; // a malformed reply: start over rather than stop watching
+        scheduleRefresh(Duration.zero);
         await Future.delayed(const Duration(seconds: 1));
       }
     }
   }
 
   void _onEvent(Map<String, dynamic> e) {
-    final p = (e['payload'] as Map?)?.cast<String, dynamic>() ?? {};
-    final sid = e['session'] as String? ?? '';
-    switch (e['kind']) {
-      case 'status' when p['status'] == 'blocked' || p['status'] == 'completed':
-        _alerts.add(Alert(sid, '${p['name'] ?? 'Session'}', p['status'] == 'blocked' ? 'needs your input' : 'finished', p['status']));
-      case 'notify':
-        _alerts.add(Alert(sid, '${p['title'] ?? p['name'] ?? 'Notification'}', '${p['body'] ?? ''}', 'notify'));
-    }
+    final a = Alert.of(e);
+    if (a == null) return;
+    background ? Watch.show(a) : _alerts.add(a);
   }
 
   @override

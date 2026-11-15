@@ -4,7 +4,9 @@ import 'client.dart';
 import 'model.dart';
 import 'screens/home.dart';
 import 'screens/pair.dart';
+import 'screens/session.dart';
 import 'theme.dart';
+import 'watch.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +33,7 @@ class Computers extends ChangeNotifier {
   void open(Pairing p) {
     current?.dispose();
     current = AgtermModel(p)..start();
+    Watch.check(ask: true);
     notifyListeners();
   }
 
@@ -60,10 +63,38 @@ class AgtermApp extends StatefulWidget {
 }
 
 class _AgtermAppState extends State<AgtermApp> {
-  final computers = Computers()..load();
+  final computers = Computers();
+  final nav = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  Future<void> _start() async {
+    String? launched;
+    try {
+      launched = await Watch.init(openSession);
+    } catch (_) {
+      // no notifications: the app works without background alerts
+    }
+    await computers.load();
+    if (launched != null) openSession(launched);
+  }
+
+  // a notification's tap: that session on the computer on screen, over the home screen
+  void openSession(String id) {
+    final m = computers.current;
+    if (m == null) return;
+    nav.currentState
+      ?..popUntil((r) => r.isFirst)
+      ..push(MaterialPageRoute(builder: (_) => SessionScreen(model: m, sessionId: id)));
+  }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+        navigatorKey: nav,
         title: 'agterm',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),

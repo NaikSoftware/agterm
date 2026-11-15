@@ -1,4 +1,5 @@
 import 'package:agterm_mobile/client.dart';
+import 'package:agterm_mobile/model.dart';
 import 'package:agterm_mobile/screens/prompt.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -70,5 +71,16 @@ void main() {
   test('promptTail drops frames and blank rows', () {
     expect(promptTail('╭────╮\n│ a  │\n\n│ b  │\n╰────╯', rows: 6), 'a\nb');
     expect(promptTail('1\n2\n3\n4', rows: 2), '3\n4');
+  });
+
+  test('Alert.of: blocked, completed and notify alert; other events do not', () {
+    Alert? of(String kind, Map p) => Alert.of({'kind': kind, 'session': 's1', 'payload': p});
+    final b = of('status', {'status': 'blocked', 'name': 'claude'})!;
+    expect((b.sessionId, b.title, b.body, b.status), ('s1', 'claude', 'needs your input', 'blocked'));
+    expect(of('status', {'status': 'completed'})!.body, 'finished');
+    final n = of('notify', {'title': 'Build', 'body': 'green'})!;
+    expect((n.title, n.body, n.status), ('Build', 'green', 'notify'));
+    expect(of('status', {'status': 'active'}), isNull);
+    expect(of('lifecycle', {}), isNull);
   });
 }

@@ -87,7 +87,7 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   Future<void> _load() async {
-    if (polling || m.state != LinkState.connected || ModalRoute.of(context)?.isCurrent != true) return;
+    if (polling || m.state != LinkState.connected || m.background || ModalRoute.of(context)?.isCurrent != true) return;
     polling = true;
     try {
       final r = await m.call('session.text', target: widget.sessionId, args: {'pane': pane, if (scrollback) 'lines': 2000});

@@ -6,6 +6,7 @@ import '../client.dart';
 import '../main.dart';
 import '../model.dart';
 import '../theme.dart';
+import '../watch.dart';
 import 'actions.dart';
 import 'new_session.dart';
 import 'pair.dart';
@@ -54,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // only for the blocked cards on screen: their prompt is what the quick answers act on
   Future<void> _loadSnippets() async {
-    if (m.state != LinkState.connected || ModalRoute.of(context)?.isCurrent != true) return;
+    if (m.state != LinkState.connected || m.background || ModalRoute.of(context)?.isCurrent != true) return;
     for (final s in m.sessions.where((s) => s.status == 'blocked')) {
       try {
         final r = await m.call('session.text', target: s.id, args: {'lines': 12});
@@ -153,6 +154,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       reportOf(context, m.act('notify', args: {'body': body.trim(), 'title': 'agterm Mobile'}));
                     }
                   }),
+              StatefulBuilder(
+                  builder: (context, setSheet) => SwitchListTile(
+                        key: const Key('watch'),
+                        secondary: const Icon(Icons.notifications_active_outlined, color: C.muted),
+                        title: const Text('Alerts in the background'),
+                        subtitle: Text(Watch.enabled && !Watch.permitted ? 'Notifications are off for agterm in Android settings' : 'When an agent needs you',
+                            style: const TextStyle(fontSize: 12, color: C.muted)),
+                        value: Watch.enabled,
+                        onChanged: (v) async {
+                          await Watch.setEnabled(v);
+                          setSheet(() {});
+                        },
+                      )),
               ListTile(
                   minTileHeight: 52,
                   leading: const Icon(Icons.computer, color: C.muted),

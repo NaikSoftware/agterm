@@ -38,7 +38,7 @@ void main() {
     await pumpUntil(t, find.text('WORKSPACES'));
     await pumpUntil(t, find.text('phone-target'));
 
-    await t.tap(find.text('phone-target'));
+    await t.tap(find.text('phone-target').last); // the row; a Needs-you card may show it too
     await pumpUntil(t, find.byKey(const Key('composer')));
     await t.enterText(find.byKey(const Key('composer')), 'echo from-the-phone');
     await t.tap(find.byKey(const Key('send')));
