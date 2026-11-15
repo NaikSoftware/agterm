@@ -57,22 +57,36 @@ class Connection {
   Future<void> get closed => _closed.future;
 
   static Future<Connection> open(Pairing p, {Duration timeout = const Duration(seconds: 8)}) async {
-    final socket = await SecureSocket.connect(p.host, p.port,
+    SecureSocket? socket;
+    final pending = SecureSocket.connect(p.host, p.port,
         context: SecurityContext(withTrustedRoots: false), // trust nothing but the pinned certificate
         onBadCertificate: (c) => certificateFingerprint(c) == p.fingerprint,
         timeout: timeout);
+    try {
+      // connect's own timeout covers TCP only, not the TLS handshake
+      socket = await pending.timeout(timeout);
+    } on HandshakeException {
+      throw AgtermError('The computer presented a different certificate. Pair it again.');
+    } on TimeoutException {
+      unawaited(pending.then((s) => s.destroy(), onError: (_) {}));
+      rethrow;
+    }
     final peer = socket.peerCertificate;
     if (peer == null || certificateFingerprint(peer) != p.fingerprint) {
       socket.destroy();
       throw AgtermError('The computer presented a different certificate. Pair it again.');
     }
     final c = Connection._(socket);
-    final hello = await c._send({'auth': p.token}).timeout(timeout);
-    if (hello['ok'] != true) {
+    try {
+      final hello = await c._send({'auth': p.token}).timeout(timeout);
+      if (hello['ok'] != true) {
+        throw AgtermError(hello['error'] == 'unauthorized' ? 'The pairing was revoked. Pair this computer again.' : '${hello['error']}');
+      }
+      return c;
+    } catch (_) {
       c.close();
-      throw AgtermError(hello['error'] == 'unauthorized' ? 'The pairing was revoked. Pair this computer again.' : '${hello['error']}');
+      rethrow;
     }
-    return c;
   }
 
   Future<Map<String, dynamic>> _send(Map<String, dynamic> request) {
@@ -87,7 +101,11 @@ class Connection {
   /// One control command; the result object, or AgtermError with the app's message.
   Future<Map<String, dynamic>> call(String cmd, {String? target, Map<String, dynamic>? args, String? window}) async {
     final a = {...?args, 'window': ?window};
-    final r = await _send({'cmd': cmd, 'target': ?target, if (a.isNotEmpty) 'args': a}).timeout(const Duration(seconds: 15));
+    final id = _next;
+    final r = await _send({'cmd': cmd, 'target': ?target, if (a.isNotEmpty) 'args': a}).timeout(const Duration(seconds: 15), onTimeout: () {
+      _pending.remove(id);
+      throw TimeoutException('no answer to $cmd');
+    });
     if (r['ok'] != true) throw AgtermError('${r['error'] ?? 'request failed'}');
     return (r['result'] as Map?)?.cast<String, dynamic>() ?? {};
   }

@@ -20,8 +20,8 @@ void main() {
     await expectLater(c.call('session.info', target: 'nope'), throwsA(isA<AgtermError>()));
     c.close();
     final bad = Pairing(name: 'x', host: p.host, port: p.port, token: 'A' * 43, fingerprint: p.fingerprint);
-    await expectLater(Connection.open(bad), throwsA(isA<AgtermError>()));
+    await expectLater(Connection.open(bad), throwsA(isA<AgtermError>().having((e) => e.message, 'message', contains('revoked'))));
     final wrongCert = Pairing(name: 'x', host: p.host, port: p.port, token: p.token, fingerprint: '0' * 64);
-    await expectLater(Connection.open(wrongCert), throwsA(anything));
+    await expectLater(Connection.open(wrongCert), throwsA(isA<AgtermError>().having((e) => e.message, 'message', contains('certificate'))));
   }, skip: link == null ? 'set AGTERM_PAIR_LINK' : false);
 }

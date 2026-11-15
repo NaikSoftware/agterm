@@ -9,6 +9,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHostInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -24,11 +25,22 @@
 #include <QUrl>
 #include <QUrlQuery>
 #include <cstdio>
+#include <unistd.h>
 
 namespace {
 QString mobileDir()
 {
     return stateDir() + QStringLiteral("/mobile");
+}
+
+// <state>/mobile holds the key and the token: refuse it unless only we can enter it
+bool ensurePrivateDir(QString *error)
+{
+    QDir().mkpath(mobileDir());
+    if (!QFile::setPermissions(mobileDir(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)
+        || QFileInfo(mobileDir()).ownerId() != ::getuid())
+        return *error = QStringLiteral("cannot make %1 private to you").arg(mobileDir()), false;
+    return true;
 }
 
 int fail(const QString &message)
@@ -40,9 +52,10 @@ int fail(const QString &message)
 bool writePrivate(const QString &path, const QByteArray &data)
 {
     QFile f(path);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    // created owner-only, so the token is never readable by others even for a moment
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate, QFileDevice::ReadOwner | QFileDevice::WriteOwner)
+        || !f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner))
         return false;
-    f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     return f.write(data) == data.size();
 }
 
@@ -170,9 +183,9 @@ int serve(const QString &socketPath, const QHash<QString, QString> &opt)
 {
     if (!QSslSocket::supportsSsl())
         return fail(QStringLiteral("Qt has no TLS backend here (install the OpenSSL plugin)"));
-    QDir().mkpath(mobileDir());
-    QFile::setPermissions(mobileDir(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     QString error;
+    if (!ensurePrivateDir(&error))
+        return fail(error);
     const QByteArray token = loadToken(&error);
     if (token.isEmpty() || !ensureCertificate(&error))
         return fail(error);
@@ -191,6 +204,8 @@ int serve(const QString &socketPath, const QHash<QString, QString> &opt)
     conf.setPeerVerifyMode(QSslSocket::VerifyNone);
     auto *server = new QSslServer(qApp);
     server->setSslConfiguration(conf);
+    server->setHandshakeTimeout(3000);     // a peer that never speaks TLS gives its slot back fast
+    server->setMaxPendingConnections(128); // Qt counts handshaking sockets against this
     bool portOk = true;
     const quint16 port = opt.value(QStringLiteral("port"), QStringLiteral("8765")).toUShort(&portOk);
     const QHostAddress bind(opt.value(QStringLiteral("bind"), QStringLiteral("0.0.0.0")));
@@ -218,6 +233,13 @@ int serve(const QString &socketPath, const QHash<QString, QString> &opt)
     QObject::connect(server, &QSslServer::pendingConnectionAvailable, server, [server, socketPath] {
         while (auto *s = qobject_cast<QSslSocket *>(server->nextPendingConnection())) {
             const QString peer = s->peerAddress().toString();
+            s->setSocketOption(QAbstractSocket::KeepAliveOption, 1); // a phone that vanished without a FIN is dropped
+            auto *revoked = new QTimer(s); // `mobile reset` reaches idle phones too, not only at their next request
+            QObject::connect(revoked, &QTimer::timeout, s, [s] {
+                if (s->property("authed").toBool() && !sameSecret(s->property("token").toByteArray(), currentToken()))
+                    s->abort();
+            });
+            revoked->start(5000);
             QObject::connect(s, &QSslSocket::disconnected, s, &QObject::deleteLater);
             QTimer::singleShot(10000, s, [s] { // an unauthenticated connection does not linger
                 if (!s->property("authed").toBool())
@@ -236,7 +258,7 @@ int serve(const QString &socketPath, const QHash<QString, QString> &opt)
                     const QByteArray offered = o.value(QStringLiteral("auth")).toString().toLatin1();
                     if (token.isEmpty() || !sameSecret(offered, token)) {
                         fprintf(stderr, "agtermctl: refused %s: wrong token\n", qPrintable(peer));
-                        send(s, {{"ok", false}, {"error", QStringLiteral("unauthorized")}});
+                        send(s, {{"ok", false}, {"id", o.value(QStringLiteral("id"))}, {"error", QStringLiteral("unauthorized")}});
                         QObject::disconnect(s, &QSslSocket::readyRead, nullptr, nullptr); // lines already sent are not more attempts
                         s->disconnectFromHost();
                         return;
@@ -246,7 +268,7 @@ int serve(const QString &socketPath, const QHash<QString, QString> &opt)
                     fprintf(stderr, "agtermctl: phone connected from %s\n", qPrintable(peer));
                     send(s, {{"ok", true}, {"id", o.value(QStringLiteral("id"))}, {"result", QJsonObject{{"host", QHostInfo::localHostName()}, {"version", QLatin1String(appVersion)}}}});
                 }
-                if (s->bytesAvailable() > maxRequestBytes)
+                if (s->bytesAvailable() > (s->property("authed").toBool() ? maxRequestBytes : 4096)) // the auth line is ~60 bytes
                     s->abort();
             });
         }
@@ -260,9 +282,8 @@ int mobileCommand(const QString &sub, const QString &socketPath, const QHash<QSt
     if (sub == QLatin1String("serve"))
         return serve(socketPath, opt);
     if (sub == QLatin1String("reset")) {
-        QDir().mkpath(mobileDir());
         QString error;
-        if (loadToken(&error, true).isEmpty())
+        if (!ensurePrivateDir(&error) || loadToken(&error, true).isEmpty())
             return fail(error);
         printf("Pairing revoked: paired phones are disconnected. Restart `agtermctl mobile serve` for the new code.\n");
         return 0;
