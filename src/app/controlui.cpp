@@ -9,6 +9,7 @@
 #include <KActionCollection>
 #include <KParts/ReadOnlyPart>
 
+#include <QStackedWidget>
 #include <QApplication>
 #include <QButtonGroup>
 #include <QCheckBox>
@@ -79,6 +80,25 @@ QSize MainWindow::gridSize(const QString &sessionId, const QString &pane)
     KParts::ReadOnlyPart *part = panePart(sessionId, pane);
     QObject *s = part ? sessionOf(part) : nullptr;
     return s ? KonsolePrivate::gridSize(s) : QSize();
+}
+
+bool MainWindow::setGrid(const QString &sessionId, const QString &pane, const QSize &grid, QString *error)
+{
+    const Panes p = m_panes.value(sessionId);
+    KParts::ReadOnlyPart *part = pane == QLatin1String("right") ? p.right : p.main;
+    QObject *s = part ? sessionOf(part) : nullptr;
+    QObject *e = s ? KonsolePrivate::emulation(s) : nullptr;
+    if (!e)
+        return *error = QStringLiteral("pane has no terminal"), false;
+    if (grid.isValid()) // Konsole only resizes the emulation again when a shown view changes size
+        return QMetaObject::invokeMethod(e, "setImageSize", Q_ARG(int, grid.height()), Q_ARG(int, grid.width()))
+            || (*error = QStringLiteral("cannot resize the terminal"), false);
+    // back to the view's size; Konsole counts only shown views, so the page is current meanwhile, as in prime()
+    QWidget *current = m_stack->currentWidget();
+    m_stack->setCurrentWidget(p.view);
+    const bool fitted = KonsolePrivate::fitToView(s);
+    m_stack->setCurrentWidget(current);
+    return fitted || (*error = QStringLiteral("cannot resize the terminal"), false);
 }
 
 void MainWindow::emitEvent(const QString &kind, const QString &sessionId, const QJsonObject &payload)

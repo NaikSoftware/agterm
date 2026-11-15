@@ -207,6 +207,11 @@ All take `--target` (workspace id, prefix, name, `active`) and `--window`.
 - `session swap`: exchanges the two terminals' positions without restarting them; `session has no split`.
 - `session focus [left|right|other]`: moves keyboard focus between the panes (default `other`);
   `session has no split`, `invalid pane: X`. Read back as `splitFocused`.
+- `session grid <cols>x<rows> | --reset [--pane left|right]`: gives the program that grid (what `stty size` shows) apart from
+  the window, e.g. a phone's, until `--reset` or the pane's view is resized or shown; the computer's view keeps its
+  font, so rows beyond it are read with `session text --lines N`. Answers `result.columns`/`result.rows`. Errors:
+  `session.grid takes columns and rows, or reset`, `session.grid: columns must be 20...1000 and rows 5...1000`,
+  `invalid pane: X`, `session has no split pane`, `cannot resize the terminal`.
 - `session resize --split-ratio R | --grow-left D | --grow-right D` (also `--grow-top`, `--grow-bottom`,
   `--grow-primary`, `--grow-split`): sets the main pane's fraction (clamped 0.05–0.95) or moves it by D.
   Prints the applied ratio (`result.ratio`). Errors: `provide exactly one split ratio or grow option`,

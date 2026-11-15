@@ -20,6 +20,8 @@ inline int columns(QObject *session)
     const QSize g = gridSize(session);
     return g.isValid() ? g.width() : -1;
 }
+// gives the emulation the size its shown views have again (Session::updateTerminalSize); false when the symbol is missing
+bool fitToView(QObject *session);
 // whether the program in the view asked for mouse reports; *ok is false when the symbol is missing
 bool usesMouseTracking(QWidget *display, bool *ok);
 // the view's background alpha, 0..1 (Konsole takes it from the colour scheme); -1 when the symbol is missing

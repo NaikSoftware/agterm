@@ -90,8 +90,8 @@ class _SessionScreenState extends State<SessionScreen> {
     if (polling || m.state != LinkState.connected || m.background || ModalRoute.of(context)?.isCurrent != true) return;
     polling = true;
     try {
-      // fitted, the computer's pane has few rows at its big font: the lines above them fill the phone's height
-      final rows = scrollback ? 2000 : m.fitted.containsKey(_fitKey) ? (_height / (_fit * 1.3)).floor() : 0;
+      // fitted, the grid has more rows than the computer's view shows; reading the last ones gets all of them
+      final rows = scrollback ? 2000 : m.fitted[_fitKey] ?? 0;
       final r = await m.call('session.text', target: widget.sessionId, args: {'pane': pane, if (rows > 0) 'lines': rows});
       final t = _trimEnd('${r['text'] ?? ''}');
       _columns = (r['columns'] as num?)?.toInt();
@@ -106,8 +106,8 @@ class _SessionScreenState extends State<SessionScreen> {
     }
   }
 
-  // "Fit to phone": the computer's pane zooms until it is as narrow as this screen shows at a readable size, so the
-  // program redraws at that width and nothing wraps; the button then puts back the size it had (0 = its default)
+  // "Fit to phone": the program's grid becomes what this screen shows at a readable size (session grid), apart from the
+  // computer's view, so it redraws for the phone; the button then gives the grid back to the computer's view
   static const readable = 12.0;
   String get _fitKey => '${widget.sessionId}/$pane';
   int _fitColumns() => max(20, (_width / (MediaQuery.textScalerOf(context).scale(readable) * 0.6)).floor());
@@ -117,13 +117,15 @@ class _SessionScreenState extends State<SessionScreen> {
     final key = _fitKey;
     try {
       if (m.fitted.containsKey(key)) {
-        await m.call('font.set', target: widget.sessionId, args: {'pane': pane, 'size': m.fitted[key]});
+        await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'reset': true});
         m.fitted.remove(key);
       } else {
         // JetBrains Mono advances 0.6 em; a larger system font size asks for fewer, bigger columns
         final columns = _fitColumns();
-        final r = await m.call('font.fit', target: widget.sessionId, args: {'pane': pane, 'columns': columns});
-        m.fitted[key] = (r['previousFontSize'] as num?)?.toDouble() ?? 0;
+        final size = _width / (columns * 0.6);
+        final rows = max(5, (_height / (size * 1.3)).floor()); // the text's line height is 1.3
+        await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'columns': columns, 'rows': rows});
+        m.fitted[key] = rows;
       }
     } on AgtermError catch (e) {
       if (mounted) report(context, e.message);

@@ -42,6 +42,7 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session flag [on|off|toggle]
   session move <workspace> [--index N]
   session focus [left|right|other]      move keyboard focus between the split panes
+  session grid <cols>x<rows> | --reset [--pane left|right]   the program's grid apart from the window (a phone's) | back
   session resize --split-ratio R | --grow-left D | --grow-right D   (also --grow-top/-bottom/-primary/-split)
   workspace move --index N
   session split [on|off|toggle] [--axis vertical|horizontal]
@@ -245,7 +246,7 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     const QStringList flags{"json", "stdin", "all", "no-select", "create-workspace", "auto-reset", "blink", "if-idle", "undoable", "companion",
                             "wait", "block", "follow", "full", "markdown", "sticky", "no-frame", "spinner", "none", "clear", "mru", "auto-size", "close", "minimized",
-                            "next", "prev", "allow-custom", "no-block", "multiple", "ack", "no-qr"};
+                            "next", "prev", "allow-custom", "no-block", "multiple", "ack", "no-qr", "reset"};
     QStringList pos;
     QHash<QString, QString> opt;
     QHash<QString, QStringList> multi; // every value of a repeatable option, in order
@@ -329,6 +330,12 @@ int main(int argc, char **argv)
         args.insert("index", opt.value(QStringLiteral("index")).toInt());
     if (cmd == QLatin1String("filepanel.width"))
         args.insert("width", arg.toInt());
+    if (cmd == QLatin1String("session.grid")) {
+        if (opt.contains(QStringLiteral("reset")))
+            args.insert("reset", true);
+        else if (const QStringList cr = arg.split(QLatin1Char('x')); cr.size() == 2)
+            args.insert("columns", cr[0].toInt()), args.insert("rows", cr[1].toInt());
+    }
     if (cmd == QLatin1String("font.fit"))
         args.insert("columns", arg.toInt());
     if (cmd == QLatin1String("font.set"))

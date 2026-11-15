@@ -276,6 +276,13 @@ for _ in $(seq 20); do cols=$(ctl session text --target "$fit" | grep -E '^[0-9]
 [ -n "$cols" ] && [ "$cols" -le 60 ] && [ "$cols" -ge 45 ] || fail "font fit gives a background pane 45-60 columns ($cols)"
 prev=$(ctl --json font set 0 --target "$fit")
 [[ $prev == *'"previousFontSize":'[1-9]* ]] || fail "font set reports the fitted size it replaced ($prev)"
+# session grid: the phone's Fit to phone; the program sees the phone's grid, all of it readable, until --reset
+ctl session grid 48x70 --target "$fit" >/dev/null || fail "session grid"
+ctl session type $'clear; stty size; seq 1 60\r' --target "$fit"
+for _ in $(seq 20); do out=$(ctl session text --lines 70 --target "$fit"); [[ $out == *60* ]] && break; sleep 0.2; done
+[ "$(head -1 <<<"$out")" = "70 48" ] || fail "session grid: the program sees 70x48, the first row reads back ($(head -2 <<<"$out"))"
+ctl session grid --reset --target "$fit" >/dev/null
+ctl --json session text --target "$fit" | grep -q '"columns":48' && fail "session grid --reset gives the grid back to the view"
 ctl session close --target "$fit" >/dev/null
 # Settings ▸ Connect a Phone switched on: the app runs the relay itself from launch and ends it with itself
 printf '{"on":true,"port":%s}\n' "$port" >"$AGTERM_STATE_DIR/mobile/desktop.json"

@@ -26,6 +26,15 @@ public:
         Q_UNUSED(pane);
         return {};
     }
+    // the program's grid set directly, apart from the view (a phone's columns x rows); an invalid size gives it back to the view
+    virtual bool setGrid(const QString &sessionId, const QString &pane, const QSize &grid, QString *error)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        Q_UNUSED(grid);
+        *error = QStringLiteral("no terminals");
+        return false;
+    }
     // the live panes' ids (AGTERM_PANE_ID) by role, left first; a respawned pane gets a new one
     virtual QStringList paneIds(const QString &sessionId) const
     {

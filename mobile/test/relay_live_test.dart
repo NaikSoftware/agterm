@@ -20,6 +20,9 @@ void main() {
     final fit = await c.call('font.fit', target: created['id'], args: {'columns': 40});
     final back = await c.call('font.set', target: created['id'], args: {'size': fit['previousFontSize']});
     expect(back['fontSize'], fit['previousFontSize']); // Fit to phone puts the computer's size back
+    final grid = await c.call('session.grid', target: created['id'], args: {'columns': 40, 'rows': 60});
+    expect([grid['columns'], grid['rows']], [40, 60]); // Fit to phone: the phone's grid
+    await c.call('session.grid', target: created['id'], args: {'reset': true});
     await expectLater(c.call('session.info', target: 'nope'), throwsA(isA<AgtermError>()));
     c.close();
     final bad = Pairing(name: 'x', host: p.host, port: p.port, token: 'A' * 43, fingerprint: p.fingerprint);

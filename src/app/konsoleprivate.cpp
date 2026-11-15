@@ -59,6 +59,14 @@ QSize gridSize(QObject *session)
     return size ? size(e) : QSize();
 }
 
+bool fitToView(QObject *session)
+{
+    auto update = fn<void (*)(QObject *)>(session, "_ZN7Konsole7Session18updateTerminalSizeEv");
+    if (update)
+        update(session);
+    return update;
+}
+
 QString scrollback(QObject *session, QWidget *display, bool *ok)
 {
     // Session::getAllDisplayedText reads the lines the view shows, so paging the view's scrollbar walks the history
