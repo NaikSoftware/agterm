@@ -21,9 +21,6 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusReply>
-#include <QDBusInterface>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -33,7 +30,6 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSplitter>
-#include <QTimer>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QToolBar>
@@ -448,30 +444,8 @@ void MainWindow::applyGlass()
     for (QAbstractScrollArea *view : views)
         view->viewport()->setAutoFillBackground(!clear);
     update();
-    // agterm's own KWin effect (src/kwin-glass) gives the blur a strength; where it is not installed, or not built
-    // for this KWin, KWin's plain blur stands in at its desktop-wide strength.
-    // shortcut: the effect styles every window of this process alike, the last one applied wins; key it per window
-    // if windows ever need different glass.
-    const int blur = clear ? int(qBound(0.0, s.windowBlur, 100.0)) : 0;
-    QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"), QStringLiteral("org.kde.kwin.Effects"));
-    bool own = false;
-    if (effects.isValid() && (blur || m_glassApplied)) {
-        if (!QDBusReply<bool>(effects.call(QStringLiteral("isEffectLoaded"), QStringLiteral("agtermglass"))).value())
-            effects.call(QStringLiteral("loadEffect"), QStringLiteral("agtermglass"));
-        // the effect's own object answers only once its shaders compiled; loaded but broken must fall back too
-        QDBusInterface glassEffect(QStringLiteral("org.kde.KWin"), QStringLiteral("/org/agterm/Glass"), QStringLiteral("org.agterm.Glass"));
-        own = QDBusReply<QString>(glassEffect.call(QStringLiteral("version"))).isValid();
-        if (own) {
-            glassEffect.asyncCall(QStringLiteral("setBlur"), blur);
-            m_glassApplied = blur;
-        }
-    }
-    if (!own && blur && !m_glassRetried) {
-        m_glassRetried = true; // a freshly loaded effect may not answer yet
-        QTimer::singleShot(2000, this, &MainWindow::applyGlass);
-    }
     if (windowHandle())
-        KWindowEffects::enableBlurBehind(windowHandle(), !own && blur > 0);
+        KWindowEffects::enableBlurBehind(windowHandle(), clear && s.windowBlur);
 }
 
 bool MainWindow::appCommand(const QString &cmd, const QString &sessionId, const QJsonObject &args, QJsonObject *result, QString *error)

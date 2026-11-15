@@ -72,22 +72,7 @@ target_link_libraries(test_filepanel PRIVATE agterm-ui Qt6::Test)
 add_test(NAME filepanel COMMAND test_filepanel)
 set_tests_properties(filepanel PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-# the glass effect needs KWin's development files: the real packages, or scripts/fetch-kwin-headers.sh
-list(APPEND CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/.deps/usr)
-find_package(KWin CONFIG QUIET)
-find_package(KDecoration3 CONFIG QUIET)
 include(GNUInstallDirs)
-if(TARGET KWin::kwin AND TARGET KDecoration3::KDecoration)
-  add_subdirectory(src/kwin-glass)
-  # KWin looks for effects on the system plugin path only; a home prefix needs it extended at login
-  if(CMAKE_INSTALL_PREFIX MATCHES "^$ENV{HOME}/")
-    set(AGTERM_QT_PLUGIN_DIR ${CMAKE_INSTALL_FULL_LIBDIR}/qt6/plugins)
-    configure_file(packaging/agterm-qt-env.sh.in agterm-qt-env.sh @ONLY)
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/agterm-qt-env.sh DESTINATION $ENV{HOME}/.config/plasma-workspace/env)
-  endif()
-else()
-  message(STATUS "KWin development files not found: agterm's glass effect is not built (run scripts/fetch-kwin-headers.sh)")
-endif()
 install(TARGETS agterm-qt agtermctl agterm-session-host RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 configure_file(packaging/agterm-qt.desktop.in agterm-qt.desktop @ONLY) # Exec is absolute: the Plasma menu does not see ~/.local/bin
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/agterm-qt.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
