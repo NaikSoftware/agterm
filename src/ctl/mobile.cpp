@@ -1,6 +1,7 @@
 // agtermctl mobile: a TLS relay that lets the agterm Mobile app speak the control protocol over the network.
 // The phone sends the same {cmd, target, args} lines agtermctl sends, plus an "id" echoed on the answer; each line is
-// forwarded to the app's control socket. Nothing listens unless `agtermctl mobile serve` runs.
+// forwarded to the app's control socket. Nothing listens unless `agtermctl mobile serve` runs, by hand or as the app's
+// child while Settings ▸ Connect a Phone is switched on (src/app/phone.cpp).
 #include "mobile.h"
 
 #include "paths.h"
@@ -18,6 +19,7 @@
 #include <QPointer>
 #include <QProcess>
 #include <QRandomGenerator>
+#include <QRegularExpression>
 #include <QSslKey>
 #include <QSslServer>
 #include <QSslSocket>
@@ -124,13 +126,19 @@ void printQr(const QString &text)
     }
 }
 
+// the first one goes in the QR code, so container and VM bridges, which a phone rarely reaches, come last
 QStringList lanAddresses()
 {
-    QStringList out;
-    for (const QHostAddress &a : QNetworkInterface::allAddresses())
-        if (a.protocol() == QAbstractSocket::IPv4Protocol && !a.isLoopback() && !a.isLinkLocal())
-            out << a.toString();
-    return out;
+    QStringList out, bridges;
+    for (const QNetworkInterface &i : QNetworkInterface::allInterfaces()) {
+        if (!i.flags().testFlag(QNetworkInterface::IsUp))
+            continue;
+        const bool bridge = QRegularExpression(QStringLiteral("^(docker|br-|virbr|veth|lxc|lxd|podman|cni|vmnet|vboxnet)")).match(i.name()).hasMatch();
+        for (const QNetworkAddressEntry &e : i.addressEntries())
+            if (const QHostAddress a = e.ip(); a.protocol() == QAbstractSocket::IPv4Protocol && !a.isLoopback() && !a.isLinkLocal())
+                (bridge ? bridges : out) << a.toString();
+    }
+    return out + bridges;
 }
 
 QString pairLink(const QString &host, quint16 port, const QByteArray &token, const QByteArray &fingerprint)

@@ -267,12 +267,18 @@ ctl mobile reset >/dev/null
 grep -q '"error":"unauthorized"' <<<"$(phone "{\"auth\":\"$tok\"}")" || fail "mobile reset revokes the old token"
 grep -q '"ok":true' <<<"$(phone "{\"auth\":\"$(cat "$AGTERM_STATE_DIR/mobile/token")\"}")" || fail "the new token after reset"
 kill "$mpid"; wait "$mpid" 2>/dev/null || true
+# Settings ▸ Connect a Phone switched on: the app runs the relay itself from launch and ends it with itself
+printf '{"on":true,"port":%s}\n' "$port" >"$AGTERM_STATE_DIR/mobile/desktop.json"
 cd /tmp
 ctl session type $'cd /usr\n' --target "$id"
 sleep 1
 stop
 
 start
+for _ in $(seq 50); do grep -q '"ok":true' <<<"$(phone "{\"auth\":\"$(cat "$AGTERM_STATE_DIR/mobile/token")\"}")" && break; sleep 0.2; done
+grep -q '"id":1,"ok":true,"result":{"tree"' <<<"$(phone "{\"auth\":\"$(cat "$AGTERM_STATE_DIR/mobile/token")\"}" '{"id":1,"cmd":"tree"}')" \
+  || fail "the app starts the relay it was switched on with"
+printf '{"on":false,"port":%s}\n' "$port" >"$AGTERM_STATE_DIR/mobile/desktop.json"
 ctl tree | grep -q 'renamed' || fail "session not restored"
 ctl tree | grep renamed | grep -q idle || fail "status must not survive a restart"
 ctl tree | grep renamed | grep -q '/usr' || fail "cwd not tracked"
@@ -285,6 +291,7 @@ for _ in $(seq 20); do ctl session info --target src | grep -qE '^foreground +sl
 ctl session info --target src | grep -qE '^foreground +sleep' || fail "rerun restore replays the captured command"
 ctl restore mode live >/dev/null
 stop
+timeout 3 openssl s_client -connect "127.0.0.1:$port" </dev/null >/dev/null 2>&1 && fail0 "the relay outlived the app"
 
 start # live: every pane starts its daemon, and the captured sleep is replayed into the fresh shell once
 ctl restore mode | grep -q 'active     live' || fail "live mode at launch"

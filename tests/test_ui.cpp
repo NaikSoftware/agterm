@@ -32,6 +32,7 @@
 #include <QPushButton>
 #include <QWheelEvent>
 #include "smoothwheel.h"
+#include "phone.h"
 #include "konsoleprivate.h"
 
 namespace Konsole
@@ -55,6 +56,19 @@ class TestUi : public QObject
     QTemporaryDir dir;
 
 private Q_SLOTS:
+
+    void phoneCodeShowsTheChosenAddress()
+    {
+        const QString link = QStringLiteral("agterm://pair?h=172.17.0.1&p=8765&t=tok-en_&f=ab12&n=my%20pc");
+        const QString moved = pairLinkWithHost(link, QStringLiteral(" pc.tail1234.ts.net "));
+        QCOMPARE(moved, QStringLiteral("agterm://pair?h=pc.tail1234.ts.net&p=8765&t=tok-en_&f=ab12&n=my%20pc"));
+        QCOMPARE(pairLinkWithHost(link, QString()), link); // no choice keeps what serve printed
+        const QImage code = qrImage(link);
+        QCOMPARE(code.width(), code.height());
+        QVERIFY(code.width() >= 21 + 8);                       // the smallest QR plus a four-module quiet zone
+        QCOMPARE(code.pixel(0, 0), qRgb(255, 255, 255));        // light border on any theme
+        QCOMPARE(code.pixel(4, 4), qRgb(0, 0, 0));              // the top-left finder starts inside it
+    }
 
     void smoothWheelReplaysNotchesLineByLine()
     {

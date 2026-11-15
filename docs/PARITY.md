@@ -138,6 +138,6 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   agterm-qt hook install is migrated), agent skill (Claude Code and Codex, ownership marker); no first-launch welcome.
   `agterm-qt --install agent-hooks|skill|cli|all [--home DIR]` runs them by hand. The Codex adapter reads its hook JSON with python3 (master used macOS plutil). Not detected: an
   unparseable `config.toml` (no TOML parser; a top-level `hooks` key is found line by line)
-- [x] Phone relay (agterm-qt only): `agtermctl mobile serve|reset` for the agterm Mobile app
+- [x] Phone relay (agterm-qt only): Settings ▸ Connect a Phone… or `agtermctl mobile serve|reset` for the agterm Mobile app
   (`mobile/`): the control protocol over TLS, pinned by the certificate's SHA-256 and gated by a 256-bit token, paired by
   QR code or `agterm://pair` link; `session type --pane` types into either pane

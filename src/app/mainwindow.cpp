@@ -10,6 +10,7 @@
 #include "palette.h"
 #include "restore.h"
 #include "paths.h"
+#include "phone.h"
 #include "sidebar.h"
 #include "store.h"
 
@@ -662,6 +663,7 @@ void MainWindow::createMenus()
                                [this] { profileDialog("showEditCurrentProfileDialog"); }));
     settings->addAction(action(QStringLiteral("manage_profiles"), tr("Manage Profiles…"), QStringLiteral("configure-shortcuts"), {},
                                [this] { profileDialog("showManageProfilesDialog"); }));
+    settings->addAction(action(QStringLiteral("connect_phone"), tr("Connect a Phone…"), QStringLiteral("smartphone"), {}, [this] { showPhoneDialog(this); }));
     addHelpMenu(menuBar()->addMenu(tr("&Help")));
 }
 

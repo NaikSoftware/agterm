@@ -19,10 +19,11 @@ flutter build apk           # build/app/outputs/flutter-apk/app-release.apk
 
 ## Pairing
 
-1. On the computer, in any terminal: `agtermctl mobile serve` (add `--host <name or IP>` when the phone reaches it by
-   another address, e.g. over Tailscale). It prints a QR code and an `agterm://pair?…` link and serves while it runs.
+1. On the computer, open Settings ▸ Connect a Phone… in agterm-qt and switch it on. Pick the address the phone reaches
+   the computer at (or type one, e.g. a Tailscale name). Or, in any terminal, run `agtermctl mobile serve` (`--host` sets
+   the address); it prints the same QR code and `agterm://pair?…` link and serves while it runs.
 2. In the app, tap Scan pairing code and point the camera at the code, or paste the link and tap Connect.
-3. `agtermctl mobile reset` on the computer revokes the pairing; run `serve` again and pair anew.
+3. Revoke Paired Phones in that window (or `agtermctl mobile reset`) revokes the pairing; scan the new code to pair anew.
 
 ## Background alerts
 

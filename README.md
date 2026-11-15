@@ -125,19 +125,23 @@ lacks answer "not supported on this platform".
 
 agterm Mobile ([mobile/](mobile/README.md), Flutter) watches and drives agterm-qt from a phone: the session tree with
 status dots and the sessions that need you, a session's screen, typing into it (an agent's question shows as answer
-buttons), and the sidebar's row menus. It speaks the control API through a relay that runs only while you want it:
+buttons), and the sidebar's row menus. It speaks the control API through a relay that runs only while you want it.
+
+Settings ▸ Connect a Phone… switches it on: the window shows the QR code to scan in the app, the `agterm://pair?…` link
+to copy, the address the code points the phone at (pick your LAN or VPN address, or type a name such as the machine's
+Tailscale name) and the port, and Revoke Paired Phones. While switched on, the relay starts with agterm-qt and stops with
+it. The same relay runs from a terminal too, while the command runs:
 
 ```sh
 agtermctl mobile serve [--port 8765] [--bind ADDR] [--host NAME] [--no-qr]
 ```
 
-It prints a QR code and an `agterm://pair?…` link; scan the code in the app or paste the link. Nothing listens unless
-`serve` runs, and Ctrl+C stops it.
+It prints the QR code and the link; Ctrl+C stops it. Nothing listens unless one of the two runs.
 
 - The connection is TLS with a self-signed certificate (made with the `openssl` CLI on the first run, kept in
   `<state dir>/mobile/`); the phone pins its SHA-256 fingerprint from the link, so no CA is involved.
 - Each connection must first present the link's 256-bit token (`<state dir>/mobile/token`, mode 0600). Anyone with
-  the link controls your terminals: `agtermctl mobile reset` makes a new token and cuts off every phone holding the old
+  the link controls your terminals: Revoke Paired Phones (or `agtermctl mobile reset`) makes a new token and cuts off every phone holding the old
   one at once.
 - `serve` listens on all interfaces by default; `--bind` restricts it. It reaches the phone over your LAN or a VPN such
   as Tailscale; `--host` only sets the address written into the link (e.g. the machine's Tailscale name or IP).
