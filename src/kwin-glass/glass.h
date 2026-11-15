@@ -1,6 +1,5 @@
 /*
-    agterm's glass: KWin's blur effect (6.8.2), narrowed to agterm windows, with a per-window strength and
-    a refracting edge like a slab of glass.
+    agterm's glass: KWin's blur effect (6.8.2), narrowed to agterm windows, with a per-window strength.
 
     SPDX-FileCopyrightText: 2010 Fredrik Höglund <fredrik@kde.org>
     SPDX-FileCopyrightText: 2018 Alex Nemeth <alex.nemeth329@gmail.com>
@@ -35,8 +34,7 @@ struct GlassRenderData
 
 struct GlassLook
 {
-    int blur = 0; // 0..15, KWin's own blur strength steps; 0 = clear glass
-    double refraction = 0; // 0..1
+    int blur = 0; // 1..15, KWin's own blur strength steps
 };
 
 struct GlassWindowData
@@ -44,9 +42,6 @@ struct GlassWindowData
     GlassLook look;
     std::unordered_map<RenderView *, GlassRenderData> render;
     std::unique_ptr<BackgroundEffectItem> blurItem;
-    QList<RectF> shape; // what the last blur pass painted, in device pixels relative to background
-    Rect background; // logical, on screen
-    Rect scaledBackground;
 };
 
 class GlassEffect : public Effect, protected QDBusContext
@@ -73,8 +68,8 @@ public:
     }
 
 public Q_SLOTS:
-    // the calling process's agterm windows get this look; 0 and 0 turn the glass off. blur and refraction are 0..100.
-    Q_SCRIPTABLE void setGlass(int blur, int refraction);
+    // the calling process's agterm windows get this blur, 0..100; 0 turns it off
+    Q_SCRIPTABLE void setBlur(int blur);
     Q_SCRIPTABLE QString version() const;
 
 private:
@@ -83,7 +78,6 @@ private:
     void update(EffectWindow *w);
     bool shouldBlur(const EffectWindow *w, int mask, const WindowPaintData &data) const;
     void blur(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceRegion, WindowPaintData &data);
-    void rim(const RenderViewport &viewport, EffectWindow *w, WindowPaintData &data);
     void initBlurStrengthValues();
 
     struct Pass
@@ -94,12 +88,8 @@ private:
     Pass m_downsamplePass, m_upsamplePass;
     struct : Pass
     {
-        int box = -1, cornerRadius = -1, opacity = -1, refraction = -1, edge = -1, texSize = -1, valid = -1;
+        int box = -1, cornerRadius = -1, opacity = -1;
     } m_glassPass;
-    struct : Pass
-    {
-        int box = -1, cornerRadius = -1, opacity = -1, edge = -1;
-    } m_rimPass;
 
     bool m_valid = false;
     RenderView *m_currentView = nullptr;

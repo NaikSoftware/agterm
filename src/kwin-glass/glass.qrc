@@ -5,6 +5,5 @@
   <file>shaders/vertex.vert</file>
   <file>shaders/glass.vert</file>
   <file>shaders/glass.frag</file>
-  <file>shaders/rim.frag</file>
 </qresource>
 </RCC>

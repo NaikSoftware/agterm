@@ -213,9 +213,8 @@ void MainWindow::showSettings()
     // fully clear would leave text floating on the desktop
     window->addRow(tr("Background transparency"), percent(cur.windowTransparency, 90, tr("Opaque"), [](Settings &s, double v) { s.windowTransparency = v; }));
     window->addRow(tr("Blur"), percent(cur.windowBlur, 100, tr("Off"), [](Settings &s, double v) { s.windowBlur = v; }));
-    window->addRow(tr("Glass edges"), percent(cur.windowGlass, 100, tr("Off"), [](Settings &s, double v) { s.windowGlass = v; }));
-    auto *glassHint = new QLabel(tr("Blur and glass show through transparent backgrounds. Their strength and the refracting edges come from "
-                                    "agterm's KWin effect; without it KWin's own blur is used."));
+    auto *glassHint = new QLabel(tr("Blur shows through transparent backgrounds. Its strength comes from agterm's KWin effect; "
+                                    "without it KWin's own blur is used."));
     glassHint->setWordWrap(true);
     glassHint->setForegroundRole(QPalette::PlaceholderText);
     window->addRow(QString(), glassHint);

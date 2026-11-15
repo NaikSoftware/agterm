@@ -34,9 +34,6 @@ namespace KWin
 {
 
 static const QString s_path = QStringLiteral("/org/agterm/Glass");
-static constexpr float s_bevel = 44; // logical pixels of curved glass along each edge
-static constexpr float s_reach = 70; // logical pixels beyond the edge the rim shows at full refraction
-static constexpr float s_hairline = 1.2;
 
 GlassEffect::GlassEffect()
 {
@@ -55,21 +52,12 @@ GlassEffect::GlassEffect()
     };
     if (!load(m_downsamplePass, QStringLiteral("vertex.vert"), QStringLiteral("downsample.frag"))
         || !load(m_upsamplePass, QStringLiteral("vertex.vert"), QStringLiteral("upsample.frag"))
-        || !load(m_glassPass, QStringLiteral("glass.vert"), QStringLiteral("glass.frag"))
-        || !load(m_rimPass, QStringLiteral("glass.vert"), QStringLiteral("rim.frag"))) {
+        || !load(m_glassPass, QStringLiteral("glass.vert"), QStringLiteral("glass.frag"))) {
         return;
     }
     m_glassPass.box = m_glassPass.shader->uniformLocation("box");
     m_glassPass.cornerRadius = m_glassPass.shader->uniformLocation("cornerRadius");
     m_glassPass.opacity = m_glassPass.shader->uniformLocation("opacity");
-    m_glassPass.refraction = m_glassPass.shader->uniformLocation("refraction");
-    m_glassPass.edge = m_glassPass.shader->uniformLocation("edge");
-    m_glassPass.texSize = m_glassPass.shader->uniformLocation("texSize");
-    m_glassPass.valid = m_glassPass.shader->uniformLocation("valid");
-    m_rimPass.box = m_rimPass.shader->uniformLocation("box");
-    m_rimPass.cornerRadius = m_rimPass.shader->uniformLocation("cornerRadius");
-    m_rimPass.opacity = m_rimPass.shader->uniformLocation("opacity");
-    m_rimPass.edge = m_rimPass.shader->uniformLocation("edge");
 
     initBlurStrengthValues();
 
@@ -102,7 +90,7 @@ QString GlassEffect::version() const
     return QStringLiteral(KWIN_PLUGIN_VERSION_STRING);
 }
 
-void GlassEffect::setGlass(int blur, int refraction)
+void GlassEffect::setBlur(int blur)
 {
     if (!calledFromDBus()) {
         return;
@@ -113,12 +101,11 @@ void GlassEffect::setGlass(int blur, int refraction)
         return;
     }
     blur = std::clamp(blur, 0, 100);
-    refraction = std::clamp(refraction, 0, 100);
-    if (!blur && !refraction) {
+    if (!blur) {
         m_looks.remove(pid.value());
     } else {
         // 1..100 maps onto KWin's own 15 blur steps
-        m_looks.insert(pid.value(), GlassLook{blur ? std::clamp(int(std::ceil(blur * 15 / 100.0)), 1, 15) : 0, refraction / 100.0});
+        m_looks.insert(pid.value(), GlassLook{std::clamp(int(std::ceil(blur * 15 / 100.0)), 1, 15)});
     }
     for (EffectWindow *w : effects->stackingOrder()) {
         if (qint64(w->pid()) == qint64(pid.value())) {
@@ -182,11 +169,9 @@ void GlassEffect::update(EffectWindow *w)
     if (!data.blurItem) {
         data.blurItem = std::make_unique<BackgroundEffectItem>(w->windowItem());
     }
-    // what changes under the window reaches it through the blur kernel and, further, through the bent rim
-    const int blurReach = data.look.blur ? blurOffsets[blurStrengthValues[data.look.blur - 1].iteration - 1].expandSize : 0;
-    const int reach = int(std::ceil(s_reach * 1.2 * data.look.refraction)) + 2;
-    data.blurItem->setPixelsToExpandRepaintsBelowOpaqueRegions(std::max(blurReach, reach));
-    data.blurItem->setEffectBoundingRect(w->contentsRect().adjusted(-reach, -reach, reach, reach));
+    // what changes under the window reaches it through the blur kernel
+    data.blurItem->setPixelsToExpandRepaintsBelowOpaqueRegions(blurOffsets[blurStrengthValues[data.look.blur - 1].iteration - 1].expandSize);
+    data.blurItem->setEffectBoundingRect(w->contentsRect());
     w->addRepaintFull();
 }
 
@@ -214,18 +199,16 @@ bool GlassEffect::shouldBlur(const EffectWindow *w, int mask, const WindowPaintD
 bool GlassEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceRegion, WindowPaintData &data)
 {
     blur(renderTarget, viewport, w, mask, deviceRegion, data);
-    const bool drawn = effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
-    rim(viewport, w, data);
-    return drawn;
+    return effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
 // fills the streaming buffer with the shape (device pixels, relative to the background) as triangles,
-// after an optional offscreen quad covering the whole background
-static bool upload(GLVertexBuffer *vbo, const QList<RectF> &shape, const Rect &background, const Rect &scaledBackground, bool withQuad)
+// after an offscreen quad covering the whole background
+static bool upload(GLVertexBuffer *vbo, const QList<RectF> &shape, const Rect &background, const Rect &scaledBackground)
 {
     vbo->reset();
     vbo->setAttribLayout(std::span(GLVertexBuffer::GLVertex2DLayout), sizeof(GLVertex2D));
-    auto result = vbo->map<GLVertex2D>((withQuad ? 6 : 0) + shape.size() * 6);
+    auto result = vbo->map<GLVertex2D>(6 + shape.size() * 6);
     if (!result) {
         return false;
     }
@@ -240,9 +223,7 @@ static bool upload(GLVertexBuffer *vbo, const QList<RectF> &shape, const Rect &b
         map[i++] = GLVertex2D{.position = QVector2D(x1, y0), .texcoord = QVector2D(u1, v0)};
         map[i++] = GLVertex2D{.position = QVector2D(x1, y1), .texcoord = QVector2D(u1, v1)};
     };
-    if (withQuad) {
-        quad(0, 0, background.width(), background.height(), background.width(), background.height());
-    }
+    quad(0, 0, background.width(), background.height(), background.width(), background.height());
     for (const RectF &rect : shape) {
         quad(rect.left(), rect.top(), rect.right(), rect.bottom(), scaledBackground.width(), scaledBackground.height());
     }
@@ -257,7 +238,6 @@ void GlassEffect::blur(const RenderTarget &renderTarget, const RenderViewport &v
         return;
     }
     GlassWindowData &glass = it->second;
-    glass.shape.clear();
     GlassRenderData &renderInfo = glass.render[m_currentView];
     if (!shouldBlur(w, mask, data)) {
         return;
@@ -269,9 +249,7 @@ void GlassEffect::blur(const RenderTarget &renderTarget, const RenderViewport &v
     // the whole client area is glass; the server-side title bar paints over its own part
     RegionF blurShape(w->contentsRect());
     blurShape.translate(w->pos());
-    // the rim shows what lies just beyond the edge, so the captured background reaches past the window
-    const int margin = int(std::ceil(s_reach * 1.2 * glass.look.refraction));
-    const Rect backgroundRect = blurShape.boundingRect().rounded().adjusted(-margin, -margin, margin, margin);
+    const Rect backgroundRect = blurShape.boundingRect().rounded();
     const Rect scaledBackgroundRect = backgroundRect.scaled(viewport.scale()).rounded();
     const Rect deviceBackgroundRect = viewport.mapToDeviceCoordinates(backgroundRect).rounded();
     const auto opacity = w->opacity() * data.opacity();
@@ -331,7 +309,7 @@ void GlassEffect::blur(const RenderTarget &renderTarget, const RenderViewport &v
     }
 
     GLVertexBuffer *vbo = GLVertexBuffer::streamingBuffer();
-    if (!upload(vbo, effectiveShape, backgroundRect, scaledBackgroundRect, true)) {
+    if (!upload(vbo, effectiveShape, backgroundRect, scaledBackgroundRect)) {
         qCWarning(AGTERM_GLASS) << "Failed to map vertex buffer";
         return;
     }
@@ -381,54 +359,10 @@ void GlassEffect::blur(const RenderTarget &renderTarget, const RenderViewport &v
     m_glassPass.shader->setUniform(m_glassPass.box, QVector4D(nativeBox.center().x(), nativeBox.center().y(), nativeBox.width() * 0.5, nativeBox.height() * 0.5));
     m_glassPass.shader->setUniform(m_glassPass.cornerRadius, cornerRadius.toVector());
     m_glassPass.shader->setUniform(m_glassPass.opacity, float(opacity * opacity));
-    m_glassPass.shader->setUniform(m_glassPass.refraction, float(glass.look.refraction * (s_bevel + s_reach) * viewport.scale()));
-    // past the screen's edge nothing was captured: samples stay on the part of the background that is on screen
-    const RectF onScreen = RectF(backgroundRect).intersected(viewport.renderRect());
-    m_glassPass.shader->setUniform(m_glassPass.valid, QVector4D((onScreen.left() - backgroundRect.x()) / backgroundRect.width(),
-                                                                1.0 - (onScreen.bottom() - backgroundRect.y()) / backgroundRect.height(),
-                                                                (onScreen.right() - backgroundRect.x()) / backgroundRect.width(),
-                                                                1.0 - (onScreen.top() - backgroundRect.y()) / backgroundRect.height()));
-    m_glassPass.shader->setUniform(m_glassPass.edge, float(s_bevel * viewport.scale()));
-    m_glassPass.shader->setUniform(m_glassPass.texSize, QVector2D(scaledBackgroundRect.width(), scaledBackgroundRect.height()));
     read->colorAttachment()->bind();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     vbo->draw(GL_TRIANGLES, 6, effectiveShape.size() * 6);
-    glDisable(GL_BLEND);
-    ShaderManager::instance()->popShader();
-    vbo->unbindArrays();
-
-    glass.shape = effectiveShape;
-    glass.background = backgroundRect;
-    glass.scaledBackground = scaledBackgroundRect;
-}
-
-void GlassEffect::rim(const RenderViewport &viewport, EffectWindow *w, WindowPaintData &data)
-{
-    auto it = m_windows.find(w);
-    if (it == m_windows.end() || it->second.shape.isEmpty() || it->second.look.refraction <= 0) {
-        return;
-    }
-    GlassWindowData &glass = it->second;
-    GLVertexBuffer *vbo = GLVertexBuffer::streamingBuffer();
-    if (!upload(vbo, glass.shape, glass.background, glass.scaledBackground, false)) {
-        return;
-    }
-    vbo->bindArrays();
-    const RectF nativeBox = RectF(w->contentsRect().translated(w->pos())).scaled(viewport.scale()).rounded().translated(-glass.scaledBackground.topLeft());
-    const BorderRadius cornerRadius = w->window()->borderRadius().scaled(viewport.scale()).rounded();
-    QMatrix4x4 projectionMatrix = viewport.projectionMatrix();
-    projectionMatrix.translate(glass.scaledBackground.x(), glass.scaledBackground.y());
-
-    ShaderManager::instance()->pushShader(m_rimPass.shader.get());
-    m_rimPass.shader->setUniform(m_rimPass.mvpMatrix, projectionMatrix);
-    m_rimPass.shader->setUniform(m_rimPass.box, QVector4D(nativeBox.center().x(), nativeBox.center().y(), nativeBox.width() * 0.5, nativeBox.height() * 0.5));
-    m_rimPass.shader->setUniform(m_rimPass.cornerRadius, cornerRadius.toVector());
-    m_rimPass.shader->setUniform(m_rimPass.opacity, float(w->opacity() * data.opacity() * std::min(1.0, 0.4 + glass.look.refraction)));
-    m_rimPass.shader->setUniform(m_rimPass.edge, float(s_hairline * viewport.scale()));
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    vbo->draw(GL_TRIANGLES, 0, glass.shape.size() * 6);
     glDisable(GL_BLEND);
     ShaderManager::instance()->popShader();
     vbo->unbindArrays();
