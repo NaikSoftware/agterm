@@ -491,6 +491,15 @@ private Q_SLOTS:
         QCOMPARE(s.closed[1].title, QStringLiteral("Fix the bug"));
         QCOMPARE(s.closed[1].resume, line);
         QCOMPARE(s.closed[0].resume, QString());
+        { // the list outlives a restart
+            Store r;
+            r.fromJson(s.toJson());
+            QCOMPARE(r.closed.size(), 2);
+            QCOMPARE(r.closed[1].title, QStringLiteral("Fix the bug"));
+            QCOMPARE(r.closed[1].resume, line);
+            QCOMPARE(r.closed[1].closedAt, s.closed[1].closedAt);
+            QCOMPARE(r.session(r.reopenClosed(r.closed[1].id))->cwd, QStringLiteral("/tmp"));
+        }
         const QString again = s.reopenClosed(s.closed[1].id);
         QCOMPARE(s.takeReplay(again, false, {}), line); // typed whatever the restore mode
         QCOMPARE(s.takeReplay(again, true, {}), QString());
