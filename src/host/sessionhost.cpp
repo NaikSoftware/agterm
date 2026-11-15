@@ -133,6 +133,7 @@ struct Modes {
     Modes modes;
     constexpr size_t cap = 4 << 20;
     int client = -1;
+    pid_t job = 0; // the foreground job a kill finds in front of the shell
     bool redraw = false;
     std::chrono::steady_clock::time_point nudged{}; // when the width goes back; zero when not nudged
     char buf[65536];
@@ -202,8 +203,11 @@ struct Modes {
                 }
                 input.erase(0, 5 + size_t(len));
             }
-            if (kill)
+            if (kill) {
+                if (const pid_t fg = ::tcgetpgrp(master); fg > 0 && fg != child)
+                    job = fg;
                 break;
+            }
         }
     }
     ::unlink(path.c_str());
@@ -214,8 +218,11 @@ struct Modes {
     if (child > 0)
         ::kill(-child, SIGHUP); // the shell leads its own session; closing the master hangs up the rest
     ::close(master);
-    for (int i = 0; child > 0 && i < 20 && ::waitpid(child, nullptr, WNOHANG) == 0; ++i)
+    const auto running = [&] { return (child > 0 && ::waitpid(child, nullptr, WNOHANG) == 0) || (job > 0 && ::kill(-job, 0) == 0); };
+    for (int i = 0; i < 40 && running(); ++i)
         ::usleep(50000);
+    if (job > 0) // a job ignoring SIGHUP (nohup, a trap) must not outlive its closed pane
+        ::kill(-job, SIGKILL);
     if (child > 0 && ::waitpid(child, nullptr, WNOHANG) == 0) { // a shell ignoring SIGHUP must not keep the daemon
         ::kill(-child, SIGKILL);
         ::waitpid(child, nullptr, 0);

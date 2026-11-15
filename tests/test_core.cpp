@@ -19,6 +19,7 @@
 #include <QSqlQuery>
 #include <QTest>
 #include <QUuid>
+#include <csignal>
 
 class FakeTerminals : public Terminals
 {
@@ -827,6 +828,28 @@ private Q_SLOTS:
         QVERIFY(!Live::alive(sock));
         QVERIFY(!QFile::exists(Live::dir(state.path())));
         QVERIFY(second.waitForFinished(3000));
+    }
+
+    void liveKillEndsAForegroundJobIgnoringHangup()
+    {
+        QTemporaryDir state;
+        const QString sock = Live::socket(state.path(), QStringLiteral("s1"), QStringLiteral("main")), pidFile = state.filePath("job.pid");
+        Live::makeDir(state.path());
+        QProcess client;
+        // set -m gives the job its own process group in front of the shell's, as an interactive shell does
+        client.start(QStringLiteral(AGTERM_SESSION_HOST),
+                     {sock, "--", "/bin/bash", "-c", QStringLiteral("set -m; sh -c 'trap \"\" HUP; echo $$ > %1; exec sleep 60'; exit").arg(pidFile)});
+        const auto readJob = [&] {
+            QFile f(pidFile);
+            return f.open(QIODevice::ReadOnly) ? f.readAll().trimmed().toInt() : 0;
+        };
+        QTRY_VERIFY(readJob() > 1);
+        const int job = readJob();
+        QVERIFY(::kill(job, 0) == 0);
+        QCOMPARE(Live::foregroundPid(Live::shellPid(sock)), job);
+        Live::kill(sock);
+        QTRY_VERIFY(::kill(job, 0) != 0);
+        QTRY_COMPARE(client.state(), QProcess::NotRunning);
     }
 
     void dashboardTargetsExpandDropAndTrim()

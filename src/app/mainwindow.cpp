@@ -63,6 +63,8 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include <csignal>
+
 // A live pane's shell runs under its daemon, behind the attach client Konsole started; Konsole sees only the client.
 // A very light wash of the shown session's background tint over the terminal, so panels tell apart by colour.
 // Not in the stack's layout: it covers the whole stack and lets every mouse event through to the terminal.
@@ -114,6 +116,16 @@ static int shellPid(KParts::ReadOnlyPart *part)
 static int freshForegroundPid(KParts::ReadOnlyPart *part)
 {
     return Live::foregroundPid(shellPid(part));
+}
+
+// a foreground job ignoring SIGHUP (nohup, a trap) must not outlive its closed pane; a live pane's host ends its own
+static void endForegroundJob(KParts::ReadOnlyPart *part)
+{
+    if (!part || !part->property("agtermLive").toString().isEmpty())
+        return;
+    const int shell = shellPid(part), job = Live::foregroundPid(shell);
+    if (job > 0 && job != shell)
+        QTimer::singleShot(2000, [job] { ::kill(-job, SIGKILL); }); // the hangup first, as the session host does
 }
 
 static int foregroundPid(KParts::ReadOnlyPart *part)
@@ -338,8 +350,11 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         forgetOverlays(id);
         dashboardForget(id); // its panes go back home first, so they die with the view
         // taken first, so the parts dying with their view are not mistaken for shells that exited
-        if (Panes p = m_panes.take(id); p.view)
+        if (Panes p = m_panes.take(id); p.view) {
+            endForegroundJob(p.main);
+            endForegroundJob(p.right);
             p.view->deleteLater(); // closes the ptys, which hangs up the shells
+        }
         for (const char *pane : {"main", "right"}) // a deleted session's daemons go with it; a closed window's stay
             if (const QString live = Live::socket(stateDir(), id, QLatin1String(pane)); QFile::exists(live))
                 Live::kill(live);
@@ -876,6 +891,7 @@ void MainWindow::applyLayout(const QString &id)
     } else if (!s->hasSplit && p.right) {
         auto *right = std::exchange(p.right, nullptr);
         const QString live = right->property("agtermLive").toString();
+        endForegroundJob(right);
         delete right; // closes the split shell whatever it runs
         if (!live.isEmpty())
             Live::kill(live);
