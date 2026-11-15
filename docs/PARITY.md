@@ -28,7 +28,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Strip agent spinner glyphs (✳ ◑ braille) from terminal titles (fork)
 - [x] Close-session reselection by MRU within the workspace
 - [x] Shortcuts: new session ⌘N, new workspace ⌘⇧N, open directory ⌘O, close ⌘W, prev/next session ⌥⌘↑↓, attention ⌃⌥↑↓, toggle sidebar ⌘⌃S, flag ⌘⇧F
-- [x] Shortcuts: reopen ⌘⇧T, font ⌘+ ⌘− ⌘0 (`font inc|dec|reset`, sizes persisted; driven through Konsole's Ctrl+wheel zoom)
+- [x] Shortcuts: reopen ⌘⇧T, font ⌘+ ⌘− ⌘0 (`font inc|dec|reset`, sizes persisted; driven through Konsole's Ctrl+wheel zoom). agterm-qt only: `font set <points>`
+  and `font fit <columns>` (the phone's Fit to phone), both answering `previousFontSize`
 
 ## Phase 2: terminals
 

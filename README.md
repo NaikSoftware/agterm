@@ -118,14 +118,18 @@ and `AGTERMCTL`, so
 line) on `<state dir>/agterm.sock`. The state dir is `~/.local/share/agterm-qt`, or `AGTERM_STATE_DIR`.
 Beyond sessions and workspaces it streams events (`agtermctl events`), shows pickers and questions (`pick`, `ask`),
 passes messages between panes (`msg`, addressed by `AGTERM_PANE_ID`), reads a pane's screen or scrollback
-(`session text --all`), and types into either pane (`session type --pane right`). Commands for features agterm-qt
+(`session text --all`), types into either pane (`session type --pane right`), and zooms a pane's font
+(`font inc|dec|reset`, `font set <points>`, or `font fit <columns>` for the smallest size that leaves the program at most
+that many columns). Commands for features agterm-qt
 lacks answer "not supported on this platform".
 
 ## Phone app
 
 agterm Mobile ([mobile/](mobile/README.md), Flutter) watches and drives agterm-qt from a phone: the session tree with
-status dots and the sessions that need you, a session's screen, typing into it (an agent's question shows as answer
-buttons), and the sidebar's row menus. It speaks the control API through a relay that runs only while you want it.
+status dots (a working agent's dot pulses, as in the sidebar) and the sessions that need you, a session's screen, typing
+into it (an agent's question shows as answer buttons), and the sidebar's row menus. Fit to phone on a session's screen
+zooms the computer's pane until the program is as narrow as the phone shows at a readable size, so nothing wraps;
+Restore PC size puts back the size it had. It speaks the control API through a relay that runs only while you want it.
 
 Settings ▸ Connect a Phone… switches it on: the window shows the QR code to scan in the app, the `agterm://pair?…` link
 to copy, the address the code points the phone at (pick your LAN or VPN address, or type a name such as the machine's
