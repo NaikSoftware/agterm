@@ -10,6 +10,7 @@
 #include <KParts/ReadOnlyPart>
 
 #include <QStackedWidget>
+#include <QStatusBar>
 #include <QApplication>
 #include <QWheelEvent>
 #include <QButtonGroup>
@@ -91,9 +92,14 @@ bool MainWindow::setGrid(const QString &sessionId, const QString &pane, const QS
     QObject *e = s ? KonsolePrivate::emulation(s) : nullptr;
     if (!e)
         return *error = QStringLiteral("pane has no terminal"), false;
-    if (grid.isValid()) // Konsole only resizes the emulation again when a shown view changes size
-        return QMetaObject::invokeMethod(e, "setImageSize", Q_ARG(int, grid.height()), Q_ARG(int, grid.width()))
-            || (*error = QStringLiteral("cannot resize the terminal"), false);
+    const QString key = sessionId + QLatin1Char('/') + pane;
+    if (grid.isValid()) { // Konsole only resizes the emulation again when a shown view changes size
+        if (!QMetaObject::invokeMethod(e, "setImageSize", Q_ARG(int, grid.height()), Q_ARG(int, grid.width())))
+            return *error = QStringLiteral("cannot resize the terminal"), false;
+        m_phoneGrids.insert(key, grid);
+        return true;
+    }
+    m_phoneGrids.remove(key);
     // back to the view's size; Konsole counts only shown views, so the page is current meanwhile, as in prime()
     QWidget *current = m_stack->currentWidget();
     m_stack->setCurrentWidget(p.view);
@@ -116,6 +122,24 @@ bool MainWindow::scroll(const QString &sessionId, const QString &pane, int lines
         QApplication::sendEvent(display, &wheel);
     }
     return true;
+}
+
+// still on a phone's grid: Konsole hands the pane back to its view on its own when the view is resized or shown
+bool MainWindow::hasPhoneGrid(const QString &id) const
+{
+    auto *self = const_cast<MainWindow *>(this);
+    for (const QString pane : {QStringLiteral("left"), QStringLiteral("right")})
+        if (const QSize set = m_phoneGrids.value(id + QLatin1Char('/') + pane); set.isValid() && self->gridSize(id, pane) == set)
+            return true;
+    return false;
+}
+
+// Session ▸ Restore Terminal Size: takes a pane back from a phone's Fit to phone
+void MainWindow::restoreTerminalSize(const QString &id)
+{
+    for (const QString pane : {QStringLiteral("left"), QStringLiteral("right")})
+        if (QString error; m_phoneGrids.contains(id + QLatin1Char('/') + pane) && !setGrid(id, pane, QSize(), &error))
+            statusBar()->showMessage(error, 3000);
 }
 
 void MainWindow::emitEvent(const QString &kind, const QString &sessionId, const QJsonObject &payload)

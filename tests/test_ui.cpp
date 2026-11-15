@@ -419,6 +419,41 @@ private Q_SLOTS:
         qunsetenv("VISUAL");
     }
 
+    void restoreTerminalSizeTakesBackAPhoneGrid()
+    {
+        Store store;
+        MainWindow w(store, dir.filePath("grid.json"));
+        w.restore({});
+        const QString a = store.addSession(store.addWorkspace("w"), {}, {});
+        store.select(a);
+        w.show();
+        QTRY_VERIFY_WITH_TIMEOUT(w.gridSize(a, "left").isValid(), 5000);
+        const QSize own = w.gridSize(a, "left");
+        QMenu *menu = nullptr;
+        for (QAction *m : w.menuBar()->actions())
+            if (m->text() == QLatin1String("&Session"))
+                menu = m->menu();
+        QAction *restore = w.namedAction("restore_terminal_size");
+        Q_EMIT menu->aboutToShow();
+        QVERIFY(!restore->isEnabled()); // not on a phone's grid
+
+        QString error;
+        QVERIFY(w.setGrid(a, "left", QSize(40, 60), &error));
+        QCOMPARE(w.gridSize(a, "left"), QSize(40, 60));
+        Q_EMIT menu->aboutToShow();
+        QVERIFY(restore->isEnabled());
+        restore->trigger();
+        QCOMPARE(w.gridSize(a, "left"), own); // the window's own size again
+        Q_EMIT menu->aboutToShow();
+        QVERIFY(!restore->isEnabled());
+
+        QVERIFY(w.setGrid(a, "left", QSize(40, 60), &error));
+        w.resize(w.size() + QSize(80, 40)); // the window takes the grid back on its own: nothing left to restore
+        QTRY_VERIFY(w.gridSize(a, "left") != QSize(40, 60));
+        Q_EMIT menu->aboutToShow();
+        QVERIFY(!restore->isEnabled());
+    }
+
     void dashboardHostsTheLivePanesAndGivesThemBack()
     {
         Store store;

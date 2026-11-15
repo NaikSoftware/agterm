@@ -109,7 +109,7 @@ class AgtermModel extends ChangeNotifier {
   final _alerts = StreamController<Alert>.broadcast();
   Stream<Alert> get alerts => _alerts.stream;
   bool _running = false, _disposed = false;
-  final fitted = <String, int>{}; // "session/pane" whose grid is set to this phone's → its rows
+  final fitted = <String, (int, int)>{}; // "session/pane" whose grid is set to this phone's → its columns and rows
   bool background = false; // in the background with the connection kept up for alerts: screens stop polling
   int _generation = 0; // bumps on every (re)connect, so a stale loop stops
   String? _run; // the events cursor outlives a reconnect, so what happened while offline still alerts

@@ -93,10 +93,12 @@ class _SessionScreenState extends State<SessionScreen> {
     polling = true;
     try {
       // fitted, the grid has more rows than the computer's view shows; reading the last ones gets all of them
-      final rows = scrollback ? 2000 : m.fitted[_fitKey] ?? 0;
+      final rows = scrollback ? 2000 : m.fitted[_fitKey]?.$2 ?? 0;
       final r = await m.call('session.text', target: widget.sessionId, args: {'pane': pane, if (rows > 0) 'lines': rows});
       final t = _trimEnd('${r['text'] ?? ''}');
       _columns = (r['columns'] as num?)?.toInt();
+      // the computer took the grid back (Restore Terminal Size, or its window resized): no longer fitted
+      if (_columns != null && m.fitted[_fitKey] != null && m.fitted[_fitKey]!.$1 != _columns) m.fitted.remove(_fitKey);
       if (mounted && (t != text || error != null)) setState(() => (text = t, error = null));
       if (s != null && s!.unseen > 0) unawaited(m.act('session.seen', target: widget.sessionId));
     } on AgtermError catch (e) {
@@ -127,7 +129,7 @@ class _SessionScreenState extends State<SessionScreen> {
         final size = _width / (columns * 0.6);
         final rows = max(5, (_height / (size * 1.3)).floor()); // the text's line height is 1.3
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'columns': columns, 'rows': rows});
-        m.fitted[key] = rows;
+        m.fitted[key] = (columns, rows);
       }
     } on AgtermError catch (e) {
       if (mounted) report(context, e.message);

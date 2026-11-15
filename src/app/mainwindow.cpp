@@ -507,6 +507,11 @@ void MainWindow::createMenus()
         if (m_store.session(m_store.selected))
             duplicateCompanion(m_store.selected);
     }));
+    QAction *restoreSize = action(QStringLiteral("restore_terminal_size"), tr("Restore Terminal Size"), QStringLiteral("view-restore"), {},
+                                  [this] { restoreTerminalSize(m_store.selected); });
+    restoreSize->setToolTip(tr("Give the terminal back the window's size after a phone's Fit to phone"));
+    session->addAction(restoreSize);
+    connect(session, &QMenu::aboutToShow, restoreSize, [this, restoreSize] { restoreSize->setEnabled(hasPhoneGrid(m_store.selected)); });
     session->addAction(action(QStringLiteral("clear_status"), tr("Clear Status"), QStringLiteral("edit-clear"), {},
                               [this] { m_store.setStatus(m_store.selected, QStringLiteral("idle")); }));
     session->addAction(action(QStringLiteral("toggle_flag"), tr("Flag"), QStringLiteral("flag"), QKeySequence(QStringLiteral("Ctrl+Alt+Shift+F")), [this] {
@@ -1631,6 +1636,8 @@ void MainWindow::sidebarMenu(const QPoint &pos)
             menu.addAction(tr("Duplicate Session"), this, [this, id] { m_store.select(m_store.duplicateSession(id, liveCwd(id))); });
             menu.addAction(tr("New Companion"), this, [this, id] { newCompanion(id); });
             menu.addAction(tr("Duplicate as Companion"), this, [this, id] { duplicateCompanion(id); });
+            if (hasPhoneGrid(id)) // fitted to a phone: the row offers the way back
+                menu.addAction(QIcon::fromTheme(QStringLiteral("view-restore")), tr("Restore Terminal Size"), this, [this, id] { restoreTerminalSize(id); });
         }
         fillMoveMenu(menu.addMenu(tr("Move to")), ids);
         bool allFlagged = true;

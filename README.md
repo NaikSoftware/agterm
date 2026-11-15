@@ -151,7 +151,9 @@ into it (an agent's question shows as answer buttons), and the sidebar's row men
 gives the program the phone's own grid (`session grid`): as many columns and rows as the phone shows at a readable
 size, so it redraws for the phone and nothing wraps, while the computer's font stays as it was; Restore PC size gives
 the grid back to the computer's window. While fitted, dragging the screen scrolls the program itself (wheel notches
-through `session scroll`), so Claude Code scrolls its own transcript. It speaks the control API through a relay that runs only while you want it.
+through `session scroll`), so Claude Code scrolls its own transcript. On the computer, Session ▸ Restore Terminal Size
+(also on the row's right-click menu while it applies) takes a fitted session back; it is disabled once the window
+has taken the grid back by itself (resized or shown). It speaks the control API through a relay that runs only while you want it.
 
 Settings ▸ Connect a Phone… switches it on: the window shows the QR code to scan in the app, the `agterm://pair?…` link
 to copy, the address the code points the phone at (pick your LAN or VPN address, or type a name such as the machine's

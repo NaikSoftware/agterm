@@ -162,6 +162,9 @@ private:
     QJsonObject controlExtras(const QString &id) const; // splitFocused, ask
     QJsonObject controlChrome() const;                  // sidebarWidth, zoomedSurface, pickPending, askPending
     QHash<QString, bool> m_splitFocused;
+    QHash<QString, QSize> m_phoneGrids; // "session/pane" → the grid a phone set (session grid)
+    bool hasPhoneGrid(const QString &id) const;
+    void restoreTerminalSize(const QString &id);
     QString m_zoomSurface, m_pickId;
     struct Ask {
         QPointer<QDialog> dialog;
