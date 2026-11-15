@@ -119,8 +119,7 @@ line) on `<state dir>/agterm.sock`. The state dir is `~/.local/share/agterm-qt`,
 Beyond sessions and workspaces it streams events (`agtermctl events`), shows pickers and questions (`pick`, `ask`),
 passes messages between panes (`msg`, addressed by `AGTERM_PANE_ID`), reads a pane's screen or scrollback
 (`session text --all`), types into either pane (`session type --pane right`), and zooms a pane's font
-(`font inc|dec|reset`, `font set <points>`, or `font fit <columns>` for the smallest size that leaves the program at most
-that many columns), and sets a pane's grid apart from its window (`session grid <cols>x<rows>`, `--reset`). Commands for features agterm-qt
+(`font inc|dec|reset`), and sets a pane's grid apart from its window (`session grid <cols>x<rows>`, `--reset`). Commands for features agterm-qt
 lacks answer "not supported on this platform".
 
 ## Phone app

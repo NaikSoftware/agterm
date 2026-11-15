@@ -216,9 +216,8 @@ All take `--target` (workspace id, prefix, name, `active`) and `--window`.
   `--grow-primary`, `--grow-split`): sets the main pane's fraction (clamped 0.05–0.95) or moves it by D.
   Prints the applied ratio (`result.ratio`). Errors: `provide exactly one split ratio or grow option`,
   `session has no split`.
-- `font inc|dec|reset [--pane left|right]`: the pane's font size, persisted per session. `font set <points>` sets it (0 = the default size); `font fit <columns>` zooms the pane (shown or not) to the smallest size that leaves the program at most that many columns. Both answer `previousFontSize`, so a caller can put the size back with `font set`.
-  Errors: `pane must be left or right`, `session has no split`, `font.fit: columns must be 20...1000`,
-  `font.set: size must be 4...96 points, or 0 for the default`, `cannot read the terminal's size`. Read back: `result.fontSize`, the node's
+- `font inc|dec|reset [--pane left|right]`: the pane's font size, persisted per session.
+  Errors: `pane must be left or right`, `session has no split`. Read back: `result.fontSize`, the node's
   `fontSize`/`splitFontSize`.
 - `surface zoom [show|hide|toggle] [--target active|surface:<session>:left|right]`: fills the window with one pane
   (sidebar hidden). Zooming selects that session. Errors: `invalid surface zoom mode: X`, `no active surface`,

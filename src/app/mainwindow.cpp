@@ -162,25 +162,6 @@ void zoomFontTo(QWidget *display, double points)
     }
 }
 
-// the smallest font that leaves the pane at most `columns` wide, so a narrow screen elsewhere shows every column unwrapped
-bool fitColumns(QWidget *display, QObject *session, int columns, QString *error)
-{
-    if (KonsolePrivate::columns(session) <= 0)
-        return *error = QStringLiteral("cannot read the terminal's size"), false;
-    for (int guard = 0; guard < 100; ++guard) {
-        const double now = display->font().pointSizeF();
-        const bool tooWide = KonsolePrivate::columns(session) > columns;
-        zoomFontTo(display, tooWide ? now + 1 : now - 1);
-        if (display->font().pointSizeF() == now)
-            break; // at Konsole's limit
-        if (!tooWide && KonsolePrivate::columns(session) > columns) {
-            zoomFontTo(display, now); // one step smaller was too wide: the size before it is the fit
-            break;
-        }
-    }
-    return true;
-}
-
 PartBridge::PartBridge(MainWindow *window, Store &store, const QString &id, QObject *parent)
     : QObject(parent), m_window(window), m_store(store), m_id(id)
 {
@@ -591,7 +572,7 @@ void MainWindow::createMenus()
         QAction *a = action(name, text, {}, keys.first(), [this, op] {
             QString e;
             if (m_store.session(m_store.selected))
-                font(m_store.selected, QStringLiteral("main"), op, 0, &e);
+                font(m_store.selected, QStringLiteral("main"), op, &e);
         });
         a->setShortcuts(keys);
         view->addAction(a);
@@ -954,28 +935,17 @@ void MainWindow::newCompanion(const QString &parentId)
         m_store.select(m_store.addCompanion(parentId, {}, liveCwd(parentId)));
 }
 
-bool MainWindow::font(const QString &sessionId, const QString &pane, const QString &op, double value, QString *error)
+bool MainWindow::font(const QString &sessionId, const QString &pane, const QString &op, QString *error)
 {
     const Panes p = m_panes.value(sessionId);
-    KParts::ReadOnlyPart *part = pane == QLatin1String("right") ? p.right : p.main;
-    QWidget *display = terminalDisplay(part);
+    QWidget *display = terminalDisplay(pane == QLatin1String("right") ? p.right : p.main);
     Session *s = m_store.session(sessionId);
     if (!display || !s) {
         *error = QStringLiteral("pane has no terminal");
         return false;
     }
-    const double now = display->font().pointSizeF(), base = display->property("agtermBaseFont").toDouble();
-    if (op == QLatin1String("fit")) {
-        // Konsole resizes the pty only for a shown view, so a background session is current for the fit, as prime() does
-        QWidget *current = m_stack->currentWidget();
-        m_stack->setCurrentWidget(p.view);
-        const bool fitted = fitColumns(display, sessionOf(part), int(value), error);
-        m_stack->setCurrentWidget(current);
-        if (!fitted)
-            return false;
-    } else {
-        zoomFontTo(display, op == QLatin1String("inc") ? now + 1 : op == QLatin1String("dec") ? now - 1 : op == QLatin1String("set") && value > 0 ? value : base);
-    }
+    const double now = display->font().pointSizeF();
+    zoomFontTo(display, op == QLatin1String("inc") ? now + 1 : op == QLatin1String("dec") ? now - 1 : display->property("agtermBaseFont").toDouble());
     recordFontSizes(s);
     m_saveTimer.start();
     return true;

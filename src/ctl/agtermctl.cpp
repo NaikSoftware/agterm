@@ -49,7 +49,6 @@ static const char *usage = R"(usage: agtermctl <command> [args] [--target T] [--
   session split close
   session swap
   font inc|dec|reset [--pane left|right]   the session's terminal font size
-  font set <points> | fit <columns> [--pane left|right]   a size (0 = default) | the smallest size at most that wide
   recent list | clear
   recent open [id]                      reopen a closed session (default: the most recent)
   filepanel [show|hide|toggle]          the session folder tree beside the sidebar
@@ -336,10 +335,6 @@ int main(int argc, char **argv)
         else if (const QStringList cr = arg.split(QLatin1Char('x')); cr.size() == 2)
             args.insert("columns", cr[0].toInt()), args.insert("rows", cr[1].toInt());
     }
-    if (cmd == QLatin1String("font.fit"))
-        args.insert("columns", arg.toInt());
-    if (cmd == QLatin1String("font.set"))
-        args.insert("size", arg.toDouble());
     if (cmd == QLatin1String("filepanel"))
         args.insert("mode", arg.isEmpty() ? QStringLiteral("toggle") : arg);
     if (QStringList{"session.flag", "session.split", "workspace.focus", "workspace.filter"}.contains(cmd))

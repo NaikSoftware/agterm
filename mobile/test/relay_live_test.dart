@@ -17,9 +17,6 @@ void main() {
     await Future.delayed(const Duration(milliseconds: 800));
     final text = await c.call('session.text', target: created['id']);
     expect('$text', contains('phone-ok'));
-    final fit = await c.call('font.fit', target: created['id'], args: {'columns': 40});
-    final back = await c.call('font.set', target: created['id'], args: {'size': fit['previousFontSize']});
-    expect(back['fontSize'], fit['previousFontSize']); // Fit to phone puts the computer's size back
     final grid = await c.call('session.grid', target: created['id'], args: {'columns': 40, 'rows': 60});
     expect([grid['columns'], grid['rows']], [40, 60]); // Fit to phone: the phone's grid
     await c.call('session.grid', target: created['id'], args: {'reset': true});

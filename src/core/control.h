@@ -62,14 +62,12 @@ public:
         Q_UNUSED(sessionId);
         return {};
     }
-    // op inc | dec | reset | set (value: points, 0 = the base size) | fit (value: columns, the smallest size that fits them)
-    // on pane main | right; records the resulting size on the session
-    virtual bool font(const QString &sessionId, const QString &pane, const QString &op, double value, QString *error)
+    // op inc | dec | reset on pane main | right; records the resulting size on the session
+    virtual bool font(const QString &sessionId, const QString &pane, const QString &op, QString *error)
     {
         Q_UNUSED(sessionId);
         Q_UNUSED(pane);
         Q_UNUSED(op);
-        Q_UNUSED(value);
         *error = QStringLiteral("no terminals");
         return false;
     }

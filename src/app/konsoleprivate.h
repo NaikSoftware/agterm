@@ -15,11 +15,6 @@ QString scrollback(QObject *session, QWidget *display, bool *ok);
 QString selectedText(QObject *session);
 // the emulation's grid, columns x rows (what the program sees); invalid when the symbol is missing
 QSize gridSize(QObject *session);
-inline int columns(QObject *session)
-{
-    const QSize g = gridSize(session);
-    return g.isValid() ? g.width() : -1;
-}
 // gives the emulation the size its shown views have again (Session::updateTerminalSize); false when the symbol is missing
 bool fitToView(QObject *session);
 // whether the program in the view asked for mouse reports; *ok is false when the symbol is missing
