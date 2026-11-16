@@ -189,6 +189,8 @@ final class ControlServer {
 
     /// The Live sessions reset's confirm path; nil refuses `zmx.reset` as unsupported.
     var liveReset: LiveResetCoordinator?
+    /// The Connect a Phone relay behind `phone.*`; nil answers that the relay is not available.
+    var phoneRelay: PhoneRelay?
     /// The scheduler's rows for `hooks.list`, wired by `agtermApp` once the controller exists.
     var hookStatus: () -> [ControlHookEntry] = { [] }
     /// companionPageTokens are page-companion attachments handed to another Mac and not claimed yet, by token.
@@ -578,10 +580,11 @@ final class ControlServer {
     /// Commands whose dispatch awaits an ssh round trip. `zmx.attach` re-resolves the remote first, so it
     /// carries the same wait; local `zmx.list` blocks too, but bounded, and stays inline to keep cache order.
     /// `session.restart` waits on process exits for seconds, while the shell it starts calls this socket.
+    /// The phone relay changes wait for the old relay's exit, which first hands its phones' grids back here.
     nonisolated private static func waitsOnNetwork(_ cmd: Command) -> Bool {
         // companion creation may ssh to a remote parent's origin, which can be this Mac's own socket
         [.zmxTree, .zmxAttach, .zmxAttachGroup, .sessionRestart, .sessionCompanionNew, .sessionCompanionDuplicate,
-         .sessionCompanionPage, .windowRemoteOpen].contains(cmd)
+         .sessionCompanionPage, .windowRemoteOpen, .phoneEnable, .phonePort, .phoneRevoke].contains(cmd)
     }
 
     // these polling reads cannot change window nodes; skip the AppKit rebuild
@@ -687,14 +690,14 @@ final class ControlServer {
                 .sessionOverlayResult, .sessionOverlaySubmit, .sessionOverlayCopy, .sessionOverlayText,
                 .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle, .sessionOverlayFollow, .sessionOverlaySearch,
                 .sessionOverlayChanges, .sessionOverlayWrap,
-                .sessionBackground, .sessionText, .quick, .quickType, .quickText,
+                .sessionBackground, .sessionText, .sessionGrid, .sessionScroll, .quick, .quickType, .quickText,
                 .windowNew, .windowList, .windowSelect, .windowGo,
                 .windowClose, .windowRename, .windowDelete, .windowResize, .windowMove, .windowZoom,
                 .windowFullscreen, .windowMinimize, .windowRemoteOpen, .windowRemoteDismiss,
                 .sessionDetach, .sessionReattach, .workspaceDetach, .workspaceReattach,
                 .restoreClear, .restoreCapture, .restoreMode, .zmxList, .zmxPrune, .zmxKill, .zmxReset, .zmxTree,
                 .zmxAttach, .zmxAttachGroup, .zmxPresent, .zmxScreen, .catalogSubscribe, .catalogOp, .sessionOverlayJobRun, .sessionOverlayPageServe, .dashboard, .version,
-                .recentList, .recentOpen, .recentClear:
+                .recentList, .recentOpen, .recentClear, .phoneStatus, .phoneEnable, .phonePort, .phoneHost, .phoneRevoke:
             return ControlResponse(ok: false, error: "control dispatcher did not handle \(request.cmd.rawValue)")
         case .debugAppearance:
             return setDebugAppearance(args: request.args)
@@ -866,6 +869,13 @@ final class ControlServer {
             fontSize: { ($0.addressableSurface as? GhosttySurfaceView)?.currentFontSize() },
             splitFontSize: { ($0.splitSurface as? GhosttySurfaceView)?.currentFontSize() },
             scratchFontSize: { ($0.scratchSurface as? GhosttySurfaceView)?.currentFontSize() },
+            paneGrids: { session in
+                let grid = { (surface: (any TerminalSurface)?) in
+                    (surface as? GhosttySurfaceView)?.forcedGrid.map { ControlGrid(columns: $0.columns, rows: $0.rows) }
+                }
+                let left = grid(session.surface), right = grid(session.splitSurface)
+                return left == nil && right == nil ? nil : ControlPaneGrids(left: left, right: right)
+            },
             // both are app-level facts now that the quick terminal is one detached panel, so every projected
             // window reports the same value for them rather than one of its own.
             quickVisible: { QuickTerminalController.shared.isVisible },
@@ -906,6 +916,7 @@ final class ControlServer {
             sidebarDensity: GhosttyApp.shared.sidebarDensity
         )
         tree.remote = windowID.flatMap(library.remoteNode(for:))
+        tree.phone = phoneRelay?.status.readback
         return tree
     }
 

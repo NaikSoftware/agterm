@@ -358,7 +358,7 @@ public final class AppStore {
                             fontSize: (Session) -> Double? = { _ in nil },
                             splitFontSize: (Session) -> Double? = { _ in nil },
                             scratchFontSize: (Session) -> Double? = { _ in nil },
-                            quickVisible: () -> Bool? = { nil },
+                            paneGrids: (Session) -> ControlPaneGrids? = { _ in nil }, quickVisible: () -> Bool? = { nil },
                             zoomedSurface: () -> String? = { nil },
                             pickPending: () -> String? = { nil },
                             askPending: () -> String? = { nil },
@@ -467,7 +467,7 @@ public final class AppStore {
                                           parent: session.parentID?.uuidString,
                                           collapsed: !session.isExpanded && parents.contains(session.id) ? true : nil,
                                           content: session.content == .page ? "page" : nil, info: session.effectiveInfo,
-                                          remoteSessionID: session.remoteSessionID)
+                                          remoteSessionID: session.remoteSessionID, paneGrids: paneGrids(session))
             }
             return ControlWorkspaceNode(id: workspace.id.uuidString, name: workspace.name,
                                         active: workspace.id == activeWorkspaceID,

@@ -124,6 +124,26 @@ public extension ControlActions {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("hooks.list"))
     }
 
+    func phoneStatus() -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("phone.status"))
+    }
+
+    func setPhoneEnabled(_: ControlToggleMode) async -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("phone.enable"))
+    }
+
+    func setPhonePort(_: Int) async -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("phone.port"))
+    }
+
+    func setPhoneHost(_: String?) -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("phone.host"))
+    }
+
+    func revokePhone() async -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("phone.revoke"))
+    }
+
     func clearBrowser() async -> ControlResponse {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("browser.clear"))
     }
@@ -255,6 +275,14 @@ public extension ControlActions {
 
     func takeSessionLead(_: String?, window _: String?, pane _: StatusPane?) -> ControlResponse {
         ControlResponse(ok: false, error: "session.lead is not supported by this host")
+    }
+
+    func setSessionGrid(_: String?, window _: String?, pane _: StatusPane, grid _: ControlGrid?) -> ControlResponse {
+        ControlResponse(ok: false, error: "session.grid is not supported by this host")
+    }
+
+    func scrollSession(_: String?, window _: String?, pane _: StatusPane, lines _: Int) -> ControlResponse {
+        ControlResponse(ok: false, error: "session.scroll is not supported by this host")
     }
 
     /// Not `ControlActionsUnsupported.message`, which says "on this platform": the divider exists wherever

@@ -34,6 +34,9 @@ struct ControlEventProtocolTests {
                          payload: ControlEventPayload(name: "api", pane: "right", paneID: "tok")),
             ControlEvent(seq: 14, ts: 14.5, kind: .message, window: "win", workspace: "work", session: "sess",
                          payload: ControlEventPayload(name: "api", paneID: "tok", from: "S:Q", messageID: "m1")),
+            ControlEvent(seq: 15, ts: 15.5, kind: .phoneConnected, payload: ControlEventPayload(ip: "10.0.0.5")),
+            ControlEvent(seq: 16, ts: 16.5, kind: .phoneDisconnected, payload: ControlEventPayload(ip: "10.0.0.5")),
+            ControlEvent(seq: 17, ts: 17.5, kind: .phoneRefused, payload: ControlEventPayload(ip: "::1")),
         ]
 
         let data = try JSONEncoder().encode(events)
@@ -75,6 +78,9 @@ struct ControlEventProtocolTests {
                          payload: ControlEventPayload(name: "api", pane: "right", paneID: "tok")),
             ControlEvent(seq: 14, ts: 14.5, kind: .message, window: "win", workspace: "work", session: "sess",
                          payload: ControlEventPayload(name: "api", paneID: "tok", from: "S:Q", messageID: "m1")),
+            ControlEvent(seq: 15, ts: 15.5, kind: .phoneConnected, payload: ControlEventPayload(ip: "10.0.0.5")),
+            ControlEvent(seq: 16, ts: 16.5, kind: .phoneDisconnected, payload: ControlEventPayload(ip: "10.0.0.5")),
+            ControlEvent(seq: 17, ts: 17.5, kind: .phoneRefused, payload: ControlEventPayload(ip: "::1")),
         ]
         let expected = [
             ##"{"kind":"status","payload":{"blink":true,"color":"#aabbcc","name":"api","pane":"right","##
@@ -92,6 +98,9 @@ struct ControlEventProtocolTests {
             ##"{"kind":"app.launched","payload":{},"seq":12,"ts":12.5}"##,
             ##"{"kind":"pane.focused","payload":{"name":"api","pane":"right","paneID":"tok"},"seq":13,"session":"sess","ts":13.5,"window":"win","workspace":"work"}"##,
             ##"{"kind":"message","payload":{"from":"S:Q","messageID":"m1","name":"api","paneID":"tok"},"seq":14,"session":"sess","ts":14.5,"window":"win","workspace":"work"}"##,
+            ##"{"kind":"phone.connected","payload":{"ip":"10.0.0.5"},"seq":15,"ts":15.5}"##,
+            ##"{"kind":"phone.disconnected","payload":{"ip":"10.0.0.5"},"seq":16,"ts":16.5}"##,
+            ##"{"kind":"phone.refused","payload":{"ip":"::1"},"seq":17,"ts":17.5}"##,
         ]
 
         #expect(try events.map(canonicalJSON) == expected)

@@ -59,6 +59,8 @@ public enum Command: String, Codable, Sendable {
     case sessionPaste = "session.paste"
     case sessionSelectAll = "session.selectall"
     case sessionText = "session.text"
+    case sessionGrid = "session.grid"
+    case sessionScroll = "session.scroll"
     case sessionSearch = "session.search"
     case sessionOverlayOpen = "session.overlay.open"
     case sessionOverlayClose = "session.overlay.close"
@@ -123,6 +125,11 @@ public enum Command: String, Codable, Sendable {
     case keymapRun = "keymap.run"
     case hooksReload = "hooks.reload"
     case hooksList = "hooks.list"
+    case phoneStatus = "phone.status"
+    case phoneEnable = "phone.enable"
+    case phonePort = "phone.port"
+    case phoneHost = "phone.host"
+    case phoneRevoke = "phone.revoke"
     case browserClear = "browser.clear"
     case browserLinks = "browser.links"
     case configReload = "config.reload"
@@ -225,8 +232,12 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     /// `zmx kill`'s explicit confirmation. The command destroys a backend process that can reach detached
     /// claims and every client attached to it, so it has no useful default for who is affected.
     public var force: Bool?
-    /// The machine `zmx tree` reaches, spelled as ssh would take it.
+    /// The machine `zmx tree` reaches, spelled as ssh would take it; the address `phone.host` puts in the link.
     public var host: String?
+    /// `phone.host`: let the link follow the relay's best address instead of a fixed `host`.
+    public var auto: Bool?
+    /// `phone.port`: the port the phone relay listens on.
+    public var port: Int?
     /// For `session.new`: create in the background without selecting or focusing (the CLI's `--no-select`);
     /// omitted/`false` keeps select-and-focus. Read back via the `tree` `active` flag — the new node is not it.
     public var noSelect: Bool?
@@ -307,8 +318,13 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     public var ratioDelta: Double?
     /// For `session.text` / `quick.text`: read the full screen + scrollback instead of just the visible screen.
     public var all: Bool?
-    /// For `session.text` / `quick.text`: keep only the last N lines of the full buffer.
+    /// For `session.text` / `quick.text`: keep only the last N lines of the full buffer. For `session.scroll`:
+    /// wheel lines, negative toward older output.
     public var lines: Int?
+    /// columns and rows are the grid `session.grid` gives a pane apart from its view; reset hands it back to the view.
+    public var columns: Int?
+    public var rows: Int?
+    public var reset: Bool?
     /// Direction for `session.go` (`next`|`prev`|`previous`|`first`|`last`), for `workspace.go`
     /// (`next`|`prev`|`previous` — a workspace has no attention state and no ends to jump to), for the
     /// reorder form of `session.move` / `workspace.move` (`up`|`down`|`top`|`bottom`), and for
@@ -720,6 +736,10 @@ public struct ControlResult: Codable, Sendable, Equatable {
     /// pane is the pane session.restore wrote, session.text read or session.type typed into, or the anchor
     /// ask.open resolved. The first three report it on every success, the default-pane paths included.
     public var pane: String?
+    /// columns and rows are a pane's real grid, from `session.grid` and `session.text`; lines echoes `session.scroll`.
+    public var columns: Int?
+    public var rows: Int?
+    public var lines: Int?
     /// The light/dark syncing state for `theme.set`/`theme.list`, from the stored theme: `sync` = whether it
     /// is ghostty's dual `light:,dark:` form (the terminal tracks the macOS appearance), `light`/`dark` its
     /// sides. While syncing `theme` is absent; otherwise `theme` is the plain single theme, these absent.
@@ -759,6 +779,8 @@ public struct ControlResult: Codable, Sendable, Equatable {
     public var remote: ControlRemoteTree?
     /// What `zmx.reset` confirmed: the sessions and panes it will reset at the next launch.
     public var liveReset: ControlLiveResetStatus?
+    /// The phone relay, from every `phone.*` command; only `phone.status` carries `link`.
+    public var phone: ControlPhoneStatus?
     /// The page `session.overlay.open --html` opened, which `session.overlay.result --page` reads back.
     public var pageID: String?
     /// A page's selector outcome for `session.overlay.result --page`.
@@ -807,7 +829,12 @@ public struct ControlResult: Codable, Sendable, Equatable {
                 parent: String? = nil, closed: [String]? = nil, companionPage: PresentationPage? = nil,
                 messageID: String? = nil, delivered: [String]? = nil, rejected: [MessageRejection]? = nil,
                 messages: [BusMessage]? = nil, remaining: Int? = nil, acked: [String]? = nil,
-                remoteGroup: ControlRemoteGroup? = nil) {
+                remoteGroup: ControlRemoteGroup? = nil, columns: Int? = nil, rows: Int? = nil, lines: Int? = nil,
+                phone: ControlPhoneStatus? = nil) {
+        self.phone = phone
+        self.columns = columns
+        self.rows = rows
+        self.lines = lines
         self.messageID = messageID
         self.delivered = delivered
         self.rejected = rejected

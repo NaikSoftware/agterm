@@ -65,6 +65,11 @@ final class MockControlActions: ControlActions {
         case keymapList
         case keymapRun(name: String, target: String?, window: String?)
         case hooksReload
+        case phoneStatus
+        case phoneEnable(ControlToggleMode)
+        case phonePort(Int)
+        case phoneHost(String?)
+        case phoneRevoke
         case hooksList
         case recentList
         case recentClear
@@ -125,6 +130,8 @@ final class MockControlActions: ControlActions {
         case hudClose(target: String?, window: String?)
         case sessionBackground(target: String?, window: String?, ControlSessionBackgroundOptions)
         case sessionText(target: String?, window: String?, ControlSessionTextOptions)
+        case sessionGrid(target: String?, window: String?, pane: StatusPane, ControlGrid?)
+        case sessionScroll(target: String?, window: String?, pane: StatusPane, lines: Int)
         case windowNew(String?, minimized: Bool)
         case windowList
         case windowSelect(target: String?)
@@ -211,6 +218,8 @@ final class MockControlActions: ControlActions {
     var nextHudCloseResponse = ControlResponse(ok: true)
     var nextSessionBackgroundResponse = ControlResponse(ok: true)
     var nextSessionTextResponse = ControlResponse(ok: true)
+    var nextSessionGridResponse = ControlResponse(ok: true)
+    var nextPhoneResponse = ControlResponse(ok: true)
     var nextSurfaceZoomResponse = ControlResponse(ok: true)
     var nextSurfaceCursorResponse = ControlResponse(ok: true, result: ControlResult(cursor: ControlCursor(column: 0)))
     var nextDashboardResponse = ControlResponse(ok: true)
@@ -543,6 +552,31 @@ final class MockControlActions: ControlActions {
         return ControlResponse(ok: true, result: ControlResult(id: "sess"))
     }
 
+    func phoneStatus() -> ControlResponse {
+        calls.append(.phoneStatus)
+        return nextPhoneResponse
+    }
+
+    func setPhoneEnabled(_ mode: ControlToggleMode) async -> ControlResponse {
+        calls.append(.phoneEnable(mode))
+        return nextPhoneResponse
+    }
+
+    func setPhonePort(_ port: Int) async -> ControlResponse {
+        calls.append(.phonePort(port))
+        return nextPhoneResponse
+    }
+
+    func setPhoneHost(_ host: String?) -> ControlResponse {
+        calls.append(.phoneHost(host))
+        return nextPhoneResponse
+    }
+
+    func revokePhone() async -> ControlResponse {
+        calls.append(.phoneRevoke)
+        return nextPhoneResponse
+    }
+
     func reloadHooks() -> ControlResponse {
         calls.append(.hooksReload)
         return nextHooksReloadResponse
@@ -869,6 +903,16 @@ final class MockControlActions: ControlActions {
     func readSessionText(_ target: String?, window: String?, options: ControlSessionTextOptions) -> ControlResponse {
         calls.append(.sessionText(target: target, window: window, options))
         return nextSessionTextResponse
+    }
+
+    func setSessionGrid(_ target: String?, window: String?, pane: StatusPane, grid: ControlGrid?) -> ControlResponse {
+        calls.append(.sessionGrid(target: target, window: window, pane: pane, grid))
+        return nextSessionGridResponse
+    }
+
+    func scrollSession(_ target: String?, window: String?, pane: StatusPane, lines: Int) -> ControlResponse {
+        calls.append(.sessionScroll(target: target, window: window, pane: pane, lines: lines))
+        return ControlResponse(ok: true)
     }
 
     func windowNew(name: String?, minimized: Bool) async -> ControlResponse {

@@ -31,6 +31,8 @@ public struct PaletteContext: Sendable, Equatable {
     public let canStepWindows: Bool
     public let activeSessionHasSplit: Bool
     public let activeSplitAxis: SplitAxis?
+    /// A `session.grid` holds one of the active session's panes away from its view.
+    public let activeSessionHasForcedGrid: Bool
     public let hasPendingClose: Bool
     public let hasRecentClosed: Bool
     /// Whether the frontmost window has an active session at all.
@@ -78,6 +80,7 @@ public struct PaletteContext: Sendable, Equatable {
                 canStepWindows: Bool = false,
                 activeSessionHasSplit: Bool = false,
                 activeSplitAxis: SplitAxis? = nil,
+                activeSessionHasForcedGrid: Bool = false,
                 hasPendingClose: Bool = false,
                 hasRecentClosed: Bool = false,
                 hasActiveSession: Bool = false,
@@ -114,6 +117,7 @@ public struct PaletteContext: Sendable, Equatable {
         self.canStepWindows = canStepWindows
         self.activeSessionHasSplit = activeSessionHasSplit
         self.activeSplitAxis = activeSplitAxis
+        self.activeSessionHasForcedGrid = activeSessionHasForcedGrid
         self.hasPendingClose = hasPendingClose
         self.hasRecentClosed = hasRecentClosed
         self.hasActiveSession = hasActiveSession
@@ -131,7 +135,7 @@ public struct PaletteContext: Sendable, Equatable {
 /// Static action-palette rows, in the same order the macOS palette presents them before dynamic rows.
 public enum PaletteCommand: String, CaseIterable, Sendable {
     case newSession, newWorkspace, openDirectory
-    case renameSession, duplicateSession, newCompanion, duplicateCompanion, convertCompanion, renameWorkspace, closeSession, reopenRecent, undoClose, clearStatus
+    case renameSession, duplicateSession, restoreTerminalSize, newCompanion, duplicateCompanion, convertCompanion, renameWorkspace, closeSession, reopenRecent, undoClose, clearStatus
     case previousSession, nextSession, previousAttentionSession, nextAttentionSession
     case previousWorkspace, nextWorkspace
     case previousWindow, nextWindow
@@ -164,6 +168,8 @@ public enum PaletteCommand: String, CaseIterable, Sendable {
             return context.hasActiveSession || context.attentionNavigationAcrossWindows
         case .newCompanion, .duplicateCompanion:
             return context.hasActiveSession
+        case .restoreTerminalSize:
+            return context.hasActiveSession && context.activeSessionHasForcedGrid
         case .convertCompanion:
             return context.hasActiveSession && !context.activeSessionIsCompanion && !context.activeSessionIsRemote
         case .swapPanes:
@@ -276,6 +282,7 @@ public enum PaletteCommand: String, CaseIterable, Sendable {
         case .openDirectory: return "Open Directory…"
         case .renameSession: return "Rename Session"
         case .duplicateSession: return "Duplicate Session"
+        case .restoreTerminalSize: return "Restore Terminal Size"
         case .newCompanion: return "New Companion"
         case .duplicateCompanion: return "Duplicate as Companion"
         case .convertCompanion: return "Convert to Companion"
@@ -395,7 +402,7 @@ public enum PaletteCommand: String, CaseIterable, Sendable {
         case .editFocusedWorkspaces: return .editFocusedWorkspaces
         case .editKeymap, .reloadKeymap, .editHooks, .reloadHooks, .editGhosttyConfig, .reloadConfig,
              .clearFlagged, .clearFocus, .addWorkspaceToFocus, .expandWorkspaces, .collapseWorkspaces,
-             .closeSplit, .swapPanes:
+             .closeSplit, .swapPanes, .restoreTerminalSize:
             return nil
         }
     }

@@ -173,7 +173,8 @@ struct HtmlBridgeTests {
         #expect(try request(#"{"cmd":"session.overlay.reload","args":{"current":false}}"#).args?.current == false)
     }
 
-    @Test(arguments: ["zmx.present", "catalog.subscribe", "session.overlay.job.run", "session.overlay.page.serve", "zmx.reset"])
+    @Test(arguments: ["zmx.present", "catalog.subscribe", "session.overlay.job.run", "session.overlay.page.serve", "zmx.reset",
+                      "phone.status", "phone.enable", "phone.port", "phone.host", "phone.revoke"])
     func streamAndAfterReplyCommandsAreRefused(_ cmd: String) {
         guard case .failure(let error) = build(#"{"cmd":"\#(cmd)"}"#) else { Issue.record("\(cmd) must be refused"); return }
         #expect(error.message == HtmlBridgeError.unsupported(cmd).message)

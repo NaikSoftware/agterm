@@ -177,7 +177,7 @@ renumbering. Do not reintroduce a count anywhere.
 - `session.new`, `.duplicate`, `.companion.new`, `.companion.page`, `.companion.duplicate`, `.companion.convert`, `.companion.page.attach`, `.page`, `.collapse`, `.expand`, `.close`, `.select`, `.rename`, `.reveal`, `.move`, `.type`, `.split`,
   `.split.close`, `.swap`, `.lead`,
   `.scratch`, `.focus`, `.resize`, `.go`, `.copy`, `.paste`, `.selectall`, `.text`, `.search`, `.status`,
-  `.flag`, `.tint`, `.info`, `.seen`, `.restore`, `.restart`, `.background`, `.overlay.open`, `.overlay.close`, `.overlay.resize`,
+  `.grid`, `.scroll`, `.flag`, `.tint`, `.info`, `.seen`, `.restore`, `.restart`, `.background`, `.overlay.open`, `.overlay.close`, `.overlay.resize`,
   `.overlay.reload`, `.overlay.navigate`,
   `.overlay.result`, `.overlay.submit`, `.overlay.copy`, `.overlay.text`, `.overlay.job.run`, `.overlay.page.serve`, `.overlay.hide`,
   `.overlay.show`, `.overlay.toggle`, `.overlay.follow`, `.overlay.search`, `.overlay.changes`, `.overlay.wrap`, `.hud.open`, `.hud.update`,
@@ -189,6 +189,7 @@ renumbering. Do not reintroduce a count anywhere.
 - `sidebar`, `sidebar.mode`, `sidebar.flagged-layout`, `sidebar.density`, `sidebar.expand`, `sidebar.collapse`,
   `sidebar.width`, `filepanel`, `filepanel.width`, `notify`
 - `font.inc`, `font.dec`, `font.reset`
+- `phone.status`, `phone.enable`, `phone.port`, `phone.host`, `phone.revoke`: app-wide, no target or window
 - `window.new`, `.list`, `.select`, `.go`, `.close`, `.rename`, `.delete`, `.resize`, `.move`, `.zoom`,
   `.fullscreen`, `.minimize`, `.remote.open`, `.remote.dismiss`
 - `session.detach`, `session.reattach`, `workspace.detach`, `workspace.reattach`: a remote window's rows only
@@ -221,6 +222,11 @@ and a download, and opens no socket. `ServerInstall` in `agtermCore` owns the as
 rules and the argv on `TerminfoInstall`'s connection surface; `ServerInstaller` in the CLI runs the steps
 over injectable effects, and no archive bytes are sent to the host until the tarball's sha256 matches the app's
 `agterm-server.sha256`. A bad destination is refused in `run`, not `validate`, so every refusal exits 1.
+
+`mobile serve|reset` are CLI-only too: `serve` is a TLS relay and `reset` rewrites its token file, so neither has a
+protocol command. `phone.*` is the protocol face of the app's `PhoneRelay`. agterm-server leaves `session.grid`,
+`session.scroll` and all `phone.*` unserved, a page cannot send `phone.*` (`HtmlBridge` refuses them), and the relay
+refuses `phone.*` from a phone. `site/commands.html#phone` owns the rest.
 
 `session wait` is not a fourth exemption but a client-side composite, like `overlay open --block`: it
 opens the socket only for existing reads (`events.read`, `window.list`, `tree`), so there is no

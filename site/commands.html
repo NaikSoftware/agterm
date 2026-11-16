@@ -214,6 +214,8 @@
             <a href="#clipboard" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">clipboard</a>
             <a href="#terminfo" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">terminfo</a>
             <a href="#server" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">server</a>
+            <a href="#mobile" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">mobile</a>
+            <a href="#phone" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">phone</a>
             <a href="#version" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">version</a>
             <div style="height: 16px"></div>
             <span style="color: #4a5158; font-size: 11px; letter-spacing: 0.12em; padding: 4px 12px">HELP</span>
@@ -737,7 +739,7 @@
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace; white-space: nowrap">HH:MM:SS remote.opened NAME host=HOST remote-session-id=ID</span>; they ride the
                 created/closed edges, so undo re-emits <span style="font-family: &quot;JetBrains Mono&quot;, monospace">remote.opened</span>, and they say nothing
                 about whether ssh is still connected), and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">app.launched</span> (once per app run, with no
-                window or session, after hooks are loaded and the control socket accepts connections), and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">message</span> (a message was queued for a pane: <span style="font-family: &quot;JetBrains Mono&quot;, monospace">session</span> is the recipient's, the payload carries its <span style="font-family: &quot;JetBrains Mono&quot;, monospace">paneID</span>, the sender as <span style="font-family: &quot;JetBrains Mono&quot;, monospace">from</span> (absent for a sender outside agterm) and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">messageID</span>, never the body). <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--kind</span> may be repeated or
+                window or session, after hooks are loaded and the control socket accepts connections), and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">phone.connected</span> / <span style="font-family: &quot;JetBrains Mono&quot;, monospace">phone.disconnected</span> / <span style="font-family: &quot;JetBrains Mono&quot;, monospace">phone.refused</span> (a phone joined, left or failed the token check, with its address as <span style="font-family: &quot;JetBrains Mono&quot;, monospace">ip</span> and no window or session; stopping the relay disconnects every phone without a <span style="font-family: &quot;JetBrains Mono&quot;, monospace">phone.disconnected</span> each), and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">message</span> (a message was queued for a pane: <span style="font-family: &quot;JetBrains Mono&quot;, monospace">session</span> is the recipient's, the payload carries its <span style="font-family: &quot;JetBrains Mono&quot;, monospace">paneID</span>, the sender as <span style="font-family: &quot;JetBrains Mono&quot;, monospace">from</span> (absent for a sender outside agterm) and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">messageID</span>, never the body). <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--kind</span> may be repeated or
                 comma-separated; an unknown kind errors. Every event carries
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">seq</span>,
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">ts</span>,
@@ -2036,6 +2038,29 @@
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">scratch</span> an open scratch terminal. Read overrides back
                 from the node's <span style="font-family: &quot;JetBrains Mono&quot;, monospace">paneBackgrounds</span> object, where an absent
                 pane inherits <span style="font-family: &quot;JetBrains Mono&quot;, monospace">background</span>.
+              </p>
+            </div>
+
+            <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 11px; padding: 18px 20px; margin-bottom: 12px">
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #6d82f3; line-height: 1.6; word-break: break-word">
+                agtermctl session grid &lt;COLS&gt;x&lt;ROWS&gt; | --reset [--pane left|right] [--target T] [--window W]
+              </div>
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">session.grid</div>
+              <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
+                Force a pane to a fixed character grid, for a phone that shows fewer columns than the Mac window. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--reset</span> hands the size back to the view. Columns take 20...1000 and rows 5...1000; give both or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--reset</span>. The pane defaults to left; <span style="font-family: &quot;JetBrains Mono&quot;, monospace">scratch</span> is refused, and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">right</span> needs a split. Returns <span style="font-family: &quot;JetBrains Mono&quot;, monospace">id</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">pane</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">columns</span> and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">rows</span>, the grid after the change. The grid clears on any view resize, on Restore Terminal Size (<span style="font-family: &quot;JetBrains Mono&quot;, monospace">--reset</span>), when the pane closes, when the phone that set it with a session id (not <span style="font-family: &quot;JetBrains Mono&quot;, monospace">active</span>) disconnects or the relay stops; a phone's release resets both panes of that session.
+              </p>
+              <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 8px 0 0">
+                Read the forced panes back from the node's <span style="font-family: &quot;JetBrains Mono&quot;, monospace">paneGrids</span> object in <span style="font-family: &quot;JetBrains Mono&quot;, monospace">tree</span>: <span style="font-family: &quot;JetBrains Mono&quot;, monospace">{"right":{"columns":40,"rows":30}}</span>, absent when nothing is forced. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">session text</span> reports the pane's real <span style="font-family: &quot;JetBrains Mono&quot;, monospace">columns</span> and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">rows</span>. The menu half is Session &#9656; Restore Terminal Size, which resets both panes. agterm-server does not serve it.
+              </p>
+            </div>
+
+            <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 11px; padding: 18px 20px; margin-bottom: 12px">
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #6d82f3; line-height: 1.6; word-break: break-word">
+                agtermctl session scroll &lt;LINES&gt; [--pane left|right] [--target T] [--window W]
+              </div>
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">session.scroll</div>
+              <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
+                Scroll a pane's viewport by wheel notches, as a phone swipe does. A negative count scrolls toward older output. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">LINES</span> takes -1000...1000 and not 0. A program that reports the mouse gets wheel events instead. Returns <span style="font-family: &quot;JetBrains Mono&quot;, monospace">id</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">pane</span> and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">lines</span>. agterm-server does not serve it.
               </p>
             </div>
 
@@ -4771,6 +4796,80 @@
               </p>
               <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 8px 0 0">
                 Exits 0 when installed, 3 when installed but the agent hooks are incomplete, and 1 on installation failure, with the reason on stderr.
+              </p>
+            </div>
+          </section>
+
+          <section id="mobile" style="scroll-margin-top: 88px; padding-top: 56px">
+            <h2
+              style="
+                font-family: &quot;JetBrains Mono&quot;, monospace;
+                font-weight: 700;
+                font-size: 28px;
+                letter-spacing: -0.02em;
+                margin: 0 0 16px;
+                padding-bottom: 12px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+              "
+            >
+              mobile
+            </h2>
+
+            <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 0 0 12px">
+              Local-only and macOS-only: these commands run the phone relay in this process and have no protocol command. The relay forwards a paired phone's commands to the control socket; the <a href="/docs#phone-app" style="color: #6d82f3">Phone app</a> guide has the security model.
+            </p>
+
+            <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 11px; padding: 18px 20px; margin-bottom: 12px">
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #6d82f3; line-height: 1.6; word-break: break-word">
+                agtermctl mobile serve [--port N] [--host H] [--bind ADDR] [--no-qr] [--socket PATH]
+              </div>
+              <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
+                Listen for agterm Mobile over TLS, print a pairing QR and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">agterm://pair</span> links, and stay in the foreground until Ctrl+C. The first run creates a self-signed certificate and a token under <span style="font-family: &quot;JetBrains Mono&quot;, monospace">mobile/</span> in the state directory; the link carries the certificate fingerprint and the token. The port defaults to 8765 and takes 1024...65535. A phone sends the token first and is closed after a wrong one. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">phone.*</span> commands from a phone are refused. When a phone leaves, the grids it forced are reset. The relay exits with its parent.
+              </p>
+              <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 8px 0 0">
+                The relay is off until you run this or switch it on in Connect a Phone…. A firewall may ask about incoming connections the first time.
+              </p>
+            </div>
+
+            <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 11px; padding: 18px 20px; margin-bottom: 12px">
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #6d82f3; line-height: 1.6; word-break: break-word">
+                agtermctl mobile reset
+              </div>
+              <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
+                Replace the token. Paired phones are disconnected and the old link stops working; run <span style="font-family: &quot;JetBrains Mono&quot;, monospace">mobile serve</span> again for the new code. A running <span style="font-family: &quot;JetBrains Mono&quot;, monospace">mobile serve</span> exits within seconds; the one the Connect a Phone window runs restarts with the new code.
+              </p>
+            </div>
+          </section>
+
+          <section id="phone" style="scroll-margin-top: 88px; padding-top: 56px">
+            <h2
+              style="
+                font-family: &quot;JetBrains Mono&quot;, monospace;
+                font-weight: 700;
+                font-size: 28px;
+                letter-spacing: -0.02em;
+                margin: 0 0 16px;
+                padding-bottom: 12px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+              "
+            >
+              phone
+            </h2>
+
+            <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 0 0 12px">
+              macOS-only. These drive the Connect a Phone… window of the running app: app-wide, no <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--target</span>, no <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--window</span>. agterm-server refuses all of them, and so does a page.
+            </p>
+
+            <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 11px; padding: 18px 20px; margin-bottom: 12px">
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #6d82f3; line-height: 1.6; word-break: break-word">
+                agtermctl phone status | on | off | toggle | port N | host NAME | host --auto | revoke | link [--qr]
+              </div>
+              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">phone.status · phone.enable · phone.port · phone.host · phone.revoke</div>
+              <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
+                Each command answers <span style="font-family: &quot;JetBrains Mono&quot;, monospace">result.phone</span>: <span style="font-family: &quot;JetBrains Mono&quot;, monospace">on</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">listening</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">port</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">host</span> (the effective address), <span style="font-family: &quot;JetBrains Mono&quot;, monospace">hosts</span> (the offered addresses), and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">lastEvent</span> and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">error</span> when set. Only <span style="font-family: &quot;JetBrains Mono&quot;, monospace">status</span> and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">link</span> carry the pairing <span style="font-family: &quot;JetBrains Mono&quot;, monospace">link</span>, which holds the token. Turning the relay on (<span style="font-family: &quot;JetBrains Mono&quot;, monospace">on</span>, or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">toggle</span> to on) starts it when it is off or failed. A changed <span style="font-family: &quot;JetBrains Mono&quot;, monospace">port</span> and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">revoke</span> restart it only while it is on; otherwise they answer at once, and a port equal to the current one changes nothing. A start or restart answers when the relay listens, fails, or after 10 s. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">on</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">off</span> and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">toggle</span> send <span style="font-family: &quot;JetBrains Mono&quot;, monospace">phone.enable</span> with <span style="font-family: &quot;JetBrains Mono&quot;, monospace">mode</span>.
+              </p>
+              <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 8px 0 0">
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">link</span> prints the link alone, or the terminal QR and then the link with <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--qr</span>; it exits 1 while the relay is off or not listening. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">port</span> takes 1024...65535. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">revoke</span> runs <span style="font-family: &quot;JetBrains Mono&quot;, monospace">mobile reset</span> and restarts the relay while it is on; a failed reset answers <span style="font-family: &quot;JetBrains Mono&quot;, monospace">ok:false</span> with its error text. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">tree</span> reports <span style="font-family: &quot;JetBrains Mono&quot;, monospace">phone</span> at the top level: <span style="font-family: &quot;JetBrains Mono&quot;, monospace">on</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">listening</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">port</span> and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">host</span>, without the link.
               </p>
             </div>
           </section>

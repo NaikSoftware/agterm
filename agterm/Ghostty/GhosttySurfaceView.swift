@@ -140,6 +140,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
     var onUserInput: ((StatusKeystroke) -> Void)?
     /// Called after a size push and after a cell-size change; a HUD panel is measured from this surface.
     var onGridChange: (() -> Void)?
+    var forcedGrid: (columns: Int, rows: Int)? // `session.grid`, owned by GhosttySurfaceView+Grid.swift
 
     /// Called on the main actor with the current font size (points) when it changes (cmd +/-), so the app
     /// can persist it. Pane surfaces share a live-role-aware callback; scratch and overlays leave it unset.
@@ -838,8 +839,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
     func destroySurface() {
         // a pane torn down before it spawned must not consume its pending slots; the session keeps them.
         launchSeed = nil
-        // leave the launch queue: a key nobody will ever request holds every pane behind it for an interval,
-        // and the grant that arrives anyway finds a destroyed view and no-ops.
+        // leave the launch queue: a key nobody will request holds every pane behind it; a late grant no-ops.
         if let spawnKey, let spawnPacer { spawnPacer.cancel(spawnKey) }
         spawnKey = nil
         awaitingSpawnPermit = false
@@ -847,6 +847,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
         hiddenJanitorTask?.cancel()
         hiddenJanitorTask = nil
         isDestroyed = true
+        recordForcedGrid(nil)
         focusObservers.forEach { NotificationCenter.default.removeObserver($0) }
         focusObservers = []
         windowVisibilityObservation = nil
@@ -919,14 +920,12 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
         layer = plain
     }
 
-    /// `TerminalSurface` conformance: the model calls this when the owning session is closed.
     func teardown() {
         destroySurface()
     }
 
-    /// `TerminalSurface.isRealized`: the libghostty surface — and with it the spawned program — exists. False
-    /// while `createSurface` is still deferred on a zero backing size (`pendingSurfaceCreation`) and after
-    /// `destroySurface`, both of which leave `surface` nil.
+    /// `TerminalSurface.isRealized`: the libghostty surface, and with it the spawned program, exists. False while
+    /// `createSurface` is deferred on a zero backing size (`pendingSurfaceCreation`) and after `destroySurface`.
     var isRealized: Bool { surface != nil }
 
     // MARK: - Window / size
@@ -948,7 +947,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
             ghostty_surface_set_content_scale(surface, scale, scale)
             let size = convertToBacking(bounds).size
             if size.width > 0, size.height > 0 {
-                ghostty_surface_set_size(surface, UInt32(size.width), UInt32(size.height))
+                pushSize(surface, viewPixels: size)
             }
             updateGhosttyFocus()
         }
@@ -959,6 +958,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
     }
 
     override func setFrameSize(_ newSize: NSSize) {
+        if newSize != frame.size { recordForcedGrid(nil) }
         super.setFrameSize(newSize)
         if pendingSurfaceCreation { createSurface() }
         updateMetalLayerSize()
@@ -979,7 +979,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
         ghostty_surface_set_color_scheme(surface, isDark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
     }
 
-    private func updateMetalLayerSize() {
+    func updateMetalLayerSize() {
         guard let surface, window != nil else { return }
         let scaledSize = convertToBacking(bounds).size
         guard scaledSize.width > 0, scaledSize.height > 0 else { return }
@@ -991,7 +991,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
             CATransaction.commit()
         }
         ghostty_surface_set_content_scale(surface, scale, scale)
-        ghostty_surface_set_size(surface, UInt32(scaledSize.width), UInt32(scaledSize.height))
+        pushSize(surface, viewPixels: scaledSize)
         // the split re-parent invalidates the Metal drawable, and neither a same-grid set_size nor the tick
         // (dirty surfaces only) repaints it — force one or the re-hosted pane stays blank over a live buffer.
         ghostty_surface_refresh(surface)

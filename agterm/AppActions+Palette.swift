@@ -35,6 +35,7 @@ extension AppActions {
             canStepWindows: library.canStepWindows,
             activeSessionHasSplit: activeStore?.activeSession?.hasSplit == true,
             activeSplitAxis: activeStore?.activeSession?.splitAxis,
+            activeSessionHasForcedGrid: activeStore?.activeSession?.hasForcedGrid == true,
             hasPendingClose: activeStore?.pendingCloseSummary != nil,
             hasRecentClosed: !library.recentClosedItems.isEmpty,
             hasActiveSession: activeStore?.activeSession != nil,
@@ -82,6 +83,7 @@ extension AppActions {
         case .openDirectory: openDirectory()
         case .renameSession: renameActiveSession()
         case .duplicateSession: duplicateActiveSession()
+        case .restoreTerminalSize: restoreActiveTerminalSize()
         case .newCompanion: newCompanionOfActiveSession()
         case .duplicateCompanion: duplicateActiveSessionAsCompanion()
         case .convertCompanion: convertActiveSessionToCompanion()

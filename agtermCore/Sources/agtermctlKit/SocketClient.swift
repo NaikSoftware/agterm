@@ -44,7 +44,7 @@ struct SocketClient {
 
     /// Connect, send `request` as one newline-terminated JSON line, read the response line, decode it.
     func send(_ request: ControlRequest) throws -> SocketReply {
-        var data = try JSONEncoder().encode(request)
+        let data = try JSONEncoder().encode(request)
         // the server rejects a request line over the shared cap (newline excluded, matching this count)
         // and closes the connection; check before writing so the caller gets this error instead of a
         // write failure against the closing peer.
@@ -53,21 +53,22 @@ struct SocketClient {
                 "request too large (\(data.count) bytes, cap \(ControlWire.maxRequestLineBytes)) — "
                     + "split the input into smaller requests")
         }
-        data.append(UInt8(ascii: "\n"))
-
-        let fd = try connect()
-        defer { close(fd) }
-
-        try Self.writeAll(fd, data)
-
-        guard let line = Self.readLine(fd) else {
-            throw SocketClientError("no response from \(path)")
-        }
+        let line = try sendRaw(data)
         do {
             return SocketReply(response: try JSONDecoder().decode(ControlResponse.self, from: line), raw: line)
         } catch {
             throw SocketClientError("could not decode response: \(error.localizedDescription)")
         }
+    }
+
+    /// Write one request line (newline excluded) and return the response line undecoded, so a relay passes through
+    /// commands and fields this build does not model.
+    func sendRaw(_ request: Data) throws -> Data {
+        let fd = try connect()
+        defer { close(fd) }
+        try Self.writeAll(fd, request + Data([UInt8(ascii: "\n")]))
+        guard let line = Self.readLine(fd) else { throw SocketClientError("no response from \(path)") }
+        return line
     }
 
     /// Open and connect a `AF_UNIX` stream socket to `path`. The caller owns the descriptor.
@@ -279,6 +280,9 @@ struct SocketClient {
         if let hooks = response.result?.hooks {
             return formatHooks(hooks)
         }
+        if let phone = response.result?.phone {
+            return formatPhone(phone)
+        }
         if let remote = response.result?.remote {
             return formatRemoteTree(remote)
         }
@@ -350,6 +354,17 @@ struct SocketClient {
 
     /// formatResponse(_:receipt:echoID:) prints what the command itself prints, then its receipt; a refused or
     /// fenced operation prints the receipt alone, which carries the error.
+    static func formatPhone(_ phone: ControlPhoneStatus) -> String {
+        let state = phone.listening ? ", listening on port \(phone.port)" : phone.on ? ", not listening" : ", port \(phone.port)"
+        var lines = ["on: \(phone.on ? "yes" : "no")\(state)"]
+        if !phone.host.isEmpty { lines.append("host: \(phone.host)") }
+        if let hosts = phone.hosts, !hosts.isEmpty { lines.append("hosts: \(hosts.joined(separator: ", "))") }
+        if let last = phone.lastEvent { lines.append("last: \(last)") }
+        if let error = phone.error { lines.append("error: \(error)") }
+        if let link = phone.link { lines.append("link: \(link)") }
+        return lines.joined(separator: "\n")
+    }
+
     private static func formatResponse(_ response: ControlResponse, receipt: CatalogReceipt, echoID: Bool) -> String {
         guard response.ok else { return "error: " + formatReceipt(receipt) }
         var bare = response

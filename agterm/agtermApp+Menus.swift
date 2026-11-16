@@ -54,6 +54,9 @@ extension agtermApp {
             CommandGroup(replacing: .appInfo) {
                 Button("About Agterm") { showAboutPanel() }
             }
+            CommandGroup(after: .appSettings) {
+                Button("Connect a Phone…") { openWindow(id: Self.phoneWindowID) }
+            }
             // the reset quits and reopens the app, so it shares Quit's group rather than sitting in Help beside
             // the installers.
             CommandGroup(before: .appTermination) {
@@ -168,6 +171,8 @@ extension agtermApp {
                 Button("Duplicate Session") { actions.duplicateActiveSession() }
                     .keyboardShortcut(shortcut(for: .duplicateSession))
                     .disabled(!PaletteCommand.duplicateSession.isEnabled(in: context))
+                Button("Restore Terminal Size") { actions.restoreActiveTerminalSize() }
+                    .disabled(!PaletteCommand.restoreTerminalSize.isEnabled(in: context))
                 Divider()
                 Button("New Companion") { actions.newCompanionOfActiveSession() }
                     .keyboardShortcut(shortcut(for: .newCompanion))
