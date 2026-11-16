@@ -72,6 +72,7 @@ final class SpySurface: PaneRoleMutableSurface {
     var teardownCount = 0
     var promotedCount = 0
     var assignedRoles: [SwappablePaneRole] = []
+    var calls: [String] = []
     var paneToken: String
     var backedByZmx: Bool
     /// Defaults to a live terminal, the state a surface parked in a session slot reaches a beat later; the
@@ -81,7 +82,8 @@ final class SpySurface: PaneRoleMutableSurface {
         self.paneToken = paneToken
         self.backedByZmx = backedByZmx
     }
-    func teardown() { teardownCount += 1 }
+    func teardown() { teardownCount += 1; calls.append("teardown") }
+    func endForegroundJob() { calls.append("endForegroundJob") }
     func promoteToPrimaryPane() { promotedCount += 1 }
     func setPaneRole(_ role: SwappablePaneRole) { assignedRoles.append(role) }
 }

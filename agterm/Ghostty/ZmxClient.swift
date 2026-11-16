@@ -201,7 +201,7 @@ final class ZmxClient {
         for name in Set(names) {
             do {
                 outcomes[name] = Self.outcome(of: try invoke(["kill", name], mergesStderr: true), name: name)
-                if outcomes[name] == .killed, let job = jobs[name] { sweeper?.send(SIGHUP, to: job) }
+                if outcomes[name] == .killed, let job = jobs[name] { sweeper?.hangUp(job) }
             } catch {
                 Self.logger.error("zmx kill failed for \(name, privacy: .public): \(String(describing: error), privacy: .public)")
                 outcomes[name] = .failed(String(describing: error))
@@ -228,7 +228,7 @@ final class ZmxClient {
         let job = foregroundJobs(of: [name])[name]
         do {
             let outcome = Self.outcome(of: try invoke(["kill", name, "--force"], mergesStderr: true), name: name)
-            if outcome == .killed, let job { sweeper?.send(SIGHUP, to: job) }
+            if outcome == .killed, let job { sweeper?.hangUp(job) }
             return outcome
         } catch {
             Self.logger.error("zmx kill failed for \(name, privacy: .public): \(String(describing: error), privacy: .public)")
@@ -245,7 +245,7 @@ final class ZmxClient {
             let output = try invoke(["kill"] + unique + ["--force"], timeout: timeout, mergesStderr: true)
             // only a name zmx confirmed: a stale-socket cleanup leaves the shell, and its job, running
             for (name, job) in jobs where Self.outcome(of: output, name: name) == .killed {
-                sweeper?.send(SIGHUP, to: job)
+                sweeper?.hangUp(job)
             }
             return true
         } catch {
