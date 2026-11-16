@@ -161,7 +161,7 @@ void main() {
     });
 
     test("not found for 2 minutes says can't find", () {
-      expect(connectError(BleNotFound(), ble, const Duration(seconds: 119)), 'Cannot reach studio over Bluetooth. Is phone access on?');
+      expect(connectError(BleNotFound(), ble, const Duration(seconds: 119)), 'Looking for studio over Bluetooth…');
       expect(connectError(BleNotFound(), ble, const Duration(minutes: 2)), "Can't find studio: out of range, Bluetooth off, or the pairing was reset.");
       expect(connectError(AgtermError('x'), ble, const Duration(minutes: 5)), 'x');
     });
@@ -200,8 +200,41 @@ void main() {
     m.seen = DateTime.now().subtract(const Duration(minutes: 3));
     m.resume();
     await Future.delayed(Duration.zero);
-    expect(m.error, 'Cannot reach studio over Bluetooth. Is phone access on?');
+    expect(m.error, 'Looking for studio over Bluetooth…');
     m.dispose();
+  });
+
+  group("a revoked Bluetooth pairing with a blocked address says can't find", () {
+    final p = Pairing.parse('agterm://pair?h=h&p=2&t=$token&f=$fp&n=studio&b=1')!;
+    const cantFind = "Can't find studio: out of range, Bluetooth off, or the pairing was reset.";
+    const looking = 'Looking for studio over Bluetooth…';
+
+    AgtermModel model(Duration unseen) {
+      AndroidFlutterLocalNotificationsPlugin.registerWith(); // resume asks it whether notifications are on
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(const MethodChannel('dexterous.com/flutter/local_notifications'), (_) async => null);
+      return AgtermModel(p,
+          open: (p, {preferBluetooth = false}) => Connection.open(p,
+              preferBluetooth: preferBluetooth, tls: (p, t) async => throw TimeoutException('tls'), ble: (p) async => throw BleNotFound()))
+        ..seen = DateTime.now().subtract(unseen);
+    }
+
+    Future<String?> shown(Duration unseen, {bool resumed = false}) async {
+      final m = model(unseen);
+      resumed ? m.resume() : m.start();
+      await Future.delayed(Duration.zero);
+      m.dispose();
+      return m.error;
+    }
+
+    test('while the loop runs: looking for it, then cannot find it after 2 minutes', () async {
+      expect(await shown(const Duration(minutes: 1)), looking);
+      expect(await shown(const Duration(minutes: 3)), cantFind);
+    });
+
+    test('when the app comes back after the revoke: looking for it, since resume restarts the clock', () async {
+      expect(await shown(const Duration(minutes: 3), resumed: true), looking);
+    });
   });
 
   group('platform channel', () {

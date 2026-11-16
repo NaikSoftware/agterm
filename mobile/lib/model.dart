@@ -125,6 +125,7 @@ String connectError(Object e, Pairing p, Duration unseen) => switch (e) {
       AgtermError() => e.message,
       BleNotFound() when unseen >= const Duration(minutes: 2) =>
         "Can't find ${p.name}: out of range, Bluetooth off, or the pairing was reset.",
+      BleNotFound() => 'Looking for ${p.name} over Bluetooth…',
       _ when p.host == null => 'Cannot reach ${p.name} over Bluetooth. Is phone access on?',
       _ => 'Cannot reach ${p.host}:${p.port}. Is `agtermctl mobile serve` running?',
     };
