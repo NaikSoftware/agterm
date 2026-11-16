@@ -497,8 +497,8 @@ omitted when expanded).
   (same arguments) - color a sidebar row so it stands out, e.g. red for production; a workspace tint colors only
   its own row. `session new`/`workspace new` take `--tint`/`--tint-on`. Read back as the tree node's `tint`/`tintOn`;
   details in reference.md.
-- `session seen [--target] [--window W]` — clear the session's unseen-notification badge WITHOUT changing the
-  selection or focus (the focus-free counterpart to `notify`, which raises the badge). Idempotent — a
+- `session seen [--target] [--window W]` — clear the session's unseen-notification badge, and an `--auto-reset`
+  status as a visit would, WITHOUT changing the selection or focus (the focus-free counterpart to `notify`, which raises the badge). Idempotent — a
   no-op when already zero. Read the current count from the tree node's `unseen` field. Use it so an
   orchestrator can acknowledge a driven session's notifications without pulling focus to it.
 - `session restore ("cmd" | --none | --clear) [--pane left|right] [--pane-id TOKEN]` — pin what a pane re-runs on
