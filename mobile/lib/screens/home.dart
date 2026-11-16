@@ -404,10 +404,41 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 10),
-        sliver: SliverList.list(children: [for (final w in m.workspaces) Padding(padding: const EdgeInsets.only(bottom: 10), child: _group(w))]),
+        sliver: SliverList.list(children: [
+          for (final w in m.workspaces.where((w) => w.sessions.isNotEmpty)) Padding(padding: const EdgeInsets.only(bottom: 10), child: _group(w)),
+          if (m.workspaces.where((w) => w.sessions.isEmpty).toList() case final empty when empty.isNotEmpty)
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 3.6,
+              children: [for (final w in empty) _emptyTile(w)],
+            ),
+        ]),
       ),
     ];
   }
+
+  // an empty workspace has nothing to fold, so it is a tile; a tap opens its actions, where a new session starts
+  Widget _emptyTile(Workspace w) => Material(
+        color: C.hover,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: C.line)),
+        child: InkWell(
+          key: Key('wsTile-${w.id}'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => showWorkspaceActions(context, m, w),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(children: [
+              SizedBox(width: 20, child: Lucide(lucideSquareStack, color: tintColor(w.tint) ?? C.muted)),
+              const SizedBox(width: 9),
+              Expanded(child: Text(w.name, style: const TextStyle(fontSize: 14, color: C.muted), maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ]),
+          ),
+        ),
+      );
 
   // the most urgent status among a folded workspace's sessions (blocked > active > completed), the first on a tie
   static Session? _urgent(Iterable<Session> sessions) {
