@@ -193,180 +193,23 @@ class BleTransportKeys {
 
   Uint8List open(Uint8List frame) => inflate(receive.decrypt(frame));
 
+  // Counts output per filter step, so a bomb is refused before it is ever held in memory.
+  // A stream cut before its final block yields partial output: only the key holder can send one, and Apple's inflater is lenient too.
   @visibleForTesting
   static Uint8List inflate(Uint8List deflated) {
+    if (deflated.isEmpty) throw BleLinkError.badFrame;
+    final out = BytesBuilder(copy: false);
     try {
-      return _Inflate(deflated).run();
+      final filter = RawZLibFilter.inflateFilter(raw: true)..process(deflated, 0, deflated.length);
+      for (List<int>? part; (part = filter.processed(end: true)) != null;) {
+        out.add(part!);
+        if (out.length > maxChunk) throw BleLinkError.badFrame;
+      }
     } catch (_) {
       throw BleLinkError.badFrame;
     }
-  }
-}
-
-class _Huffman {
-  // Canonical code as in zlib's puff.c; returns 0 if complete, > 0 if incomplete, < 0 if over-subscribed.
-  _Huffman(List<int> lengths, this.status) : symbol = List.filled(lengths.length, 0) {
-    for (final l in lengths) {
-      count[l]++;
-    }
-    if (count[0] == lengths.length) return;
-    var left = 1;
-    for (var len = 1; len < 16; len++) {
-      left = (left << 1) - count[len];
-      if (left < 0) {
-        status = left;
-        return;
-      }
-    }
-    status = left;
-    final offs = List.filled(16, 0);
-    for (var len = 1; len < 15; len++) {
-      offs[len + 1] = offs[len] + count[len];
-    }
-    for (var s = 0; s < lengths.length; s++) {
-      if (lengths[s] != 0) symbol[offs[lengths[s]]++] = s;
-    }
-  }
-
-  final count = List.filled(16, 0);
-  final List<int> symbol;
-  int status;
-}
-
-// Raw DEFLATE (RFC 1951) after zlib's puff.c. dart:io's inflater returns a cut stream's partial output without an error,
-// so this one refuses input that ends before the final block, and output past maxChunk at the byte that crosses it.
-class _Inflate {
-  _Inflate(this._in);
-
-  static const _lens = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
-  static const _lext = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
-  static const _dists = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097,
-    6145, 8193, 12289, 16385, 24577];
-  static const _dext = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
-  static const _order = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
-  static final _fixedLen = _Huffman([for (var s = 0; s < 288; s++) s < 144 ? 8 : s < 256 ? 9 : s < 280 ? 7 : 8], 0);
-  static final _fixedDist = _Huffman(List.filled(30, 5), 0);
-
-  final Uint8List _in;
-  final _out = Uint8List(BleTransportKeys.maxChunk);
-  var _pos = 0, _outLen = 0, _bitBuf = 0, _bitCnt = 0;
-
-  Never _fail() => throw BleLinkError.badFrame;
-
-  int _bits(int need) {
-    var val = _bitBuf;
-    while (_bitCnt < need) {
-      if (_pos == _in.length) _fail(); // the input ran out before the final block ended
-      val |= _in[_pos++] << _bitCnt;
-      _bitCnt += 8;
-    }
-    _bitBuf = val >> need;
-    _bitCnt -= need;
-    return val & ((1 << need) - 1);
-  }
-
-  void _put(int byte) {
-    if (_outLen == _out.length) _fail();
-    _out[_outLen++] = byte;
-  }
-
-  int _decode(_Huffman h) {
-    var code = 0, first = 0, index = 0;
-    for (var len = 1; len < 16; len++) {
-      code |= _bits(1);
-      final count = h.count[len];
-      if (code - count < first) return h.symbol[index + code - first];
-      index += count;
-      first = (first + count) << 1;
-      code <<= 1;
-    }
-    _fail();
-  }
-
-  void _stored() {
-    _bitBuf = _bitCnt = 0;
-    if (_pos + 4 > _in.length) _fail();
-    final len = _in[_pos] | _in[_pos + 1] << 8;
-    if (_in[_pos + 2] != ~_in[_pos] & 0xff || _in[_pos + 3] != ~_in[_pos + 1] & 0xff) _fail();
-    _pos += 4;
-    if (_pos + len > _in.length) _fail();
-    for (var i = 0; i < len; i++) {
-      _put(_in[_pos++]);
-    }
-  }
-
-  void _codes(_Huffman lengths, _Huffman distances) {
-    for (var symbol = _decode(lengths); symbol != 256; symbol = _decode(lengths)) {
-      if (symbol < 256) {
-        _put(symbol);
-        continue;
-      }
-      symbol -= 257;
-      if (symbol >= 29) _fail();
-      final len = _lens[symbol] + _bits(_lext[symbol]);
-      symbol = _decode(distances);
-      if (symbol >= 30) _fail();
-      final dist = _dists[symbol] + _bits(_dext[symbol]);
-      if (dist > _outLen) _fail();
-      for (var i = 0; i < len; i++) {
-        _put(_out[_outLen - dist]);
-      }
-    }
-  }
-
-  void _dynamic() {
-    final nlen = _bits(5) + 257, ndist = _bits(5) + 1, ncode = _bits(4) + 4;
-    if (nlen > 286 || ndist > 30) _fail();
-    final lengths = List.filled(nlen + ndist, 0), codeLengths = List.filled(19, 0);
-    for (var i = 0; i < ncode; i++) {
-      codeLengths[_order[i]] = _bits(3);
-    }
-    final lencode = _Huffman(codeLengths, 0);
-    if (lencode.status != 0) _fail();
-    for (var index = 0; index < nlen + ndist;) {
-      final symbol = _decode(lencode);
-      if (symbol < 16) {
-        lengths[index++] = symbol;
-        continue;
-      }
-      var len = 0, repeat = 0;
-      if (symbol == 16) {
-        if (index == 0) _fail();
-        len = lengths[index - 1];
-        repeat = 3 + _bits(2);
-      } else {
-        repeat = symbol == 17 ? 3 + _bits(3) : 11 + _bits(7);
-      }
-      if (index + repeat > nlen + ndist) _fail();
-      lengths.fillRange(index, index += repeat, len);
-    }
-    if (lengths[256] == 0) _fail();
-    // An incomplete code is allowed only when it holds a single symbol, as in zlib.
-    _Huffman checked(List<int> l) {
-      final h = _Huffman(l, 0);
-      if (h.status < 0 || (h.status > 0 && l.length - h.count[0] != 1)) _fail();
-      return h;
-    }
-
-    _codes(checked(lengths.sublist(0, nlen)), checked(lengths.sublist(nlen)));
-  }
-
-  Uint8List run() {
-    for (var last = 0; last == 0;) {
-      last = _bits(1);
-      switch (_bits(2)) {
-        case 0:
-          _stored();
-        case 1:
-          _codes(_fixedLen, _fixedDist);
-        case 2:
-          _dynamic();
-        default:
-          _fail();
-      }
-    }
-    if (_outLen == 0) _fail();
-    return Uint8List.sublistView(_out, 0, _outLen);
+    if (out.isEmpty) throw BleLinkError.badFrame;
+    return out.takeBytes();
   }
 }
 

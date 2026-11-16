@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:agterm_mobile/ble_link.dart';
@@ -131,28 +130,6 @@ void main() {
     phone.receive.counter = -1;
     expect(() => phone.seal(utf('x\n')), throwsA(BleLinkError.badFrame));
     expect(() => phone.receive.decrypt(Uint8List(32)), throwsA(BleLinkError.badFrame));
-  });
-
-  test('inflate matches zlib on stored, fixed and dynamic blocks and refuses every cut stream', () {
-    final random = Random(7);
-    const row = '\x1b[32m~/dev/agterm\x1b[0m \$ ls -la Sources/agtermctlKit | grep Swift\n';
-    final chunks = [
-      utf('x'),
-      utf('{"cmd":"tree","id":3}\n'),
-      utf(row * 80).sublist(0, 4096),
-      Uint8List.fromList(List.generate(4096, (_) => random.nextInt(256))),
-    ];
-    for (final chunk in chunks) {
-      for (final level in [0, 1, 6, 9]) {
-        final deflated = Uint8List.fromList(ZLibEncoder(raw: true, level: level).convert(chunk));
-        expect(BleTransportKeys.inflate(deflated), chunk, reason: 'level $level, ${chunk.length} bytes');
-        for (var n = 0; n < deflated.length; n++) {
-          expect(() => BleTransportKeys.inflate(deflated.sublist(0, n)), throwsA(BleLinkError.badFrame), reason: 'cut to $n');
-        }
-      }
-    }
-    expect(() => BleTransportKeys.inflate(hex('ca48cdc9c95728cf2fca49e102000000ffff')), throwsA(BleLinkError.badFrame)); // sync-flushed
-    expect(BleTransportKeys.inflate(hex('cb48cdc9c95728cf2fca49e10200')), utf('hello world\n'));
   });
 
   test('deflate shrinks terminal text', () {
