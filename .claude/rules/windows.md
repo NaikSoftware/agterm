@@ -30,7 +30,8 @@ session drag are out of scope.
 
 ## Model and persistence
 
-- A window's `WindowInfo.source` names the agterm-server it mirrors (`WindowSource`); nil is this Mac's own tree.
+- A window's `WindowInfo.source` names the agterm-server or the Mac window (`originWindow`) it mirrors
+  (`WindowSource`); nil is this Mac's own tree. One is raised by host plus origin window, never opened twice.
   A remote window is never seeded and saves no rows: its store loads empty with its saved
   `RemoteWindowViewState` and is filled from the catalog (`WindowLibrary+Remote`, `control-api.md`).
 - Host-free `WindowLibrary` owns ordered `WindowInfo` values, live stores, and `frontmostWindowID`.
@@ -57,8 +58,8 @@ session drag are out of scope.
   `agtermCore` imports no `os`, since the agterm-linux fork builds it on Linux.
 - Bootstrap never throws. Load a valid index; otherwise recover every UUID-named per-window file before
   considering legacy migration or an empty seed. Recovered files are appended before `loadStore`, named
-  `window N`, all opened, and the first made frontmost. Missing/corrupt window snapshots open with a
-  default workspace/session. The library is never empty after launch.
+  `window N`, all opened, and the first made frontmost. Missing/corrupt window snapshots open as an
+  empty tree. The library is never empty after launch.
 
 ## Scene lifecycle
 
@@ -133,7 +134,7 @@ session drag are out of scope.
   split, scratch, and overlay with `deckInteractive && isActive && !quickTerminal.holdsKey`. Read `holdsKey`,
   never `isVisible`: the predicate is app-level, so it inerts EVERY window, and a PINNED panel (a control
   `quick show`) stays on screen after agterm loses key. Gating on visibility there makes
-  `TerminalView.updateNSView` revoke first responder in every window on the next SwiftUI update, so the user
+  `TerminalSurfaceHost.updateNSView` revoke first responder in every window on the next SwiftUI update, so the user
   clicks into a terminal, types, and loses the keyboard again at the next title or status change. The same
   distinction governs `focusActiveSession`, `focusSplitPane`, the scratch's `suppressAutoFocus`,
   `coverHidesActiveSession` and the Command-W rungs. `holdsKey` follows the panel's own
@@ -218,6 +219,16 @@ session drag are out of scope.
   (`agterm-session-host key`). An update or a forced logout therefore starts a new host for new panes
   (#971), and the old one stays the root of its existing daemons, since responsibility cannot be moved.
   The fixed `session-host` directory is a build predating keys; it is never served again.
+- On macOS 27 and later the client starts the host as a launchd job in `gui/<uid>` (`HostJob`), so the host
+  and its daemons get a coalition of their own. A spawned host stays in the coalition of the agterm that
+  started it, and loginwindow force-quitting a program BTM disallows in the background ends that whole
+  coalition, live panes included (#985). Responsibility disclaim does not change the coalition.
+  Each attempt has a unique label, `<bundleID>.session-host.<key>.<nonce>`, and a 0600 plist removed once
+  bootstrap returns. The host takes the key and label as arguments, exits when either is not its own, and
+  tries to boot out its label after serving ends, including on error.
+  A job host ends with the GUI login session, so the forced-logout case above applies to a spawned host only.
+  A definite bootstrap failure falls back to the disclaimed spawn, which keeps the shared coalition;
+  a timed-out one never starts a second host. Older macOS keeps the spawn.
 - A host whose panes are gone is retired, never killed: after every launch's reap `HostRetirer` runs
   `agterm-session-host stop <dir>` off the main thread, which asks every other endpoint to stop and a host
   refuses while it roots a live daemon. Reset Live Sessions… moves panes off an earlier host (`staleHost`),

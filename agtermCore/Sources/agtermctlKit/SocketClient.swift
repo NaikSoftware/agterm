@@ -600,6 +600,7 @@ struct SocketClient {
                 let tags = splitTag + realizedTag + overlayTag
                     + (session.scratch ? " (scratch)" : "") + pendingTag + interactionTag
                 let splitCwdSuffix = session.splitCwd.map { $0 == session.cwd ? "" : "  split cwd: \($0)" } ?? ""
+                let scratchCwdSuffix = session.scratchCwd.map { $0 == session.cwd ? "" : "  scratch cwd: \($0)" } ?? ""
                 let titleSuffix = session.title.map { "  title: \($0)" } ?? ""
                 let earlier = " (earlier helper)"
                 let attribution = session.liveAttribution.map {
@@ -612,10 +613,9 @@ struct SocketClient {
                     "  presentation: \($0.state)" + ($0.mode == "presenter" ? ", presenter" : "")
                         + ($0.error.map { " (\($0))" } ?? "")
                 } ?? ""
-                let presenters = session.presenters.map {
-                    ($0.presenter == true ? "  presented remotely" : "") + ($0.mirrors > 0 ? "  mirrored by: \($0.mirrors)" : "")
-                } ?? ""
-                lines.append("  \(smark) \(session.name)\(tags)  [\(session.id)]  \(session.cwd)\(splitCwdSuffix)\(titleSuffix)\(attribution)\(splitAttribution)\(presentation)\(presenters)")
+                let presenters = session.presenters.map { $0.viewedBy > 0 ? "  viewed by: \($0.viewedBy)" : "" } ?? ""
+                let cwds = session.cwd + splitCwdSuffix + scratchCwdSuffix
+                lines.append("  \(smark) \(session.name)\(tags)  [\(session.id)]  \(cwds)\(titleSuffix)\(attribution)\(splitAttribution)\(presentation)\(presenters)")
             }
         }
         return lines.joined(separator: "\n")

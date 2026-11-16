@@ -408,6 +408,6 @@ final class FileTreeCellView: SidebarCellView {
     required init?(coder _: NSCoder) { fatalError("init(coder:) is not supported") }
 
     override func setColors(selected: Bool) {
-        textField?.textColor = themeTextColor(selected: selected).withAlphaComponent(textAlpha)
+        textField?.textColor = Self.themeTextColor(selected: selected).withAlphaComponent(textAlpha)
     }
 }

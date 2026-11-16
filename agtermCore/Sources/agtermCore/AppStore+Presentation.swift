@@ -18,7 +18,8 @@ extension AppStore {
         guard let session = session(withID: id) else { return PresentationSnapshot(status: nil, hud: nil) }
         return PresentationSnapshot(status: presentationStatus(of: session),
                                     hud: presentationHud(of: session, now: now), context: session.context,
-                                    layout: presentationLayout(of: session), info: session.info.map(Self.presentationInfo))
+                                    layout: presentationLayout(of: session), info: session.info.map(Self.presentationInfo),
+                                    mail: presentationMail(forSession: id))
     }
 
     /// presentationInfo is the wire form of a local info line; the origin mirrors only its own line, never a mirror.
@@ -27,14 +28,22 @@ extension AppStore {
     }
 
     func presentationLayout(of session: Session) -> PresentationLayout? {
-        guard session.remoteHost == nil else { return nil }
+        guard session.remoteHost == nil, session.content != .page else { return nil }
         let panes = [session.paneIdentity] + (session.hasSplit ? [session.splitPaneIdentity].compactMap { $0 } : [])
+        let scratch = session.localScratchIdentity
         return PresentationLayout(panes: panes, primary: session.paneIdentity,
-                                  axis: session.hasSplit ? session.splitAxis.rawValue : nil, shown: session.isSplit)
+                                  axis: session.hasSplit ? session.splitAxis.rawValue : nil, shown: session.isSplit,
+                                  scratch: scratch,
+                                  scratchShown: scratch != nil && (headless ? session.scratchDaemon?.shown == true : session.scratchActive))
     }
 
     func savePaneLayout(_ session: Session) {
         save()
+        publishPaneLayout(session)
+    }
+
+    /// publishPaneLayout tells the session's viewers its pane arrangement and scratch, which change without a save.
+    public func publishPaneLayout(_ session: Session) {
         if let layout = presentationLayout(of: session) {
             presentationHub?.publishLayout(layout, session: session.id)
         }
@@ -103,7 +112,10 @@ extension AppStore {
         return PresentationStatus(status: indicator.status, blink: indicator.blink, color: indicator.color,
                                   shape: indicator.shape,
                                   pane: presentationStatusPane(indicator.statusPane, of: session),
-                                  changedAt: session.statusChangedAt?.timeIntervalSince1970)
+                                  changedAt: session.statusChangedAt?.timeIntervalSince1970,
+                                  autoReset: indicator.autoReset ? true : nil,
+                                  activePanes: StatusPane.allCases.filter { session.paneActivity[$0] != nil }
+                                      .map { presentationStatusPane($0, of: session) })
     }
 
     /// A status owner as the stable identity a viewer can follow across a swap or promotion on either Mac.
@@ -117,12 +129,11 @@ extension AppStore {
         }
     }
 
-    /// presentStatusSoundRemotely hands a status sound to the session's presenter when the status pane follows
+    /// presentStatusSoundRemotely hands a status sound to the viewer leading the status pane when that pane follows
     /// remotely. False when playback must stay on this Mac.
     public func presentStatusSoundRemotely(_ sound: PresentationSound, in session: Session, pane: StatusPane?) -> Bool {
-        guard let hub = presentationHub, hub.hasPresenter(session: session.id),
-              case .identity(let identity) = presentationStatusPane(pane, of: session),
-              presentsRemotely(session, paneIdentity: identity) else { return false }
-        return hub.sendToPresenter(.sound(sound), session: session.id)
+        guard let hub = presentationHub, case .identity(let identity) = presentationStatusPane(pane, of: session),
+              let owner = remoteRecipient(session, paneIdentity: identity) else { return false }
+        return hub.send(.sound(sound), toOwner: owner)
     }
 }

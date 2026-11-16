@@ -143,6 +143,10 @@ struct agtermApp: App {
         LinkOpener.shared.selectSession = { [weak actions] id, origin, pane in
             actions?.followSessionLink(id, from: origin, pane: pane)
         }
+        LinkOpener.shared.sessionName = { [weak library] id, origin, pane in
+            guard let library, let target = library.sessionLinkTarget(id, from: origin, pane: pane) else { return nil }
+            return library.store(for: target.windowID)?.session(withID: target.sessionID)?.displayName
+        }
         controlServer.installRemoteLinkClicks()
         LinkOpener.shared.overlay = { [weak controlServer] url, session, percent in
             controlServer?.openLinkOverlay(url, session: session, sizePercent: percent) ?? false
@@ -312,7 +316,7 @@ struct agtermApp: App {
                                              services: paneServices)
                         }
                         PaneLead.roleChanged = { [library] view in
-                            view.session.flatMap { library.store(forSession: $0.id) }?.leadRoleChanged()
+                            (view.session ?? view.scratchOwner).flatMap { library.store(forSession: $0.id) }?.leadRoleChanged()
                         }
                         PaneLead.reconnect = { old, cover in
                             Self.reattachPane(old, claim: false, cover: cover, services: paneServices)
@@ -327,7 +331,7 @@ struct agtermApp: App {
                         }
                         PaneLead.waitToReconnect = { [weak server = controlServer, library] view, cover in
                             guard let session = view.session, let store = library.store(holdingSession: session.id) else { return }
-                            Self.remotePaneStopped(view, store: store, sessionID: session.id, library: library)
+                            Self.remotePaneStopped(view, store: store, sessionID: session.id, library: library, attach: server)
                             server?.waitToReconnect(view, cover: cover)
                         }
                         // drive the Dock badge (via UNUserNotifications) from the app-wide unseen total — the

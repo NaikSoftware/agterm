@@ -10,6 +10,7 @@ import Testing
 final class MockControlActions: ControlActions {
     enum Call: Equatable {
         case tree(window: String?)
+        case catalogOperation(opID: String, sent: CatalogPosition?, window: String?)
         case eventsRead(ControlEventReadOptions)
         case sessionNew(ControlSessionCreateOptions)
         case sessionDuplicate(target: String?, window: String?)
@@ -17,6 +18,7 @@ final class MockControlActions: ControlActions {
         case sessionGo(window: String?, SessionNavigation)
         case sessionClose(target: String?, window: String?)
         case sessionCloseBatch(targets: [String], window: String?)
+        case sessionTerminate(targets: [String], window: String?, undoable: Bool)
         case sessionRename(target: String?, window: String?, String)
         case sessionReveal(target: String?, window: String?)
         case workspaceNew(window: String?, String?, collapsed: Bool)
@@ -37,6 +39,7 @@ final class MockControlActions: ControlActions {
         case pageSession(target: String?, window: String?, options: ControlSessionOverlayOpenOptions)
         case companionDuplicate(target: String?, window: String?, select: Bool)
         case companionConvert(target: String?, window: String?)
+        case companionMove(target: String?, parent: String, index: Int?, window: String?)
         case companionPageAttach(target: String?, window: String?)
         case workspaceFlag(target: String?, window: String?, ControlToggleMode)
         case sessionFlag(target: String?, window: String?, String?)
@@ -87,6 +90,7 @@ final class MockControlActions: ControlActions {
         case zmxScreen(name: String, fullBuffer: Bool, lines: Int?)
         case zmxPrune
         case zmxKill(target: String, window: String?, pane: ZmxPaneRole)
+        case zmxKillPane(target: String, window: String?, pane: ZmxPaneRole, paneID: String)
         case zmxReset
         case zmxTree(host: String?)
         case zmxAttach(host: String, session: String)
@@ -116,6 +120,7 @@ final class MockControlActions: ControlActions {
         case overlayWrap(target: String?, window: String?, pane: OverlayPane?, mode: ControlToggleMode)
         case overlaySearch(target: String?, window: String?, pane: OverlayPane?, request: TextSearchRequest)
         case overlayChanges(target: String?, window: String?, pane: OverlayPane?, forward: Bool)
+        case overlayFiles(target: String?, window: String?, pane: OverlayPane?, to: String)
         case overlayReload(target: String?, window: String?, pane: OverlayPane?, current: Bool)
         case overlayNavigate(target: String?, window: String?, pane: OverlayPane?, HtmlNavigation)
         case overlayResize(target: String?, window: String?, sizePercent: Int?)
@@ -144,7 +149,7 @@ final class MockControlActions: ControlActions {
         case windowZoom(target: String?)
         case windowFullscreen(target: String?)
         case windowMinimize(target: String?, mode: ControlToggleMode)
-        case windowRemoteOpen(host: String)
+        case windowRemoteOpen(host: String, originWindow: String?)
         case pickOpen(PendingPick, window: String?, follow: Bool)
         case pickResult(target: String, window: String?)
         case pickCancel(target: String, window: String?)
@@ -253,6 +258,11 @@ final class MockControlActions: ControlActions {
         return nextTreeResponse
     }
 
+    func catalogOperation(_ opID: String, sent: CatalogPosition?, window: String?) -> ControlResponse {
+        calls.append(.catalogOperation(opID: opID, sent: sent, window: window))
+        return ControlResponse(ok: true)
+    }
+
     func readEvents(_ options: ControlEventReadOptions) -> ControlResponse {
         calls.append(.eventsRead(options))
         return nextEventsReadResponse
@@ -285,6 +295,11 @@ final class MockControlActions: ControlActions {
 
     func closeSessions(_ targets: [String], window: String?) -> ControlResponse {
         calls.append(.sessionCloseBatch(targets: targets, window: window))
+        return ControlResponse(ok: true)
+    }
+
+    func terminateSessions(_ targets: [String], window: String?, undoable: Bool) -> ControlResponse {
+        calls.append(.sessionTerminate(targets: targets, window: window, undoable: undoable))
         return ControlResponse(ok: true)
     }
 
@@ -375,6 +390,11 @@ final class MockControlActions: ControlActions {
 
     func convertToCompanion(_ target: String?, window: String?) -> ControlResponse {
         calls.append(.companionConvert(target: target, window: window))
+        return ControlResponse(ok: true)
+    }
+
+    func moveCompanion(_ target: String?, parent: String, index: Int?, window: String?) -> ControlResponse {
+        calls.append(.companionMove(target: target, parent: parent, index: index, window: window))
         return ControlResponse(ok: true)
     }
 
@@ -668,6 +688,11 @@ final class MockControlActions: ControlActions {
         return nextZmxKillResponse
     }
 
+    func killZmxPane(target: String, window: String?, pane: ZmxPaneRole, paneID: String) -> ControlResponse {
+        calls.append(.zmxKillPane(target: target, window: window, pane: pane, paneID: paneID))
+        return nextZmxKillResponse
+    }
+
     func resetLiveSessions() -> ControlResponse {
         calls.append(.zmxReset)
         return nextZmxResetResponse
@@ -832,6 +857,11 @@ final class MockControlActions: ControlActions {
         return ControlResponse(ok: true, result: ControlResult(id: target, text: "3 of 7"))
     }
 
+    func goSessionOverlayFiles(_ target: String?, window: String?, pane: OverlayPane?, to: String) async -> ControlResponse {
+        calls.append(.overlayFiles(target: target, window: window, pane: pane, to: to))
+        return ControlResponse(ok: true, result: ControlResult(id: target, text: "2 of 4: b.go"))
+    }
+
     func resizeSessionOverlay(_ target: String?, window: String?, sizePercent: Int?) -> ControlResponse {
         calls.append(.overlayResize(target: target, window: window, sizePercent: sizePercent))
         return nextOverlayResizeResponse
@@ -976,7 +1006,11 @@ final class MockControlActions: ControlActions {
     }
 
     func windowRemoteOpen(host: String) async -> ControlResponse {
-        calls.append(.windowRemoteOpen(host: host))
+        await windowRemoteOpen(host: host, originWindow: nil)
+    }
+
+    func windowRemoteOpen(host: String, originWindow: String?) async -> ControlResponse {
+        calls.append(.windowRemoteOpen(host: host, originWindow: originWindow))
         return nextWindowRemoteOpenResponse
     }
 
@@ -1039,8 +1073,11 @@ final class MockControlActions: ControlActions {
     /// messagesUnsupported answers what the `ControlActions` default answers, for a host without the bus.
     var messagesUnsupported = false
 
+    var messageFailures: [MessageAddress: MessagePaneError] = [:]
+
     func resolveMessagePane(_ address: MessageAddress) -> Result<MessageRecipient, MessagePaneError> {
         if messagesUnsupported { return .failure(.unsupported) }
+        if let failure = messageFailures[address] { return .failure(failure) }
         guard let recipient = messagePanes[address] else {
             let pane = switch address.pane {
             case .id(let id): id.uuidString

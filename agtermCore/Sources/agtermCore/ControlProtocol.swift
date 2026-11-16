@@ -1,6 +1,6 @@
 /// A control command name, the `cmd` field of a `ControlRequest`. Raw values are the wire strings the CLI
 /// and the socket server share; an unknown one fails to decode into an "unknown command" error, not a crash.
-public enum Command: String, Codable, Sendable {
+public enum Command: String, Codable, Sendable, CaseIterable {
     case tree
     case eventsRead = "events.read"
     case workspaceNew = "workspace.new"
@@ -11,6 +11,8 @@ public enum Command: String, Codable, Sendable {
     case sessionNew = "session.new"
     case sessionDuplicate = "session.duplicate"
     case sessionClose = "session.close"
+    case sessionTerminate = "session.terminate"
+    case sessionUndo = "session.undo"
     case sessionSelect = "session.select"
     case sessionGo = "session.go"
     case sessionRename = "session.rename"
@@ -39,6 +41,7 @@ public enum Command: String, Codable, Sendable {
     case sessionPage = "session.page"
     case sessionCompanionDuplicate = "session.companion.duplicate"
     case sessionCompanionConvert = "session.companion.convert"
+    case sessionCompanionMove = "session.companion.move"
     /// A viewer asking for one attachment of a page companion: a single-use token for `session.overlay.page.serve`
     /// plus what the page shows.
     case sessionCompanionPageAttach = "session.companion.page.attach"
@@ -77,6 +80,7 @@ public enum Command: String, Codable, Sendable {
     case sessionOverlayFollow = "session.overlay.follow"
     case sessionOverlaySearch = "session.overlay.search"
     case sessionOverlayChanges = "session.overlay.changes"
+    case sessionOverlayFiles = "session.overlay.files"
     case sessionOverlayWrap = "session.overlay.wrap"
     case sessionHudOpen = "session.hud.open"
     case sessionHudUpdate = "session.hud.update"
@@ -151,6 +155,8 @@ public enum Command: String, Codable, Sendable {
     case zmxList = "zmx.list"
     case zmxPrune = "zmx.prune"
     case zmxKill = "zmx.kill"
+    /// zmxKillPane is `zmx.kill` pinned to a pane token, its own verb so an app predating the pin refuses it unknown.
+    case zmxKillPane = "zmx.kill.pane"
     case zmxReset = "zmx.reset"
     case zmxTree = "zmx.tree"
     case zmxAttach = "zmx.attach"
@@ -238,6 +244,9 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     public var auto: Bool?
     /// `phone.port`: the port the phone relay listens on.
     public var port: Int?
+    /// For `window.remote.open`: the Mac host's window to show, an id or unique prefix there. Distinct from `window`,
+    /// which names a window on this Mac and which a page's bridge fills in.
+    public var originWindow: String?
     /// For `session.new`: create in the background without selecting or focusing (the CLI's `--no-select`);
     /// omitted/`false` keeps select-and-focus. Read back via the `tree` `active` flag — the new node is not it.
     public var noSelect: Bool?
@@ -528,6 +537,10 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     public var ids: [String]?
     /// The project folder for `workspace.new` and `workspace.folder` mode `set`.
     public var folder: String?
+    /// parent is the top-level session `session.companion.move` puts the target companion under.
+    public var parent: String?
+    /// index is the companion's slot among the new parent's companions for `session.companion.move`; nil appends.
+    public var index: Int?
 
     public init(name: String? = nil, cwd: String? = nil, targets: [String]? = nil,
                 workspace: String? = nil, workspaceName: String? = nil,
@@ -768,6 +781,9 @@ public struct ControlResult: Codable, Sendable, Equatable {
     public var headless: Bool?
     /// versions is what agterm-server advertises on `version`; a Mac app omits it.
     public var versions: CatalogVersions?
+    /// macCatalog is what a Mac app serving remote windows advertises on `version`, apart from `versions`, so a viewer
+    /// predating Mac origins still reads a Mac as one it cannot open.
+    public var macCatalog: CatalogVersions?
     /// receipt answers a command sent with an operation id, and `catalog.op`.
     public var receipt: CatalogReceipt?
     /// The restore-mode policy for `restore.mode`, and the header `zmx list` repeats so its rows can be
@@ -797,6 +813,10 @@ public struct ControlResult: Codable, Sendable, Equatable {
     public var parent: String?
     /// Every session id `session.close` closed, a parent's companions included.
     public var closed: [String]?
+    /// recentID is the Recent Closed entry a single-target `session.close` wrote, which `recent.open` takes.
+    public var recentID: String?
+    /// undoID names an undoable close's pending record, which `session.undo` takes while the grace lasts.
+    public var undoID: String?
     /// The page a `session.companion.page.attach` handed out, token included.
     public var companionPage: PresentationPage?
     /// messageID is the id every copy of a `msg.send` shares.
@@ -826,11 +846,13 @@ public struct ControlResult: Codable, Sendable, Equatable {
                 pageID: String? = nil, pageOutcome: ControlHtmlPageOutcome? = nil,
                 restart: ControlRestartReceipt? = nil, installed: AppIdentity? = nil,
                 recent: [ControlRecentItem]? = nil, recentOpen: ControlRecentOpen? = nil, undoable: Bool? = nil,
-                parent: String? = nil, closed: [String]? = nil, companionPage: PresentationPage? = nil,
+                parent: String? = nil, closed: [String]? = nil, recentID: String? = nil, undoID: String? = nil,
+                companionPage: PresentationPage? = nil,
                 messageID: String? = nil, delivered: [String]? = nil, rejected: [MessageRejection]? = nil,
                 messages: [BusMessage]? = nil, remaining: Int? = nil, acked: [String]? = nil,
-                remoteGroup: ControlRemoteGroup? = nil, columns: Int? = nil, rows: Int? = nil, lines: Int? = nil,
-                phone: ControlPhoneStatus? = nil) {
+                remoteGroup: ControlRemoteGroup? = nil, macCatalog: CatalogVersions? = nil, columns: Int? = nil, rows: Int? = nil,
+                lines: Int? = nil, phone: ControlPhoneStatus? = nil) {
+        self.macCatalog = macCatalog
         self.phone = phone
         self.columns = columns
         self.rows = rows
@@ -845,6 +867,8 @@ public struct ControlResult: Codable, Sendable, Equatable {
         self.remoteGroup = remoteGroup
         self.parent = parent
         self.closed = closed
+        self.recentID = recentID
+        self.undoID = undoID
         self.undoable = undoable
         self.recent = recent
         self.recentOpen = recentOpen

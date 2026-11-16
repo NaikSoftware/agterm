@@ -50,7 +50,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
     private(set) var awaitingSpawnPermit = false
 
     /// Whether this surface grabs first responder as soon as it is created — the overlay's path: it mounts
-    /// over an already-focused session, and `TerminalView.focusIfNeeded` grabs only when the view is in a
+    /// over an already-focused session, and `TerminalSurfaceHost.focusIfNeeded` grabs only when the view is in a
     /// window at the first `updateNSView`, which the deferred overlay surface is not, with no later update.
     private let autoFocus: Bool
 
@@ -70,8 +70,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
     let backedByZmx: Bool
 
     /// The session whose visual config this surface inherits when it deliberately has no `session`: the scratch
-    /// renders the owner's watermark without its OSC title/PWD reports mutating the session model. Nil for
-    /// overlays and quick terminals; main/split use `session`.
+    /// renders the owner's watermark and reports its PWD only to `scratchCwd`. Nil for overlays and quick terminals.
     weak var watermarkSession: Session?
 
     /// Whether this is the session's split (right) pane. Routes `applyPwd`/`applyTitle` to the session's
@@ -129,9 +128,9 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
 
     /// Called on the main actor on EVERY keystroke into this surface, carrying what the key means to the glyph
     /// (`InterruptKeystroke.classify`: interrupt, submit or plain typing). The factory decides per pane via
-    /// `AgentIndicator.clearedBy(pane:keystroke:reset:)`: clear the glyph to idle only when THIS surface's pane
-    /// owns a clearable status — `blocked`/`completed` as the Status reset setting says, `active` only on an
-    /// interrupt — so foreground typing cannot wipe a background pane's block. Passing the pane rather than
+    /// `AppStore.clearStatus(by:)`: clear the glyph only when THIS surface's pane owns a clearable status —
+    /// `blocked`/`completed` as the Status reset setting says, `active` only on an interrupt — so foreground
+    /// typing cannot wipe a background pane's block. Passing the pane rather than
     /// reading `view.session` lets the scratch, which has none, self-clear. Status is otherwise
     /// control-driven; this is the one input-driven clear, for the decline case Claude Code fires no hook for.
     var onUserInputClearsStatus: ((StatusKeystroke) -> Void)?
@@ -168,18 +167,18 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
 
     /// Heap buffers backing the surface config's `const char*` fields — notably `initial_input`, which
     /// libghostty writes to the pty asynchronously after the child spawns, so the buffer must outlive
-    /// `ghostty_surface_new`. Freed in `destroySurface`.
-    nonisolated(unsafe) private var configCStrings: [UnsafeMutablePointer<CChar>] = []
+    /// `ghostty_surface_new`. Freed in `finishDestroy`.
+    nonisolated(unsafe) private(set) var configCStrings: [UnsafeMutablePointer<CChar>] = []
 
     /// The `ghostty_env_var_s` structs handed to `config.env_vars`; their `key`/`value` point into the
     /// `configCStrings` buffers (same lifetime). The array must itself outlive `ghostty_surface_new`, so it is
-    /// stored rather than local, cleared in `destroySurface`/`deinit`. `nonisolated(unsafe)`: main actor only.
-    nonisolated(unsafe) private var envVars: [ghostty_env_var_s] = []
+    /// stored rather than local, cleared in `finishDestroy`/`deinit`. `nonisolated(unsafe)`: main actor only.
+    nonisolated(unsafe) private(set) var envVars: [ghostty_env_var_s] = []
 
     /// Per-surface ghostty configs for this surface's background watermark (`configWithOverlay`), retained so
     /// they outlive their `ghostty_surface_update_config`. Capped at ONE: each re-apply frees the prior, since
     /// after `update_config` the surface no longer references it, so a scripted `config.reload` loop can't
-    /// grow the array. The last is freed in `destroySurface`/`deinit`, safe because the surface — their only
+    /// grow the array. The last is freed in `finishDestroy`/`deinit`, safe because the surface — their only
     /// consumer — is gone (unlike the app-wide config `GhosttyApp` never frees). `nonisolated(unsafe)`: main
     /// actor only; internal for `+Config`.
     nonisolated(unsafe) var ownedConfigs: [ghostty_config_t] = []
@@ -363,6 +362,8 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
     var linkPressDragged = false
     /// Whether any mouse button is down, system-wide; replaceable because a real click elsewhere answers it too.
     var mouseButtonsDown: () -> Bool = { NSEvent.pressedMouseButtons != 0 }
+    /// linkHover is the label model of the host now showing this surface; see `LinkHoverModel.adopt`.
+    var linkHover: LinkHoverModel?
 
     // admitted by the off-main SET_TITLE callback, completed by the main block it queues.
     nonisolated let titleAdmission = OSAllocatedUnfairLock(initialState: TitleAdmission())
@@ -513,6 +514,10 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
         // no save(): OSC 7 fires on every cd/prompt redraw and would thrash the disk. live cwd is persisted on
         // quit and on structural mutations, so a crash loses only cwd changes since the last save. the
         // equality guard matters likewise: an equal write still notifies observers and churns the reconcile.
+        if let owner = scratchOwner {
+            owner.scratchCwd = pwd
+            return
+        }
         if isSplitPane {
             if session?.splitCwd != pwd { session?.splitCwd = pwd }
         } else {
@@ -703,7 +708,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
         // so the watermark path above skips it.
         applyOverlayConfig()
 
-        // the overlay grabs first responder itself (TerminalView's once-on-attach grab misses the deferred
+        // the overlay grabs first responder itself (TerminalSurfaceHost's once-on-attach grab misses the deferred
         // overlay surface); a bounded run-loop retry beats the SwiftUI/AppKit responder race.
         requestAutoFocus(in: window)
     }
@@ -827,16 +832,10 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
         }
     }
 
-    /// Rechecked inside retries so a newly opened dialog can claim its region's input.
-    static func pickOwnsFocus(in window: NSWindow?, session: Session? = nil, pane: OverlayPane? = nil) -> Bool {
-        guard let window, let windowID = WindowRegistry.shared.windowID(for: window) else { return false }
-        if PickRegistry.shared.controller(for: windowID)?.modalPending == true { return true }
-        guard let session, let catcher = AskKeyCatcher.KeyCatcherView.sessionCatchers.object(forKey: session.id as NSUUID),
-              catcher.window === window else { return false }
-        return catcher.sessionInput?.blocksTerminalFocus(in: window, pane: pane) == true
-    }
+    /// Set by `retireSurface`; the callbacks drop libghostty's reports for it.
+    nonisolated let retired = OSAllocatedUnfairLock(initialState: false)
 
-    func destroySurface() {
+    func detachSurface() -> ghostty_surface_t? {
         // a pane torn down before it spawned must not consume its pending slots; the session keeps them.
         launchSeed = nil
         // leave the launch queue: a key nobody will request holds every pane behind it; a late grant no-ops.
@@ -851,8 +850,12 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
         focusObservers.forEach { NotificationCenter.default.removeObserver($0) }
         focusObservers = []
         windowVisibilityObservation = nil
-        if let surface { ghostty_surface_free(surface) }
-        surface = nil
+        defer { surface = nil }
+        return surface
+    }
+
+    func finishDestroy() {
+        linkHover?.label = nil
         // release the custom layer libghostty installed and this view still retains. The current pin clears
         // its display callback in `IOSurfaceLayer.release`, so this defends builds predating that fix, where
         // the callback kept pointing at the freed renderer and the next CoreAnimation display locked a mutex
@@ -952,7 +955,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
             updateGhosttyFocus()
         }
         updateMetalLayerSize()
-        // focus is driven by TerminalView.updateNSView when this surface becomes the active session's detail
+        // focus is driven by TerminalSurfaceHost.updateNSView when this surface becomes the active session's detail
         // view; only an auto-focus (overlay) surface grabs here, since that grab misses a deferred surface.
         requestAutoFocus(in: window)
     }

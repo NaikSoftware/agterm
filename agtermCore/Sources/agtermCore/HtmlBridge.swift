@@ -49,7 +49,7 @@ public enum HtmlBridge {
                                                 .sessionCompanionPageAttach, .phoneStatus, .phoneEnable, .phonePort,
                                                 .phoneHost, .phoneRevoke]
     // commands that address no session, or address it some other way than by `target`
-    private static let notSessionTargeted: Set<Command> = [.sessionNew, .sessionGo, .sessionOverlayJobRun,
+    private static let notSessionTargeted: Set<Command> = [.sessionNew, .sessionGo, .sessionUndo, .sessionOverlayJobRun,
                                                                   .sessionOverlayPageServe]
     // session commands outside the `session.` names; `ask.open` joins them unless it asks in the window's GUI
     private static let sessionTargeted: Set<Command> = [.notify, .fontInc, .fontDec, .fontReset, .keymapRun]
@@ -58,7 +58,7 @@ public enum HtmlBridge {
                                                    .sessionOverlayNavigate, .sessionOverlaySubmit,
                                                    .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle,
                                                    .sessionOverlayFollow, .sessionOverlaySearch, .sessionOverlayChanges,
-                                                   .sessionOverlayWrap]
+                                                   .sessionOverlayFiles, .sessionOverlayWrap]
     // these take their window as `target`, not as `args.window`
     private static let windowTargeted: Set<Command> = [.windowClose, .windowSelect, .windowRename, .windowDelete,
                                                        .windowResize, .windowMove, .windowZoom, .windowFullscreen,

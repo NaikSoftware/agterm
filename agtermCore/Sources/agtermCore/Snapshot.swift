@@ -33,7 +33,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
     /// flaggedOrder is the flagged working set's saved order (`AppStore.flaggedOrder`); nil restores in tree
     /// order.
     public var flaggedOrder: [UUID]?
-    /// catalogOperations is agterm-server's operation table, saved with the catalog it describes; nil on a Mac.
+    /// catalogOperations is the operation table of the catalog this store serves, saved with it; nil before its first operation.
     public var catalogOperations: CatalogOperationTable?
 
     public init(version: Int = Snapshot.currentVersion, selectedSessionID: UUID? = nil,
@@ -131,9 +131,12 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
     public var rememberedFolder: String?
     /// The workspace's pinned project folder; nil = none, and absent from the file like `tint`.
     public var projectFolder: String?
+    /// attached holds the workspace's rows attached from another host; nil when it has none.
+    public var attached: [AttachedSessionSnapshot]?
 
     public init(id: UUID, name: String, sessions: [SessionSnapshot], collapsed: Bool? = nil,
-                tint: SidebarTint? = nil, rememberedFolder: String? = nil, projectFolder: String? = nil) {
+                tint: SidebarTint? = nil, rememberedFolder: String? = nil, projectFolder: String? = nil,
+                attached: [AttachedSessionSnapshot]? = nil) {
         self.id = id
         self.name = name
         self.sessions = sessions
@@ -141,10 +144,11 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
         self.tint = tint
         self.rememberedFolder = rememberedFolder
         self.projectFolder = projectFolder
+        self.attached = attached
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, sessions, collapsed, tint, rememberedFolder, projectFolder
+        case id, name, sessions, collapsed, tint, rememberedFolder, projectFolder, attached
     }
 
     /// Custom decode so `collapsed` is LOSSY, matching the other two snapshot types: the synthesized
@@ -159,6 +163,7 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
         tint = (try? c.decodeIfPresent(SidebarTint.self, forKey: .tint)) ?? nil
         rememberedFolder = (try? c.decodeIfPresent(String.self, forKey: .rememberedFolder)) ?? nil
         projectFolder = (try? c.decodeIfPresent(String.self, forKey: .projectFolder)) ?? nil
+        attached = (try? c.decodeIfPresent([AttachedSessionSnapshot].self, forKey: .attached)) ?? nil
     }
 }
 
@@ -231,6 +236,8 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
     public var page: PageSnapshot?
     /// ended is written only when true; see `Session.ended`.
     public var ended: Bool?
+    /// scratchPaneIdentity names the zmx daemon behind a Live scratch, so a relaunch adopts it hidden.
+    public var scratchPaneIdentity: UUID?
 
     public init(id: UUID, paneIdentity: UUID? = nil, splitPaneIdentity: UUID? = nil,
                 customName: String?, cwd: String, isSplit: Bool? = nil, hasSplit: Bool? = nil,
@@ -242,8 +249,10 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
                 backgroundWatermark: BackgroundWatermark? = nil, paneBackgrounds: PaneBackgrounds? = nil,
                 restoreCommand: String? = nil, splitRestoreCommand: String? = nil,
                 context: String? = nil, lastSelectedAt: Double? = nil, tint: SidebarTint? = nil,
-                parentID: UUID? = nil, collapsed: Bool? = nil, page: PageSnapshot? = nil, ended: Bool? = nil) {
+                parentID: UUID? = nil, collapsed: Bool? = nil, page: PageSnapshot? = nil, ended: Bool? = nil,
+                scratchPaneIdentity: UUID? = nil) {
         self.id = id
+        self.scratchPaneIdentity = scratchPaneIdentity
         self.page = page
         self.ended = ended
         self.parentID = parentID
@@ -280,6 +289,7 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
         case foregroundCommand, splitForegroundCommand, initialCommand, commandWait
         case splitInitialCommand, splitCommandWait, backgroundWatermark, paneBackgrounds
         case restoreCommand, splitRestoreCommand, context, lastSelectedAt, tint, parentID, collapsed, page, ended
+        case scratchPaneIdentity
     }
 
     /// Custom decode so every optional is LOSSY, matching `Snapshot.init(from:)`: an unknown
@@ -324,6 +334,7 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
             page = PageSnapshot(source: .unreadable(PageSnapshot.unreadableReason))
         }
         ended = (try? c.decodeIfPresent(Bool.self, forKey: .ended)) ?? nil
+        scratchPaneIdentity = (try? c.decodeIfPresent(UUID.self, forKey: .scratchPaneIdentity)) ?? nil
         // the only field checked for CONTENT, not just type: a hand-edited context carrying a newline or
         // 300 bytes would otherwise reach the title bar and the JSON read-back intact.
         let storedContext = (try? c.decodeIfPresent(String.self, forKey: .context)) ?? nil

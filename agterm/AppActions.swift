@@ -191,6 +191,8 @@ final class AppActions {
             performRemote(.newSession(workspace: workspace, anchor: .after(id), shell: shell), in: store, select: true)
             return
         }
+        if forwardAttached(ControlRequest(cmd: .sessionDuplicate, target: id.uuidString), row: id, in: store,
+                           action: "Duplicate Session") { return }
         guard let session = store.duplicateSession(id) else { return }
         store.noteUserActivity()
         store.selectSession(session.id)
@@ -345,6 +347,11 @@ final class AppActions {
     func undoClose() {
         guard uiActionsEnabled else { return }
         guard let store else { return }
+        if store.remoteActions != nil {
+            undoRemoteClose(in: store)
+            return
+        }
+        if undoOriginCloseIfNewer(than: store) { return }
         let restored = withAnimation(.easeInOut(duration: 0.16)) {
             store.undoPendingClose()
         }
@@ -360,6 +367,8 @@ final class AppActions {
 
     func openLatestRecentClosed() {
         guard uiActionsEnabled else { return }
+        if serverRecentItems != nil { return openServerRecent(nil) }
+        if let attached = newestAttachedRecent { return openAttachedRecent(attached.id) }
         guard let owner = library.reopenLatestRecentClosedReportingWindow() else { return }
         revealRestoredWindow(owner)
     }
@@ -401,7 +410,7 @@ final class AppActions {
     func clearActiveSessionStatus() {
         guard uiActionsEnabled else { return }
         guard let store, let id = store.selectedSessionID else { return }
-        store.setAgentIndicator(AgentIndicator(), forSession: id)
+        store.clearStatus(id)
     }
 
     /// Re-read `keymap.conf`, re-rendering the menu shortcuts and rebuilding the custom-command runner +
@@ -551,6 +560,7 @@ final class AppActions {
     func toggleFlag(_ sessionID: UUID) {
         guard uiActionsEnabled else { return }
         guard let store, let session = store.session(withID: sessionID) else { return }
+        if sendFlag(!session.flagged, forSessions: [sessionID], in: store) { return }
         store.setFlag(!session.flagged, forSession: sessionID)
     }
 
@@ -572,8 +582,12 @@ final class AppActions {
     /// change) and doing nothing when none is. Skips the confirm under an XCUITest launch — a modal hangs it.
     func clearFlags() {
         guard uiActionsEnabled else { return }
-        guard let store, !store.flaggedSessions.isEmpty else { return }
-        if !ContentView.isUITestLaunch, !confirmClearFlags(count: store.flaggedSessions.count) { return }
+        guard let store, store.clearableFlagCount > 0 else { return }
+        if !ContentView.isUITestLaunch, !confirmClearFlags(count: store.clearableFlagCount) { return }
+        if store.marksOnServer {
+            performRemote(.clearFlags, in: store)
+            return
+        }
         store.clearFlags()
     }
 
@@ -706,6 +720,9 @@ final class AppActions {
         if session.scratchActive { setScratchShown(false, of: session, in: store); return }
         let shown = !(session.isSplit && (axis == nil || axis == session.splitAxis))
         if performRemote(.setSplit(session.id, shown: shown, axis: axis?.rawValue), in: store) { return }
+        let split = ControlRequest(cmd: .sessionSplit, target: session.id.uuidString,
+                                   args: ControlArgs(mode: shown ? "on" : "off", axis: axis?.rawValue))
+        if forwardAttached(split, row: session.id, in: store, action: "Split") { return }
         store.toggleSplit(session.id, axis: axis)
         focusSplitPane(session, wantSplit: session.splitFocused)
     }
@@ -721,6 +738,8 @@ final class AppActions {
         guard session.hasSplit, !session.fullOverlayVisible else { return }
         if session.scratchActive { setScratchShown(false, of: session, in: store); return }
         if performRemote(.closeSplit(session.id), in: store) { return }
+        if forwardAttached(ControlRequest(cmd: .sessionSplitClose, target: session.id.uuidString), row: session.id, in: store,
+                           action: "Close Split") { return }
         store.closeSplit(session.id)
         focusSplitPane(session, wantSplit: false)
     }

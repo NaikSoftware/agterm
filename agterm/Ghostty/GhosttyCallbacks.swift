@@ -144,6 +144,15 @@ final class GhosttyCallbacks: @unchecked Sendable {
             let intent = view.releaseIntent.withLock { $0 }
             DispatchQueue.main.async { view.openLink(link, intent: intent) }
             return true
+        case GHOSTTY_ACTION_MOUSE_OVER_LINK:
+            // libghostty applies `link-previews` before sending, and an empty url clears. Length-delimited
+            // like `open_url`, and valid only for this call.
+            guard let view = surfaceView(from: target) else { return true }
+            let hover = action.action.mouse_over_link
+            let link = hover.len == 0 || hover.url == nil ? ""
+                : String(decoding: UnsafeRawBufferPointer(start: hover.url, count: Int(hover.len)), as: UTF8.self)
+            DispatchQueue.main.async { view.applyLinkHover(link) }
+            return true
         case GHOSTTY_ACTION_COLOR_CHANGE:
             // a dynamic color set or RESET via OSC 10/11/12 (fg/bg/cursor) or their 110/111/112 resets,
             // already applied by libghostty; but under translucency every surface renders background-opacity
@@ -406,9 +415,10 @@ final class GhosttyCallbacks: @unchecked Sendable {
 
     func closeSurface(ud: UnsafeMutableRawPointer?) {
         guard let ud else { return }
-        // the Session retains the view until destroySurface() runs (the only place ghostty_surface_free is
-        // called), so takeUnretainedValue() is safe. never close or free synchronously from this callback.
+        // the Session retains the view until destroySurface() runs, and SurfaceRetirement retains a retired one
+        // until it frees the surface, so takeUnretainedValue() is safe. never close or free synchronously here.
         let view = Unmanaged<GhosttySurfaceView>.fromOpaque(ud).takeUnretainedValue()
+        guard !view.retired.withLock({ $0 }) else { return }
         DispatchQueue.main.async { view.handleProcessExit() }
     }
 
@@ -417,7 +427,8 @@ final class GhosttyCallbacks: @unchecked Sendable {
               let surface = target.target.surface,
               let ud = ghostty_surface_userdata(surface)
         else { return nil }
-        return Unmanaged<GhosttySurfaceView>.fromOpaque(ud).takeUnretainedValue()
+        let view = Unmanaged<GhosttySurfaceView>.fromOpaque(ud).takeUnretainedValue()
+        return view.retired.withLock { $0 } ? nil : view
     }
 
     private func surface(from ud: UnsafeMutableRawPointer?) -> ghostty_surface_t? {
