@@ -488,27 +488,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       {required Color tint, required double indent, bool chevronSlot = false, bool hiddenBlocked = false, bool showWorkspace = false}) {
     final own = tintColor(s.tint);
     final t = own ?? tint;
-    final selected = s.active && (w?.active ?? false);
     final running = s.status == 'active';
     final info = showWorkspace ? s.workspaceName : (s.context.isNotEmpty ? s.context : s.shortCwd);
     final hasCompanions = chevronSlot && (w?.sessions.any((c) => c.parent == s.id) ?? false);
     final radius = BorderRadius.circular(running ? 0 : 12);
-    return Material(
-      type: MaterialType.transparency,
-      child: InkWell(
-        key: Key('row-${s.id}'),
-        borderRadius: radius,
-        onTap: () => open(s.id),
-        onLongPress: () => showSessionActions(context, m, s),
-        child: CustomPaint(
-          painter: running ? _WavePainter(wave, t) : null,
-          child: Container(
+    // no selected-session highlight: a tap opens a new screen, so "current" means nothing in this list.
+    // The wave sits under the Material and the tint is Ink, so neither hides the tap ripple.
+    return CustomPaint(
+      painter: running ? _WavePainter(wave, t) : null,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          key: Key('row-${s.id}'),
+          borderRadius: radius,
+          onTap: () => open(s.id),
+          onLongPress: () => showSessionActions(context, m, s),
+          child: Ink(
+            decoration: BoxDecoration(color: own?.withValues(alpha: 0.09), borderRadius: radius),
+            child: Container(
             constraints: const BoxConstraints(minHeight: 52),
-            decoration: BoxDecoration(
-              color: selected ? t.withValues(alpha: 0.20) : own?.withValues(alpha: 0.09),
-              border: selected ? Border.all(color: t.withValues(alpha: 0.55)) : null,
-              borderRadius: radius,
-            ),
             padding: EdgeInsets.fromLTRB(chevronSlot ? 0 : indent, 6, 12, 6),
             child: Row(children: [
               if (chevronSlot)
@@ -555,6 +553,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ]),
           ),
         ),
+      ),
       ),
     );
   }
