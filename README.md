@@ -52,6 +52,14 @@ A split session, two panes side by side on different color themes:
 
 ![Split session](docs/screenshots/split-theme.png)
 
+agterm Mobile on an Android phone: the session tree, a new session, and a Claude Code session fitted to the phone:
+
+<p align="center">
+  <img src="docs/screenshots/mobile-sessions.png" width="270" alt="Sessions: a blocked agent's question with answer buttons, a finished session, workspaces of agent sessions">
+  <img src="docs/screenshots/mobile-new-session.png" width="270" alt="New session: pick Terminal, Claude Code, Codex, OpenCode or Antigravity, a workspace and a folder">
+  <img src="docs/screenshots/mobile-session.png" width="270" alt="A Claude Code session fitted to the phone">
+</p>
+
 </details>
 
 ## The model
