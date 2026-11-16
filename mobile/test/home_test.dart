@@ -43,11 +43,19 @@ void main() {
     expect(find.byKey(const Key('row-c2')), findsNothing);
     expect(find.byKey(const Key('hiddenBlocked-s3')), findsOneWidget);
     expect(find.byKey(const Key('hiddenBlocked-s1')), findsNothing);
-    expect(find.byKey(const Key('wsMenu-w1')), findsOneWidget);
     await t.tap(find.byKey(const Key('ws-w1')));
     await t.pump();
     expect(find.byKey(const Key('row-s1')), findsNothing);
     await t.pumpWidget(const SizedBox()); // stops the snippet timer
+  });
+
+  testWidgets('the workspace ⋮ opens its actions with a new session there', (t) async {
+    await pumpHome(t, model());
+    await t.tap(find.byKey(const Key('wsMenu-w2')));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 500));
+    expect(find.text('New session here'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
   });
 
 }
