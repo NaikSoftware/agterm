@@ -71,6 +71,7 @@ class _SessionScreenState extends State<SessionScreen> {
     m.addListener(_onModel);
     _lifecycle = AppLifecycleListener(onPause: () => _setForeground(false), onResume: () => _setForeground(true));
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncFit()); // the first layout gives the screen's size
+    _visit();
   }
 
   void _setForeground(bool on) {
@@ -78,12 +79,16 @@ class _SessionScreenState extends State<SessionScreen> {
     _syncFit();
   }
 
+  // a visit as on the computer: an auto-reset status (an agent's Done) clears on the way in and on the way out
+  void _visit() => unawaited(m.act('session.seen', target: widget.sessionId));
+
   @override
   void dispose() {
     poll?.cancel();
     m.removeListener(_onModel);
     _lifecycle.dispose();
     _release(pane);
+    _visit();
     input.dispose();
     inputFocus.dispose();
     vScroll.dispose();
