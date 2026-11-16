@@ -1,8 +1,8 @@
 import XCTest
 
-/// End-to-end tests for the title-bar recent-sessions button — the mouse equivalent of the Ctrl-Tab
-/// switcher. It opens a popover of the window's most-recently-used sessions; clicking a row commits the
-/// switch. The button is disabled while there is neither another session nor a recently closed one.
+/// End-to-end tests for the title-bar switcher pill (`recent-sessions-button`) — the mouse equivalent of the
+/// Ctrl-Tab switcher. It opens a popover of attention, recent and recently closed sessions; clicking a row
+/// commits the switch. The pill is disabled while all three lists are empty.
 ///
 /// SCOPE NOTE: the row CLICK → session switch cannot be driven from XCUITest — a synthesized click (element
 /// OR coordinate) on a SwiftUI `Button` inside an `NSPopover` does not fire the button's action (confirmed
@@ -76,16 +76,22 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
         let recent = app.buttons["recent-sessions-button"]
         XCTAssertTrue(pollEnabled(recent, true, timeout: 8))
         let jumpRow = openPopoverJumpRow(button: recent, timeout: 10)
-        XCTAssertTrue(jumpRow.label.contains("api › logs"), "clock popover row: \(jumpRow.label)")
+        XCTAssertTrue(jumpRow.label.contains("api › logs"), "switcher recent row: \(jumpRow.label)")
+        let needsYou = app.buttons["attention-session-row"]
+        XCTAssertTrue(needsYou.waitForExistence(timeout: 5), "the switcher should list the blocked companion under Needs you")
+        XCTAssertTrue(needsYou.label.contains("api › logs"), "switcher attention row: \(needsYou.label)")
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
 
+        // the switcher's own jump row tells its popover apart from the bell's, which share attention rows.
         let bell = app.buttons["attention-button"]
         let attentionRow = app.buttons["attention-session-row"]
+        let switcherJump = app.buttons["jump-session-row"]
         let deadline = Date().addingTimeInterval(10)
-        while Date() < deadline, !attentionRow.exists {
+        while Date() < deadline, !attentionRow.exists || switcherJump.exists {
             bell.click()
             _ = attentionRow.waitForExistence(timeout: 1)
         }
+        XCTAssertFalse(switcherJump.exists, "the bell's popover, not the switcher's, should be open")
         XCTAssertTrue(attentionRow.label.contains("api › logs"), "bell popover row: \(attentionRow.label)")
     }
 

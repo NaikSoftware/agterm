@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 
 /// Title-bar "jump to a session" buttons, split out of `WindowContentView` to keep that file under the
-/// 1000-line limit (the `+Dashboard`/`+Zoom` extension pattern): the recent-sessions popover — the mouse
+/// 1000-line limit (the `+Dashboard`/`+Zoom` extension pattern): the session switcher pill — the mouse
 /// equivalent of the Ctrl-Tab switcher — and the attention bell. Both open a session picker over the
 /// frontmost window and are referenced from `WindowContentView.titlebarRow`.
 extension WindowContentView {
@@ -21,65 +21,91 @@ extension WindowContentView {
         Array(library.recentClosedItems.lazy.filter { $0.kind == .session }.prefix(15))
     }
 
-    /// Title-bar button opening the recent-sessions popover — the mouse equivalent of the Ctrl-Tab switcher.
-    /// Lists the window's most-recently-used OTHER sessions, then recently closed ones; disabled/dimmed when both
-    /// lists are empty. Opening a popover is interactive-only, so it is control-API keep-in-sync
-    /// exempt, like the bell opening the attention palette.
-    var recentSessionsButton: some View {
-        let enabled = !(recentSessions.isEmpty && recentClosedSessions.isEmpty) && !pick.modalPending
+    /// Nothing for the switcher popover to list: no other recent, no closed, no attention session.
+    private var switcherEmpty: Bool {
+        recentSessions.isEmpty && recentClosedSessions.isEmpty && library.attentionAcrossWindows.isEmpty
+    }
+
+    /// The title-bar session switcher: the title wrapped in a pill that opens one popover. The title stays
+    /// non-hittable on top and the button sits behind it, so a disabled button never dims the title.
+    /// Opening a popover is interactive-only, so it is control-API keep-in-sync exempt, like the bell.
+    var switcherPill: some View {
+        HStack(spacing: 8) {
+            titleLabel.hugging()
+            // Ctrl-Tab is a raw key monitor in `SessionSwitcher`, not a rebindable `BuiltinAction`.
+            Text(verbatim: "⌃Tab")
+                .font(.caption)
+                .foregroundStyle(chromeText.opacity(0.45))
+                .fixedSize()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .allowsHitTesting(false)
+        .background { recentSessionsButton }
+    }
+
+    private var recentSessionsButton: some View {
+        let enabled = !switcherEmpty && !pick.modalPending
         return Button {
             guard !pick.modalPending else { return }
             recentSessionsShown.toggle()
         } label: {
-            Label("Recent sessions", systemImage: InterfaceElement.recentSessions.symbolName!)
+            SwitcherPillChrome(chromeText: chromeText, open: recentSessionsShown)
         }
+        .buttonStyle(.plain)
         .toolTip("Recent sessions (⌃Tab)", isShown: titlebarTipsShown)
-        // pin the tint to chromeText like the attention bell: a disabled plain button otherwise resolves the SF
-        // Symbol to the system disabled color, near-invisible on the themed titlebar — the dimmed clock would
-        // vanish instead of graying out like the bell.
-        .foregroundStyle(chromeText)
         .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.35)
+        .accessibilityLabel("Recent sessions")
         .accessibilityIdentifier("recent-sessions-button")
         .popover(isPresented: $recentSessionsShown, arrowEdge: .bottom) {
             recentSessionsPopover
         }
         .onChange(of: recentSessionsShown) { _, shown in
             // suppress this window's auto-follow while the popover is open so an armed idle jump can't reshuffle
-            // the MRU rows under the pointer (the palette + dashboard bracket the same way); the counted
-            // suppression stays balanced across open/close and with the attention popover.
+            // the rows under the pointer; counted, so it stays balanced with the bell's popover.
             if shown { store.suppressAutoFollow() } else { store.resumeAutoFollow() }
         }
-        .onChange(of: recentSessions.isEmpty && recentClosedSessions.isEmpty) { _, empty in
-            // the only listed session exiting on its own fires no outside-click dismiss, so close the popover
-            // ourselves when both lists empty — else an empty sliver lingers under a now-disabled button.
+        .onChange(of: switcherEmpty) { _, empty in
+            // the last listed session leaving fires no outside-click dismiss; close so no empty sliver lingers.
             if empty { recentSessionsShown = false }
         }
     }
 
-    /// The recent-sessions popover body: the MRU OTHER sessions as full rows (the shared two-line
-    /// `SessionSwitcherRow`). Each row highlights on hover and, on a click anywhere in the row, commits the
-    /// switch (`noteUserActivity` + `selectSession` + focus, like the Ctrl-Tab release) then closes the popover
-    /// — the palette-row feel. A "Recently closed" section follows, each row reopening its entry through
-    /// `openRecentClosed`. Tinted to the terminal theme (`terminalColor` panel, `chromeText` text,
-    /// selection-color hover) so it matches the themed chrome rather than the system popover look. Measured and
-    /// capped like the attention popover.
+    /// The switcher popover: a jump row into the ⌃P session palette, then "Needs you" (the bell's rows),
+    /// "Recent" (MRU other sessions) and "Recently closed", empty sections hidden. Themed, measured and capped
+    /// like the attention popover.
     private var recentSessionsPopover: some View {
         let metrics = GhosttyApp.shared.interfaceMetrics
+        let attention = library.attentionAcrossWindows
         // no `.accessibilityIdentifier` on this container: a SwiftUI identifier on a parent propagates to and
-        // OVERRIDES its descendants', clobbering the per-row `recent-session-row` ids the tests read.
+        // OVERRIDES its descendants', clobbering the per-row ids the tests read.
         return ScrollView {
             VStack(spacing: 2) {
-                ForEach(recentSessions, id: \.self) { id in
-                    recentSessionRow(id)
+                SessionPopoverRow(
+                    title: "Jump to a session",
+                    subtitle: helpHint("Search all sessions", .sessionPalette),
+                    remote: false,
+                    status: nil,
+                    statusColorHex: nil,
+                    statusShape: nil,
+                    foreground: chromeText,
+                    hoverColor: popoverHoverColor,
+                    accessibilityID: "jump-session-row",
+                    icon: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)?
+                        .withSymbolConfiguration(.init(pointSize: metrics.scaled(15), weight: .regular))
+                ) { jumpToSessionPalette() }
+                if !attention.isEmpty {
+                    popoverSectionHeader("Needs you")
+                    attentionRows(attention)
+                }
+                if !recentSessions.isEmpty {
+                    popoverSectionHeader("Recent")
+                    ForEach(recentSessions, id: \.self) { id in
+                        recentSessionRow(id)
+                    }
                 }
                 if !recentClosedSessions.isEmpty {
-                    Text("Recently closed")
-                        .font(.system(size: metrics.secondary))
-                        .foregroundStyle(chromeText.opacity(0.6))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, metrics.scaled(12))
-                        .padding(.top, recentSessions.isEmpty ? 0 : metrics.scaled(6))
+                    popoverSectionHeader("Recently closed")
                     ForEach(recentClosedSessions) { item in
                         SessionPopoverRow(
                             title: item.title,
@@ -115,6 +141,26 @@ extension WindowContentView {
         .frame(width: metrics.scaled(320))
         .background(terminalColor)
         .presentationBackground(terminalColor)
+    }
+
+    private func popoverSectionHeader(_ title: String) -> some View {
+        let metrics = GhosttyApp.shared.interfaceMetrics
+        return Text(title)
+            .font(.system(size: metrics.secondary))
+            .foregroundStyle(chromeText.opacity(0.6))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.scaled(12))
+            .padding(.top, metrics.scaled(6))
+    }
+
+    /// Closes the popover, then opens (never toggles) the session palette on the next turn.
+    private func jumpToSessionPalette() {
+        guard !pick.modalPending else { return }
+        recentSessionsShown = false
+        DispatchQueue.main.async {
+            guard actions.uiActionsEnabled else { return }
+            actions.palette?.open(.sessions)
+        }
     }
 
     /// The popover closes first and the reopen runs on the next turn, since it may raise another window.
@@ -190,7 +236,7 @@ extension WindowContentView {
             attentionPopover
         }
         .onChange(of: attentionPopoverShown) { _, shown in
-            // same as the recent popover: suppress auto-follow while open (counted, so it stays balanced).
+            // same as the switcher popover: suppress auto-follow while open (counted, so it stays balanced).
             if shown { store.suppressAutoFollow() } else { store.resumeAutoFollow() }
         }
         .onChange(of: empty) { _, isEmpty in
@@ -209,20 +255,7 @@ extension WindowContentView {
         let metrics = GhosttyApp.shared.interfaceMetrics
         return ScrollView {
             VStack(spacing: 2) {
-                ForEach(library.attentionAcrossWindows) { entry in
-                    SessionPopoverRow(
-                        title: library.attentionLabel(entry),
-                        subtitle: library.attentionSubtitle(entry),
-                        remote: entry.session.remoteHost != nil,
-                        status: entry.session.agentIndicator.status,
-                        statusColorHex: entry.session.agentIndicator.color,
-                        statusShape: entry.session.agentIndicator.shape,
-                        foreground: chromeText,
-                        hoverColor: popoverHoverColor,
-                        accessibilityID: "attention-session-row",
-                        isEnabled: actions.canSelectAttention(windowID: entry.window.id, sessionID: entry.session.id)
-                    ) { selectAttention(entry) }
-                }
+                attentionRows(library.attentionAcrossWindows)
             }
             .background(
                 GeometryReader { rows in
@@ -242,6 +275,24 @@ extension WindowContentView {
         .presentationBackground(terminalColor)
     }
 
+    /// The attention rows shared by the bell's popover and the switcher's "Needs you" section.
+    private func attentionRows(_ entries: [AttentionEntry]) -> some View {
+        ForEach(entries) { entry in
+            SessionPopoverRow(
+                title: library.attentionLabel(entry),
+                subtitle: library.attentionSubtitle(entry),
+                remote: entry.session.remoteHost != nil,
+                status: entry.session.agentIndicator.status,
+                statusColorHex: entry.session.agentIndicator.color,
+                statusShape: entry.session.agentIndicator.shape,
+                foreground: chromeText,
+                hoverColor: popoverHoverColor,
+                accessibilityID: "attention-session-row",
+                isEnabled: actions.canSelectAttention(windowID: entry.window.id, sessionID: entry.session.id)
+            ) { selectAttention(entry) }
+        }
+    }
+
     /// The attention popover's row-stack cap at the default interface size, about ten rows.
     static let attentionRowsCap: Double = 440
 
@@ -253,6 +304,7 @@ extension WindowContentView {
         let sessionID = entry.session.id
         guard !pick.modalPending, actions.canSelectAttention(windowID: windowID, sessionID: sessionID) else { return }
         attentionPopoverShown = false
+        recentSessionsShown = false
         DispatchQueue.main.async { actions.selectAttention(windowID: windowID, sessionID: sessionID) }
     }
 }
@@ -292,5 +344,21 @@ private struct SessionPopoverRow: View {
         .opacity(isEnabled ? 1 : 0.35)
         .onHover { hovering = $0 }
         .accessibilityIdentifier(accessibilityID)
+    }
+}
+
+/// The switcher pill's rounded fill and hairline, stronger on hover and while its popover is open. Its own view,
+/// so a hover change re-renders only this and never `WindowContentView`'s body.
+private struct SwitcherPillChrome: View {
+    let chromeText: Color
+    let open: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 7)
+            .fill(chromeText.opacity(hovering || open ? 0.12 : 0.06))
+            .overlay(RoundedRectangle(cornerRadius: 7).stroke(chromeText.opacity(0.10), lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+            .onHover { hovering = $0 }
     }
 }

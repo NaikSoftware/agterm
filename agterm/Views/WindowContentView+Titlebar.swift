@@ -41,8 +41,8 @@ extension WindowContentView {
     }
 
     /// Custom titlebar row replacing the system toolbar: the sidebar and file panel toggles pinned to the
-    /// leading columns' trailing edge (by the divider), the title at the terminal's start, and the trailing
-    /// cluster (recent-sessions / attention popovers, divider, scratch / split controls, divider, dashboard /
+    /// leading columns' trailing edge (by the divider), the title (or switcher pill) at the terminal's start, and the
+    /// trailing cluster (attention popover, divider, scratch / split controls, divider, dashboard /
     /// quick terminal / custom commands). Positions track `leadingColumnsWidth`; the left inset clears the system traffic lights.
     private var titlebarRow: some View {
         HStack(spacing: 0) {
@@ -69,10 +69,15 @@ extension WindowContentView {
                 }
                 Spacer().frame(width: 12)
             }
-            titleLabel
-                // the title text falls through to the drag/zoom layer behind it, so double-click zooms and
-                // drag moves the window; the rest of the row is non-hittable spacers plus the buttons.
-                .allowsHitTesting(false)
+            if shows(.recentSessions) {
+                // the pill takes its own clicks; the rest of the row still falls through to the drag/zoom layer.
+                switcherPill
+            } else {
+                titleLabel
+                    // the title text falls through to the drag/zoom layer behind it, so double-click zooms and
+                    // drag moves the window; the rest of the row is non-hittable spacers plus the buttons.
+                    .allowsHitTesting(false)
+            }
             Spacer(minLength: 12)
             titlebarTrailingActions
         }
@@ -91,13 +96,12 @@ extension WindowContentView {
         .background { WindowControlArea() }
     }
 
-    /// The title bar's trailing action cluster, each button gated by its Interface toggle: recent-sessions /
-    /// attention popovers, per-session scratch / split controls, window-overlay dashboard / quick terminal
+    /// The title bar's trailing action cluster, each button gated by its Interface toggle: the attention
+    /// popover, per-session scratch / split controls, window-overlay dashboard / quick terminal
     /// and the custom-commands popover. A separator sits ONLY where two groups that each still show 2+
     /// buttons meet, so a group reduced to one button flows in unbracketed and an empty group lets its
     /// neighbors meet directly.
     private var titlebarTrailingActions: some View {
-        let showRecent = shows(.recentSessions)
         let showAttention = attentionButtonEnabled // the bell keeps its own separate Notifications setting
         let showScratch = shows(.scratch)
         let showSplit = shows(.split)
@@ -105,13 +109,12 @@ extension WindowContentView {
         let showDashboard = shows(.dashboard)
         let showQuick = shows(.quickTerminal)
         let showCustom = shows(.customCommands)
-        let countA = (showRecent ? 1 : 0) + (showAttention ? 1 : 0)
+        let countA = showAttention ? 1 : 0
         let countB = (showScratch ? 1 : 0) + (showSplit ? 1 : 0) + (showOverlayToggle ? 1 : 0)
         let countC = (showDashboard ? 1 : 0) + (showQuick ? 1 : 0) + (showCustom ? 1 : 0)
         // a separator only between two 2+-button groups (the host-free rule, unit-tested in agtermCore).
         let dividers = InterfaceElement.titlebarGroupDividers(countA: countA, countB: countB, countC: countC)
         return HStack(spacing: 14) {
-            if showRecent { recentSessionsButton.labelStyle(.iconOnly) }
             if showAttention { attentionButton.labelStyle(.iconOnly) }
             if dividers.afterA { titlebarDivider }
             if showScratch { scratchButton.labelStyle(.iconOnly) }
@@ -276,6 +279,14 @@ struct TitlebarLabel: View {
     let showsWindowName: Bool
     let showsContext: Bool
     let showsRemoteHost: Bool
+    /// False sizes the label to its text for the switcher pill, giving up the #516 fixed-width slot.
+    var fillsWidth = true
+
+    func hugging() -> TitlebarLabel {
+        var copy = self
+        copy.fillsWidth = false
+        return copy
+    }
 
     var body: some View {
         let composition = composition
@@ -315,7 +326,7 @@ struct TitlebarLabel: View {
         .lineLimit(1)
         .truncationMode(.tail)
         // fixed-width slot, so the label's width stays put while an animated title ticks (#516)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: fillsWidth ? .infinity : nil, alignment: .leading)
     }
 
     private var composition: TitlebarComposition {

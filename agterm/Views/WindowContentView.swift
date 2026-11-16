@@ -83,8 +83,8 @@ struct WindowContentView: View {
     @State var attentionButtonEnabled: Bool = WindowContentView.resolvedAttentionButtonEnabled()
     /// The title-bar / sidebar-footer chrome the user hid in Settings ▸ Interface, read by `shows(_:)`.
     @State var hiddenInterfaceElements: Set<InterfaceElement> = WindowContentView.resolvedHiddenInterfaceElements()
-    /// Whether the recent-sessions popover (the mouse form of the Ctrl-Tab switcher) is shown, anchored on
-    /// the title-bar clock button. Non-private so `+RecentSessions`'s button/rows can toggle it.
+    /// Whether the session switcher popover (the mouse form of the Ctrl-Tab switcher) is shown, anchored on
+    /// the title pill. Non-private so `+RecentSessions`'s button/rows can toggle it.
     @State var recentSessionsShown = false
     /// Whether the attention popover (the mouse equivalent of the ⌃⇧I attention palette) is shown, anchored
     /// on the title-bar bell. Non-private so the `+RecentSessions` extension's bell/rows can toggle it.

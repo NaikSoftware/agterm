@@ -284,9 +284,13 @@ final class ControlWindowUITests: ControlAPITestCase {
     // 14pt below the top edge, horizontally centred: clears the top resize strip, lands in the titlebar
     // band (compact 30 / normal 48) and in the empty header Spacer — clear of the traffic lights and the
     // toolbar buttons, so the click falls through to the `WindowControlArea` layer. Re-resolved at each
-    // interaction so it stays in the header after a zoom grows the window.
+    // interaction so it stays in the header after a zoom grows the window. Shifted past the switcher pill,
+    // which takes its own clicks, when a long title reaches the centre.
     private func emptyHeaderPoint(_ window: XCUIElement) -> XCUICoordinate {
-        window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: 14))
+        let pill = app.buttons["recent-sessions-button"]
+        let centreX = window.frame.midX
+        let dx = pill.exists && pill.frame.maxX + 20 > centreX ? pill.frame.maxX + 20 - centreX : 0
+        return window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: dx, dy: 14))
     }
 
     // drives the real cursor, unlike testWindowZoom's control command.
