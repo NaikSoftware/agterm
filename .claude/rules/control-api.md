@@ -2328,6 +2328,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   alone keeps the one-hop window after a demotion.
 - Commands that act on the pane's OWN surface are refused while it is covered, with `pane is covered
   while another Mac leads it; take the lead first (session lead)`: `session.paste`, `.selectall`, `.copy`,
+  `session.grid` (not `--reset`), `session.scroll`,
   and a `session.search` that opens, updates or navigates, judged on the PINNED `searchSurface` when a
   search is open. They would otherwise answer ok for a paste the daemon drops or select text laid out
   for another grid. `session.search --to close` stays available, being cleanup. A pane that leads keeps

@@ -699,13 +699,14 @@ error keeps those names for compatibility.
 - `session grid COLSxROWS | --reset [--pane left|right] [--target] [--window W]`: force a pane to a fixed
   character grid, for a phone. `--reset` returns the size to the view. Columns take 20...1000 and rows
   5...1000; give both or `--reset`. `--pane` defaults to `left`; `scratch` → `invalid pane: scratch`, `right`
-  without a split → `session has no split pane`, an off-screen pane → `pane is not on screen`. Returns `id`,
+  without a split → `session has no split pane`, an off-screen pane → `pane is not on screen`, a pane another Mac leads →
+  `pane is covered ...; take the lead first (session lead)` (`--reset` still clears it). Returns `id`,
   `pane`, `columns`, `rows` (the real grid after the change). Read forced panes from `tree`'s `paneGrids`
   (`{left?, right?}` of `{columns, rows}`, omitted when none); `session text` reports the real `columns` and
   `rows`. The cases that clear it are listed at commands.html#session, `session grid`. agterm-server does not serve it.
 - `session scroll LINES [--pane left|right] [--target] [--window W]`: scroll by wheel notches, negative toward
   older output. `LINES` takes -1000...1000 and not 0. Returns `id`, `pane`, `lines`. A mouse-reporting program
-  gets wheel events instead. agterm-server does not serve it.
+  gets wheel events instead. On a pane another Mac leads, take the lead first (`session lead`). agterm-server does not serve it.
 - `session text [--all] [--lines N] [--pane left|right|scratch] [--pane-id TOKEN] [--target] [--window W]`: returns `result.text`
   with the session's terminal buffer as PLAIN TEXT (no ANSI/color). By default it reads the VISIBLE
   SCREEN of the on-screen pane. `--all` reads the whole buffer including scrollback; `--lines N` reads the
