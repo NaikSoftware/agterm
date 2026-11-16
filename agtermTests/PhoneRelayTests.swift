@@ -263,18 +263,22 @@ final class PhoneRelayTests: XCTestCase {
     }
 
     func testTheBluetoothLineIsAStatusAndNeverTheExitError() throws {
+        let seen = dir.appendingPathComponent("seen")
+        let busy = dir.appendingPathComponent("busy")
         let relay = started(try fakeTool("""
         echo 'agtermctl: bluetooth: advertising' >&2
         echo '\(link)'
-        sleep 0.3
+        while [ ! -e '\(seen.path)' ]; do sleep 0.05; done
         echo 'agtermctl: bluetooth: off (in use by another relay)' >&2
-        sleep 0.3
+        while [ ! -e '\(busy.path)' ]; do sleep 0.05; done
         exit 1
         """))
 
         XCTAssertTrue(wait { relay.status.bluetooth == "advertising" })
+        FileManager.default.createFile(atPath: seen.path, contents: nil)
         XCTAssertTrue(wait { relay.status.bluetooth == "busy" })
         XCTAssertEqual(relay.status.readback.bluetooth, "busy")
+        FileManager.default.createFile(atPath: busy.path, contents: nil)
         XCTAssertTrue(wait { relay.error != nil })
         XCTAssertEqual(relay.error, "The relay stopped.")
         XCTAssertNil(relay.status.bluetooth)

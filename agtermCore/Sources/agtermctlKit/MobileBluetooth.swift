@@ -128,6 +128,8 @@ final class MobileBluetooth: NSObject, CBPeripheralManagerDelegate, @unchecked S
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
         switch peripheral.state {
         case .poweredOn:
+            // a repeated poweredOn with a channel still published would publish a second PSM and leak the first
+            guard psm == nil else { break }
             // the radio coming back finds the old channel and service gone; unverified on hardware, see Task 8
             peripheral.removeAllServices()
             peripheral.publishL2CAPChannel(withEncryption: false)

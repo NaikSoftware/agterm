@@ -10,11 +10,11 @@ import agtermCore
 
 // MARK: - mobile
 
-/// Mobile runs the TLS relay agterm Mobile connects to. The phone sends the same `{cmd, target, args}` lines
+/// Mobile runs the TLS and Bluetooth relay agterm Mobile connects to. The phone sends the same `{cmd, target, args}` lines
 /// agtermctl sends, plus an `id` echoed on the answer; each line is forwarded to the control socket.
 struct Mobile: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Let agterm Mobile drive this Mac over the network.",
+        abstract: "Let agterm Mobile drive this Mac over the network or Bluetooth.",
         subcommands: [Serve.self, Reset.self]
     )
 
