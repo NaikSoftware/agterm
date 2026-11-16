@@ -36,8 +36,10 @@ struct NoiseCipher: Sendable {
 
     init(key: Data) { self.key = SymmetricKey(data: key) }
 
+    // Noise reserves 2^64-1, so a cipher refuses rather than reuse a nonce.
     private func nonce() throws -> ChaChaPoly.Nonce {
-        try ChaChaPoly.Nonce(data: Data(count: 4) + withUnsafeBytes(of: counter.littleEndian) { Data($0) })
+        guard counter < .max else { throw BleLinkError.badFrame }
+        return try ChaChaPoly.Nonce(data: Data(count: 4) + withUnsafeBytes(of: counter.littleEndian) { Data($0) })
     }
 
     mutating func encrypt(_ plaintext: Data, ad: Data = Data()) throws -> Data {
@@ -148,7 +150,7 @@ struct NoiseHandshake: Sendable {
 }
 
 /// The phone's side (`-> psk, e`, `<- e, ee`); the Mac uses it only in tests, mirroring the phone.
-public struct BleInitiator: Sendable {
+public struct BleInitiator: ~Copyable, Sendable {
     private var state: NoiseHandshake
 
     public init(psk: SymmetricKey) { self.init(psk: psk, ephemeral: .init()) }
@@ -159,7 +161,11 @@ public struct BleInitiator: Sendable {
 
     public mutating func start() throws -> Data { try writeMessage1(payload: Data()) }
 
-    public mutating func finish(_ reply: Data) throws -> BleTransportKeys { try readMessage2(reply).transport }
+    // Our handshake carries empty payloads, so both messages are exactly 48 bytes.
+    public consuming func finish(_ reply: Data) throws -> BleTransportKeys {
+        guard reply.count == 48 else { throw BleLinkError.badFrame }
+        return try readMessage2(reply).transport
+    }
 
     mutating func writeMessage1(payload: Data) throws -> Data {
         let pub = state.writeE()
@@ -179,7 +185,7 @@ public struct BleInitiator: Sendable {
 }
 
 /// The Mac's side. Message 1's first 32 bytes are the phone's ephemeral public key (the `bt:<hex>` peer label).
-public struct BleResponder: Sendable {
+public struct BleResponder: ~Copyable, Sendable {
     private var state: NoiseHandshake
 
     public init(psk: SymmetricKey) { self.init(psk: psk, ephemeral: .init()) }
@@ -188,7 +194,8 @@ public struct BleResponder: Sendable {
         state = NoiseHandshake(psk: psk, ephemeral: ephemeral, prologue: prologue)
     }
 
-    public mutating func readInitiator(_ message: Data) throws -> (reply: Data, transport: BleTransportKeys) {
+    public consuming func readInitiator(_ message: Data) throws -> (reply: Data, transport: BleTransportKeys) {
+        guard message.count == 48 else { throw BleLinkError.badFrame }
         let read = try respond(to: message, payload: Data())
         return (read.reply, read.transport)
     }

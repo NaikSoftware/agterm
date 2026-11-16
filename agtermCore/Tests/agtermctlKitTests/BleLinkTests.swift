@@ -13,7 +13,7 @@ struct BleLinkTests {
             let handshakeHash: String
             let messages: [Message]
         }
-        struct Frame: Decodable { let direction: String, plaintext: String, deflated: String, frame: String }
+        struct Frame: Decodable { let direction: String, encoder: String, plaintext: String, deflated: String, frame: String }
         struct Handshake: Decodable {
             let initiatorEphemeralPrivate: String, responderEphemeralPrivate: String
             let message1: String, message2: String, message1Wire: String, handshakeHash: String
@@ -47,7 +47,7 @@ struct BleLinkTests {
 
     private func pair(psk: SymmetricKey = BleIDs.psk(token: "token")) throws -> (BleTransportKeys, BleTransportKeys) {
         var initiator = BleInitiator(psk: psk)
-        var responder = BleResponder(psk: psk)
+        let responder = BleResponder(psk: psk)
         let (reply, mac) = try responder.readInitiator(try initiator.start())
         return (try initiator.finish(reply), mac)
     }
@@ -81,7 +81,7 @@ struct BleLinkTests {
         #expect(BleIDs.psk(token: v.token).withUnsafeBytes { Data($0) } == hex(v.psk))
         let psk = BleIDs.psk(token: v.token)
         var initiator = BleInitiator(psk: psk, ephemeral: try key(v.handshake.initiatorEphemeralPrivate))
-        var responder = BleResponder(psk: psk, ephemeral: try key(v.handshake.responderEphemeralPrivate))
+        let responder = BleResponder(psk: psk, ephemeral: try key(v.handshake.responderEphemeralPrivate))
         let message1 = try initiator.start()
         #expect(message1 == hex(v.handshake.message1))
         #expect(BleFramer.frame(message1) == hex(v.handshake.message1Wire))
@@ -89,6 +89,7 @@ struct BleLinkTests {
         #expect(reply == hex(v.handshake.message2))
         let phone = try initiator.finish(reply)
         #expect(phone.handshakeHash == hex(v.handshake.handshakeHash))
+        #expect(v.frames.contains { $0.encoder == "zlib" && $0.direction == "phone-to-mac" })
         var sides = ["phone-to-mac": (phone, mac), "mac-to-phone": (mac, phone)]
         for frame in v.frames {
             var (sender, receiver) = try #require(sides[frame.direction])
@@ -103,21 +104,22 @@ struct BleLinkTests {
 
     @Test func handshakeMessagesAre48Bytes() throws {
         var initiator = BleInitiator(psk: BleIDs.psk(token: "t"))
-        var responder = BleResponder(psk: BleIDs.psk(token: "t"))
+        let responder = BleResponder(psk: BleIDs.psk(token: "t"))
         let message1 = try initiator.start()
         #expect(message1.count == 48)
         #expect(try responder.readInitiator(message1).reply.count == 48)
     }
 
     @Test func wrongPskThrowsWrongKey() throws {
-        var initiator = BleInitiator(psk: BleIDs.psk(token: "old"))
-        var responder = BleResponder(psk: BleIDs.psk(token: "new"))
-        #expect(throws: BleLinkError.wrongKey) { try responder.readInitiator(try initiator.start()) }
+        #expect(throws: BleLinkError.wrongKey) {
+            var initiator = BleInitiator(psk: BleIDs.psk(token: "old"))
+            try BleResponder(psk: BleIDs.psk(token: "new")).readInitiator(try initiator.start())
+        }
     }
 
-    @Test func shortHandshakeThrows() {
-        var responder = BleResponder(psk: BleIDs.psk(token: "t"))
-        #expect(throws: BleLinkError.badFrame) { try responder.readInitiator(Data(count: 47)) }
+    @Test(arguments: [47, 49])
+    func handshakeOfAnotherLengthThrows(length: Int) {
+        #expect(throws: BleLinkError.badFrame) { try BleResponder(psk: BleIDs.psk(token: "t")).readInitiator(Data(count: length)) }
     }
 
     @Test func tamperedFrameThrows() throws {
@@ -132,6 +134,20 @@ struct BleLinkTests {
         let frame = try phone.seal(Data("line\n".utf8))
         #expect(try mac.open(frame) == Data("line\n".utf8))
         #expect(throws: BleLinkError.badFrame) { try mac.open(frame) }
+    }
+
+    @Test func outOfOrderFrameThrows() throws {
+        var (phone, mac) = try pair()
+        _ = try phone.seal(Data("first\n".utf8))
+        let second = try phone.seal(Data("second\n".utf8))
+        #expect(throws: BleLinkError.badFrame) { try mac.open(second) }
+    }
+
+    @Test func incompressibleFullChunkRoundTrips() throws {
+        var (phone, mac) = try pair()
+        var generator = SystemRandomNumberGenerator()
+        let chunk = Data((0..<BleTransportKeys.maxChunk).map { _ in UInt8.random(in: 0...255, using: &generator) })
+        #expect(try mac.open(try phone.seal(chunk)) == chunk)
     }
 
     @Test func longLineSplitAcrossChunksRoundTrips() throws {
