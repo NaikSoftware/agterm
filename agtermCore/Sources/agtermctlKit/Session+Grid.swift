@@ -15,7 +15,7 @@ extension Session {
         func validate() throws {
             guard (size == nil) == reset else { throw ValidationError("provide <columns>x<rows> or --reset") }
             if size != nil, parsedSize == nil { throw ValidationError("size must be <columns>x<rows>, such as 80x24") }
-            try validatePaneArgument(pane)
+            try validateGridPane(pane)
         }
 
         private var parsedSize: (columns: Int, rows: Int)? {
@@ -48,7 +48,7 @@ extension Session {
 
         func validate() throws {
             guard lines.count == 1, Int(lines[0]) != nil else { throw ValidationError("provide one whole number of lines") }
-            try validatePaneArgument(pane)
+            try validateGridPane(pane)
         }
 
         func makeRequest() throws -> ControlRequest {
@@ -56,4 +56,10 @@ extension Session {
                            args: options.withWindow(ControlArgs(pane: pane, lines: lines.first.flatMap { Int($0) })))
         }
     }
+}
+
+/// The server refuses scratch for grid and scroll, so the CLI does too.
+private func validateGridPane(_ pane: String?) throws {
+    try validatePaneArgument(pane)
+    if let pane, StatusPane(controlName: pane) == .scratch { throw ValidationError("invalid pane: \(pane)") }
 }

@@ -64,6 +64,7 @@ final class GhosttyCallbacks: @unchecked Sendable {
             guard let view = surfaceView(from: target) else { return true }
             DispatchQueue.main.async {
                 view.reportFontSize()
+                if view.forcedGrid != nil { view.updateMetalLayerSize() }
                 view.onGridChange?()
             }
             return true

@@ -866,6 +866,13 @@ final class ControlServer {
             fontSize: { ($0.addressableSurface as? GhosttySurfaceView)?.currentFontSize() },
             splitFontSize: { ($0.splitSurface as? GhosttySurfaceView)?.currentFontSize() },
             scratchFontSize: { ($0.scratchSurface as? GhosttySurfaceView)?.currentFontSize() },
+            paneGrids: { session in
+                let grid = { (surface: (any TerminalSurface)?) in
+                    (surface as? GhosttySurfaceView)?.forcedGrid.map { ControlGrid(columns: $0.columns, rows: $0.rows) }
+                }
+                let left = grid(session.surface), right = grid(session.splitSurface)
+                return left == nil && right == nil ? nil : ControlPaneGrids(left: left, right: right)
+            },
             // both are app-level facts now that the quick terminal is one detached panel, so every projected
             // window reports the same value for them rather than one of its own.
             quickVisible: { QuickTerminalController.shared.isVisible },

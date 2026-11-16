@@ -168,6 +168,8 @@ extension agtermApp {
                 Button("Duplicate Session") { actions.duplicateActiveSession() }
                     .keyboardShortcut(shortcut(for: .duplicateSession))
                     .disabled(!PaletteCommand.duplicateSession.isEnabled(in: context))
+                Button("Restore Terminal Size") { actions.restoreActiveTerminalSize() }
+                    .disabled(!actions.canRestoreActiveTerminalSize || modalActive)
                 Divider()
                 Button("New Companion") { actions.newCompanionOfActiveSession() }
                     .keyboardShortcut(shortcut(for: .newCompanion))

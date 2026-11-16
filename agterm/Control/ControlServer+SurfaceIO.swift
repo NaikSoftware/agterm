@@ -317,8 +317,47 @@ extension ControlServer {
                     ControlResponse(ok: true, result: ControlResult(text: $0))
                 }
                 ?? ControlResponse(ok: false, error: "failed to read surface buffer")
-            if response.ok { response.result?.pane = read.rawValue }
+            if response.ok {
+                response.result?.pane = read.rawValue
+                let grid = surface.gridSize()
+                response.result?.columns = grid.columns
+                response.result?.rows = grid.rows
+            }
             return response
+        }
+    }
+
+    /// The reply carries the grid libghostty reports after the change, which a caller compares with its own.
+    func setSessionGrid(_ target: String?, window: String?, pane: StatusPane, grid: ControlGrid?) -> ControlResponse {
+        withGridPane(target, window: window, pane: pane) { id, surface in
+            surface.setForcedGrid(grid.map { ($0.columns, $0.rows) })
+            let real = surface.gridSize()
+            return ControlResponse(ok: true, result: ControlResult(id: id, pane: pane.rawValue, columns: real.columns, rows: real.rows))
+        }
+    }
+
+    func scrollSession(_ target: String?, window: String?, pane: StatusPane, lines: Int) -> ControlResponse {
+        withGridPane(target, window: window, pane: pane) { id, surface in
+            surface.scrollNotches(lines)
+            return ControlResponse(ok: true, result: ControlResult(id: id, pane: pane.rawValue, lines: lines))
+        }
+    }
+
+    /// The dispatcher has already refused scratch, so `pane` is left or right.
+    private func withGridPane(_ target: String?, window: String?, pane: StatusPane,
+                              _ body: (String, GhosttySurfaceView) -> ControlResponse) -> ControlResponse {
+        resolver.resolveSession(target, window: window) { store, id in
+            guard let session = store.session(withID: id) else {
+                return ControlResponse(ok: false, error: "session not realized")
+            }
+            if pane == .right, session.splitSurface == nil {
+                return ControlResponse(ok: false, error: "session has no split pane")
+            }
+            guard let surface = (pane == .right ? session.splitSurface : session.surface) as? GhosttySurfaceView,
+                  surface.isRealized else {
+                return ControlResponse(ok: false, error: "session not realized")
+            }
+            return body(id.uuidString, surface)
         }
     }
 

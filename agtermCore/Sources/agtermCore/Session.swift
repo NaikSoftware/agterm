@@ -225,6 +225,9 @@ public final class Session: Identifiable {
     /// paneBackgrounds overrides `backgroundWatermark` per pane.
     @ObservationIgnored public var paneBackgrounds = PaneBackgrounds()
 
+    /// Whether a pane holds a `session.grid` grid apart from its view, which enables Restore Terminal Size.
+    public var hasForcedGrid = false
+
     /// A command to run as the session's process instead of the login shell (kitty's `launch <cmd>`, ghostty's
     /// `command`), set via `session.new --command`. The surface factory reads it once; the session closes when
     /// the command exits. Persisted, so a command session — e.g. an `ssh …` shortcut, which escapes the

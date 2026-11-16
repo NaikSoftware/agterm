@@ -130,6 +130,12 @@ extension WorkspaceSidebar.Coordinator {
                 duplicate.representedObject = node
                 duplicate.isEnabled = !serverBlocked
                 menu.addItem(duplicate)
+                let restore = NSMenuItem(title: "Restore Terminal Size", action: #selector(menuRestoreTerminalSize(_:)),
+                                         keyEquivalent: "")
+                restore.target = self
+                restore.representedObject = node
+                restore.isEnabled = store.session(withID: node.id)?.hasForcedGrid == true
+                menu.addItem(restore)
             }
             if sessionCount == 1 {
                 menu.addItem(.separator())
@@ -338,6 +344,11 @@ extension WorkspaceSidebar.Coordinator {
         guard let node = sender.representedObject as? SidebarNode else { return }
         // this sidebar's window-local store, like Close/Flag — a background window acts on its own row.
         actions.duplicateSession(node.id, in: store)
+    }
+
+    @objc private func menuRestoreTerminalSize(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        actions.restoreTerminalSize(node.id, in: store)
     }
 
     @objc private func menuDuplicateCompanion(_ sender: NSMenuItem) {

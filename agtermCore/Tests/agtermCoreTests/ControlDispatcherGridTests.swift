@@ -104,7 +104,9 @@ struct ControlDispatcherGridTests {
         #expect(plain.paneGrids == nil)
         #expect(!String(decoding: try JSONEncoder().encode(plain), as: UTF8.self).contains("paneGrids"))
         #expect(fitted.paneGrids == forced)
-        #expect(String(decoding: try JSONEncoder().encode(fitted), as: UTF8.self)
+        let sorted = JSONEncoder()
+        sorted.outputFormatting = .sortedKeys
+        #expect(String(decoding: try sorted.encode(fitted), as: UTF8.self)
             .contains("\"paneGrids\":{\"right\":{\"columns\":40,\"rows\":30}}"))
     }
 }

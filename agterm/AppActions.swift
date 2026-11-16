@@ -211,6 +211,24 @@ final class AppActions {
         revealSessionInFinder(id, in: store)
     }
 
+    var canRestoreActiveTerminalSize: Bool {
+        guard let store, let id = store.selectedSessionID else { return false }
+        return store.session(withID: id)?.hasForcedGrid == true
+    }
+
+    func restoreActiveTerminalSize() {
+        guard let store, let id = store.selectedSessionID else { return }
+        restoreTerminalSize(id, in: store)
+    }
+
+    /// Hands every pane of the session back to its view, undoing `session.grid`.
+    func restoreTerminalSize(_ id: UUID, in store: AppStore) {
+        guard let session = store.session(withID: id) else { return }
+        for surface in [session.surface, session.splitSurface] {
+            (surface as? GhosttySurfaceView)?.setForcedGrid(nil)
+        }
+    }
+
     var canRevealActiveSessionInFinder: Bool {
         guard let store, let id = store.selectedSessionID else { return false }
         return canRevealSessionInFinder(id, in: store)

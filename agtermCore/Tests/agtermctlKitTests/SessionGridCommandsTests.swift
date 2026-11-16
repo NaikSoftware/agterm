@@ -62,4 +62,9 @@ struct SessionGridCommandsTests {
         let expected = ControlRequest(cmd: .sessionScroll, target: "active", args: ControlArgs(pane: "split", lines: 5))
         #expect(try request(["session", "scroll", "5", "--pane", "split"]) == expected)
     }
+
+    @Test(arguments: [["grid", "80x24"], ["grid", "--reset"], ["scroll", "3"]])
+    func gridAndScrollRefuseTheScratchPane(argv: [String]) {
+        #expect(validationMessage(["session"] + argv + ["--pane", "scratch"]) == "invalid pane: scratch")
+    }
 }
