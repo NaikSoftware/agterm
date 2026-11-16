@@ -36,6 +36,8 @@ struct Mobile: ParsableCommand {
         var noQR = false
         @Option(name: .long, help: "Override the control socket path requests are forwarded to.")
         var socket: String?
+        @Flag(inversion: .prefixedNo, help: "Offer Bluetooth (BLE L2CAP) to agterm Mobile.")
+        var bluetooth = true
 
         func validate() throws {
             if !PhoneDesktopState.portRange.contains(Int(port)) { throw ValidationError(PhoneDesktopState.portError) }
@@ -66,10 +68,15 @@ struct Mobile: ParsableCommand {
                 throw ExitCode.failure
             }
 
-            var hosts = host.map { [$0] } ?? MobilePairing.lanAddresses()
-            if hosts.isEmpty { hosts = ["127.0.0.1"] }
+            let radio = bluetooth ? MobileBluetooth(relay: relay, token: token, status: Self.bluetoothStatus) : nil
+            if let radio { radio.start() } else { Self.bluetoothStatus("off (disabled)") }
+            let lan: [String?] = host.map { [$0] } ?? MobilePairing.lanAddresses()
+            // without a LAN address a Bluetooth phone needs no host, and a TLS-only one can still reach this Mac locally
+            let hosts = lan.isEmpty ? [bluetooth ? nil : "127.0.0.1"] : lan
             let name = MobilePairing.hostName()
-            let links = hosts.map { MobilePairing.pairLink(host: $0, port: listening, token: token, fingerprint: fingerprint, name: name) }
+            let links = hosts.map {
+                MobilePairing.pairLink(host: $0, port: listening, token: token, fingerprint: fingerprint, name: name, bluetooth: bluetooth)
+            }
             if !noQR, let matrix = try? MobilePairing.qrMatrix(links[0]) {
                 MobilePairing.qrRows(matrix).forEach { print($0) }
             }
@@ -105,7 +112,11 @@ struct Mobile: ParsableCommand {
             }
             watch.resume()
             sources.append(watch)
-            withExtendedLifetime((relay, sources)) { dispatchMain() }
+            withExtendedLifetime((relay, radio, sources)) { dispatchMain() }
+        }
+
+        @Sendable static func bluetoothStatus(_ status: String) {
+            FileHandle.standardError.write(Data("agtermctl: bluetooth: \(status)\n".utf8))
         }
     }
 
@@ -253,13 +264,14 @@ enum MobilePairing {
         return diff == 0
     }
 
-    /// `agterm://pair?h=HOST&p=PORT&t=TOKEN&f=SHA256HEX&n=NAME`. Only unreserved characters pass unencoded:
-    /// the phone decodes a bare `+` as a space.
-    static func pairLink(host: String, port: UInt16, token: String, fingerprint: String, name: String) -> String {
+    /// `agterm://pair?h=HOST&p=PORT&t=TOKEN&f=SHA256HEX&n=NAME[&b=1]`; a nil host leaves out `h` and `p`. Only unreserved
+    /// characters pass unencoded: the phone decodes a bare `+` as a space.
+    static func pairLink(host: String?, port: UInt16, token: String, fingerprint: String, name: String, bluetooth: Bool = false) -> String {
         var unreserved = CharacterSet.alphanumerics.intersection(.init(charactersIn: Unicode.Scalar(0)..<Unicode.Scalar(128)))
         unreserved.insert(charactersIn: "-._~")
         let encode = { (value: String) in value.addingPercentEncoding(withAllowedCharacters: unreserved) ?? "" }
-        return "agterm://pair?h=\(encode(host))&p=\(port)&t=\(encode(token))&f=\(encode(fingerprint))&n=\(encode(name))"
+        let address = host.map { "h=\(encode($0))&p=\(port)&" } ?? ""
+        return "agterm://pair?\(address)t=\(encode(token))&f=\(encode(fingerprint))&n=\(encode(name))" + (bluetooth ? "&b=1" : "")
     }
 
     /// The short Bonjour name ("Nicks-MacBook"), which is what the phone lists the pairing under.
@@ -345,7 +357,7 @@ final class MobileRelay: @unchecked Sendable {
     private let parameters: NWParameters
     private let port: UInt16
     private let bind: String?
-    private let settings: PhoneSession.Settings
+    let settings: PhoneSession.Settings
     private let releaseTimeout: TimeInterval
     private var listener: NWListener?
     private var phones: [ObjectIdentifier: PhoneSession] = [:]
@@ -428,11 +440,9 @@ final class MobileRelay: @unchecked Sendable {
         let waiting = phones.values.filter { !$0.authenticated }
         if waiting.count >= maxUnauthenticated, let oldest = waiting.min(by: { $0.order < $1.order }) { oldest.close() }
         accepted += 1
-        let ended = SessionKey()
         let phone = PhoneSession(connection, order: accepted, queue: queue, settings: settings) { [weak self] in
-            if let key = ended.key { self?.phones[key] = nil }
+            self?.phones[ObjectIdentifier($0)] = nil
         }
-        ended.key = ObjectIdentifier(phone)
         phones[ObjectIdentifier(phone)] = phone
         phone.start()
     }
@@ -459,8 +469,6 @@ final class MobileRelay: @unchecked Sendable {
         return String(text.prefix { $0 != "%" })
     }
 }
-
-private final class SessionKey: @unchecked Sendable { var key: ObjectIdentifier? }
 
 /// A TLS phone, started on the relay queue at accept so every callback lands there.
 private final class TLSPhoneConnection: PhoneTransportConnection, @unchecked Sendable {

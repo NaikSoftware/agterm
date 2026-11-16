@@ -5,11 +5,11 @@ import agtermCore
 /// One phone's byte stream, whatever carries it. Callbacks and completions run on the relay's queue, and every
 /// method is called there, so a connection may deliver as soon as it is created on that queue.
 protocol PhoneTransportConnection: AnyObject {
-    /// Names the phone in relay log lines: the IP for TLS.
+    /// Names the phone in relay log lines: the IP for TLS, `bt:<4 hex>` for Bluetooth.
     var peerLabel: String { get }
     /// `completion` runs once the bytes are handed off or the connection failed.
     func send(_ data: Data, completion: @escaping () -> Void)
-    /// Ends the connection at once; nothing pending is flushed.
+    /// Ends the connection; a send whose completion ran still reaches the peer, so a transport flushes before closing.
     func close()
     var onReceive: ((Data) -> Void)? { get set }
     /// The peer left or the transport failed; may come more than once, and after `close()`.
@@ -42,7 +42,7 @@ final class PhoneSession: @unchecked Sendable {
     private let connection: any PhoneTransportConnection
     private let queue: DispatchQueue
     private let settings: Settings
-    private let onEnd: () -> Void
+    private let onEnd: (PhoneSession) -> Void
     private var buffer = Data()
     private var token: String?
     private var closing = false
@@ -55,7 +55,7 @@ final class PhoneSession: @unchecked Sendable {
 
     /// `onEnd` runs once, on `queue`, when the session closes.
     init(_ connection: any PhoneTransportConnection, order: Int, queue: DispatchQueue, settings: Settings,
-         onEnd: @escaping () -> Void) {
+         onEnd: @escaping (PhoneSession) -> Void) {
         self.connection = connection
         self.order = order
         self.queue = queue
@@ -66,8 +66,7 @@ final class PhoneSession: @unchecked Sendable {
     /// Call on `queue`.
     func start() {
         connection.onReceive = { [weak self] in self?.receive($0) }
-        // after a refusal the refusal's own send completion closes
-        connection.onClose = { [weak self] in if self?.closing == false { self?.close() } }
+        connection.onClose = { [weak self] in self?.close() }
         // counted from accept, so a peer that never finishes the transport handshake gives its slot back too
         queue.asyncAfter(deadline: .now() + settings.authTimeout) { [weak self] in
             if let self, token == nil { close() }
@@ -99,7 +98,7 @@ final class PhoneSession: @unchecked Sendable {
         connection.onClose = nil
         connection.close()
         releaseGrids()
-        onEnd()
+        onEnd(self)
     }
 
     private func receive(_ data: Data) {

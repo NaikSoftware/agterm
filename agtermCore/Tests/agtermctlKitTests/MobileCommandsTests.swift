@@ -239,7 +239,7 @@ struct MobileCommandsTests {
             err = Pipe()
             process.executableURL = tool
             process.arguments = ["mobile", "serve", "--port", String(Int.random(in: 20000...32767)), "--bind", "127.0.0.1", "--no-qr",
-                                 "--socket", server.path]
+                                 "--no-bluetooth", "--socket", server.path]
             process.environment = ProcessInfo.processInfo.environment.merging(
                 ["AGTERM_STATE_DIR": (dir as NSString).deletingLastPathComponent]) { $1 }
             let out = Pipe(), lines = printed
@@ -266,6 +266,8 @@ struct MobileCommandsTests {
         #expect(process.terminationStatus == 1)
         let stderr = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         #expect(stderr.contains("agtermctl: \(PhoneRelayLine.pairingReset)\n"))
+        #expect(stderr.contains("agtermctl: bluetooth: off (disabled)\n"))
+        #expect(!printed.all().joined().contains("b=1"))
     }
 
     @Test func anInMemoryPhoneAuthenticatesForwardsAndReleasesItsGridOnClose() throws {
@@ -296,7 +298,210 @@ struct MobileCommandsTests {
     }
 }
 
+struct MobileBluetoothTests {
+    @Test func pairLinkOffersBluetoothAndOmitsAMissingHost() {
+        let link = MobilePairing.pairLink(host: "10.0.0.2", port: 8765, token: "T", fingerprint: "ab", name: "Mac", bluetooth: true)
+        #expect(link == "agterm://pair?h=10.0.0.2&p=8765&t=T&f=ab&n=Mac&b=1")
+        let radioOnly = MobilePairing.pairLink(host: nil, port: 8765, token: "T", fingerprint: "ab", name: "Mac", bluetooth: true)
+        #expect(radioOnly == "agterm://pair?t=T&f=ab&n=Mac&b=1")
+        #expect(!MobilePairing.pairLink(host: "h", port: 1, token: "T", fingerprint: "ab", name: "Mac", bluetooth: false).contains("b="))
+    }
+
+    @Test func aPairedPhoneHandshakesForwardsAndGivesBackItsGrid() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let phone = try BlePhone(fixture)
+        try phone.handshake(token: fixture.token)
+        phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(phone.readJSON()?["ok"] as? Bool == true)
+        phone.send(#"{"cmd":"session.grid","target":"S1","args":{"columns":40,"rows":20},"id":2}"#)
+        #expect(phone.readJSON()?["id"] as? Int == 2)
+        let before = fixture.server.requests().count
+        phone.close()
+        let right = #"{"args":{"pane":"right","reset":true},"cmd":"session.grid","target":"S1"}"#
+        #expect(fixture.server.waitFor(right, after: before))
+        let label = "bt:" + phone.message1.prefix(2).map { String(format: "%02x", $0) }.joined()
+        #expect(fixture.logged().contains("phone connected from \(label)"))
+        #expect(fixture.waitLogged("phone disconnected from \(label)"))
+    }
+
+    @Test func aWrongKeyGetsTheRejectFrameBeforeTheClose() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let phone = try BlePhone(fixture)
+        try phone.sendMessage1(token: String(repeating: "z", count: 43))
+        #expect(phone.readFrame() == Data([0x01]))
+        #expect(phone.waitClosed())
+    }
+
+    @Test func aPhoneOverTheCapGetsBusy() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let radio = MobileBluetooth(relay: fixture.relay, token: fixture.token, maxPhones: 1, status: { _ in })
+        let first = try BlePhone(fixture, radio)
+        try first.handshake(token: fixture.token)
+        let second = try BlePhone(fixture, radio)
+        try second.sendMessage1(token: fixture.token)
+        #expect(second.readFrame() == Data([0x02]))
+        #expect(second.waitClosed())
+        first.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(first.readJSON()?["ok"] as? Bool == true)
+    }
+
+    @Test func theUnauthorizedAnswerArrivesBeforeTheClose() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let phone = try BlePhone(fixture)
+        try phone.handshake(token: fixture.token)
+        phone.send(#"{"auth":"\#(String(repeating: "z", count: 43))","id":3}"#)
+        #expect(phone.readJSON()?["error"] as? String == "unauthorized")
+        #expect(phone.waitClosed())
+    }
+
+    @Test func aLongLineCrossesFramesIntactBothWays() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let phone = try BlePhone(fixture)
+        try phone.handshake(token: fixture.token)
+        phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(phone.readJSON()?["ok"] as? Bool == true)
+        // random letters barely deflate, so the answer outruns the socket buffer
+        let alphabet = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        let cmd = String((0..<20000).map { _ in alphabet.randomElement() ?? "a" })
+        phone.send(#"{"cmd":"\#(cmd)","id":2}"#)
+        let answer = try #require(phone.readJSON())
+        #expect((answer["result"] as? [String: Any])?["echo"] as? String == cmd)
+        #expect(phone.framesOpened > 5)
+    }
+
+    @Test func aTamperedFrameClosesWithoutForwarding() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let phone = try BlePhone(fixture)
+        try phone.handshake(token: fixture.token)
+        phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(phone.readJSON()?["ok"] as? Bool == true)
+        let before = fixture.server.requests().count
+        var frame = try phone.seal(#"{"cmd":"tree","id":2}"# + "\n")
+        frame[frame.count - 1] ^= 0x01
+        phone.write(BleFramer.frame(frame))
+        #expect(phone.waitClosed())
+        #expect(fixture.server.requests().count == before)
+    }
+
+    @Test func aHeldLockLeavesBluetoothOffForThisRelay() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let held = open(fixture.mobileDir + "/bluetooth.lock", O_RDWR | O_CREAT, 0o600)
+        defer { close(held) }
+        try #require(flock(held, LOCK_EX | LOCK_NB) == 0)
+        let lines = LogLines()
+        // never reaches CoreBluetooth: the lock is taken first
+        MobileBluetooth(relay: fixture.relay, token: fixture.token, status: { lines.append($0) }).start()
+        #expect(lines.all() == ["off (in use by another relay)"])
+    }
+}
+
 // MARK: - fixtures
+
+/// The phone's end of an L2CAP channel: a socket pair whose other end the relay reads as streams.
+private final class BlePhone: @unchecked Sendable {
+    private(set) var message1 = Data()
+    private(set) var framesOpened = 0
+    private let fd: Int32
+    private var framer = BleFramer()
+    private var frames: [Data] = []
+    private var keys: BleTransportKeys?
+    private var lines = Data()
+    private var closed = false
+    private let radio: MobileBluetooth
+
+    init(_ fixture: MobileFixture, _ radio: MobileBluetooth? = nil) throws {
+        let radio = radio ?? MobileBluetooth(relay: fixture.relay, token: fixture.token, status: { _ in })
+        self.radio = radio
+        var fds: [Int32] = [0, 0]
+        try #require(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0)
+        fd = fds[1]
+        var on: Int32 = 1
+        for end in fds { setsockopt(end, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size)) }
+        var timeout = timeval(tv_sec: 30, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        var input: Unmanaged<CFReadStream>?, output: Unmanaged<CFWriteStream>?
+        CFStreamCreatePairWithSocket(nil, fds[0], &input, &output)
+        let read = try #require(input).takeRetainedValue(), write = try #require(output).takeRetainedValue()
+        CFReadStreamSetProperty(read, CFStreamPropertyKey(kCFStreamPropertyShouldCloseNativeSocket), kCFBooleanTrue)
+        fixture.relay.queue.sync { radio.accept(input: read as InputStream, output: write as OutputStream, holding: nil) }
+    }
+
+    func sendMessage1(token: String) throws {
+        var initiator = BleInitiator(psk: BleIDs.psk(token: token))
+        message1 = try initiator.start()
+        write(BleFramer.frame(message1))
+    }
+
+    func handshake(token: String) throws {
+        var initiator = BleInitiator(psk: BleIDs.psk(token: token))
+        message1 = try initiator.start()
+        write(BleFramer.frame(message1))
+        keys = try initiator.finish(try #require(readFrame()))
+    }
+
+    func seal(_ text: String) throws -> Data {
+        var sealing = try #require(keys)
+        defer { keys = sealing }
+        return try sealing.seal(Data(text.utf8))
+    }
+
+    func send(_ text: String) {
+        let data = Data((text + "\n").utf8)
+        for start in stride(from: 0, to: data.count, by: BleTransportKeys.maxChunk) {
+            let sealed = try? keys?.seal(data.subdata(in: start..<min(start + BleTransportKeys.maxChunk, data.count)))
+            write(BleFramer.frame(sealed ?? Data()))
+        }
+    }
+
+    func write(_ data: Data) {
+        _ = StreamBridge.writeAll(fd, data)
+    }
+
+    /// The next frame body, or nil at end of stream or after the read timeout.
+    func readFrame() -> Data? {
+        var bytes = [UInt8](repeating: 0, count: 4096)
+        while frames.isEmpty {
+            let count = read(fd, &bytes, bytes.count)
+            guard count > 0 else { return nil }
+            frames += framer.push(Data(bytes[..<count]))
+        }
+        return frames.removeFirst()
+    }
+
+    func readJSON() -> [String: Any]? {
+        while true {
+            if let newline = lines.firstIndex(of: 0x0A) {
+                let line = Data(lines[lines.startIndex..<newline])
+                lines = Data(lines[(newline + 1)...])
+                return (try? JSONSerialization.jsonObject(with: line)) as? [String: Any]
+            }
+            guard let frame = readFrame(), let plain = try? keys?.open(frame) else { return nil }
+            framesOpened += 1
+            lines.append(plain)
+        }
+    }
+
+    /// True once the relay closed its end; a frame still unread counts against it.
+    func waitClosed() -> Bool {
+        var byte: UInt8 = 0
+        return frames.isEmpty && read(fd, &byte, 1) == 0
+    }
+
+    func close() {
+        guard !closed else { return }
+        closed = true
+        Darwin.close(fd)
+    }
+
+    deinit { close() }
+}
 
 private final class MobileFixture: @unchecked Sendable {
     let mobileDir: String
@@ -323,6 +528,15 @@ private final class MobileFixture: @unchecked Sendable {
     }
 
     func logged() -> [String] { lines.all() }
+
+    func waitLogged(_ line: String) -> Bool {
+        let deadline = Date().addingTimeInterval(30)
+        while !logged().contains(line) {
+            if Date() > deadline { return false }
+            usleep(20_000)
+        }
+        return true
+    }
 
     func connect() throws -> TLSLineClient { try TLSLineClient(port: port) }
 
