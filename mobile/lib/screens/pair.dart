@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../client.dart';
+import '../model.dart';
 import '../theme.dart';
 
 class PairScreen extends StatefulWidget {
@@ -24,13 +25,14 @@ class _PairScreenState extends State<PairScreen> {
     if (p == null) return setState(() => error = 'That is not a pairing link. It starts with agterm://pair?');
     setState(() => (busy = true, error = null));
     try {
-      (await Connection.open(p)).close(); // prove the token and certificate before saving them
+      (await Connection.open(p, preferBluetooth: BluetoothPref.prefer)).close(); // prove the token and certificate before saving them
       await widget.onPaired(p);
       if (mounted && widget.canGoBack) Navigator.of(context).pop();
     } on AgtermError catch (e) {
       setState(() => error = e.message);
     } catch (_) {
-      setState(() => error = 'Cannot reach ${p.host}:${p.port}. Check that phone access is on (Settings ▸ Connect a Phone…) and the phone is on the same network.');
+      final where = [if (p.host != null) 'on the same network', if (p.bluetooth) 'near the computer with Bluetooth on'].join(' or ');
+      setState(() => error = 'Cannot reach ${p.name}. Check that phone access is on (Settings ▸ Connect a Phone…) and the phone is $where.');
     } finally {
       if (mounted) setState(() => busy = false);
     }

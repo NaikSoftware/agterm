@@ -38,7 +38,7 @@ class Computers extends ChangeNotifier {
   }
 
   Future<void> add(Pairing p) async {
-    all = [p, ...all.where((x) => x.key != p.key && x.fingerprint != p.fingerprint)];
+    all = [p, ...all.where((x) => x.key != p.key && (x.host == null || x.address != p.address))];
     await PairingStore.save(all);
     open(p);
   }
@@ -79,6 +79,7 @@ class _AgtermAppState extends State<AgtermApp> {
     } catch (_) {
       // no notifications: the app works without background alerts
     }
+    await BluetoothPref.load().catchError((_) {});
     await computers.load();
     if (launched != null) openSession(launched);
   }

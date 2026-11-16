@@ -76,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 minTileHeight: 56,
                 leading: Icon(p.key == m.pairing.key ? Icons.radio_button_checked : Icons.radio_button_off, color: C.accent),
                 title: Text(p.name),
-                subtitle: Text('${p.host}:${p.port}', style: const TextStyle(fontFamily: mono, fontSize: 12, color: C.muted)),
+                subtitle: Text([if (p.host != null) p.address, if (p.bluetooth) 'Bluetooth'].join(' · '), style: const TextStyle(fontFamily: mono, fontSize: 12, color: C.muted)),
                 trailing: IconButton(
                   tooltip: 'Forget',
                   icon: const Icon(Icons.delete_outline),
@@ -167,6 +167,24 @@ class _HomeScreenState extends State<HomeScreen> {
                           setSheet(() {});
                         },
                       )),
+              StatefulBuilder(
+                  builder: (context, setSheet) => SwitchListTile(
+                        key: const Key('preferBluetooth'),
+                        secondary: const Icon(Icons.bluetooth, color: C.muted),
+                        title: const Text('Prefer Bluetooth'),
+                        subtitle: Text(
+                            m.pairing.bluetooth && m.pairing.host != null
+                                ? 'Try Bluetooth before Wi-Fi'
+                                : 'This pairing has one way to connect',
+                            style: const TextStyle(fontSize: 12, color: C.muted)),
+                        value: BluetoothPref.prefer,
+                        onChanged: m.pairing.bluetooth && m.pairing.host != null
+                            ? (v) async {
+                                await BluetoothPref.set(v);
+                                setSheet(() {});
+                              }
+                            : null,
+                      )),
               ListTile(
                   minTileHeight: 52,
                   leading: const Icon(Icons.computer, color: C.muted),
@@ -246,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _header(List<Session> all) {
     final (dot, line) = switch (m.state) {
-      LinkState.connected => (C.completed, 'Connected · ${m.pairing.host}'),
+      LinkState.connected => (C.completed, 'Connected · ${m.via == 'BT' ? 'Bluetooth' : m.pairing.host}'),
       LinkState.connecting => (C.blocked, 'Connecting…'),
       LinkState.offline => (C.danger, 'Offline'),
     };
@@ -336,7 +354,7 @@ class _HomeScreenState extends State<HomeScreen> {
           else
             const Icon(Icons.cloud_off, color: C.danger, size: 20),
           const SizedBox(width: 12),
-          Expanded(child: Text(m.error ?? 'Connecting to ${m.pairing.host}:${m.pairing.port}…', style: const TextStyle(color: C.muted, height: 1.4))),
+          Expanded(child: Text(m.error ?? 'Connecting to ${m.pairing.host == null ? m.pairing.name : m.pairing.address}…', style: const TextStyle(color: C.muted, height: 1.4))),
         ]),
       );
 

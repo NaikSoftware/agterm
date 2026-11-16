@@ -199,6 +199,14 @@ class _SessionScreenState extends State<SessionScreen> {
               style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
         ]),
         actions: [
+          if (m.state == LinkState.connected && m.via.isNotEmpty)
+            Container(
+              key: const Key('via'),
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(border: Border.all(color: C.line), borderRadius: BorderRadius.circular(6)),
+              child: Text(m.via, style: const TextStyle(fontSize: 11, color: C.muted, fontWeight: FontWeight.w600)),
+            ),
           StatusChip(s.status, blink: s.blink),
           IconButton(
             key: const Key('sessionMenu'),
