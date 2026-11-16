@@ -268,6 +268,24 @@ struct MobileCommandsTests {
         #expect(stderr.contains("agtermctl: \(PhoneRelayLine.pairingReset)\n"))
     }
 
+    @Test func anInMemoryPhoneAuthenticatesForwardsAndReleasesItsGridOnClose() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let phone = MemoryPhone(queue: fixture.relay.queue)
+        fixture.relay.queue.sync { fixture.relay.accept(phone) }
+        phone.deliver(#"{"auth":"\#(fixture.token)","id":1}"# + "\n")
+        #expect(phone.readJSON()?["ok"] as? Bool == true)
+        phone.deliver(#"{"cmd":"session.grid","target":"S1","args":{"columns":40,"rows":20},"id":2}"# + "\n")
+        let answer = try #require(phone.readJSON())
+        #expect(answer["id"] as? Int == 2 && (answer["result"] as? [String: Any])?["echo"] as? String == "session.grid")
+        let before = fixture.server.requests().count
+        phone.peerLeft()
+        let right = #"{"args":{"pane":"right","reset":true},"cmd":"session.grid","target":"S1"}"#
+        #expect(fixture.server.waitFor(right, after: before))
+        #expect(fixture.logged().contains("phone disconnected from mem:1"))
+        #expect(phone.closed())
+    }
+
     @Test func secondRelayOnTheSamePortFails() throws {
         let fixture = try MobileFixture()
         defer { fixture.stop() }
@@ -422,6 +440,42 @@ private final class TLSLineClient: @unchecked Sendable {
             if changed.wait(timeout: .now() + deadline.timeIntervalSinceNow) == .timedOut { return false }
         }
         return true
+    }
+}
+
+/// A phone connection with no transport: the test feeds bytes in on the relay queue and reads the lines sent back.
+private final class MemoryPhone: PhoneTransportConnection, @unchecked Sendable {
+    let peerLabel = "mem:1"
+    var onReceive: ((Data) -> Void)?
+    var onClose: (() -> Void)?
+    private let queue: DispatchQueue
+    private let lock = NSLock()
+    private let changed = DispatchSemaphore(value: 0)
+    private var sent: [Data] = []
+    private var isClosed = false
+
+    init(queue: DispatchQueue) { self.queue = queue }
+
+    func deliver(_ text: String) { queue.async { self.onReceive?(Data(text.utf8)) } }
+    func peerLeft() { queue.async { self.onClose?() } }
+    func closed() -> Bool { lock.withLock { isClosed } }
+
+    func send(_ data: Data, completion: @escaping () -> Void) {
+        lock.withLock { sent.append(data) }
+        changed.signal()
+        completion()
+    }
+
+    func close() { lock.withLock { isClosed = true } }
+
+    func readJSON(timeout: TimeInterval = 30) -> [String: Any]? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if let line = lock.withLock({ sent.isEmpty ? nil : sent.removeFirst() }) {
+                return (try? JSONSerialization.jsonObject(with: line)) as? [String: Any]
+            }
+            if changed.wait(timeout: .now() + deadline.timeIntervalSinceNow) == .timedOut { return nil }
+        }
     }
 }
 
