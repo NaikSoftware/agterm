@@ -22,7 +22,7 @@ struct ConnectPhoneView: View {
                 .frame(maxWidth: .infinity)
             Form {
                 HStack {
-                    TextField("Address", text: $hostField, prompt: Text(relay.offeredHosts.first ?? "Best guess"))
+                    TextField("Address", text: $hostField, prompt: Text(relay.offeredHosts.first ?? (listening ? "No Wi-Fi address: Bluetooth only" : "Best guess")))
                         .onChange(of: hostField) { _, host in relay.setHost(host) }
                     Menu {
                         ForEach(relay.offeredHosts, id: \.self) { host in
@@ -39,6 +39,17 @@ struct ConnectPhoneView: View {
                     .onSubmit { commitPort() }
                     .onChange(of: portFocused) { _, focused in if !focused { commitPort() } }
                     .frame(width: 160)
+                LabeledContent("Bluetooth") {
+                    HStack {
+                        Text(bluetooth)
+                            .textSelection(.enabled)
+                        if relay.bluetooth == "unauthorized" {
+                            Button("Open Bluetooth Settings") {
+                                NSWorkspace.shared.open(Self.bluetoothSettings)
+                            }
+                        }
+                    }
+                }
             }
             HStack {
                 Text(status)
@@ -109,6 +120,13 @@ struct ConnectPhoneView: View {
         let last = relay.lastEvent.map { "Last: \($0)." } ?? ""
         return listening ? "Listening on port \(relay.state.port). " + last : last
     }
+
+    private var bluetooth: String {
+        if let value = relay.bluetooth { return PhoneRelayLine.bluetoothText(value) }
+        return relay.state.on && relay.error == nil ? "Starting…" : "Off"
+    }
+
+    private static let bluetoothSettings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth")!
 
     private func commitPort() {
         guard let port = Int(portField.trimmingCharacters(in: .whitespaces)), PhoneDesktopState.portRange.contains(port) else {

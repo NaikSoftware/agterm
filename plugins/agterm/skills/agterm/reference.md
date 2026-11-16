@@ -2717,11 +2717,11 @@ Connect a Phone… window of the running app: `phone.status`, `phone.enable` (`m
 `phone.port` (1024...65535), `phone.host` (a host, or `auto`), `phone.revoke`. App-wide: a target or
 `--window` is refused. agterm-server and HTML pages refuse all five.
 
-- Result `result.phone`: `on`, `listening`, `port`, `host` (effective), `hosts?`, `lastEvent?`, `error?`
+- Result `result.phone`: `on`, `listening`, `port`, `host` (effective), `hosts?`, `lastEvent?`, `error?`, `bluetooth?` (`advertising|off|unauthorized|unsupported|busy|disabled`)
   and `link?`. Only `phone.status` carries `link` (it holds the token); `phone link` prints it, or the QR then
   it with `--qr`, and exits 1 while the relay is off or not listening.
 - Restart timing, the 10 s rule and the `link` rule: see commands.html#phone, which owns them.
-- Read-back: `tree` top-level `phone` is `{on, listening, port, host}`, no link.
+- Read-back: `tree` top-level `phone` is `{on, listening, port, host, bluetooth?}`, no link.
 - Palette and Session menu: Restore Terminal Size resets both panes' grids.
 
 ## version

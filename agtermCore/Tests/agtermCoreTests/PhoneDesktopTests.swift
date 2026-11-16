@@ -64,4 +64,16 @@ struct PhoneDesktopTests {
                 == .other("cannot listen on *:8765: Address already in use"))
         #expect(PhoneRelayLine.stderr("   ") == nil)
     }
+
+    @Test func bluetoothLinesMapToTheStatusValue() {
+        let lines = ["advertising": "advertising", "off (powered off)": "off", "off (unauthorized)": "unauthorized",
+                     "off (unsupported)": "unsupported", "off (in use by another relay)": "busy", "off (disabled)": "disabled"]
+        for (line, value) in lines {
+            #expect(PhoneRelayLine.stderr("agtermctl: bluetooth: \(line)") == .bluetooth(value))
+        }
+        #expect(PhoneRelayLine.stderr("agtermctl: bluetooth: off (gremlins)") == .other("bluetooth: off (gremlins)"))
+        #expect(PhoneRelayLine.bluetoothText("advertising") == "Advertising")
+        #expect(PhoneRelayLine.bluetoothText("busy") == "Off: in use by another relay")
+        #expect(PhoneRelayLine.bluetoothText("off") == "Off: powered off")
+    }
 }

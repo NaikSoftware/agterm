@@ -77,6 +77,18 @@ public enum PhoneRelayLine: Equatable {
     /// A connection event worth showing, or any other stderr line (the last one is the error when the relay exits).
     case event(String)
     case other(String)
+    /// `bluetooth: advertising | off (<reason>)`, as the `phone.status` value.
+    case bluetooth(String)
+
+    /// Serve's `off (<reason>)` reasons and the value each one reads back as.
+    public static let bluetoothReasons = ["powered off": "off", "unauthorized": "unauthorized", "unsupported": "unsupported",
+                                          "in use by another relay": "busy", "disabled": "disabled"]
+
+    /// The window's text for a `bluetooth` value.
+    public static func bluetoothText(_ value: String) -> String {
+        if value == "advertising" { return "Advertising" }
+        return "Off: " + (bluetoothReasons.first { $0.value == value }?.key ?? value)
+    }
 
     /// What serve exits with when `mobile reset` replaced the token it printed; the window restarts it once.
     public static let pairingReset = "the pairing was reset; restart to show the new code"
@@ -90,6 +102,11 @@ public enum PhoneRelayLine: Equatable {
         var line = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return nil }
         if line.hasPrefix("agtermctl: ") { line.removeFirst("agtermctl: ".count) }
+        if line == "bluetooth: advertising" { return .bluetooth("advertising") }
+        if line.hasPrefix("bluetooth: off ("), line.hasSuffix(")"),
+           let value = bluetoothReasons[String(line.dropFirst("bluetooth: off (".count).dropLast())] {
+            return .bluetooth(value)
+        }
         return isEvent(line) ? .event(line) : .other(line)
     }
 

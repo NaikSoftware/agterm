@@ -359,6 +359,7 @@ struct SocketClient {
         var lines = ["on: \(phone.on ? "yes" : "no")\(state)"]
         if !phone.host.isEmpty { lines.append("host: \(phone.host)") }
         if let hosts = phone.hosts, !hosts.isEmpty { lines.append("hosts: \(hosts.joined(separator: ", "))") }
+        if let bluetooth = phone.bluetooth { lines.append("bluetooth: \(bluetooth)") }
         if let last = phone.lastEvent { lines.append("last: \(last)") }
         if let error = phone.error { lines.append("error: \(error)") }
         if let link = phone.link { lines.append("link: \(link)") }

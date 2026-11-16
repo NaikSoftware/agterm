@@ -41,7 +41,7 @@
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Command-line tools you run inside agterm (for example, a system-audio capture or transcription tool) request permission to record system audio through agterm.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Command-line tools you run inside agterm request Bluetooth access through agterm.</string>
+	<string>agterm uses Bluetooth to let agterm Mobile on your phone connect without Wi-Fi. Command-line tools you run inside agterm request Bluetooth access through agterm too.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Command-line tools you run inside agterm request access to your calendars through agterm.</string>
 	<key>NSCalendarsUsageDescription</key>

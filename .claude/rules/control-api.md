@@ -227,6 +227,8 @@ over injectable effects, and no archive bytes are sent to the host until the tar
 protocol command. `phone.*` is the protocol face of the app's `PhoneRelay`. agterm-server leaves `session.grid`,
 `session.scroll` and all `phone.*` unserved, a page cannot send `phone.*` (`HtmlBridge` refuses them), and the relay
 refuses `phone.*` from a phone. `site/commands.html#phone` owns the rest.
+Debug builds are ad-hoc signed with a bare `cdhash` requirement,
+so each rebuild asks for Bluetooth again at the relay's first start.
 
 `session wait` is not a fourth exemption but a client-side composite, like `overlay open --block`: it
 opens the socket only for existing reads (`events.read`, `window.list`, `tree`), so there is no
