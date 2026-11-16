@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../model.dart';
+import '../notice.dart';
 import '../theme.dart';
 import 'new_session.dart';
 
@@ -46,7 +47,7 @@ Future<void> reportOf(BuildContext context, Future<String?> result) async {
 }
 
 void report(BuildContext context, String? error) {
-  if (error != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  if (error != null && context.mounted) showNotice(context, error);
 }
 
 Widget _item(IconData icon, String label, VoidCallback onTap, {Color? color, Key? key}) => ListTile(
