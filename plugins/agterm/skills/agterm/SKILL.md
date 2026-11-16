@@ -3,13 +3,13 @@ name: agterm
 description: >
   Drive agterm, a macOS terminal, via agtermctl. Use in an agterm session:
   manage sessions, companions and workspaces; split panes; toggle the scratch or file panel; run, hide or show overlays;
-  read exit status; show HTML pages, interactive too, URLs or dev servers in an overlay with saved logins or as a
+  read exit status; show HTML pages, URLs or dev servers in an overlay or as a
   page session row;
-  post a HUD/caption/notification/sidebar activity line; message panes; show a picker, question or input dialog; show images/markdown/code; type
+  post a HUD/notification/sidebar activity line; message panes; show a picker, question or input dialog; show images/markdown/code; type
   into or restart a pane by id, copy its selection, set the clipboard, search its scrollback; manage windows, font size and
   theme; reload or edit the keymap, event hooks and agterm-scoped ghostty config; run a custom command; read
-  a closed window's session screen; subscribe to status, notify, lifecycle, selection,
-  pane, tree and launch events; wait on agent status.
+  a closed window's session screen; subscribe to status, lifecycle, tree and other
+  events; wait on agent status; pair the phone app.
   Covers window/workspace/session addressing, session links, AGTERM_* variables,
   attaching another Mac's sessions, agterm-server windows, cookbook recipes, version and upgrades, diagnosing
   problems, filing a bug or feature request.
@@ -18,7 +18,7 @@ when_to_use: >
   split the pane, print a link that jumps to a session, close the overlay, hide the overlay for a moment, show a message over the session, show a question dialog, agtermctl ask,
   ask the user to type a value or a message, let the user pick one or several items from a list,
   show an image inline, show this markdown file rendered, show this source file or log at a line, show me the diff of a file or the changes as links, tail or follow this log file, search the log or text page in the overlay, wrap long lines in the text or log page, show this HTML page or artifact, make an HTML page or explainer for this and show
-  it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, pin a project folder to a workspace, route a session to its project workspace, show status or activity under a session in the sidebar, show or hide the file panel (file tree), make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, make this session a companion, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, open a page as its own session row in the sidebar, run my custom command, send a message to the other pane or another agent, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, open a remote window for my Linux server, run sessions on a Linux host with agterm-server, install agterm-server on a Linux host, detach or reattach a remote session, copy this to the clipboard, was agterm upgraded under the running app, upgrade agterm without losing sessions, what recipes are there,
+  it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, pin a project folder to a workspace, route a session to its project workspace, show status or activity under a session in the sidebar, show or hide the file panel (file tree), make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, make this session a companion, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, open a page as its own session row in the sidebar, run my custom command, send a message to the other pane or another agent, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, open a remote window for my Linux server, run sessions on a Linux host with agterm-server, install agterm-server on a Linux host, detach or reattach a remote session, copy this to the clipboard, was agterm upgraded under the running app, upgrade agterm without losing sessions, what recipes are there, connect my phone, pair agterm Mobile, revoke a paired phone, fit a pane to the phone,
   the keymap editor will not open.
 allowed-tools: Bash(agtermctl *)
 ---
@@ -309,7 +309,7 @@ given. Use `--json` for one bare event object per line; filter with repeatable o
 `--kind` over `status`, `notify`, `session.created` (carries `parent` for a companion), `session.closed`, `session.selected` (a window's
 selection moved; carries the session that lost it as `previous`), `tree.changed`, `pane.split`,
 `pane.scratch`, `pane.focused` (a session's selection moved between its two split panes; carries the
-pane and its `paneID`), `remote.opened`, `remote.closed`, `app.launched` (once per app run, when hooks and
+pane and its `paneID`), `remote.opened`, `remote.closed`, `phone.connected|disconnected|refused` (carry `ip`), `app.launched` (once per app run, when hooks and
 the socket are ready) and `message` (mail queued for a pane; carries `paneID`, `from` and `messageID`, never the body); resume with paired `--run RUN --after SEQ`; and set
 page size with `--limit 1...1000`. The app retains 4,096 events for one process run. Cursor run changes,
 expiry, and ahead-of-tail errors are fatal and are never silently rebaselined. Once the stream holds a
@@ -816,6 +816,17 @@ once per host and account; nothing is cached and `ssh` itself is untouched. Loca
 through; other connection settings belong in `~/.ssh/config` under a host alias, while the execution
 settings (no pty, stdin kept, plain session, no fork, no `RemoteCommand`) are the installer's and win
 over the config. The remote needs `tic` (ncurses) and says so when it is missing.
+
+**phone** — agterm Mobile (an Android app) reaches this Mac through a TLS relay that is off by default.
+`phone status|on|off|toggle|port N|host NAME|host --auto|revoke|link [--qr]` drives the Connect a Phone… window
+of the running app (app-wide, no `--target`, macOS-only, refused by agterm-server and by pages); each answers
+`result.phone` (`on`, `listening`, `port`, `host`, `hosts`, `lastEvent`, `error`), and only `status` and `link` carry
+the pairing `link`, which holds the token: never print it to a shared surface. `tree` carries the same without
+the link. `mobile serve [--port N] [--host H] [--no-qr]` runs the relay in the foreground and `mobile reset`
+replaces the token and drops every phone; both are local-only. `session grid COLSxROWS|--reset [--pane]` forces a
+pane's character grid (read back as `paneGrids` in `tree`) and `session scroll LINES [--pane]` scrolls it; a view
+resize or the phone leaving clears the grid. Events `phone.connected|disconnected|refused` carry `ip`
+([details](reference.md#phone)).
 
 **version** — `agtermctl version` — which agterm is serving this socket, as `result.app` (`version`, plus
 `commit` when the build recorded one), and the bundle on disk as `result.installed`, which differs from
