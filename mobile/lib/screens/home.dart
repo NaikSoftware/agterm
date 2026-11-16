@@ -422,15 +422,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _row(Session s, {required double indent, bool showWorkspace = false}) {
     final sub = showWorkspace ? s.workspaceName : (s.context.isNotEmpty ? s.context : (s.parent.isNotEmpty ? 'companion · ${s.shortCwd}' : s.shortCwd));
-    return InkWell(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: InkWell(
       key: Key('row-${s.id}'),
+      borderRadius: BorderRadius.circular(12),
       onTap: () => open(s.id),
       onLongPress: () => showSessionActions(context, m, s),
       child: Container(
         height: 56,
-        margin: const EdgeInsets.symmetric(horizontal: 8),
         padding: EdgeInsets.only(left: indent - 8, right: 12),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: s.active ? C.surface : null),
         child: Row(children: [
           StatusDot(s.status, blink: s.blink),
           const SizedBox(width: 12),
@@ -457,6 +458,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Text('${s.unseen}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: C.bg)),
             ),
         ]),
+      ),
       ),
     );
   }

@@ -70,10 +70,14 @@ Future<String?> pickTint(BuildContext context, String title) => showModalBottomS
                 Semantics(
                   label: t.key,
                   button: true,
-                  child: InkWell(
-                    onTap: () => Navigator.pop(context, t.key),
-                    borderRadius: BorderRadius.circular(24),
-                    child: Container(width: 48, height: 48, decoration: BoxDecoration(color: t.value, shape: BoxShape.circle)),
+                  child: Material(
+                    color: t.value,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      onTap: () => Navigator.pop(context, t.key),
+                      customBorder: const CircleBorder(),
+                      child: const SizedBox(width: 48, height: 48),
+                    ),
                   ),
                 ),
               OutlinedButton(onPressed: () => Navigator.pop(context, 'clear'), child: const Text('None')),
