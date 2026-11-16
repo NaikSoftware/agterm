@@ -208,6 +208,10 @@ final class PhoneRelay {
 
     private func exited(run: Int) {
         guard run == generation else { return }
+        if lastStderr == PhoneRelayLine.pairingReset, state.on { // a `mobile reset` by hand
+            lastStderr = nil
+            return restart()
+        }
         process = nil
         links = []
         error = lastStderr.flatMap { PhoneRelayLine.isEvent($0) ? nil : $0 } ?? "The relay stopped."

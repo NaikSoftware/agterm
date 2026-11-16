@@ -78,6 +78,9 @@ public enum PhoneRelayLine: Equatable {
     case event(String)
     case other(String)
 
+    /// What serve exits with when `mobile reset` replaced the token it printed; the window restarts it once.
+    public static let pairingReset = "the pairing was reset; restart to show the new code"
+
     public static func link(_ line: String) -> String? {
         let line = line.trimmingCharacters(in: .whitespacesAndNewlines)
         return line.hasPrefix("agterm://") ? line : nil

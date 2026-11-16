@@ -2701,7 +2701,7 @@ same four ssh options, the same installer-owned execution settings and the same 
 ## mobile
 
 `agtermctl mobile serve [--port N] [--host H] [--bind ADDR] [--no-qr] [--socket PATH]` runs the phone relay in
-the foreground; `mobile reset` replaces the token. Local-only and macOS-only: no protocol command.
+the foreground; `mobile reset` replaces the token, and a running `serve` exits 1 within seconds. Local-only and macOS-only: no protocol command.
 `serve` creates a self-signed certificate and a token under `mobile/` in the state directory, prints a QR and
 `agterm://pair?h=&p=&t=&f=&n=` links (`t` token, `f` certificate sha256), and listens on TLS, default port
 8765 (1024...65535). A phone's first line is the token; a wrong one is answered `unauthorized` and closed.

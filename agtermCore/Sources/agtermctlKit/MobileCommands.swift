@@ -91,14 +91,20 @@ struct Mobile: ParsableCommand {
                 sources.append(source)
             }
             // a crashed app must not leave the port bound: its child is reparented to launchd
-            let parent = getppid()
-            if parent != 1 {
-                let watch = DispatchSource.makeTimerSource(queue: .main)
-                watch.schedule(deadline: .now() + 2, repeating: 2)
-                watch.setEventHandler { if getppid() == 1 { Darwin.exit(0) } }
-                watch.resume()
-                sources.append(watch)
+            let orphanable = getppid() != 1
+            let watch = DispatchSource.makeTimerSource(queue: .main)
+            watch.schedule(deadline: .now() + 2, repeating: 2)
+            watch.setEventHandler {
+                if orphanable, getppid() == 1 { Darwin.exit(0) }
+                // a reset by hand leaves the printed code dead
+                if case let .token(now) = MobilePairing.readToken(in: dir), !MobilePairing.sameSecret(now, token) {
+                    FileHandle.standardError.write(Data("agtermctl: \(PhoneRelayLine.pairingReset)\n".utf8))
+                    relay.releaseAllGrids()
+                    Darwin.exit(1)
+                }
             }
+            watch.resume()
+            sources.append(watch)
             withExtendedLifetime((relay, sources)) { dispatchMain() }
         }
     }
@@ -338,7 +344,7 @@ final class MobileRelay: @unchecked Sendable {
         var closing = false
         var revoke: (any DispatchSourceTimer)?
         /// The reset request for every grid this phone forced, by (target, pane).
-        var grids: [String: Data] = [:]
+        var grids: [String: [Data]] = [:]
         /// Keeps pipelined requests in order, and holds a hung app to one blocked thread per phone.
         let work = DispatchQueue(label: "agtermctl.mobile.phone")
         /// Accept order, for evicting the oldest unauthenticated connection.
@@ -381,6 +387,8 @@ final class MobileRelay: @unchecked Sendable {
         let tcp = NWProtocolTCP.Options()
         tcp.enableKeepalive = true // a phone that vanished without a FIN is dropped
         tcp.keepaliveIdle = 30
+        tcp.keepaliveInterval = 10
+        tcp.keepaliveCount = 3
         parameters = NWParameters(tls: tls, tcp: tcp)
         self.port = port
         self.bind = bind
@@ -443,7 +451,7 @@ final class MobileRelay: @unchecked Sendable {
 
     /// Resets every grid every phone forced, waiting up to `releaseTimeout` for the app; for a relay told to stop.
     func releaseAllGrids() {
-        let resets = queue.sync { phones.values.flatMap { phone in defer { phone.grids = [:] }; return Array(phone.grids.values) } }
+        let resets = queue.sync { phones.values.flatMap { phone in defer { phone.grids = [:] }; return Self.uniqueResets(phone.grids) } }
         let group = DispatchGroup()
         for reset in resets {
             DispatchQueue.global().async(group: group) { [socketPath] in _ = try? SocketClient(path: socketPath).sendRaw(reset) }
@@ -560,9 +568,9 @@ final class MobileRelay: @unchecked Sendable {
         }
     }
 
-    /// For a `session.grid` request, its (target, pane) key and the request that undoes it; a nil `reset`
-    /// means the request is itself a reset.
-    private static func gridClaim(_ request: [String: Any]) -> (key: String, reset: Data?)? {
+    /// For a `session.grid` request, its (target, pane) key and the requests that undo it; a nil `reset`
+    /// means the request is itself a reset. Both panes are reset: a swap or a promotion moves a grid to the other role.
+    private static func gridClaim(_ request: [String: Any]) -> (key: String, reset: [Data]?)? {
         guard request["cmd"] as? String == Command.sessionGrid.rawValue else { return nil }
         let args = request["args"] as? [String: Any] ?? [:]
         // only an explicit session is tracked: `active` or no target may name another session by close time
@@ -570,16 +578,24 @@ final class MobileRelay: @unchecked Sendable {
         let pane = args["pane"] as? String
         let key = "\(target)\u{0}\(pane ?? "")"
         if args["reset"] as? Bool == true { return (key, nil) }
-        var resetArgs: [String: Any] = ["reset": true]
-        resetArgs["pane"] = pane
-        resetArgs["window"] = args["window"]
-        let reset: [String: Any] = ["cmd": Command.sessionGrid.rawValue, "target": target, "args": resetArgs]
-        return (key, try? JSONSerialization.data(withJSONObject: reset, options: [.sortedKeys, .withoutEscapingSlashes]))
+        let resets = ["left", "right"].compactMap { side -> Data? in
+            var resetArgs: [String: Any] = ["reset": true, "pane": side]
+            resetArgs["window"] = args["window"]
+            let reset: [String: Any] = ["cmd": Command.sessionGrid.rawValue, "target": target, "args": resetArgs]
+            return try? JSONSerialization.data(withJSONObject: reset, options: [.sortedKeys, .withoutEscapingSlashes])
+        }
+        return (key, resets)
+    }
+
+    /// Each target's pair once, though both of its panes were claimed.
+    private static func uniqueResets(_ grids: [String: [Data]]) -> [Data] {
+        var seen = Set<Data>()
+        return grids.values.flatMap { $0 }.filter { seen.insert($0).inserted }
     }
 
     /// A forced grid must not outlive the phone that set it; failures are ignored, the session may be gone.
     private func releaseGrids(of phone: Phone) {
-        let resets = Array(phone.grids.values)
+        let resets = Self.uniqueResets(phone.grids)
         phone.grids = [:]
         let socketPath = socketPath
         // after any request still in flight on this phone's queue

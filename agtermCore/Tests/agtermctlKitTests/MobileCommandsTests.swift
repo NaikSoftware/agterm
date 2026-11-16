@@ -153,11 +153,12 @@ struct MobileCommandsTests {
         #expect(answers == [2, 3, 4, 5, 6])
         let before = fixture.server.requests().count
         client.close()
-        let reset = #"{"args":{"pane":"right","reset":true},"cmd":"session.grid","target":"S1"}"#
-        #expect(fixture.server.waitFor(reset, after: before))
+        let resets = [#"{"args":{"pane":"left","reset":true},"cmd":"session.grid","target":"S1"}"#,
+                      #"{"args":{"pane":"right","reset":true},"cmd":"session.grid","target":"S1"}"#]
+        #expect(fixture.server.waitFor(resets[1], after: before))
         let sentinel = #"{"cmd":"sentinel"}"#
         _ = try SocketClient(path: fixture.server.path).sendRaw(Data(sentinel.utf8))
-        #expect(Array(fixture.server.requests().dropFirst(before)) == [reset, sentinel])
+        #expect(Array(fixture.server.requests().dropFirst(before)) == resets + [sentinel])
     }
 
     @Test func anAuthenticatedPhoneLeavingIsLoggedOnce() throws {
@@ -185,7 +186,8 @@ struct MobileCommandsTests {
         #expect(client.readJSON()?["ok"] as? Bool == true)
         let before = fixture.server.requests().count
         fixture.relay.releaseAllGrids()
-        #expect(Array(fixture.server.requests().dropFirst(before)) == [#"{"args":{"reset":true},"cmd":"session.grid","target":"S1"}"#])
+        #expect(Array(fixture.server.requests().dropFirst(before)).sorted() == [#"{"args":{"pane":"left","reset":true},"cmd":"session.grid","target":"S1"}"#,
+                                                                               #"{"args":{"pane":"right","reset":true},"cmd":"session.grid","target":"S1"}"#])
     }
 
     @Test(arguments: ["delete", "unreadable", "short"])
@@ -217,6 +219,42 @@ struct MobileCommandsTests {
         #expect(stale.waitClosed())
         phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
         #expect(phone.readJSON()?["ok"] as? Bool == true)
+    }
+
+    // a separate process: serve ends by exit
+    @Test func serveExitsWhenThePairingIsResetUnderIt() throws {
+        let dir = try MobileFixture.privateDirectory()
+        defer { try? FileManager.default.removeItem(atPath: (dir as NSString).deletingLastPathComponent) }
+        let server = RawStubServer()
+        try server.start()
+        defer { server.stop() }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent(".build/debug/agtermctl")
+        process.arguments = ["mobile", "serve", "--port", String(Int.random(in: 40000...60000)), "--bind", "127.0.0.1", "--no-qr",
+                             "--socket", server.path]
+        process.environment = ProcessInfo.processInfo.environment.merging(
+            ["AGTERM_STATE_DIR": (dir as NSString).deletingLastPathComponent]) { $1 }
+        let out = Pipe(), err = Pipe()
+        process.standardOutput = out
+        process.standardError = err
+        let printed = LogLines()
+        out.fileHandleForReading.readabilityHandler = { printed.append(String(decoding: $0.availableData, as: UTF8.self)) }
+        try process.run()
+        defer { if process.isRunning { kill(process.processIdentifier, SIGKILL); process.waitUntilExit() } }
+        let listening = Date().addingTimeInterval(30)
+        while !printed.all().joined().contains("Listening on"), process.isRunning, Date() < listening { usleep(20_000) }
+        try #require(process.isRunning)
+
+        _ = try MobilePairing.loadToken(in: dir, fresh: true)
+
+        let exited = Date().addingTimeInterval(30)
+        while process.isRunning, Date() < exited { usleep(20_000) }
+        try #require(!process.isRunning)
+        out.fileHandleForReading.readabilityHandler = nil
+        #expect(process.terminationStatus == 1)
+        let stderr = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        #expect(stderr.contains("agtermctl: \(PhoneRelayLine.pairingReset)\n"))
     }
 
     @Test func secondRelayOnTheSamePortFails() throws {

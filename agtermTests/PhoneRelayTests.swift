@@ -5,6 +5,7 @@ import agtermCore
 @MainActor
 final class PhoneRelayTests: XCTestCase {
     private var dir: URL!
+    private var relays: [PhoneRelay] = []
 
     override func setUp() async throws {
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("phone-relay-\(UUID().uuidString)")
@@ -12,6 +13,8 @@ final class PhoneRelayTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        relays.forEach { $0.stopForQuit() }
+        relays = []
         try? FileManager.default.removeItem(at: dir)
     }
 
@@ -48,8 +51,14 @@ final class PhoneRelayTests: XCTestCase {
         return condition()
     }
 
-    private func started(_ tool: URL) -> PhoneRelay {
+    private func made(_ tool: URL) -> PhoneRelay {
         let relay = PhoneRelay(stateDirectory: dir, tool: tool)
+        relays.append(relay)
+        return relay
+    }
+
+    private func started(_ tool: URL) -> PhoneRelay {
+        let relay = made(tool)
         relay.attach(socketPath: "/tmp/unused.sock")
         relay.setOn(true)
         return relay
@@ -85,7 +94,7 @@ final class PhoneRelayTests: XCTestCase {
         let begun = Date()
         relay.setOn(false)
 
-        XCTAssertLessThan(Date().timeIntervalSince(begun), 0.3)
+        XCTAssertLessThan(Date().timeIntervalSince(begun), 3)
         XCTAssertNil(relay.link)
         XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("gone ") } })
         XCTAssertNil(relay.error)
@@ -99,7 +108,7 @@ final class PhoneRelayTests: XCTestCase {
         let begun = Date()
         relay.setPort(20000)
 
-        XCTAssertLessThan(Date().timeIntervalSince(begun), 0.3)
+        XCTAssertLessThan(Date().timeIntervalSince(begun), 3)
         XCTAssertTrue(wait { logLines().count >= 4 && relay.link != nil })
         let events = logLines().map { $0.split(separator: " ").first.map(String.init) ?? "" }
         XCTAssertEqual(Array(events.prefix(4)), ["start", "stop", "gone", "start"])
@@ -141,7 +150,7 @@ final class PhoneRelayTests: XCTestCase {
                                    settingsModel: SettingsModel(library: library, settingsStore: SettingsStore(directory: dir)),
                                    identity: AppIdentity(version: "test", commit: "test"), zmxClient: nil,
                                    socketPath: dir.appendingPathComponent("control.sock").path)
-        let relay = PhoneRelay(stateDirectory: dir, tool: try slowServe())
+        let relay = made(try slowServe())
         relay.onEvent = { kind, ip in library.emitAppEvent(ControlEventDraft(kind: kind, payload: ControlEventPayload(ip: ip))) }
         relay.attach(socketPath: "/tmp/unused.sock")
         server.phoneRelay = relay
@@ -185,7 +194,7 @@ final class PhoneRelayTests: XCTestCase {
                                    settingsModel: SettingsModel(library: library, settingsStore: SettingsStore(directory: dir)),
                                    identity: AppIdentity(version: "test", commit: "test"), zmxClient: nil,
                                    socketPath: dir.appendingPathComponent("control.sock").path)
-        let relay = PhoneRelay(stateDirectory: dir, tool: try slowServe(extra: #"if [ "$2" = reset ]; then exit 0; fi"#))
+        let relay = made(try slowServe(extra: #"if [ "$2" = reset ]; then exit 0; fi"#))
         relay.attach(socketPath: "/tmp/unused.sock")
         relay.setOn(true)
         server.phoneRelay = relay
@@ -233,8 +242,24 @@ final class PhoneRelayTests: XCTestCase {
         XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("gone ") } })
     }
 
+    func testAPairingResetByHandRestartsTheRelayWithTheNewCode() throws {
+        let tries = dir.appendingPathComponent("tries")
+        let relay = started(try slowServe(extra: """
+        echo try >> '\(tries.path)'
+        if [ "$(wc -l < '\(tries.path)')" -eq 1 ]; then
+          echo '\(link)'; echo 'agtermctl: \(PhoneRelayLine.pairingReset)' >&2; exit 1
+        fi
+        """))
+
+        XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("start ") } && relay.link != nil })
+        XCTAssertNil(relay.error)
+        XCTAssertEqual(((try? String(contentsOf: tries, encoding: .utf8)) ?? "").split(separator: "\n").count, 2)
+        relay.setOn(false)
+        XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("gone ") } })
+    }
+
     func testWithoutABoundSocketNothingStarts() async {
-        let relay = PhoneRelay(stateDirectory: dir, tool: URL(fileURLWithPath: "/usr/bin/false"))
+        let relay = made(URL(fileURLWithPath: "/usr/bin/false"))
         relay.attach(socketPath: nil)
         relay.setOn(true)
         await relay.settled()

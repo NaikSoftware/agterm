@@ -220,4 +220,18 @@ final class ControlServerGridTests: XCTestCase {
         XCTAssertEqual(server.scrollSession(session.id.uuidString, window: nil, pane: .left, lines: -3).error,
                        "pane is not on screen")
     }
+
+    func testAResetClearsTheGridOfAPaneWithoutAWindow() throws {
+        let server = makeServer()
+        let (_, session) = try makeSession()
+        let surface = try view(session)
+        XCTAssertTrue(server.setSessionGrid(session.id.uuidString, window: nil, pane: .left, grid: ControlGrid(columns: 40, rows: 10)).ok)
+        surface.window?.contentView = nil
+
+        let response = server.setSessionGrid(session.id.uuidString, window: nil, pane: .left, grid: nil)
+
+        XCTAssertTrue(response.ok, response.error ?? "")
+        XCTAssertNil(surface.forcedGrid)
+        XCTAssertFalse(session.hasForcedGrid)
+    }
 }
