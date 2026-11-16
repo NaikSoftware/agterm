@@ -30,8 +30,7 @@ extension ControlServer {
 
     func revokePhone() async -> ControlResponse {
         guard let relay = phoneRelay else { return Self.noPhoneRelay }
-        await relay.revoke()
-        if let notice = relay.notice { return ControlResponse(ok: false, error: notice) }
+        if let failure = await relay.revoke() { return ControlResponse(ok: false, error: failure) }
         return await phoneAnswer(relay)
     }
 

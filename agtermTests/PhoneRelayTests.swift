@@ -216,6 +216,23 @@ final class PhoneRelayTests: XCTestCase {
         XCTAssertEqual(relay.link, link)
     }
 
+    func testSwitchingOnAFailedRelayStartsItAgain() throws {
+        let tries = dir.appendingPathComponent("tries")
+        let relay = started(try slowServe(extra: """
+        echo try >> '\(tries.path)'
+        if [ "$(wc -l < '\(tries.path)')" -eq 1 ]; then echo 'agtermctl: cannot listen on *:8765: busy' >&2; exit 1; fi
+        """))
+        XCTAssertTrue(wait { relay.error != nil })
+        XCTAssertTrue(relay.state.on)
+
+        relay.setOn(true)
+
+        XCTAssertTrue(wait { relay.link != nil })
+        XCTAssertNil(relay.error)
+        relay.setOn(false)
+        XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("gone ") } })
+    }
+
     func testWithoutABoundSocketNothingStarts() async {
         let relay = PhoneRelay(stateDirectory: dir, tool: URL(fileURLWithPath: "/usr/bin/false"))
         relay.attach(socketPath: nil)

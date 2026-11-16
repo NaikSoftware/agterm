@@ -56,17 +56,20 @@ final class PhoneRelay {
 
     /// Waits, without blocking main, until the queued change has run and the relay printed its links or stopped.
     func untilListening(within limit: Duration) async {
-        await settled()
         let deadline = ContinuousClock.now + limit
+        await settled()
         while state.on, links.isEmpty, error == nil, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(50))
         }
     }
 
+    /// On means "try to be listening": switching on a relay that is on but failed starts it again.
     func setOn(_ on: Bool) {
-        guard on != state.on else { return }
-        state.on = on
-        save()
+        guard on != state.on || (on && error != nil) else { return }
+        if on != state.on {
+            state.on = on
+            save()
+        }
         restart()
     }
 
@@ -86,17 +89,20 @@ final class PhoneRelay {
     }
 
     /// Writes a new token, which cuts every paired phone off, then restarts serve so it shows the new code.
-    func revoke() async {
+    /// Returns this revoke's own failure, nil on success: `notice` shows it too, but a save can overwrite it meanwhile.
+    @discardableResult
+    func revoke() async -> String? {
         if let failure = await Self.run(["mobile", "reset"], tool: tool, stateDirectory: stateDirectory) {
             notice = failure
-            return
+            return failure
         }
         notice = nil
         if state.on { restart() }
         lastEvent = "paired phones revoked"
+        return nil
     }
 
-    /// Waits for the queued transition; tests use it, the window does not need to.
+    /// Waits for the queued transition.
     func settled() async { await transition?.value }
 
     private func save() {
