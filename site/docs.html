@@ -481,7 +481,7 @@ command &quot;Session here&quot; ctrl+a&gt;n agtermctl session new --cwd &quot;$
 <p>A <strong>session</strong> is one running shell with a name, a working directory and its own scrollback: the unit you work in, and a row in the sidebar. A <strong>workspace</strong> is a named group of sessions for one project or context. A session can move between workspaces while it runs, keeping its shell and scrollback.</p>
 <h3 id="workspaces-sidebar">The sidebar</h3>
 <ul>
-<li>The sidebar is a two-level tree: workspaces, each holding sessions. A workspace row has a stacked-squares icon, a session row an outlined terminal.</li>
+<li>The sidebar is a two-level tree: workspaces, each holding sessions. A workspace row has an icon of two overlapping squares, a session row an outlined terminal.</li>
 <li>A workspace can pin a project folder. A session a script starts with <code>session new --cwd DIR</code> and no other placement lands in the workspace whose folder is <code>DIR</code> or holds it, in any open window; the deepest pin wins. A new session in a workspace with a project folder opens there unless Settings sends new sessions home or to a fixed folder. On first launch, and from <strong>File ▸ Set Up Workspaces…</strong>, a guide offers one workspace per project folder it finds. Pin or clear a folder with <code>workspace folder</code>. Remote windows do not carry project folders yet.</li>
 <li>A session is named after its working directory's last folder. Renaming pins a name of your own; clearing it restores automatic naming. Rename inline by double-clicking a row's name.</li>
 <li>The four icons at the bottom of the sidebar add a workspace, add a session, and toggle the workspace filter and the flagged view.</li>

@@ -222,7 +222,7 @@ public enum InterfaceElement: String, Codable, Sendable, CaseIterable {
         case .focusFilter: return "square.grid.2x2"
         case .workspaceAddSession: return "plus"
         case .sessionIcons: return "terminal"
-        case .workspaceIcons: return "square.stack"
+        case .workspaceIcons: return "square.on.square"
         case .workspaceChevrons: return "chevron.right"
         }
     }

@@ -130,7 +130,7 @@ final class SidebarBandTests: XCTestCase {
     }
 
     func testWorkspaceSymbolExists() {
-        XCTAssertNotNil(NSImage(systemSymbolName: "square.stack", accessibilityDescription: nil))
+        XCTAssertNotNil(NSImage(systemSymbolName: "square.on.square", accessibilityDescription: nil))
         XCTAssertNotNil(NSImage(systemSymbolName: InterfaceElement.workspaceIcons.symbolName!, accessibilityDescription: nil))
     }
 

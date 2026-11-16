@@ -224,7 +224,7 @@ paths:
   `rebuiltWorkspaceShell` lacks membership input and also serves session reopen, so it must not restore it.
   `reClosingAWorkspaceRebuiltByASessionUndoKeepsItsMembership`, focus undo/reopen tests, and legacy recent
   decode tests pin this contract.
-- Marked workspace rows use `square.stack` at `.black` weight, not a fill: fill identifies a
+- Marked workspace rows use `square.on.square` at `.black` weight, not a fill: fill identifies a
   flagged session, weight identifies focus membership. The 16x15 black image and 15x14 regular image sit
   in a fixed 16x16 `NSImageView`, so the 1pt size difference does not move layout. Render membership even while filtering
   is off. `RowContent.focusMember` limits reload to that row.

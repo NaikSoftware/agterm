@@ -894,12 +894,12 @@ struct WorkspaceSidebar: NSViewRepresentable {
 
         /// Leading row icons as monochrome template symbols. A flagged SESSION swaps to its base glyph's
         /// `.fill` variant (the solid-interior idiom the scratch-active toolbar glyph uses); a workspace in
-        /// the focus SET keeps the same `square.stack` outline at `.black` weight, so the two markers
+        /// the focus SET keeps the same `square.on.square` outline at `.black` weight, so the two markers
         /// stay distinct (fill = flagged session, black = marked workspace). Never a composited corner
         /// badge, so each stays a single template `setColors` tints; the weight variant renders 1pt larger
         /// (16x15 vs 15x14) but the icon view is pinned to 16x16, so neither swap moves the row. Cached.
-        lazy var workspaceIcon = Self.rowIcon("square.stack")
-        lazy var focusedWorkspaceIcon = Self.rowIcon("square.stack", weight: .black)
+        lazy var workspaceIcon = Self.rowIcon("square.on.square")
+        lazy var focusedWorkspaceIcon = Self.rowIcon("square.on.square", weight: .black)
         lazy var splitSessionIcon = Self.rowIcon("rectangle.split.2x1")
         lazy var horizontalSplitSessionIcon = Self.rowIcon("rectangle.split.1x2")
         lazy var sessionIcon = Self.rowIcon("terminal")
