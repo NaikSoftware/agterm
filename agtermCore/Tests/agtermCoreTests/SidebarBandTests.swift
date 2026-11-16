@@ -2,11 +2,16 @@ import Testing
 @testable import agtermCore
 
 struct SidebarBandTests {
-    @Test func edgesFollowGroupSizesInOrder() {
-        #expect(SidebarBand.edges(groupRowCounts: [1, 3]) == [.single, .first, .middle, .last])
-        #expect(SidebarBand.edges(groupRowCounts: [2]) == [.first, .last])
-        #expect(SidebarBand.edges(groupRowCounts: []) == [])
-        #expect(SidebarBand.edges(groupRowCounts: [0, 1]) == [.single])
+    @Test func edgeFollowsThePositionInTheGroup() {
+        #expect(SidebarBand.edge(index: 0, count: 1) == .single)
+        #expect((0..<3).map { SidebarBand.edge(index: $0, count: 3) } == [.first, .middle, .last])
+        #expect((0..<2).map { SidebarBand.edge(index: $0, count: 2) } == [.first, .last])
+    }
+
+    @Test func edgeClampsAnOutOfRangeIndex() {
+        #expect(SidebarBand.edge(index: -1, count: 3) == .first)
+        #expect(SidebarBand.edge(index: 5, count: 3) == .last)
+        #expect(SidebarBand.edge(index: 4, count: 0) == .single)
     }
 
     @Test(arguments: [AgentStatus.idle, .blocked, .completed])

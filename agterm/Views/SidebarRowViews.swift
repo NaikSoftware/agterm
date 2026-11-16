@@ -294,18 +294,29 @@ final class StatusIconView: NSImageView {
     /// apply renders the indicator's tinted glyph and updates tooltip + accessibility value to the state name;
     /// `.idle` hides the view and stops the blink.
     func apply(_ indicator: AgentIndicator) {
+        self.indicator = indicator
         toolTip = indicator.status.tooltipText
         showsGlyph = indicator.status != .idle
+        applyPulses()
         guard showsGlyph else {
             image = nil
             setAccessibilityValue(AgentStatus.idle.rawValue)
-            pulse(Self.blinkKey, false, to: 0.2, duration: 0.5)
-            pulse(Self.fadeKey, false, to: 0.25, duration: 1.4)
             return
         }
         image = Self.icon(for: indicator.status, override: indicator.color, shape: indicator.shape)
         setAccessibilityValue(indicator.status.rawValue)
-        let motion = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    private var indicator = AgentIndicator()
+
+    // Core Animation can drop a layer's animations while the view is out of a window, so re-add on return.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyPulses()
+    }
+
+    private func applyPulses() {
+        let motion = showsGlyph && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         pulse(Self.blinkKey, indicator.blink && motion, to: 0.2, duration: 0.5)
         pulse(Self.fadeKey, indicator.status == .active && !indicator.blink && motion, to: 0.25, duration: 1.4)
     }
@@ -435,6 +446,7 @@ class SidebarRowView: NSTableRowView {
     private var waveStill = false
     private var wavePeriod: CGFloat = 0
     static let waveKey = "sidebar-wave"
+    static let bandRadius: CGFloat = 9
 
     /// setWave shows the active-row wave, or removes it for nil. It drifts one period per 4.8 s unless
     /// Reduce Motion is on, which leaves the gradient still.
@@ -472,12 +484,26 @@ class SidebarRowView: NSTableRowView {
         layoutWave()
     }
 
+    // re-adds the drift if Core Animation dropped it while the row was out of a window
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        needsLayout = true
+    }
+
     private func layoutWave() {
         guard let clip = waveLayer, let gradient = clip.sublayers?.first else { return }
         let period = bounds.width * 2
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         clip.frame = bandRect(band?.edge ?? .middle)
+        // square, except at the band's rounded outer corners, so the wave never pokes past them
+        let top: CACornerMask = isFlipped ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        let bottom: CACornerMask = isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        var corners: CACornerMask = []
+        if band?.edge == .first || band?.edge == .single { corners.formUnion(top) }
+        if band?.edge == .last || band?.edge == .single { corners.formUnion(bottom) }
+        clip.maskedCorners = corners
+        clip.cornerRadius = corners.isEmpty ? 0 : Self.bandRadius
         gradient.frame = CGRect(x: -clip.frame.minX, y: 0, width: period * 2, height: clip.bounds.height)
         CATransaction.commit()
         guard period != wavePeriod || (!waveStill && gradient.animation(forKey: Self.waveKey) == nil) else { return }
@@ -507,7 +533,7 @@ class SidebarRowView: NSTableRowView {
     /// fillBand rounds only the group's outer corners: the rounded rect overhangs the inner sides and is clipped.
     private func fillBand(_ color: NSColor, edge: SidebarBandEdge) {
         let rect = bandRect(edge)
-        let radius: CGFloat = 9
+        let radius = Self.bandRadius
         var shape = rect
         if edge == .middle || edge == .last { shape.size.height += radius; if isFlipped { shape.origin.y -= radius } }
         if edge == .middle || edge == .first { shape.size.height += radius; if !isFlipped { shape.origin.y -= radius } }

@@ -108,6 +108,18 @@ final class SidebarBandTests: XCTestCase {
         XCTAssertNil(wave.superlayer)
     }
 
+    func testWaveRoundsOnlyAtTheBandsOuterCorners() throws {
+        let (store, workspace) = try twoSessionWorkspace()
+        store.setTint(SidebarTint(color: .blue), forWorkspace: workspace.id)
+        for session in workspace.sessions { session.agentIndicator = AgentIndicator(status: .active) }
+        mount(store)
+        let middle = try XCTUnwrap(rowView(forItem: try XCTUnwrap(workspace.sessions.first).id).waveLayer)
+        let last = try XCTUnwrap(rowView(forItem: try XCTUnwrap(workspace.sessions.last).id).waveLayer)
+        XCTAssertEqual(middle.cornerRadius, 0)
+        XCTAssertEqual(last.cornerRadius, SidebarRowView.bandRadius)
+        XCTAssertEqual(last.maskedCorners.rawValue.nonzeroBitCount, 2)
+    }
+
     func testActiveGlyphFadesAndBlinkReplacesTheFade() throws {
         try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "Reduce Motion stops the fade")
         let icon = StatusIconView()

@@ -131,6 +131,8 @@ struct WorkspaceSidebar: NSViewRepresentable {
         /// Root workspace nodes in store order, rebuilt from the store on each reload from cached instances.
         private var roots: [SidebarNode] = []
         private var deferredRebuild = false
+        /// rebuilding skips the expansion callbacks' decoration sweep; the rebuild sweeps once when it ends.
+        var rebuilding = false
         private var deferredRenameNodes: [UUID: SidebarNode] = [:]
         /// Cache of node instances keyed by id, so identity is stable across reloads.
         var nodeCache: [UUID: SidebarNode] = [:]
@@ -572,7 +574,11 @@ struct WorkspaceSidebar: NSViewRepresentable {
                 return
             }
             deferredRebuild = false
-            defer { applyRowDecorations() }
+            rebuilding = true
+            defer {
+                rebuilding = false
+                applyRowDecorations()
+            }
             // a mode or layout switch moves the selected row, possibly under a collapsed workspace, while the
             // selected id stays the same: forget the last reveal so the next `syncSelection` reveals it again.
             // Only a switch does this. Any other rebuild must leave a deliberate fold alone.
@@ -732,7 +738,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
 
         func outlineViewItemDidExpand(_ notification: Notification) {
             guard let node = notification.userInfo?[Self.outlineItemUserInfoKey] as? SidebarNode else { return }
-            defer { applyRowDecorations() }
+            defer { if !rebuilding { applyRowDecorations() } }
             guard node.kind == .workspace else { return parentExpansionChanged(node, expanded: true) }
             expandedWorkspaceIDs.insert(node.id)
             // persist ONLY a genuine user expand: a programmatic reveal or rebuild re-apply sets
@@ -744,7 +750,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
 
         func outlineViewItemDidCollapse(_ notification: Notification) {
             guard let node = notification.userInfo?[Self.outlineItemUserInfoKey] as? SidebarNode else { return }
-            defer { applyRowDecorations() }
+            defer { if !rebuilding { applyRowDecorations() } }
             guard node.kind == .workspace else { return parentExpansionChanged(node, expanded: false) }
             expandedWorkspaceIDs.remove(node.id)
             // persist only a genuine user collapse; programmatic collapses are suppressed (see didExpand).

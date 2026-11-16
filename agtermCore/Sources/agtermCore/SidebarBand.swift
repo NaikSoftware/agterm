@@ -15,11 +15,13 @@ public struct SidebarWave: Sendable, Equatable {
 }
 
 public enum SidebarBand {
-    /// edges gives one edge per row for groups laid out in order.
-    public static func edges(groupRowCounts: [Int]) -> [SidebarBandEdge] {
-        groupRowCounts.flatMap { count -> [SidebarBandEdge] in
-            guard count > 1 else { return count == 1 ? [.single] : [] }
-            return [.first] + Array(repeating: .middle, count: count - 2) + [.last]
+    /// edge is where row `index` of a group of `count` rows sits; an out-of-range index clamps into the group.
+    public static func edge(index: Int, count: Int) -> SidebarBandEdge {
+        guard count > 1 else { return .single }
+        switch min(max(index, 0), count - 1) {
+        case 0: return .first
+        case count - 1: return .last
+        default: return .middle
         }
     }
 

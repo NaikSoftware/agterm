@@ -43,22 +43,28 @@ extension WorkspaceSidebar.Coordinator {
         let workspaceTint = rendersWorkspaceRows && head?.kind == .workspace
             ? store.workspaces.first { $0.id == head?.id }?.tint : nil
         if let workspaceTint {
-            let edge = SidebarBand.edges(groupRowCounts: [group.count])[row - group.lowerBound]
+            let edge = SidebarBand.edge(index: row - group.lowerBound, count: group.count)
             rowView.band = (NSColor.tint(workspaceTint.color).withAlphaComponent(0.10), edge)
         } else {
             rowView.band = nil
         }
         let session = node.kind == .session ? store.session(withID: node.id) : nil
         rowView.rowWash = session?.tint.map { NSColor.tint($0.color).withAlphaComponent(0.09) }
-        let app = GhosttyApp.shared
         let indicator = effectiveIndicator(forSession: node.id)
-        let accent = app.terminalSelectionBackgroundColor ?? app.terminalForegroundColor ?? .white
-        guard let session, let activeHex = app.statusColor(for: .active, override: indicator.color).agtermHexString,
-              let accentHex = accent.agtermHexString else { return rowView.setWave(nil) }
-        rowView.setWave(SidebarBand.wave(
-            status: indicator.status,
-            sessionTintHex: session.tint.flatMap { NSColor.tint($0.color).agtermHexString },
-            workspaceTintHex: workspaceTint.flatMap { NSColor.tint($0.color).agtermHexString },
-            activeHex: activeHex, accentHex: accentHex))
+        guard let session, indicator.status == .active else { return rowView.setWave(nil) }
+        // dynamic system colors resolve for the sidebar's theme-pinned appearance, not the app's
+        var wave: SidebarWave?
+        outline.effectiveAppearance.performAsCurrentDrawingAppearance {
+            let app = GhosttyApp.shared
+            let accent = app.terminalSelectionBackgroundColor ?? app.terminalForegroundColor ?? .white
+            guard let activeHex = app.statusColor(for: .active, override: indicator.color).agtermHexString,
+                  let accentHex = accent.agtermHexString else { return }
+            wave = SidebarBand.wave(
+                status: indicator.status,
+                sessionTintHex: session.tint.flatMap { NSColor.tint($0.color).agtermHexString },
+                workspaceTintHex: workspaceTint.flatMap { NSColor.tint($0.color).agtermHexString },
+                activeHex: activeHex, accentHex: accentHex)
+        }
+        rowView.setWave(wave)
     }
 }
