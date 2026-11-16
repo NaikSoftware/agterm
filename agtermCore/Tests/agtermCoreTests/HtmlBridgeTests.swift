@@ -86,8 +86,7 @@ struct HtmlBridgeTests {
         #expect(workspace.args?.window == nil)
     }
 
-    @Test(arguments: ["hooks.reload", "hooks.list", "browser.clear", "browser.links", "recent.list", "recent.clear",
-                      "phone.status", "phone.enable", "phone.port", "phone.host", "phone.revoke"])
+    @Test(arguments: ["hooks.reload", "hooks.list", "browser.clear", "browser.links", "recent.list", "recent.clear"])
     func aCommandRefusingAnyWindowGetsNone(_ cmd: String) throws {
         let built = try request(#"{"cmd":"\#(cmd)"}"#)
         #expect(built.target == nil)
@@ -174,7 +173,8 @@ struct HtmlBridgeTests {
         #expect(try request(#"{"cmd":"session.overlay.reload","args":{"current":false}}"#).args?.current == false)
     }
 
-    @Test(arguments: ["zmx.present", "catalog.subscribe", "session.overlay.job.run", "session.overlay.page.serve", "zmx.reset"])
+    @Test(arguments: ["zmx.present", "catalog.subscribe", "session.overlay.job.run", "session.overlay.page.serve", "zmx.reset",
+                      "phone.status", "phone.enable", "phone.port", "phone.host", "phone.revoke"])
     func streamAndAfterReplyCommandsAreRefused(_ cmd: String) {
         guard case .failure(let error) = build(#"{"cmd":"\#(cmd)"}"#) else { Issue.record("\(cmd) must be refused"); return }
         #expect(error.message == HtmlBridgeError.unsupported(cmd).message)
