@@ -178,7 +178,7 @@ public enum InterfaceElement: String, Codable, Sendable, CaseIterable {
         case .windowName: return "Window name"
         case .remoteHost: return "Remote host"
         case .sessionContext: return "Session context"
-        case .recentSessions: return "Recent sessions"
+        case .recentSessions: return "Session switcher"
         case .scratch: return "Scratch terminal"
         case .split: return "Split view"
         case .overlayToggle: return "Hide overlays"
@@ -209,7 +209,7 @@ public enum InterfaceElement: String, Codable, Sendable, CaseIterable {
         case .sidebarToggle: return "sidebar.left"
         case .workspaceName, .sessionName, .windowName, .sessionContext: return nil
         case .remoteHost: return "cloud"
-        case .recentSessions: return "clock.arrow.circlepath"
+        case .recentSessions: return "magnifyingglass"
         case .scratch: return "rectangle"
         case .split: return "rectangle.split.2x1"
         case .overlayToggle: return "rectangle.on.rectangle"

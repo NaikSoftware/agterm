@@ -224,10 +224,17 @@ paths:
   `rebuiltWorkspaceShell` lacks membership input and also serves session reopen, so it must not restore it.
   `reClosingAWorkspaceRebuiltByASessionUndoKeepsItsMembership`, focus undo/reopen tests, and legacy recent
   decode tests pin this contract.
-- Marked workspace rows use the same `square.grid.2x2` at `.black` weight, not a fill: fill identifies a
+- Marked workspace rows use `square.stack` at `.black` weight, not a fill: fill identifies a
   flagged session, weight identifies focus membership. The 16x15 black image and 15x14 regular image sit
   in a fixed 16x16 `NSImageView`, so the 1pt size difference does not move layout. Render membership even while filtering
   is off. `RowContent.focusMember` limits reload to that row.
+- A workspace tint draws a band behind its workspace row and every session and companion row.
+  `SidebarRowView` draws it from the host-free `SidebarBand` edge model in `agtermCore`.
+  It resets on every configure and reapplies on fold, tint, rebuild and appearance change.
+- An `.active` row shows a wave: a square-cornered `CAGradientLayer` sublayer animated on `transform.translation.x`,
+  4.8 s per period, the period two row widths.
+  The active status glyph fades under key `agent-status-fade` (1.4 s), distinct from blink.
+  Reduce Motion leaves both static.
 - `focus-filter-toggle` replaces the deleted single-workspace pill. It uses a filled grid when active,
   manual 0.35 opacity and disabled state when the set is empty, and accessibility value `on`/`off`.
   It remains usable while filtering is off and is gated by `InterfaceElement.focusFilter`.
