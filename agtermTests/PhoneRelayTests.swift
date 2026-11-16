@@ -35,6 +35,7 @@ final class PhoneRelayTests: XCTestCase {
         echo "start $$" >> '\(log.path)'
         trap 'echo "stop $$" >> "\(log.path)"; sleep 0.5; echo "gone $$" >> "\(log.path)"; exit 0' TERM
         echo '\(link)'
+        echo 'agtermctl: bluetooth: advertising' >&2
         echo 'agtermctl: phone connected from 10.0.0.9' >&2
         echo 'agtermctl: phone disconnected from 10.0.0.9' >&2
         while :; do sleep 0.05 & wait $!; done
@@ -169,7 +170,8 @@ final class PhoneRelayTests: XCTestCase {
         let status = await dispatcher.dispatch(ControlRequest(cmd: .phoneStatus))
         XCTAssertEqual(status?.result?.phone?.link, link)
         let tree = await dispatcher.dispatch(ControlRequest(cmd: .tree))
-        XCTAssertEqual(tree?.result?.tree?.phone, ControlPhoneStatus(on: true, listening: true, port: 8765, host: "10.0.0.1"))
+        XCTAssertEqual(tree?.result?.tree?.phone, ControlPhoneStatus(on: true, listening: true, port: 8765, host: "10.0.0.1",
+                                                                         bluetooth: "advertising"))
         func phoneEvents() -> [ControlEvent] {
             library.readEvents(ControlEventReadOptions(cursor: ControlEventCursor(run: anchor.run, after: anchor.next),
                                                        kinds: [.phoneConnected, .phoneDisconnected], limit: 10))
@@ -288,6 +290,22 @@ final class PhoneRelayTests: XCTestCase {
         XCTAssertTrue(relay.status.listening)
         XCTAssertEqual(relay.status.host, "")
         XCTAssertEqual(relay.status.hosts, [])
+        relay.setHost("127.0.0.1")
+        XCTAssertEqual(relay.link, "agterm://pair?h=127.0.0.1&p=8765&t=tok&f=ab&n=mac&b=1")
+    }
+
+    func testARelayWithoutABluetoothLineAnswersStartingAtTheDeadline() throws {
+        let relay = started(try fakeTool("""
+        echo '\(link)'
+        while :; do sleep 0.05 & wait $!; done
+        """))
+        var answered = false
+        Task { await relay.untilListening(within: .milliseconds(500)); answered = true }
+
+        XCTAssertTrue(wait { answered })
+        XCTAssertEqual(relay.link, link)
+        XCTAssertEqual(relay.status.bluetooth, "starting")
+        XCTAssertEqual(relay.status.readback.bluetooth, "starting")
     }
 
     func testWithoutABoundSocketNothingStarts() async {

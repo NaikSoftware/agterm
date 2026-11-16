@@ -61,13 +61,19 @@ public enum PhonePairLink {
 
     /// `link` with its `h` value replaced and every other byte untouched: a `URLComponents` round trip would
     /// decode `%2B`/`%27` in `n` and re-emit them bare, which the phone reads differently.
-    public static func withHost(_ link: String, host: String) -> String {
+    /// A Bluetooth-only link has no `h`; with `port` it gains `h` and `p` (adb reverse to 127.0.0.1 needs them).
+    public static func withHost(_ link: String, host: String, port: Int? = nil) -> String {
         let host = host.trimmingCharacters(in: .whitespaces)
         guard !host.isEmpty, let query = link.range(of: "?"),
               let encoded = host.addingPercentEncoding(withAllowedCharacters: hostAllowed) else { return link }
         var pairs = link[query.upperBound...].split(separator: "&", omittingEmptySubsequences: false).map(String.init)
-        guard let index = pairs.firstIndex(where: { $0.hasPrefix("h=") }) else { return link }
-        pairs[index] = "h=" + encoded
+        if let index = pairs.firstIndex(where: { $0.hasPrefix("h=") }) {
+            pairs[index] = "h=" + encoded
+        } else {
+            guard let port else { return link }
+            let hasPort = pairs.contains { $0.hasPrefix("p=") }
+            pairs.insert(contentsOf: ["h=" + encoded] + (hasPort ? [] : ["p=\(port)"]), at: 0)
+        }
         return link[..<query.upperBound] + pairs.joined(separator: "&")
     }
 }
@@ -87,6 +93,7 @@ public enum PhoneRelayLine: Equatable {
     /// The window's text for a `bluetooth` value.
     public static func bluetoothText(_ value: String) -> String {
         if value == "advertising" { return "Advertising" }
+        if value == "starting" { return "Starting…" }
         return "Off: " + (bluetoothReasons.first { $0.value == value }?.key ?? value)
     }
 

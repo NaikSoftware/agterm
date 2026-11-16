@@ -47,6 +47,15 @@ struct PhoneDesktopTests {
     @Test func blankHostOrLinkWithoutHostIsUnchanged() {
         #expect(PhonePairLink.withHost(link, host: "  ") == link)
         #expect(PhonePairLink.withHost("agterm://pair?p=1", host: "x") == "agterm://pair?p=1")
+        #expect(PhonePairLink.withHost("agterm://pair?t=T&b=1", host: "x") == "agterm://pair?t=T&b=1")
+    }
+
+    @Test func aBluetoothOnlyLinkGainsTheTypedHostAndThePort() {
+        #expect(PhonePairLink.withHost("agterm://pair?t=T&b=1", host: "127.0.0.1", port: 8765)
+                == "agterm://pair?h=127.0.0.1&p=8765&t=T&b=1")
+        #expect(PhonePairLink.withHost("agterm://pair?t=T&b=1", host: " ", port: 8765) == "agterm://pair?t=T&b=1")
+        #expect(PhonePairLink.withHost(link, host: "mac", port: 1)
+                == "agterm://pair?h=mac&p=8765&t=abc-_x&f=0a1b&n=Nick%27s%20Mac%2BBook%20Pro")
     }
 
     @Test func hostIsPercentEncoded() {
@@ -75,5 +84,6 @@ struct PhoneDesktopTests {
         #expect(PhoneRelayLine.bluetoothText("advertising") == "Advertising")
         #expect(PhoneRelayLine.bluetoothText("busy") == "Off: in use by another relay")
         #expect(PhoneRelayLine.bluetoothText("off") == "Off: powered off")
+        #expect(PhoneRelayLine.bluetoothText("starting") == "Starting…")
     }
 }

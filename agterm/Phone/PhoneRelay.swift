@@ -49,18 +49,20 @@ final class PhoneRelay {
 
     var offeredHosts: [String] { links.compactMap(PhonePairLink.host(of:)) }
     var host: String { state.host.isEmpty ? offeredHosts.first ?? "" : state.host }
-    var link: String? { links.first.map { PhonePairLink.withHost($0, host: host) } }
+    var link: String? { links.first.map { PhonePairLink.withHost($0, host: host, port: state.port) } }
 
     var status: ControlPhoneStatus {
         ControlPhoneStatus(on: state.on, listening: !links.isEmpty, port: state.port, host: host, hosts: offeredHosts,
-                           lastEvent: lastEvent, error: error, link: link, bluetooth: bluetooth)
+                           lastEvent: lastEvent, error: error, link: link,
+                           bluetooth: bluetooth ?? (links.isEmpty ? nil : "starting"))
     }
 
-    /// Waits, without blocking main, until the queued change has run and the relay printed its links or stopped.
+    /// Waits, without blocking main, until the queued change has run and the relay printed its links and its
+    /// Bluetooth line, or stopped.
     func untilListening(within limit: Duration) async {
         let deadline = ContinuousClock.now + limit
         await settled()
-        while state.on, links.isEmpty, error == nil, ContinuousClock.now < deadline {
+        while state.on, links.isEmpty || bluetooth == nil, error == nil, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(50))
         }
     }

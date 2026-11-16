@@ -43,7 +43,7 @@ struct ConnectPhoneView: View {
                     HStack {
                         Text(bluetooth)
                             .textSelection(.enabled)
-                        if relay.bluetooth == "unauthorized" {
+                        if relay.status.bluetooth == "unauthorized" {
                             Button("Open Bluetooth Settings") {
                                 NSWorkspace.shared.open(Self.bluetoothSettings)
                             }
@@ -122,7 +122,7 @@ struct ConnectPhoneView: View {
     }
 
     private var bluetooth: String {
-        if let value = relay.bluetooth { return PhoneRelayLine.bluetoothText(value) }
+        if let value = relay.status.bluetooth { return PhoneRelayLine.bluetoothText(value) }
         return relay.state.on && relay.error == nil ? "Starting…" : "Off"
     }
 
