@@ -125,6 +125,8 @@ final class MockControlActions: ControlActions {
         case hudClose(target: String?, window: String?)
         case sessionBackground(target: String?, window: String?, ControlSessionBackgroundOptions)
         case sessionText(target: String?, window: String?, ControlSessionTextOptions)
+        case sessionGrid(target: String?, window: String?, pane: StatusPane, ControlGrid?)
+        case sessionScroll(target: String?, window: String?, pane: StatusPane, lines: Int)
         case windowNew(String?, minimized: Bool)
         case windowList
         case windowSelect(target: String?)
@@ -211,6 +213,7 @@ final class MockControlActions: ControlActions {
     var nextHudCloseResponse = ControlResponse(ok: true)
     var nextSessionBackgroundResponse = ControlResponse(ok: true)
     var nextSessionTextResponse = ControlResponse(ok: true)
+    var nextSessionGridResponse = ControlResponse(ok: true)
     var nextSurfaceZoomResponse = ControlResponse(ok: true)
     var nextSurfaceCursorResponse = ControlResponse(ok: true, result: ControlResult(cursor: ControlCursor(column: 0)))
     var nextDashboardResponse = ControlResponse(ok: true)
@@ -869,6 +872,16 @@ final class MockControlActions: ControlActions {
     func readSessionText(_ target: String?, window: String?, options: ControlSessionTextOptions) -> ControlResponse {
         calls.append(.sessionText(target: target, window: window, options))
         return nextSessionTextResponse
+    }
+
+    func setSessionGrid(_ target: String?, window: String?, pane: StatusPane, grid: ControlGrid?) -> ControlResponse {
+        calls.append(.sessionGrid(target: target, window: window, pane: pane, grid))
+        return nextSessionGridResponse
+    }
+
+    func scrollSession(_ target: String?, window: String?, pane: StatusPane, lines: Int) -> ControlResponse {
+        calls.append(.sessionScroll(target: target, window: window, pane: pane, lines: lines))
+        return ControlResponse(ok: true)
     }
 
     func windowNew(name: String?, minimized: Bool) async -> ControlResponse {

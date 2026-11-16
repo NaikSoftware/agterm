@@ -347,6 +347,8 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     /// paneBackgrounds is the read side of `session.background --pane`: overrides only, never effective values,
     /// so an absent pane inherits `background`; omitted when no pane has one.
     public let paneBackgrounds: PaneBackgrounds?
+    /// paneGrids is the read side of `session.grid`, omitted while every pane follows its view.
+    public let paneGrids: ControlPaneGrids?
     /// The session's unseen-notification badge count; nil/omitted when zero. `notify` (and terminal OSC
     /// 9/777) raise it, `session.seen` clears it. Ephemeral like `status` — never persisted, resets on restart.
     public let unseen: Int?
@@ -427,7 +429,9 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
                 remoteOverlays: [ControlRemoteOverlayNode]? = nil, htmlOverlays: [ControlHtmlOverlayNode]? = nil,
                 hiddenOverlays: [String]? = nil, lastSelectedAt: Double? = nil,
                 tint: String? = nil, tintOn: [String]? = nil, parent: String? = nil, collapsed: Bool? = nil,
-                content: String? = nil, info: SessionInfo? = nil, remoteSessionID: String? = nil) {
+                content: String? = nil, info: SessionInfo? = nil, remoteSessionID: String? = nil,
+                paneGrids: ControlPaneGrids? = nil) {
+        self.paneGrids = paneGrids
         self.remoteSessionID = remoteSessionID
         self.content = content
         self.info = info?.source

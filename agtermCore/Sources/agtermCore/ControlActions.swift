@@ -214,6 +214,10 @@ public protocol ControlActions {
     func setSessionBackground(_ target: String?, window: String?,
                               options: ControlSessionBackgroundOptions) -> ControlResponse
     func readSessionText(_ target: String?, window: String?, options: ControlSessionTextOptions) -> ControlResponse
+    /// setSessionGrid gives the pane a grid apart from its view, or with nil hands it back; answers `{id, pane, columns, rows}`.
+    func setSessionGrid(_ target: String?, window: String?, pane: StatusPane, grid: ControlGrid?) -> ControlResponse
+    /// scrollSession wheels the pane like a mouse over it; answers `{id, pane, lines}`.
+    func scrollSession(_ target: String?, window: String?, pane: StatusPane, lines: Int) -> ControlResponse
     func windowNew(name: String?, minimized: Bool) async -> ControlResponse
     func windowList() -> ControlResponse
     func windowSelect(_ target: String?) async -> ControlResponse

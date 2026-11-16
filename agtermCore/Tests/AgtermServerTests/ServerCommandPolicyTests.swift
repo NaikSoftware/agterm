@@ -12,7 +12,7 @@ struct ServerCommandPolicyTests {
         #expect(ServerCommandPolicy.refusal(.windowNew) == HeadlessCommandPolicy.physicalWindowRefusal(.windowNew))
     }
 
-    @Test(arguments: [Command.zmxPrune, .zmxReset, .restoreCapture, .eventsRead])
+    @Test(arguments: [Command.zmxPrune, .zmxReset, .restoreCapture, .eventsRead, .sessionGrid, .sessionScroll])
     func anyOtherCommandIsRefusedByName(_ command: Command) {
         #expect(ServerCommandPolicy.refusal(command) == "\(command.rawValue) is not available on agterm-server")
     }

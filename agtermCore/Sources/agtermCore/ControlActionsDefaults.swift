@@ -257,6 +257,14 @@ public extension ControlActions {
         ControlResponse(ok: false, error: "session.lead is not supported by this host")
     }
 
+    func setSessionGrid(_: String?, window _: String?, pane _: StatusPane, grid _: ControlGrid?) -> ControlResponse {
+        ControlResponse(ok: false, error: "session.grid is not supported by this host")
+    }
+
+    func scrollSession(_: String?, window _: String?, pane _: StatusPane, lines _: Int) -> ControlResponse {
+        ControlResponse(ok: false, error: "session.scroll is not supported by this host")
+    }
+
     /// Not `ControlActionsUnsupported.message`, which says "on this platform": the divider exists wherever
     /// there is a sidebar, so a host refusing this has not implemented the command rather than lacking the
     /// thing it moves.
