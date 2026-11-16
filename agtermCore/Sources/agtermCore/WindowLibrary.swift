@@ -32,8 +32,8 @@ public struct WindowInfo: Codable, Sendable, Identifiable, Equatable {
 /// loaded; the persisted open-set in `windows.json` records which to reopen on the next launch.
 ///
 /// Recovery contract (never throws, mirrors `PersistenceStore.load()`): a corrupt or version-mismatched
-/// `windows.json` counts as absent → migrate legacy `workspaces.json` if present, else seed one window; a
-/// missing/corrupt per-window file opens with an empty `Snapshot` (one default workspace + session), so the
+/// `windows.json` counts as absent → recover orphaned `windows/<id>.json` files, else migrate legacy
+/// `workspaces.json`, else seed one window; a missing/corrupt per-window file opens as an empty tree, so the
 /// window set is always valid and non-empty.
 @Observable
 @MainActor
@@ -45,6 +45,10 @@ public final class WindowLibrary {
     /// unless another one still holds the session, live or pending its close, in which case it restores
     /// there. Independent of window reopen semantics.
     public private(set) var recentClosedItems: [RecentClosedItem]
+    /// remoteRecentClosedItems are the closed rows attached here from another host, newest first.
+    public private(set) var remoteRecentClosedItems: [RemoteRecentClosedItem]
+    /// attachedUndos are each window's undoable terminates of attached rows, oldest first, while their grace lasts.
+    public internal(set) var attachedUndos: [UUID: [AttachedUndo]] = [:]
 
     /// The id of the frontmost on-screen window, mirrored into the index on change. Outlives the window
     /// only when it was the last one closed, so the index records which window the user exited from.
@@ -70,7 +74,7 @@ public final class WindowLibrary {
     @ObservationIgnored let directory: URL
     @ObservationIgnored let recentClosedStore: RecentClosedStore
     /// One bounded run-identified ring shared by every window store for this library/app lifetime.
-    @ObservationIgnored private let controlEventRing: ControlEventRing
+    @ObservationIgnored let controlEventRing: ControlEventRing
     /// Every event after the ring sequences it, debounced `tree.changed` included: what `events.read` will show.
     @ObservationIgnored public var onControlEvent: ((ControlEvent) -> Void)?
     /// onRemoteStoreOpened and onRemoteStoreClosed bracket a remote window's loaded store, so the app can run
@@ -79,6 +83,8 @@ public final class WindowLibrary {
     @ObservationIgnored public var onRemoteStoreClosed: ((UUID) -> Void)?
     /// remoteDuplicates maps a remote window whose server turned out to be another window's to that window.
     @ObservationIgnored var remoteDuplicates: [UUID: UUID] = [:]
+    /// remoteOpenClaims are remote windows the user opened whose mirror has not asked yet; never saved.
+    @ObservationIgnored var remoteOpenClaims: Set<UUID> = []
     @ObservationIgnored private let paneFinalizer: (([UUID]) -> Void)?
     @ObservationIgnored private let launchPaneDrop: (([UUID]) -> Void)?
     @ObservationIgnored private let launchInventorySink: ((Set<UUID>?) -> Void)?
@@ -138,6 +144,7 @@ public final class WindowLibrary {
         self.stores = [:]
         self.windows = []
         self.recentClosedItems = recentClosedStore.load()
+        self.remoteRecentClosedItems = recentClosedStore.loadRemote()
         self.frontmostWindowID = nil
         bootstrap()
         if let launchInventorySink { launchInventorySink(prepareLaunchPaneInventory()) }
@@ -188,7 +195,8 @@ public final class WindowLibrary {
     /// supplies each open window's live frame app-side (NSWindow handles live in `WindowRegistry`, not this
     /// host-free model); nil by default so tests and non-AppKit callers get a geometry-free list.
     public func controlWindowNodes(geometry: (WindowInfo.ID) -> ControlWindowFrame? = { _ in nil },
-                                   flags: (WindowInfo.ID) -> (fullscreen: Bool, zoomed: Bool, minimized: Bool)? = { _ in nil })
+                                   flags: (WindowInfo.ID) -> (fullscreen: Bool, zoomed: Bool, minimized: Bool)? = { _ in nil },
+                                   viewers: (WindowInfo.ID) -> Int? = { _ in nil })
         -> [ControlWindowNode] {
         let active = activeWindowID
         return windows.map {
@@ -202,18 +210,14 @@ public final class WindowLibrary {
                                          fullscreen: live?.fullscreen, zoomed: live?.zoomed,
                                          minimized: live?.minimized)
             node.remote = remoteNode(for: $0.id)
+            node.catalogViewers = viewers($0.id)
             return node
         }
     }
 
     /// Reads the app-wide ring and maps both pages and cursor failures onto the stable control response.
     public func readEvents(_ options: ControlEventReadOptions) -> ControlResponse {
-        switch controlEventRing.read(cursor: options.cursor, kinds: options.kinds, limit: options.limit) {
-        case .batch(let batch):
-            return ControlResponse(ok: true, result: ControlResult(events: batch))
-        case .failure(let error, let anchor):
-            return ControlResponse(ok: false, result: ControlResult(events: anchor), error: error.rawValue)
-        }
+        controlEventRing.readResponse(options)
     }
 
     /// Appends `app.launched` on the first call of a run, and only when `ready`. The caller picks the
@@ -224,12 +228,6 @@ public final class WindowLibrary {
         appLaunchSettled = true
         guard ready else { return }
         let event = controlEventRing.append(ControlEventDraft(kind: .appLaunched))
-        onControlEvent?(event)
-    }
-
-    /// Appends an app-wide event (no window or session) and hands it to the hook sink, as `emitAppLaunched` does.
-    public func emitAppEvent(_ draft: ControlEventDraft) {
-        let event = controlEventRing.append(draft) // outside the call: an optional call skips its argument
         onControlEvent?(event)
     }
 
@@ -407,7 +405,11 @@ public final class WindowLibrary {
     public func loadStore(for id: UUID, launchRestore: Bool = false) -> AppStore? {
         guard windows.contains(where: { $0.id == id }) else { return nil }
         if let existing = stores[id] { return existing }
-        if windows.first(where: { $0.id == id })?.isRemote == true { return loadRemoteStore(for: id) }
+        if windows.first(where: { $0.id == id })?.isRemote == true {
+            // a window the user opens takes the lead of its rows; one the launch restores leaves it where it is
+            if !launchRestore { remoteOpenClaims.insert(id) }
+            return loadRemoteStore(for: id)
+        }
         let persistence = persistenceStore(for: id)
         let store = makeStore(for: id, persistence: persistence)
         let snapshot = loadSnapshotForStore(persistence)
@@ -735,6 +737,7 @@ public final class WindowLibrary {
             launchPaneDrop: launchPaneDrop
         )
         store.flaggedLayout = flaggedLayout
+        store.recentClosedWindow = windowID
         return store
     }
 
@@ -919,15 +922,13 @@ public final class WindowLibrary {
             // through the ownership projection, so this stays one predicate: an empty list is a session
             // whose daemons are not ours to claim, and inventing rows for it would name daemons that do
             // not exist here
-            var owned = session.locallyManagedPaneIdentities.makeIterator()
-            guard let primary = owned.next() else { continue }
-            claims.append(site.claim(.left, identity: primary))
-            guard session.hasSplit else { continue }
-            guard let split = owned.next() else {
-                complete = false
-                continue
+            let owned = session.locallyManagedPaneIdentities
+            guard !owned.isEmpty else { continue }
+            claims.append(site.claim(.left, identity: session.paneIdentity))
+            if session.hasSplit {
+                if let split = session.splitPaneIdentity { claims.append(site.claim(.right, identity: split)) } else { complete = false }
             }
-            claims.append(site.claim(.right, identity: split))
+            if let scratch = session.localScratchIdentity { claims.append(site.claim(.scratch, identity: scratch)) }
         }
         return ZmxClaimWalk(claims: claims, complete: complete)
     }
@@ -951,12 +952,10 @@ public final class WindowLibrary {
                 } else {
                     complete = false
                 }
-                guard (session.hasSplit ?? false) || (session.isSplit ?? false) else { continue }
-                guard let split = session.splitPaneIdentity else {
-                    complete = false
-                    continue
+                if (session.hasSplit ?? false) || (session.isSplit ?? false) {
+                    if let split = session.splitPaneIdentity { claims.append(site.claim(.right, identity: split)) } else { complete = false }
                 }
-                claims.append(site.claim(.right, identity: split))
+                if let scratch = session.scratchPaneIdentity { claims.append(site.claim(.scratch, identity: scratch)) }
             }
         }
         return ZmxClaimWalk(claims: claims, complete: complete)
@@ -990,6 +989,7 @@ public final class WindowLibrary {
 
     func refreshRecentClosedItems() {
         recentClosedItems = recentClosedStore.load()
+        remoteRecentClosedItems = recentClosedStore.loadRemote()
     }
 
     func log(_ message: @autoclosure () -> String) {

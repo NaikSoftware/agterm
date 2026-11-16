@@ -15,9 +15,11 @@ public struct ControlRecentItem: Codable, Sendable, Equatable {
     /// A session entry's agent (`SessionLauncher` raw value) and the line its reopen types; absent otherwise.
     public let agent: String?
     public let resume: String?
+    /// host is the origin of a `remote` entry, a row attached here from another host; absent for this host's own.
+    public let host: String?
 
     public init(id: String, kind: String, title: String, subtitle: String?, closedAt: Double,
-                workspaceID: String, sessionIDs: [String], agent: String? = nil, resume: String? = nil) {
+                workspaceID: String, sessionIDs: [String], agent: String? = nil, resume: String? = nil, host: String? = nil) {
         self.id = id
         self.kind = kind
         self.title = title
@@ -27,6 +29,22 @@ public struct ControlRecentItem: Codable, Sendable, Equatable {
         self.sessionIDs = sessionIDs
         self.agent = agent
         self.resume = resume
+        self.host = host
+    }
+
+    /// remoteKind is the kind of an entry for a row attached from another host, whose session ids are the origin's.
+    public static let remoteKind = "remote"
+
+    public init(_ item: RemoteRecentClosedItem) {
+        self.init(id: item.id.uuidString, kind: Self.remoteKind, title: item.name, subtitle: item.host,
+                  closedAt: item.closedAt.timeIntervalSince1970, workspaceID: item.placement.workspaceID.uuidString,
+                  sessionIDs: [item.originSessionID], host: item.host)
+    }
+
+    /// merged lists this host's entries and its attached rows' entries together, newest first.
+    public static func merged(_ items: [RecentClosedItem], remote: [RemoteRecentClosedItem]) -> [ControlRecentItem] {
+        guard !remote.isEmpty else { return items.map(ControlRecentItem.init) }
+        return (items.map(ControlRecentItem.init) + remote.map(ControlRecentItem.init)).sorted { $0.closedAt > $1.closedAt }
     }
 
     public init(_ item: RecentClosedItem) {
@@ -53,11 +71,15 @@ public struct ControlRecentOpen: Codable, Sendable, Equatable {
     public let item: ControlRecentItem
     public let window: String
     public let complete: Bool
+    /// restored is every row the open brought into the window, a closed parent reopened first included; only a Mac
+    /// serving its window to another Mac reports it.
+    public let restored: [String]?
 
-    public init(item: ControlRecentItem, window: String, complete: Bool) {
+    public init(item: ControlRecentItem, window: String, complete: Bool, restored: [String]? = nil) {
         self.item = item
         self.window = window
         self.complete = complete
+        self.restored = restored
     }
 }
 
@@ -76,6 +98,30 @@ public enum RecentClosedTarget {
                 ControlResolve.errorMessage(noun: "recent item", target: target, resolution: resolution)))
         }
         return .success(id)
+    }
+}
+
+/// RecentClosedChoice is the entry a `recent.open` target names: this host's own or an attached row's.
+public enum RecentClosedChoice: Equatable, Sendable {
+    case local(UUID)
+    case remote(UUID)
+}
+
+extension RecentClosedTarget {
+    /// resolve over both lists: the newest of either when `target` is nil, else the one id that matches.
+    public static func resolve(_ target: String?, in items: [RecentClosedItem],
+                               remote: [RemoteRecentClosedItem]) -> Result<RecentClosedChoice, RecentClosedTargetError> {
+        guard !remote.isEmpty else { return resolve(target, in: items).map(RecentClosedChoice.local) }
+        guard let target else {
+            if let local = items.first, local.closedAt >= remote[0].closedAt { return .success(.local(local.id)) }
+            return .success(.remote(remote[0].id))
+        }
+        let resolution = ControlResolve.resolve(target, candidates: items.map(\.id) + remote.map(\.id), active: nil)
+        guard case .resolved(let id) = resolution else {
+            return .failure(RecentClosedTargetError(
+                ControlResolve.errorMessage(noun: "recent item", target: target, resolution: resolution)))
+        }
+        return .success(remote.contains { $0.id == id } ? .remote(id) : .local(id))
     }
 }
 

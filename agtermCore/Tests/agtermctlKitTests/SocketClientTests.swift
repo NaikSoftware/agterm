@@ -409,6 +409,19 @@ struct SocketClientTests {
         #expect(server.received?.cmd == .sessionCompanionNew)
     }
 
+    @Test func anAppTooOldForUndoIsNamed() throws {
+        let decodeError = "invalid request: Cannot initialize Command from invalid String value session.undo"
+        let server = StubServer(response: ControlResponse(ok: false, error: decodeError))
+        try server.start()
+        defer { server.stop() }
+
+        let run = try runCLI(["session", "undo", "--target", "u1", "--socket", server.path])
+
+        #expect(run.status == 1)
+        #expect(String(decoding: run.err, as: UTF8.self) == "error: the running app is too old for session undo\n")
+        #expect(server.received?.cmd == .sessionUndo)
+    }
+
     @Test func anAppTooOldForConvertIsNamedAndNothingElseIsSent() throws {
         let decodeError = "invalid request: Cannot initialize Command from invalid String value session.companion.convert"
         let server = StubServer(response: ControlResponse(ok: false, error: decodeError))
@@ -421,6 +434,24 @@ struct SocketClientTests {
         #expect(run.out.isEmpty)
         #expect(String(decoding: run.err, as: UTF8.self) == "error: the running app is too old for convert\n")
         #expect(server.received?.cmd == .sessionCompanionConvert)
+    }
+
+    @Test(arguments: [
+        (["session", "close", "--terminate", "--target", "s1"], Command.sessionTerminate, "terminate"),
+        (["zmx", "kill", "--target", "s1", "--pane", "left", "--pane-id", "tok", "--force"], .zmxKillPane, "a pinned pane kill"),
+    ])
+    func anAppTooOldForTerminateOrAPinnedKillIsNamed(argv: [String], command: Command, what: String) throws {
+        let decodeError = "invalid request: Cannot initialize Command from invalid String value \(command.rawValue)"
+        let server = StubServer(response: ControlResponse(ok: false, error: decodeError))
+        try server.start()
+        defer { server.stop() }
+
+        let run = try runCLI(argv + ["--socket", server.path])
+
+        #expect(run.status == 1)
+        #expect(run.out.isEmpty)
+        #expect(String(decoding: run.err, as: UTF8.self) == "error: the running app is too old for \(what)\n")
+        #expect(server.received?.cmd == command)
     }
 
     @Test func anAppTooOldForPageSessionsIsNamedAndNothingElseIsSent() throws {
@@ -1171,6 +1202,16 @@ struct SocketClientTests {
         #expect(output == "* work  [w]\n  * shell (split)  [s]  \(expected)")
     }
 
+    @Test(arguments: [("/other", "/main  scratch cwd: /other"), ("/main", "/main")])
+    func formatTreeIncludesOnlyADifferingScratchDirectory(_ scratchCwd: String, _ expected: String) throws {
+        let data = Data(#"{"id":"s","name":"shell","cwd":"/main","scratchCwd":"\#(scratchCwd)","active":true,"split":false,"overlay":false,"scratch":true,"flagged":false}"#.utf8)
+        let session = try JSONDecoder().decode(ControlSessionNode.self, from: data)
+        let tree = ControlTree(workspaces: [ControlWorkspaceNode(id: "w", name: "work", active: true, sessions: [session])])
+        let response = ControlResponse(ok: true, result: ControlResult(tree: tree))
+        let output = SocketClient.formatResponse(response)
+        #expect(output == "* work  [w]\n  * shell (scratch)  [s]  \(expected)")
+    }
+
     @Test func formatWindowResizeReportsAppliedWidthAndHeight() throws {
         let response = try JSONDecoder().decode(ControlResponse.self, from: Data(#"{"ok":true,"result":{"id":"w","width":1200,"height":800}}"#.utf8))
         #expect(SocketClient.formatResponse(response) == "1200 800")
@@ -1215,7 +1256,25 @@ struct SocketClientTests {
         let out = SocketClient.formatResponse(ControlResponse(ok: true, result: ControlResult(tree: tree)))
 
         #expect(out.contains("presentation: failed (exit 255)"))
-        #expect(out.contains("mirrored by: 2"))
+        #expect(out.contains("viewed by: 2"))
+    }
+
+    @Test(arguments: [(ControlPresentersNode(mirrors: 1, presenter: true, viewers: 3), 3), (ControlPresentersNode(mirrors: 1, presenter: true), 2),
+                      (ControlPresentersNode(mirrors: 2), 2)])
+    func theViewerCountComesFromViewersOrFromAnOlderAppsMirrorsAndPresenter(node: ControlPresentersNode, count: Int) {
+        #expect(node.viewedBy == count)
+    }
+
+    @Test func presentersDecodeAcrossVersions() throws {
+        struct OlderPresenters: Decodable, Equatable {
+            let mirrors: Int
+            let presenter: Bool?
+        }
+        let current = try JSONEncoder().encode(ControlPresentersNode(mirrors: 1, presenter: true, viewers: 2))
+        let older = Data(#"{"mirrors":1,"presenter":true}"#.utf8)
+
+        #expect(try JSONDecoder().decode(OlderPresenters.self, from: current) == OlderPresenters(mirrors: 1, presenter: true))
+        #expect(try JSONDecoder().decode(ControlPresentersNode.self, from: older).viewedBy == 2)
     }
 
     @Test func formatTreeShowsThePresenterOnBothSides() {
@@ -1231,8 +1290,7 @@ struct SocketClientTests {
         let out = SocketClient.formatResponse(ControlResponse(ok: true, result: ControlResult(tree: tree)))
 
         #expect(out.contains("presentation: connected, presenter"))
-        #expect(out.contains("presented remotely"))
-        #expect(!out.contains("mirrored by"))
+        #expect(out.contains("viewed by: 1"))
     }
 
     @Test func formatResponseTree() {

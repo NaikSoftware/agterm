@@ -38,6 +38,8 @@ struct RemotePresentationClientTests {
         var huds: [PresentationHud?] = []
         var contexts: [String?] = []
         var notifies: [PresentationNotify] = []
+        var messages: [PresentationMessage] = []
+        var mails: [PresentationMail?] = []
         var sounds: [PresentationSound] = []
         var connections: [RemotePresentationConnection] = []
         var modes: [PresentationMode] = []
@@ -54,6 +56,7 @@ struct RemotePresentationClientTests {
         var respawns: [(PresentationRespawns, Bool)] = []
         var linkRefusals: [RemoteLinkRefusal] = []
         var warnings: [String] = []
+        var leads: Set<UUID> = []
     }
 
     final class Clock { var now = Date(timeIntervalSince1970: 1_789_000_000) }
@@ -98,6 +101,9 @@ struct RemotePresentationClientTests {
             sound: { recorder.sounds.append($0) },
             respawns: { recorder.respawns.append(($0, $1)) },
             linkRefused: { recorder.linkRefusals.append($0) },
+            message: { recorder.messages.append($0) },
+            mail: { recorder.mails.append($0) },
+            leads: { recorder.leads },
             warn: { recorder.warnings.append($0) })
         return RemotePresentationClient(argv: ["ssh", "buildbox", "present"], presentationVersion: version,
                                         transport: transport, effects: effects, now: { clock.now })
@@ -143,6 +149,59 @@ struct RemotePresentationClientTests {
         transport.deliver(line(.pendingCommit, rev: 2 + chunks.count))
 
         #expect(recorder.asks == asks)
+    }
+
+    private func leadReports(_ link: Link?) -> [Set<UUID>] {
+        (link?.sent ?? []).compactMap { if case .leadReport(let report) = $0.body { Set(report.leaders) } else { nil } }
+    }
+
+    @Test(arguments: [true, false])
+    func theLeadSetIsReportedOnlyToAnOriginThatTakesIt(takes: Bool) {
+        let client = makeClient()
+        client.start()
+        let pane = UUID()
+        recorder.leads = [pane]
+
+        connect(client, kinds: ["status"] + (takes ? [PresentationHub.leadReportKind] : []))
+
+        #expect(leadReports(transport.links.last) == (takes ? [[pane]] : []))
+        #expect(client.claimsLead == takes)
+    }
+
+    @Test func theLeadSetIsReportedEmptyAndAgainOnlyWhenItChanges() {
+        let client = makeClient()
+        client.start()
+        let pane = UUID()
+        connect(client, kinds: [PresentationHub.leadReportKind])
+        #expect(!client.claimsLead)
+
+        client.refreshLeads()
+        client.tick()
+        recorder.leads = [pane]
+        client.tick()
+        client.refreshLeads()
+        recorder.leads = []
+        transport.deliver(line(.layout(PresentationLayout(panes: [pane], primary: pane, axis: nil, shown: false)), rev: 2))
+
+        #expect(leadReports(transport.links.last) == [[], [pane], []])
+        #expect(!client.claimsLead)
+    }
+
+    @Test func aNewLinkReportsTheLeadSetAgain() {
+        let client = makeClient()
+        client.start()
+        let pane = UUID()
+        recorder.leads = [pane]
+        connect(client, kinds: [PresentationHub.leadReportKind])
+
+        transport.close("gone")
+        clock.now = clock.now.addingTimeInterval(60)
+        client.tick()
+        connect(client, gen: 8, kinds: [PresentationHub.leadReportKind])
+
+        #expect(transport.links.count == 2)
+        #expect(leadReports(transport.links.first) == [[pane]])
+        #expect(leadReports(transport.links.last) == [[pane]])
     }
 
     @Test func chunksALostStreamLeftUncommittedApplyNothing() throws {
@@ -234,6 +293,30 @@ struct RemotePresentationClientTests {
 
         #expect(recorder.modes == [.mirror])
         #expect(recorder.connections.last == .connected)
+    }
+
+    @Test func aVacancyMakesARefusedMirrorAskAgain() {
+        let client = makeClient()
+        client.start()
+        connect(client, mode: .presenter)
+        transport.deliver(line(.presenterRefused, rev: 2))
+
+        transport.deliver(line(.presenterVacant, rev: 3))
+        transport.deliver(line(.presenterGranted, rev: 4))
+
+        #expect(transport.links[0].sent.map(\.body).filter { $0 == .presenterAcquire }.count == 2)
+        #expect(recorder.modes == [.mirror, .presenter])
+    }
+
+    @Test func aVacancyLeavesThePresenterAlone() {
+        let client = makeClient()
+        client.start()
+        connect(client, mode: .presenter)
+        transport.deliver(line(.presenterGranted, rev: 2))
+
+        transport.deliver(line(.presenterVacant, rev: 3))
+
+        #expect(transport.links[0].sent.map(\.body).filter { $0 == .presenterAcquire }.count == 1)
     }
 
     // regression: a replacement client after soft close and undo left the row reading presenter when refused
@@ -476,6 +559,33 @@ struct RemotePresentationClientTests {
         #expect(recorder.statuses == [nil, Self.blocked, nil])
         #expect(recorder.huds == [nil, nil])
         #expect(recorder.notifies == [notify])
+    }
+
+    @Test func aMirrorReportsEveryMessageFrameAndASnapshotReportsNone() {
+        let client = makeClient()
+        client.start()
+        connect(client, mode: .mirror, kinds: ["message"])
+        let afterSnapshot = recorder.messages
+        let messages = [PresentationMessage(pane: UUID(), from: nil, messageID: UUID()),
+                        PresentationMessage(pane: UUID(), from: "S:P", messageID: UUID())]
+
+        transport.deliver(line(.message(messages[0]), rev: 2))
+        transport.deliver(line(.message(messages[1]), rev: 3))
+
+        #expect(afterSnapshot.isEmpty)
+        #expect(recorder.messages == messages)
+    }
+
+    @Test func aSnapshotReportsItsMailEvenWhenAbsentAndAMailFrameReplacesIt() {
+        let client = makeClient()
+        client.start()
+        let mail = PresentationMail(panes: [UUID().uuidString: 2])
+        connect(client, snapshot: PresentationSnapshot(status: nil, hud: nil, mail: mail), kinds: ["mail"])
+
+        transport.deliver(line(.mail(PresentationMail(panes: [:])), rev: 2))
+        transport.deliver(line(.snapshot(PresentationSnapshot(status: nil, hud: nil)), rev: 3))
+
+        #expect(recorder.mails == [mail, PresentationMail(panes: [:]), nil])
     }
 
     @Test func aFrameFromAnotherGenerationOrAnOldRevisionIsIgnored() {

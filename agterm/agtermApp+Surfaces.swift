@@ -58,18 +58,19 @@ extension agtermApp {
             guard let splitFocused = Self.focusedSplitState(focused, surface: view) else { return }
             store.session(withID: sessionID)?.splitFocused = splitFocused
             // focusing a pane means you've seen the session: clear the badge and any delivered banners.
-            store.clearUnseen(sessionID)
+            store.markSeen(sessionID)
             NotificationManager.shared.clearDelivered(sessionID: sessionID)
         }
         // focus-free half of the clear above: zoom hosting suppresses the focus report though the refocused
         // user is looking right at this surface.
         view.onClearUnseen = {
-            store.clearUnseen(sessionID)
+            store.markSeen(sessionID)
             NotificationManager.shared.clearDelivered(sessionID: sessionID)
         }
         Self.wireStatusClear(view, store: store, sessionID: sessionID)
         view.onUserInput = { keystroke in
             store.noteUserActivity()
+            store.forwardSeenKeystroke(keystroke, forSession: sessionID)
             // typing in the session counts as seeing it, but its banners stay: a note that arrived
             // mid-typing would vanish on the next key before it could be read.
             guard (store.session(withID: sessionID)?.unseenCount ?? 0) > 0,
@@ -88,14 +89,16 @@ extension agtermApp {
                view.session?.surface === view || view.session?.splitSurface === view {
                 RemoteReconnectBook.shared.cancel(pane: pane)
             }
-            Self.remotePaneStopped(view, store: store, sessionID: sessionID, library: services.library)
+            Self.remotePaneStopped(view, store: store, sessionID: sessionID, library: services.library,
+                                   attach: services.actions.remoteAttacher as? RemoteAttachLines)
             PaneLead.heldExit?(view)
         }
     }
 
-    /// replacePane puts a surface built from `launch` in `old`'s slot and destroys `old`, running none of
+    /// replacePane puts a surface built from `launch` in `old`'s slot and retires `old`, running none of
     /// the pane's close paths. `spawnFirst` creates the new surface at the old size BEFORE the free: libghostty
     /// routes a queued child-exit by surface address, and a surface created after it can take the old exit.
+    /// Retiring keeps the old surface allocated until its threads have exited, without the main thread waiting on them.
     @MainActor
     static func replacePane(_ old: GhosttySurfaceView, launch: PaneReattach, lead: ZmxLeadAttachment, cover: Bool,
                             spawnFirst: Bool = false, services: SurfaceServices) -> GhosttySurfaceView? {
@@ -115,7 +118,7 @@ extension agtermApp {
         // the old client's exit must not close the pane the new one now owns
         _ = old.claimProcessExit()
         let hadFocus = old.window?.firstResponder === old
-        // synchronously: END_SEARCH reports back through a callback `destroySurface` clears first
+        // synchronously: the retired surface's END_SEARCH callback is dropped
         if session.searchSurface === old {
             session.searchActive = false
             session.searchNeedle = ""
@@ -128,7 +131,7 @@ extension agtermApp {
             view.frame = old.frame.isEmpty ? NSRect(x: 0, y: 0, width: 800, height: 600) : old.frame
             view.createSurface()
         }
-        old.destroySurface()
+        old.retireSurface()
         if old.backedByZmx { services.zmxForegroundResolver?.noteLifecycleChange() }
         if hadFocus { view.focusAfterReparent() }
         return view
@@ -144,7 +147,8 @@ extension agtermApp {
         guard let session = store.session(withID: sessionID), session.surface === view || session.splitSurface === view else { return }
         // the catalog owns a remote window's panes: an exit here attaches again, or keeps an ended row's screen
         if session.remotePresentation?.binding.catalogOwned == true {
-            if !session.ended { PaneLead.reattach?(view, false) }
+            let pane = view.isSplitPane ? session.splitPaneIdentity : session.paneIdentity
+            if !session.ended, !(pane.map(session.catalogPaneHeld) ?? false) { PaneLead.reattach?(view, false) }
             return
         }
         if view.isSplitPane {
@@ -200,8 +204,8 @@ extension agtermApp {
     /// responder back to the visible terminal. TOTAL/SELECTED carry the count/index; both factories share it, so
     /// GUI and control pin the owner alike.
     @MainActor
-    private static func wireSearchCallbacks(_ view: GhosttySurfaceView, store: AppStore, sessionID: UUID,
-                                            actions: AppActions) {
+    static func wireSearchCallbacks(_ view: GhosttySurfaceView, store: AppStore, sessionID: UUID,
+                                    actions: AppActions) {
         view.isSearchable = true
         view.onSearchStart = { [weak view] needle in
             guard let session = store.session(withID: sessionID) else { return }
@@ -245,24 +249,22 @@ extension agtermApp {
     }
 
     /// Wires the pane-scoped keystroke-clear: `keyDown` fires `onUserInputClearsStatus` unconditionally, and this
-    /// closure clears to idle only when host-free `AgentIndicator.clearedBy(pane:keystroke:reset:)` says the
-    /// keystroke's OWN pane owns the status under the Status reset setting, read live from `GhosttyApp` so a
-    /// Settings change applies to the next key. A block set from a background pane survives typing elsewhere. Main/split read
+    /// closure hands it to `AppStore.clearStatus(by:)`, which clears only when the keystroke's OWN pane owns the
+    /// status under the Status reset setting, read live from `GhosttyApp` so a Settings change applies to the
+    /// next key. A block set from a background pane survives typing elsewhere. Main/split read
     /// the LIVE `isSplitPane` at keystroke time, so a promoted survivor clears as `.left`, matching its migrated
     /// status identity and `tree` addressing; a captured `.right` would clear the wrong pane and leave both panes
     /// `.right`-wired after a re-split. The scratch passes `fixedPane: .scratch`: never promoted, no `view.session`.
     @MainActor
-    private static func wireStatusClear(_ view: GhosttySurfaceView, store: AppStore, sessionID: UUID,
-                                        fixedPane: StatusPane? = nil) {
+    static func wireStatusClear(_ view: GhosttySurfaceView, store: AppStore, sessionID: UUID,
+                                fixedPane: StatusPane? = nil) {
         view.onUserInputClearsStatus = { [weak view] keystroke in
             let pane = fixedPane ?? ((view?.isSplitPane ?? false) ? .right : .left)
             let reset = GhosttyApp.shared.statusReset
+            if store.forwardStatusKeystroke(keystroke, pane: pane, forSession: sessionID) { return }
             // a status mirrored from an origin pane this Mac has no counterpart for is not this pane's to clear
             guard store.session(withID: sessionID)?.remotePresentation?.allowsKeystrokeStatusClear != false else { return }
-            if store.session(withID: sessionID)?.agentIndicator
-                .clearedBy(pane: pane, keystroke: keystroke, reset: reset) == true {
-                store.setAgentIndicator(AgentIndicator(), forSession: sessionID)
-            }
+            store.clearStatus(by: keystroke, pane: pane, reset: reset, forSession: sessionID)
         }
     }
 
@@ -347,7 +349,7 @@ extension agtermApp {
         //
         // the pane arm's callbacks re-resolve their pane from the slot the surface CURRENTLY occupies, never
         // the captured `pane`: `closePrimaryPane` MOVES a right-pane overlay into the left slot without
-        // rebuilding the view (`TerminalView.makeNSView` reuses a non-nil slot), so a captured `.right` would
+        // rebuilding the view (`TerminalSurfaceHost.makeNSView` reuses a non-nil slot), so a captured `.right` would
         // close nothing, record the status where `session.overlay.result --pane left` can't read it, and leave
         // the promoted pane under a dead overlay forever. The captured value is the pre-realization fallback,
         // for the window between the open and the slot holding this surface.
@@ -393,39 +395,5 @@ extension agtermApp {
                                backgroundColor: session.overlayBackgroundColor, wait: session.overlayWait)
         }
         return session.paneOverlay(pane) ?? PaneOverlay(command: "")
-    }
-
-    /// Scratch-terminal surface factory: a third per-session shell, full-overlay rendered. Like the overlay it is
-    /// NOT operationally wired to the session (no `view.session`/`isSplitPane`), so its PWD/title never clobber
-    /// the sidebar name, but it keeps a weak visual-config link for the watermark and — unlike the overlay —
-    /// stays alive when hidden. Runs a login shell, or `session.scratchCommand` (`session.scratch --command`)
-    /// RUN-ONCE. `autoFocus` grabs first responder on show (winning the SwiftUI/AppKit responder race); the
-    /// shell's `exit` runs `closeScratch`, hiding + tearing down so the next show is fresh.
-    @MainActor
-    static func makeScratchSurface(for session: Session, store: AppStore, env: [String: String],
-                                   suppressAutoFocus: Bool, actions: AppActions) -> GhosttySurfaceView {
-        // re-shows are focused via the `scratchActive` onChange (which also defers to those covers).
-        // scratchCommand is run-once: read it for this spawn, then clear so a local scratch's post-exit respawn is a shell.
-        let command = session.scratchCommand
-        session.scratchCommand = nil
-        let cwd = session.localWorkingDirectory(reported: session.effectiveCwd, homeDirectory: NSHomeDirectory())
-        // a remote window's scratch is its server's: a stopped attach keeps its screen until it reconnects
-        let catalogScratch = session.catalogScratch
-        let view = GhosttySurfaceView(workingDirectory: cwd, fontSize: session.fontSize.map(Float.init), command: command,
-                                      autoFocus: !suppressAutoFocus,
-                                      env: env.merging(catalogScratch.map { ["AGTERM_PANE_ID": $0.uuidString] } ?? [:]) { $1 })
-        view.watermarkSession = session
-        let sessionID = session.id
-        view.onExit = { [weak view] in
-            if let view, PaneLead.scratchStopped?(view) == true { return }
-            store.closeScratch(sessionID)
-        }
-        Self.wireStatusClear(view, store: store, sessionID: sessionID, fixedPane: .scratch)
-        // same idle-timer reset as the overlay: an idle auto-follow fire must not hide the scratch mid-typing.
-        view.onUserInput = { _ in store.noteUserActivity() }
-        // the scratch is searchable (⌘F), pinned to the same session as the panes: unlike the overlay/quick
-        // terminal it stays alive across hides, so a bar over it is safe.
-        Self.wireSearchCallbacks(view, store: store, sessionID: sessionID, actions: actions)
-        return view
     }
 }

@@ -76,6 +76,10 @@ final class ControlServer {
     /// here because an extension cannot hold it. Main-actor only.
     let presentationHub = PresentationHub(staleTimeout: 30)
     var presentationStreams: [PresentationStream] = []
+    lazy var mailRelay = PresentationMailRelay { [unowned self] in
+        publishPresentationMail()
+        for catalog in originCatalogs.values { catalog.publisher.markDirty() }
+    }
     /// Remote overlay jobs this Mac handed to presenters.
     let overlayJobs = OverlayJobs()
     var overlayJobStreams: [String: OverlayJobStream] = [:]
@@ -89,9 +93,26 @@ final class ControlServer {
     /// How long an adopted stream may stay silent before its first hello.
     var presentationHelloDeadline: TimeInterval = 10
 
+    /// this Mac's windows served as remote windows; `ControlServer+MacCatalog` owns the logic.
+    var catalogStreams: [CatalogStream] = []
+    var catalogHeartbeat: Task<Void, Never>?
+    var originCatalogs: [UUID: OriginCatalog] = [:]
+    var originSignatures: [UUID: Set<String>] = [:]
+    var restartingPanes: Set<UUID> = []
+    /// originRead is the inventory read in flight, answering whether it succeeded; a request during it rereads.
+    var originRead: Task<Bool, Never>?
+    var originRereads = false
+    /// originEvidence is the last inventory read's evidence, which a window's new catalog starts from.
+    var originEvidence: CatalogPaneEvidence?
+    var originEventsWired = false
+    /// originLiveActive is whether this launch runs Live sessions, which serving a window needs; hosted tests set it.
+    var originLiveActive: () -> Bool = { GhosttyApp.shared.launchRestoreMode == .live }
+
     /// This Mac as a VIEWER: one client per attached session. `ControlServer+RemotePresentation` owns the
     /// logic. The transport is injectable so a hosted test needs no ssh.
     var remoteClients: [UUID: RemotePresentationClient] = [:]
+    /// restoredOriginChecks is each host whose restored rows are being checked, with its failures in a row.
+    var restoredOriginChecks: [String: Int] = [:]
     var remoteTransport: RemotePresentationTransport = RemotePresentationProcess()
     var remoteTick: Task<Void, Never>?
     /// remoteCatalogs holds one catalog stream per open remote window; `ControlServer+RemoteCatalog` owns them.
@@ -103,9 +124,18 @@ final class ControlServer {
     var remoteLinkRefusalHuds: [UUID: Int] = [:]
     /// pageLauncher and forwardLauncher start a page's channel helper and port forward; injectable so a hosted test needs no ssh.
     var pageLauncher: RemotePageLauncher = RemotePageProcess()
+    /// catalogPageClaims are the remote page rows a claim runs for; `ControlServer+CatalogPage` owns them.
+    var catalogPageClaims: Set<UUID> = []
+    /// forwardedPages names the server each page a remote window created lives on, so its result is read there after
+    /// that window is gone; `ControlServer+RemoteActions` owns them.
+    var forwardedPages: [UUID: String] = [:]
+    /// catalogPagePause is the wait before a remote page row's claim is tried again.
+    var catalogPagePause: () async -> Void = { try? await Task.sleep(for: .seconds(2)) }
     var forwardLauncher: RemoteForwardLauncher = RemoteForwardProcessLauncher()
+    let linkForwards = LinkForwards()
     var pendingReplicaStates: Set<UUID> = []
     var replicaFlushScheduled = false
+    var openWorkTracking = 0
 
     nonisolated private func cachedWindows() -> [ControlWindowNode] {
         cacheLock.lock(); defer { cacheLock.unlock() }
@@ -193,12 +223,9 @@ final class ControlServer {
     var phoneRelay: PhoneRelay?
     /// The scheduler's rows for `hooks.list`, wired by `agtermApp` once the controller exists.
     var hookStatus: () -> [ControlHookEntry] = { [] }
-    /// companionPageTokens are page-companion attachments handed to another Mac and not claimed yet, by token.
-    var companionPageTokens: [String: CompanionPageToken] = [:]
-    /// pendingCompanionClaims are claimed attachments whose channel is not adopted yet, by claim id.
-    var pendingCompanionClaims: [UUID: CompanionPageServing] = [:]
-    /// companionPageStreams are the live channels of page-companion attachments, by claim id.
-    var companionPageStreams: [UUID: PageServeStream] = [:]
+    /// pageAttachments are this Mac's page rows handed to other Macs.
+    lazy var pageAttachments = PageAttachmentBook(clock: { [unowned self] in hudClock() },
+                                                  servedPage: { [unowned self] in servedPage(session: $0, page: $1) })
     /// originEpoch names this app run in respawn counts, so a viewer never reads a restarted counter as older.
     let originEpoch = UUID().uuidString
     /// respawnGenerations counts each session's pane respawns by daemon name, for the presentation snapshot.
@@ -304,6 +331,7 @@ final class ControlServer {
     func start() {
         // ahead of the socket: a remote window mirrors its server whether or not this instance serves control
         wireRemoteCatalogs()
+        wireOriginEvents()
         guard listener == nil else { return }
 
         guard socketPath.utf8.count < 104 else {
@@ -367,7 +395,10 @@ final class ControlServer {
         // outside the guard: the lock is taken in `init`, so an instance that never bound (path too long,
         // or a bind that failed) still holds one and would otherwise keep it for the whole process.
         defer { releaseOwnership() }
+        mailRelay.stop()
         shutdownPresentationStreams()
+        shutdownCatalogStreams()
+        pageAttachments.shutdown()
         stopRemoteCatalogs()
         stopRemotePresentations()
         guard let loop = listener else { return }
@@ -502,6 +533,15 @@ final class ControlServer {
             return
         }
 
+        // a catalog stream is handed off the same way; its hello names the window it mirrors
+        if request.cmd == .catalogSubscribe {
+            let response = runBlocking { await server.dispatch(request) }
+            guard server.responseWriter(conn, response), response.ok else { return }
+            handedOff = true
+            runBlocking { await server.adoptCatalogStream(descriptor: conn) }
+            return
+        }
+
         // a claimed job's helper keeps its connection the same way, and a claim whose reply never reached
         // the helper leaves nobody to run the job
         if request.cmd == .sessionOverlayJobRun {
@@ -531,10 +571,24 @@ final class ControlServer {
             return
         }
 
+        // an operation from a window mirroring one of this Mac's waits on zmx reads and a new row's panes, so it
+        // runs from a worker and never reaches the remote route below
+        if request.args?.opID != nil {
+            handedOff = true
+            let worker = Thread {
+                defer { close(conn) }
+                let response = runBlocking { await server.originOperation(request) }
+                _ = server.responseWriter(conn, response ?? ControlResponse(ok: false, error: "no operation id"))
+            }
+            worker.name = "com.umputun.agterm.control.catalog"
+            worker.start()
+            return
+        }
+
         // a remote window's structural command is decided here and sent from a worker, so the accept thread
         // never waits on ssh while local structural commands keep their inline order
         if let route = runBlocking({ await server.remoteRoute(request) }) {
-            guard case .send = route else {
+            if case .refused = route {
                 _ = server.responseWriter(conn, runBlocking { await server.runRemoteRoute(route) })
                 return
             }
@@ -636,10 +690,11 @@ final class ControlServer {
 
     /// Run an async closure on a fresh task, blocking the calling background thread until it finishes —
     /// bridges the synchronous read loop to the main-actor dispatch without hopping the loop thread itself.
-    nonisolated private static func runBlocking<T: Sendable>(_ body: @escaping @Sendable () async -> T) -> T {
+    nonisolated static func runBlocking<T: Sendable>(_ body: @escaping @Sendable () async -> T) -> T {
         let semaphore = DispatchSemaphore(value: 0)
         let box = ResultBox<T>()
-        Task {
+        // above the default: a same-priority task waits behind every task already queued on the shared pool
+        Task(priority: .high) {
             box.value = await body()
             semaphore.signal()
         }
@@ -656,7 +711,7 @@ final class ControlServer {
 
     /// Execute a request against the store/actions seam. Never throws across the socket: any failure is a
     /// `{"ok":false,"error":…}` response.
-    private func dispatch(_ request: ControlRequest) async -> ControlResponse {
+    func dispatch(_ request: ControlRequest) async -> ControlResponse {
         // refresh the read cache in this same main-actor execution, so the background fast path sees the new
         // state without a separate, stallable hop.
         defer { if !Self.leavesWindowsUnchanged(request.cmd) { refreshWindowCache() } }
@@ -667,13 +722,13 @@ final class ControlServer {
             return response
         }
         switch request.cmd {
-        case .tree, .eventsRead, .sessionNew, .sessionDuplicate, .sessionSelect, .sessionGo, .sessionClose, .sessionRename,
-                .sessionReveal, .sessionMove,
+        case .tree, .eventsRead, .sessionNew, .sessionDuplicate, .sessionSelect, .sessionGo, .sessionClose, .sessionTerminate, .sessionUndo,
+                .sessionRename, .sessionReveal, .sessionMove,
                 .workspaceNew, .workspaceSelect, .workspaceGo, .workspaceRename, .workspaceDelete, .workspaceMove,
                 .workspaceFocus,
                 .workspaceFilter, .workspaceCollapse, .workspaceExpand, .workspaceFlag,
                 .sessionCollapse, .sessionExpand, .sessionCompanionNew, .sessionCompanionPage, .sessionPage, .sessionCompanionDuplicate,
-                .sessionCompanionConvert, .sessionCompanionPageAttach,
+                .sessionCompanionConvert, .sessionCompanionMove, .sessionCompanionPageAttach,
                 .sessionSplit, .sessionSplitClose, .sessionSwap, .sessionLead, .sessionRestart, .sessionScratch, .sessionFocus,
                 .sessionResize, .surfaceZoom,
                 .surfaceCursor,
@@ -689,13 +744,13 @@ final class ControlServer {
                 .sessionOverlayReload, .sessionOverlayNavigate,
                 .sessionOverlayResult, .sessionOverlaySubmit, .sessionOverlayCopy, .sessionOverlayText,
                 .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle, .sessionOverlayFollow, .sessionOverlaySearch,
-                .sessionOverlayChanges, .sessionOverlayWrap,
+                .sessionOverlayChanges, .sessionOverlayFiles, .sessionOverlayWrap,
                 .sessionBackground, .sessionText, .sessionGrid, .sessionScroll, .quick, .quickType, .quickText,
                 .windowNew, .windowList, .windowSelect, .windowGo,
                 .windowClose, .windowRename, .windowDelete, .windowResize, .windowMove, .windowZoom,
                 .windowFullscreen, .windowMinimize, .windowRemoteOpen, .windowRemoteDismiss,
                 .sessionDetach, .sessionReattach, .workspaceDetach, .workspaceReattach,
-                .restoreClear, .restoreCapture, .restoreMode, .zmxList, .zmxPrune, .zmxKill, .zmxReset, .zmxTree,
+                .restoreClear, .restoreCapture, .restoreMode, .zmxList, .zmxPrune, .zmxKill, .zmxKillPane, .zmxReset, .zmxTree,
                 .zmxAttach, .zmxAttachGroup, .zmxPresent, .zmxScreen, .catalogSubscribe, .catalogOp, .sessionOverlayJobRun, .sessionOverlayPageServe, .dashboard, .version,
                 .recentList, .recentOpen, .recentClear, .phoneStatus, .phoneEnable, .phonePort, .phoneHost, .phoneRevoke:
             return ControlResponse(ok: false, error: "control dispatcher did not handle \(request.cmd.rawValue)")
@@ -869,13 +924,7 @@ final class ControlServer {
             fontSize: { ($0.addressableSurface as? GhosttySurfaceView)?.currentFontSize() },
             splitFontSize: { ($0.splitSurface as? GhosttySurfaceView)?.currentFontSize() },
             scratchFontSize: { ($0.scratchSurface as? GhosttySurfaceView)?.currentFontSize() },
-            paneGrids: { session in
-                let grid = { (surface: (any TerminalSurface)?) in
-                    (surface as? GhosttySurfaceView)?.forcedGrid.map { ControlGrid(columns: $0.columns, rows: $0.rows) }
-                }
-                let left = grid(session.surface), right = grid(session.splitSurface)
-                return left == nil && right == nil ? nil : ControlPaneGrids(left: left, right: right)
-            },
+            paneGrids: Self.paneGrids,
             // both are app-level facts now that the quick terminal is one detached panel, so every projected
             // window reports the same value for them rather than one of its own.
             quickVisible: { QuickTerminalController.shared.isVisible },
@@ -917,6 +966,7 @@ final class ControlServer {
         )
         tree.remote = windowID.flatMap(library.remoteNode(for:))
         tree.phone = phoneRelay?.status.readback
+        tree.catalogViewers = windowID.flatMap(originViewers)
         return tree
     }
 
@@ -929,10 +979,7 @@ final class ControlServer {
     /// background, selection and focus untouched.
     func makeSessionResponse(in store: AppStore, workspaceID: UUID, options: ControlSessionCreateOptions,
                              tint: SidebarTint? = nil, at index: Int? = nil) -> ControlResponse {
-        let cwd = options.cwd
-            ?? settingsModel.settings.usableRememberedFolder(store.workspaces.first { $0.id == workspaceID }?.projectFolder)
-            ?? settingsModel.settings.usableRememberedFolder(store.rememberedFolder(ofWorkspace: workspaceID))
-            ?? FileManager.default.homeDirectoryForCurrentUser.path
+        let cwd = options.cwd ?? defaultSessionCwd(in: store, workspaceID: workspaceID)
         guard let session = store.addSession(toWorkspace: workspaceID, cwd: cwd,
                                              command: options.command, name: options.name,
                                              wait: options.wait ?? false, at: index, select: !options.noSelect,
@@ -941,19 +988,6 @@ final class ControlServer {
         }
         if !options.noSelect, store === library.activeStore { actions.focusActiveSession() }
         return ControlResponse(ok: true, result: ControlResult(id: session.id.uuidString))
-    }
-
-    /// The first workspace whose remembered folder is exactly `cwd`, only in the `currentSession` new-session mode.
-    func remembering(_ cwd: String?, in store: AppStore) -> UUID? {
-        guard settingsModel.settings.usesRememberedFolder, let cwd else { return nil }
-        return store.workspaceID(rememberingFolder: cwd)
-    }
-
-    /// `value` trimmed of surrounding whitespace, or nil if absent or blank after trimming.
-    func trimmed(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let result = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return result.isEmpty ? nil : result
     }
 
     /// Internal, not private: the `ControlServer+*.swift` extensions holding the command arms cannot reach a

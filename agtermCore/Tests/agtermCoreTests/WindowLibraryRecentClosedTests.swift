@@ -16,6 +16,25 @@ final class WindowLibraryRecentClosedTests {
         try? FileManager.default.removeItem(at: directory)
     }
 
+    @Test func anAttachedUndoWhoseReplyArrivesLateStillUndoesInTheOrderTheTerminatesWereAskedFor() throws {
+        let library = WindowLibrary(directory: directory)
+        let window = try #require(library.activeWindowID)
+        let asked = Date()
+        let first = AttachedUndo(host: "buildbox", undoID: "a", sessions: ["s1"], initiated: asked)
+        let second = AttachedUndo(host: "buildbox", undoID: "b", sessions: ["s2"], initiated: asked.addingTimeInterval(1))
+        let third = AttachedUndo(host: "buildbox", undoID: "c", sessions: ["s3"], initiated: asked.addingTimeInterval(2))
+
+        library.noteAttachedUndo(second, window: window, grace: 60)
+        library.noteAttachedUndo(third, window: window, grace: 60)
+        library.noteAttachedUndo(first, window: window, grace: 60)
+
+        #expect(library.attachedUndos[window]?.last == third)
+        #expect(library.takeAttachedUndo(window: window) == third)
+        #expect(library.takeAttachedUndo(window: window) == second)
+        #expect(library.takeAttachedUndo(window: window) == first)
+        #expect(library.attachedUndos[window] == nil)
+    }
+
     @Test func aReopenReportsItsWindowAndConsumesTheEntry() throws {
         let library = WindowLibrary(directory: directory)
         let store = try #require(library.activeStore)
@@ -30,6 +49,25 @@ final class WindowLibraryRecentClosedTests {
         #expect(outcome == RecentClosedReopen(window: windowID, complete: true))
         #expect(store.session(withID: session.id) != nil)
         #expect(library.recentClosedItems.isEmpty)
+    }
+
+    @Test func reopeningAFinalizedWorkspaceCloseLeavesItsAttachedRowsInRecentClosed() throws {
+        let library = WindowLibrary(directory: directory)
+        let store = try #require(library.activeStore)
+        _ = store.addWorkspace(name: "other")
+        let workspace = store.addWorkspace(name: "work")
+        let local = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/a"))
+        _ = try addAttachedRow(to: store, workspace: workspace.id, origin: "o1")
+        #expect(store.softRemoveWorkspace(workspace.id, grace: 3600))
+        store.finalizeAllPendingCloses()
+        let recent = try #require(library.recentClosedItems.first { $0.kind == .workspace })
+
+        let outcome = library.reopenRecentClosedOutcome(recent.id)
+
+        #expect(outcome?.complete == true)
+        #expect(store.session(withID: local.id) != nil)
+        #expect(library.recentClosedItems.allSatisfy { $0.id != recent.id })
+        #expect(library.recentClosedStore.loadRemote().map(\.originSessionID) == ["o1"])
     }
 
     @Test func aReopenReportsTheWindowHoldingTheWorkspaceNotTheRequestedOne() throws {
@@ -351,5 +389,111 @@ final class WindowLibraryRecentClosedTests {
         closed = try store.addCompanion(to: task.id).get()
         store.closeSession(closed.id)
         _ = try store.convertToCompanion(task.id).get()
+    }
+}
+
+@MainActor
+final class WindowLibraryRecentClosedWindowTests {
+    private let directory: URL
+    private let library: WindowLibrary
+    private let first: AppStore
+    private let firstID: UUID
+    private let second: AppStore
+    private let secondID: UUID
+
+    init() throws {
+        directory = FileManager.default.temporaryDirectory.appendingPathComponent("agterm-recent-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        library = WindowLibrary(directory: directory)
+        first = try #require(library.activeStore)
+        firstID = try #require(library.activeWindowID)
+        secondID = library.newWindow().id
+        second = try #require(library.store(for: secondID))
+    }
+
+    deinit {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    private func close(in store: AppStore, workspace name: String = "project") throws -> RecentClosedItem {
+        let workspace = store.addWorkspace(name: name)
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/project", name: "api"))
+        store.closeSession(session.id)
+        return try #require(library.recentClosedItems.first)
+    }
+
+    private func moved(_ item: RecentClosedItem, to window: UUID?) -> RecentClosedItem {
+        RecentClosedItem(id: item.id, kind: item.kind, title: item.title, subtitle: item.subtitle, closedAt: item.closedAt,
+                         session: item.session, workspace: item.workspace, window: window)
+    }
+
+    @Test func aCloseRecordsTheWindowThatClosedIt() throws {
+        #expect(try close(in: second).window == secondID)
+        #expect(try close(in: first, workspace: "other").window == firstID)
+    }
+
+    @Test func aWindowListsOnlyItsOwnEntries() throws {
+        let mine = try close(in: first)
+        _ = try close(in: second, workspace: "other")
+        library.recentClosedStore.recordRemote(RemoteRecentClosedItem(host: "box", originSessionID: "o1", name: "remote",
+            placement: .init(workspaceID: UUID(), workspaceName: "w", workspaceIndex: 0, sessionIndex: 0, parentID: nil)))
+
+        #expect(library.recentClosedItems(inWindow: firstID).map(\.id) == [mine.id])
+    }
+
+    @Test func anEntryWithoutAWindowIsInNoWindowList() throws {
+        let item = try close(in: first)
+        library.recentClosedStore.record(moved(item, to: nil))
+        library.refreshRecentClosedItems()
+
+        #expect(library.recentClosedItems(inWindow: firstID).isEmpty)
+        #expect(library.recentClosedItems.map(\.id) == [item.id])
+    }
+
+    @Test func aWindowClearLeavesOtherWindowsEntries() throws {
+        _ = try close(in: first)
+        let other = try close(in: second, workspace: "other")
+
+        library.clearRecentClosedItems(inWindow: firstID)
+
+        #expect(library.recentClosedItems.map(\.id) == [other.id])
+    }
+
+    @Test func aWindowReopensItsEntryIntoItself() throws {
+        let item = try close(in: first)
+
+        let reopened = try library.reopenRecentClosed(item.id, inWindow: firstID).get()
+
+        #expect(reopened == RecentClosedReopen(window: firstID, complete: true))
+        #expect(library.recentClosedItems(inWindow: firstID).isEmpty)
+    }
+
+    @Test func anEntryWhoseWorkspaceLivesInAnotherWindowIsRefused() throws {
+        let item = try close(in: second)
+        library.recentClosedStore.record(moved(item, to: firstID))
+        library.refreshRecentClosedItems()
+
+        #expect(library.reopenRecentClosed(item.id, inWindow: firstID) == .failure(.elsewhere))
+        #expect(RecentClosedWindowRefusal.elsewhere.message
+            == "the entry's workspace or parent session is in another window; reopen it from that window")
+        #expect(second.workspaces.first { $0.name == "project" }?.sessions.isEmpty == true)
+    }
+
+    @Test func aCompanionWhoseParentLivesInAnotherWindowIsRefused() throws {
+        let workspace = second.addWorkspace(name: "project")
+        let parent = try #require(second.addSession(toWorkspace: workspace.id, cwd: "/project", name: "api"))
+        let companion = try second.addCompanion(to: parent.id).get()
+        second.closeSession(companion.id)
+        let item = try #require(library.recentClosedItems.first)
+        library.recentClosedStore.record(moved(item, to: firstID))
+        library.refreshRecentClosedItems()
+
+        #expect(library.reopenRecentClosed(item.id, inWindow: firstID) == .failure(.elsewhere))
+    }
+
+    @Test func anotherWindowsEntryIsNotFound() throws {
+        let item = try close(in: second)
+
+        #expect(library.reopenRecentClosed(item.id, inWindow: firstID) == .failure(.notFound))
     }
 }

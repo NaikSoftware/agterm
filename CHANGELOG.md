@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.42.3 - 2026-11-13
+
+### Bug Fixes
+
+- **Switching to or from a left/right split session with the compact toolbar no longer flickers at the top.** Every switch resized both panes by about two rows, so the shells redrew and a stale frame showed under the titlebar; the panes now keep their size. A top/bottom split can still jump its divider for one frame when shown #995 @umputun
+- an unnamed session on an agterm-server host, shown in a remote window, kept its directory name as the sidebar label and window title instead of following the terminal title. It follows the title once both the server and the app are updated #993 @umputun #991
+
+## v0.42.2 - 2026-11-13
+
+### Bug Fixes
+
+- **Live sessions no longer close when macOS force-quits a program started in one.** A GUI program switched off in System Settings ▸ General ▸ Login Items ▸ Allow in the Background, started from a live session after agterm had been quit and opened again, was force-quit by macOS about 30 seconds later, and the live sessions macOS had grouped with it closed too. On macOS 27 and later agterm starts the session host as its own background job, so the force-quit reaches only the program. Sessions started before this update keep their old host until Agterm ▸ Reset Live Sessions… moves them #987 @umputun #985
+- with the keyboard layout lock on, layout switches made in another app were reverted to the locked layout, and leaving agterm did not restore the earlier one. The lock now holds only while agterm is the active app #988 @umputun
+- on macOS 15 the Claude status hook handled every main-agent event as a subagent's, so a row showing blocked or completed stayed that way after Claude went back to work, and a Stop while a background subagent ran showed completed. Reinstall from Help ▸ Install Agent Status Hooks to pick it up 5cc32465 @umputun #990
+
+## v0.42.1 - 2026-11-12
+
+### Improved
+
+- **Log pages and text-page controls on remote sessions.** A log ⌘-clicked in a session attached from another Mac opens as a log page there, and Follow, search, Wrap and change steps work on it as on a local page. `session overlay follow|search|wrap|changes` from the origin reach the page on the presenting Mac; a Mac on 0.42.0 gets the plain text page and refuses those controls. agterm-server serves log pages too, and its page rows show in a Mac's remote window #978 @umputun
+- a custom command run from the scratch terminal gets the scratch shell's own directory in `AGT_SESSION_PWD`, where it used to get the main pane's. Relative links in a local scratch resolve against that directory, and `tree` reads it back as `scratchCwd` #981 @umputun
+- `remote-session-restore` cookbook recipe: re-attaches sessions from other Macs into the workspaces they were in after a relaunch #973 @maxshevelev
+
+### Bug Fixes
+
+- after an update, new Live panes were still started by the old session host, so Local Network access failed in them; after a forced logout, new panes failed with `No user exists for uid 501`. A changed helper build or a new login now gets its own host, and Reset Live Sessions moves running panes onto it #972 @umputun #971
+- on an agterm-server Linux host, installing the agent status hooks left the hook wrappers without their executable bit, so status reporting failed #974 @Romancha
+- installing the agent status hooks on an agterm-server Linux host made a chmod 600 `.zshrc`, `.bashrc` or `config.fish` world-readable f52cb2bf @umputun
+- `mailbox-chat` recipe: under a Codex started without `--no-daemon`, mail for the starting pane went to whichever Codex thread started last. Such a Codex now refuses with an error naming `--no-daemon` #979 @umputun
+- `annotate-document` recipe: pages stopped painting on macOS 26 WebKit, and long inline code ran past the page edge b7316f1c fc6178b8 @umputun
+
 ## v0.42.0 - 2026-11-11
 
 ### New Features

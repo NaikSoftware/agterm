@@ -12,7 +12,7 @@ final class WindowLibrarySessionLinkTests {
     private final class Binder: RemoteCatalogEffects {
         let bind: (UUID) -> Bool
         init(bind: @escaping (UUID) -> Bool) { self.bind = bind }
-        func attachCommand(host _: String, pane _: CatalogPane) -> String { "attach" }
+        func attachCommand(host _: String, pane _: CatalogPane, claim _: Bool) -> String { "attach" }
         func catalogRowAdded(_: Session) {}
         func catalogRowRemoved(_: UUID) {}
         func catalogRowEnded(_: UUID) {}
@@ -190,6 +190,10 @@ final class WindowLibrarySessionLinkTests {
         #expect(library.sessionLinkTarget(b.id, from: .scratch(scratchOnly.id), pane: nil)
                 == SessionLinkTarget(windowID: window.id, sessionID: b.id))
         #expect(library.sessionLinkTarget(localRow.id, from: .scratch(clicked.id), pane: nil) == nil)
+        let scratch = try #require(clicked.originScratch)
+        #expect(library.sessionLinkTarget(b.id, from: .remotePane(clicked.id), pane: scratch)
+                == SessionLinkTarget(windowID: window.id, sessionID: b.id))
+        #expect(library.sessionLinkTarget(localRow.id, from: .remotePane(clicked.id), pane: scratch) == nil)
         #expect(library.sessionLinkTarget(ended.id, from: .pane(clicked.id), pane: clicked.paneIdentity)
                 == SessionLinkTarget(windowID: window.id, sessionID: ended.id))
         #expect(library.sessionLinkTarget(empty.id, from: .pane(clicked.id), pane: clicked.paneIdentity)
