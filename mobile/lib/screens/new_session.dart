@@ -66,6 +66,7 @@ class _NewSessionSheetState extends State<NewSessionSheet> {
     };
     try {
       final r = await widget.model.call(widget.parent == null ? 'session.new' : 'session.companion.new', target: widget.parent?.id, args: args);
+      LauncherPref.set(launcher).catchError((_) {});
       await widget.model.refresh();
       if (!mounted) return;
       Navigator.pop(context);

@@ -47,7 +47,7 @@ class Watch {
         title: 'Watching $computer',
         body: 'Tells you when an agent needs you',
         notificationDetails: const AndroidNotificationDetails('watch', 'Watching',
-            channelDescription: 'Shown while agterm watches your computer in the background',
+            channelDescription: 'Shown while Agterm2 watches your computer in the background',
             importance: Importance.low, priority: Priority.low, ongoing: true, showWhen: false),
         startType: AndroidServiceStartType.startNotSticky, // the plugin's service can't restart without its intent
         foregroundServiceTypes: {

@@ -80,6 +80,7 @@ class _AgtermAppState extends State<AgtermApp> {
       // no notifications: the app works without background alerts
     }
     await BluetoothPref.load().catchError((_) {});
+    await LauncherPref.load().catchError((_) {});
     await computers.load();
     if (launched != null) openSession(launched);
   }
@@ -96,7 +97,7 @@ class _AgtermAppState extends State<AgtermApp> {
   @override
   Widget build(BuildContext context) => MaterialApp(
         navigatorKey: nav,
-        title: 'agterm',
+        title: 'Agterm2',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),
         home: ListenableBuilder(

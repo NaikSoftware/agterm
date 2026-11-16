@@ -133,6 +133,20 @@ class BluetoothPref {
   }
 }
 
+/// The launcher this phone started last; a workspace row's quick-start repeats it.
+class LauncherPref {
+  static const _storage = FlutterSecureStorage();
+  static const _key = 'lastLauncher';
+  static String last = 'terminal';
+
+  static Future<void> load() async => last = await _storage.read(key: _key) ?? 'terminal';
+
+  static Future<void> set(String id) async {
+    last = id;
+    await _storage.write(key: _key, value: id);
+  }
+}
+
 /// What the screen says when no transport connected; [unseen] is how long no Bluetooth scan has matched.
 String connectError(Object e, Pairing p, Duration unseen) => switch (e) {
       AgtermError() => e.message,
