@@ -357,6 +357,8 @@ extension ControlServer {
                   surface.isRealized else {
                 return ControlResponse(ok: false, error: "session not realized")
             }
+            // without a window nothing pushes the size, so a stored grid would report what libghostty does not hold
+            guard surface.window != nil else { return ControlResponse(ok: false, error: "pane is not on screen") }
             return body(id.uuidString, surface)
         }
     }

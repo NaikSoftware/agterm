@@ -189,4 +189,34 @@ final class ControlServerGridTests: XCTestCase {
         try await waitUntil { surface.readScreenText(all: false, lines: nil)?.contains("300") == false }
         XCTAssertEqual(surface.readScreenText(all: false, lines: nil)?.contains("300"), false)
     }
+
+    func testScrollReachesAMouseReportingProgramInsideASmallForcedGrid() async throws {
+        let server = makeServer()
+        let (_, session) = try makeSession(command: "/bin/sh -c \"printf '\\033[?1000h\\033[?1006h'; exec cat -v\"")
+        let surface = try view(session)
+        _ = server.setSessionGrid(session.id.uuidString, window: nil, pane: .left, grid: ControlGrid(columns: 30, rows: 8))
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        XCTAssertTrue(server.scrollSession(session.id.uuidString, window: nil, pane: .left, lines: -3).ok)
+
+        let screen = { (surface.readScreenText(all: true, lines: nil) ?? "").replacingOccurrences(of: "\n", with: "") }
+        try await waitUntil { screen().contains("<64;") }
+        XCTAssertTrue(screen().contains("<64;"), screen())
+    }
+
+    func testAPaneWithoutAWindowIsRefusedAndKeepsNoGrid() throws {
+        let server = makeServer()
+        let (_, session) = try makeSession()
+        let surface = try view(session)
+        surface.window?.contentView = nil
+
+        let response = server.setSessionGrid(session.id.uuidString, window: nil, pane: .left,
+                                             grid: ControlGrid(columns: 40, rows: 10))
+
+        XCTAssertEqual(response.error, "pane is not on screen")
+        XCTAssertNil(surface.forcedGrid)
+        XCTAssertFalse(session.hasForcedGrid)
+        XCTAssertEqual(server.scrollSession(session.id.uuidString, window: nil, pane: .left, lines: -3).error,
+                       "pane is not on screen")
+    }
 }

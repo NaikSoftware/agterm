@@ -42,12 +42,17 @@ extension GhosttySurfaceView {
         return (UInt32(width), UInt32(height))
     }
 
-    /// Wheels the pane as a mouse over its centre would: `lines` < 0 scrolls toward older output.
+    /// Wheels the pane as a mouse over the centre of its screen would: `lines` < 0 scrolls toward older output.
+    /// The screen, not the view: a point past a small forced grid is dropped by a mouse-reporting program.
     func scrollNotches(_ lines: Int) {
         guard let surface else { return }
-        let centre = NSPoint(x: bounds.midX, y: bounds.midY)
-        ghostty_surface_mouse_pos(surface, centre.x, centre.y, GHOSTTY_MODS_NONE)
-        lastReportedMousePoint = centre
+        let size = ghostty_surface_size(surface)
+        let screen = convertFromBacking(NSSize(width: Double(size.width_px), height: Double(size.height_px)))
+        let centre = NSPoint(x: min(screen.width, bounds.width) / 2, y: min(screen.height, bounds.height) / 2)
+        if centre != lastReportedMousePoint {
+            ghostty_surface_mouse_pos(surface, centre.x, centre.y, GHOSTTY_MODS_NONE)
+            lastReportedMousePoint = centre
+        }
         let notches = max(1, (abs(lines) + 1) / 3)
         ghostty_surface_mouse_scroll(surface, 0, Double(lines < 0 ? notches : -notches), 0)
     }

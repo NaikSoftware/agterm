@@ -116,4 +116,13 @@ final class RestoreTerminalSizeTests: XCTestCase {
         XCTAssertNil(left.forcedGrid)
         XCTAssertFalse(actions.canRestoreActiveTerminalSize)
     }
+
+    func testTearingDownAForcedPaneClearsTheSessionFlag() throws {
+        let (session, _, right) = try makeSplitSession()
+        right.setForcedGrid((columns: 40, rows: 10))
+
+        right.teardown()
+
+        XCTAssertFalse(session.hasForcedGrid)
+    }
 }

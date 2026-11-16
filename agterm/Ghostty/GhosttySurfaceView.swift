@@ -839,8 +839,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
     func destroySurface() {
         // a pane torn down before it spawned must not consume its pending slots; the session keeps them.
         launchSeed = nil
-        // leave the launch queue: a key nobody will ever request holds every pane behind it for an interval,
-        // and the grant that arrives anyway finds a destroyed view and no-ops.
+        // leave the launch queue: a key nobody will request holds every pane behind it; a late grant no-ops.
         if let spawnKey, let spawnPacer { spawnPacer.cancel(spawnKey) }
         spawnKey = nil
         awaitingSpawnPermit = false
@@ -848,6 +847,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
         hiddenJanitorTask?.cancel()
         hiddenJanitorTask = nil
         isDestroyed = true
+        recordForcedGrid(nil)
         focusObservers.forEach { NotificationCenter.default.removeObserver($0) }
         focusObservers = []
         windowVisibilityObservation = nil
