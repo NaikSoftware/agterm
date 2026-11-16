@@ -21,7 +21,7 @@ What it does:
 - **Live sessions.** Quit, update, or relaunch agterm while the processes in primary and split panes keep running, an agent mid-turn included. The next launch reattaches to them with their text and TUI state. It is one of three restore modes in Settings ▸ General ▸ Restore sessions, next to fresh shells and re-running the commands captured at quit. Live mode takes effect after restarting agterm and requires zsh or fish as the macOS login shell, or as the absolute path in the ghostty `command` agterm loads.
 - **Remote sessions.** Open a session running on another Mac as a row in this sidebar, split and companions included, from File ▸ Attach Remote… or with `agtermctl zmx attach --companions`. Its status, notifications, HUD, and title-bar context follow it to this Mac, and its panes take this Mac's size. The other Mac runs agterm in Live sessions mode and is reached over key-based ssh. The menu item lists the Macs named in `remotes.conf`; [Remote sessions](https://agterm.com/docs#remote-sessions) covers the setup.
 - **Remote server.** Run sessions on a Linux host under agterm-server and open them in a remote window: every shell keeps running on the host when the Mac sleeps or the network drops, and the next connection finds it as it was. `agtermctl server install HOST` installs the matching release from the Mac; [Remote server](https://agterm.com/docs#remote-server) covers the rest.
-- **Phone app.** [agterm Mobile](https://github.com/NaikSoftware/agterm-qt/tree/main/mobile) shows your sessions on an Android phone through a TLS relay that is off by default; pair it from agterm ▸ Connect a Phone… ([Phone app](https://agterm.com/docs#phone-app)).
+- **Phone app.** Watch and drive your sessions from an Android phone ([Phone app](#phone-app)).
 - **Agent skill.** An agent skill, installed automatically, teaches Claude Code or Codex the control model and the `agtermctl` commands, so an agent running inside agterm can build its own layout, run overlays, manage windows, and show images inline without you explaining the API.
 - **Agent status.** A coding agent reports its state (active, blocked, or completed) onto its session's row, so you can see which of many running agents needs you. Status hooks for Claude Code, Codex, Pi, OpenCode, and other agents install automatically.
 
@@ -51,14 +51,6 @@ The yazi file manager in a floating overlay over the active session, from one `c
 A split session, two panes side by side on different color themes:
 
 ![Split session](docs/screenshots/split-theme.png)
-
-agterm Mobile on an Android phone: the session tree, a new session, and a Claude Code session fitted to the phone:
-
-<p align="center">
-  <img src="docs/screenshots/mobile-sessions.png" width="270" alt="Sessions: a blocked agent's question with answer buttons, a finished session, workspaces of agent sessions">
-  <img src="docs/screenshots/mobile-new-session.png" width="270" alt="New session: pick Terminal, Claude Code, Codex, OpenCode or Antigravity, a workspace and a folder">
-  <img src="docs/screenshots/mobile-session.png" width="270" alt="A Claude Code session fitted to the phone">
-</p>
 
 </details>
 
@@ -129,6 +121,23 @@ agtermctl tree --json                                     # dump the whole model
 `session type` returns once the keystrokes are queued, so a following `session text` races the shell, and `pick` and `ask` block until someone answers.
 
 The same interface covers windows, splits, overlays, dashboards, HUDs, notifications, events, themes, and restoration. Every command is at [agterm.com/commands](https://agterm.com/commands).
+
+## Phone app
+
+[agterm Mobile](https://github.com/NaikSoftware/agterm-qt/tree/main/mobile) (Flutter, Android) watches and drives your sessions from a phone.
+
+<p align="center">
+  <img src="docs/screenshots/mobile-sessions.png" width="270" alt="Sessions: a blocked agent's question with answer buttons, a finished session, workspaces of agent sessions">
+  <img src="docs/screenshots/mobile-new-session.png" width="270" alt="New session: pick Terminal, Claude Code, Codex, OpenCode or Antigravity, a workspace and a folder">
+  <img src="docs/screenshots/mobile-session.png" width="270" alt="A Claude Code session fitted to the phone">
+</p>
+
+- **Sessions.** The workspace tree with status dots. An agent's question shows as answer buttons, so a permission prompt is one tap.
+- **A session's screen.** Its text, a key bar and a composer that types into it.
+- **Fit to phone.** The program gets the phone's columns and rows and redraws for them; a drag scrolls the program itself. Session ▸ Restore Terminal Size gives the grid back, and so does any window resize or the phone disconnecting.
+- **Alerts.** A notification when an agent blocks or finishes while the app is in the background.
+
+To pair, open agterm ▸ Connect a Phone…, switch it on, and scan the code in the app. `agtermctl mobile serve` does the same from a shell. The relay is off by default. It uses TLS pinned to this Mac's certificate, and anyone with the code controls your terminals until you revoke it. If a firewall blocks incoming connections, connect the phone by USB and run `adb reverse tcp:8765 tcp:8765`, then set the address to `127.0.0.1`. [Phone app](https://agterm.com/docs#phone-app) has the details.
 
 ## Documentation
 
