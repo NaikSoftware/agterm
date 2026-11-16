@@ -879,7 +879,7 @@ struct AppSettingsTests {
         let symbols = InterfaceElement.allCases.filter { !rowIcons.contains($0) }.compactMap(\.symbolName)
         #expect(Set(symbols).count == symbols.count)
         #expect(InterfaceElement.sessionIcons.symbolName == InterfaceElement.quickTerminal.symbolName)
-        #expect(InterfaceElement.workspaceIcons.symbolName == InterfaceElement.focusFilter.symbolName)
+        #expect(InterfaceElement.workspaceIcons.symbolName == "square.stack")
     }
 
     @Test func settingsOrderListsTextOnlyElementsFirst() {

@@ -34,7 +34,11 @@ extension WorkspaceSidebar.Coordinator {
     }
 
     private func decorate(_ rowView: SidebarRowView, row: Int, in group: Range<Int>, outline: NSOutlineView) {
-        guard let node = outline.item(atRow: row) as? SidebarNode else { return }
+        guard let node = outline.item(atRow: row) as? SidebarNode else {
+            rowView.band = nil
+            rowView.rowWash = nil
+            return rowView.setWave(nil)
+        }
         let head = outline.item(atRow: group.lowerBound) as? SidebarNode
         let workspaceTint = rendersWorkspaceRows && head?.kind == .workspace
             ? store.workspaces.first { $0.id == head?.id }?.tint : nil

@@ -499,7 +499,7 @@ private struct PaletteRow: View {
             (isOn, symbol, weight) = (on, on ? "flag.fill" : "flag", .regular)
             value = on ? "flagged" : "unflagged"
         case .focus(let on):
-            (isOn, symbol, weight) = (on, "square.grid.2x2", on ? .black : .regular)
+            (isOn, symbol, weight) = (on, "square.stack", on ? .black : .regular)
             value = on ? "focused" : "unfocused"
         }
         return Image(systemName: symbol)

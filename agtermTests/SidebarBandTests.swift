@@ -66,6 +66,19 @@ final class SidebarBandTests: XCTestCase {
         XCTAssertEqual(edges(), [.first, .middle, .last])
     }
 
+    func testFoldingACompanionParentMovesTheGroupEnd() throws {
+        let (store, workspace) = try twoSessionWorkspace()
+        let parent = try XCTUnwrap(workspace.sessions.last)
+        _ = try store.addCompanion(to: parent.id, options: CompanionOptions(name: "companion")).get()
+        store.setTint(SidebarTint(color: .blue), forWorkspace: workspace.id)
+        mount(store)
+        let parentNode = coordinator.node(for: parent.id, kind: .session)
+        outline.expandItem(parentNode)
+        XCTAssertEqual(edges(), [.first, .middle, .middle, .last])
+        outline.collapseItem(parentNode)
+        XCTAssertEqual(edges(), [.first, .middle, .last])
+    }
+
     func testTintedSessionGetsAWash() throws {
         let (store, workspace) = try twoSessionWorkspace()
         let session = try XCTUnwrap(workspace.sessions.last)
