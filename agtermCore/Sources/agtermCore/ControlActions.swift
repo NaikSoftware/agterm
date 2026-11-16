@@ -123,6 +123,13 @@ public protocol ControlActions {
     /// `hooks.reload` / `hooks.list`, app-global like the keymap pair.
     func reloadHooks() -> ControlResponse
     func listHooks() -> ControlResponse
+    /// `phone.*`, app-global over the one phone relay. Each answers `result.phone` after the change took effect;
+    /// a nil host follows the relay's best address.
+    func phoneStatus() -> ControlResponse
+    func setPhoneEnabled(_ mode: ControlToggleMode) async -> ControlResponse
+    func setPhonePort(_ port: Int) async -> ControlResponse
+    func setPhoneHost(_ host: String?) -> ControlResponse
+    func revokePhone() async -> ControlResponse
     /// `recent.list` / `recent.clear`, app-global over the one Recent Closed list.
     func listRecentClosed() -> ControlResponse
     func clearRecentClosed() -> ControlResponse

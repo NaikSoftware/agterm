@@ -899,6 +899,24 @@ final class AppStoreEventTests {
         #expect(try treeChanges(library) { store.closeHud(session.id) } == 1)
     }
 
+    @Test func anAppEventReachesTheRingAndTheHookSink() throws {
+        let (library, _, _) = try launched()
+        var delivered: [ControlEvent] = []
+        library.onControlEvent = { delivered.append($0) }
+        let anchor = try eventBatch(library.readEvents(ControlEventReadOptions(cursor: nil, kinds: nil, limit: 100)))
+
+        library.emitAppEvent(ControlEventDraft(kind: .phoneRefused, payload: ControlEventPayload(ip: "10.0.0.3")))
+        library.onControlEvent = nil
+        library.emitAppEvent(ControlEventDraft(kind: .phoneRefused, payload: ControlEventPayload(ip: "10.0.0.4")))
+
+        let batch = try eventBatch(library.readEvents(ControlEventReadOptions(
+            cursor: ControlEventCursor(run: anchor.run, after: anchor.next), kinds: [.phoneRefused], limit: 100
+        )))
+        #expect(batch.items.map(\.payload.ip) == ["10.0.0.3", "10.0.0.4"])
+        #expect(batch.items.first?.window == nil)
+        #expect(delivered == [batch.items[0]])
+    }
+
     @Test func appLaunchedIsAppendedOncePerRunAndReachesTheHookSink() throws {
         let (library, _, _) = try launched()
         var delivered: [ControlEventKind] = []

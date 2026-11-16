@@ -65,6 +65,11 @@ final class MockControlActions: ControlActions {
         case keymapList
         case keymapRun(name: String, target: String?, window: String?)
         case hooksReload
+        case phoneStatus
+        case phoneEnable(ControlToggleMode)
+        case phonePort(Int)
+        case phoneHost(String?)
+        case phoneRevoke
         case hooksList
         case recentList
         case recentClear
@@ -214,6 +219,7 @@ final class MockControlActions: ControlActions {
     var nextSessionBackgroundResponse = ControlResponse(ok: true)
     var nextSessionTextResponse = ControlResponse(ok: true)
     var nextSessionGridResponse = ControlResponse(ok: true)
+    var nextPhoneResponse = ControlResponse(ok: true)
     var nextSurfaceZoomResponse = ControlResponse(ok: true)
     var nextSurfaceCursorResponse = ControlResponse(ok: true, result: ControlResult(cursor: ControlCursor(column: 0)))
     var nextDashboardResponse = ControlResponse(ok: true)
@@ -544,6 +550,31 @@ final class MockControlActions: ControlActions {
     func runCustomCommand(name: String, target: String?, window: String?) -> ControlResponse {
         calls.append(.keymapRun(name: name, target: target, window: window))
         return ControlResponse(ok: true, result: ControlResult(id: "sess"))
+    }
+
+    func phoneStatus() -> ControlResponse {
+        calls.append(.phoneStatus)
+        return nextPhoneResponse
+    }
+
+    func setPhoneEnabled(_ mode: ControlToggleMode) async -> ControlResponse {
+        calls.append(.phoneEnable(mode))
+        return nextPhoneResponse
+    }
+
+    func setPhonePort(_ port: Int) async -> ControlResponse {
+        calls.append(.phonePort(port))
+        return nextPhoneResponse
+    }
+
+    func setPhoneHost(_ host: String?) -> ControlResponse {
+        calls.append(.phoneHost(host))
+        return nextPhoneResponse
+    }
+
+    func revokePhone() async -> ControlResponse {
+        calls.append(.phoneRevoke)
+        return nextPhoneResponse
     }
 
     func reloadHooks() -> ControlResponse {

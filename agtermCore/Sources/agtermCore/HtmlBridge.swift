@@ -63,7 +63,8 @@ public enum HtmlBridge {
                                                        .windowMinimize]
     // app-global commands that refuse any window
     private static let windowless: Set<Command> = [.hooksReload, .hooksList, .browserClear, .browserLinks,
-                                                   .recentList, .recentClear]
+                                                   .recentList, .recentClear, .phoneStatus, .phoneEnable, .phonePort,
+                                                   .phoneHost, .phoneRevoke]
     // their ids name something else (a remote session, dashboard cells), and they still land in a local window
     private static let placedLocally: Set<Command> = [.zmxAttach, .zmxAttachGroup, .dashboard, .recentOpen]
 

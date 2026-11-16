@@ -135,6 +135,50 @@ final class PhoneRelayTests: XCTestCase {
         XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("gone ") } })
     }
 
+    func testPhoneEnableAnswersOnceTheRelayListensAndTheTreeAndEventsKeepTheTokenOut() async throws {
+        let library = WindowLibrary(directory: dir.appendingPathComponent("state", isDirectory: true))
+        let server = ControlServer(library: library, actions: AppActions(library: library),
+                                   settingsModel: SettingsModel(library: library, settingsStore: SettingsStore(directory: dir)),
+                                   identity: AppIdentity(version: "test", commit: "test"), zmxClient: nil,
+                                   socketPath: dir.appendingPathComponent("control.sock").path)
+        let relay = PhoneRelay(stateDirectory: dir, tool: try slowServe())
+        relay.onEvent = { kind, ip in library.emitAppEvent(ControlEventDraft(kind: kind, payload: ControlEventPayload(ip: ip))) }
+        relay.attach(socketPath: "/tmp/unused.sock")
+        server.phoneRelay = relay
+        let dispatcher = ControlDispatcher(actions: server)
+        let anchor = try XCTUnwrap(library.readEvents(ControlEventReadOptions(cursor: nil, kinds: nil, limit: 1)).result?.events)
+        var on = ControlArgs()
+        on.mode = "on"
+
+        let enabled = await dispatcher.dispatch(ControlRequest(cmd: .phoneEnable, args: on))
+
+        let answer = try XCTUnwrap(enabled?.result?.phone)
+        XCTAssertEqual(enabled?.ok, true)
+        XCTAssertTrue(answer.on && answer.listening)
+        XCTAssertEqual(answer.hosts, ["10.0.0.1"])
+        XCTAssertNil(answer.link)
+        let status = await dispatcher.dispatch(ControlRequest(cmd: .phoneStatus))
+        XCTAssertEqual(status?.result?.phone?.link, link)
+        let tree = await dispatcher.dispatch(ControlRequest(cmd: .tree))
+        XCTAssertEqual(tree?.result?.tree?.phone, ControlPhoneStatus(on: true, listening: true, port: 8765, host: "10.0.0.1"))
+        func phoneEvents() -> [ControlEvent] {
+            library.readEvents(ControlEventReadOptions(cursor: ControlEventCursor(run: anchor.run, after: anchor.next),
+                                                       kinds: [.phoneConnected, .phoneDisconnected], limit: 10))
+                .result?.events?.items ?? []
+        }
+        let deadline = Date().addingTimeInterval(10)
+        while phoneEvents().count < 2, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertEqual(phoneEvents().map(\.kind), [.phoneConnected, .phoneDisconnected])
+        XCTAssertEqual(phoneEvents().map(\.payload.ip), ["10.0.0.9", "10.0.0.9"])
+
+        var off = ControlArgs()
+        off.mode = "off"
+        let disabled = await dispatcher.dispatch(ControlRequest(cmd: .phoneEnable, args: off))
+        XCTAssertEqual(disabled?.result?.phone, ControlPhoneStatus(on: false, listening: false, port: 8765, host: "", hosts: []))
+        await relay.settled()
+        XCTAssertTrue(logLines().contains { $0.hasPrefix("gone ") })
+    }
+
     func testWithoutABoundSocketNothingStarts() async {
         let relay = PhoneRelay(stateDirectory: dir, tool: URL(fileURLWithPath: "/usr/bin/false"))
         relay.attach(socketPath: nil)

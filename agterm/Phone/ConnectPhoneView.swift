@@ -74,6 +74,11 @@ struct ConnectPhoneView: View {
             portField = String(relay.state.port)
         }
         .onChange(of: relay.state.port) { _, port in portField = String(port) }
+        // `phone.host` writes it too; the field's own edits map to the stored value and are left alone
+        .onChange(of: relay.state.host) { _, host in
+            let shown = hostField.trimmingCharacters(in: .whitespaces)
+            if host != (shown == relay.offeredHosts.first ? "" : shown) { hostField = host }
+        }
         .confirmationDialog("Revoke paired phones?", isPresented: $confirmRevoke) {
             Button("Revoke", role: .destructive) { Task { await relay.revoke() } }
         } message: {

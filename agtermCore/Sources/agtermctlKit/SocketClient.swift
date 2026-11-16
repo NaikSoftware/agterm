@@ -280,6 +280,9 @@ struct SocketClient {
         if let hooks = response.result?.hooks {
             return formatHooks(hooks)
         }
+        if let phone = response.result?.phone {
+            return formatPhone(phone)
+        }
         if let remote = response.result?.remote {
             return formatRemoteTree(remote)
         }
@@ -351,6 +354,17 @@ struct SocketClient {
 
     /// formatResponse(_:receipt:echoID:) prints what the command itself prints, then its receipt; a refused or
     /// fenced operation prints the receipt alone, which carries the error.
+    static func formatPhone(_ phone: ControlPhoneStatus) -> String {
+        let state = phone.listening ? ", listening on port \(phone.port)" : phone.on ? ", not listening" : ", port \(phone.port)"
+        var lines = ["on: \(phone.on ? "yes" : "no")\(state)"]
+        if !phone.host.isEmpty { lines.append("host: \(phone.host)") }
+        if let hosts = phone.hosts, !hosts.isEmpty { lines.append("hosts: \(hosts.joined(separator: ", "))") }
+        if let last = phone.lastEvent { lines.append("last: \(last)") }
+        if let error = phone.error { lines.append("error: \(error)") }
+        if let link = phone.link { lines.append("link: \(link)") }
+        return lines.joined(separator: "\n")
+    }
+
     private static func formatResponse(_ response: ControlResponse, receipt: CatalogReceipt, echoID: Bool) -> String {
         guard response.ok else { return "error: " + formatReceipt(receipt) }
         var bare = response

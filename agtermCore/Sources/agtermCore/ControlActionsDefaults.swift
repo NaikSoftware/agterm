@@ -124,6 +124,26 @@ public extension ControlActions {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("hooks.list"))
     }
 
+    func phoneStatus() -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("phone.status"))
+    }
+
+    func setPhoneEnabled(_: ControlToggleMode) async -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("phone.enable"))
+    }
+
+    func setPhonePort(_: Int) async -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("phone.port"))
+    }
+
+    func setPhoneHost(_: String?) -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("phone.host"))
+    }
+
+    func revokePhone() async -> ControlResponse {
+        ControlResponse(ok: false, error: ControlActionsUnsupported.message("phone.revoke"))
+    }
+
     func clearBrowser() async -> ControlResponse {
         ControlResponse(ok: false, error: ControlActionsUnsupported.message("browser.clear"))
     }

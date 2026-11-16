@@ -877,6 +877,8 @@ public struct ControlTree: Codable, Sendable, Equatable {
     public let app: AppIdentity?
     /// remote is the server a remote window mirrors and its connection; nil/omitted for a local window.
     public var remote: ControlRemoteWindow?
+    /// phone is the app's phone relay as `ControlPhoneStatus.readback`: never the link, which holds the token.
+    public var phone: ControlPhoneStatus?
     /// The Live sessions reset state: app-global like `app`, omitted when nothing is pending and no launch
     /// has consumed a marker. The read side of `zmx.reset`.
     public let liveReset: ControlLiveResetReadback?

@@ -16,6 +16,8 @@ final class PhoneRelay {
     private(set) var notice: String?
     private(set) var lastEvent: String?
 
+    /// A phone connected, left or was refused; the app emits it as a `phone.*` control event.
+    @ObservationIgnored var onEvent: ((ControlEventKind, String) -> Void)?
     @ObservationIgnored private let stateDirectory: URL
     @ObservationIgnored private let tool: URL?
     @ObservationIgnored private var socketPath: String?
@@ -47,6 +49,20 @@ final class PhoneRelay {
     var host: String { state.host.isEmpty ? offeredHosts.first ?? "" : state.host }
     var link: String? { links.first.map { PhonePairLink.withHost($0, host: host) } }
 
+    var status: ControlPhoneStatus {
+        ControlPhoneStatus(on: state.on, listening: !links.isEmpty, port: state.port, host: host, hosts: offeredHosts,
+                           lastEvent: lastEvent, error: error, link: link)
+    }
+
+    /// Waits, without blocking main, until the queued change has run and the relay printed its links or stopped.
+    func untilListening(within limit: Duration) async {
+        await settled()
+        let deadline = ContinuousClock.now + limit
+        while state.on, links.isEmpty, error == nil, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
     func setOn(_ on: Bool) {
         guard on != state.on else { return }
         state.on = on
@@ -55,7 +71,7 @@ final class PhoneRelay {
     }
 
     func setPort(_ port: Int) {
-        guard (1024...65535).contains(port), port != state.port else { return }
+        guard (1...65535).contains(port), port != state.port else { return }
         state.port = port
         save()
         if state.on { restart() }
@@ -176,7 +192,10 @@ final class PhoneRelay {
     private func stderr(_ line: String, run: Int) {
         guard run == generation, let parsed = PhoneRelayLine.stderr(line) else { return }
         switch parsed {
-        case .event(let text): lastEvent = text; lastStderr = text
+        case .event(let text):
+            lastEvent = text
+            lastStderr = text
+            if let event = PhoneRelayLine.controlEvent(text) { onEvent?(event.kind, event.ip) }
         case .other(let text): lastStderr = text
         }
     }

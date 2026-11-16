@@ -107,14 +107,14 @@ final class RestoreTerminalSizeTests: XCTestCase {
         let (session, left, _) = try makeSplitSession()
         let store = try XCTUnwrap(library.activeStore)
         _ = store.selectSession(session.id)
-        XCTAssertFalse(actions.canRestoreActiveTerminalSize)
+        XCTAssertFalse(PaletteCommand.restoreTerminalSize.isEnabled(in: actions.paletteContext))
 
         left.setForcedGrid((columns: 40, rows: 10))
-        XCTAssertTrue(actions.canRestoreActiveTerminalSize)
+        XCTAssertTrue(PaletteCommand.restoreTerminalSize.isEnabled(in: actions.paletteContext))
         actions.restoreActiveTerminalSize()
 
         XCTAssertNil(left.forcedGrid)
-        XCTAssertFalse(actions.canRestoreActiveTerminalSize)
+        XCTAssertFalse(PaletteCommand.restoreTerminalSize.isEnabled(in: actions.paletteContext))
     }
 
     func testTearingDownAForcedPaneClearsTheSessionFlag() throws {

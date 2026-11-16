@@ -9,6 +9,7 @@ struct PaletteCatalogTests {
             "Open Directory…",
             "Rename Session",
             "Duplicate Session",
+            "Restore Terminal Size",
             "New Companion",
             "Duplicate as Companion",
             "Convert to Companion",
@@ -73,7 +74,7 @@ struct PaletteCatalogTests {
     }
 
     @Test func catalogHasTheExpectedStaticCommandCount() {
-        #expect(PaletteCommand.allCases.count == 64)
+        #expect(PaletteCommand.allCases.count == 66)
     }
 
     @Test func idsRoundTripThroughRawValue() {
@@ -215,7 +216,7 @@ struct PaletteCatalogTests {
                                              sidebarShowsWorkspaceTree: true, sidebarShowsWorkspaceRows: true, hasMarkedWorkspaces: true,
                                              canStepWorkspaces: true,
                                              canStepWindows: true,
-                                             activeSessionHasSplit: true, hasPendingClose: true,
+                                             activeSessionHasSplit: true, activeSessionHasForcedGrid: true, hasPendingClose: true,
                                              hasRecentClosed: true, hasActiveSession: true, hasSessions: true,
                                              hasCurrentWorkspace: true, hasRemotes: true, activeSessionHasOverlay: true)
 
@@ -237,7 +238,8 @@ struct PaletteCatalogTests {
     }
 
     private static let needSession: Set<PaletteCommand> = [
-        .renameSession, .duplicateSession, .newCompanion, .duplicateCompanion, .convertCompanion, .clearStatus, .toggleFlag, .toggleSplit, .toggleHorizontalSplit,
+        .renameSession, .duplicateSession, .restoreTerminalSize, .newCompanion, .duplicateCompanion, .convertCompanion, .clearStatus, .toggleFlag,
+        .toggleSplit, .toggleHorizontalSplit,
         .swapPanes, .toggleScratch, .toggleOverlay, .find,
         .previousSession, .nextSession, .previousAttentionSession, .nextAttentionSession,
         .firstSession, .lastSession,
@@ -265,7 +267,7 @@ struct PaletteCatalogTests {
                                      sidebarShowsWorkspaceTree: true, sidebarShowsWorkspaceRows: true, hasMarkedWorkspaces: true,
                                      canStepWorkspaces: true,
                                      canStepWindows: true,
-                                     activeSessionHasSplit: true, hasPendingClose: true,
+                                     activeSessionHasSplit: true, activeSessionHasForcedGrid: true, hasPendingClose: true,
                                      hasRecentClosed: true, hasActiveSession: false, hasSessions: true,
                                      hasCurrentWorkspace: true, hasRemotes: true, activeSessionHasOverlay: true)
         for command in PaletteCommand.allCases {
@@ -280,6 +282,15 @@ struct PaletteCatalogTests {
         #expect(!PaletteCommand.toggleScratch.isEnabled(in: page))
         #expect(PaletteCommand.renameSession.isEnabled(in: page))
         #expect(PaletteCommand.closeSession.isEnabled(in: page))
+    }
+
+    @Test func restoreTerminalSizeNeedsAForcedGridAndStaysListed() {
+        #expect(PaletteCommand.restoreTerminalSize.isVisible(in: PaletteContext()))
+        #expect(!PaletteCommand.restoreTerminalSize.isEnabled(in: PaletteContext(hasActiveSession: true)))
+        #expect(PaletteCommand.restoreTerminalSize.isEnabled(in: PaletteContext(activeSessionHasForcedGrid: true, hasActiveSession: true)))
+        #expect(!PaletteCommand.restoreTerminalSize.isEnabled(
+            in: PaletteContext(activeSessionHasForcedGrid: true, hasActiveSession: true, pickerActive: true)))
+        #expect(PaletteCommand.restoreTerminalSize.builtinAction == nil)
     }
 
     @Test func newCompanionNeedsAnActiveSession() {
@@ -389,7 +400,7 @@ struct PaletteCatalogTests {
                                      sidebarShowsWorkspaceTree: true, sidebarShowsWorkspaceRows: true, hasMarkedWorkspaces: true,
                                      canStepWorkspaces: true,
                                      canStepWindows: true,
-                                     activeSessionHasSplit: true, hasPendingClose: true,
+                                     activeSessionHasSplit: true, activeSessionHasForcedGrid: true, hasPendingClose: true,
                                      hasRecentClosed: true, hasActiveSession: true, hasSessions: true,
                                      hasCurrentWorkspace: false, hasRemotes: true, activeSessionHasOverlay: true)
         let needWorkspace: Set<PaletteCommand> = [.renameWorkspace, .focusWorkspace, .addWorkspaceToFocus,
@@ -405,7 +416,7 @@ struct PaletteCatalogTests {
                                      sidebarShowsWorkspaceTree: true, sidebarShowsWorkspaceRows: true, hasMarkedWorkspaces: true,
                                      canStepWorkspaces: true,
                                      canStepWindows: true,
-                                     activeSessionHasSplit: true, hasPendingClose: true,
+                                     activeSessionHasSplit: true, activeSessionHasForcedGrid: true, hasPendingClose: true,
                                      hasRecentClosed: true, hasActiveSession: true,
                                      hasCurrentWorkspace: true, terminalZoomActive: true)
         for command in PaletteCommand.allCases {
@@ -419,7 +430,7 @@ struct PaletteCatalogTests {
                                      sidebarShowsWorkspaceTree: true, sidebarShowsWorkspaceRows: true, hasMarkedWorkspaces: true,
                                      canStepWorkspaces: true,
                                      canStepWindows: true,
-                                     activeSessionHasSplit: true, hasPendingClose: true,
+                                     activeSessionHasSplit: true, activeSessionHasForcedGrid: true, hasPendingClose: true,
                                      hasRecentClosed: true, hasActiveSession: true,
                                      hasCurrentWorkspace: true, pickerActive: true)
         for command in PaletteCommand.allCases {
@@ -435,7 +446,7 @@ struct PaletteCatalogTests {
                                      sidebarShowsWorkspaceTree: true, sidebarShowsWorkspaceRows: true, hasMarkedWorkspaces: true,
                                      canStepWorkspaces: true,
                                      canStepWindows: true,
-                                     activeSessionHasSplit: true, hasPendingClose: true,
+                                     activeSessionHasSplit: true, activeSessionHasForcedGrid: true, hasPendingClose: true,
                                      hasRecentClosed: true, hasActiveSession: true,
                                      hasCurrentWorkspace: true, pickerActive: controller.modalPending)
         #expect(context.modalActive)
@@ -452,7 +463,7 @@ struct PaletteCatalogTests {
                                      sidebarShowsWorkspaceTree: true, sidebarShowsWorkspaceRows: true, hasMarkedWorkspaces: true,
                                      canStepWorkspaces: true,
                                      canStepWindows: true,
-                                     activeSessionHasSplit: true, hasPendingClose: true,
+                                     activeSessionHasSplit: true, activeSessionHasForcedGrid: true, hasPendingClose: true,
                                      hasRecentClosed: true, hasActiveSession: true,
                                      hasCurrentWorkspace: true, dashboardOpen: true)
         for command in PaletteCommand.allCases {

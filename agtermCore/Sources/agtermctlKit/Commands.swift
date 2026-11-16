@@ -95,7 +95,7 @@ public struct Agtermctl: ParsableCommand {
     )
 
     #if os(macOS)
-    private static let hostSubcommands: [ParsableCommand.Type] = [Server.self, Mobile.self]
+    private static let hostSubcommands: [ParsableCommand.Type] = [Server.self, Mobile.self, Phone.self]
     #else
     private static let hostSubcommands: [ParsableCommand.Type] = []
     #endif

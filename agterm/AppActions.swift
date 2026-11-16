@@ -211,11 +211,6 @@ final class AppActions {
         revealSessionInFinder(id, in: store)
     }
 
-    var canRestoreActiveTerminalSize: Bool {
-        guard let store, let id = store.selectedSessionID else { return false }
-        return store.session(withID: id)?.hasForcedGrid == true
-    }
-
     func restoreActiveTerminalSize() {
         guard let store, let id = store.selectedSessionID else { return }
         restoreTerminalSize(id, in: store)

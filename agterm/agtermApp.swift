@@ -130,7 +130,10 @@ struct agtermApp: App {
                                           zmxClient: restored.zmxClient,
                                           zmxOutdatedBefore: restored.zmxOutdatedBefore)
         _controlServer = State(initialValue: controlServer)
-        _phoneRelay = State(initialValue: PhoneRelay(stateDirectory: stateDirectory))
+        let phoneRelay = PhoneRelay(stateDirectory: stateDirectory)
+        phoneRelay.onEvent = { [weak library] in library?.emitAppEvent(ControlEventDraft(kind: $0, payload: ControlEventPayload(ip: $1))) }
+        controlServer.phoneRelay = phoneRelay
+        _phoneRelay = State(initialValue: phoneRelay)
         actions.remoteAttacher = controlServer
         actions.companionDuplicator = controlServer
         actions.sessionTyper = controlServer

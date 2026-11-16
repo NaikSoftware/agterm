@@ -125,6 +125,11 @@ public enum Command: String, Codable, Sendable {
     case keymapRun = "keymap.run"
     case hooksReload = "hooks.reload"
     case hooksList = "hooks.list"
+    case phoneStatus = "phone.status"
+    case phoneEnable = "phone.enable"
+    case phonePort = "phone.port"
+    case phoneHost = "phone.host"
+    case phoneRevoke = "phone.revoke"
     case browserClear = "browser.clear"
     case browserLinks = "browser.links"
     case configReload = "config.reload"
@@ -227,8 +232,12 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     /// `zmx kill`'s explicit confirmation. The command destroys a backend process that can reach detached
     /// claims and every client attached to it, so it has no useful default for who is affected.
     public var force: Bool?
-    /// The machine `zmx tree` reaches, spelled as ssh would take it.
+    /// The machine `zmx tree` reaches, spelled as ssh would take it; the address `phone.host` puts in the link.
     public var host: String?
+    /// `phone.host`: let the link follow the relay's best address instead of a fixed `host`.
+    public var auto: Bool?
+    /// `phone.port`: the port the phone relay listens on.
+    public var port: Int?
     /// For `session.new`: create in the background without selecting or focusing (the CLI's `--no-select`);
     /// omitted/`false` keeps select-and-focus. Read back via the `tree` `active` flag — the new node is not it.
     public var noSelect: Bool?
@@ -770,6 +779,8 @@ public struct ControlResult: Codable, Sendable, Equatable {
     public var remote: ControlRemoteTree?
     /// What `zmx.reset` confirmed: the sessions and panes it will reset at the next launch.
     public var liveReset: ControlLiveResetStatus?
+    /// The phone relay, from every `phone.*` command; only `phone.status` carries `link`.
+    public var phone: ControlPhoneStatus?
     /// The page `session.overlay.open --html` opened, which `session.overlay.result --page` reads back.
     public var pageID: String?
     /// A page's selector outcome for `session.overlay.result --page`.
@@ -818,7 +829,9 @@ public struct ControlResult: Codable, Sendable, Equatable {
                 parent: String? = nil, closed: [String]? = nil, companionPage: PresentationPage? = nil,
                 messageID: String? = nil, delivered: [String]? = nil, rejected: [MessageRejection]? = nil,
                 messages: [BusMessage]? = nil, remaining: Int? = nil, acked: [String]? = nil,
-                remoteGroup: ControlRemoteGroup? = nil, columns: Int? = nil, rows: Int? = nil, lines: Int? = nil) {
+                remoteGroup: ControlRemoteGroup? = nil, columns: Int? = nil, rows: Int? = nil, lines: Int? = nil,
+                phone: ControlPhoneStatus? = nil) {
+        self.phone = phone
         self.columns = columns
         self.rows = rows
         self.lines = lines

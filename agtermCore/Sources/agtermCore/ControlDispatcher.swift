@@ -69,6 +69,8 @@ public struct ControlDispatcher {
                 return ControlResponse(ok: false, error: "catalog.op takes epoch and rev together")
             }
             return actions.catalogOperation(opID, sent: epoch.flatMap { epoch in rev.map { CatalogPosition(epoch: epoch, rev: $0) } })
+        case .phoneStatus, .phoneEnable, .phonePort, .phoneHost, .phoneRevoke:
+            return await dispatchPhoneCommand(request)
         case .hooksReload, .hooksList:
             return dispatchHooksCommand(request)
         case .recentList, .recentOpen, .recentClear:

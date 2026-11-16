@@ -285,6 +285,12 @@ struct EventCommandsTests {
         #expect(human[16] == "00:00:00 pane.focused api left pane-id=-")
         #expect(human[17] == "00:00:00 message api pane-id=tok from=S:Q id=m1")
         #expect(human[18] == "00:00:00 message api pane-id=tok from=- id=m2")
+        let phone = [ControlEventKind.phoneConnected, .phoneDisconnected, .phoneRefused].map {
+            EventFormatter.human(ControlEvent(seq: 20, ts: 0, kind: $0, payload: ControlEventPayload(ip: "10.0.0.3")),
+                                 timeZone: TimeZone(secondsFromGMT: 0)!)
+        }
+        #expect(phone == ["00:00:00 phone.connected ip=10.0.0.3", "00:00:00 phone.disconnected ip=10.0.0.3",
+                          "00:00:00 phone.refused ip=10.0.0.3"])
 
         for event in events {
             let line = try EventFormatter.json(event)
