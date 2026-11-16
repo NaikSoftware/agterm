@@ -68,7 +68,7 @@ class BleChannel(private val activity: Activity, messenger: BinaryMessenger) : M
             "connect" -> {
                 val link = Link(id)
                 links[id] = link
-                Thread { link.open(UUID.fromString(call.argument<String>("service")), call.argument<Int>("timeoutMs")!!.toLong(), result) }.start()
+                Thread { link.open(call.argument<List<String>>("services")!!.map(UUID::fromString), call.argument<Int>("timeoutMs")!!.toLong(), result) }.start()
             }
             "write" -> links[id]?.write(call.argument<ByteArray>("data")!!, result) ?: result.error("closed", null, null)
             "close" -> { links.remove(id)?.close(); result.success(null) }
@@ -87,10 +87,10 @@ class BleChannel(private val activity: Activity, messenger: BinaryMessenger) : M
         private val events = LinkedBlockingQueue<Any>() // scan and GATT callbacks; an IOException fails the wait
         private val writer = Executors.newSingleThreadExecutor() // one writer: ciphertext order is nonce order
 
-        fun open(service: UUID, timeoutMs: Long, result: MethodChannel.Result) {
+        fun open(services: List<UUID>, timeoutMs: Long, result: MethodChannel.Result) {
             try {
-                val device = scan(service, timeoutMs)
-                val psm = readPsm(device, service)
+                val device = scan(services, timeoutMs)
+                val psm = readPsm(device, services)
                 val s = device.createInsecureL2capChannel(psm)
                 socket = s
                 if (closed) throw IOException("closed")
@@ -107,7 +107,7 @@ class BleChannel(private val activity: Activity, messenger: BinaryMessenger) : M
             }
         }
 
-        private fun scan(service: UUID, timeoutMs: Long): BluetoothDevice {
+        private fun scan(services: List<UUID>, timeoutMs: Long): BluetoothDevice {
             val adapter = activity.getSystemService(BluetoothManager::class.java)?.adapter
             if (adapter == null || !adapter.isEnabled) throw NotFound()
             val scanner = adapter.bluetoothLeScanner ?: throw NotFound()
@@ -116,7 +116,7 @@ class BleChannel(private val activity: Activity, messenger: BinaryMessenger) : M
                 override fun onScanFailed(errorCode: Int) { events.offer(ScanFailed(errorCode)) }
             }
             scanner.startScan(
-                listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(service)).build()),
+                services.map { ScanFilter.Builder().setServiceUuid(ParcelUuid(it)).build() }, // the rotating UUIDs of epochs e-1, e, e+1
                 ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), cb)
             try {
                 return await(timeoutMs) { NotFound() }
@@ -126,7 +126,7 @@ class BleChannel(private val activity: Activity, messenger: BinaryMessenger) : M
         }
 
         // The spike kept the GATT open for the whole L2CAP session (and requested HIGH priority on it), so this does too.
-        private fun readPsm(device: BluetoothDevice, service: UUID): Int {
+        private fun readPsm(device: BluetoothDevice, services: List<UUID>): Int {
             gatt = device.connectGatt(activity, false, object : BluetoothGattCallback() {
                 override fun onConnectionStateChange(g: BluetoothGatt, status: Int, state: Int) {
                     if (status != BluetoothGatt.GATT_SUCCESS || state == BluetoothProfile.STATE_DISCONNECTED) {
@@ -134,7 +134,7 @@ class BleChannel(private val activity: Activity, messenger: BinaryMessenger) : M
                     } else if (state == BluetoothProfile.STATE_CONNECTED) g.discoverServices()
                 }
                 override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-                    val c = g.getService(service)?.getCharacteristic(PSM_CHARACTERISTIC)
+                    val c = services.firstNotNullOfOrNull { g.getService(it) }?.getCharacteristic(PSM_CHARACTERISTIC) // whichever epoch matched
                     if (status != BluetoothGatt.GATT_SUCCESS || c == null || !g.readCharacteristic(c)) {
                         events.offer(IOException("no PSM characteristic (status $status)"))
                     }

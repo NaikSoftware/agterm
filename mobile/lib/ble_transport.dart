@@ -86,7 +86,10 @@ Future<bool> bluetoothGranted() async => await _method.invokeMethod<bool>('grant
 Future<Link> openBle(Pairing p) async {
   if (!_asked) {
     _asked = true; // the first Bluetooth connect asks; later ones only check
-    await _method.invokeMethod('permit');
+    // a request from a stopped or recreated activity may never answer
+    if (await _method.invokeMethod<bool>('permit').timeout(const Duration(seconds: 60), onTimeout: () => null) == null) {
+      throw AgtermError('Android did not answer the Bluetooth permission request. Allow Nearby devices for agterm in Android settings.');
+    }
   }
   if (!await bluetoothGranted()) {
     throw AgtermError('agterm needs the Nearby devices permission to connect over Bluetooth. Allow it in Android settings.');
@@ -106,7 +109,7 @@ Future<Link> openBle(Pairing p) async {
   }
 
   try {
-    await _method.invokeMethod('connect', {'id': id, 'service': BleIds.serviceUuid(p.token), 'timeoutMs': 10000});
+    await _method.invokeMethod('connect', {'id': id, 'services': BleIds.serviceUuids(p.token, DateTime.now()), 'timeoutMs': 10000});
   } on PlatformException catch (e) {
     close();
     throw switch (e.code) {

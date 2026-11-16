@@ -24,9 +24,19 @@ void main() {
   }
 
   test('ids and psk match the vectors', () {
-    expect(BleIds.serviceUuid(v['token']), (v['serviceUUID'] as String).toLowerCase());
+    for (final r in v['rotatingServiceUUIDs'] as List) {
+      expect(BleIds.serviceUuid(v['token'], r['epoch']), (r['serviceUUID'] as String).toLowerCase());
+    }
     expect(BleIds.psmCharacteristic, v['psmCharacteristicUUID']);
     expect(BleIds.psk(v['token']), hex(v['psk']));
+  });
+
+  test('scans for epochs e-1, e and e+1', () {
+    final [a, b] = [for (final r in v['rotatingServiceUUIDs'] as List) (r['epoch'] as int, r['serviceUUID'] as String)];
+    // the last second of epoch a: a-1, a, a+1
+    expect(BleIds.serviceUuids(v['token'], DateTime.fromMillisecondsSinceEpoch((a.$1 * 900 + 899) * 1000)).sublist(1), [a.$2, b.$2]);
+    // the first second of epoch b: a, b, b+1
+    expect(BleIds.serviceUuids(v['token'], DateTime.fromMillisecondsSinceEpoch(b.$1 * 900 * 1000)).sublist(0, 2), [a.$2, b.$2]);
   });
 
   test('handshake reproduces the vectors', () {

@@ -27,12 +27,21 @@ List<Uint8List> _hkdf(List<int> salt, List<int> ikm, List<int> info, int outputs
 class BleIds {
   static const psmCharacteristic = 'a6e5c0de-0001-4a67-8000-6167746572d1';
 
-  static String serviceUuid(String token) {
-    final b = _hmac(utf8.encode(token), utf8.encode('agterm-ble-adv')).sublist(0, 16);
+  static const epochSeconds = 900;
+
+  /// The UUID the Mac advertises during [epoch] (unix seconds / [epochSeconds]): it rotates so nobody can track the Mac.
+  static String serviceUuid(String token, int epoch) {
+    final b = _hmac(utf8.encode(token), utf8.encode('agterm-ble-adv:$epoch')).sublist(0, 16);
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
     final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
     return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
+  }
+
+  /// The UUIDs to scan for at [now]: epochs e-1, e and e+1, for clock skew.
+  static List<String> serviceUuids(String token, DateTime now) {
+    final e = now.millisecondsSinceEpoch ~/ 1000 ~/ epochSeconds;
+    return [for (var i = e - 1; i <= e + 1; i++) serviceUuid(token, i)];
   }
 
   static Uint8List psk(String token) => _hkdf(const [], utf8.encode(token), utf8.encode('agterm-ble-psk'), 1)[0];
