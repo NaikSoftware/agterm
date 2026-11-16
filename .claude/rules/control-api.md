@@ -226,10 +226,26 @@ rules and the argv on `TerminfoInstall`'s connection surface; `ServerInstaller` 
 over injectable effects, and no archive bytes are sent to the host until the tarball's sha256 matches the app's
 `agterm-server.sha256`. A bad destination is refused in `run`, not `validate`, so every refusal exits 1.
 
-`mobile serve|reset` are CLI-only too: `serve` is a TLS relay and `reset` rewrites its token file, so neither has a
+`mobile serve|reset` are CLI-only too: `serve` is a TLS and Bluetooth relay and `reset` rewrites its token file, so neither has a
 protocol command. `phone.*` is the protocol face of the app's `PhoneRelay`. agterm-server leaves `session.grid`,
 `session.scroll` and all `phone.*` unserved, a page cannot send `phone.*` (`HtmlBridge` refuses them), and the relay
 refuses `phone.*` from a phone. `site/commands.html#phone` owns the rest.
+Debug builds are ad-hoc signed with a bare `cdhash` requirement,
+so each rebuild asks for Bluetooth again at the relay's first start.
+
+`mobile serve` also offers BLE (`MobileBluetooth.swift`, `#if os(macOS)`): an insecure L2CAP channel, with
+Noise NNpsk0 keyed by the pairing token doing the authentication and encryption. Each line is chunked into
+1...4096-byte sealed frames; a replayed or tampered frame drops the link. The advertised service UUID is an HMAC
+of the token over a 900 s epoch, re-registered at each boundary, so a passive scanner cannot track the Mac.
+`<mobileDir>/bluetooth.lock` (`flock`) lets one relay per state directory advertise, so a Release and a Debug
+instance can both advertise. The `maxPhones` busy cap (reject `[0x02]`)
+counts authenticated phones only, so replayed handshakes cannot lock out a paired phone; the unauthenticated cap
+and the 10 s auth timeout cover the rest. agtermctl embeds an Info.plist (`com.umputun.agtermctl`, usage string)
+via `-sectcreate` in project.yml's Bundle helper executables phase, so a hand-run serve prompts under a stable identity. The L2CAP streams run on
+their own `StreamThread`, never `RunLoop.main`. `commands.html#mobile` owns the user-visible values.
+A Bluetooth wrong-key handshake emits no `phone.refused`: a stranger in radio range could flood the event.
+`tree.phone.bluetooth` changes emit no event; it is poll-only.
+A connected central can still read the GAP device name, a known limit of the rotating UUID against an active observer.
 
 `session wait` is not a fourth exemption but a client-side composite, like `overlay open --block`: it
 opens the socket only for existing reads (`events.read`, `window.list`, `tree`), so there is no
@@ -2564,6 +2580,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   alone keeps the one-hop window after a demotion.
 - Commands that act on the pane's OWN surface are refused while it is covered, with `pane is covered
   while another Mac leads it; take the lead first (session lead)`: `session.paste`, `.selectall`, `.copy`,
+  `session.grid` (not `--reset`), `session.scroll`,
   and a `session.search` that opens, updates or navigates, judged on the PINNED `searchSurface` when a
   search is open. They would otherwise answer ok for a paste the daemon drops or select text laid out
   for another grid. `session.search --to close` stays available, being cleanup. A pane that leads keeps

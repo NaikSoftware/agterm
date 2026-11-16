@@ -13,9 +13,13 @@ public struct ControlPhoneStatus: Codable, Sendable, Equatable {
     /// Why the relay is not listening.
     public var error: String?
     public var link: String?
+    /// `advertising|off|unauthorized|unsupported|busy|disabled` from serve's last Bluetooth line, `starting` while
+    /// a listening relay has printed none yet (a pending permission prompt); nil while no relay listens.
+    /// A string, not an enum, so an older CLI still decodes a value added later.
+    public var bluetooth: String?
 
     public init(on: Bool, listening: Bool, port: Int, host: String, hosts: [String]? = nil,
-                lastEvent: String? = nil, error: String? = nil, link: String? = nil) {
+                lastEvent: String? = nil, error: String? = nil, link: String? = nil, bluetooth: String? = nil) {
         self.on = on
         self.listening = listening
         self.port = port
@@ -24,9 +28,12 @@ public struct ControlPhoneStatus: Codable, Sendable, Equatable {
         self.lastEvent = lastEvent
         self.error = error
         self.link = link
+        self.bluetooth = bluetooth
     }
 
-    public var readback: ControlPhoneStatus { ControlPhoneStatus(on: on, listening: listening, port: port, host: host) }
+    public var readback: ControlPhoneStatus {
+        ControlPhoneStatus(on: on, listening: listening, port: port, host: host, bluetooth: bluetooth)
+    }
 }
 
 public extension PhoneRelayLine {

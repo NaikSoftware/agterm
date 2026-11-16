@@ -732,13 +732,14 @@ error keeps those names for compatibility.
 - `session grid COLSxROWS | --reset [--pane left|right] [--target] [--window W]`: force a pane to a fixed
   character grid, for a phone. `--reset` returns the size to the view. Columns take 20...1000 and rows
   5...1000; give both or `--reset`. `--pane` defaults to `left`; `scratch` → `invalid pane: scratch`, `right`
-  without a split → `session has no split pane`, an off-screen pane → `pane is not on screen`. Returns `id`,
+  without a split → `session has no split pane`, an off-screen pane → `pane is not on screen`, a pane another Mac leads →
+  `pane is covered ...; take the lead first (session lead)` (`--reset` still clears it). Returns `id`,
   `pane`, `columns`, `rows` (the real grid after the change). Read forced panes from `tree`'s `paneGrids`
   (`{left?, right?}` of `{columns, rows}`, omitted when none); `session text` reports the real `columns` and
   `rows`. The cases that clear it are listed at commands.html#session, `session grid`. agterm-server does not serve it.
 - `session scroll LINES [--pane left|right] [--target] [--window W]`: scroll by wheel notches, negative toward
   older output. `LINES` takes -1000...1000 and not 0. Returns `id`, `pane`, `lines`. A mouse-reporting program
-  gets wheel events instead. agterm-server does not serve it.
+  gets wheel events instead. On a pane another Mac leads, take the lead first (`session lead`). agterm-server does not serve it.
 - `session text [--all] [--lines N] [--pane left|right|scratch] [--pane-id TOKEN] [--target] [--window W]`: returns `result.text`
   with the session's terminal buffer as PLAIN TEXT (no ANSI/color). By default it reads the VISIBLE
   SCREEN of the on-screen pane. `--all` reads the whole buffer including scrollback; `--lines N` reads the
@@ -2844,14 +2845,15 @@ same four ssh options, the same installer-owned execution settings and the same 
 
 ## mobile
 
-`agtermctl mobile serve [--port N] [--host H] [--bind ADDR] [--no-qr] [--socket PATH]` runs the phone relay in
+`agtermctl mobile serve [--port N] [--host H] [--bind ADDR] [--bluetooth|--no-bluetooth] [--no-qr] [--socket PATH]` runs the phone relay in
 the foreground; `mobile reset` replaces the token, and a running `serve` exits 1 within seconds. Local-only and macOS-only: no protocol command.
 `serve` creates a self-signed certificate and a token under `mobile/` in the state directory, prints a QR and
 `agterm://pair?h=&p=&t=&f=&n=` links (`t` token, `f` certificate sha256), and listens on TLS, default port
 8765 (1024...65535). A phone's first line is the token; a wrong one is answered `unauthorized` and closed.
 Later lines are forwarded to the control socket with the phone's `id` echoed. `phone.*` from a phone → `phone.*
 is not available from a phone`. The relay exits when its parent
-dies. `reset` prints ``Pairing revoked: paired phones are disconnected. Restart `agtermctl mobile serve` for the new code.`` and the old link stops working.
+dies. Bluetooth is on by default; serve prints `agtermctl: bluetooth: advertising|off (REASON)` to stderr, and
+a link whose relay offers it ends in `&b=1` (no `h`/`p` without a LAN address). commands.html#mobile owns the values. `reset` prints ``Pairing revoked: paired phones are disconnected. Restart `agtermctl mobile serve` for the new code.`` and the old link stops working.
 
 ## phone
 
@@ -2860,11 +2862,11 @@ Connect a Phone… window of the running app: `phone.status`, `phone.enable` (`m
 `phone.port` (1024...65535), `phone.host` (a host, or `auto`), `phone.revoke`. App-wide: a target or
 `--window` is refused. agterm-server and HTML pages refuse all five.
 
-- Result `result.phone`: `on`, `listening`, `port`, `host` (effective), `hosts?`, `lastEvent?`, `error?`
+- Result `result.phone`: `on`, `listening`, `port`, `host` (effective), `hosts?`, `lastEvent?`, `error?`, `bluetooth?` (`advertising|off|unauthorized|unsupported|busy|disabled`, or `starting` while a listening relay has not reported it)
   and `link?`. Only `phone.status` carries `link` (it holds the token); `phone link` prints it, or the QR then
   it with `--qr`, and exits 1 while the relay is off or not listening.
 - Restart timing, the 10 s rule and the `link` rule: see commands.html#phone, which owns them.
-- Read-back: `tree` top-level `phone` is `{on, listening, port, host}`, no link.
+- Read-back: `tree` top-level `phone` is `{on, listening, port, host, bluetooth?}`, no link.
 - Palette and Session menu: Restore Terminal Size resets both panes' grids.
 
 ## version

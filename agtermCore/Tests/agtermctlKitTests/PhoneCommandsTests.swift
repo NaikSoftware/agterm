@@ -51,11 +51,12 @@ struct PhoneCommandsTests {
 
     @Test func statusPrintsOneFactPerLineAndOmitsWhatIsAbsent() {
         let full = ControlPhoneStatus(on: true, listening: true, port: 8765, host: "10.0.0.2", hosts: ["10.0.0.2", "10.0.0.9"],
-                                      lastEvent: "phone connected from 10.0.0.5", link: "agterm://pair?h=10.0.0.2")
+                                      lastEvent: "phone connected from 10.0.0.5", link: "agterm://pair?h=10.0.0.2", bluetooth: "advertising")
         #expect(SocketClient.formatResponse(ControlResponse(ok: true, result: ControlResult(phone: full))) == """
             on: yes, listening on port 8765
             host: 10.0.0.2
             hosts: 10.0.0.2, 10.0.0.9
+            bluetooth: advertising
             last: phone connected from 10.0.0.5
             link: agterm://pair?h=10.0.0.2
             """)

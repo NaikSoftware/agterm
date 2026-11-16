@@ -79,10 +79,11 @@ struct ControlDispatcherPhoneTests {
 
     @Test func statusEncodesItsLinkButTheTreeReadbackDropsIt() throws {
         let status = ControlPhoneStatus(on: true, listening: false, port: 9000, host: "h", hosts: ["h", "i"],
-                                        lastEvent: "phone connected from 1.2.3.4", error: "boom", link: "agterm://pair?t=T")
+                                        lastEvent: "phone connected from 1.2.3.4", error: "boom", link: "agterm://pair?t=T",
+                                        bluetooth: "busy")
         let full = try #require(String(data: JSONEncoder().encode(status), encoding: .utf8))
         #expect(full.contains("\"link\""))
-        #expect(status.readback == ControlPhoneStatus(on: true, listening: false, port: 9000, host: "h"))
+        #expect(status.readback == ControlPhoneStatus(on: true, listening: false, port: 9000, host: "h", bluetooth: "busy"))
         var tree = ControlTree(workspaces: [])
         let bare = try #require(String(data: JSONEncoder().encode(tree), encoding: .utf8))
         #expect(!bare.contains("phone"))
@@ -91,6 +92,7 @@ struct ControlDispatcherPhoneTests {
         #expect(decoded.phone == status.readback)
         let encoded = try #require(String(data: JSONEncoder().encode(tree), encoding: .utf8))
         #expect(!encoded.contains("link") && !encoded.contains("hosts") && !encoded.contains("lastEvent"))
+        #expect(encoded.contains("\"bluetooth\":\"busy\""))
     }
 
     @Test func relayLinesBecomePhoneEvents() {

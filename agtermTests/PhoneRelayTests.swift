@@ -35,6 +35,7 @@ final class PhoneRelayTests: XCTestCase {
         echo "start $$" >> '\(log.path)'
         trap 'echo "stop $$" >> "\(log.path)"; sleep 0.5; echo "gone $$" >> "\(log.path)"; exit 0' TERM
         echo '\(link)'
+        echo 'agtermctl: bluetooth: advertising' >&2
         echo 'agtermctl: phone connected from 10.0.0.9' >&2
         echo 'agtermctl: phone disconnected from 10.0.0.9' >&2
         while :; do sleep 0.05 & wait $!; done
@@ -89,13 +90,14 @@ final class PhoneRelayTests: XCTestCase {
 
     func testSwitchingOffReturnsAtOnceAndTheChildExitsAfter() throws {
         let relay = started(try slowServe())
-        XCTAssertTrue(wait { relay.link != nil })
+        XCTAssertTrue(wait { relay.link != nil && relay.status.bluetooth == "advertising" })
 
         let begun = Date()
         relay.setOn(false)
 
         XCTAssertLessThan(Date().timeIntervalSince(begun), 3)
         XCTAssertNil(relay.link)
+        XCTAssertNil(relay.status.bluetooth)
         XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("gone ") } })
         XCTAssertNil(relay.error)
         XCTAssertFalse(PhoneDesktopState.load(stateDirectory: dir).on)
@@ -103,12 +105,13 @@ final class PhoneRelayTests: XCTestCase {
 
     func testAPortChangeStartsTheNewChildOnlyAfterTheOldOneExited() throws {
         let relay = started(try slowServe())
-        XCTAssertTrue(wait { relay.link != nil })
+        XCTAssertTrue(wait { relay.link != nil && relay.status.bluetooth == "advertising" })
 
         let begun = Date()
         relay.setPort(20000)
 
         XCTAssertLessThan(Date().timeIntervalSince(begun), 3)
+        XCTAssertNil(relay.status.bluetooth)
         XCTAssertTrue(wait { logLines().count >= 4 && relay.link != nil })
         let events = logLines().map { $0.split(separator: " ").first.map(String.init) ?? "" }
         XCTAssertEqual(Array(events.prefix(4)), ["start", "stop", "gone", "start"])
@@ -169,7 +172,8 @@ final class PhoneRelayTests: XCTestCase {
         let status = await dispatcher.dispatch(ControlRequest(cmd: .phoneStatus))
         XCTAssertEqual(status?.result?.phone?.link, link)
         let tree = await dispatcher.dispatch(ControlRequest(cmd: .tree))
-        XCTAssertEqual(tree?.result?.tree?.phone, ControlPhoneStatus(on: true, listening: true, port: 8765, host: "10.0.0.1"))
+        XCTAssertEqual(tree?.result?.tree?.phone, ControlPhoneStatus(on: true, listening: true, port: 8765, host: "10.0.0.1",
+                                                                         bluetooth: "advertising"))
         func phoneEvents() -> [ControlEvent] {
             library.readEvents(ControlEventReadOptions(cursor: ControlEventCursor(run: anchor.run, after: anchor.next),
                                                        kinds: [.phoneConnected, .phoneDisconnected], limit: 10))
@@ -256,6 +260,58 @@ final class PhoneRelayTests: XCTestCase {
         XCTAssertEqual(((try? String(contentsOf: tries, encoding: .utf8)) ?? "").split(separator: "\n").count, 2)
         relay.setOn(false)
         XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("gone ") } })
+    }
+
+    func testTheBluetoothLineIsAStatusAndNeverTheExitError() throws {
+        let seen = dir.appendingPathComponent("seen")
+        let busy = dir.appendingPathComponent("busy")
+        let relay = started(try fakeTool("""
+        echo 'agtermctl: bluetooth: advertising' >&2
+        echo '\(link)'
+        while [ ! -e '\(seen.path)' ]; do sleep 0.05; done
+        echo 'agtermctl: bluetooth: off (in use by another relay)' >&2
+        while [ ! -e '\(busy.path)' ]; do sleep 0.05; done
+        exit 1
+        """))
+
+        XCTAssertTrue(wait { relay.status.bluetooth == "advertising" })
+        FileManager.default.createFile(atPath: seen.path, contents: nil)
+        XCTAssertTrue(wait { relay.status.bluetooth == "busy" })
+        XCTAssertEqual(relay.status.readback.bluetooth, "busy")
+        FileManager.default.createFile(atPath: busy.path, contents: nil)
+        XCTAssertTrue(wait { relay.error != nil })
+        XCTAssertEqual(relay.error, "The relay stopped.")
+        XCTAssertNil(relay.status.bluetooth)
+    }
+
+    func testABluetoothOnlyLinkWithoutAnAddressStillListens() throws {
+        let radioOnly = "agterm://pair?t=tok&f=ab&n=mac&b=1"
+        let relay = started(try fakeTool("""
+        echo '\(radioOnly)'
+        while :; do sleep 0.05 & wait $!; done
+        """))
+
+        XCTAssertTrue(wait { relay.link != nil })
+        XCTAssertEqual(relay.link, radioOnly)
+        XCTAssertTrue(relay.status.listening)
+        XCTAssertEqual(relay.status.host, "")
+        XCTAssertEqual(relay.status.hosts, [])
+        relay.setHost("127.0.0.1")
+        XCTAssertEqual(relay.link, "agterm://pair?h=127.0.0.1&p=8765&t=tok&f=ab&n=mac&b=1")
+    }
+
+    func testARelayWithoutABluetoothLineAnswersStartingAtTheDeadline() throws {
+        let relay = started(try fakeTool("""
+        echo '\(link)'
+        while :; do sleep 0.05 & wait $!; done
+        """))
+        var answered = false
+        Task { await relay.untilListening(within: .milliseconds(500)); answered = true }
+
+        XCTAssertTrue(wait { answered })
+        XCTAssertEqual(relay.link, link)
+        XCTAssertEqual(relay.status.bluetooth, "starting")
+        XCTAssertEqual(relay.status.readback.bluetooth, "starting")
     }
 
     func testWithoutABoundSocketNothingStarts() async {

@@ -136,7 +136,7 @@ The same interface covers windows, splits, overlays, dashboards, HUDs, notificat
 - **Fit to phone.** The program gets the phone's columns and rows and redraws for them; a drag scrolls the program itself. Session ▸ Restore Terminal Size gives the grid back, and so does any window resize or the phone disconnecting.
 - **Alerts.** A notification when an agent blocks or finishes while the app is in the background.
 
-To pair, open agterm ▸ Connect a Phone…, switch it on, and scan the code in the app. `agtermctl mobile serve` does the same from a shell. The relay is off by default. It uses TLS pinned to this Mac's certificate, and anyone with the code controls your terminals until you revoke it. If a firewall blocks incoming connections, connect the phone by USB and run `adb reverse tcp:8765 tcp:8765`, then set the address to `127.0.0.1`. [Phone app](https://agterm.com/docs#phone-app) has the details.
+The phone also works over Bluetooth without Wi-Fi. To pair, open agterm ▸ Connect a Phone…, switch it on, and scan the code in the app. `agtermctl mobile serve` does the same from a shell. The relay is off by default. It uses TLS pinned to this Mac's certificate, and anyone with the code controls your terminals until you revoke it. If a firewall blocks incoming connections, connect the phone by USB and run `adb reverse tcp:8765 tcp:8765`, then set the address to `127.0.0.1`. [Phone app](https://agterm.com/docs#phone-app) has the details.
 
 ## Documentation
 

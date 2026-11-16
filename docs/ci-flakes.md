@@ -253,6 +253,16 @@ Each entry separates a demonstrated cause from one that is only consistent with 
 - **Fix.** The per-file bound and the page wait are 30 s, a coarse end-to-end ceiling for a pathological slowdown
   rather than a latency target.
 
+### `AppDelegateCaptureTests.testExitCaptureReadsALiveListingSlowerThanAHundredMilliseconds`
+
+- **Symptom.** `AppDelegateCaptureTests.swift:100` `("0") is not equal to ("1")` and `:101` `nil` is not equal to
+  the expected command.
+- **Runs.** Local only (2026-11-16): 1 of 3 isolated runs failed on master 841a74d, and 1 full hosted run failed on
+  a branch that does not touch the capture path.
+- **Cause, consistent with the evidence only.** The test's zsh listing (`zselect -t 12`) starts slowly under load
+  and misses the capture timeout, so nothing is captured. No stage was measured.
+- **Fix.** None yet.
+
 ### `ControlServerRemotePageTests.testATextActionOnAPageThatIsNotTextAnswersTheLocalRefusalAndAdvancesNoSequence`
 
 - **Symptom.** `XCTAssertEqual failed: ("5") is not equal to ("1")` on the state frame count.

@@ -329,7 +329,7 @@ extension ControlServer {
 
     /// The reply carries the grid libghostty reports after the change, which a caller compares with its own.
     func setSessionGrid(_ target: String?, window: String?, pane: StatusPane, grid: ControlGrid?) -> ControlResponse {
-        withGridPane(target, window: window, pane: pane, needsWindow: grid != nil) { id, surface in
+        withGridPane(target, window: window, pane: pane, drives: grid != nil) { id, surface in
             // off screen a reset only clears the record: the view sizes the pane when it is mounted again
             if surface.window == nil { surface.recordForcedGrid(nil) } else { surface.setForcedGrid(grid.map { ($0.columns, $0.rows) }) }
             let real = surface.gridSize()
@@ -344,8 +344,9 @@ extension ControlServer {
         }
     }
 
-    /// The dispatcher has already refused scratch, so `pane` is left or right.
-    private func withGridPane(_ target: String?, window: String?, pane: StatusPane, needsWindow: Bool = true,
+    /// The dispatcher has already refused scratch, so `pane` is left or right. A `drives` command pushes size or
+    /// input, which needs a window and the lead; a grid reset only clears the record, so it needs neither.
+    private func withGridPane(_ target: String?, window: String?, pane: StatusPane, drives: Bool = true,
                               _ body: (String, GhosttySurfaceView) -> ControlResponse) -> ControlResponse {
         resolver.resolveSession(target, window: window) { store, id in
             guard let session = store.session(withID: id) else {
@@ -359,7 +360,8 @@ extension ControlServer {
                 return ControlResponse(ok: false, error: "session not realized")
             }
             // without a window nothing pushes the size, so a stored grid would report what libghostty does not hold
-            guard surface.window != nil || !needsWindow else { return ControlResponse(ok: false, error: "pane is not on screen") }
+            guard surface.window != nil || !drives else { return ControlResponse(ok: false, error: "pane is not on screen") }
+            if drives, let refusal = coveredRefusal(surface) { return refusal }
             return body(id.uuidString, surface)
         }
     }

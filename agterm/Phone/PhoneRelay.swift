@@ -15,6 +15,8 @@ final class PhoneRelay {
     /// A failure that leaves the relay as it was: a revoke or a save.
     private(set) var notice: String?
     private(set) var lastEvent: String?
+    /// The `phone.status` `bluetooth` value from the running serve's last Bluetooth line.
+    private(set) var bluetooth: String?
 
     /// A phone connected, left or was refused; the app emits it as a `phone.*` control event.
     @ObservationIgnored var onEvent: ((ControlEventKind, String) -> Void)?
@@ -47,18 +49,20 @@ final class PhoneRelay {
 
     var offeredHosts: [String] { links.compactMap(PhonePairLink.host(of:)) }
     var host: String { state.host.isEmpty ? offeredHosts.first ?? "" : state.host }
-    var link: String? { links.first.map { PhonePairLink.withHost($0, host: host) } }
+    var link: String? { links.first.map { PhonePairLink.withHost($0, host: host, port: state.port) } }
 
     var status: ControlPhoneStatus {
         ControlPhoneStatus(on: state.on, listening: !links.isEmpty, port: state.port, host: host, hosts: offeredHosts,
-                           lastEvent: lastEvent, error: error, link: link)
+                           lastEvent: lastEvent, error: error, link: link,
+                           bluetooth: bluetooth ?? (links.isEmpty ? nil : "starting"))
     }
 
-    /// Waits, without blocking main, until the queued change has run and the relay printed its links or stopped.
+    /// Waits, without blocking main, until the queued change has run and the relay printed its links and its
+    /// Bluetooth line, or stopped.
     func untilListening(within limit: Duration) async {
         let deadline = ContinuousClock.now + limit
         await settled()
-        while state.on, links.isEmpty, error == nil, ContinuousClock.now < deadline {
+        while state.on, links.isEmpty || bluetooth == nil, error == nil, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(50))
         }
     }
@@ -121,6 +125,7 @@ final class PhoneRelay {
         links = []
         error = nil
         lastEvent = nil
+        bluetooth = nil
         let old = process
         process = nil
         if let old { old.terminate(); ending.append(old) }
@@ -203,6 +208,7 @@ final class PhoneRelay {
             lastStderr = text
             if let event = PhoneRelayLine.controlEvent(text) { onEvent?(event.kind, event.ip) }
         case .other(let text): lastStderr = text
+        case .bluetooth(let value): bluetooth = value // a status, never the error an exit shows
         }
     }
 
@@ -214,6 +220,7 @@ final class PhoneRelay {
         }
         process = nil
         links = []
+        bluetooth = nil
         error = lastStderr.flatMap { PhoneRelayLine.isEvent($0) ? nil : $0 } ?? "The relay stopped."
         lastStderr = nil
     }

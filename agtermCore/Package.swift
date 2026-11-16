@@ -25,10 +25,16 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
-        .executableTarget(name: "agtermctl", dependencies: ["agtermctlKit"]),
+        // Info.plist is linked in by the app's Bundle helper executables phase (project.yml), not here:
+        // unsafeFlags would make SwiftPM refuse this package as a dependency
+        .executableTarget(name: "agtermctl", dependencies: ["agtermctlKit"], exclude: ["Info.plist"]),
         // debug-only fixture: it imports agtermctlKit @testable, and release builds name their products.
         .executableTarget(name: "session-wait-watchdog-probe", dependencies: ["agtermctlKit"]),
-        .testTarget(name: "agtermctlKitTests", dependencies: ["agtermctlKit", "agtermctl", "session-wait-watchdog-probe"]),
+        .testTarget(
+            name: "agtermctlKitTests",
+            dependencies: ["agtermctlKit", "agtermctl", "session-wait-watchdog-probe"],
+            exclude: ["Fixtures"]
+        ),
         .target(name: "AgtermServerKit", dependencies: ["agtermCore"]),
         .executableTarget(
             name: "agterm-server",

@@ -7,6 +7,7 @@ import agtermCore
 final class ControlServerGridTests: XCTestCase {
     private var stateDir: URL!
     private var library: WindowLibrary!
+    private var panes: [UUID] = []
 
     override func setUp() async throws {
         try await super.setUp()
@@ -16,6 +17,7 @@ final class ControlServerGridTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        panes.forEach(ZmxLeadBook.shared.forget)
         library = nil
         try? FileManager.default.removeItem(at: stateDir)
         try await super.tearDown()
@@ -42,8 +44,8 @@ final class ControlServerGridTests: XCTestCase {
         return (store, session)
     }
 
-    private func realizedView(session: Session?, command: String) -> GhosttySurfaceView {
-        let view = GhosttySurfaceView(workingDirectory: NSTemporaryDirectory(), fontSize: 12, command: command)
+    private func realizedView(session: Session?, command: String, env: [String: String] = [:]) -> GhosttySurfaceView {
+        let view = GhosttySurfaceView(workingDirectory: NSTemporaryDirectory(), fontSize: 12, command: command, env: env)
         view.session = session
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 480, height: 320), styleMask: [],
                               backing: .buffered, defer: false)
@@ -231,6 +233,31 @@ final class ControlServerGridTests: XCTestCase {
         let response = server.setSessionGrid(session.id.uuidString, window: nil, pane: .left, grid: nil)
 
         XCTAssertTrue(response.ok, response.error ?? "")
+        XCTAssertNil(surface.forcedGrid)
+        XCTAssertFalse(session.hasForcedGrid)
+    }
+
+    func testACoveredPaneRefusesGridAndScrollButAResetClearsItsRecord() throws {
+        let server = makeServer()
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try XCTUnwrap(store.addSession(toWorkspace: try XCTUnwrap(store.currentWorkspaceID),
+                                                     cwd: NSTemporaryDirectory()))
+        let identity = UUID()
+        panes.append(identity)
+        let surface = realizedView(session: session, command: "/bin/cat", env: ["AGTERM_PANE_ID": identity.uuidString])
+        session.surface = surface
+        let id = session.id.uuidString
+        ZmxLeadBook.shared.begin(ZmxLeadAttachment(nonce: "n", claim: true), pane: identity)
+        _ = ZmxLeadBook.shared.apply(try XCTUnwrap(ZmxLeadNotice(title: "zmx-role;n:leader:1")), pane: identity)
+        XCTAssertTrue(server.setSessionGrid(id, window: nil, pane: .left, grid: ControlGrid(columns: 40, rows: 10)).ok)
+        _ = ZmxLeadBook.shared.apply(try XCTUnwrap(ZmxLeadNotice(title: "zmx-role;n:follower:2")), pane: identity)
+        let refusal = "pane is covered while another Mac leads it; take the lead first (session lead)"
+
+        XCTAssertEqual(server.setSessionGrid(id, window: nil, pane: .left, grid: ControlGrid(columns: 30, rows: 8)).error, refusal)
+        XCTAssertEqual(surface.forcedGrid?.columns, 40)
+        XCTAssertEqual(server.scrollSession(id, window: nil, pane: .left, lines: -3).error, refusal)
+        let reset = server.setSessionGrid(id, window: nil, pane: .left, grid: nil)
+        XCTAssertTrue(reset.ok, reset.error ?? "")
         XCTAssertNil(surface.forcedGrid)
         XCTAssertFalse(session.hasForcedGrid)
     }
