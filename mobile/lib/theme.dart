@@ -273,7 +273,7 @@ class AgentLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) => agentNames.containsKey(agent)
       ? SvgPicture.asset('assets/agents/$agent.svg',
-          width: size, height: size, colorFilter: ColorFilter.mode(color ?? agentColor(agent), BlendMode.srcIn))
+          width: size, height: size, semanticsLabel: agentNames[agent], colorFilter: ColorFilter.mode(color ?? agentColor(agent), BlendMode.srcIn))
       : Lucide(lucideTerminal, size: size + 2, color: color ?? C.muted);
 }
 

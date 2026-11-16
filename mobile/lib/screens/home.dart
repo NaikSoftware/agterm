@@ -230,14 +230,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (id != null && mounted) reportOf(context, m.act('recent.open', target: id));
   }
 
+  // the session rows the list draws: a filter's matches, or the tree minus folded workspaces and folded companions
+  Iterable<Session> _shownRows(List<Session> all) => filter != 'all'
+      ? all.where((s) => filter == 'flagged' ? s.flagged : s.status == filter)
+      : m.workspaces.where((w) => !collapsed.contains(w.id)).expand((w) {
+          final folded = {for (final s in w.sessions) if (s.collapsed) s.id};
+          return w.sessions.where((s) => s.parent.isEmpty || !folded.contains(s.parent));
+        });
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: m,
         builder: (context, _) {
           final all = m.sessions.toList();
           final needs = all.where((s) => s.needsYou).toList()..sort((a, b) => a.status == b.status ? 0 : (a.status == 'blocked' ? -1 : 1));
-          // one ticker drives every running row; it sleeps while none runs, and stands still with animations off
-          if (!MediaQuery.disableAnimationsOf(context) && all.any((s) => s.status == 'active')) {
+          // one ticker drives every running row; it sleeps while none is on screen, and stands still with animations off
+          if (!MediaQuery.disableAnimationsOf(context) && _shownRows(all).any((s) => s.status == 'active')) {
             if (!wave.isAnimating) wave.repeat();
           } else {
             wave.value = 0;
@@ -413,7 +421,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
-              childAspectRatio: 3.6,
+              mainAxisExtent: 52,
               children: [for (final w in empty) _emptyTile(w)],
             ),
         ]),
@@ -519,7 +527,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final radius = BorderRadius.circular(running ? 0 : 12);
     // no selected-session highlight: a tap opens a new screen, so "current" means nothing in this list.
     // The wave sits under the Material and the tint is Ink, so neither hides the tap ripple.
-    return CustomPaint(
+    // its own layer, so a wave frame repaints this row and not the whole workspace group
+    return RepaintBoundary(
+     child: CustomPaint(
       painter: running ? _WavePainter(wave, t) : null,
       child: Material(
         type: MaterialType.transparency,
@@ -536,7 +546,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: Row(children: [
               if (chevronSlot)
                 // the whole lead-in is the fold control: a 14 px chevron alone is too small to hit
-                GestureDetector(
+                Semantics(
+                  button: hasCompanions,
+                  label: hasCompanions ? (s.collapsed ? 'Show companions' : 'Hide companions') : null,
+                  child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: hasCompanions ? () => reportOf(context, m.act(s.collapsed ? 'session.expand' : 'session.collapse', target: s.id)) : null,
                   child: SizedBox(
@@ -546,7 +559,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         ? Align(alignment: Alignment.centerRight, child: Icon(s.collapsed ? Icons.chevron_right : Icons.expand_more, size: 16, color: C.dim))
                         : null,
                   ),
-                ),
+                )),
               if (chevronSlot) const SizedBox(width: 10),
               SizedBox(width: 20, child: Center(child: AgentLogo(s.agent, color: own ?? (s.agent.isEmpty ? C.muted : null)))),
               const SizedBox(width: 10),
@@ -580,6 +593,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
       ),
       ),
+     ),
     );
   }
 
