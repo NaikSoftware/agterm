@@ -18,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Control channel, set on scene appear; terminate stops the listener and unlinks the socket.
     var controlServer: ControlServer?
 
+    /// The phone relay child, stopped at terminate so its port is free for the next launch.
+    var phoneRelay: PhoneRelay?
+
     /// Custom-command key-monitor runner, set on scene appear; terminate removes its monitor + observer.
     var customCommandRunner: CustomCommandRunner?
 
@@ -392,6 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // resolve in-memory pickers and asks before closing the socket: a client already polling may observe
         // cancellation, but a later poll can still race socket teardown at process exit.
         actions?.cancelAllPendingModals()
+        phoneRelay?.stop()
         controlServer?.stop()
         customCommandRunner?.stop()
         TerminalInputSource.shared.stop()

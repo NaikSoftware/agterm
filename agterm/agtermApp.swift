@@ -10,7 +10,7 @@ struct agtermApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self)
     private var appDelegate
 
-    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openWindow) var openWindow
 
     @State var library: WindowLibrary
     @State var actions: AppActions
@@ -28,6 +28,7 @@ struct agtermApp: App {
     @State private var accessibilityObserver: SystemAccessibilityObserver
     @State private var wakeObserver: SystemWakeObserver
     @State private var linkObserver: RemoteLinkObserver
+    @State private var phoneRelay: PhoneRelay
 
     private let zmxForegroundResolver: ZmxForegroundResolver?
     private let captureOnExit: AppDelegate.ExitCapture?
@@ -43,6 +44,7 @@ struct agtermApp: App {
 
     /// The plain `WindowGroup`'s scene id, used by `openWindow(id:)` to spawn additional windows.
     private static let windowGroupID = "terminal"
+    static let phoneWindowID = "phone"
 
     /// Held for the whole process; the kernel releases it at exit, a force-quit included.
     private static var stateDirectoryLock: StateDirectoryLock?
@@ -128,6 +130,7 @@ struct agtermApp: App {
                                           zmxClient: restored.zmxClient,
                                           zmxOutdatedBefore: restored.zmxOutdatedBefore)
         _controlServer = State(initialValue: controlServer)
+        _phoneRelay = State(initialValue: PhoneRelay(stateDirectory: stateDirectory))
         actions.remoteAttacher = controlServer
         actions.companionDuplicator = controlServer
         actions.sessionTyper = controlServer
@@ -260,7 +263,9 @@ struct agtermApp: App {
                         // bind the app-level quick terminal (idempotent); its env needs the bound socket, so
                         // this follows `start()` like the surface environment does.
                         wireQuickTerminal(library: library)
-                        // Ctrl-Tab session-switcher key monitors (idempotent).
+                        // forwards to the BOUND socket: a refused instance's path belongs to another app
+                        appDelegate.phoneRelay = phoneRelay
+                        phoneRelay.attach(socketPath: controlServer.boundSocketPath)                        // Ctrl-Tab session-switcher key monitors (idempotent).
                         sessionSwitcher.start()
                         // Ctrl-1/Ctrl-2 direct pane-focus key monitor (idempotent).
                         paneShortcuts.start()
@@ -372,6 +377,11 @@ struct agtermApp: App {
         Settings {
             SettingsView(model: settingsModel)
         }
+
+        Window("Connect a Phone", id: Self.phoneWindowID) {
+            ConnectPhoneView(relay: phoneRelay)
+        }
+        .windowResizability(.contentSize)
     }
 
     @MainActor

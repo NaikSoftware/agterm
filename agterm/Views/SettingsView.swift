@@ -47,7 +47,7 @@ struct SettingsView: View {
 }
 
 /// Marks its hosting `NSWindow` non-restorable so macOS doesn't persist/reopen it.
-private struct NonRestorableWindow: NSViewRepresentable {
+struct NonRestorableWindow: NSViewRepresentable {
     func makeNSView(context _: Context) -> NSView { Probe() }
     func updateNSView(_: NSView, context _: Context) {}
 
