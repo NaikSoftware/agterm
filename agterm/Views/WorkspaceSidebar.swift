@@ -318,6 +318,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
 
         @objc private func accessibilityDisplayOptionsChanged() {
             reapplyStatusGlyphs()
+            applyRowDecorations()
         }
 
         /// Re-apply the row height, indent and fonts when the sidebar font size, density or chevron visibility
@@ -474,6 +475,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
                 return
             }
             reloadChangedContentRows()
+            applyRowDecorations()
         }
 
         /// The structural shape for the current mode and layout: the workspace rows `workspaceProjection`
@@ -570,6 +572,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
                 return
             }
             deferredRebuild = false
+            defer { applyRowDecorations() }
             // a mode or layout switch moves the selected row, possibly under a collapsed workspace, while the
             // selected id stays the same: forget the last reveal so the next `syncSelection` reveals it again.
             // Only a switch does this. Any other rebuild must leave a deliberate fold alone.
@@ -729,6 +732,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
 
         func outlineViewItemDidExpand(_ notification: Notification) {
             guard let node = notification.userInfo?[Self.outlineItemUserInfoKey] as? SidebarNode else { return }
+            defer { applyRowDecorations() }
             guard node.kind == .workspace else { return parentExpansionChanged(node, expanded: true) }
             expandedWorkspaceIDs.insert(node.id)
             // persist ONLY a genuine user expand: a programmatic reveal or rebuild re-apply sets
@@ -740,6 +744,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
 
         func outlineViewItemDidCollapse(_ notification: Notification) {
             guard let node = notification.userInfo?[Self.outlineItemUserInfoKey] as? SidebarNode else { return }
+            defer { applyRowDecorations() }
             guard node.kind == .workspace else { return parentExpansionChanged(node, expanded: false) }
             expandedWorkspaceIDs.remove(node.id)
             // persist only a genuine user collapse; programmatic collapses are suppressed (see didExpand).
@@ -889,12 +894,12 @@ struct WorkspaceSidebar: NSViewRepresentable {
 
         /// Leading row icons as monochrome template symbols. A flagged SESSION swaps to its base glyph's
         /// `.fill` variant (the solid-interior idiom the scratch-active toolbar glyph uses); a workspace in
-        /// the focus SET keeps the same `square.grid.2x2` outline at `.black` weight, so the two markers
+        /// the focus SET keeps the same `square.stack` outline at `.black` weight, so the two markers
         /// stay distinct (fill = flagged session, black = marked workspace). Never a composited corner
         /// badge, so each stays a single template `setColors` tints; the weight variant renders 1pt larger
         /// (16x15 vs 15x14) but the icon view is pinned to 16x16, so neither swap moves the row. Cached.
-        lazy var workspaceIcon = Self.rowIcon("square.grid.2x2")
-        lazy var focusedWorkspaceIcon = Self.rowIcon("square.grid.2x2", weight: .black)
+        lazy var workspaceIcon = Self.rowIcon("square.stack")
+        lazy var focusedWorkspaceIcon = Self.rowIcon("square.stack", weight: .black)
         lazy var splitSessionIcon = Self.rowIcon("rectangle.split.2x1")
         lazy var horizontalSplitSessionIcon = Self.rowIcon("rectangle.split.1x2")
         lazy var sessionIcon = Self.rowIcon("terminal")

@@ -57,7 +57,7 @@ struct WorkspaceSetupGuide: View {
             ForEach([("web-app", ["Fix login redirect", "Dev server"]), ("api-server", ["Review PR #128"]),
                      ("mobile-app", ["Push notifications"])], id: \.0) { name, sessions in
                 VStack(alignment: .leading, spacing: 2) {
-                    Label(name, systemImage: "square.grid.2x2").fontWeight(.medium)
+                    Label(name, systemImage: "square.stack").fontWeight(.medium)
                     ForEach(sessions, id: \.self) { Label($0, systemImage: "terminal").padding(.leading, 14) }
                 }
             }

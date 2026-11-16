@@ -11,7 +11,7 @@ final class AddSessionButton: NSButton {
 }
 
 /// An `NSTableCellView` with a leading icon, the name field, and a trailing badge. The icon is the inherited
-/// `cell.imageView` (2x2 grid for a workspace, outlined terminal for a session), so AppKit re-tints it white on
+/// `cell.imageView` (stack for a workspace, outlined terminal for a session), so AppKit re-tints it white on
 /// a selected row; the name is `cell.textField`, which the rename and selection wiring drives.
 class SidebarCellView: NSTableCellView {
     /// Trailing unseen-notification count — a session's `unseenCount` or a collapsed workspace's roll-up; 0 hides.
@@ -52,6 +52,7 @@ class SidebarCellView: NSTableCellView {
     /// reveal and Interface toggle. `repeatLauncher` is read on each reveal, since the last choice changes.
     var repeatButton: NSButton?
     var repeatButtonWidthConstraint: NSLayoutConstraint?
+    var repeatButtonGapConstraint: NSLayoutConstraint?
     var repeatLauncher: (() -> SessionLauncher)?
 
     /// Hover-revealed close button at the trailing edge, session cells only (nil for workspace cells).
@@ -104,8 +105,9 @@ class SidebarCellView: NSTableCellView {
             repeatButton.setAccessibilityValue(launcher.rawValue)
         }
         repeatButton.isHidden = !visible
-        // the image sits leading, so the extra width is the gap before "+"
-        repeatButtonWidthConstraint.constant = visible ? Self.addButtonWidth + 6 : 0
+        // sized to the logo, which can be wider than the "+" slot, so the gap stays visible
+        repeatButtonWidthConstraint.constant = visible ? max(Self.addButtonWidth, ceil(repeatButton.image?.size.width ?? 0)) : 0
+        repeatButtonGapConstraint?.constant = visible ? 6 : 0
     }
 
     /// Reveals or collapses the session row's close button. It shows only while the row has no badge, status
@@ -262,9 +264,11 @@ final class BadgeView: NSView {
 /// `session.status --shape` swaps the silhouette, so shape carries the state alongside the tint. Hidden on
 /// `.idle`. Accessibility: an `agent-status` static text whose value is the state name (XCUITest matches
 /// `app.staticTexts["agent-status"]`; neither tint nor silhouette is observable there). Blink is a layer
-/// `opacity` `CABasicAnimation` (autoreverse/repeat), added only while visible AND blinking.
+/// `opacity` `CABasicAnimation` (autoreverse/repeat), added only while visible AND blinking; a non-blinking
+/// `active` glyph gets a slower fade instead. Reduce Motion stops both.
 final class StatusIconView: NSImageView {
     private static let blinkKey = "agent-status-blink"
+    private static let fadeKey = "agent-status-fade"
     private static let glyphWidth: CGFloat = 16
     /// Symbol point size of the glyph; the Settings shape picker previews options at the same size, so an
     /// option looks like the glyph it installs.
@@ -295,13 +299,15 @@ final class StatusIconView: NSImageView {
         guard showsGlyph else {
             image = nil
             setAccessibilityValue(AgentStatus.idle.rawValue)
-            stopBlink()
+            pulse(Self.blinkKey, false, to: 0.2, duration: 0.5)
+            pulse(Self.fadeKey, false, to: 0.25, duration: 1.4)
             return
         }
         image = Self.icon(for: indicator.status, override: indicator.color, shape: indicator.shape)
         setAccessibilityValue(indicator.status.rawValue)
-        let shouldBlink = indicator.blink && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        if shouldBlink { startBlink() } else { stopBlink() }
+        let motion = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        pulse(Self.blinkKey, indicator.blink && motion, to: 0.2, duration: 0.5)
+        pulse(Self.fadeKey, indicator.status == .active && !indicator.blink && motion, to: 0.25, duration: 1.4)
     }
 
     /// hoverHidden collapses a shown glyph while the workspace row's hover buttons take its slot.
@@ -319,19 +325,21 @@ final class StatusIconView: NSImageView {
         widthConstraint.constant = visible ? Self.glyphWidth : 0
     }
 
-    private func startBlink() {
-        guard layer?.animation(forKey: Self.blinkKey) == nil else { return }
-        let blink = CABasicAnimation(keyPath: "opacity")
-        blink.fromValue = 1.0
-        blink.toValue = 0.2
-        blink.duration = 0.5
-        blink.autoreverses = true
-        blink.repeatCount = .greatestFiniteMagnitude
-        layer?.add(blink, forKey: Self.blinkKey)
-    }
-
-    private func stopBlink() {
-        layer?.removeAnimation(forKey: Self.blinkKey)
+    /// pulse runs or stops an endless autoreversing opacity animation; a running one is left alone so a
+    /// reconfigure never restarts it at full opacity.
+    private func pulse(_ key: String, _ on: Bool, to opacity: Double, duration: CFTimeInterval) {
+        guard on else {
+            layer?.removeAnimation(forKey: key)
+            return
+        }
+        guard layer?.animation(forKey: key) == nil else { return }
+        let pulse = CABasicAnimation(keyPath: "opacity")
+        pulse.fromValue = 1.0
+        pulse.toValue = opacity
+        pulse.duration = duration
+        pulse.autoreverses = true
+        pulse.repeatCount = .greatestFiniteMagnitude
+        layer?.add(pulse, forKey: key)
     }
 
     private static func icon(for status: AgentStatus, override colorHex: String?, shape: StatusShape?) -> NSImage? {
@@ -407,8 +415,113 @@ class SidebarRowView: NSTableRowView {
         return NSAppearance(named: textIsDark ? .aqua : .darkAqua)
     }
 
+    /// band is the workspace group's tint behind this row; the edge rounds and insets only the group's outer ends.
+    var band: (color: NSColor, edge: SidebarBandEdge)? {
+        didSet {
+            guard band?.color != oldValue?.color || band?.edge != oldValue?.edge else { return }
+            needsDisplay = true
+            needsLayout = true
+        }
+    }
+
+    /// rowWash is a tinted session's own wash, drawn over the band.
+    var rowWash: NSColor? {
+        didSet { if rowWash != oldValue { needsDisplay = true } }
+    }
+
+    /// waveLayer clips the drifting gradient to the band rect; nil while the row shows no wave.
+    private(set) var waveLayer: CALayer?
+    private var wave: SidebarWave?
+    private var waveStill = false
+    private var wavePeriod: CGFloat = 0
+    static let waveKey = "sidebar-wave"
+
+    /// setWave shows the active-row wave, or removes it for nil. It drifts one period per 4.8 s unless
+    /// Reduce Motion is on, which leaves the gradient still.
+    func setWave(_ wave: SidebarWave?) {
+        let still = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        guard wave != self.wave || still != waveStill else { return }
+        self.wave = wave
+        waveStill = still
+        guard let wave, let base = NSColor(agtermHex: wave.base), let second = NSColor(agtermHex: wave.second) else {
+            waveLayer?.removeFromSuperlayer()
+            waveLayer = nil
+            return
+        }
+        wantsLayer = true
+        let clip = waveLayer ?? CALayer()
+        if waveLayer == nil {
+            clip.masksToBounds = true
+            clip.addSublayer(CAGradientLayer())
+            layer?.insertSublayer(clip, at: 0)
+            waveLayer = clip
+        }
+        let gradient = clip.sublayers?.first as? CAGradientLayer
+        let period = [base.withAlphaComponent(0.04), base.withAlphaComponent(0.20), second.withAlphaComponent(0.16)]
+        // two periods side by side, so a shift by one period lands on an identical frame
+        gradient?.colors = (period + period + [base.withAlphaComponent(0.04)]).map(\.cgColor)
+        gradient?.locations = [0, 0.125, 0.275, 0.5, 0.625, 0.775, 1]
+        gradient?.startPoint = CGPoint(x: 0, y: 0.5)
+        gradient?.endPoint = CGPoint(x: 1, y: 0.5)
+        wavePeriod = 0
+        layoutWave()
+    }
+
+    override func layout() {
+        super.layout()
+        layoutWave()
+    }
+
+    private func layoutWave() {
+        guard let clip = waveLayer, let gradient = clip.sublayers?.first else { return }
+        let period = bounds.width * 2
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        clip.frame = bandRect(band?.edge ?? .middle)
+        gradient.frame = CGRect(x: -clip.frame.minX, y: 0, width: period * 2, height: clip.bounds.height)
+        CATransaction.commit()
+        guard period != wavePeriod || (!waveStill && gradient.animation(forKey: Self.waveKey) == nil) else { return }
+        wavePeriod = period
+        gradient.removeAnimation(forKey: Self.waveKey)
+        guard !waveStill, period > 0 else { return }
+        let drift = CABasicAnimation(keyPath: "transform.translation.x")
+        drift.fromValue = 0
+        drift.toValue = -period
+        drift.duration = 4.8
+        drift.repeatCount = .greatestFiniteMagnitude
+        gradient.add(drift, forKey: Self.waveKey)
+    }
+
+    /// bandRect is the band's frame for an edge: inset 3pt from the row sides, and 2pt at the group's outer ends
+    /// so adjacent groups never touch.
+    func bandRect(_ edge: SidebarBandEdge) -> NSRect {
+        let outerTop = edge == .first || edge == .single
+        let outerBottom = edge == .last || edge == .single
+        var rect = bounds.insetBy(dx: 3, dy: 0)
+        let topInset: CGFloat = outerTop ? 2 : 0, bottomInset: CGFloat = outerBottom ? 2 : 0
+        rect.origin.y += isFlipped ? topInset : bottomInset
+        rect.size.height -= topInset + bottomInset
+        return rect
+    }
+
+    /// fillBand rounds only the group's outer corners: the rounded rect overhangs the inner sides and is clipped.
+    private func fillBand(_ color: NSColor, edge: SidebarBandEdge) {
+        let rect = bandRect(edge)
+        let radius: CGFloat = 9
+        var shape = rect
+        if edge == .middle || edge == .last { shape.size.height += radius; if isFlipped { shape.origin.y -= radius } }
+        if edge == .middle || edge == .first { shape.size.height += radius; if !isFlipped { shape.origin.y -= radius } }
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: rect).addClip()
+        color.setFill()
+        NSBezierPath(roundedRect: shape, xRadius: radius, yRadius: radius).fill()
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
     override func drawBackground(in dirtyRect: NSRect) {
         super.drawBackground(in: dirtyRect)
+        if let band { fillBand(band.color, edge: band.edge) }
+        if let rowWash { fillBand(rowWash, edge: band?.edge ?? .middle) }
         guard isSelected else { return }
         if let selection = GhosttyApp.shared.terminalSelectionBackgroundColor {
             selection.withAlphaComponent(isEmphasized ? 1 : 0.55).setFill()

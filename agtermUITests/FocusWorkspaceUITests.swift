@@ -6,7 +6,7 @@ import XCTest
 /// `WorkspaceSidebar.Coordinator`, the bottom-bar toggle in `WindowContentView`).
 ///
 /// This suite is also the regression coverage for the two surfaces whose own output is NOT
-/// accessibility-observable: the marked row's black-weight `square.grid.2x2` icon and the row menu's
+/// accessibility-observable: the marked row's black-weight `square.stack` icon and the row menu's
 /// Focus/Unfocus + Add/Remove-from-Focus label flips. Neither can be asserted directly (an SF Symbol on a
 /// recycled cell is not in the AX tree, and a menu label is only observable by invoking it), so they are
 /// covered here through what they DO: which rows the tree renders.

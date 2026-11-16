@@ -278,10 +278,12 @@ extension WorkspaceSidebar.Coordinator {
             let repeatWidth = repeatBtn.widthAnchor.constraint(equalToConstant: 0)
             cell.repeatButtonWidthConstraint = repeatWidth
             repeatBtn.isHidden = true
+            let repeatGap = addBtn.leadingAnchor.constraint(equalTo: repeatBtn.trailingAnchor)
+            cell.repeatButtonGapConstraint = repeatGap
             constraints += [
                 badge.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
                 field.trailingAnchor.constraint(equalTo: repeatBtn.leadingAnchor, constant: -6),
-                repeatBtn.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor),
+                repeatGap,
                 repeatBtn.centerYAnchor.constraint(equalTo: center),
                 repeatWidth,
                 repeatBtn.heightAnchor.constraint(equalToConstant: 16),

@@ -5,7 +5,7 @@ import agtermCore
 @MainActor
 final class WorkspaceSetupGuidePresenterTests: XCTestCase {
     private final class Effects: RemoteCatalogEffects {
-        func attachCommand(host: String, pane: CatalogPane) -> String { "" }
+        func attachCommand(host: String, pane: CatalogPane, claim: Bool) -> String { "" }
         func catalogRowAdded(_: Session) {}
         func catalogRowRemoved(_: UUID) {}
         func catalogRowEnded(_: UUID) {}
