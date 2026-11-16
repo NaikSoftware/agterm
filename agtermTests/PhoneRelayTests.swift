@@ -90,13 +90,14 @@ final class PhoneRelayTests: XCTestCase {
 
     func testSwitchingOffReturnsAtOnceAndTheChildExitsAfter() throws {
         let relay = started(try slowServe())
-        XCTAssertTrue(wait { relay.link != nil })
+        XCTAssertTrue(wait { relay.link != nil && relay.status.bluetooth == "advertising" })
 
         let begun = Date()
         relay.setOn(false)
 
         XCTAssertLessThan(Date().timeIntervalSince(begun), 3)
         XCTAssertNil(relay.link)
+        XCTAssertNil(relay.status.bluetooth)
         XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("gone ") } })
         XCTAssertNil(relay.error)
         XCTAssertFalse(PhoneDesktopState.load(stateDirectory: dir).on)
@@ -104,12 +105,13 @@ final class PhoneRelayTests: XCTestCase {
 
     func testAPortChangeStartsTheNewChildOnlyAfterTheOldOneExited() throws {
         let relay = started(try slowServe())
-        XCTAssertTrue(wait { relay.link != nil })
+        XCTAssertTrue(wait { relay.link != nil && relay.status.bluetooth == "advertising" })
 
         let begun = Date()
         relay.setPort(20000)
 
         XCTAssertLessThan(Date().timeIntervalSince(begun), 3)
+        XCTAssertNil(relay.status.bluetooth)
         XCTAssertTrue(wait { logLines().count >= 4 && relay.link != nil })
         let events = logLines().map { $0.split(separator: " ").first.map(String.init) ?? "" }
         XCTAssertEqual(Array(events.prefix(4)), ["start", "stop", "gone", "start"])

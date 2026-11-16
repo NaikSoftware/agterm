@@ -22,7 +22,7 @@ struct ConnectPhoneView: View {
                 .frame(maxWidth: .infinity)
             Form {
                 HStack {
-                    TextField("Address", text: $hostField, prompt: Text(relay.offeredHosts.first ?? (listening ? "No Wi-Fi address: Bluetooth only" : "Best guess")))
+                    TextField("Address", text: $hostField, prompt: Text(relay.offeredHosts.first ?? (listening ? "No Wi-Fi address" : "Best guess")))
                         .onChange(of: hostField) { _, host in relay.setHost(host) }
                     Menu {
                         ForEach(relay.offeredHosts, id: \.self) { host in
