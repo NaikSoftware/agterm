@@ -66,12 +66,17 @@ class _SessionScreenState extends State<SessionScreen> {
     // shortcut: polls the plain-text screen; a streamed, coloured terminal needs a pty tap in agterm-qt
     poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _load());
     m.addListener(_onModel);
+    _visit();
   }
+
+  // a visit as on the computer: an auto-reset status (an agent's Done) clears on the way in and on the way out
+  void _visit() => unawaited(m.act('session.seen', target: widget.sessionId));
 
   @override
   void dispose() {
     poll?.cancel();
     m.removeListener(_onModel);
+    _visit();
     input.dispose();
     inputFocus.dispose();
     vScroll.dispose();
