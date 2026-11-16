@@ -272,10 +272,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       );
 
   Widget _header(List<Session> all) {
-    final (dot, line) = switch (m.state) {
-      LinkState.connected => (C.completed, m.via == 'BT' ? 'Bluetooth' : '${m.pairing.host}'),
-      LinkState.connecting => (C.blocked, 'Connecting…'),
-      LinkState.offline => (C.danger, 'Offline'),
+    final line = switch (m.state) {
+      LinkState.connected => m.via == 'BT' ? 'Bluetooth' : '${m.pairing.host}',
+      LinkState.connecting => 'Connecting…',
+      LinkState.offline => 'Offline',
     };
     final blocked = all.where((s) => s.status == 'blocked').length, done = all.where((s) => s.status == 'completed').length;
     Widget chip(String id, String label, {Widget? avatar}) {
@@ -320,13 +320,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   Flexible(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('Agterm2', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                      Row(children: [
-                        Container(width: 7, height: 7, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
-                        const SizedBox(width: 6),
-                        Flexible(
-                            child: Text('${m.pairing.name} · $line',
-                                style: const TextStyle(fontSize: 12.5, color: C.muted), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      ]),
+                      Text('${m.pairing.name} · $line', style: const TextStyle(fontSize: 12.5, color: C.muted), maxLines: 1, overflow: TextOverflow.ellipsis),
                     ]),
                   ),
                 ]),
