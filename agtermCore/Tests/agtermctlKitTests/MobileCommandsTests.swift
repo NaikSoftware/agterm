@@ -111,6 +111,26 @@ struct MobileCommandsTests {
         #expect(client.waitClosed())
     }
 
+    @Test func aDisconnectingPhoneGivesBackTheGridsItForced() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let client = try fixture.connect()
+        client.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(client.readJSON()?["ok"] as? Bool == true)
+        client.send(#"{"cmd":"session.grid","target":"S1","args":{"pane":"right","columns":40,"rows":20},"id":2}"#)
+        client.send(#"{"cmd":"session.grid","target":"S2","args":{"columns":40,"rows":20},"id":3}"#)
+        client.send(#"{"cmd":"session.grid","target":"S2","args":{"reset":true},"id":4}"#)
+        for _ in 0..<3 { #expect(client.readJSON()?["ok"] as? Bool == true) }
+        let before = fixture.server.requests().count
+        client.close()
+        let reset = #"{"args":{"pane":"right","reset":true},"cmd":"session.grid","target":"S1"}"#
+        let deadline = Date().addingTimeInterval(30)
+        while !fixture.server.requests().dropFirst(before).contains(reset), Date() < deadline { usleep(20_000) }
+        usleep(300_000) // a wrong reset for S2 would be sent alongside S1's
+        let after = Array(fixture.server.requests().dropFirst(before))
+        #expect(after == [reset])
+    }
+
     @Test func secondRelayOnTheSamePortFails() throws {
         let fixture = try MobileFixture()
         defer { fixture.stop() }
@@ -222,6 +242,8 @@ private final class TLSLineClient: @unchecked Sendable {
     }
 
     deinit { connection.cancel() }
+
+    func close() { connection.cancel() }
 
     private func receive() {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, done, error in

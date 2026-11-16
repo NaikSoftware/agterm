@@ -312,6 +312,8 @@ final class MobileRelay: @unchecked Sendable {
         var token: String?
         var closing = false
         var revoke: (any DispatchSourceTimer)?
+        /// The reset request for every grid this phone forced, by (target, pane).
+        var grids: [String: Data] = [:]
         init(_ connection: NWConnection, peer: String) {
             self.connection = connection
             self.peer = peer
@@ -479,6 +481,7 @@ final class MobileRelay: @unchecked Sendable {
     private func forward(_ request: [String: Any], id: Data, to phone: Phone) {
         let body = (try? JSONSerialization.data(withJSONObject: request, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data("{}".utf8)
         let socketPath = socketPath
+        let grid = Self.gridClaim(request)
         DispatchQueue.global().async { [weak self] in
             guard let self else { return }
             let answer: Data
@@ -487,7 +490,44 @@ final class MobileRelay: @unchecked Sendable {
             } catch {
                 answer = Self.encode(ControlResponse(ok: false, error: "agterm is not reachable: \(error)"))
             }
-            queue.async { self.send(Self.tagged(answer, id: id), to: phone) }
+            let ok = ((try? JSONSerialization.jsonObject(with: answer)) as? [String: Any])?["ok"] as? Bool == true
+            queue.async {
+                if let grid {
+                    if grid.reset == nil {
+                        phone.grids[grid.key] = nil
+                    } else if ok {
+                        phone.grids[grid.key] = grid.reset
+                        if phone.closing { self.releaseGrids(of: phone) } // the phone left while this one was in flight
+                    }
+                }
+                self.send(Self.tagged(answer, id: id), to: phone)
+            }
+        }
+    }
+
+    /// For a `session.grid` request, its (target, pane) key and the request that undoes it; a nil `reset`
+    /// means the request is itself a reset.
+    private static func gridClaim(_ request: [String: Any]) -> (key: String, reset: Data?)? {
+        guard request["cmd"] as? String == Command.sessionGrid.rawValue else { return nil }
+        let args = request["args"] as? [String: Any] ?? [:]
+        let target = request["target"] as? String, pane = args["pane"] as? String
+        let key = "\(target ?? "")\u{0}\(pane ?? "")"
+        if args["reset"] as? Bool == true { return (key, nil) }
+        var resetArgs: [String: Any] = ["reset": true]
+        resetArgs["pane"] = pane
+        resetArgs["window"] = args["window"]
+        var reset: [String: Any] = ["cmd": Command.sessionGrid.rawValue, "args": resetArgs]
+        reset["target"] = target
+        return (key, try? JSONSerialization.data(withJSONObject: reset, options: [.sortedKeys, .withoutEscapingSlashes]))
+    }
+
+    /// A forced grid must not outlive the phone that set it; failures are ignored, the session may be gone.
+    private func releaseGrids(of phone: Phone) {
+        let resets = Array(phone.grids.values)
+        phone.grids = [:]
+        let socketPath = socketPath
+        for reset in resets {
+            DispatchQueue.global().async { _ = try? SocketClient(path: socketPath).sendRaw(reset) }
         }
     }
 
@@ -501,6 +541,7 @@ final class MobileRelay: @unchecked Sendable {
         phone.revoke?.cancel()
         phone.connection.cancel()
         phones[ObjectIdentifier(phone)] = nil
+        releaseGrids(of: phone)
     }
 
     private func tokenMatches(_ token: String) -> Bool {
