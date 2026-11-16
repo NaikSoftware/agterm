@@ -179,6 +179,43 @@ final class PhoneRelayTests: XCTestCase {
         XCTAssertTrue(logLines().contains { $0.hasPrefix("gone ") })
     }
 
+    func testAPageCannotReachThePhoneRelayOrItsLink() async throws {
+        let library = WindowLibrary(directory: dir.appendingPathComponent("state", isDirectory: true))
+        let server = ControlServer(library: library, actions: AppActions(library: library),
+                                   settingsModel: SettingsModel(library: library, settingsStore: SettingsStore(directory: dir)),
+                                   identity: AppIdentity(version: "test", commit: "test"), zmxClient: nil,
+                                   socketPath: dir.appendingPathComponent("control.sock").path)
+        let relay = PhoneRelay(stateDirectory: dir, tool: try slowServe(extra: #"if [ "$2" = reset ]; then exit 0; fi"#))
+        relay.attach(socketPath: "/tmp/unused.sock")
+        relay.setOn(true)
+        server.phoneRelay = relay
+        defer { relay.stopForQuit() }
+        let deadline = Date().addingTimeInterval(10)
+        while relay.link == nil, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertEqual(relay.link, link)
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try XCTUnwrap(store.addSession(toWorkspace: try XCTUnwrap(store.currentWorkspaceID), cwd: NSTemporaryDirectory()))
+        let file = dir.appendingPathComponent("page.html")
+        try "<title>P</title>".write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertTrue(server.openSessionOverlay(session.id.uuidString, window: nil, options: ControlSessionOverlayOpenOptions(
+            command: "", cwd: nil, wait: false, sizePercent: nil, backgroundColor: nil, follow: false, pane: nil,
+            page: .file(path: file.path, grantRoot: nil))).ok)
+        defer { store.closeOverlay(session.id) }
+        let page = HtmlOverlayRegistry.shared.page(for: try XCTUnwrap(session.htmlOverlay), store: store)
+
+        for cmd in ["phone.status", "phone.enable", "phone.port", "phone.host", "phone.revoke"] {
+            var replies: [(Any?, String?)] = []
+            page.handleBridgeRequest(["cmd": cmd], mainFrame: true) { replies.append(($0, $1)) }
+            let answered = Date().addingTimeInterval(5)
+            while replies.isEmpty, Date() < answered { try await Task.sleep(for: .milliseconds(20)) }
+            XCTAssertEqual(replies.count, 1, cmd)
+            XCTAssertEqual(replies.first?.1, "\(cmd) cannot be sent from a page")
+            XCTAssertFalse(String(describing: replies.first?.0 as Any).contains("t=tok"), cmd)
+        }
+        XCTAssertTrue(relay.state.on)
+        XCTAssertEqual(relay.link, link)
+    }
+
     func testWithoutABoundSocketNothingStarts() async {
         let relay = PhoneRelay(stateDirectory: dir, tool: URL(fileURLWithPath: "/usr/bin/false"))
         relay.attach(socketPath: nil)

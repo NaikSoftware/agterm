@@ -137,33 +137,6 @@ final class ControlServerSessionActionsTests: XCTestCase {
         XCTAssertEqual(replies.values.count, 1, "a request is answered exactly once")
     }
 
-    func testAPageCannotReachThePhoneRelayOrItsLink() async throws {
-        let link = "agterm://pair?h=10.0.0.1&p=18000&t=secret-token&f=ab&n=mac"
-        let tool = stateDir.appendingPathComponent("fake-agtermctl")
-        try FileManager.default.createDirectory(at: stateDir, withIntermediateDirectories: true)
-        try Data("#!/bin/sh\necho '\(link)'\nwhile :; do sleep 0.05 & wait $!; done\n".utf8).write(to: tool)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tool.path)
-        let relay = PhoneRelay(stateDirectory: stateDir, tool: tool)
-        relay.attach(socketPath: "/tmp/unused.sock")
-        relay.setOn(true)
-        server.phoneRelay = relay
-        defer { relay.stopForQuit() }
-        let deadline = Date().addingTimeInterval(10)
-        while relay.link == nil, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
-        XCTAssertEqual(relay.link, link)
-        let (store, session) = try addSession()
-        let page = try openPage(in: store, session)
-        defer { store.closeOverlay(session.id) }
-
-        for cmd in ["phone.status", "phone.enable", "phone.port", "phone.host", "phone.revoke"] {
-            let replies = send(["cmd": cmd], from: page)
-            try await settle(replies)
-            XCTAssertEqual(replies.values.first?.1, "\(cmd) cannot be sent from a page")
-            XCTAssertFalse(String(describing: replies.values.first?.0 as Any).contains("secret-token"), cmd)
-        }
-        XCTAssertTrue(relay.state.on)
-    }
-
     func testAPageClosingItselfIsAnsweredOnceAndRecordedDismissed() async throws {
         let (store, session) = try addSession()
         let page = try openPage(in: store, session)
