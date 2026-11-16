@@ -111,7 +111,7 @@ struct ConnectPhoneView: View {
     }
 
     private func commitPort() {
-        guard let port = Int(portField.trimmingCharacters(in: .whitespaces)), (1024...65535).contains(port) else {
+        guard let port = Int(portField.trimmingCharacters(in: .whitespaces)), PhoneDesktopState.portRange.contains(port) else {
             portField = String(relay.state.port)
             return
         }

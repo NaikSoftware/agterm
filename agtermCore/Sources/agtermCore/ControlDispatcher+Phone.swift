@@ -16,8 +16,8 @@ extension ControlDispatcher {
             }
             return await actions.setPhoneEnabled(mode)
         case .phonePort:
-            guard let port = args?.port, (1...65535).contains(port) else {
-                return ControlResponse(ok: false, error: "phone.port requires a port 1...65535")
+            guard let port = args?.port, PhoneDesktopState.portRange.contains(port) else {
+                return ControlResponse(ok: false, error: PhoneDesktopState.portError)
             }
             return await actions.setPhonePort(port)
         case .phoneHost:

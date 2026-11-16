@@ -32,6 +32,8 @@ struct PhoneDesktopTests {
         try FileManager.default.createDirectory(at: dir.appendingPathComponent("mobile"), withIntermediateDirectories: true)
         try Data(#"{"on":true,"port":70000}"#.utf8).write(to: dir.appendingPathComponent("mobile/desktop.json"))
         #expect(PhoneDesktopState.load(stateDirectory: dir) == PhoneDesktopState(on: true, port: 8765, host: ""))
+        try Data(#"{"on":true,"port":80}"#.utf8).write(to: dir.appendingPathComponent("mobile/desktop.json"))
+        #expect(PhoneDesktopState.load(stateDirectory: dir).port == 8765)
     }
 
     private let link = "agterm://pair?h=192.168.0.5&p=8765&t=abc-_x&f=0a1b&n=Nick%27s%20Mac%2BBook%20Pro"

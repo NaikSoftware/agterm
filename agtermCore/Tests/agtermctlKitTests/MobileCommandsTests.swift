@@ -82,6 +82,31 @@ struct MobileCommandsTests {
         #expect(fixture.server.requests().last == #"{"args":{"unknownArg":1},"cmd":"tree"}"#)
     }
 
+    @Test func aPhoneCannotDriveTheRelayItself() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let client = try fixture.connect()
+        client.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(client.readJSON()?["ok"] as? Bool == true)
+        let before = fixture.server.requests().count
+        for (id, cmd) in ["phone.status", "phone.enable", "phone.revoke"].enumerated() {
+            client.send(#"{"cmd":"\#(cmd)","id":\#(id + 2)}"#)
+            let refusal = try #require(client.readJSON())
+            #expect(refusal["ok"] as? Bool == false && refusal["id"] as? Int == id + 2)
+            #expect(refusal["error"] as? String == "phone.* is not available from a phone")
+        }
+        client.send(#"{"cmd":"tree","id":9}"#)
+        #expect(client.readJSON()?["id"] as? Int == 9)
+        #expect(Array(fixture.server.requests().dropFirst(before)) == [#"{"cmd":"tree"}"#])
+    }
+
+    @Test(arguments: ["0", "1023"])
+    func servePortsBelow1024AreRefused(_ port: String) {
+        var message: String?
+        do { _ = try Agtermctl.parseAsRoot(["mobile", "serve", "--port", port]) } catch { message = Agtermctl.message(for: error) }
+        #expect(message == "port must be 1024...65535")
+    }
+
     @Test func wrongTokenIsRefusedAndClosed() throws {
         let fixture = try MobileFixture()
         defer { fixture.stop() }
@@ -224,7 +249,8 @@ private final class MobileFixture: @unchecked Sendable {
         try server.start()
         let lines = lines
         relay = MobileRelay(identity: identity, port: 0, bind: "127.0.0.1", mobileDir: mobileDir, socketPath: server.path,
-                            hostName: "test-mac", revokeInterval: 0.3, maxUnauthenticated: maxUnauthenticated,
+                            // a release bound a loaded runner cannot run out; the stub answers at once
+                            hostName: "test-mac", revokeInterval: 0.3, maxUnauthenticated: maxUnauthenticated, releaseTimeout: 30,
                             log: { lines.append($0) })
         port = try relay.start()
     }

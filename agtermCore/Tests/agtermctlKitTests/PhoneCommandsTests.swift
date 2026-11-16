@@ -43,8 +43,8 @@ struct PhoneCommandsTests {
     }
 
     @Test func badArgumentsAreRefusedLocally() {
-        #expect(validationMessage(["phone", "port", "0"]) == "port must be 1...65535")
-        #expect(validationMessage(["phone", "port", "70000"]) == "port must be 1...65535")
+        #expect(validationMessage(["phone", "port", "1023"]) == "port must be 1024...65535")
+        #expect(validationMessage(["phone", "port", "70000"]) == "port must be 1024...65535")
         #expect(validationMessage(["phone", "host"]) == "provide a host or --auto")
         #expect(validationMessage(["phone", "host", "a", "--auto"]) == "provide a host or --auto")
     }

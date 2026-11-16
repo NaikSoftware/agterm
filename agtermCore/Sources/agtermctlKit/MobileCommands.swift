@@ -26,7 +26,7 @@ struct Mobile: ParsableCommand {
             socket. Anyone with the link controls your terminals; `agtermctl mobile reset` revokes it. The token, key \
             and certificate live in <state dir>/mobile; --socket changes only where requests go.
             """)
-        @Option(name: .long, help: "TCP port to listen on.")
+        @Option(name: .long, help: "TCP port to listen on, 1024...65535.")
         var port: UInt16 = 8765
         @Option(name: .long, help: "IP address to listen on (default: all interfaces).")
         var bind: String?
@@ -38,7 +38,7 @@ struct Mobile: ParsableCommand {
         var socket: String?
 
         func validate() throws {
-            if port == 0 { throw ValidationError("--port takes 1-65535") }
+            if !PhoneDesktopState.portRange.contains(Int(port)) { throw ValidationError(PhoneDesktopState.portError) }
             if let bind, IPv4Address(bind) == nil, IPv6Address(bind) == nil { throw ValidationError("--bind takes an IP address") }
         }
 
@@ -365,6 +365,7 @@ final class MobileRelay: @unchecked Sendable {
     private let hostName: String
     private let authTimeout: TimeInterval
     private let revokeInterval: TimeInterval
+    private let releaseTimeout: TimeInterval
     private let log: @Sendable (String) -> Void
     private var listener: NWListener?
     private var phones: [ObjectIdentifier: Phone] = [:]
@@ -372,6 +373,7 @@ final class MobileRelay: @unchecked Sendable {
 
     init(identity: SecIdentity, port: UInt16, bind: String?, mobileDir: String, socketPath: String, hostName: String,
          authTimeout: TimeInterval = 10, revokeInterval: TimeInterval = 5, maxUnauthenticated: Int = 32,
+         releaseTimeout: TimeInterval = 3,
          log: @escaping @Sendable (String) -> Void = { FileHandle.standardError.write(Data("agtermctl: \($0)\n".utf8)) }) {
         let tls = NWProtocolTLS.Options()
         sec_protocol_options_set_local_identity(tls.securityProtocolOptions, sec_identity_create(identity)!)
@@ -387,6 +389,7 @@ final class MobileRelay: @unchecked Sendable {
         self.hostName = hostName
         self.authTimeout = authTimeout
         self.revokeInterval = revokeInterval
+        self.releaseTimeout = releaseTimeout
         self.maxUnauthenticated = maxUnauthenticated
         self.log = log
     }
@@ -438,14 +441,14 @@ final class MobileRelay: @unchecked Sendable {
         }
     }
 
-    /// Resets every grid every phone forced, waiting up to `timeout` for the app; for a relay told to stop.
-    func releaseAllGrids(timeout: TimeInterval = 3) {
+    /// Resets every grid every phone forced, waiting up to `releaseTimeout` for the app; for a relay told to stop.
+    func releaseAllGrids() {
         let resets = queue.sync { phones.values.flatMap { phone in defer { phone.grids = [:] }; return Array(phone.grids.values) } }
         let group = DispatchGroup()
         for reset in resets {
             DispatchQueue.global().async(group: group) { [socketPath] in _ = try? SocketClient(path: socketPath).sendRaw(reset) }
         }
-        _ = group.wait(timeout: .now() + timeout)
+        _ = group.wait(timeout: .now() + releaseTimeout)
     }
 
     private func accept(_ connection: NWConnection) {
@@ -530,11 +533,15 @@ final class MobileRelay: @unchecked Sendable {
         let body = (try? JSONSerialization.data(withJSONObject: request, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data("{}".utf8)
         let socketPath = socketPath
         let grid = Self.gridClaim(request)
+        // a paired phone must not switch the relay off, revoke its pairing or read the link
+        let refused = (request["cmd"] as? String)?.hasPrefix("phone.") == true
         phone.work.async { [weak self] in
             guard let self else { return }
             let answer: Data
             do {
-                answer = try SocketClient(path: socketPath).sendRaw(body)
+                // on the phone's queue, so the refusal keeps its place among earlier answers
+                answer = refused ? Self.encode(ControlResponse(ok: false, error: "phone.* is not available from a phone"))
+                    : try SocketClient(path: socketPath).sendRaw(body)
             } catch {
                 answer = Self.encode(ControlResponse(ok: false, error: "agterm is not reachable: \(error)"))
             }

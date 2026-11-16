@@ -26,7 +26,7 @@ struct ControlDispatcherPhoneTests {
             (.phoneEnable, args(mode: "on"), .phoneEnable(.on)),
             (.phoneEnable, args(mode: "off"), .phoneEnable(.off)),
             (.phoneEnable, nil, .phoneEnable(.toggle)),
-            (.phonePort, args(port: 1), .phonePort(1)),
+            (.phonePort, args(port: 1024), .phonePort(1024)),
             (.phonePort, args(port: 65535), .phonePort(65535)),
             (.phoneHost, args(host: " mac.local "), .phoneHost("mac.local")),
             (.phoneHost, args(auto: true), .phoneHost(nil)),
@@ -60,9 +60,9 @@ struct ControlDispatcherPhoneTests {
     @Test func badArgumentsAreRefusedBeforeAnyAction() async {
         let cases: [(Command, ControlArgs?, String)] = [
             (.phoneEnable, args(mode: "maybe"), "phone.enable requires on|off|toggle"),
-            (.phonePort, nil, "phone.port requires a port 1...65535"),
-            (.phonePort, args(port: 0), "phone.port requires a port 1...65535"),
-            (.phonePort, args(port: 65536), "phone.port requires a port 1...65535"),
+            (.phonePort, nil, "port must be 1024...65535"),
+            (.phonePort, args(port: 1023), "port must be 1024...65535"),
+            (.phonePort, args(port: 65536), "port must be 1024...65535"),
             (.phoneHost, nil, "phone.host takes a host or auto"),
             (.phoneHost, args(host: "a", auto: true), "phone.host takes a host or auto"),
             (.phoneHost, args(auto: false), "phone.host takes a host or auto"),

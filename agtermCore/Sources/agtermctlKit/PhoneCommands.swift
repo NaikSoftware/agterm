@@ -36,11 +36,11 @@ struct Phone: ParsableCommand {
 
     struct Port: RequestCommand {
         static let configuration = CommandConfiguration(abstract: "Set the port the relay listens on (default 8765); restarts it when on.")
-        @Argument(help: "The port, 1...65535.") var port: Int
+        @Argument(help: "The port, 1024...65535.") var port: Int
         @OptionGroup var options: BasicOptions
 
         func validate() throws {
-            guard (1...65535).contains(port) else { throw ValidationError("port must be 1...65535") }
+            guard PhoneDesktopState.portRange.contains(port) else { throw ValidationError(PhoneDesktopState.portError) }
         }
 
         func makeRequest() throws -> ControlRequest {

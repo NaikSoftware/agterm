@@ -3,6 +3,9 @@ import Foundation
 /// The Connect a Phone window's state in `<stateDir>/mobile/desktop.json`. An empty `host` follows the relay's best guess.
 public struct PhoneDesktopState: Codable, Equatable, Sendable {
     public static let defaultPort = 8765
+    /// The one port rule for the window, `phone.port`, `agtermctl phone port` and `mobile serve --port`.
+    public static let portRange = 1024...65535
+    public static let portError = "port must be 1024...65535"
     public var on = false
     public var port = PhoneDesktopState.defaultPort
     public var host = ""
@@ -17,7 +20,7 @@ public struct PhoneDesktopState: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         on = (try? c.decodeIfPresent(Bool.self, forKey: .on)) ?? false
         let port = (try? c.decodeIfPresent(Int.self, forKey: .port)) ?? Self.defaultPort
-        self.port = (1...65535).contains(port) ? port : Self.defaultPort
+        self.port = Self.portRange.contains(port) ? port : Self.defaultPort
         host = (try? c.decodeIfPresent(String.self, forKey: .host)) ?? ""
     }
 

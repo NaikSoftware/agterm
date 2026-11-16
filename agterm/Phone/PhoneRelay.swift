@@ -71,7 +71,7 @@ final class PhoneRelay {
     }
 
     func setPort(_ port: Int) {
-        guard (1...65535).contains(port), port != state.port else { return }
+        guard PhoneDesktopState.portRange.contains(port), port != state.port else { return }
         state.port = port
         save()
         if state.on { restart() }
