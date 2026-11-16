@@ -228,22 +228,34 @@ struct MobileCommandsTests {
         let server = RawStubServer()
         try server.start()
         defer { server.stop() }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent(".build/debug/agtermctl")
-        process.arguments = ["mobile", "serve", "--port", String(Int.random(in: 40000...60000)), "--bind", "127.0.0.1", "--no-qr",
-                             "--socket", server.path]
-        process.environment = ProcessInfo.processInfo.environment.merging(
-            ["AGTERM_STATE_DIR": (dir as NSString).deletingLastPathComponent]) { $1 }
-        let out = Pipe(), err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        let printed = LogLines()
-        out.fileHandleForReading.readabilityHandler = { printed.append(String(decoding: $0.availableData, as: UTF8.self)) }
-        try process.run()
-        defer { if process.isRunning { kill(process.processIdentifier, SIGKILL); process.waitUntilExit() } }
-        let listening = Date().addingTimeInterval(30)
-        while !printed.all().joined().contains("Listening on"), process.isRunning, Date() < listening { usleep(20_000) }
+        // the products directory holds the test bundle and the built agtermctl
+        let tool = Bundle(for: MobileFixture.self).bundleURL.deletingLastPathComponent().appendingPathComponent("agtermctl")
+        try #require(FileManager.default.isExecutableFile(atPath: tool.path), "\(tool.path)")
+        var process = Process(), printed = LogLines(), err = Pipe()
+        // below the ephemeral range the in-process fixtures bind through port 0; a taken port gets another try
+        for _ in 0..<3 {
+            process = Process()
+            printed = LogLines()
+            err = Pipe()
+            process.executableURL = tool
+            process.arguments = ["mobile", "serve", "--port", String(Int.random(in: 20000...32767)), "--bind", "127.0.0.1", "--no-qr",
+                                 "--socket", server.path]
+            process.environment = ProcessInfo.processInfo.environment.merging(
+                ["AGTERM_STATE_DIR": (dir as NSString).deletingLastPathComponent]) { $1 }
+            let out = Pipe(), lines = printed
+            process.standardOutput = out
+            process.standardError = err
+            out.fileHandleForReading.readabilityHandler = { lines.append(String(decoding: $0.availableData, as: UTF8.self)) }
+            try process.run()
+            let listening = Date().addingTimeInterval(30)
+            while !printed.all().joined().contains("Listening on"), process.isRunning, Date() < listening { usleep(20_000) }
+            if process.isRunning { break }
+            out.fileHandleForReading.readabilityHandler = nil
+            let failure = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            guard failure.contains("Address already in use") else { break }
+        }
+        let served = process
+        defer { if served.isRunning { kill(served.processIdentifier, SIGKILL); served.waitUntilExit() } }
         try #require(process.isRunning)
 
         _ = try MobilePairing.loadToken(in: dir, fresh: true)
@@ -251,7 +263,6 @@ struct MobileCommandsTests {
         let exited = Date().addingTimeInterval(30)
         while process.isRunning, Date() < exited { usleep(20_000) }
         try #require(!process.isRunning)
-        out.fileHandleForReading.readabilityHandler = nil
         #expect(process.terminationStatus == 1)
         let stderr = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         #expect(stderr.contains("agtermctl: \(PhoneRelayLine.pairingReset)\n"))
