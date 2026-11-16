@@ -6,6 +6,22 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('AutoFit', () {
+    test('fits a visible screen and gives the grid back when hidden', () {
+      final f = AutoFit();
+      expect(f.next(fitted: false, visible: true), isTrue);
+      expect(f.next(fitted: true, visible: true), isNull);
+      expect(f.next(fitted: true, visible: false), isFalse);
+      expect(f.next(fitted: false, visible: false), isNull);
+    });
+
+    test('a manual restore or the computer taking the grid back stops refitting', () {
+      final f = AutoFit()..wanted = false;
+      expect(f.next(fitted: true, visible: true), isFalse);
+      expect(f.next(fitted: false, visible: true), isNull);
+    });
+  });
+
   group('macOS server compat', () {
     test('blink reads statusBlink when blink is absent', () {
       expect(Session({'statusBlink': true}, 'w', 'W').blink, isTrue);

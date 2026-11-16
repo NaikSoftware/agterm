@@ -64,6 +64,19 @@ class AgWindow {
   final bool open, active;
 }
 
+/// Fit to phone while a session screen is in front: the grid follows the phone only while someone looks at it there,
+/// and goes back to the computer's view when the screen closes or the app leaves the foreground.
+class AutoFit {
+  bool wanted = true; // off once the phone's button or the computer gives the grid back, so neither side fights the other
+
+  /// The grid change to make now: true to fit, false to give the grid back, null for none.
+  bool? next({required bool fitted, required bool visible}) => switch ((wanted && visible, fitted)) {
+        (true, false) => true,
+        (false, true) => false,
+        _ => null,
+      };
+}
+
 /// Something worth telling the user about: an agent blocked or finished, or a notification it raised.
 class Alert {
   Alert(this.sessionId, this.title, this.body, this.status);
@@ -172,6 +185,7 @@ class AgtermModel extends ChangeNotifier {
 
   void pause() {
     _running = false;
+    fitted.clear(); // the computer gives back every grid this phone set when the link closes
     _run = null; // not watching: back in the foreground, only new events matter
     _generation++;
     _c?.close();
@@ -217,6 +231,7 @@ class AgtermModel extends ChangeNotifier {
       if (gen != _generation || _disposed) return;
       _c?.close(); // a failure after connecting (e.g. in refresh) must not leak the connection
       _c = null;
+      fitted.clear();
       _set(LinkState.offline);
       await Future.delayed(Duration(seconds: backoff));
       if (gen != _generation || _disposed) return; // paused and resumed meanwhile: the new loop runs
