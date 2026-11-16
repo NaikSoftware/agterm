@@ -6,6 +6,7 @@ import '../ble_transport.dart';
 import '../client.dart';
 import '../main.dart';
 import '../model.dart';
+import '../notice.dart';
 import '../theme.dart';
 import '../watch.dart';
 import 'actions.dart';
@@ -48,10 +49,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onAlert(Alert a) {
     if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('${a.title}: ${a.body}', maxLines: 2, overflow: TextOverflow.ellipsis),
-      action: a.sessionId.isEmpty ? null : SnackBarAction(label: 'Open', onPressed: () => open(a.sessionId)),
-    ));
+    showNotice(context, '${a.title}: ${a.body}',
+        action: a.sessionId.isEmpty ? null : 'Open', onAction: () => mounted ? open(a.sessionId) : null);
   }
 
   // only for the blocked cards on screen: their prompt is what the quick answers act on

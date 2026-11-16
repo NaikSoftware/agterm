@@ -102,7 +102,6 @@ ThemeData buildTheme() {
         dragHandleColor: Color(0xFF3A3D4A)),
     dialogTheme: const DialogThemeData(backgroundColor: C.surface, surfaceTintColor: Colors.transparent),
     popupMenuTheme: const PopupMenuThemeData(color: C.surface2, surfaceTintColor: Colors.transparent),
-    snackBarTheme: const SnackBarThemeData(backgroundColor: C.surface2, contentTextStyle: TextStyle(color: C.text), behavior: SnackBarBehavior.floating),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: C.bg,
