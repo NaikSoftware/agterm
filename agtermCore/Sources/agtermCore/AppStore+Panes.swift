@@ -35,6 +35,11 @@ extension AppStore {
         let scratches = sessions.filter { $0.remoteHost == nil }.compactMap(\.scratchDaemon?.identity)
         let identities = (PaneIdentityInventory.identities(in: sessions) + scratches).filter { $0 != alreadyFinalized }
         if !identities.isEmpty { paneFinalizer?(identities) }
+        for session in sessions {
+            session.surface?.endForegroundJob()
+            session.splitSurface?.endForegroundJob()
+            session.scratchSurface?.endForegroundJob()
+        }
     }
 
     /// Every pane identity of `sessions` leaves mount eligibility. A hidden split's identity is included;
@@ -252,6 +257,7 @@ extension AppStore {
         session.hasSplit = false
         session.splitFocused = false
         session.splitAxis = .leftRight
+        session.splitSurface?.endForegroundJob()
         session.splitSurface?.teardown()
         session.splitSurface = nil
         session.splitCwd = nil

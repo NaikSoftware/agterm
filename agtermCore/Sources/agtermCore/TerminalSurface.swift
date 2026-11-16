@@ -8,6 +8,10 @@ public protocol TerminalSurface: AnyObject {
     /// Frees the underlying libghostty surface and shell. Called when the owning session is closed.
     func teardown()
 
+    /// Called just before `teardown()` when a session or split is closed for good, never on a window close.
+    /// The teardown hangs up the shell, and a foreground job ignoring SIGHUP would outlive the pane.
+    func endForegroundJob()
+
     /// Reassigns this surface from the split (right) pane role to the primary, so its live pwd/title reports
     /// flow to the session's main fields (`currentCwd`/`oscTitle`) not the split ones
     /// (`splitCwd`/`splitTitle`). Called by `closePrimaryPane` when the primary pane's shell exits and the
@@ -40,6 +44,7 @@ public protocol TerminalSurface: AnyObject {
 
 public extension TerminalSurface {
     var backedByZmx: Bool { false }
+    func endForegroundJob() {}
 }
 
 /// A live terminal surface's current role in a two-pane session.

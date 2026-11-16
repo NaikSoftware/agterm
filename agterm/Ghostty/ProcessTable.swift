@@ -1,5 +1,6 @@
 import agtermCore
 import Darwin
+import Foundation
 
 /// ProcessTable is the live process table as `ProcessSweep` reads it.
 enum ProcessTable {
@@ -34,6 +35,25 @@ struct ProcessSweeper {
     /// table reads the process table, nil when it cannot be read.
     var table: () -> [ProcessRecord]? = ProcessTable.read
     var signal: (Int32, pid_t) -> Void = { _ = kill($1, $0) }
+    /// endLater SIGKILLs what is left of a hung-up job after `killGrace`, so a closed pane's job that ignores
+    /// SIGHUP (`nohup`, a trap) does not outlive it. It reads the real table, never `table`, and dies with the app.
+    var endLater: ([ProcessRecord]) -> Void = ProcessSweeper.killAfterGrace
+    static let killGrace: TimeInterval = 2
+
+    private static func killAfterGrace(_ job: [ProcessRecord]) {
+        DispatchQueue.global().asyncAfter(deadline: .now() + killGrace) { ProcessSweeper().send(SIGKILL, to: job) }
+    }
+
+    /// hangUp sends `job` the SIGHUP a closed terminal would, then ends it after `killGrace`.
+    func hangUp(_ job: [ProcessRecord]) {
+        send(SIGHUP, to: job)
+        endLater(job)
+    }
+
+    /// group returns the members of process group `pgid`, empty when the table cannot be read.
+    func group(_ pgid: pid_t) -> [ProcessRecord] {
+        table()?.filter { $0.group == pgid } ?? []
+    }
 
     /// capture returns each shell's foreground job, keyed like `shells`, omitting shells without one.
     func capture(shells: [String: pid_t]) -> [String: [ProcessRecord]] {

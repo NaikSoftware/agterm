@@ -23,6 +23,14 @@ extension GhosttySurfaceView {
     /// surface's CURRENT slot even after a promote + re-split (#199).
     var paneToken: String { env["AGTERM_PANE_ID"] ?? "" }
 
+    /// `TerminalSurface.endForegroundJob`: reads the group before the free hangs it up. A Live pane's group
+    /// here is its attach client; `ZmxClient`'s daemon kill ends the shell's job instead.
+    func endForegroundJob() {
+        guard !backedByZmx, let group = foregroundPid() else { return }
+        let sweeper = ProcessSweeper()
+        sweeper.endLater(sweeper.group(group))
+    }
+
     var zmxSessionName: String? {
         guard backedByZmx, let paneIdentity = UUID(uuidString: paneToken) else { return nil }
         return ZmxSupport.daemonName(for: paneIdentity)

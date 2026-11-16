@@ -334,11 +334,15 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   signals the shell's own process group; a pane's creation command (`session.new --command`, a restart line)
   runs in a group of its own and was measured surviving `session.close` and `zmx.kill` as an orphan, while
   a program typed at the prompt died. Before a kill `foregroundJobs` reads the terminal's foreground group
-  from the process table, and a kill zmx CONFIRMED sends that group SIGHUP at once, with no timer, so it
-  also lands during app termination and before panes mount. A stale-socket or failed kill sends nothing.
-  This is what a closed terminal does: `nohup`, `disown`ed and other background jobs are never signalled,
-  and a foreground program that ignores hangups survives a close. Do not widen it to the shell's process
-  tree. `ProcessSweeper` is nil by default because a test's fake listing names real pids.
+  from the process table, and a kill zmx CONFIRMED sends that group SIGHUP at once, so it also lands during
+  app termination and before panes mount. A stale-socket or failed kill sends nothing.
+  `ProcessSweeper.hangUp` then SIGKILLs what is left of the group after `killGrace` (2 s): a closed pane must
+  not leave a job that ignores hangups (`nohup cmd` in the foreground, `trap '' HUP`) running unseen.
+  That timer dies with the app, so a kill just before quit sends the hangup only.
+  Outside Live, `TerminalSurface.endForegroundJob` does the same for a session (panes and scratch) or split closed for good,
+  reading the pane's foreground group before the teardown frees it; a window close calls neither.
+  `nohup … &`, `disown`ed and other background jobs are never signalled. Do not widen it to the shell's
+  process tree. `ProcessSweeper` is nil by default because a test's fake listing names real pids.
 - `session.scratch` is a third, nonpersisted login shell with on/off/toggle. It spawns lazily, survives
   hiding, recreates after exit, and renders as a full translucent cover below overlay. It has no session
   PWD/title link but a weak watermark link. GUI surfaces are Command-J, titlebar, View, and palette.
