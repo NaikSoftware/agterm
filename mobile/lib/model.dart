@@ -132,16 +132,18 @@ String connectError(Object e, Pairing p, Duration unseen) => switch (e) {
 enum LinkState { connecting, connected, offline }
 
 class AgtermModel extends ChangeNotifier {
-  AgtermModel(this.pairing) {
+  AgtermModel(this.pairing, {@visibleForTesting this.open = Connection.open}) {
     _lifecycle = AppLifecycleListener(onResume: resume, onPause: _background);
   }
 
   final Pairing pairing;
+  final Future<Connection> Function(Pairing p, {bool preferBluetooth}) open;
   late final AppLifecycleListener _lifecycle;
   Connection? _c;
   LinkState state = LinkState.connecting;
   String via = ''; // the live transport's badge: 'Wi-Fi' or 'BT'
-  DateTime _seen = DateTime.now(); // the last Bluetooth scan match or connect; outlives pause and resume
+  @visibleForTesting
+  DateTime seen = DateTime.now(); // the last Bluetooth scan match, connect or resume: "Can't find" needs 2 real minutes
   String? error;
   List<AgWindow> windows = [];
   String? windowId; // null = the frontmost window
@@ -178,6 +180,7 @@ class AgtermModel extends ChangeNotifier {
   void resume() {
     if (background) Watch.stop();
     background = false;
+    seen = DateTime.now();
     Watch.check();
     start();
   }
@@ -194,20 +197,21 @@ class AgtermModel extends ChangeNotifier {
       final gen = ++_generation;
       _set(LinkState.connecting);
       try {
-        final c = await Connection.open(pairing, preferBluetooth: BluetoothPref.prefer);
+        final c = await open(pairing, preferBluetooth: BluetoothPref.prefer);
         if (gen != _generation) return c.close();
         _c = c;
         via = c.via;
         error = null;
         backoff = 1;
-        _seen = DateTime.now();
+        seen = DateTime.now();
         _set(LinkState.connected);
         await refresh();
         unawaited(_eventLoop(gen));
         await _c!.closed;
       } catch (e) {
-        if (e is! BleNotFound) _seen = DateTime.now();
-        error = connectError(e, pairing, DateTime.now().difference(_seen));
+        if (e is! BleNotFound) seen = DateTime.now();
+        error = connectError(e, pairing, DateTime.now().difference(seen));
+        if (e is Revoked) _running = false; // no transport can succeed: wait for a new pairing or a resume
       }
       if (gen != _generation || _disposed) return;
       _c?.close(); // a failure after connecting (e.g. in refresh) must not leak the connection

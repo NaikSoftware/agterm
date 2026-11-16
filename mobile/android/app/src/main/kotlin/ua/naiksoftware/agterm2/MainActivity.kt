@@ -20,6 +20,7 @@ class MainActivity : FlutterActivity() {
 
     // Back finishes the activity (before Android 12) and takes the Dart side with it: nothing is left to watch
     override fun onDestroy() {
+        ble?.closeAll() // the engine and its Dart links go with the activity
         if (isFinishing) stopService(Intent(this, ForegroundService::class.java))
         super.onDestroy()
     }

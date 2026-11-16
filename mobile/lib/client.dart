@@ -26,11 +26,12 @@ class Pairing {
     final uri = Uri.tryParse(link.trim());
     if (uri == null || uri.scheme != 'agterm' || uri.host != 'pair') return null;
     final q = uri.queryParameters;
-    final host = q['h']?.isNotEmpty == true ? q['h'] : null;
     final port = int.tryParse(q['p'] ?? '');
+    // with b=1 an unusable address leaves the pairing Bluetooth only
+    final host = q['h']?.isNotEmpty == true && port != null && port >= 1 && port <= 65535 ? q['h'] : null;
     final bluetooth = q['b'] == '1';
     final fp = (q['f'] ?? '').toLowerCase();
-    if (host == null ? !bluetooth : port == null || port < 1 || port > 65535) return null;
+    if (host == null && !bluetooth) return null;
     if ((q['t'] ?? '').length < 32 || !RegExp(r'^[0-9a-f]{64}$').hasMatch(fp)) return null;
     return Pairing(
       name: q['n']?.isNotEmpty == true ? q['n']! : host ?? 'Computer',
@@ -57,6 +58,11 @@ class AgtermError implements Exception {
 }
 
 const revokedMessage = 'The pairing was revoked. Pair this computer again.';
+
+/// The token is no longer valid: no transport can succeed, so nothing retries.
+class Revoked extends AgtermError {
+  Revoked() : super(revokedMessage);
+}
 
 String certificateFingerprint(X509Certificate c) => sha256.convert(c.der).toString();
 
@@ -131,6 +137,8 @@ class Connection {
     for (final t in preferBluetooth ? tries.reversed : tries) {
       try {
         return await _authenticate(await t(), p);
+      } on Revoked {
+        rethrow;
       } catch (e) {
         if (_rank(e) > _rank(error)) error = e;
       }
@@ -142,7 +150,7 @@ class Connection {
     final c = Connection._(link);
     try {
       final hello = await c._send({'auth': p.token}).timeout(const Duration(seconds: 8));
-      if (hello['ok'] != true) throw AgtermError(hello['error'] == 'unauthorized' ? revokedMessage : '${hello['error']}');
+      if (hello['ok'] != true) throw hello['error'] == 'unauthorized' ? Revoked() : AgtermError('${hello['error']}');
       return c;
     } catch (_) {
       c.close();

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../ble_transport.dart';
 import '../client.dart';
 import '../model.dart';
 import '../theme.dart';
@@ -25,7 +26,8 @@ class _PairScreenState extends State<PairScreen> {
     if (p == null) return setState(() => error = 'That is not a pairing link. It starts with agterm://pair?');
     setState(() => (busy = true, error = null));
     try {
-      (await Connection.open(p, preferBluetooth: BluetoothPref.prefer)).close(); // prove the token and certificate before saving them
+      if (p.bluetooth) await requestBluetooth(); // the one foreground moment to ask; background connects only check
+      (await Connection.open(p,preferBluetooth: BluetoothPref.prefer)).close(); // prove the token and certificate before saving them
       await widget.onPaired(p);
       if (mounted && widget.canGoBack) Navigator.of(context).pop();
     } on AgtermError catch (e) {

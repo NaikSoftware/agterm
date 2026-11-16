@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../ble_transport.dart';
 import '../client.dart';
 import '../main.dart';
 import '../model.dart';
@@ -180,6 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         value: BluetoothPref.prefer,
                         onChanged: m.pairing.bluetooth && m.pairing.host != null
                             ? (v) async {
+                                if (v) await requestBluetooth();
                                 await BluetoothPref.set(v);
                                 setSheet(() {});
                               }

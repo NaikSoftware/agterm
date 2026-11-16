@@ -56,7 +56,7 @@ class BleTransport {
     } catch (e) {
       close();
       throw switch (e) {
-        BleLinkError.wrongKey => AgtermError(revokedMessage),
+        BleLinkError.wrongKey => Revoked(),
         BleLinkError.busy => AgtermError(busyMessage),
         _ => e,
       };
@@ -77,23 +77,21 @@ const _method = MethodChannel('agterm/ble');
 final _inputs = <int, StreamController<List<int>>>{};
 StreamSubscription? _events;
 int _nextId = 0;
-bool _asked = false;
 
 /// Whether Android lets this app use Bluetooth (BLUETOOTH_SCAN and BLUETOOTH_CONNECT).
 Future<bool> bluetoothGranted() async => await _method.invokeMethod<bool>('granted') ?? false;
 
-/// Scans for the pairing's service UUID, opens its L2CAP channel and runs the handshake.
+/// Asks for the Bluetooth permissions; only from a foreground UI action (pairing, the Prefer Bluetooth switch).
+/// A request that gets no answer in [timeout] (a stopped or recreated activity) counts as denied.
+Future<bool> requestBluetooth({Duration timeout = const Duration(seconds: 60)}) async =>
+    await _method.invokeMethod<bool>('permit').timeout(timeout, onTimeout: () => false) ?? false;
+
+const notAllowedMessage = 'Bluetooth needs the Nearby devices permission. Allow it in Android settings, or pair again.';
+
+/// Scans for the pairing's service UUID, opens its L2CAP channel and runs the handshake. Never asks for permissions:
+/// it may run in the background.
 Future<Link> openBle(Pairing p) async {
-  if (!_asked) {
-    _asked = true; // the first Bluetooth connect asks; later ones only check
-    // a request from a stopped or recreated activity may never answer
-    if (await _method.invokeMethod<bool>('permit').timeout(const Duration(seconds: 60), onTimeout: () => null) == null) {
-      throw AgtermError('Android did not answer the Bluetooth permission request. Allow Nearby devices for agterm in Android settings.');
-    }
-  }
-  if (!await bluetoothGranted()) {
-    throw AgtermError('agterm needs the Nearby devices permission to connect over Bluetooth. Allow it in Android settings.');
-  }
+  if (!await bluetoothGranted()) throw AgtermError(notAllowedMessage);
   // one subscription for all links, alive before any connect, so no early bytes are dropped
   _events ??= const EventChannel('agterm/ble/data').receiveBroadcastStream().listen((e) {
     final m = e as Map;
@@ -114,8 +112,9 @@ Future<Link> openBle(Pairing p) async {
     close();
     throw switch (e.code) {
       'notFound' => BleNotFound(),
+      'off' => AgtermError('Bluetooth is off.'),
       'scanFailed' => AgtermError('Bluetooth scanning failed (${e.message}). Try again in a minute.'),
-      _ => e,
+      _ => AgtermError('Bluetooth connection failed: ${e.message ?? e.code}'),
     };
   }
   final raw = Link(input.stream, (b) => _method.invokeMethod('write', {'id': id, 'data': Uint8List.fromList(b)}).catchError((_) => close()), close,

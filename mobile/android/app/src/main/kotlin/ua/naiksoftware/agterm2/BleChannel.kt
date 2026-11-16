@@ -46,7 +46,15 @@ class BleChannel(private val activity: Activity, messenger: BinaryMessenger) : M
     }
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink) { sink = events }
-    override fun onCancel(arguments: Any?) { sink = null }
+    // Dart never cancels while it lives: the engine went away, and an open link would keep the Mac busy for this phone
+    override fun onCancel(arguments: Any?) {
+        sink = null
+        closeAll()
+    }
+
+    fun closeAll() {
+        for (id in links.keys.toList()) links.remove(id)?.close()
+    }
 
     private fun granted() = PERMISSIONS.all { activity.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
 
@@ -77,6 +85,7 @@ class BleChannel(private val activity: Activity, messenger: BinaryMessenger) : M
     }
 
     private class NotFound : IOException("not found")
+    private class Off : IOException("Bluetooth is off")
     private class ScanFailed(code: Int) : IOException("code $code")
     private data class Psm(val value: Int)
 
@@ -102,15 +111,15 @@ class BleChannel(private val activity: Activity, messenger: BinaryMessenger) : M
             } catch (e: Exception) {
                 close()
                 links.remove(id, this)
-                val code = when (e) { is NotFound -> "notFound"; is ScanFailed -> "scanFailed"; else -> "failed" }
+                val code = when (e) { is NotFound -> "notFound"; is Off -> "off"; is ScanFailed -> "scanFailed"; else -> "failed" }
                 main.post { result.error(code, e.message ?: e.toString(), null) }
             }
         }
 
         private fun scan(services: List<UUID>, timeoutMs: Long): BluetoothDevice {
             val adapter = activity.getSystemService(BluetoothManager::class.java)?.adapter
-            if (adapter == null || !adapter.isEnabled) throw NotFound()
-            val scanner = adapter.bluetoothLeScanner ?: throw NotFound()
+            if (adapter == null || !adapter.isEnabled) throw Off()
+            val scanner = adapter.bluetoothLeScanner ?: throw Off() // null while the radio turns off
             val cb = object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, r: ScanResult) { events.offer(r.device) }
                 override fun onScanFailed(errorCode: Int) { events.offer(ScanFailed(errorCode)) }

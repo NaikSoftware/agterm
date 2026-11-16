@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:agterm_mobile/ble_link.dart';
 import 'package:agterm_mobile/ble_transport.dart';
 import 'package:agterm_mobile/client.dart';
 import 'package:agterm_mobile/model.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Uint8List hex(String s) => Uint8List.fromList([for (var i = 0; i < s.length; i += 2) int.parse(s.substring(i, i + 2), radix: 16)]);
@@ -44,7 +45,8 @@ Link fakeRaw(void Function(Uint8List body, void Function(Uint8List body) reply) 
 }
 
 void main() {
-  final v = jsonDecode(File('test/fixtures/ble-vectors.json').readAsStringSync()) as Map<String, dynamic>;
+  TestWidgetsFlutterBinding.ensureInitialized(); // platform channel mocks and the model's lifecycle listener
+  final v =jsonDecode(File('test/fixtures/ble-vectors.json').readAsStringSync()) as Map<String, dynamic>;
   final hs = v['handshake'] as Map<String, dynamic>;
   BleInitiator vectorInitiator() => BleInitiator.deterministic(BleIds.psk(v['token']), hex(hs['initiatorEphemeralPrivate']));
 
@@ -63,9 +65,16 @@ void main() {
       expect(Pairing.parse('agterm://pair?h=h&p=2&t=$token&f=$fp')!.bluetooth, isFalse);
     });
 
-    test('refuses no h without b, and a bad port with h', () {
+    test('refuses no usable address without b', () {
       expect(Pairing.parse('agterm://pair?t=$token&f=$fp&n=mac'), isNull);
-      expect(Pairing.parse('agterm://pair?h=h&t=$token&f=$fp&b=1'), isNull);
+      expect(Pairing.parse('agterm://pair?h=h&p=0&t=$token&f=$fp'), isNull);
+    });
+
+    test('with b=1 a missing or bad port leaves the pairing Bluetooth only', () {
+      for (final q in ['h=h', 'h=h&p=0', 'h=h&p=x', 'h=h&p=70000']) {
+        final p = Pairing.parse('agterm://pair?$q&t=$token&f=$fp&n=mac&b=1')!;
+        expect((p.host, p.port, p.bluetooth), (null, null, true), reason: q);
+      }
     });
 
     test('a Bluetooth-only pairing round-trips through JSON', () {
@@ -155,6 +164,101 @@ void main() {
       expect(connectError(BleNotFound(), ble, const Duration(seconds: 119)), 'Cannot reach studio over Bluetooth. Is phone access on?');
       expect(connectError(BleNotFound(), ble, const Duration(minutes: 2)), "Can't find studio: out of range, Bluetooth off, or the pairing was reset.");
       expect(connectError(AgtermError('x'), ble, const Duration(minutes: 5)), 'x');
+    });
+  });
+
+  group('revoked', () {
+    final both = Pairing.parse('agterm://pair?h=h&p=2&t=$token&f=$fp&b=1')!;
+
+    test('TLS unauthorized never scans', () async {
+      var scanned = false;
+      await expectLater(Connection.open(both, tls: (p, t) async => throw Revoked(), ble: (p) async {
+        scanned = true;
+        return fakeRelay('BT');
+      }), throwsA(isA<Revoked>()));
+      expect(scanned, isFalse);
+    });
+
+    test('stops the reconnect loop and shows the revoked message', () async {
+      var calls = 0;
+      final m = AgtermModel(both, open: (p, {preferBluetooth = false}) async {
+        calls++;
+        throw Revoked();
+      })..start();
+      await Future.delayed(const Duration(milliseconds: 1300)); // past the first 1 s backoff
+      expect((calls, m.state, m.error), (1, LinkState.offline, revokedMessage));
+      m.dispose();
+    });
+  });
+
+  test("resume restarts the 2-minute clock, so can't find needs 2 real minutes", () async {
+    final p = Pairing.parse('agterm://pair?t=$token&f=$fp&n=studio&b=1')!;
+    AndroidFlutterLocalNotificationsPlugin.registerWith(); // resume asks it whether notifications are on
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('dexterous.com/flutter/local_notifications'), (_) async => null);
+    final m = AgtermModel(p, open: (p, {preferBluetooth = false}) async => throw BleNotFound());
+    m.seen = DateTime.now().subtract(const Duration(minutes: 3));
+    m.resume();
+    await Future.delayed(Duration.zero);
+    expect(m.error, 'Cannot reach studio over Bluetooth. Is phone access on?');
+    m.dispose();
+  });
+
+  group('platform channel', () {
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final p = Pairing.parse('agterm://pair?t=$token&f=$fp&n=studio&b=1')!;
+    late List<String> calls;
+    Map connectArgs = {};
+
+    // the Kotlin side: permissions as [granted], and connect failing with [code]
+    void android({bool granted = true, String code = 'failed', String? message}) {
+      calls = [];
+      messenger.setMockMethodCallHandler(const MethodChannel('agterm/ble/data'), (_) async => null);
+      messenger.setMockMethodCallHandler(const MethodChannel('agterm/ble'), (c) async {
+        calls.add(c.method);
+        if (c.method == 'connect') connectArgs = c.arguments as Map;
+        return switch (c.method) {
+          'granted' => granted,
+          'connect' => throw PlatformException(code: code, message: message),
+          'permit' => Completer<bool>().future, // never answers
+          _ => null,
+        };
+      });
+    }
+
+    Future<String> failure() async {
+      try {
+        await openBle(p);
+      } catch (e) {
+        return '$e';
+      }
+      return 'connected';
+    }
+
+    test('a background connect only checks the permission and skips Bluetooth without it', () async {
+      android(granted: false);
+      expect(await failure(), notAllowedMessage);
+      expect(calls, ['granted']);
+    });
+
+    test('Bluetooth off and a failed connect have their own messages', () async {
+      android(code: 'off', message: 'Bluetooth is off');
+      expect(await failure(), 'Bluetooth is off.');
+      android(code: 'failed', message: 'GATT timed out');
+      expect(await failure(), 'Bluetooth connection failed: GATT timed out');
+      expect(calls, ['granted', 'connect', 'close']);
+      expect(connectArgs['services'], BleIds.serviceUuids(token, DateTime.now()));
+    });
+
+    test('a permission request with no answer counts as denied', () async {
+      android();
+      expect(await requestBluetooth(timeout: const Duration(milliseconds: 20)), isFalse);
+      expect(calls, ['permit']);
+    });
+
+    tearDown(() {
+      messenger.setMockMethodCallHandler(const MethodChannel('agterm/ble'), null);
+      messenger.setMockMethodCallHandler(const MethodChannel('agterm/ble/data'), null);
     });
   });
 
