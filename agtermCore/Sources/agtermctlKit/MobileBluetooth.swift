@@ -90,6 +90,23 @@ final class MobileBluetooth: NSObject, CBPeripheralManagerDelegate, @unchecked S
         off("unsupported")
     }
 
+    /// Registering or advertising failed: open channels and the PSM stay, and the next try comes in 30 s.
+    /// Call on `relay.queue`.
+    func advertisingFailed(_ step: String, _ error: any Error) {
+        relay.settings.log("bluetooth \(step) failed: \(error.localizedDescription)")
+        report("off (unsupported)")
+        schedule(after: 30)
+    }
+
+    private func schedule(after delay: TimeInterval) {
+        let rotation = DispatchSource.makeTimerSource(queue: relay.queue)
+        rotation.schedule(wallDeadline: .now() + delay)
+        rotation.setEventHandler { [weak self] in self?.advertise() }
+        rotation.resume()
+        self.rotation?.cancel()
+        self.rotation = rotation
+    }
+
     /// Registers the PSM characteristic under this epoch's UUID and advertises it, then again at the next boundary.
     /// Open channels are not touched.
     private func advertise() {
@@ -105,13 +122,7 @@ final class MobileBluetooth: NSObject, CBPeripheralManagerDelegate, @unchecked S
         service.characteristics = [characteristic]
         self.service = service
         manager.add(service)
-        let boundary = Double(epoch + 1) * BleIDs.epochSeconds - now.timeIntervalSince1970
-        let rotation = DispatchSource.makeTimerSource(queue: relay.queue)
-        rotation.schedule(wallDeadline: .now() + boundary)
-        rotation.setEventHandler { [weak self] in self?.advertise() }
-        rotation.resume()
-        self.rotation?.cancel()
-        self.rotation = rotation
+        schedule(after: Double(epoch + 1) * BleIDs.epochSeconds - now.timeIntervalSince1970)
     }
 
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
@@ -134,13 +145,13 @@ final class MobileBluetooth: NSObject, CBPeripheralManagerDelegate, @unchecked S
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: (any Error)?) {
-        if let error { return failed("service", error) }
+        if let error { return advertisingFailed("service", error) }
         // the service UUID only: a local name would expose the Mac's name
         peripheral.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [service.uuid]])
     }
 
     func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: (any Error)?) {
-        if let error { return failed("advertising", error) }
+        if let error { return advertisingFailed("advertising", error) }
         report("advertising")
     }
 

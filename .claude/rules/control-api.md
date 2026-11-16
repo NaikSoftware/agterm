@@ -237,7 +237,7 @@ of the token over a 900 s epoch, re-registered at each boundary, so a passive sc
 `<mobileDir>/bluetooth.lock` (`flock`) lets one relay per Mac advertise. The `maxPhones` busy cap (reject `[0x02]`)
 counts authenticated phones only, so replayed handshakes cannot lock out a paired phone; the unauthenticated cap
 and the 10 s auth timeout cover the rest. agtermctl embeds an Info.plist (`com.umputun.agtermctl`, usage string)
-via `-sectcreate` in `Package.swift`, so a hand-run serve prompts under a stable identity. The L2CAP streams run on
+via `-sectcreate` in project.yml's Bundle helper executables phase, so a hand-run serve prompts under a stable identity. The L2CAP streams run on
 their own `StreamThread`, never `RunLoop.main`. `commands.html#mobile` owns the user-visible values.
 
 `session wait` is not a fourth exemption but a client-side composite, like `overlay open --block`: it

@@ -450,6 +450,22 @@ struct MobileBluetoothTests {
         #expect(lines.all() == ["off (powered off)"])
     }
 
+    @Test func aFailedRotationKeepsOpenPhones() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let lines = LogLines()
+        let radio = MobileBluetooth(relay: fixture.relay, token: fixture.token, status: { lines.append($0) })
+        let phone = try BlePhone(fixture, radio)
+        try phone.handshake(token: fixture.token)
+        phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(phone.readJSON()?["ok"] as? Bool == true)
+        fixture.relay.queue.sync { radio.advertisingFailed("service", CocoaError(.featureUnsupported)) }
+        phone.send(#"{"cmd":"tree","id":2}"#)
+        #expect(phone.readJSON()?["id"] as? Int == 2)
+        #expect(lines.all() == ["off (unsupported)"])
+        #expect(fixture.logged().contains { $0.hasPrefix("bluetooth service failed: ") })
+    }
+
     @Test func aCloseStopsWaitingForAPhoneThatStopsReading() throws {
         let fixture = try MobileFixture()
         defer { fixture.stop() }
