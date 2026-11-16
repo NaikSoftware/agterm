@@ -8,6 +8,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'client.dart';
 import 'watch.dart';
 
+// the computer's home folder: /home/<name> on Linux, /Users/<name> on macOS
+final homePrefix = RegExp(r'^/(home|Users)/[^/]+');
+String shortHome(String path) => path.replaceFirst(homePrefix, '~');
+String expandHome(String path, String home) => path.replaceFirst(RegExp(r'^~(?=/|$)'), home);
+
 class Session {
   Session(Map m, this.workspaceId, this.workspaceName)
       : id = m['id'] ?? '',
@@ -21,7 +26,7 @@ class Session {
         unseen = (m['unseen'] as num?)?.toInt() ?? 0,
         flagged = m['flagged'] == true,
         active = m['active'] == true,
-        blink = m['blink'] == true,
+        blink = (m['blink'] ?? m['statusBlink']) == true,
         hasSplit = m['hasSplit'] == true,
         split = m['split'] == true,
         collapsed = m['collapsed'] == true;
@@ -31,7 +36,7 @@ class Session {
   final bool flagged, active, blink, hasSplit, split, collapsed;
 
   bool get needsYou => status == 'blocked' || status == 'completed';
-  String get shortCwd => cwd.replaceFirst(RegExp(r'^/home/[^/]+'), '~');
+  String get shortCwd => shortHome(cwd);
 }
 
 class Workspace {

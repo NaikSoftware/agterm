@@ -1,9 +1,39 @@
 import 'package:agterm_mobile/client.dart';
 import 'package:agterm_mobile/model.dart';
 import 'package:agterm_mobile/screens/prompt.dart';
+import 'package:agterm_mobile/theme.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('macOS server compat', () {
+    test('blink reads statusBlink when blink is absent', () {
+      expect(Session({'statusBlink': true}, 'w', 'W').blink, isTrue);
+      expect(Session({'blink': true}, 'w', 'W').blink, isTrue);
+      expect(Session({}, 'w', 'W').blink, isFalse);
+    });
+
+    test('shortens /home and /Users prefixes', () {
+      expect(shortHome('/home/ann/src'), '~/src');
+      expect(shortHome('/Users/ann'), '~');
+      expect(shortHome('/opt/x'), '/opt/x');
+    });
+
+    test('expands ~ only as a leading path element', () {
+      expect(expandHome('~/src', '/Users/ann'), '/Users/ann/src');
+      expect(expandHome('~', '/Users/ann'), '/Users/ann');
+      expect(expandHome('~x/a', '/Users/ann'), '~x/a');
+    });
+
+    test('parses palette names and hex tints', () {
+      expect(tintColor('teal'), isNotNull);
+      expect(tintColor('red'), isNotNull);
+      expect(tintColor('#ff8800'), const Color(0xFFFF8800));
+      expect(tintColor('#ff88'), isNull);
+      expect(tintColor(''), isNull);
+    });
+  });
+
   group('Pairing.parse', () {
     const fp = 'd6804234939ad32471883bb5743cf3e435d24d0e1a02085f0adf7a51634cb443';
     const token = 'B9nEPMC4LDwT26URUTdmlho5YnA9mIq2gvBL86UnvVo';

@@ -200,7 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ListTile(
               minTileHeight: 52,
               title: Text('${e['title'] ?? e['id']}'),
-              subtitle: Text('${e['subtitle'] ?? ''}'.replaceFirst(RegExp(r'^/home/[^/]+'), '~'), style: const TextStyle(fontFamily: mono, fontSize: 12, color: C.muted)),
+              subtitle: Text(shortHome('${e['subtitle'] ?? ''}'), style: const TextStyle(fontFamily: mono, fontSize: 12, color: C.muted)),
               onTap: () => Navigator.pop(c, '${e['id']}'),
             ),
         ]),
@@ -384,8 +384,8 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(children: [
               Icon(collapsed.contains(w.id) ? Icons.chevron_right : Icons.expand_more, size: 18, color: C.muted),
               const SizedBox(width: 8),
-              if (tints[w.tint] != null) ...[
-                Container(width: 8, height: 8, decoration: BoxDecoration(color: tints[w.tint], borderRadius: BorderRadius.circular(2))),
+              if (tintColor(w.tint) != null) ...[
+                Container(width: 8, height: 8, decoration: BoxDecoration(color: tintColor(w.tint), borderRadius: BorderRadius.circular(2))),
                 const SizedBox(width: 8),
               ],
               Expanded(child: Text(w.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
@@ -416,7 +416,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(s.name, style: TextStyle(fontSize: 14, color: tints[s.tint] ?? C.text), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(s.name, style: TextStyle(fontSize: 14, color: tintColor(s.tint) ?? C.text), maxLines: 1, overflow: TextOverflow.ellipsis),
               Text(sub,
                   style: TextStyle(fontSize: 12, color: C.muted, fontFamily: s.context.isEmpty && !showWorkspace ? mono : null),
                   maxLines: 1,
