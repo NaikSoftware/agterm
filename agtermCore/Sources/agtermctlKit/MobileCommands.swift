@@ -147,10 +147,32 @@ enum MobilePairing {
 
     /// Read on every request, so `mobile reset` cuts off phones holding the old token at once.
     static func currentToken(in dir: String) -> String? {
-        guard let data = FileManager.default.contents(atPath: dir + "/token") else { return nil }
-        let token = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        return token.count >= 32 ? token : nil
+        if case let .token(token) = readToken(in: dir) { return token }
+        return nil
     }
+
+    enum TokenRead: Equatable {
+        case token(String)
+        /// Missing, unreadable or not a token: no phone holds a valid pairing.
+        case absent
+        /// A read error that says nothing about the file, such as running out of descriptors.
+        case unavailable
+    }
+
+    static func readToken(in dir: String) -> TokenRead {
+        let fd = open(dir + "/token", O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { return isTransient(errno) ? .unavailable : .absent }
+        defer { close(fd) }
+        var bytes = [UInt8](repeating: 0, count: 256)
+        let count = read(fd, &bytes, bytes.count)
+        guard count >= 0 else { return isTransient(errno) ? .unavailable : .absent }
+        let token = String(decoding: bytes[..<count], as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard token.count >= 32, token.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil else { return .absent }
+        return .token(token)
+    }
+
+    /// EACCES is not here: a token file nobody can read was changed on purpose, so it revokes.
+    static func isTransient(_ code: Int32) -> Bool { [EMFILE, ENFILE, EINTR, EAGAIN].contains(code) }
 
     /// 32 random bytes, base64url without padding.
     static func loadToken(in dir: String, fresh: Bool = false) throws -> String {
@@ -319,15 +341,18 @@ final class MobileRelay: @unchecked Sendable {
         var grids: [String: Data] = [:]
         /// Keeps pipelined requests in order, and holds a hung app to one blocked thread per phone.
         let work = DispatchQueue(label: "agtermctl.mobile.phone")
-        init(_ connection: NWConnection, peer: String) {
+        /// Accept order, for evicting the oldest unauthenticated connection.
+        let order: Int
+        init(_ connection: NWConnection, peer: String, order: Int) {
             self.connection = connection
             self.peer = peer
+            self.order = order
         }
     }
 
     /// The pre-auth cap: the auth line is about 60 bytes.
     static let preAuthBytes = 4096
-    /// Connections still owing their token; more are refused, so a flood cannot use up descriptors.
+    /// Connections still owing their token; past it the oldest is dropped, so a flood cannot use up descriptors.
     private let maxUnauthenticated: Int
 
     var onFailure: (@Sendable () -> Void)?
@@ -343,6 +368,7 @@ final class MobileRelay: @unchecked Sendable {
     private let log: @Sendable (String) -> Void
     private var listener: NWListener?
     private var phones: [ObjectIdentifier: Phone] = [:]
+    private var accepted = 0
 
     init(identity: SecIdentity, port: UInt16, bind: String?, mobileDir: String, socketPath: String, hostName: String,
          authTimeout: TimeInterval = 10, revokeInterval: TimeInterval = 5, maxUnauthenticated: Int = 32,
@@ -423,11 +449,11 @@ final class MobileRelay: @unchecked Sendable {
     }
 
     private func accept(_ connection: NWConnection) {
-        guard phones.values.filter({ $0.token == nil }).count < maxUnauthenticated else {
-            connection.cancel()
-            return
-        }
-        let phone = Phone(connection, peer: Self.peerAddress(connection.endpoint))
+        // evicting the oldest, not refusing the newest, so a flood cannot lock a paired phone out
+        let waiting = phones.values.filter { $0.token == nil }
+        if waiting.count >= maxUnauthenticated, let oldest = waiting.min(by: { $0.order < $1.order }) { close(oldest) }
+        accepted += 1
+        let phone = Phone(connection, peer: Self.peerAddress(connection.endpoint), order: accepted)
         phones[ObjectIdentifier(phone)] = phone
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
@@ -573,11 +599,14 @@ final class MobileRelay: @unchecked Sendable {
         return MobilePairing.sameSecret(token, current)
     }
 
-    /// Only a token read successfully and different revokes; a read error (EMFILE under a connection flood)
-    /// must not drop paired phones.
+    /// Fails closed: a missing or invalid token revokes, and only a transient read error (EMFILE under a
+    /// connection flood) keeps paired phones.
     private func revoked(_ token: String) -> Bool {
-        guard let current = MobilePairing.currentToken(in: mobileDir) else { return false }
-        return !MobilePairing.sameSecret(token, current)
+        switch MobilePairing.readToken(in: mobileDir) {
+        case let .token(current): return !MobilePairing.sameSecret(token, current)
+        case .absent: return true
+        case .unavailable: return false
+        }
     }
 
     /// The control reply with the phone's `id` spliced in as its first key, the rest of the bytes untouched.

@@ -147,27 +147,35 @@ struct MobileCommandsTests {
         #expect(Array(fixture.server.requests().dropFirst(before)) == [#"{"args":{"reset":true},"cmd":"session.grid","target":"S1"}"#])
     }
 
-    @Test func anUnreadableTokenKeepsAPairedPhone() throws {
+    @Test(arguments: ["delete", "unreadable", "short"])
+    func aMissingOrInvalidTokenDropsAPairedPhone(_ change: String) throws {
         let fixture = try MobileFixture()
         defer { fixture.stop() }
         let client = try fixture.connect()
         client.send(#"{"auth":"\#(fixture.token)","id":1}"#)
         #expect(client.readJSON()?["ok"] as? Bool == true)
-        chmod(fixture.mobileDir + "/token", 0)
-        client.send(#"{"cmd":"tree","id":2}"#)
-        #expect(client.readJSON()?["id"] as? Int == 2)
+        let path = fixture.mobileDir + "/token"
+        switch change {
+        case "delete": unlink(path)
+        case "unreadable": chmod(path, 0)
+        default: try Data("short\n".utf8).write(to: URL(fileURLWithPath: path))
+        }
+        #expect(client.waitClosed())
     }
 
-    @Test func unauthenticatedConnectionsBeyondTheCapAreRefused() throws {
+    @Test func onlyResourceErrorsCountAsTransient() {
+        #expect([EMFILE, ENFILE, EINTR, EAGAIN].allSatisfy(MobilePairing.isTransient))
+        #expect(![ENOENT, EACCES, ENOTDIR].contains(where: MobilePairing.isTransient))
+    }
+
+    @Test func aFullPreAuthCapEvictsTheOldestConnection() throws {
         let fixture = try MobileFixture(maxUnauthenticated: 1)
         defer { fixture.stop() }
-        let first = try fixture.connect()
-        #expect(throws: (any Error).self) { _ = try fixture.connect() }
-        first.send(#"{"auth":"\#(fixture.token)","id":1}"#)
-        #expect(first.readJSON()?["ok"] as? Bool == true)
-        let third = try fixture.connect()
-        third.send(#"{"auth":"\#(fixture.token)","id":1}"#)
-        #expect(third.readJSON()?["ok"] as? Bool == true)
+        let stale = try fixture.connect()
+        let phone = try fixture.connect()
+        #expect(stale.waitClosed())
+        phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(phone.readJSON()?["ok"] as? Bool == true)
     }
 
     @Test func secondRelayOnTheSamePortFails() throws {
