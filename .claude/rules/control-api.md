@@ -223,12 +223,10 @@ rules and the argv on `TerminfoInstall`'s connection surface; `ServerInstaller` 
 over injectable effects, and no archive bytes are sent to the host until the tarball's sha256 matches the app's
 `agterm-server.sha256`. A bad destination is refused in `run`, not `validate`, so every refusal exits 1.
 
-`mobile serve|reset` are CLI-only too: `serve` is a TLS relay that forwards a phone's lines to the socket and
-`reset` rewrites its token file, so neither has a protocol command. `phone.*` is the protocol face of the same
-relay, owned by the app's `PhoneRelay`. agterm-server leaves `session.grid`, `session.scroll` and all `phone.*`
-unserved by `ServerCommandPolicy`, and a page cannot send `phone.*` (`HtmlBridge` refuses them). The relay refuses
-`phone.*` from a phone, so a phone cannot cut its own link or read the token back. `phone.status` alone carries
-the link; `tree.phone` omits it.
+`mobile serve|reset` are CLI-only too: `serve` is a TLS relay and `reset` rewrites its token file, so neither has a
+protocol command. `phone.*` is the protocol face of the app's `PhoneRelay`. agterm-server leaves `session.grid`,
+`session.scroll` and all `phone.*` unserved, a page cannot send `phone.*` (`HtmlBridge` refuses them), and the relay
+refuses `phone.*` from a phone. `site/commands.html#phone` owns the rest.
 
 `session wait` is not a fourth exemption but a client-side composite, like `overlay open --block`: it
 opens the socket only for existing reads (`events.read`, `window.list`, `tree`), so there is no

@@ -818,15 +818,10 @@ settings (no pty, stdin kept, plain session, no fork, no `RemoteCommand`) are th
 over the config. The remote needs `tic` (ncurses) and says so when it is missing.
 
 **phone** — agterm Mobile (an Android app) reaches this Mac through a TLS relay that is off by default.
-`phone status|on|off|toggle|port N|host NAME|host --auto|revoke|link [--qr]` drives the Connect a Phone… window
-of the running app (app-wide, no `--target`, macOS-only, refused by agterm-server and by pages); each answers
-`result.phone` (`on`, `listening`, `port`, `host`, `hosts`, `lastEvent`, `error`), and only `status` and `link` carry
-the pairing `link`, which holds the token: never print it to a shared surface. `tree` carries the same without
-the link. `mobile serve [--port N] [--host H] [--no-qr]` runs the relay in the foreground and `mobile reset`
-replaces the token and drops every phone; both are local-only. `session grid COLSxROWS|--reset [--pane]` forces a
-pane's character grid (read back as `paneGrids` in `tree`) and `session scroll LINES [--pane]` scrolls it; a view
-resize or the phone leaving clears the grid. Events `phone.connected|disconnected|refused` carry `ip`
-([details](reference.md#phone)).
+`phone status|on|off|toggle|port|host|revoke|link` drives its Connect a Phone… window, `mobile serve|reset` runs
+the relay and replaces its token, and `session grid` / `session scroll` fit and scroll a pane for the phone. The
+pairing link holds the token: never print it to a shared surface. Results, rules and the cases that clear a grid
+are in the [command reference](reference.md#phone).
 
 **version** — `agtermctl version` — which agterm is serving this socket, as `result.app` (`version`, plus
 `commit` when the build recorded one), and the bundle on disk as `result.installed`, which differs from

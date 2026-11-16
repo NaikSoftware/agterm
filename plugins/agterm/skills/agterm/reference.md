@@ -702,7 +702,7 @@ error keeps those names for compatibility.
   without a split → `session has no split pane`, an off-screen pane → `pane is not on screen`. Returns `id`,
   `pane`, `columns`, `rows` (the real grid after the change). Read forced panes from `tree`'s `paneGrids`
   (`{left?, right?}` of `{columns, rows}`, omitted when none); `session text` reports the real `columns` and
-  `rows`. Any view resize clears the grid. agterm-server does not serve it.
+  `rows`. The cases that clear it are listed at commands.html#session, `session grid`. agterm-server does not serve it.
 - `session scroll LINES [--pane left|right] [--target] [--window W]`: scroll by wheel notches, negative toward
   older output. `LINES` takes -1000...1000 and not 0. Returns `id`, `pane`, `lines`. A mouse-reporting program
   gets wheel events instead. agterm-server does not serve it.
@@ -2706,8 +2706,8 @@ the foreground; `mobile reset` replaces the token. Local-only and macOS-only: no
 `agterm://pair?h=&p=&t=&f=&n=` links (`t` token, `f` certificate sha256), and listens on TLS, default port
 8765 (1024...65535). A phone's first line is the token; a wrong one is answered `unauthorized` and closed.
 Later lines are forwarded to the control socket with the phone's `id` echoed. `phone.*` from a phone → `phone.*
-is not available from a phone`. A phone leaving resets the grids it forced. The relay exits when its parent
-dies. `reset` prints `Pairing revoked: paired phones are disconnected.` and the old link stops working.
+is not available from a phone`. The relay exits when its parent
+dies. `reset` prints ``Pairing revoked: paired phones are disconnected. Restart `agtermctl mobile serve` for the new code.`` and the old link stops working.
 
 ## phone
 
@@ -2719,8 +2719,7 @@ Connect a Phone… window of the running app: `phone.status`, `phone.enable` (`m
 - Result `result.phone`: `on`, `listening`, `port`, `host` (effective), `hosts?`, `lastEvent?`, `error?`
   and `link?`. Only `phone.status` carries `link` (it holds the token); `phone link` prints it, or the QR then
   it with `--qr`, and exits 1 while the relay is off or not listening.
-- `on`/`toggle` to on, `port` and `revoke` restart the relay and answer when it listens, fails, or after
-  10 s (`error: the relay did not start within 10 s`); `off` and `host` answer at once.
+- Restart timing, the 10 s rule and the `link` rule: see commands.html#phone, which owns them.
 - Read-back: `tree` top-level `phone` is `{on, listening, port, host}`, no link.
 - Palette and Session menu: Restore Terminal Size resets both panes' grids.
 
