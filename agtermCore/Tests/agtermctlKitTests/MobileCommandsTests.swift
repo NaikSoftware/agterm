@@ -33,6 +33,7 @@ struct MobileCommandsTests {
 
     @Test func tokenIsPrivateBase64URLAndResetReplacesIt() throws {
         let dir = try MobileFixture.privateDirectory()
+        defer { try? FileManager.default.removeItem(atPath: (dir as NSString).deletingLastPathComponent) }
         let token = try MobilePairing.loadToken(in: dir)
         #expect(token.count >= 32 && token.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil)
         #expect(try MobilePairing.loadToken(in: dir) == token)
@@ -120,15 +121,53 @@ struct MobileCommandsTests {
         client.send(#"{"cmd":"session.grid","target":"S1","args":{"pane":"right","columns":40,"rows":20},"id":2}"#)
         client.send(#"{"cmd":"session.grid","target":"S2","args":{"columns":40,"rows":20},"id":3}"#)
         client.send(#"{"cmd":"session.grid","target":"S2","args":{"reset":true},"id":4}"#)
-        for _ in 0..<3 { #expect(client.readJSON()?["ok"] as? Bool == true) }
+        client.send(#"{"cmd":"session.grid","target":"active","args":{"columns":40,"rows":20},"id":5}"#)
+        client.send(#"{"cmd":"session.grid","args":{"columns":40,"rows":20},"id":6}"#)
+        let answers = (0..<5).compactMap { _ in client.readJSON()?["id"] as? Int }
+        #expect(answers == [2, 3, 4, 5, 6])
         let before = fixture.server.requests().count
         client.close()
         let reset = #"{"args":{"pane":"right","reset":true},"cmd":"session.grid","target":"S1"}"#
-        let deadline = Date().addingTimeInterval(30)
-        while !fixture.server.requests().dropFirst(before).contains(reset), Date() < deadline { usleep(20_000) }
-        usleep(300_000) // a wrong reset for S2 would be sent alongside S1's
-        let after = Array(fixture.server.requests().dropFirst(before))
-        #expect(after == [reset])
+        #expect(fixture.server.waitFor(reset, after: before))
+        let sentinel = #"{"cmd":"sentinel"}"#
+        _ = try SocketClient(path: fixture.server.path).sendRaw(Data(sentinel.utf8))
+        #expect(Array(fixture.server.requests().dropFirst(before)) == [reset, sentinel])
+    }
+
+    @Test func aStoppingRelayGivesBackItsPhonesGrids() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let client = try fixture.connect()
+        client.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(client.readJSON()?["ok"] as? Bool == true)
+        client.send(#"{"cmd":"session.grid","target":"S1","args":{"columns":40,"rows":20},"id":2}"#)
+        #expect(client.readJSON()?["ok"] as? Bool == true)
+        let before = fixture.server.requests().count
+        fixture.relay.releaseAllGrids()
+        #expect(Array(fixture.server.requests().dropFirst(before)) == [#"{"args":{"reset":true},"cmd":"session.grid","target":"S1"}"#])
+    }
+
+    @Test func anUnreadableTokenKeepsAPairedPhone() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let client = try fixture.connect()
+        client.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(client.readJSON()?["ok"] as? Bool == true)
+        chmod(fixture.mobileDir + "/token", 0)
+        client.send(#"{"cmd":"tree","id":2}"#)
+        #expect(client.readJSON()?["id"] as? Int == 2)
+    }
+
+    @Test func unauthenticatedConnectionsBeyondTheCapAreRefused() throws {
+        let fixture = try MobileFixture(maxUnauthenticated: 1)
+        defer { fixture.stop() }
+        let first = try fixture.connect()
+        #expect(throws: (any Error).self) { _ = try fixture.connect() }
+        first.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(first.readJSON()?["ok"] as? Bool == true)
+        let third = try fixture.connect()
+        third.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(third.readJSON()?["ok"] as? Bool == true)
     }
 
     @Test func secondRelayOnTheSamePortFails() throws {
@@ -153,7 +192,7 @@ private final class MobileFixture: @unchecked Sendable {
     let port: UInt16
     private let lines = LogLines()
 
-    init() throws {
+    init(maxUnauthenticated: Int = 32) throws {
         mobileDir = try Self.privateDirectory()
         token = try MobilePairing.loadToken(in: mobileDir)
         try MobilePairing.ensureCertificate(in: mobileDir)
@@ -161,7 +200,8 @@ private final class MobileFixture: @unchecked Sendable {
         try server.start()
         let lines = lines
         relay = MobileRelay(identity: identity, port: 0, bind: "127.0.0.1", mobileDir: mobileDir, socketPath: server.path,
-                            hostName: "test-mac", revokeInterval: 0.3, log: { lines.append($0) })
+                            hostName: "test-mac", revokeInterval: 0.3, maxUnauthenticated: maxUnauthenticated,
+                            log: { lines.append($0) })
         port = try relay.start()
     }
 
@@ -228,7 +268,7 @@ private final class TLSLineClient: @unchecked Sendable {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready: ready.signal()
-            case .failed, .cancelled: self?.markClosed(); ready.signal()
+            case .failed, .cancelled, .waiting: self?.markClosed(); ready.signal()
             default: break
             }
         }
@@ -303,6 +343,16 @@ private final class RawStubServer: @unchecked Sendable {
     private var stopped = false
 
     func requests() -> [String] { lock.withLock { received } }
+
+    /// Whether `line` arrives among the requests after the first `count`, within a slow-runner bound.
+    func waitFor(_ line: String, after count: Int) -> Bool {
+        let deadline = Date().addingTimeInterval(30)
+        while !requests().dropFirst(count).contains(line) {
+            if Date() > deadline { return false }
+            usleep(20_000)
+        }
+        return true
+    }
 
     func start() throws {
         unlink(path)

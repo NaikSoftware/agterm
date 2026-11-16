@@ -83,7 +83,10 @@ struct Mobile: ParsableCommand {
             for stop in [SIGINT, SIGTERM, SIGHUP] {
                 signal(stop, SIG_IGN)
                 let source = DispatchSource.makeSignalSource(signal: stop, queue: .main)
-                source.setEventHandler { Darwin.exit(0) }
+                source.setEventHandler {
+                    relay.releaseAllGrids() // a stopped relay gives grids back; a dead parent took the sessions with it
+                    Darwin.exit(0)
+                }
                 source.resume()
                 sources.append(source)
             }
@@ -302,8 +305,8 @@ enum MobilePairing {
 
 // MARK: - relay
 
-/// The TLS listener and its phones. Every mutable property is touched on `queue` only; forwards run on a
-/// global queue because `SocketClient` blocks, and hop back to answer.
+/// The TLS listener and its phones. Every mutable property is touched on `queue` only. Each phone's requests
+/// run in order on that phone's own serial queue, because `SocketClient` blocks, and hop back to answer.
 final class MobileRelay: @unchecked Sendable {
     private final class Phone: @unchecked Sendable {
         let connection: NWConnection
@@ -314,6 +317,8 @@ final class MobileRelay: @unchecked Sendable {
         var revoke: (any DispatchSourceTimer)?
         /// The reset request for every grid this phone forced, by (target, pane).
         var grids: [String: Data] = [:]
+        /// Keeps pipelined requests in order, and holds a hung app to one blocked thread per phone.
+        let work = DispatchQueue(label: "agtermctl.mobile.phone")
         init(_ connection: NWConnection, peer: String) {
             self.connection = connection
             self.peer = peer
@@ -322,6 +327,8 @@ final class MobileRelay: @unchecked Sendable {
 
     /// The pre-auth cap: the auth line is about 60 bytes.
     static let preAuthBytes = 4096
+    /// Connections still owing their token; more are refused, so a flood cannot use up descriptors.
+    private let maxUnauthenticated: Int
 
     var onFailure: (@Sendable () -> Void)?
     private let queue = DispatchQueue(label: "agtermctl.mobile")
@@ -338,7 +345,7 @@ final class MobileRelay: @unchecked Sendable {
     private var phones: [ObjectIdentifier: Phone] = [:]
 
     init(identity: SecIdentity, port: UInt16, bind: String?, mobileDir: String, socketPath: String, hostName: String,
-         authTimeout: TimeInterval = 10, revokeInterval: TimeInterval = 5,
+         authTimeout: TimeInterval = 10, revokeInterval: TimeInterval = 5, maxUnauthenticated: Int = 32,
          log: @escaping @Sendable (String) -> Void = { FileHandle.standardError.write(Data("agtermctl: \($0)\n".utf8)) }) {
         let tls = NWProtocolTLS.Options()
         sec_protocol_options_set_local_identity(tls.securityProtocolOptions, sec_identity_create(identity)!)
@@ -354,6 +361,7 @@ final class MobileRelay: @unchecked Sendable {
         self.hostName = hostName
         self.authTimeout = authTimeout
         self.revokeInterval = revokeInterval
+        self.maxUnauthenticated = maxUnauthenticated
         self.log = log
     }
 
@@ -404,7 +412,21 @@ final class MobileRelay: @unchecked Sendable {
         }
     }
 
+    /// Resets every grid every phone forced, waiting up to `timeout` for the app; for a relay told to stop.
+    func releaseAllGrids(timeout: TimeInterval = 3) {
+        let resets = queue.sync { phones.values.flatMap { phone in defer { phone.grids = [:] }; return Array(phone.grids.values) } }
+        let group = DispatchGroup()
+        for reset in resets {
+            DispatchQueue.global().async(group: group) { [socketPath] in _ = try? SocketClient(path: socketPath).sendRaw(reset) }
+        }
+        _ = group.wait(timeout: .now() + timeout)
+    }
+
     private func accept(_ connection: NWConnection) {
+        guard phones.values.filter({ $0.token == nil }).count < maxUnauthenticated else {
+            connection.cancel()
+            return
+        }
         let phone = Phone(connection, peer: Self.peerAddress(connection.endpoint))
         phones[ObjectIdentifier(phone)] = phone
         connection.stateUpdateHandler = { [weak self] state in
@@ -423,7 +445,7 @@ final class MobileRelay: @unchecked Sendable {
         revoke.schedule(deadline: .now() + revokeInterval, repeating: revokeInterval)
         revoke.setEventHandler { [weak self] in
             guard let self, let token = phone.token else { return }
-            if !self.tokenMatches(token) { self.close(phone) }
+            if self.revoked(token) { self.close(phone) }
         }
         revoke.resume()
         phone.revoke = revoke
@@ -453,7 +475,7 @@ final class MobileRelay: @unchecked Sendable {
         let id = (try? JSONSerialization.data(withJSONObject: object.removeValue(forKey: "id") ?? NSNull(),
                                                options: .fragmentsAllowed)) ?? Data("null".utf8)
         if let token = phone.token {
-            guard tokenMatches(token) else { return close(phone) } // revoked by `mobile reset`
+            if revoked(token) { return close(phone) } // by `mobile reset`
             forward(object, id: id, to: phone)
             return
         }
@@ -469,7 +491,7 @@ final class MobileRelay: @unchecked Sendable {
         phone.token = offered
         log("phone connected from \(phone.peer)")
         let host = hostName, socketPath = socketPath
-        DispatchQueue.global().async { [weak self] in
+        phone.work.async { [weak self] in
             guard let self else { return }
             let version = (try? SocketClient(path: socketPath).sendRaw(Data(#"{"cmd":"version"}"#.utf8)))
                 .flatMap { try? JSONDecoder().decode(ControlResponse.self, from: $0) }?.result?.app?.version ?? "unknown"
@@ -482,7 +504,7 @@ final class MobileRelay: @unchecked Sendable {
         let body = (try? JSONSerialization.data(withJSONObject: request, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data("{}".utf8)
         let socketPath = socketPath
         let grid = Self.gridClaim(request)
-        DispatchQueue.global().async { [weak self] in
+        phone.work.async { [weak self] in
             guard let self else { return }
             let answer: Data
             do {
@@ -510,14 +532,15 @@ final class MobileRelay: @unchecked Sendable {
     private static func gridClaim(_ request: [String: Any]) -> (key: String, reset: Data?)? {
         guard request["cmd"] as? String == Command.sessionGrid.rawValue else { return nil }
         let args = request["args"] as? [String: Any] ?? [:]
-        let target = request["target"] as? String, pane = args["pane"] as? String
-        let key = "\(target ?? "")\u{0}\(pane ?? "")"
+        // only an explicit session is tracked: `active` or no target may name another session by close time
+        guard let target = request["target"] as? String, !target.isEmpty, target.lowercased() != "active" else { return nil }
+        let pane = args["pane"] as? String
+        let key = "\(target)\u{0}\(pane ?? "")"
         if args["reset"] as? Bool == true { return (key, nil) }
         var resetArgs: [String: Any] = ["reset": true]
         resetArgs["pane"] = pane
         resetArgs["window"] = args["window"]
-        var reset: [String: Any] = ["cmd": Command.sessionGrid.rawValue, "args": resetArgs]
-        reset["target"] = target
+        let reset: [String: Any] = ["cmd": Command.sessionGrid.rawValue, "target": target, "args": resetArgs]
         return (key, try? JSONSerialization.data(withJSONObject: reset, options: [.sortedKeys, .withoutEscapingSlashes]))
     }
 
@@ -526,8 +549,9 @@ final class MobileRelay: @unchecked Sendable {
         let resets = Array(phone.grids.values)
         phone.grids = [:]
         let socketPath = socketPath
-        for reset in resets {
-            DispatchQueue.global().async { _ = try? SocketClient(path: socketPath).sendRaw(reset) }
+        // after any request still in flight on this phone's queue
+        phone.work.async {
+            for reset in resets { _ = try? SocketClient(path: socketPath).sendRaw(reset) }
         }
     }
 
@@ -547,6 +571,13 @@ final class MobileRelay: @unchecked Sendable {
     private func tokenMatches(_ token: String) -> Bool {
         guard let current = MobilePairing.currentToken(in: mobileDir) else { return false }
         return MobilePairing.sameSecret(token, current)
+    }
+
+    /// Only a token read successfully and different revokes; a read error (EMFILE under a connection flood)
+    /// must not drop paired phones.
+    private func revoked(_ token: String) -> Bool {
+        guard let current = MobilePairing.currentToken(in: mobileDir) else { return false }
+        return !MobilePairing.sameSecret(token, current)
     }
 
     /// The control reply with the phone's `id` spliced in as its first key, the rest of the bytes untouched.
