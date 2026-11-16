@@ -22,10 +22,10 @@ struct ConnectPhoneView: View {
             Form {
                 HStack {
                     TextField("Address", text: $hostField, prompt: Text(relay.offeredHosts.first ?? "Best guess"))
-                        .onSubmit { relay.setHost(hostField) }
+                        .onChange(of: hostField) { _, host in relay.setHost(host) }
                     Menu {
                         ForEach(relay.offeredHosts, id: \.self) { host in
-                            Button(host) { hostField = host; relay.setHost(host) }
+                            Button(host) { hostField = host }
                         }
                     } label: { Image(systemName: "network") }
                         .menuStyle(.borderlessButton)
@@ -91,8 +91,8 @@ struct ConnectPhoneView: View {
 
     private var status: String {
         if let error = relay.error { return "Not listening: \(error)" }
-        guard listening else { return "" }
-        return "Listening on port \(relay.state.port)." + (relay.lastEvent.map { " Last: \($0)." } ?? "")
+        let last = relay.lastEvent.map { "Last: \($0)." } ?? ""
+        return listening ? "Listening on port \(relay.state.port). " + last : last
     }
 
     private func commitPort() {

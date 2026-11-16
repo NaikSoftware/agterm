@@ -14,12 +14,14 @@ final class PhoneRelay {
     private(set) var lastEvent: String?
 
     @ObservationIgnored private let stateDirectory: URL
+    @ObservationIgnored private let tool: URL?
     @ObservationIgnored private var socketPath: String?
     @ObservationIgnored private var process: Process?
     @ObservationIgnored private var generation = 0
 
-    init(stateDirectory: URL) {
+    init(stateDirectory: URL, tool: URL? = CLIInstaller.bundledTool) {
         self.stateDirectory = stateDirectory
+        self.tool = tool
         state = PhoneDesktopState.load(stateDirectory: stateDirectory)
     }
 
@@ -58,10 +60,9 @@ final class PhoneRelay {
 
     /// Writes a new token, which cuts every paired phone off, then restarts serve so it shows the new code.
     func revoke() {
-        let result = Self.run(["mobile", "reset"], stateDirectory: stateDirectory)
-        if let failure = result { error = failure; return }
-        lastEvent = "Paired phones revoked."
+        if let failure = Self.run(["mobile", "reset"], tool: tool, stateDirectory: stateDirectory) { error = failure; return }
         if state.on { start() }
+        lastEvent = "paired phones revoked"
     }
 
     private func save() {
@@ -72,8 +73,9 @@ final class PhoneRelay {
         stop()
         error = nil
         lastEvent = nil
+        lastStderr = nil
         guard let socketPath else { error = "The control socket is not available."; return }
-        guard let tool = CLIInstaller.bundledTool else { error = "agtermctl is not bundled in this build."; return }
+        guard let tool else { error = "agtermctl is not bundled in this build."; return }
         generation += 1
         let run = generation
         let child = Process()
@@ -139,8 +141,8 @@ final class PhoneRelay {
     }
 
     /// Runs a short agtermctl command; nil on success, else its error text.
-    private static func run(_ arguments: [String], stateDirectory: URL) -> String? {
-        guard let tool = CLIInstaller.bundledTool else { return "agtermctl is not bundled in this build." }
+    private static func run(_ arguments: [String], tool: URL?, stateDirectory: URL) -> String? {
+        guard let tool else { return "agtermctl is not bundled in this build." }
         let child = Process()
         child.executableURL = tool
         child.arguments = arguments

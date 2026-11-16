@@ -382,6 +382,7 @@ struct agtermApp: App {
             ConnectPhoneView(relay: phoneRelay)
         }
         .windowResizability(.contentSize)
+        .commandsRemoved() // the app menu's item opens it; no second one in Window
     }
 
     @MainActor
