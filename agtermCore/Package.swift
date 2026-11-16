@@ -25,7 +25,7 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
-        .executableTarget(name: "agtermctl", dependencies: ["agtermctlKit"]),
+        .executableTarget(name: "agtermctl", dependencies: ["agtermctlKit"], exclude: ["Info.plist"]),
         // debug-only fixture: it imports agtermctlKit @testable, and release builds name their products.
         .executableTarget(name: "session-wait-watchdog-probe", dependencies: ["agtermctlKit"]),
         .testTarget(
@@ -50,6 +50,11 @@ package.targets[0].dependencies.append(.product(name: "Markdown", package: "swif
 #endif
 
 #if os(macOS)
+// CoreBluetooth aborts a process whose TCC subject has no usage description; a hand-run agtermctl is its own subject
+if let ctl = package.targets.first(where: { $0.name == "agtermctl" }) {
+    let plist = Context.packageDirectory + "/Sources/agtermctl/Info.plist"
+    ctl.linkerSettings = [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", plist])]
+}
 package.products.append(.executable(name: "agterm-session-host", targets: ["agterm-session-host"]))
 package.targets += [
     .target(name: "SessionHostTrampoline"),

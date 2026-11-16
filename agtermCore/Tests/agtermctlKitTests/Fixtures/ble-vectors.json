@@ -3,6 +3,7 @@
     "Shared byte-exact test vectors for agterm Mobile's Bluetooth link. Every binary value is lowercase hex. Strings are UTF-8.",
     "token: the pairing token. psk = HKDF-SHA256(ikm: UTF-8 token, salt: empty, info: 'agterm-ble-psk', length 32).",
     "serviceUUID: first 16 bytes of HMAC-SHA256(key: UTF-8 token, msg: 'agterm-ble-adv') with b[6] = (b[6] & 0x0F) | 0x40 and b[8] = (b[8] & 0x3F) | 0x80, written as a lowercase hyphenated UUID (compare case-insensitively). psmCharacteristicUUID is fixed; its value is the PSM as 2 bytes little-endian.",
+    "rotatingServiceUUIDs: the UUID the Mac advertises, which rotates every 15 minutes. epoch = floor(unix_seconds / 900); the UUID is derived as serviceUUID is, with msg 'agterm-ble-adv:' + decimal(epoch). The phone scans for epochs e-1, e, e+1. serviceUUID above is the unrotated form, kept for reference.",
     "handshake: Noise_NNpsk0_25519_ChaChaPoly_SHA256, prologue ASCII 'agterm-ble-1', phone = initiator, Mac = responder, empty payloads. The *EphemeralPrivate fields are raw 32-byte X25519 PRIVATE keys; the *EphemeralPublic fields are their public keys. message1 = initiator e.pub (32) || 16-byte tag; message2 = responder e.pub (32) || 16-byte tag. handshakeHash is the final Noise h.",
     "framing: every message on the L2CAP stream, handshake included, is u16 big-endian length || body. message1Wire is message1 framed that way. A rejection is one frame of length 1: 0x01 wrong key, 0x02 busy.",
     "frames: transport messages in the order sent; each direction has its own counter, both starting at 0. Nonce = 4 zero bytes || u64 little-endian counter; associated data is empty. Split(): the first key carries phone-to-mac, the second mac-to-phone. plaintext is the line-stream chunk; deflated is its raw DEFLATE (RFC 1951, no zlib header) as Apple Compression produced it; frame = ChaChaPoly(deflated) = ciphertext || 16-byte tag. Deflate encoders differ in output bytes, so check encrypt(deflated) == frame, inflate(deflated) == plaintext and decrypt-then-inflate(frame) == plaintext; never compare your own deflate output with 'deflated'. encoder names who made 'deflated': apple-compression (Mac) or zlib (Python zlib.compressobj(wbits=-15) + flush(), as the phone's ZLibCodec(raw: true) does).",
@@ -94,6 +95,16 @@
   },
   "psk" : "3c066948a5b87d67c64912f05f1e565cfb62c9e74c8108ef9196c452a96d96d3",
   "psmCharacteristicUUID" : "a6e5c0de-0001-4a67-8000-6167746572d1",
+  "rotatingServiceUUIDs" : [
+    {
+      "epoch" : 1963584,
+      "serviceUUID" : "331e4121-9c7c-44df-909b-ff3bab569ab9"
+    },
+    {
+      "epoch" : 1963585,
+      "serviceUUID" : "7a868d4e-3e1a-4b9a-b1d1-f63c89c77338"
+    }
+  ],
   "serviceUUID" : "1f7c66b5-71dd-479a-be1b-e12c22abb5ab",
   "token" : "agterm-ble-vector-token"
 }

@@ -340,12 +340,12 @@ struct MobileBluetoothTests {
         let radio = MobileBluetooth(relay: fixture.relay, token: fixture.token, maxPhones: 1, status: { _ in })
         let first = try BlePhone(fixture, radio)
         try first.handshake(token: fixture.token)
+        first.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(first.readJSON()?["ok"] as? Bool == true)
         let second = try BlePhone(fixture, radio)
         try second.sendMessage1(token: fixture.token)
         #expect(second.readFrame() == Data([0x02]))
         #expect(second.waitClosed())
-        first.send(#"{"auth":"\#(fixture.token)","id":1}"#)
-        #expect(first.readJSON()?["ok"] as? Bool == true)
     }
 
     @Test func theUnauthorizedAnswerArrivesBeforeTheClose() throws {
@@ -389,6 +389,91 @@ struct MobileBluetoothTests {
         #expect(fixture.server.requests().count == before)
     }
 
+    @Test func replayedHandshakesDoNotHoldTheCapFromAPairedPhone() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let radio = MobileBluetooth(relay: fixture.relay, token: fixture.token, maxPhones: 1, status: { _ in })
+        let sniffed = try BlePhone(fixture, radio)
+        try sniffed.handshake(token: fixture.token)
+        let replay = try BlePhone(fixture, radio)
+        replay.write(BleFramer.frame(sniffed.message1))
+        #expect(replay.readFrame()?.count == 48)
+        let paired = try BlePhone(fixture, radio)
+        try paired.handshake(token: fixture.token)
+        paired.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(paired.readJSON()?["ok"] as? Bool == true)
+        let late = try BlePhone(fixture, radio)
+        try late.sendMessage1(token: fixture.token)
+        #expect(late.readFrame() == Data([0x02]))
+    }
+
+    @Test func outputDrainsWhenTheStreamStopsReportingSpace() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let phone = try BlePhone(fixture, output: FakeOutput())
+        try phone.handshake(token: fixture.token)
+        phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(phone.readJSON()?["ok"] as? Bool == true)
+    }
+
+    @Test func aPhoneThatStopsReadingIsDropped() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let radio = MobileBluetooth(relay: fixture.relay, token: fixture.token, limits: .init(maxPending: 64 << 10), status: { _ in })
+        let phone = try BlePhone(fixture, radio)
+        try phone.handshake(token: fixture.token)
+        phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(phone.readJSON()?["ok"] as? Bool == true)
+        let alphabet = Array("abcdefghijklmnopqrstuvwxyz0123456789")
+        for id in 2..<14 {
+            let cmd = String((0..<20000).map { _ in alphabet.randomElement() ?? "a" })
+            phone.send(#"{"cmd":"\#(cmd)","id":\#(id)}"#)
+        }
+        #expect(fixture.waitLogged("phone disconnected from \(phone.label)"))
+    }
+
+    @Test func poweringOffDropsBluetoothPhonesAndTheirGrids() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let lines = LogLines()
+        let radio = MobileBluetooth(relay: fixture.relay, token: fixture.token, status: { lines.append($0) })
+        let phone = try BlePhone(fixture, radio)
+        try phone.handshake(token: fixture.token)
+        phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(phone.readJSON()?["ok"] as? Bool == true)
+        phone.send(#"{"cmd":"session.grid","target":"S1","args":{"columns":40,"rows":20},"id":2}"#)
+        #expect(phone.readJSON()?["id"] as? Int == 2)
+        let before = fixture.server.requests().count
+        fixture.relay.queue.sync { radio.off("powered off") }
+        #expect(phone.waitClosed())
+        #expect(fixture.server.waitFor(#"{"args":{"pane":"right","reset":true},"cmd":"session.grid","target":"S1"}"#, after: before))
+        #expect(lines.all() == ["off (powered off)"])
+    }
+
+    @Test func aCloseStopsWaitingForAPhoneThatStopsReading() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let radio = MobileBluetooth(relay: fixture.relay, token: fixture.token, limits: .init(flushTimeout: 0.3), status: { _ in })
+        let output = FakeOutput()
+        let phone = try BlePhone(fixture, radio, output: output)
+        try phone.handshake(token: fixture.token)
+        output.stall()
+        phone.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        try #require(fixture.waitLogged("phone connected from \(phone.label)"))
+        fixture.relay.queue.sync { radio.off("powered off") }
+        #expect(output.waitClosed())
+    }
+
+    @Test func anUnopenableLockIsNotReportedAsBusy() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        try FileManager.default.createDirectory(atPath: fixture.mobileDir + "/bluetooth.lock", withIntermediateDirectories: false)
+        let lines = LogLines()
+        #expect(!MobileBluetooth(relay: fixture.relay, token: fixture.token, status: { lines.append($0) }).start())
+        #expect(lines.all() == ["off (unsupported)"])
+        #expect(fixture.logged().contains { $0.hasPrefix("bluetooth: cannot open ") })
+    }
+
     @Test func aHeldLockLeavesBluetoothOffForThisRelay() throws {
         let fixture = try MobileFixture()
         defer { fixture.stop() }
@@ -415,10 +500,13 @@ private final class BlePhone: @unchecked Sendable {
     private var lines = Data()
     private var closed = false
     private let radio: MobileBluetooth
+    private let fake: FakeOutput?
 
-    init(_ fixture: MobileFixture, _ radio: MobileBluetooth? = nil) throws {
+    /// With `output`, the relay writes into that fake instead of the socket.
+    init(_ fixture: MobileFixture, _ radio: MobileBluetooth? = nil, output: FakeOutput? = nil) throws {
         let radio = radio ?? MobileBluetooth(relay: fixture.relay, token: fixture.token, status: { _ in })
         self.radio = radio
+        fake = output
         var fds: [Int32] = [0, 0]
         try #require(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0)
         fd = fds[1]
@@ -430,8 +518,10 @@ private final class BlePhone: @unchecked Sendable {
         CFStreamCreatePairWithSocket(nil, fds[0], &input, &output)
         let read = try #require(input).takeRetainedValue(), write = try #require(output).takeRetainedValue()
         CFReadStreamSetProperty(read, CFStreamPropertyKey(kCFStreamPropertyShouldCloseNativeSocket), kCFBooleanTrue)
-        fixture.relay.queue.sync { radio.accept(input: read as InputStream, output: write as OutputStream, holding: nil) }
+        fixture.relay.queue.sync { radio.accept(input: read as InputStream, output: fake ?? write as OutputStream, holding: nil) }
     }
+
+    var label: String { "bt:" + message1.prefix(2).map { String(format: "%02x", $0) }.joined() }
 
     func sendMessage1(token: String) throws {
         var initiator = BleInitiator(psk: BleIDs.psk(token: token))
@@ -468,6 +558,11 @@ private final class BlePhone: @unchecked Sendable {
     func readFrame() -> Data? {
         var bytes = [UInt8](repeating: 0, count: 4096)
         while frames.isEmpty {
+            if let fake {
+                guard let data = fake.next() else { return nil }
+                frames += framer.push(data)
+                continue
+            }
             let count = read(fd, &bytes, bytes.count)
             guard count > 0 else { return nil }
             frames += framer.push(Data(bytes[..<count]))
@@ -501,6 +596,83 @@ private final class BlePhone: @unchecked Sendable {
     }
 
     deinit { close() }
+}
+
+/// An output stream that never reports events, so only the relay's own retries move bytes: it takes `chunk` bytes
+/// per write and reports no space right after one, and none at all once stalled.
+private final class FakeOutput: OutputStream, @unchecked Sendable {
+    private let lock = NSLock()
+    private let changed = DispatchSemaphore(value: 0)
+    private let chunk: Int
+    private var written = Data()
+    private var taken = 0
+    private var justWrote = false
+    private var stalled = false
+    private var isClosed = false
+    private weak var watcher: (any StreamDelegate)?
+
+    init(chunk: Int = 8) {
+        self.chunk = chunk
+        super.init(toMemory: ())
+    }
+
+    override var delegate: (any StreamDelegate)? {
+        get { watcher }
+        set { watcher = newValue }
+    }
+
+    override func open() {}
+    override func schedule(in aRunLoop: RunLoop, forMode mode: RunLoop.Mode) {}
+    override func remove(from aRunLoop: RunLoop, forMode mode: RunLoop.Mode) {}
+    override var streamStatus: Stream.Status { lock.withLock { isClosed ? .closed : .open } }
+
+    override var hasSpaceAvailable: Bool {
+        lock.withLock {
+            defer { justWrote = false }
+            return !stalled && !justWrote && !isClosed
+        }
+    }
+
+    override func write(_ buffer: UnsafePointer<UInt8>, maxLength len: Int) -> Int {
+        let count = lock.withLock {
+            let count = min(len, chunk)
+            written.append(buffer, count: count)
+            justWrote = true
+            return count
+        }
+        changed.signal()
+        return count
+    }
+
+    override func close() {
+        lock.withLock { isClosed = true }
+        changed.signal()
+    }
+
+    func stall() { lock.withLock { stalled = true } }
+    func closed() -> Bool { lock.withLock { isClosed } }
+
+    /// Bytes written since the last call; nil once closed with nothing new, or after 30 s.
+    func next() -> Data? {
+        let deadline = Date().addingTimeInterval(30)
+        while true {
+            let (data, done): (Data, Bool) = lock.withLock {
+                defer { taken = written.count }
+                return (written.subdata(in: taken..<written.count), isClosed)
+            }
+            if !data.isEmpty { return data }
+            if done || changed.wait(timeout: .now() + deadline.timeIntervalSinceNow) == .timedOut { return nil }
+        }
+    }
+
+    func waitClosed() -> Bool {
+        let deadline = Date().addingTimeInterval(30)
+        while !closed() {
+            if Date() > deadline { return false }
+            usleep(20_000)
+        }
+        return true
+    }
 }
 
 private final class MobileFixture: @unchecked Sendable {

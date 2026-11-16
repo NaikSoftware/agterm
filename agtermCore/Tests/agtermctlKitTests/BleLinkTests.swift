@@ -18,7 +18,9 @@ struct BleLinkTests {
             let initiatorEphemeralPrivate: String, responderEphemeralPrivate: String
             let message1: String, message2: String, message1Wire: String, handshakeHash: String
         }
+        struct Rotating: Decodable { let epoch: Int, serviceUUID: String }
         let token: String, serviceUUID: String, psmCharacteristicUUID: String, psk: String
+        let rotatingServiceUUIDs: [Rotating]
         let handshake: Handshake
         let frames: [Frame]
         let noiseConformance: Conformance
@@ -77,6 +79,11 @@ struct BleLinkTests {
     @Test func bleVectorsReproduce() throws {
         let v = try Self.load()
         #expect(BleIDs.serviceUUID(token: v.token).uuidString.lowercased() == v.serviceUUID)
+        #expect(v.rotatingServiceUUIDs.count == 2)
+        for rotating in v.rotatingServiceUUIDs {
+            #expect(BleIDs.serviceUUID(token: v.token, epoch: rotating.epoch).uuidString.lowercased() == rotating.serviceUUID)
+        }
+        #expect(BleIDs.epoch(at: Date(timeIntervalSince1970: 1_767_225_600 + 899)) == 1_963_584)
         #expect(BleIDs.psmCharacteristic.uuidString.lowercased() == v.psmCharacteristicUUID)
         #expect(BleIDs.psk(token: v.token).withUnsafeBytes { Data($0) } == hex(v.psk))
         let psk = BleIDs.psk(token: v.token)

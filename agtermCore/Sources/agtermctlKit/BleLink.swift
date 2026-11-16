@@ -15,8 +15,16 @@ public enum BleIDs {
     public static let psmCharacteristic = UUID(uuid: (0xA6, 0xE5, 0xC0, 0xDE, 0x00, 0x01, 0x4A, 0x67,
                                                       0x80, 0x00, 0x61, 0x67, 0x74, 0x65, 0x72, 0xD1))
 
-    public static func serviceUUID(token: String) -> UUID {
-        let mac = HMAC<SHA256>.authenticationCode(for: Data("agterm-ble-adv".utf8), using: SymmetricKey(data: Data(token.utf8)))
+    /// The advertised UUID rotates every `epochSeconds`, so a passive observer cannot follow the Mac.
+    public static let epochSeconds: TimeInterval = 900
+
+    public static func epoch(at date: Date) -> Int { Int((date.timeIntervalSince1970 / epochSeconds).rounded(.down)) }
+
+    public static func serviceUUID(token: String, epoch: Int) -> UUID { serviceUUID(token: token, message: "agterm-ble-adv:\(epoch)") }
+
+    /// `message` alone is the unrotated form the first vectors pinned.
+    static func serviceUUID(token: String, message: String = "agterm-ble-adv") -> UUID {
+        let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: SymmetricKey(data: Data(token.utf8)))
         var b = Array(mac.prefix(16))
         b[6] = (b[6] & 0x0F) | 0x40
         b[8] = (b[8] & 0x3F) | 0x80

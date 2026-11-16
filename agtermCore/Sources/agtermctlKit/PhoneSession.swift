@@ -39,7 +39,7 @@ final class PhoneSession: @unchecked Sendable {
     /// Accept order, for evicting the oldest unauthenticated connection.
     let order: Int
     var authenticated: Bool { token != nil }
-    private let connection: any PhoneTransportConnection
+    let connection: any PhoneTransportConnection
     private let queue: DispatchQueue
     private let settings: Settings
     private let onEnd: (PhoneSession) -> Void

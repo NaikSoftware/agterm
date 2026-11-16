@@ -69,13 +69,17 @@ struct Mobile: ParsableCommand {
             }
 
             let radio = bluetooth ? MobileBluetooth(relay: relay, token: token, status: Self.bluetoothStatus) : nil
-            if let radio { radio.start() } else { Self.bluetoothStatus("off (disabled)") }
-            let lan: [String?] = host.map { [$0] } ?? MobilePairing.lanAddresses()
-            // without a LAN address a Bluetooth phone needs no host, and a TLS-only one can still reach this Mac locally
-            let hosts = lan.isEmpty ? [bluetooth ? nil : "127.0.0.1"] : lan
+            if radio == nil { Self.bluetoothStatus("off (disabled)") }
+            let offered = radio?.start() ?? false
+            var lan: [String?] = host.map { [$0] } ?? MobilePairing.lanAddresses()
+            if lan.isEmpty {
+                // a Bluetooth phone needs no host; without Bluetooth only this Mac can use the link
+                if !offered { FileHandle.standardError.write(Data("agtermctl: no LAN address; the link works on this Mac only\n".utf8)) }
+                lan = [offered ? nil : "127.0.0.1"]
+            }
             let name = MobilePairing.hostName()
-            let links = hosts.map {
-                MobilePairing.pairLink(host: $0, port: listening, token: token, fingerprint: fingerprint, name: name, bluetooth: bluetooth)
+            let links = lan.map {
+                MobilePairing.pairLink(host: $0, port: listening, token: token, fingerprint: fingerprint, name: name, bluetooth: offered)
             }
             if !noQR, let matrix = try? MobilePairing.qrMatrix(links[0]) {
                 MobilePairing.qrRows(matrix).forEach { print($0) }
@@ -445,6 +449,11 @@ final class MobileRelay: @unchecked Sendable {
         }
         phones[ObjectIdentifier(phone)] = phone
         phone.start()
+    }
+
+    /// Authenticated phones whose connection `matches`. Call on `queue`.
+    func authenticatedPhones(_ matches: (any PhoneTransportConnection) -> Bool) -> Int {
+        phones.values.filter { $0.authenticated && matches($0.connection) }.count
     }
 
     /// Resets every grid every phone forced, waiting up to `releaseTimeout` for the app; for a relay told to stop.
