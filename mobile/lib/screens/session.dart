@@ -51,6 +51,9 @@ class _SessionScreenState extends State<SessionScreen> {
   String text = '';
   String? error;
   bool fitting = false;
+  final autoFit = AutoFit();
+  bool _foreground = true;
+  late final AppLifecycleListener _lifecycle;
   Timer? poll;
   double _dragRows = 0; // a drag's distance in rows not sent yet
   bool _scrolling = false;
@@ -66,7 +69,14 @@ class _SessionScreenState extends State<SessionScreen> {
     // shortcut: polls the plain-text screen; a streamed, coloured terminal needs a pty tap in agterm-qt
     poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _load());
     m.addListener(_onModel);
+    _lifecycle = AppLifecycleListener(onPause: () => _setForeground(false), onResume: () => _setForeground(true));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncFit()); // the first layout gives the screen's size
     _visit();
+  }
+
+  void _setForeground(bool on) {
+    _foreground = on;
+    _syncFit();
   }
 
   // a visit as on the computer: an auto-reset status (an agent's Done) clears on the way in and on the way out
@@ -76,6 +86,8 @@ class _SessionScreenState extends State<SessionScreen> {
   void dispose() {
     poll?.cancel();
     m.removeListener(_onModel);
+    _lifecycle.dispose();
+    _release(pane);
     _visit();
     input.dispose();
     inputFocus.dispose();
@@ -91,6 +103,7 @@ class _SessionScreenState extends State<SessionScreen> {
     }
     if (pane == 'right' && s?.hasSplit != true) pane = 'left';
     setState(() {});
+    _syncFit(); // a reconnect cleared the fits the computer gave back
   }
 
   Future<void> _load() async {
@@ -98,13 +111,18 @@ class _SessionScreenState extends State<SessionScreen> {
     polling = true;
     try {
       // fitted, the grid has more rows than the computer's view shows; reading the last ones gets all of them
-      final rows = scrollback ? 2000 : m.fitted[_fitKey]?.$2 ?? 0;
+      final fit = m.fitted[_fitKey];
+      final rows = scrollback ? 2000 : fit?.$2 ?? 0;
       final r = await m.call('session.text', target: widget.sessionId, args: {'pane': pane, if (rows > 0) 'lines': rows});
       final t = _trimEnd('${r['text'] ?? ''}');
       final columns = (r['columns'] as num?)?.toInt();
-      // the computer took the grid back (Restore Terminal Size, or its window resized): no longer fitted
-      final lost = columns != null && m.fitted[_fitKey] != null && m.fitted[_fitKey]!.$1 != columns;
-      if (lost) m.fitted.remove(_fitKey);
+      // the computer took the grid back (Restore Terminal Size, or its window resized): no longer fitted. Only a fit
+      // older than this read counts: one made while it was in flight would read as lost
+      final lost = columns != null && fit != null && m.fitted[_fitKey] == fit && fit.$1 != columns;
+      if (lost) {
+        m.fitted.remove(_fitKey);
+        autoFit.wanted = false; // the computer took the grid back: do not take it again on this visit
+      }
       // a new grid width resizes the text even when the screen's text is the same (an idle shell)
       if (mounted && (t != text || error != null || columns != _columns || lost)) setState(() => (text = t, error = null, _columns = columns));
       if (s != null && s!.unseen > 0) unawaited(m.act('session.seen', target: widget.sessionId));
@@ -142,29 +160,50 @@ class _SessionScreenState extends State<SessionScreen> {
     return size;
   }
 
-  Future<void> toggleFit() async {
+  void toggleFit() {
+    autoFit.wanted = !m.fitted.containsKey(_fitKey);
+    _syncFit();
+  }
+
+  /// Fits or gives back the grid as [autoFit] says for the screen's state now; a change during a call runs after it.
+  Future<void> _syncFit() async {
+    if (fitting || !mounted) return;
+    final visible = _foreground && !m.background && m.state == LinkState.connected;
+    final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible);
+    if (on == null) return;
     setState(() => fitting = true);
     final key = _fitKey;
     try {
-      if (m.fitted.containsKey(key)) {
-        await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'reset': true});
-        m.fitted.remove(key);
-      } else {
+      if (on) {
         // JetBrains Mono advances 0.6 em; a larger system font size asks for fewer, bigger columns
         final columns = _fitColumns();
         final size = _sizeFor(columns, 13);
         final rows = max(5, (_height / (size * 1.3)).floor()); // the text's line height is 1.3
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'columns': columns, 'rows': rows});
         m.fitted[key] = (columns, rows);
+      } else {
+        await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'reset': true});
+        m.fitted.remove(key);
       }
     } on AgtermError catch (e) {
+      autoFit.wanted = false; // a refused fit (a pane another Mac leads) is not retried on every change
       if (mounted) report(context, e.message);
     } on TimeoutException {
+      autoFit.wanted = false;
       if (mounted) report(context, 'The computer did not answer.');
     }
+    // the screen closed or moved to the other pane during the call: that fit has no viewer any more
+    if (!mounted || key != _fitKey) _release(key.split('/').last);
     if (!mounted) return;
     setState(() => fitting = false);
     Future.delayed(const Duration(milliseconds: 300), _load); // the program redraws at its new width
+    unawaited(_syncFit()); // the app paused, resumed or changed pane during the call
+  }
+
+  /// Gives back [p]'s grid without waiting: the screen is closing or moving to the other pane.
+  void _release(String p) {
+    if (m.fitted.remove('${widget.sessionId}/$p') == null) return;
+    unawaited(m.call('session.grid', target: widget.sessionId, args: {'pane': p, 'reset': true}).then((_) {}, onError: (_) {}));
   }
 
   String _trimEnd(String t) => t.split('\n').map((l) => l.trimRight()).join('\n').replaceFirst(RegExp(r'\n+$'), '');
@@ -252,11 +291,14 @@ class _SessionScreenState extends State<SessionScreen> {
           ),
         );
     void setPane(String p) {
+      if (p == pane) return;
+      _release(pane);
       setState(() {
         pane = p;
         text = '';
       });
       _load();
+      _syncFit();
     }
     return Row(mainAxisSize: MainAxisSize.min, children: [
         if (s.hasSplit) ...[

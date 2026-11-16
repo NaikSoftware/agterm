@@ -166,10 +166,11 @@ on the computer that runs only while you want it.
   sidebar's.
 - **A session's screen.** The pane's text, refreshed while you look; a key bar (esc, tab, ⇧tab, ^C, arrows, …) and a
   composer that types into it; both panes of a split; Scrollback for the history.
-- **Fit to phone** gives the program the phone's own grid (`session grid`): as many columns and rows as the phone shows
+- **Fit to phone** is on while a session's screen is open: it gives the program the phone's own grid (`session grid`): as many columns and rows as the phone shows
   at a readable size, so it redraws for the phone and nothing wraps, while the computer's font stays as it was. While
   fitted, dragging the screen scrolls the program itself (wheel notches through `session scroll`), so Claude Code
-  scrolls its own transcript. Restore PC size gives the grid back; on the computer, Session ▸ Restore Terminal Size
+  scrolls its own transcript. Leaving the screen or sending the app to the background gives the grid back, and coming
+  back fits it again. Restore PC size gives the grid back for this visit; on the computer, Session ▸ Restore Terminal Size
   (also on the row's right-click menu while it applies) does the same, and is disabled once the window has taken the
   grid back by itself (resized or shown).
 - **Alerts in the background.** A notification per session when its agent blocks, finishes or notifies; tapping one
