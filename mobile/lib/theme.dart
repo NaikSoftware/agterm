@@ -43,6 +43,20 @@ const tints = {
   'gray': Color(0xFF9A98A8),
 };
 
+// the rest of macOS's palette, and any `#rrggbb` hex; kept out of `tints` so the picker offers only what both servers accept
+const _macTints = {
+  'teal': Color(0xFF40C8E0),
+  'pink': Color(0xFFFF6482),
+  'brown': Color(0xFFAC8E68),
+  'indigo': Color(0xFF7D7AFF),
+  'mint': Color(0xFF63E6E2),
+};
+
+Color? tintColor(String tint) {
+  final hex = RegExp(r'^#([0-9a-fA-F]{6})$').firstMatch(tint);
+  return hex != null ? Color(0xFF000000 | int.parse(hex[1]!, radix: 16)) : tints[tint] ?? _macTints[tint];
+}
+
 Color statusColor(String status) => switch (status) {
       'blocked' => C.blocked,
       'completed' => C.completed,

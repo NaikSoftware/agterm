@@ -59,14 +59,13 @@ class _NewSessionSheetState extends State<NewSessionSheet> {
     final l = launchers.firstWhere((x) => x.$1 == launcher);
     final args = <String, dynamic>{
       if (name.text.trim().isNotEmpty) 'name': name.text.trim(),
-      if (cwd.text.trim().isNotEmpty) 'cwd': cwd.text.trim().replaceFirst(RegExp(r'^~(?=/|$)'), _home()),
+      if (cwd.text.trim().isNotEmpty) 'cwd': expandHome(cwd.text.trim(), _home()),
       if (l.$3.isNotEmpty) 'command': l.$3,
       if (widget.parent == null && workspace != null) 'workspace': workspace,
-      if (widget.parent != null) 'parent': widget.parent!.id,
       if (!showOnDesktop) 'noSelect': true,
     };
     try {
-      final r = await widget.model.call(widget.parent == null ? 'session.new' : 'session.companion.new', args: args);
+      final r = await widget.model.call(widget.parent == null ? 'session.new' : 'session.companion.new', target: widget.parent?.id, args: args);
       await widget.model.refresh();
       if (!mounted) return;
       Navigator.pop(context);
@@ -81,8 +80,8 @@ class _NewSessionSheetState extends State<NewSessionSheet> {
 
   // the computer's home, from a session's folder; "~" only works when some session shows it
   String _home() =>
-      widget.model.sessions.map((s) => RegExp(r'^/home/[^/]+').stringMatch(s.cwd)).whereType<String>().firstOrNull ??
-      widget.model.workspaces.map((w) => RegExp(r'^/home/[^/]+').stringMatch(w.folder)).whereType<String>().firstOrNull ??
+      widget.model.sessions.map((s) => homePrefix.stringMatch(s.cwd)).whereType<String>().firstOrNull ??
+      widget.model.workspaces.map((w) => homePrefix.stringMatch(w.folder)).whereType<String>().firstOrNull ??
       '~';
 
   @override
@@ -146,7 +145,7 @@ class _NewSessionSheetState extends State<NewSessionSheet> {
           TextField(
             controller: cwd,
             style: const TextStyle(fontFamily: mono, fontSize: 13),
-            decoration: InputDecoration(hintText: m.workspaces.where((w) => w.id == workspace).firstOrNull?.folder.replaceFirst(RegExp(r'^/home/[^/]+'), '~') ?? 'The workspace folder'),
+            decoration: InputDecoration(hintText: switch (m.workspaces.where((w) => w.id == workspace).firstOrNull?.folder) { final f? => shortHome(f), _ => 'The workspace folder' }),
             autocorrect: false,
           ),
           CheckboxListTile(
