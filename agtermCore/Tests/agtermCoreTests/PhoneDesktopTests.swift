@@ -57,6 +57,7 @@ struct PhoneDesktopTests {
         #expect(PhoneRelayLine.link("Listening on *:8765.") == nil)
         #expect(PhoneRelayLine.stderr("agtermctl: phone connected from 10.0.0.2") == .event("phone connected from 10.0.0.2"))
         #expect(PhoneRelayLine.stderr("agtermctl: refused 10.0.0.3: wrong token") == .event("refused 10.0.0.3: wrong token"))
+        #expect(PhoneRelayLine.stderr("agtermctl: phone disconnected from 10.0.0.2") == .event("phone disconnected from 10.0.0.2"))
         #expect(PhoneRelayLine.stderr("agtermctl: cannot listen on *:8765: Address already in use")
                 == .other("cannot listen on *:8765: Address already in use"))
         #expect(PhoneRelayLine.stderr("   ") == nil)

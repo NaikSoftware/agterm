@@ -10,14 +10,25 @@ final class PhoneRelay {
     private(set) var state: PhoneDesktopState
     /// The links serve printed, best host first; empty while not listening.
     private(set) var links: [String] = []
+    /// Why the relay is not listening.
     private(set) var error: String?
+    /// A failure that leaves the relay as it was: a revoke or a save.
+    private(set) var notice: String?
     private(set) var lastEvent: String?
 
     @ObservationIgnored private let stateDirectory: URL
     @ObservationIgnored private let tool: URL?
     @ObservationIgnored private var socketPath: String?
     @ObservationIgnored private var process: Process?
+    /// Children sent SIGTERM and not yet gone; quit waits for them too.
+    @ObservationIgnored private var ending: [Process] = []
+    /// The queued stop-then-start, so a new child never binds before the old one has exited.
+    @ObservationIgnored private var transition: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var lastStderr: String?
+
+    /// Longer than serve's own wait for the app to answer its grid resets on SIGTERM.
+    static let exitGrace: Duration = .seconds(5)
 
     init(stateDirectory: URL, tool: URL? = CLIInstaller.bundledTool) {
         self.stateDirectory = stateDirectory
@@ -29,7 +40,7 @@ final class PhoneRelay {
     func attach(socketPath: String?) {
         guard self.socketPath == nil else { return }
         self.socketPath = socketPath
-        if state.on { start() }
+        if state.on { restart() }
     }
 
     var offeredHosts: [String] { links.compactMap(PhonePairLink.host(of:)) }
@@ -40,14 +51,14 @@ final class PhoneRelay {
         guard on != state.on else { return }
         state.on = on
         save()
-        if on { start() } else { stop(); error = nil; lastEvent = nil }
+        restart()
     }
 
     func setPort(_ port: Int) {
         guard (1024...65535).contains(port), port != state.port else { return }
         state.port = port
         save()
-        if state.on { start() }
+        if state.on { restart() }
     }
 
     func setHost(_ host: String) {
@@ -59,24 +70,81 @@ final class PhoneRelay {
     }
 
     /// Writes a new token, which cuts every paired phone off, then restarts serve so it shows the new code.
-    func revoke() {
-        if let failure = Self.run(["mobile", "reset"], tool: tool, stateDirectory: stateDirectory) { error = failure; return }
-        if state.on { start() }
+    func revoke() async {
+        if let failure = await Self.run(["mobile", "reset"], tool: tool, stateDirectory: stateDirectory) {
+            notice = failure
+            return
+        }
+        notice = nil
+        if state.on { restart() }
         lastEvent = "paired phones revoked"
     }
 
+    /// Waits for the queued transition; tests use it, the window does not need to.
+    func settled() async { await transition?.value }
+
     private func save() {
-        do { try state.save(stateDirectory: stateDirectory) } catch { self.error = "Cannot save \(error.localizedDescription)" }
+        do {
+            try state.save(stateDirectory: stateDirectory)
+            notice = nil
+        } catch {
+            notice = "Cannot save the phone settings: \(error.localizedDescription)"
+        }
     }
 
-    private func start() {
-        stop()
+    /// Ends the running child and, once it has exited, starts a new one if the relay is still on.
+    private func restart() {
+        generation += 1
+        let ticket = generation
+        links = []
         error = nil
         lastEvent = nil
+        let old = process
+        process = nil
+        if let old { old.terminate(); ending.append(old) }
+        let previous = transition
+        transition = Task { [weak self] in
+            await previous?.value
+            if let old { await Self.waitForExit(old) }
+            guard let self else { return }
+            self.ending.removeAll { $0 === old }
+            guard ticket == self.generation, self.state.on else { return }
+            self.launch()
+        }
+    }
+
+    /// SIGTERM was sent; wait without blocking main (the app must answer serve's grid resets), then SIGKILL.
+    private static func waitForExit(_ child: Process) async {
+        if await exited(child, within: exitGrace) { return }
+        kill(child.processIdentifier, SIGKILL)
+        _ = await exited(child, within: .seconds(2))
+    }
+
+    private static func exited(_ child: Process, within limit: Duration) async -> Bool {
+        let deadline = ContinuousClock.now + limit
+        while child.isRunning, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+        return !child.isRunning
+    }
+
+    /// At quit: SIGTERM every child, then run the main run loop so the control socket keeps answering the
+    /// relay's grid resets, bounded by `exitGrace`; SIGKILL what is left.
+    func stopForQuit() {
+        generation += 1 // the queued transition then starts nothing; cancelling it would make its sleeps spin
+        let children = ending + [process].compactMap { $0 }
+        process = nil
+        ending = []
+        children.forEach { $0.terminate() }
+        let deadline = Date().addingTimeInterval(TimeInterval(Self.exitGrace.components.seconds))
+        while children.contains(where: \.isRunning), Date() < deadline {
+            RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05))
+        }
+        children.filter(\.isRunning).forEach { kill($0.processIdentifier, SIGKILL) }
+    }
+
+    private func launch() {
         lastStderr = nil
         guard let socketPath else { error = "The control socket is not available."; return }
         guard let tool else { error = "agtermctl is not bundled in this build."; return }
-        generation += 1
         let run = generation
         let child = Process()
         child.executableURL = tool
@@ -94,23 +162,11 @@ final class PhoneRelay {
             try child.run()
             process = child
         } catch {
+            out.fileHandleForReading.readabilityHandler = nil
+            err.fileHandleForReading.readabilityHandler = nil
             self.error = "Cannot run \(tool.path): \(error.localizedDescription)"
         }
     }
-
-    /// SIGTERM, then SIGKILL after 2 s, so the port is free before a restart binds it again. Quit calls it too.
-    func stop() {
-        generation += 1
-        links = []
-        guard let child = process else { return }
-        process = nil
-        child.terminate()
-        let deadline = Date().addingTimeInterval(2)
-        while child.isRunning, Date() < deadline { usleep(20_000) }
-        if child.isRunning { kill(child.processIdentifier, SIGKILL) }
-    }
-
-    @ObservationIgnored private var lastStderr: String?
 
     private func stdout(_ line: String, run: Int) {
         guard run == generation, let link = PhoneRelayLine.link(line) else { return }
@@ -129,33 +185,38 @@ final class PhoneRelay {
         guard run == generation else { return }
         process = nil
         links = []
-        error = lastStderr.flatMap { $0.hasPrefix("phone connected") || $0.hasPrefix("refused ") ? nil : $0 }
-            ?? "The relay stopped."
+        error = lastStderr.flatMap { PhoneRelayLine.isEvent($0) ? nil : $0 } ?? "The relay stopped."
         lastStderr = nil
     }
 
-    private static func environment(_ stateDirectory: URL) -> [String: String] {
+    private nonisolated static func environment(_ stateDirectory: URL) -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         env["AGTERM_STATE_DIR"] = stateDirectory.path
         return env
     }
 
-    /// Runs a short agtermctl command; nil on success, else its error text.
-    private static func run(_ arguments: [String], tool: URL?, stateDirectory: URL) -> String? {
+    /// Runs a short agtermctl command off the main thread; nil on success, else its error text.
+    private nonisolated static func run(_ arguments: [String], tool: URL?, stateDirectory: URL) async -> String? {
         guard let tool else { return "agtermctl is not bundled in this build." }
-        let child = Process()
-        child.executableURL = tool
-        child.arguments = arguments
-        child.environment = environment(stateDirectory)
-        let err = Pipe()
-        child.standardError = err
-        child.standardOutput = FileHandle.nullDevice
-        do { try child.run() } catch { return "Cannot run \(tool.path): \(error.localizedDescription)" }
-        child.waitUntilExit()
-        guard child.terminationStatus != 0 else { return nil }
-        let text = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? "agtermctl \(arguments.joined(separator: " ")) failed." : text
+        return await withCheckedContinuation { done in
+            DispatchQueue.global().async {
+                let child = Process()
+                child.executableURL = tool
+                child.arguments = arguments
+                child.environment = environment(stateDirectory)
+                let err = Pipe()
+                child.standardError = err
+                child.standardOutput = FileHandle.nullDevice
+                do { try child.run() } catch {
+                    return done.resume(returning: "Cannot run \(tool.path): \(error.localizedDescription)")
+                }
+                let text = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                child.waitUntilExit()
+                guard child.terminationStatus != 0 else { return done.resume(returning: nil) }
+                done.resume(returning: text.isEmpty ? "agtermctl \(arguments.joined(separator: " ")) failed." : text)
+            }
+        }
     }
 
     /// Whole lines from a child's pipe, delivered on the main actor. A line that never ends past 4 KiB is dropped.

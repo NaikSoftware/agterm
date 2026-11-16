@@ -587,6 +587,7 @@ final class MobileRelay: @unchecked Sendable {
     }
 
     private func close(_ phone: Phone) {
+        if phone.token != nil, phones[ObjectIdentifier(phone)] != nil { log("phone disconnected from \(phone.peer)") }
         phone.closing = true
         phone.revoke?.cancel()
         phone.connection.cancel()

@@ -395,7 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // resolve in-memory pickers and asks before closing the socket: a client already polling may observe
         // cancellation, but a later poll can still race socket teardown at process exit.
         actions?.cancelAllPendingModals()
-        phoneRelay?.stop()
+        phoneRelay?.stopForQuit()
         controlServer?.stop()
         customCommandRunner?.stop()
         TerminalInputSource.shared.stop()

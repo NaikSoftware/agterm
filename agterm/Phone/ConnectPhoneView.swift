@@ -10,6 +10,7 @@ struct ConnectPhoneView: View {
     @State private var hostField = ""
     @State private var portField = ""
     @State private var confirmRevoke = false
+    @FocusState private var portFocused: Bool
 
     private var listening: Bool { relay.link != nil }
 
@@ -34,7 +35,9 @@ struct ConnectPhoneView: View {
                         .help("Addresses this Mac has; type a VPN name such as a Tailscale host instead")
                 }
                 TextField("Port", text: $portField)
+                    .focused($portFocused)
                     .onSubmit { commitPort() }
+                    .onChange(of: portFocused) { _, focused in if !focused { commitPort() } }
                     .frame(width: 160)
             }
             HStack {
@@ -48,6 +51,13 @@ struct ConnectPhoneView: View {
                     NSPasteboard.general.setString(relay.link ?? "", forType: .string)
                 }
                 .disabled(!listening)
+            }
+            if let notice = relay.notice {
+                Text(notice)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Text("Anyone with this code controls this Mac's terminals until you revoke it.")
                 .font(.callout)
@@ -65,7 +75,7 @@ struct ConnectPhoneView: View {
         }
         .onChange(of: relay.state.port) { _, port in portField = String(port) }
         .confirmationDialog("Revoke paired phones?", isPresented: $confirmRevoke) {
-            Button("Revoke", role: .destructive) { relay.revoke() }
+            Button("Revoke", role: .destructive) { Task { await relay.revoke() } }
         } message: {
             Text("Every paired phone is disconnected and must scan the new code.")
         }

@@ -84,6 +84,10 @@ public enum PhoneRelayLine: Equatable {
         var line = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return nil }
         if line.hasPrefix("agtermctl: ") { line.removeFirst("agtermctl: ".count) }
-        return line.hasPrefix("phone connected") || line.hasPrefix("refused ") ? .event(line) : .other(line)
+        return isEvent(line) ? .event(line) : .other(line)
+    }
+
+    public static func isEvent(_ line: String) -> Bool {
+        ["phone connected ", "phone disconnected ", "refused "].contains { line.hasPrefix($0) }
     }
 }

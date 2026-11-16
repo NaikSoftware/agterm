@@ -91,6 +91,7 @@ struct MobileCommandsTests {
         #expect(refusal["ok"] as? Bool == false && refusal["id"] as? Int == 3 && refusal["error"] as? String == "unauthorized")
         #expect(client.waitClosed())
         #expect(fixture.logged().contains { $0.hasPrefix("refused ") && $0.hasSuffix(": wrong token") })
+        #expect(!fixture.logged().contains { $0.hasPrefix("phone disconnected") })
     }
 
     @Test func preAuthGarbageClosesTheConnection() throws {
@@ -132,6 +133,21 @@ struct MobileCommandsTests {
         let sentinel = #"{"cmd":"sentinel"}"#
         _ = try SocketClient(path: fixture.server.path).sendRaw(Data(sentinel.utf8))
         #expect(Array(fixture.server.requests().dropFirst(before)) == [reset, sentinel])
+    }
+
+    @Test func anAuthenticatedPhoneLeavingIsLoggedOnce() throws {
+        let fixture = try MobileFixture()
+        defer { fixture.stop() }
+        let client = try fixture.connect()
+        client.send(#"{"auth":"\#(fixture.token)","id":1}"#)
+        #expect(client.readJSON()?["ok"] as? Bool == true)
+        client.close()
+        let deadline = Date().addingTimeInterval(30)
+        while !fixture.logged().contains(where: { $0.hasPrefix("phone disconnected from ") }), Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        Thread.sleep(forTimeInterval: 0.2)
+        #expect(fixture.logged().filter { $0.hasPrefix("phone disconnected from ") }.count == 1)
     }
 
     @Test func aStoppingRelayGivesBackItsPhonesGrids() throws {

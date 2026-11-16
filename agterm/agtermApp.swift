@@ -265,7 +265,8 @@ struct agtermApp: App {
                         wireQuickTerminal(library: library)
                         // forwards to the BOUND socket: a refused instance's path belongs to another app
                         appDelegate.phoneRelay = phoneRelay
-                        phoneRelay.attach(socketPath: controlServer.boundSocketPath)                        // Ctrl-Tab session-switcher key monitors (idempotent).
+                        phoneRelay.attach(socketPath: controlServer.boundSocketPath)
+                        // Ctrl-Tab session-switcher key monitors (idempotent).
                         sessionSwitcher.start()
                         // Ctrl-1/Ctrl-2 direct pane-focus key monitor (idempotent).
                         paneShortcuts.start()
