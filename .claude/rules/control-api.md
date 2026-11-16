@@ -1505,7 +1505,8 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
 - `workspace.flag on|off|toggle` sets every session of the target workspace to one value through
   `AppStore.applyWorkspaceFlag`, the row menu's Flag All Sessions seam. `toggle` keys on
   `allSessionsFlagged`, the batch rule above, not a per-session invert. Read each session's `flagged`.
-- `session.seen` clears unseen without selection/focus/status or persistence. Read nonzero `unseen`.
+- `session.seen` is a visit without selection/focus or persistence (`AppStore.markVisited`): it clears unseen and an
+  `autoReset` status, so a phone opening a session clears Done as a Mac visit does. Read nonzero `unseen`.
 - `session.tint` and `workspace.tint` take mode `set` (a `TintValue`: a `TintColor` name or a `#rrggbb` hex stored
   lowercase, optional `tintOn` parts) or `clear`, which
   refuses a color or parts. `ControlDispatcher+SessionMetadata` parses both and the creation `tint`/`tintOn` on

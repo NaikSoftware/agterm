@@ -981,8 +981,8 @@ error keeps those names for compatibility.
   Read back from the node's `tint`/`tintOn`. GUI twins: the row menu's Tint submenu
   (a color applies to every selected row, keeping each row's placement; Show On needs every selected row
   tinted) and the palette's "Tint Session: <Color>" / "Tint Session: None" for the active session.
-- `session seen [--target] [--window W]` — clear the session's unseen-notification badge without changing
-  the selection, focus, or agent status. It is the focus-free counterpart to `notify`: `notify` (and a
+- `session seen [--target] [--window W]` — clear the session's unseen-notification badge, and an `--auto-reset`
+  status as a visit would, without changing the selection or focus. It is the focus-free counterpart to `notify`: `notify` (and a
   terminal's own OSC 9/777) raise the red badge, which otherwise clears only when the session is visited or
   typed in (as Settings ▸ Notifications ▸ Badge reset allows). Idempotent — a no-op when the badge is already zero. Read the current count from the tree node's
   `unseen` field. This lets an orchestrator acknowledge a driven session's notifications over the socket

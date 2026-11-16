@@ -96,4 +96,13 @@ struct ServerActionsEffectsTests {
 
         #expect(session.unseenCount == 0)
     }
+
+    @Test func seenClearsAnAutoResetStatus() throws {
+        let session = try newSession()
+        harness.store.setAgentIndicator(AgentIndicator(status: .completed, autoReset: true), forSession: session.id)
+
+        #expect(harness.actions.markSessionSeen(session.id.uuidString, window: nil).ok)
+
+        #expect(session.agentIndicator.status == .idle)
+    }
 }

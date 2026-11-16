@@ -205,7 +205,6 @@ struct AppStoreTests {
     }
 
     @Test func clearUnseenDoesNotChangeSelection() {
-        // the focus-free invariant behind session.seen: markSessionSeen calls clearUnseen and nothing else
         let store = makeStore()
         let ws = store.addWorkspace(name: "work")
         let a = store.addSession(toWorkspace: ws.id, cwd: "/a")!
@@ -215,6 +214,29 @@ struct AppStoreTests {
         store.clearUnseen(a.id)
         #expect(store.selectedSessionID == b.id)
         #expect(a.unseenCount == 0)
+    }
+
+    @Test func markVisitedClearsAutoResetStatusAndBadgeWithoutSelecting() {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let a = store.addSession(toWorkspace: ws.id, cwd: "/a")!
+        let b = store.addSession(toWorkspace: ws.id, cwd: "/b")!
+        store.selectSession(b.id)
+        a.unseenCount = 2
+        store.setAgentIndicator(AgentIndicator(status: .completed, autoReset: true), forSession: a.id)
+        store.markVisited(a.id)
+        #expect(a.agentIndicator.status == .idle)
+        #expect(a.unseenCount == 0)
+        #expect(store.selectedSessionID == b.id)
+    }
+
+    @Test func markVisitedKeepsStatusWithoutAutoReset() {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let a = store.addSession(toWorkspace: ws.id, cwd: "/a")!
+        store.setAgentIndicator(AgentIndicator(status: .completed), forSession: a.id)
+        store.markVisited(a.id)
+        #expect(a.agentIndicator.status == .completed)
     }
 
     @Test func setAgentIndicatorSetsFieldOnRightSession() {

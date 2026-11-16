@@ -633,6 +633,13 @@ public final class AppStore {
         return destinationIndicator
     }
 
+    /// markVisited is a visit that moves no selection (`session.seen`): it clears what selecting the session would,
+    /// the badge and an `autoReset` status.
+    public func markVisited(_ id: UUID) {
+        markSeen(id)
+        clearAutoResetIndicator(id)
+    }
+
     /// Reset a session's indicator to idle when marked `autoReset`; no-op for nil, unknown, or non-autoReset.
     private func clearAutoResetIndicator(_ id: UUID?) {
         guard let id, let session = session(withID: id), session.agentIndicator.autoReset else { return }

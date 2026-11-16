@@ -1127,7 +1127,7 @@ s=$(agtermctl zmx tree studio.local --json \
 <ul>
 <li>Clicking the banner brings agterm forward and focuses the exact pane that raised it.</li>
 <li>Focusing a session or typing in it clears its badge. <strong>Badge reset</strong> in Settings can limit typing to Enter, or turn the typing reset off.</li>
-<li><code>agtermctl session seen</code> clears a badge without moving focus, so a script driving a session can acknowledge it. <code>agtermctl tree --json</code> reports each session's <code>unseen</code> count.</li>
+<li><code>agtermctl session seen</code> clears a badge without moving focus, so a script driving a session can acknowledge it. It also clears a status set with <code>--auto-reset</code>, as a visit does; opening a session in agterm Mobile sends it. <code>agtermctl tree --json</code> reports each session's <code>unseen</code> count.</li>
 <li>The Dock icon counts the sessions that need you: each one with unseen notifications or a blocked or completed <a href="#status">agent status</a> counts once.</li>
 </ul>
 <p><strong>Settings ▸ Notifications</strong> turns banners and count badges on and off separately, and sets:</p>
