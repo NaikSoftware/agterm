@@ -112,7 +112,7 @@ targets:
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.umputun.agterm
+        PRODUCT_BUNDLE_IDENTIFIER: ua.naiksoftware.agterm2
         PRODUCT_NAME: agterm
         INFOPLIST_FILE: agterm/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -132,11 +132,11 @@ targets:
       configs:
         # Debug/dev builds get a DISTINCT bundle id. XCUITest terminates any running instance of the
         # app-under-test's bundle id before launching, so a shared id would kill the deployed Release
-        # app the user runs daily. Release keeps the real id (com.umputun.agterm) — only Debug is
+        # app the user runs daily. Release keeps the real id (ua.naiksoftware.agterm2) — only Debug is
         # isolated. State/socket are path-based, not bundle-id-derived: a Debug launch without
         # AGTERM_STATE_DIR adopts its own agterm-debug directory (DebugStateDirectory).
         Debug:
-          PRODUCT_BUNDLE_IDENTIFIER: com.umputun.agterm.debug
+          PRODUCT_BUNDLE_IDENTIFIER: ua.naiksoftware.agterm2.debug
           # Debug alone needs the three hardened-runtime exceptions; see the header of the file.
           CODE_SIGN_ENTITLEMENTS: agterm/agterm-debug.entitlements
     postBuildScripts:

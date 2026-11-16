@@ -20,7 +20,7 @@ final class HostedTestPlaceholderTests: XCTestCase {
     func testHostLaunchWindowIsTransparent() throws {
         let launchWindows = NSApp.windows.filter {
             $0.identifier?.rawValue.hasPrefix("terminal-AppWindow-") == true
-                || (NSStringFromClass(type(of: $0)).contains("SwiftUI") && $0.title == "Agterm")
+                || (NSStringFromClass(type(of: $0)).contains("SwiftUI") && $0.title == "Agterm2")
         }
         try XCTSkipIf(launchWindows.isEmpty, "FB11763863: this launch created no WindowGroup window")
 

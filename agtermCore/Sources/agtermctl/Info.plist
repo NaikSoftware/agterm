@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.umputun.agtermctl</string>
+	<string>ua.naiksoftware.agterm2.agtermctl</string>
 	<key>CFBundleName</key>
 	<string>agtermctl</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>

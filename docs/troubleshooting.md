@@ -319,7 +319,7 @@ instead, which later releases keep satisfying.
 To recover the Accessibility grant, remove the stale row and grant the installed release fresh:
 
 ```
-tccutil reset Accessibility com.umputun.agterm
+tccutil reset Accessibility ua.naiksoftware.agterm2
 ```
 
 Then open System Settings ▸ Privacy & Security ▸ Accessibility, remove any lingering agterm entry with the

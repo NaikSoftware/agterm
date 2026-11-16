@@ -237,7 +237,7 @@ grant: macOS stores each grant with a code requirement, and a grant made while a
 requires a bare code hash, so a rebuilt or reinstalled agterm no longer matches while the toggle still reads
 on. Confirm it before concluding anything: save the row's raw `csreq` blob from the system TCC.db to a
 file, the bytes rather than sqlite's printed output (`SELECT writefile('/tmp/ax.csreq', csreq) FROM access
-WHERE service='kTCCServiceAccessibility' AND client='com.umputun.agterm'`), then run
+WHERE service='kTCCServiceAccessibility' AND client='ua.naiksoftware.agterm2'`), then run
 `codesign --verify -R /tmp/ax.csreq /Applications/agterm.app`. Only `code failed to satisfy specified code
 requirement(s)` is the stale grant; an extraction, parsing, or signature error needs resolving first. The
 [stale-grant diagnosis](https://github.com/umputun/agterm/blob/master/docs/troubleshooting.md#an-accessibility-permission-you-granted-stops-working-after-an-update)

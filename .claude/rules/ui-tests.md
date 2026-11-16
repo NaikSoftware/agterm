@@ -40,7 +40,7 @@ These run inside the app, so a mistake can kill the host instead of failing an a
   ordering out the launch window exited the host before XCTest connected.
   SwiftUI's `@NSApplicationDelegateAdaptor` also makes
   `NSApp.delegate as? AppDelegate` nil, so obtain the delegate another way. The local placeholder window
-  exists (`NSApp.windows.count == 1`, title "Agterm"), but another-process CI launch may hit FB11763863
+  exists (`NSApp.windows.count == 1`, title "Agterm2"), but another-process CI launch may hit FB11763863
   and create none.
 
 ## UI tests

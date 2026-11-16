@@ -242,7 +242,7 @@ final class GhosttyCallbacks: @unchecked Sendable {
     /// The pasteboard for a libghostty clipboard location: private for selection, general for the rest.
     static func pasteboard(for location: ghostty_clipboard_e) -> NSPasteboard {
         guard location == GHOSTTY_CLIPBOARD_SELECTION else { return .general }
-        return NSPasteboard(name: .init((Bundle.main.bundleIdentifier ?? "com.umputun.agterm") + ".selection"))
+        return NSPasteboard(name: .init((Bundle.main.bundleIdentifier ?? "ua.naiksoftware.agterm2") + ".selection"))
     }
 
     /// The text a libghostty clipboard read of `location` gets (the read callback's source).
