@@ -230,6 +230,16 @@ refuses `phone.*` from a phone. `site/commands.html#phone` owns the rest.
 Debug builds are ad-hoc signed with a bare `cdhash` requirement,
 so each rebuild asks for Bluetooth again at the relay's first start.
 
+`mobile serve` also offers BLE (`MobileBluetooth.swift`, `#if os(macOS)`): an insecure L2CAP channel, with
+Noise NNpsk0 keyed by the pairing token doing the authentication and encryption. Each line is chunked into
+1...4096-byte sealed frames; a replayed or tampered frame drops the link. The advertised service UUID is an HMAC
+of the token over a 900 s epoch, re-registered at each boundary, so a passive scanner cannot track the Mac.
+`<mobileDir>/bluetooth.lock` (`flock`) lets one relay per Mac advertise. The `maxPhones` busy cap (reject `[0x02]`)
+counts authenticated phones only, so replayed handshakes cannot lock out a paired phone; the unauthenticated cap
+and the 10 s auth timeout cover the rest. agtermctl embeds an Info.plist (`com.umputun.agtermctl`, usage string)
+via `-sectcreate` in `Package.swift`, so a hand-run serve prompts under a stable identity. The L2CAP streams run on
+their own `StreamThread`, never `RunLoop.main`. `commands.html#mobile` owns the user-visible values.
+
 `session wait` is not a fourth exemption but a client-side composite, like `overlay open --block`: it
 opens the socket only for existing reads (`events.read`, `window.list`, `tree`), so there is no
 `session.wait` command and nothing new to read back. It cannot be a server command: the inline accept loop

@@ -2701,14 +2701,15 @@ same four ssh options, the same installer-owned execution settings and the same 
 
 ## mobile
 
-`agtermctl mobile serve [--port N] [--host H] [--bind ADDR] [--no-qr] [--socket PATH]` runs the phone relay in
+`agtermctl mobile serve [--port N] [--host H] [--bind ADDR] [--bluetooth|--no-bluetooth] [--no-qr] [--socket PATH]` runs the phone relay in
 the foreground; `mobile reset` replaces the token, and a running `serve` exits 1 within seconds. Local-only and macOS-only: no protocol command.
 `serve` creates a self-signed certificate and a token under `mobile/` in the state directory, prints a QR and
 `agterm://pair?h=&p=&t=&f=&n=` links (`t` token, `f` certificate sha256), and listens on TLS, default port
 8765 (1024...65535). A phone's first line is the token; a wrong one is answered `unauthorized` and closed.
 Later lines are forwarded to the control socket with the phone's `id` echoed. `phone.*` from a phone → `phone.*
 is not available from a phone`. The relay exits when its parent
-dies. `reset` prints ``Pairing revoked: paired phones are disconnected. Restart `agtermctl mobile serve` for the new code.`` and the old link stops working.
+dies. Bluetooth is on by default; serve prints `agtermctl: bluetooth: advertising|off (REASON)` to stderr, and
+a link whose relay offers it ends in `&b=1` (no `h`/`p` without a LAN address). commands.html#mobile owns the values. `reset` prints ``Pairing revoked: paired phones are disconnected. Restart `agtermctl mobile serve` for the new code.`` and the old link stops working.
 
 ## phone
 
