@@ -3,6 +3,7 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'ble_transport.dart';
 import 'model.dart';
 
 class Watch {
@@ -49,7 +50,11 @@ class Watch {
             channelDescription: 'Shown while agterm watches your computer in the background',
             importance: Importance.low, priority: Priority.low, ongoing: true, showWhen: false),
         startType: AndroidServiceStartType.startNotSticky, // the plugin's service can't restart without its intent
-        foregroundServiceTypes: {AndroidServiceForegroundType.foregroundServiceTypeSpecialUse},
+        foregroundServiceTypes: {
+          AndroidServiceForegroundType.foregroundServiceTypeSpecialUse,
+          // Android 14+ refuses connectedDevice without BLUETOOTH_CONNECT; TLS alone keeps specialUse
+          if (await bluetoothGranted()) AndroidServiceForegroundType.foregroundServiceTypeConnectedDevice,
+        },
       );
 
   /// Back in the foreground: the screen shows what the notifications said.

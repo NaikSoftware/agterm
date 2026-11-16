@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../ble_transport.dart';
 import '../client.dart';
 import '../main.dart';
 import '../model.dart';
@@ -76,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 minTileHeight: 56,
                 leading: Icon(p.key == m.pairing.key ? Icons.radio_button_checked : Icons.radio_button_off, color: C.accent),
                 title: Text(p.name),
-                subtitle: Text('${p.host}:${p.port}', style: const TextStyle(fontFamily: mono, fontSize: 12, color: C.muted)),
+                subtitle: Text([if (p.host != null) p.address, if (p.bluetooth) 'Bluetooth'].join(' · '), style: const TextStyle(fontFamily: mono, fontSize: 12, color: C.muted)),
                 trailing: IconButton(
                   tooltip: 'Forget',
                   icon: const Icon(Icons.delete_outline),
@@ -167,6 +168,25 @@ class _HomeScreenState extends State<HomeScreen> {
                           setSheet(() {});
                         },
                       )),
+              StatefulBuilder(
+                  builder: (context, setSheet) => SwitchListTile(
+                        key: const Key('preferBluetooth'),
+                        secondary: const Icon(Icons.bluetooth, color: C.muted),
+                        title: const Text('Prefer Bluetooth'),
+                        subtitle: Text(
+                            m.pairing.bluetooth && m.pairing.host != null
+                                ? 'Try Bluetooth before Wi-Fi'
+                                : 'This pairing has one way to connect',
+                            style: const TextStyle(fontSize: 12, color: C.muted)),
+                        value: BluetoothPref.prefer,
+                        onChanged: m.pairing.bluetooth && m.pairing.host != null
+                            ? (v) async {
+                                if (v) await requestBluetooth();
+                                await BluetoothPref.set(v);
+                                setSheet(() {});
+                              }
+                            : null,
+                      )),
               ListTile(
                   minTileHeight: 52,
                   leading: const Icon(Icons.computer, color: C.muted),
@@ -246,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _header(List<Session> all) {
     final (dot, line) = switch (m.state) {
-      LinkState.connected => (C.completed, 'Connected · ${m.pairing.host}'),
+      LinkState.connected => (C.completed, 'Connected · ${m.via == 'BT' ? 'Bluetooth' : m.pairing.host}'),
       LinkState.connecting => (C.blocked, 'Connecting…'),
       LinkState.offline => (C.danger, 'Offline'),
     };
@@ -336,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
           else
             const Icon(Icons.cloud_off, color: C.danger, size: 20),
           const SizedBox(width: 12),
-          Expanded(child: Text(m.error ?? 'Connecting to ${m.pairing.host}:${m.pairing.port}…', style: const TextStyle(color: C.muted, height: 1.4))),
+          Expanded(child: Text(m.error ?? 'Connecting to ${m.pairing.host == null ? m.pairing.name : m.pairing.address}…', style: const TextStyle(color: C.muted, height: 1.4))),
         ]),
       );
 
@@ -402,15 +422,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _row(Session s, {required double indent, bool showWorkspace = false}) {
     final sub = showWorkspace ? s.workspaceName : (s.context.isNotEmpty ? s.context : (s.parent.isNotEmpty ? 'companion · ${s.shortCwd}' : s.shortCwd));
-    return InkWell(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: InkWell(
       key: Key('row-${s.id}'),
+      borderRadius: BorderRadius.circular(12),
       onTap: () => open(s.id),
       onLongPress: () => showSessionActions(context, m, s),
       child: Container(
         height: 56,
-        margin: const EdgeInsets.symmetric(horizontal: 8),
         padding: EdgeInsets.only(left: indent - 8, right: 12),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: s.active ? C.surface : null),
         child: Row(children: [
           StatusDot(s.status, blink: s.blink),
           const SizedBox(width: 12),
@@ -437,6 +458,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Text('${s.unseen}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: C.bg)),
             ),
         ]),
+      ),
       ),
     );
   }

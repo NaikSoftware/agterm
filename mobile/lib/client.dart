@@ -1,38 +1,53 @@
-// The wire to `agtermctl mobile serve`: TLS pinned to the pairing's certificate fingerprint, then agtermctl's own
-// {cmd, target, args} JSON lines, each tagged with an id the relay echoes on its answer.
+// The wire to `agtermctl mobile serve`: TLS pinned to the pairing's certificate fingerprint, or the Bluetooth link
+// (ble_transport.dart), then agtermctl's own {cmd, target, args} JSON lines, each tagged with an id the relay echoes.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import 'ble_transport.dart';
+
 class Pairing {
-  Pairing({required this.name, required this.host, required this.port, required this.token, required this.fingerprint});
+  Pairing({required this.name, this.host, this.port, required this.token, required this.fingerprint, this.bluetooth = false});
 
-  final String name, host, token, fingerprint;
-  final int port;
+  final String name, token, fingerprint;
+  final String? host; // null: Bluetooth only
+  final int? port;
+  final bool bluetooth;
 
-  String get key => '$host:$port';
+  // the computer's identity: its certificate, wherever it is reached
+  String get key => fingerprint;
+  String get address => host == null ? 'Bluetooth' : '$host:$port';
 
-  // agterm://pair?h=HOST&p=PORT&t=TOKEN&f=SHA256HEX&n=NAME, as `agtermctl mobile serve` prints it
+  // agterm://pair?h=HOST&p=PORT&t=TOKEN&f=SHA256HEX&n=NAME[&b=1], as `agtermctl mobile serve` prints it;
+  // h and p are optional with b=1
   static Pairing? parse(String link) {
     final uri = Uri.tryParse(link.trim());
     if (uri == null || uri.scheme != 'agterm' || uri.host != 'pair') return null;
     final q = uri.queryParameters;
     final port = int.tryParse(q['p'] ?? '');
+    // with b=1 an unusable address leaves the pairing Bluetooth only
+    final host = q['h']?.isNotEmpty == true && port != null && port >= 1 && port <= 65535 ? q['h'] : null;
+    final bluetooth = q['b'] == '1';
     final fp = (q['f'] ?? '').toLowerCase();
-    if ((q['h'] ?? '').isEmpty || port == null || port < 1 || port > 65535) return null;
+    if (host == null && !bluetooth) return null;
     if ((q['t'] ?? '').length < 32 || !RegExp(r'^[0-9a-f]{64}$').hasMatch(fp)) return null;
-    return Pairing(name: q['n']?.isNotEmpty == true ? q['n']! : q['h']!, host: q['h']!, port: port, token: q['t']!, fingerprint: fp);
+    return Pairing(
+      name: q['n']?.isNotEmpty == true ? q['n']! : host ?? 'Computer',
+      host: host,
+      port: host == null ? null : port,
+      token: q['t']!,
+      fingerprint: fp,
+      bluetooth: bluetooth,
+    );
   }
 
-  Pairing copyWith({String? name, String? host}) =>
-      Pairing(name: name ?? this.name, host: host ?? this.host, port: port, token: token, fingerprint: fingerprint);
+  Map<String, dynamic> toJson() => {'name': name, 'host': host, 'port': port, 'token': token, 'fingerprint': fingerprint, 'bluetooth': bluetooth};
 
-  Map<String, dynamic> toJson() => {'name': name, 'host': host, 'port': port, 'token': token, 'fingerprint': fingerprint};
-
+  // entries saved before Bluetooth carry no `bluetooth`
   static Pairing fromJson(Map<String, dynamic> j) =>
-      Pairing(name: j['name'], host: j['host'], port: j['port'], token: j['token'], fingerprint: j['fingerprint']);
+      Pairing(name: j['name'], host: j['host'], port: j['port'], token: j['token'], fingerprint: j['fingerprint'], bluetooth: j['bluetooth'] == true);
 }
 
 class AgtermError implements Exception {
@@ -42,46 +57,100 @@ class AgtermError implements Exception {
   String toString() => message;
 }
 
+const revokedMessage = 'The pairing was revoked. Pair this computer again.';
+
+/// The token is no longer valid: no transport can succeed, so nothing retries.
+class Revoked extends AgtermError {
+  Revoked() : super(revokedMessage);
+}
+
 String certificateFingerprint(X509Certificate c) => sha256.convert(c.der).toString();
 
+/// A byte pipe to the relay: the TLS socket, or the Bluetooth L2CAP channel (raw, or plaintext after the handshake).
+class Link {
+  Link(this.input, this.add, this.close, {required this.via});
+  final Stream<List<int>> input;
+  final void Function(List<int> bytes) add;
+  final void Function() close;
+  final String via; // the badge: 'Wi-Fi' or 'BT'
+}
+
+typedef TlsOpener = Future<Link> Function(Pairing p, Duration timeout);
+typedef BleOpener = Future<Link> Function(Pairing p);
+
+Future<Link> openTls(Pairing p, Duration timeout) async {
+  SecureSocket? socket;
+  final pending = SecureSocket.connect(
+    p.host,
+    p.port!,
+    context: SecurityContext(withTrustedRoots: false), // trust nothing but the pinned certificate
+    onBadCertificate: (c) => certificateFingerprint(c) == p.fingerprint,
+    timeout: timeout,
+  );
+  try {
+    // connect's own timeout covers TCP only, not the TLS handshake
+    socket = await pending.timeout(timeout);
+  } on HandshakeException {
+    throw AgtermError('The computer presented a different certificate. Pair it again.');
+  } on TimeoutException {
+    unawaited(pending.then((s) => s.destroy(), onError: (_) {}));
+    rethrow;
+  }
+  final peer = socket.peerCertificate;
+  if (peer == null || certificateFingerprint(peer) != p.fingerprint) {
+    socket.destroy();
+    throw AgtermError('The computer presented a different certificate. Pair it again.');
+  }
+  return Link(socket, socket.add, socket.destroy, via: 'Wi-Fi');
+}
+
+// a definite answer (revoked, certificate, busy) beats "not found", which beats "cannot reach"
+int _rank(Object? e) => switch (e) {
+  null => -1,
+  AgtermError() => 2,
+  BleNotFound() => 1,
+  _ => 0,
+};
+
 class Connection {
-  Connection._(this._socket) {
-    _socket.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter()).listen(_onLine, onDone: _onDone, onError: (_) => _onDone());
+  Connection._(this._link) {
+    _link.input
+        .cast<List<int>>()
+        .transform(utf8.decoder) // a SecureSocket is a Stream<Uint8List>, which utf8.decoder refuses
+        .transform(const LineSplitter())
+        .listen(_onLine, onDone: _onDone, onError: (_) => _onDone());
   }
 
-  final SecureSocket _socket;
+  final Link _link;
   final _pending = <int, Completer<Map<String, dynamic>>>{};
   final _closed = Completer<void>();
   int _next = 1;
 
   Future<void> get closed => _closed.future;
+  String get via => _link.via;
 
-  static Future<Connection> open(Pairing p, {Duration timeout = const Duration(seconds: 8)}) async {
-    SecureSocket? socket;
-    final pending = SecureSocket.connect(p.host, p.port,
-        context: SecurityContext(withTrustedRoots: false), // trust nothing but the pinned certificate
-        onBadCertificate: (c) => certificateFingerprint(c) == p.fingerprint,
-        timeout: timeout);
-    try {
-      // connect's own timeout covers TCP only, not the TLS handshake
-      socket = await pending.timeout(timeout);
-    } on HandshakeException {
-      throw AgtermError('The computer presented a different certificate. Pair it again.');
-    } on TimeoutException {
-      unawaited(pending.then((s) => s.destroy(), onError: (_) {}));
-      rethrow;
-    }
-    final peer = socket.peerCertificate;
-    if (peer == null || certificateFingerprint(peer) != p.fingerprint) {
-      socket.destroy();
-      throw AgtermError('The computer presented a different certificate. Pair it again.');
-    }
-    final c = Connection._(socket);
-    try {
-      final hello = await c._send({'auth': p.token}).timeout(timeout);
-      if (hello['ok'] != true) {
-        throw AgtermError(hello['error'] == 'unauthorized' ? 'The pairing was revoked. Pair this computer again.' : '${hello['error']}');
+  /// TLS when the pairing has an address, Bluetooth when it offers it; [preferBluetooth] flips the order.
+  static Future<Connection> open(Pairing p, {bool preferBluetooth = false, TlsOpener tls = openTls, BleOpener ble = openBle}) async {
+    final tlsTimeout = Duration(seconds: p.bluetooth ? 3 : 8); // short only when Bluetooth is there to fall back on
+    final tries = [if (p.host != null) () => tls(p, tlsTimeout), if (p.bluetooth) () => ble(p)];
+    Object? error;
+    for (final t in preferBluetooth ? tries.reversed : tries) {
+      try {
+        return await _authenticate(await t(), p);
+      } on Revoked {
+        rethrow;
+      } catch (e) {
+        if (_rank(e) > _rank(error)) error = e;
       }
+    }
+    throw error ?? AgtermError('This pairing has neither an address nor Bluetooth. Pair the computer again.');
+  }
+
+  static Future<Connection> _authenticate(Link link, Pairing p) async {
+    final c = Connection._(link);
+    try {
+      final hello = await c._send({'auth': p.token}).timeout(const Duration(seconds: 8));
+      if (hello['ok'] != true) throw hello['error'] == 'unauthorized' ? Revoked() : AgtermError('${hello['error']}');
       return c;
     } catch (_) {
       c.close();
@@ -94,7 +163,7 @@ class Connection {
     final id = _next++;
     final done = Completer<Map<String, dynamic>>();
     _pending[id] = done;
-    _socket.write('${jsonEncode({...request, 'id': id})}\n');
+    _link.add(utf8.encode('${jsonEncode({...request, 'id': id})}\n'));
     return done.future;
   }
 
@@ -102,10 +171,13 @@ class Connection {
   Future<Map<String, dynamic>> call(String cmd, {String? target, Map<String, dynamic>? args, String? window}) async {
     final a = {...?args, 'window': ?window};
     final id = _next;
-    final r = await _send({'cmd': cmd, 'target': ?target, if (a.isNotEmpty) 'args': a}).timeout(const Duration(seconds: 15), onTimeout: () {
-      _pending.remove(id);
-      throw TimeoutException('no answer to $cmd');
-    });
+    final r = await _send({'cmd': cmd, 'target': ?target, if (a.isNotEmpty) 'args': a}).timeout(
+      const Duration(seconds: 15),
+      onTimeout: () {
+        _pending.remove(id);
+        throw TimeoutException('no answer to $cmd');
+      },
+    );
     if (r['ok'] != true) throw AgtermError('${r['error'] ?? 'request failed'}');
     return (r['result'] as Map?)?.cast<String, dynamic>() ?? {};
   }
@@ -131,7 +203,7 @@ class Connection {
   }
 
   void close() {
-    _socket.destroy();
+    _link.close();
     _onDone();
   }
 }

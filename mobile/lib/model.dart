@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'ble_transport.dart';
 import 'client.dart';
 import 'watch.dart';
 
@@ -89,23 +90,61 @@ class PairingStore {
   static Future<List<Pairing>> load() async {
     final raw = await _storage.read(key: _key);
     if (raw == null) return [];
-    return [for (final j in jsonDecode(raw) as List) Pairing.fromJson((j as Map).cast<String, dynamic>())];
+    return decode(raw);
+  }
+
+  // pairings were keyed by host:port before Bluetooth; two of them for one certificate keep the first (the newest)
+  @visibleForTesting
+  static List<Pairing> decode(String raw) {
+    final seen = <String>{};
+    return [
+      for (final j in jsonDecode(raw) as List)
+        if (Pairing.fromJson((j as Map).cast<String, dynamic>()) case final p when seen.add(p.key)) p,
+    ];
   }
 
   static Future<void> save(List<Pairing> all) => _storage.write(key: _key, value: jsonEncode([for (final p in all) p.toJson()]));
 }
 
+/// "Prefer Bluetooth": try it before TLS.
+class BluetoothPref {
+  static const _storage = FlutterSecureStorage();
+  static const _key = 'preferBluetooth';
+  static bool prefer = false;
+
+  static Future<void> load() async => prefer = await _storage.read(key: _key) == 'on';
+
+  static Future<void> set(bool v) async {
+    prefer = v;
+    await _storage.write(key: _key, value: v ? 'on' : 'off');
+  }
+}
+
+/// What the screen says when no transport connected; [unseen] is how long no Bluetooth scan has matched.
+String connectError(Object e, Pairing p, Duration unseen) => switch (e) {
+      AgtermError() => e.message,
+      BleNotFound() when unseen >= const Duration(minutes: 2) =>
+        "Can't find ${p.name}: out of range, Bluetooth off, or the pairing was reset.",
+      BleNotFound() => 'Looking for ${p.name} over Bluetooth…',
+      _ when p.host == null => 'Cannot reach ${p.name} over Bluetooth. Is phone access on?',
+      _ => 'Cannot reach ${p.host}:${p.port}. Is `agtermctl mobile serve` running?',
+    };
+
 enum LinkState { connecting, connected, offline }
 
 class AgtermModel extends ChangeNotifier {
-  AgtermModel(this.pairing) {
+  AgtermModel(this.pairing, {@visibleForTesting this.open = Connection.open}) {
     _lifecycle = AppLifecycleListener(onResume: resume, onPause: _background);
   }
 
   final Pairing pairing;
+  final Future<Connection> Function(Pairing p, {bool preferBluetooth}) open;
   late final AppLifecycleListener _lifecycle;
   Connection? _c;
   LinkState state = LinkState.connecting;
+  String via = ''; // the live transport's badge: 'Wi-Fi' or 'BT'
+  @visibleForTesting
+  DateTime seen = DateTime.now(); // the last Bluetooth scan match, connect or resume: "Can't find" needs 2 real minutes
   String? error;
   List<AgWindow> windows = [];
   String? windowId; // null = the frontmost window
@@ -142,6 +181,7 @@ class AgtermModel extends ChangeNotifier {
   void resume() {
     if (background) Watch.stop();
     background = false;
+    seen = DateTime.now();
     Watch.check();
     start();
   }
@@ -158,19 +198,21 @@ class AgtermModel extends ChangeNotifier {
       final gen = ++_generation;
       _set(LinkState.connecting);
       try {
-        final c = await Connection.open(pairing);
+        final c = await open(pairing, preferBluetooth: BluetoothPref.prefer);
         if (gen != _generation) return c.close();
         _c = c;
+        via = c.via;
         error = null;
         backoff = 1;
+        seen = DateTime.now();
         _set(LinkState.connected);
         await refresh();
         unawaited(_eventLoop(gen));
         await _c!.closed;
-      } on AgtermError catch (e) {
-        error = e.message;
       } catch (e) {
-        error = 'Cannot reach ${pairing.host}:${pairing.port}. Is `agtermctl mobile serve` running?';
+        if (e is! BleNotFound) seen = DateTime.now();
+        error = connectError(e, pairing, DateTime.now().difference(seen));
+        if (e is Revoked) _running = false; // no transport can succeed: wait for a new pairing or a resume
       }
       if (gen != _generation || _disposed) return;
       _c?.close(); // a failure after connecting (e.g. in refresh) must not leak the connection
