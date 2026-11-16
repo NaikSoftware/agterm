@@ -83,7 +83,8 @@ struct SurfaceTargetOptions: ParsableArguments {
 }
 
 /// Agtermctl is the root `agtermctl` command. Subcommands mirror the control catalog 1:1, except `terminfo`,
-/// `clipboard` and the macOS-only `server`, which run locally and never open the socket.
+/// `clipboard` and the macOS-only `server`, which run locally and never open the socket, and the macOS-only `mobile`
+/// relay, which forwards a phone's lines to it.
 public struct Agtermctl: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "agtermctl",
@@ -94,7 +95,7 @@ public struct Agtermctl: ParsableCommand {
     )
 
     #if os(macOS)
-    private static let hostSubcommands: [ParsableCommand.Type] = [Server.self]
+    private static let hostSubcommands: [ParsableCommand.Type] = [Server.self, Mobile.self]
     #else
     private static let hostSubcommands: [ParsableCommand.Type] = []
     #endif

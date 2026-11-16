@@ -44,7 +44,7 @@ struct SocketClient {
 
     /// Connect, send `request` as one newline-terminated JSON line, read the response line, decode it.
     func send(_ request: ControlRequest) throws -> SocketReply {
-        var data = try JSONEncoder().encode(request)
+        let data = try JSONEncoder().encode(request)
         // the server rejects a request line over the shared cap (newline excluded, matching this count)
         // and closes the connection; check before writing so the caller gets this error instead of a
         // write failure against the closing peer.
@@ -53,21 +53,22 @@ struct SocketClient {
                 "request too large (\(data.count) bytes, cap \(ControlWire.maxRequestLineBytes)) — "
                     + "split the input into smaller requests")
         }
-        data.append(UInt8(ascii: "\n"))
-
-        let fd = try connect()
-        defer { close(fd) }
-
-        try Self.writeAll(fd, data)
-
-        guard let line = Self.readLine(fd) else {
-            throw SocketClientError("no response from \(path)")
-        }
+        let line = try sendRaw(data)
         do {
             return SocketReply(response: try JSONDecoder().decode(ControlResponse.self, from: line), raw: line)
         } catch {
             throw SocketClientError("could not decode response: \(error.localizedDescription)")
         }
+    }
+
+    /// Write one request line (newline excluded) and return the response line undecoded, so a relay passes through
+    /// commands and fields this build does not model.
+    func sendRaw(_ request: Data) throws -> Data {
+        let fd = try connect()
+        defer { close(fd) }
+        try Self.writeAll(fd, request + Data([UInt8(ascii: "\n")]))
+        guard let line = Self.readLine(fd) else { throw SocketClientError("no response from \(path)") }
+        return line
     }
 
     /// Open and connect a `AF_UNIX` stream socket to `path`. The caller owns the descriptor.
