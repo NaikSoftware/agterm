@@ -192,14 +192,15 @@ final class ControlServerGridTests: XCTestCase {
 
     func testScrollReachesAMouseReportingProgramInsideASmallForcedGrid() async throws {
         let server = makeServer()
-        let (_, session) = try makeSession(command: "/bin/sh -c \"printf '\\033[?1000h\\033[?1006h'; exec cat -v\"")
+        let (_, session) = try makeSession(command: "/bin/sh -c \"printf '\\033[?1000h\\033[?1006h'; echo READY; exec cat -v\"")
         let surface = try view(session)
+        let screen = { (surface.readScreenText(all: true, lines: nil) ?? "").replacingOccurrences(of: "\n", with: "") }
         _ = server.setSessionGrid(session.id.uuidString, window: nil, pane: .left, grid: ControlGrid(columns: 30, rows: 8))
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await waitUntil { surface.gridSize() == (30, 8) && screen().contains("READY") }
+        XCTAssertTrue(surface.gridSize() == (30, 8) && screen().contains("READY"), screen())
 
         XCTAssertTrue(server.scrollSession(session.id.uuidString, window: nil, pane: .left, lines: -3).ok)
 
-        let screen = { (surface.readScreenText(all: true, lines: nil) ?? "").replacingOccurrences(of: "\n", with: "") }
         try await waitUntil { screen().contains("<64;") }
         XCTAssertTrue(screen().contains("<64;"), screen())
     }
