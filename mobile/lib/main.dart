@@ -80,7 +80,6 @@ class _AgtermAppState extends State<AgtermApp> {
       // no notifications: the app works without background alerts
     }
     await BluetoothPref.load().catchError((_) {});
-    await LauncherPref.load().catchError((_) {});
     await computers.load();
     if (launched != null) openSession(launched);
   }

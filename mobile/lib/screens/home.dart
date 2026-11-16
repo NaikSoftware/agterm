@@ -230,18 +230,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (id != null && mounted) reportOf(context, m.act('recent.open', target: id));
   }
 
-  // a fresh session from the launcher this phone used last, as the desktop row's repeat button
-  Future<void> quickStart(Workspace w) async {
-    final l = launchers.firstWhere((x) => x.$1 == LauncherPref.last, orElse: () => launchers.first);
-    try {
-      final r = await m.call('session.new', args: {if (l.$3.isNotEmpty) 'command': l.$3, 'workspace': w.id, 'noSelect': true});
-      await m.refresh();
-      if (r['id'] case final String id when mounted) open(id);
-    } catch (e) {
-      if (mounted) report(context, e is AgtermError ? e.message : '$e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: m,
@@ -460,21 +448,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Widget _workspaceRow(Workspace w, {required Color tint, required bool tinted, required bool open}) {
-    final last = launchers.firstWhere((x) => x.$1 == LauncherPref.last, orElse: () => launchers.first);
     final urgent = open ? null : _urgent(w.sessions);
-    Widget button(Key key, String tip, Widget icon, VoidCallback onTap) => Tooltip(
-          message: tip,
-          child: Material(
-            color: C.sel,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
-            child: InkWell(
-              key: key,
-              borderRadius: BorderRadius.circular(11),
-              onTap: onTap,
-              child: SizedBox(width: 40, height: 40, child: Center(child: icon)),
-            ),
-          ),
-        );
     return Row(children: [
       Expanded(
         child: InkWell(
@@ -499,10 +473,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
       ),
       const SizedBox(width: 4),
-      button(Key('quick-${w.id}'), 'New ${last.$2} session in ${w.name}', AgentLogo(last.$1, color: C.text), () => quickStart(w)),
-      const SizedBox(width: 8),
-      button(Key('add-${w.id}'), 'Choose a launcher for ${w.name}', const Icon(Icons.add, size: 20, color: C.text),
-          () => showNewSession(context, m, workspaceId: w.id)),
+      IconButton(
+        key: Key('wsMenu-${w.id}'),
+        tooltip: 'Workspace actions',
+        onPressed: () => showWorkspaceActions(context, m, w),
+        style: IconButton.styleFrom(fixedSize: const Size(44, 44)),
+        icon: const Icon(Icons.more_vert, color: C.muted),
+      ),
       const SizedBox(width: 4),
     ]);
   }
