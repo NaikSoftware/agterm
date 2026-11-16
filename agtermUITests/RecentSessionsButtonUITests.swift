@@ -11,13 +11,19 @@ import XCTest
 /// correct previous session; the click → `selectSession` glue is verified by hand (see ui-tests.md).
 @MainActor
 final class RecentSessionsButtonUITests: ControlAPITestCase {
-    func testRecentButtonEnablesWithSecondSession() throws {
+    func testSwitcherOpensWithOnlyTheJumpRowInASingleSessionWindow() throws {
         let button = app.buttons["recent-sessions-button"]
-        XCTAssertTrue(button.waitForExistence(timeout: 10), "the recent-sessions button should render in the title bar")
-        XCTAssertFalse(button.isEnabled, "a single-session window should disable the recent-sessions button")
+        XCTAssertTrue(button.waitForExistence(timeout: 10), "the switcher pill should render in the title bar")
+        XCTAssertTrue(pollEnabled(button, true, timeout: 8), "the jump row can always act, so the pill stays enabled")
 
-        _ = try sendCommand(#"{"cmd":"session.new"}"#)
-        XCTAssertTrue(pollEnabled(button, true, timeout: 8), "a second session should enable the recent-sessions button")
+        let jump = app.buttons["jump-session-row"]
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline, !jump.exists {
+            button.click()
+            _ = jump.waitForExistence(timeout: 1)
+        }
+        XCTAssertTrue(jump.exists, "clicking the pill should open the switcher with its jump row")
+        XCTAssertEqual(app.buttons.matching(identifier: "recent-session-row").count, 0)
     }
 
     // the previous session gets a unique rename so its jump row can be told apart by label.

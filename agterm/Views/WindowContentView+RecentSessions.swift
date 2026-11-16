@@ -21,11 +21,6 @@ extension WindowContentView {
         Array(library.recentClosedItems.lazy.filter { $0.kind == .session }.prefix(15))
     }
 
-    /// Nothing for the switcher popover to list: no other recent, no closed, no attention session.
-    private var switcherEmpty: Bool {
-        recentSessions.isEmpty && recentClosedSessions.isEmpty && library.attentionAcrossWindows.isEmpty
-    }
-
     /// The title-bar session switcher: the title wrapped in a pill that opens one popover. The title stays
     /// non-hittable on top and the button sits behind it, so a disabled button never dims the title.
     /// Opening a popover is interactive-only, so it is control-API keep-in-sync exempt, like the bell.
@@ -35,39 +30,38 @@ extension WindowContentView {
             // Ctrl-Tab is a raw key monitor in `SessionSwitcher`, not a rebindable `BuiltinAction`.
             Text(verbatim: "⌃Tab")
                 .font(.caption)
-                .foregroundStyle(chromeText.opacity(0.45))
+                .foregroundStyle(chromeText.opacity(pick.modalPending ? 0.2 : 0.45))
                 .fixedSize()
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
         .allowsHitTesting(false)
         .background { recentSessionsButton }
+        // hiding the pill (Interface toggle, hidden toolbar) with the popover open must not leave it marked shown.
+        .onDisappear { recentSessionsShown = false }
     }
 
     private var recentSessionsButton: some View {
-        let enabled = !switcherEmpty && !pick.modalPending
-        return Button {
+        Button {
             guard !pick.modalPending else { return }
             recentSessionsShown.toggle()
         } label: {
             SwitcherPillChrome(chromeText: chromeText, open: recentSessionsShown)
         }
         .buttonStyle(.plain)
-        .toolTip("Recent sessions (⌃Tab)", isShown: titlebarTipsShown)
-        .disabled(!enabled)
-        .accessibilityLabel("Recent sessions")
+        .toolTip("Session switcher (⌃Tab)", isShown: titlebarTipsShown)
+        .disabled(pick.modalPending)
+        // a disabled pill hands its clicks to the drag/zoom layer, like the rest of the title.
+        .allowsHitTesting(!pick.modalPending)
+        .accessibilityLabel("Session switcher")
         .accessibilityIdentifier("recent-sessions-button")
         .popover(isPresented: $recentSessionsShown, arrowEdge: .bottom) {
             recentSessionsPopover
-        }
-        .onChange(of: recentSessionsShown) { _, shown in
-            // suppress this window's auto-follow while the popover is open so an armed idle jump can't reshuffle
-            // the rows under the pointer; counted, so it stays balanced with the bell's popover.
-            if shown { store.suppressAutoFollow() } else { store.resumeAutoFollow() }
-        }
-        .onChange(of: switcherEmpty) { _, empty in
-            // the last listed session leaving fires no outside-click dismiss; close so no empty sliver lingers.
-            if empty { recentSessionsShown = false }
+                // suppress this window's auto-follow while the popover is open so an armed idle jump can't
+                // reshuffle the rows under the pointer. Bracketed on the content's own lifetime, so it stays
+                // balanced however the popover goes away, the pill unmounting included.
+                .onAppear { store.suppressAutoFollow() }
+                .onDisappear { store.resumeAutoFollow() }
         }
     }
 
@@ -352,11 +346,12 @@ private struct SessionPopoverRow: View {
 private struct SwitcherPillChrome: View {
     let chromeText: Color
     let open: Bool
+    @Environment(\.isEnabled) private var isEnabled
     @State private var hovering = false
 
     var body: some View {
         RoundedRectangle(cornerRadius: 7)
-            .fill(chromeText.opacity(hovering || open ? 0.12 : 0.06))
+            .fill(chromeText.opacity((hovering && isEnabled) || open ? 0.12 : 0.06))
             .overlay(RoundedRectangle(cornerRadius: 7).stroke(chromeText.opacity(0.10), lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: 7))
             .onHover { hovering = $0 }
