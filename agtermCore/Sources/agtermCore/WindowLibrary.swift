@@ -74,7 +74,7 @@ public final class WindowLibrary {
     @ObservationIgnored let directory: URL
     @ObservationIgnored let recentClosedStore: RecentClosedStore
     /// One bounded run-identified ring shared by every window store for this library/app lifetime.
-    @ObservationIgnored private let controlEventRing: ControlEventRing
+    @ObservationIgnored let controlEventRing: ControlEventRing
     /// Every event after the ring sequences it, debounced `tree.changed` included: what `events.read` will show.
     @ObservationIgnored public var onControlEvent: ((ControlEvent) -> Void)?
     /// onRemoteStoreOpened and onRemoteStoreClosed bracket a remote window's loaded store, so the app can run
@@ -228,12 +228,6 @@ public final class WindowLibrary {
         appLaunchSettled = true
         guard ready else { return }
         let event = controlEventRing.append(ControlEventDraft(kind: .appLaunched))
-        onControlEvent?(event)
-    }
-
-    /// Appends an app-wide event (no window or session) and hands it to the hook sink, as `emitAppLaunched` does.
-    public func emitAppEvent(_ draft: ControlEventDraft) {
-        let event = controlEventRing.append(draft) // outside the call: an optional call skips its argument
         onControlEvent?(event)
     }
 

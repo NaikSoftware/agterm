@@ -924,13 +924,7 @@ final class ControlServer {
             fontSize: { ($0.addressableSurface as? GhosttySurfaceView)?.currentFontSize() },
             splitFontSize: { ($0.splitSurface as? GhosttySurfaceView)?.currentFontSize() },
             scratchFontSize: { ($0.scratchSurface as? GhosttySurfaceView)?.currentFontSize() },
-            paneGrids: { session in
-                let grid = { (surface: (any TerminalSurface)?) in
-                    (surface as? GhosttySurfaceView)?.forcedGrid.map { ControlGrid(columns: $0.columns, rows: $0.rows) }
-                }
-                let left = grid(session.surface), right = grid(session.splitSurface)
-                return left == nil && right == nil ? nil : ControlPaneGrids(left: left, right: right)
-            },
+            paneGrids: Self.paneGrids,
             // both are app-level facts now that the quick terminal is one detached panel, so every projected
             // window reports the same value for them rather than one of its own.
             quickVisible: { QuickTerminalController.shared.isVisible },
@@ -985,10 +979,7 @@ final class ControlServer {
     /// background, selection and focus untouched.
     func makeSessionResponse(in store: AppStore, workspaceID: UUID, options: ControlSessionCreateOptions,
                              tint: SidebarTint? = nil, at index: Int? = nil) -> ControlResponse {
-        let cwd = options.cwd
-            ?? settingsModel.settings.usableRememberedFolder(store.workspaces.first { $0.id == workspaceID }?.projectFolder)
-            ?? settingsModel.settings.usableRememberedFolder(store.rememberedFolder(ofWorkspace: workspaceID))
-            ?? FileManager.default.homeDirectoryForCurrentUser.path
+        let cwd = options.cwd ?? defaultSessionCwd(in: store, workspaceID: workspaceID)
         guard let session = store.addSession(toWorkspace: workspaceID, cwd: cwd,
                                              command: options.command, name: options.name,
                                              wait: options.wait ?? false, at: index, select: !options.noSelect,
@@ -997,19 +988,6 @@ final class ControlServer {
         }
         if !options.noSelect, store === library.activeStore { actions.focusActiveSession() }
         return ControlResponse(ok: true, result: ControlResult(id: session.id.uuidString))
-    }
-
-    /// The first workspace whose remembered folder is exactly `cwd`, only in the `currentSession` new-session mode.
-    func remembering(_ cwd: String?, in store: AppStore) -> UUID? {
-        guard settingsModel.settings.usesRememberedFolder, let cwd else { return nil }
-        return store.workspaceID(rememberingFolder: cwd)
-    }
-
-    /// `value` trimmed of surrounding whitespace, or nil if absent or blank after trimming.
-    func trimmed(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let result = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return result.isEmpty ? nil : result
     }
 
     /// Internal, not private: the `ControlServer+*.swift` extensions holding the command arms cannot reach a

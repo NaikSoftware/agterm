@@ -5,6 +5,15 @@ import agtermCore
 extension ControlServer {
     static let phoneStartLimit: Duration = .seconds(10)
 
+    /// A session's `session.grid` sizes for the tree, nil when neither pane is forced.
+    static func paneGrids(_ session: Session) -> ControlPaneGrids? {
+        let grid = { (surface: (any TerminalSurface)?) in
+            (surface as? GhosttySurfaceView)?.forcedGrid.map { ControlGrid(columns: $0.columns, rows: $0.rows) }
+        }
+        let left = grid(session.surface), right = grid(session.splitSurface)
+        return left == nil && right == nil ? nil : ControlPaneGrids(left: left, right: right)
+    }
+
     func phoneStatus() -> ControlResponse {
         withPhoneRelay { ControlResponse(ok: true, result: ControlResult(phone: $0.status)) }
     }

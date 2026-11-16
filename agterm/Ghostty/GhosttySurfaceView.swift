@@ -145,8 +145,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
     /// can persist it. Pane surfaces share a live-role-aware callback; scratch and overlays leave it unset.
     /// libghostty has no font-size getter or change event, so this rides CELL_SIZE and reads the inherited config.
     var onFontSizeChange: ((Double) -> Void)?
-    /// Every OSC 7 report of a session pane, for its workspace's remembered folder; scratch and overlays leave it unset.
-    var onPwdChange: ((String) -> Void)?
+    var onPwdChange: ((String) -> Void)? // every OSC 7 report of a session pane, for its workspace's remembered folder
 
     /// Called when libghostty enters search mode (START_SEARCH) with the current needle (nil when none). The
     /// main/split factory toggles the session's search bar: visible → send `end_search` (the ⌘F-again close),
@@ -923,9 +922,7 @@ final class GhosttySurfaceView: NSView, PaneRoleMutableSurface {
         layer = plain
     }
 
-    func teardown() {
-        destroySurface()
-    }
+    func teardown() { destroySurface() }
 
     /// `TerminalSurface.isRealized`: the libghostty surface, and with it the spawned program, exists. False while
     /// `createSurface` is deferred on a zero backing size (`pendingSurfaceCreation`) and after `destroySurface`.
