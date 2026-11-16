@@ -57,19 +57,24 @@ Uint8List x25519Public(Uint8List private) => _dh(private, [9, ...List.filled(31,
 
 /// One direction's Noise CipherState: ChaChaPoly with nonce = 4 zero bytes ‖ u64 little-endian counter.
 class NoiseCipher {
-  NoiseCipher(this.key);
-  final Uint8List key;
-  int counter = 0;
+  NoiseCipher(this._key);
+  final Uint8List _key;
+  int _counter = 0;
+
+  @visibleForTesting
+  Uint8List get key => _key;
+  @visibleForTesting
+  set counter(int value) => _counter = value;
 
   // Noise reserves 2^64-1 (an int of -1 here), so a cipher refuses rather than reuse a nonce.
   List<int> get _nonce {
-    if (counter == -1) throw BleLinkError.badFrame;
-    return (ByteData(12)..setUint64(4, counter, Endian.little)).buffer.asUint8List();
+    if (_counter == -1) throw BleLinkError.badFrame;
+    return (ByteData(12)..setUint64(4, _counter, Endian.little)).buffer.asUint8List();
   }
 
   Uint8List encrypt(List<int> plaintext, {List<int> ad = const []}) {
-    final box = _aead.encryptSync(plaintext, secretKey: SecretKeyData(key), nonce: _nonce, aad: ad);
-    counter++;
+    final box = _aead.encryptSync(plaintext, secretKey: SecretKeyData(_key), nonce: _nonce, aad: ad);
+    _counter++;
     return Uint8List.fromList([...box.cipherText, ...box.mac.bytes]);
   }
 
@@ -81,13 +86,13 @@ class NoiseCipher {
     try {
       plaintext = _aead.decryptSync(
         SecretBox(ciphertext.sublist(0, split), nonce: _nonce, mac: Mac(ciphertext.sublist(split))),
-        secretKey: SecretKeyData(key),
+        secretKey: SecretKeyData(_key),
         aad: ad,
       );
     } catch (_) {
       throw BleLinkError.badFrame;
     }
-    counter++;
+    _counter++;
     return Uint8List.fromList(plaintext);
   }
 }
@@ -123,10 +128,22 @@ class BleInitiator {
     _cipher = NoiseCipher(out[1]);
   }
 
-  Uint8List start() => writeMessage1(Uint8List(0));
+  // Single use: 0 before start, 1 after it, 2 once finish has run (whatever it returned).
+  int _step = 0;
+
+  void _advance(int from) {
+    if (_step != from) throw StateError('BleInitiator is single-use: start once, then finish once');
+    _step++;
+  }
+
+  Uint8List start() {
+    _advance(0);
+    return writeMessage1(Uint8List(0));
+  }
 
   // Our handshake carries empty payloads, so a real reply is exactly 48 bytes; a 1-byte reply is the Mac's rejection.
   BleTransportKeys finish(Uint8List reply) {
+    _advance(1);
     if (reply.length == 1) {
       throw switch (reply[0]) {
         1 => BleLinkError.wrongKey,
@@ -215,7 +232,7 @@ class BleTransportKeys {
 
 /// `u16 big-endian length ‖ body` stream framing, used for every message on the L2CAP stream.
 class BleFramer {
-  final _buffer = BytesBuilder(copy: false);
+  final _buffer = BytesBuilder(); // copies: a BLE plugin may reuse the buffer it passed to push
 
   List<Uint8List> push(Uint8List bytes) {
     _buffer.add(bytes);

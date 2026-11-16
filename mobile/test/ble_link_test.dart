@@ -150,6 +150,25 @@ void main() {
     expect(mac.open(phone.seal(utf('ok\n'))), utf('ok\n'));
   });
 
+  test('initiator is single-use', () {
+    final i = BleInitiator(BleIds.psk('t'));
+    expect(() => i.finish(Uint8List(48)), throwsStateError);
+    i.start();
+    expect(i.start, throwsStateError);
+    expect(() => i.finish(Uint8List.fromList([2])), throwsA(BleLinkError.busy));
+    expect(() => i.finish(Uint8List(48)), throwsStateError);
+  });
+
+  test('framer keeps a partial frame when the caller reuses its buffer', () {
+    final f = BleFramer();
+    final buffer = Uint8List.fromList([0x00, 0x03, 0xaa, 0xbb]);
+    expect(f.push(buffer), isEmpty);
+    buffer.fillRange(0, 4, 0xee);
+    expect(f.push(Uint8List.fromList([0xcc])), [
+      [0xaa, 0xbb, 0xcc],
+    ]);
+  });
+
   test('framer handles partial, zero-length and batched frames', () {
     final f = BleFramer();
     expect(f.push(Uint8List.fromList([0x00])), isEmpty);
