@@ -249,10 +249,13 @@ and the 10 s auth timeout cover the rest. elisctl embeds an Info.plist (`ua.naik
 via `-sectcreate` in project.yml's Bundle helper executables phase, so a hand-run serve prompts under a stable identity. The L2CAP streams run on
 their own `StreamThread`, never `RunLoop.main`. `commands.html#mobile` owns the user-visible values.
 
-The phone link v2 frame contract lives in `ElisCore/Sources/ElisCore/PhoneLink/`; its vectors file has a byte-identical copy in the phone app (`mobile/test/fixtures/phone-link-vectors.json` in elis) that changes with it.
 A Bluetooth wrong-key handshake emits no `phone.refused`: a stranger in radio range could flood the event.
 `tree.phone.bluetooth` changes emit no event; it is poll-only.
 A connected central can still read the GAP device name, a known limit of the rotating UUID against an active observer.
+
+The phone link v2 frame contract lives in `ElisCore/Sources/ElisCore/PhoneLink/`.
+Its vectors file has a byte-identical copy in the phone app
+(`mobile/test/fixtures/phone-link-vectors.json` in elis) that changes with it.
 
 `session wait` is not a fourth exemption but a client-side composite, like `overlay open --block`: it
 opens the socket only for existing reads (`events.read`, `window.list`, `tree`), so there is no
