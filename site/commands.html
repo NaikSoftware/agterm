@@ -12,7 +12,6 @@
       name="keywords"
       content="hangarctl reference, Hangar control api, Hangar commands, Hangar cli, session.type, session.overlay, window.list"
     />
-    <meta name="author" content="umputun" />
     <link rel="canonical" href="https://naiksoftware.github.io/hangar/commands" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Command reference — Hangar" />
@@ -24,23 +23,22 @@
     <meta property="og:image" content="https://naiksoftware.github.io/hangar/assets/hangar-og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:site_name" content="hangar" />
+    <meta property="og:site_name" content="Hangar" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@umputun" />
     <meta name="twitter:title" content="Command reference — Hangar" />
     <meta
       name="twitter:description"
       content="Every hangarctl control command, with arguments, return values, and errors."
     />
     <meta name="twitter:image" content="https://naiksoftware.github.io/hangar/assets/hangar-og.png" />
-    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon-180.png" />
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png" />
     <meta name="theme-color" content="#191d20" />
-    <link rel="preload" href="/assets/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/assets/fonts/ibm-plex-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/style.css?v=3" />
+    <link rel="preload" href="assets/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/ibm-plex-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="style.css?v=3" />
   </head>
   <body>
     <div
@@ -75,7 +73,7 @@
             justify-content: space-between;
           "
         >
-          <a href="/" style="display: flex; align-items: center; gap: 11px; color: #e6e1d7">
+          <a href="./" style="display: flex; align-items: center; gap: 11px; color: #e6e1d7">
             <svg width="27" height="27" viewBox="0 0 100 100" fill="none" style="display: block; border-radius: 22%">
               <rect width="100" height="100" rx="24" fill="#1e40d8"></rect>
               <rect x="26" y="26" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
@@ -114,8 +112,8 @@
               font-size: 13.5px;
             "
           >
-            <a href="/" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">← home</a>
-            <a href="/docs" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">docs</a>
+            <a href="./" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">← home</a>
+            <a href="docs.html" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">docs</a>
             <a
               href="https://github.com/NaikSoftware/hangar"
               style="
@@ -141,8 +139,8 @@
               >
                 contents
               </button>
-              <a href="/">← home</a>
-              <a href="/docs">docs</a>
+              <a href="./">← home</a>
+              <a href="docs.html">docs</a>
               <a href="https://github.com/NaikSoftware/hangar">GitHub ↗</a>
             </nav>
           </details>
@@ -220,7 +218,7 @@
             <div style="height: 16px"></div>
             <span style="color: #4a5158; font-size: 11px; letter-spacing: 0.12em; padding: 4px 12px">HELP</span>
             <a href="#errors" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Errors</a>
-            <a href="/docs" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">← back to docs</a>
+            <a href="docs.html" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">← back to docs</a>
           </nav>
         </aside>
 
@@ -257,7 +255,7 @@
           </p>
           <p style="font-size: 16px; line-height: 1.7; color: #949ba4; margin: 16px 0 0">
             For the narrative introduction — what the socket is, how to install the CLI, and worked recipes — see the
-            <a href="/docs#hangarctl" style="color: #6d82f3">hangarctl section of the docs</a>.
+            <a href="docs.html#hangarctl" style="color: #6d82f3">hangarctl section of the docs</a>.
           </p>
 
           <!-- OVERVIEW -->
@@ -2581,7 +2579,7 @@
                 is saved with its source and flags and comes back with its companions after a relaunch, in every restore mode, and
                 from Recent Closed. When its file or server is gone, the row stays with the error and a Reload button. A saved
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--js</span> file page runs its scripts with the full control bridge at every launch; the
-                <a href="/docs#restore" style="color: #6d82f3">guide</a> says what that grants. A row attached from another Mac is
+                <a href="docs.html#restore" style="color: #6d82f3">guide</a> says what that grants. A row attached from another Mac is
                 never saved.
               </p>
             </div>
@@ -4142,7 +4140,7 @@
                 <strong style="color: #bfbab0">Returns</strong>
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">result.count</span> — the number of parse diagnostics
                 (0 is a clean reload). App-global; the same path as File ▸ Reload Keymap. See
-                <a href="/docs#keymap" style="color: #6d82f3">Customizing keys</a> for the file format.
+                <a href="docs.html#keymap" style="color: #6d82f3">Customizing keys</a> for the file format.
               </p>
             </div>
 
@@ -4222,7 +4220,7 @@
                 <strong style="color: #bfbab0">Returns</strong>
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">result.count</span> — the number of parse diagnostics (0 is a clean reload). A hook whose line is
                 unchanged keeps its running script and queue. App-global; the same path as File ▸ Reload Hooks, and a target or
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--window</span> is refused. See <a href="/docs#hooks" style="color: #6d82f3">Event hooks</a> for the file format.
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--window</span> is refused. See <a href="docs.html#hooks" style="color: #6d82f3">Event hooks</a> for the file format.
               </p>
             </div>
             <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 11px; padding: 18px 20px; margin-bottom: 12px">
@@ -4600,7 +4598,7 @@
                 Only a session whose every pane has a live daemon is listed; one whose daemon has gone is omitted rather than offered, because attaching to a name that no longer exists would create a fresh shell wearing it. A page has no daemon and is listed with no panes: a top-level page session always, a page companion when its parent is listed, and then it attaches only under a row already attached from that parent. A row attached from another Mac is never listed. The remote must be new enough to report where its zmx and its daemons live, or the command says so and lists nothing.
               </p>
               <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 8px 0 0">
-                The connection is non-interactive: ssh runs with <span style="font-family: &quot;JetBrains Mono&quot;, monospace">BatchMode</span>, so key-based auth must already work for the host and a password or host-key prompt is a failure rather than a question. The far side also needs <span style="font-family: &quot;JetBrains Mono&quot;, monospace">hangarctl</span> installed by the cask or the Help action, since a machine merely running Hangar has no CLI an ssh command can find.
+                The connection is non-interactive: ssh runs with <span style="font-family: &quot;JetBrains Mono&quot;, monospace">BatchMode</span>, so key-based auth must already work for the host and a password or host-key prompt is a failure rather than a question. The far side also needs <span style="font-family: &quot;JetBrains Mono&quot;, monospace">hangarctl</span> installed by the Help action, since a machine merely running Hangar has no CLI an ssh command can find.
               </p>
               <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 8px 0 0">
                 <strong style="color: #bfbab0">Result:</strong>
@@ -4729,8 +4727,8 @@
 
             <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 0 0 12px">
               A remote window mirrors the catalog of hangar-server on a Linux host
-              (<a href="/docs#remote-server" style="color: #6d82f3">Remote server</a>), or of one window of another Mac in Live
-              sessions mode (<a href="/docs#remote-window-mac" style="color: #6d82f3">A window of another Mac</a>). The window
+              (<a href="docs.html#remote-server" style="color: #6d82f3">Remote server</a>), or of one window of another Mac in Live
+              sessions mode (<a href="docs.html#remote-window-mac" style="color: #6d82f3">A window of another Mac</a>). The window
               commands below run on the Mac showing it; the catalog commands are served by hangar-server and by that other Mac.
             </p>
 
@@ -4917,7 +4915,7 @@
                 hangarctl server install DESTINATION [--from FILE] [-p PORT] [-i FILE ...] [-J HOST] [-F FILE]
               </div>
               <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
-                Install or upgrade <a href="/docs#remote-server" style="color: #6d82f3">hangar-server</a> on a Linux host. It asks the host for its architecture (<span style="font-family: &quot;JetBrains Mono&quot;, monospace">aarch64</span> or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">x86_64</span>), downloads the release tarball matching this app's version from GitHub, and refuses it unless its sha256 matches the one the app was built with. Only then does it unpack the tarball into <span style="font-family: &quot;JetBrains Mono&quot;, monospace">~/.local/lib/hangar-server</span> and run its installer, which sets up the systemd user service, lingering and the agent hooks. Running it again upgrades in place while every pane keeps running.
+                Install or upgrade <a href="docs.html#remote-server" style="color: #6d82f3">hangar-server</a> on a Linux host. It asks the host for its architecture (<span style="font-family: &quot;JetBrains Mono&quot;, monospace">aarch64</span> or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">x86_64</span>), downloads the release tarball matching this app's version from GitHub, and refuses it unless its sha256 matches the one the app was built with. Only then does it unpack the tarball into <span style="font-family: &quot;JetBrains Mono&quot;, monospace">~/.local/lib/hangar-server</span> and run its installer, which sets up the systemd user service, lingering and the agent hooks. Running it again upgrades in place while every pane keeps running.
               </p>
               <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 8px 0 0">
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">DESTINATION</span> and the four options are what <a href="#terminfo" style="color: #6d82f3">terminfo install</a> takes, with the same interactive connection and the same installer-owned execution settings. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--from FILE</span> uses a tarball already on this Mac instead of downloading one, for a Mac without GitHub access or a tarball you fetched and checked yourself; it must still match the sha256 this app was built with for the host's architecture. A development build has no release to install and is refused; <span style="font-family: &quot;JetBrains Mono&quot;, monospace">scripts/install-server.sh</span> installs from a checkout.
@@ -4944,7 +4942,7 @@
             </h2>
 
             <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 0 0 12px">
-              Local-only and macOS-only: these commands run the phone relay in this process and have no protocol command. The relay forwards a paired phone's commands to the control socket; the <a href="/docs#phone-app" style="color: #6d82f3">Phone app</a> guide has the security model.
+              Local-only and macOS-only: these commands run the phone relay in this process and have no protocol command. The relay forwards a paired phone's commands to the control socket; the <a href="docs.html#phone-app" style="color: #6d82f3">Phone app</a> guide has the security model.
             </p>
 
             <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 11px; padding: 18px 20px; margin-bottom: 12px">
@@ -5034,8 +5032,8 @@
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">commit</span> — diagnostics only, never part of a
                 version comparison. It also returns
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">result.installed</span>, the same two values read from the app bundle on disk at
-                request time. The two differ once the bundle is replaced under a running app, by
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">brew upgrade</span> for one, and stay different until the app is restarted. It is build
+                request time. The two differ once the bundle is replaced under a running app, by an installed
+                update, and stay different until the app is restarted. It is build
                 metadata, not a comparison of the executables: a rebuild from the same commit reads as equal.
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">installed</span> is omitted when the bundle cannot be read and by an older app; treat
                 its absence as unknown, never as a match.
@@ -5812,7 +5810,7 @@
             font-family: &quot;JetBrains Mono&quot;, monospace;
           "
         >
-          <a href="/" style="display: flex; align-items: center; gap: 10px; color: #949ba4; font-size: 13.5px" class="hv7"
+          <a href="./" style="display: flex; align-items: center; gap: 10px; color: #949ba4; font-size: 13.5px" class="hv7"
             >← naiksoftware.github.io/hangar</a
           >
           <div style="display: flex; gap: 24px; font-size: 13px">

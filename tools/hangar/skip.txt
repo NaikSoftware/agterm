@@ -19,6 +19,7 @@ macos/scripts/*-patches/**.patch	line	^[ -]
 
 # Credits.
 README.md	line	^Hangar started as a fork of \[agterm\]\(https://github\.com/umputun/agterm\)
+site/index.html	line	<span class="credit">Started as a fork of <a href="https://github\.com/umputun/agterm">agterm</a>
 linux/LICENSE	line	^Portions copyright .*\(agterm, https://github\.com/umputun/agterm\)
 cookbook/**/README.md	line	^Author:
 macos/**/*.swift	line	(?i)adapted from thdxg/macterm
@@ -33,3 +34,6 @@ macos/**/*.swift	line	(?i)adapted from thdxg/macterm
 **	keep	dev\.umputun/agterm
 # External downstream repository, not part of this monorepo.
 **	keep	agterm-linux
+
+# The phone wire-name test asserts the old name is gone.
+mobile/test/wire_names_test.dart	line	isNot\(contains\('agterm'\)\)

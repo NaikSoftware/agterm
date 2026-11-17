@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Documentation — Hangar | a simply good terminal with a full control API</title>
+    <title>Documentation — Hangar | a terminal workspace for AI coding agents</title>
     <meta
       name="description"
       content="Hangar documentation: install, workspaces and sessions, split panes, overlays, the hangarctl control CLI, agent status, keymaps, themes, and window management."
@@ -12,7 +12,6 @@
       name="keywords"
       content="Hangar docs, hangarctl, Hangar control api, Hangar keymap, Hangar agent skill, macOS terminal documentation"
     />
-    <meta name="author" content="umputun" />
     <link rel="canonical" href="https://naiksoftware.github.io/hangar/docs" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Documentation — Hangar" />
@@ -24,23 +23,22 @@
     <meta property="og:image" content="https://naiksoftware.github.io/hangar/assets/hangar-og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:site_name" content="hangar" />
+    <meta property="og:site_name" content="Hangar" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@umputun" />
     <meta name="twitter:title" content="Documentation — Hangar" />
     <meta
       name="twitter:description"
       content="Install Hangar, learn workspaces, sessions, overlays, and the hangarctl control CLI."
     />
     <meta name="twitter:image" content="https://naiksoftware.github.io/hangar/assets/hangar-og.png" />
-    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon-180.png" />
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png" />
     <meta name="theme-color" content="#191d20" />
-    <link rel="preload" href="/assets/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/assets/fonts/ibm-plex-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/style.css?v=3" />
+    <link rel="preload" href="assets/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/ibm-plex-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="style.css?v=3" />
     <style>
       .doc-v2 h2 { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 28px; letter-spacing: -0.02em;
         margin: 0 0 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
@@ -106,7 +104,7 @@
             justify-content: space-between;
           "
         >
-          <a href="/" style="display: flex; align-items: center; gap: 11px; color: #e6e1d7">
+          <a href="./" style="display: flex; align-items: center; gap: 11px; color: #e6e1d7">
             <svg width="27" height="27" viewBox="0 0 100 100" fill="none" style="display: block; border-radius: 22%">
               <rect width="100" height="100" rx="24" fill="#1e40d8"></rect>
               <rect x="26" y="26" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
@@ -145,8 +143,8 @@
               font-size: 13.5px;
             "
           >
-            <a href="/" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">← home</a>
-            <a href="/commands" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">commands</a>
+            <a href="./" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">← home</a>
+            <a href="commands.html" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">commands</a>
             <a
               href="https://github.com/NaikSoftware/hangar"
               style="
@@ -172,8 +170,8 @@
               >
                 contents
               </button>
-              <a href="/">← home</a>
-              <a href="/commands">commands</a>
+              <a href="./">← home</a>
+              <a href="commands.html">commands</a>
               <a href="https://github.com/NaikSoftware/hangar">GitHub ↗</a>
             </nav>
           </details>
@@ -237,7 +235,7 @@
             <span style="color: #4a5158; font-size: 11px; letter-spacing: 0.12em; padding: 4px 12px">SCRIPTING</span>
             <a href="#hangarctl" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">hangarctl reference</a>
             <a href="#page-bridge" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Page bridge</a>
-            <a href="/commands" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Command reference ↗</a>
+            <a href="commands.html" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Command reference ↗</a>
             <a
               href="https://github.com/NaikSoftware/hangar/tree/master/cookbook"
               style="color: #bfbab0; padding: 7px 12px; border-radius: 7px"
@@ -387,11 +385,9 @@
           <!-- INSTALL -->
           <section id="install" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
 <h2>Install</h2>
-<p>Signed, notarized builds for Apple Silicon (arm64) Macs running macOS 14 or later are published on the <a href="https://github.com/NaikSoftware/hangar/releases">releases page</a>. They open without any Gatekeeper workaround.</p>
-<p><strong>Homebrew</strong></p>
-<pre class="bash"><code>brew install --cask umputun/apps/agterm</code></pre>
-<p>The cask also installs the <code>hangarctl</code> command-line tool; Hangar then leaves the cask link in place.</p>
-<p><strong>Direct download.</strong> Download the latest <code>.dmg</code> from the <a href="https://github.com/NaikSoftware/hangar/releases">releases page</a>, open it, and drag Hangar.app into <code>/Applications</code>.</p>
+<p>Builds for Apple Silicon (arm64) Macs running macOS 14 or later are published on the <a href="https://github.com/NaikSoftware/hangar/releases">releases page</a>.</p>
+<p>Download the <code>.dmg</code> from the <a href="https://github.com/NaikSoftware/hangar/releases/latest">latest release</a>, open it, and drag Hangar.app into <code>/Applications</code>. The build is not notarized, so clear the download flag once before the first launch:</p>
+<pre class="bash"><code>xattr -dr com.apple.quarantine /Applications/Hangar.app</code></pre>
 <h3 id="install-help">Automatic installers</h3>
 <p>None is needed to use Hangar as a terminal; each connects it to a wider workflow. A release build installs all three once per installed build: on the first launch after a fresh install and after each update. It runs silently and shows an alert only when you must act, for example after a failure or a skipped agent. An agent you install later gets its hooks and skill on the next Hangar update.</p>
 <table>
@@ -473,7 +469,7 @@ command &quot;Session here&quot; ctrl+a&gt;n hangarctl session new --cwd &quot;$
 <p>This is the normal way to add things. Hangar installs the agent skill for you. Ask the agent in one of your sessions:</p>
 <pre><code>add a custom command that opens yazi in a 95% overlay, bound to ctrl+a then y</code></pre>
 <p>The skill carries the keymap syntax, the full command catalog, the context tokens and the PATH rule, so the agent writes a working line. An agent without it still answers, plausibly and wrongly; steps 1-3 are how you tell the two apart and change the line later without asking again.</p>
-<p>From here, <a href="#keymap">Custom commands &amp; keys</a> has the full keymap syntax and bindable actions, the <a href="/commands">command reference</a> lists every <code>hangarctl</code> command, and the cookbook collects recipes to copy and edit.</p>
+<p>From here, <a href="#keymap">Custom commands &amp; keys</a> has the full keymap syntax and bindable actions, the <a href="commands.html">command reference</a> lists every <code>hangarctl</code> command, and the cookbook collects recipes to copy and edit.</p>
 </section>
           <!-- WORKSPACES -->
           <section id="workspaces" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
@@ -492,7 +488,7 @@ command &quot;Session here&quot; ctrl+a&gt;n hangarctl session new --cwd &quot;$
 <li><strong>Reveal in Finder</strong> opens the focused pane's directory, and is greyed out when that directory no longer exists.</li>
 </ul>
 <figure>
-<img src="/assets/docs-context-menu.webp" alt="Session context menu" width="650" height="450" loading="lazy">
+<img src="assets/docs-context-menu.webp" alt="Session context menu" width="650" height="450" loading="lazy">
 <figcaption>
 A session's right-click context menu.
 </figcaption>
@@ -502,7 +498,7 @@ A session's right-click context menu.
 <h3 id="companions">Companions</h3>
 <p>A companion keeps a related shell or program next to a session: a log tail, a watcher, a second shell for the same task. It is an ordinary session pinned to its parent, listed right after it and indented under it.</p>
 <figure>
-<img src="/assets/docs-companions.webp" alt="Two sessions with companions indented under them, one companion blocked" width="655" height="233" loading="lazy">
+<img src="assets/docs-companions.webp" alt="Two sessions with companions indented under them, one companion blocked" width="655" height="233" loading="lazy">
 <figcaption>
 Two parents, each with its companions indented under it; the blocked <code>logs</code> companion shows its own status.
 </figcaption>
@@ -704,7 +700,7 @@ hangarctl session overlay open --html report.html --page</code></pre>
 <h3 id="terminals-dashboard">Dashboard</h3>
 <p>Watch several agents or builds at once: sessions' live output in one view-only grid over the window.</p>
 <figure>
-<img src="/assets/docs-dashboard.webp" alt="The dashboard with two Claude Code sessions, a codex session and a build" width="1457" height="1126" loading="lazy">
+<img src="assets/docs-dashboard.webp" alt="The dashboard with two Claude Code sessions, a codex session and a build" width="1457" height="1126" loading="lazy">
 <figcaption>
 Two Claude Code sessions, codex and a build in one grid. The amber chip is codex waiting on a question.
 </figcaption>
@@ -764,7 +760,7 @@ hangarctl dashboard --mru --font-size 11    # a fixed cell font size; --auto-siz
 </tbody>
 </table>
 <figure>
-<img src="/assets/docs-palette.webp" alt="The action palette open over a split session, Attach Remote greyed out" width="1457" height="540" loading="lazy">
+<img src="assets/docs-palette.webp" alt="The action palette open over a split session, Attach Remote greyed out" width="1457" height="540" loading="lazy">
 <figcaption>
 The action palette over a split session. Attach Remote is greyed out: listed, but unavailable right now.
 </figcaption>
@@ -799,7 +795,7 @@ The action palette over a split session. Attach Remote is greyed out: listed, bu
 <h3 id="remote-sessions-setup">Set up the other Mac</h3>
 <ul>
 <li>Hangar runs in <strong>Live sessions</strong> mode there (<a href="#restore-live">Restore</a>), which keeps a live program behind each pane. A page session needs no live program.</li>
-<li><code>hangarctl</code> is installed there by the cask or by Hangar itself (<a href="#install-help">Automatic installers</a>). A Mac that only runs Hangar has no CLI an ssh command can find.</li>
+<li><code>hangarctl</code> is installed there by Hangar itself (<a href="#install-help">Automatic installers</a>). A Mac that only runs Hangar has no CLI an ssh command can find.</li>
 <li>Key-based ssh works without prompts. Hangar runs ssh non-interactively, so a password or host-key prompt is a failure, not a question.</li>
 </ul>
 <p>Check the connection the way Hangar makes it:</p>
@@ -925,7 +921,7 @@ s=$(hangarctl zmx tree studio.local --json \
 <li>Closing the page from a script over there takes it down here; reloading asks this Mac to do it.</li>
 </ul>
 <h3 id="remote-sessions-clipboard">Clipboard</h3>
-<p><code>pbcopy</code> on the other Mac fills that Mac's clipboard, not yours. <a href="/commands#clipboard"><code>hangarctl clipboard set</code></a> sends the text through the pane, asking every terminal attached to it to set its clipboard, this Mac's included; each applies its own <code>clipboard-write</code> setting. It needs no terminal, so an agent's shell tool can use it.</p>
+<p><code>pbcopy</code> on the other Mac fills that Mac's clipboard, not yours. <a href="commands.html#clipboard"><code>hangarctl clipboard set</code></a> sends the text through the pane, asking every terminal attached to it to set its clipboard, this Mac's included; each applies its own <code>clipboard-write</code> setting. It needs no terminal, so an agent's shell tool can use it.</p>
 <h3 id="remote-sessions-disconnect">When the connection drops</h3>
 <p><strong>The presentation stream.</strong> Mirrored status, context and HUD clear here and return on reconnect. Retries run after 1, 2, 4, 8, 16, then 30 seconds, every 5 minutes after eight failures in a row, and never stop; waking the Mac or a network change retries at once. While it is down:</p>
 <ul>
@@ -1111,7 +1107,7 @@ s=$(hangarctl zmx tree studio.local --json \
           <!-- PHONE APP -->
           <section id="phone-app" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
 <h2>Phone app</h2>
-<p><a href="https://github.com/NaikSoftware/hangar/tree/main/mobile">Hangar Mobile</a> is an Android app that shows your Mac's sessions on a phone and types into them. It talks to Hangar through a relay that this Mac runs, and the relay is off by default.</p>
+<p><a href="https://github.com/NaikSoftware/hangar/tree/master/mobile">Hangar Mobile</a> is an Android app that shows your Mac's sessions on a phone and types into them. It talks to Hangar through a relay that this Mac runs, and the relay is off by default.</p>
 <ul>
 <li><strong>Pairing.</strong> Choose Hangar ▸ Connect a Phone…, switch it on, and scan the QR in the app, or paste the <code>hangar://pair</code> link. From a terminal, <code>hangarctl mobile serve</code> prints the same code. The window also sets the address and port, copies the link, and revokes pairing.</li>
 <li><strong>Bluetooth.</strong> The phone also connects over Bluetooth, so it works without Wi-Fi. It is on by default while the relay is on, and the same pairing code serves both links. The first time, macOS asks to let Hangar use Bluetooth. If you refuse, the Bluetooth row in Connect a Phone… shows <em>Off: unauthorized</em> and an Open Bluetooth Settings button. The row also reads <em>Starting…</em>, <em>Advertising</em> or <em>Off</em> with a reason. Range is about 10 m. The phone tries Wi-Fi first and then Bluetooth; its Prefer Bluetooth setting reverses that. A Mac with no Wi-Fi address pairs over Bluetooth alone: type an address only if you also want a Wi-Fi link. The phone app needs Android 15 or later.</li>
@@ -1119,7 +1115,7 @@ s=$(hangarctl zmx tree studio.local --json \
 <li><strong>Fit to phone.</strong> The phone can force a pane to a narrower character grid. The pane then shows that grid in its top-left corner. Session ▸ Restore Terminal Size, or the same item in a session's sidebar menu, gives the size back. Resizing the view clears the grid, and so does the phone disconnecting or the relay stopping.</li>
 <li><strong>Troubleshooting.</strong> When the Mac's firewall or endpoint security blocks incoming connections, connect over USB: run <code>adb reverse tcp:PORT tcp:PORT</code>, where PORT is the relay's port (8765 by default), and set the phone's address to <code>127.0.0.1</code>.</li>
 </ul>
-<p>The <a href="/commands#phone">phone</a> and <a href="/commands#mobile">mobile</a> commands drive all of this from a script.</p>
+<p>The <a href="commands.html#phone">phone</a> and <a href="commands.html#mobile">mobile</a> commands drive all of this from a script.</p>
 </section>
 
           <!-- NOTIFICATIONS -->
@@ -1174,7 +1170,7 @@ s=$(hangarctl zmx tree studio.local --json \
 </ul>
 <h3 id="settings-appearance">Appearance</h3>
 <figure>
-<img src="/assets/docs-settings-appearance.webp" alt="Settings Appearance tab" width="360" height="532" loading="lazy">
+<img src="assets/docs-settings-appearance.webp" alt="Settings Appearance tab" width="360" height="532" loading="lazy">
 <figcaption>
 The Appearance tab.
 </figcaption>
@@ -1191,7 +1187,7 @@ The Appearance tab.
 <p><strong>Reduce Transparency and Reduce Motion.</strong> With macOS Reduce Transparency on, translucent windows, palettes and switchers show opaque and unblurred; your saved opacity and blur are kept and come back when it is off. <strong>Ignore Reduce Transparency</strong> (off by default) keeps the window's opacity and blur anyway; palettes and switchers stay opaque. Reduce Motion keeps status colors and glyphs but stops their pulsing in the sidebar and the dashboard.</p>
 <h3 id="settings-interface">Interface</h3>
 <figure>
-<img src="/assets/docs-settings-interface.webp" alt="Settings Interface tab with title bar and sidebar toggles" width="360" height="532" loading="lazy">
+<img src="assets/docs-settings-interface.webp" alt="Settings Interface tab with title bar and sidebar toggles" width="360" height="532" loading="lazy">
 <figcaption>
 The Interface tab: title-bar and sidebar controls, plus the quick terminal's size. A toggle for a button shows that button's icon.
 </figcaption>
@@ -1216,7 +1212,7 @@ The Interface tab: title-bar and sidebar controls, plus the quick terminal's siz
 <p>The folder holding <code>keymap.conf</code>, a list of parse errors, and a reload button (<a href="#keymap">Custom commands &amp; keys</a>).</p>
 <p><strong>Lock in Hangar</strong> (off by default) picks one of the keyboard layouts enabled in macOS and holds it while any Hangar window has the keyboard, including overlays, pickers, dialogs and rename fields. Switching layouts there is undone at once, and your earlier layout returns when you move to another app. A crash or force quit leaves the locked layout selected.</p>
 <figure>
-<img src="/assets/screenshot-keymap-editor.webp" alt="Keymap editor" width="1330" height="828" loading="lazy">
+<img src="assets/screenshot-keymap-editor.webp" alt="Keymap editor" width="1330" height="828" loading="lazy">
 <figcaption>
 The keymap editor.
 </figcaption>
@@ -1552,11 +1548,11 @@ for (const ws of tree.workspaces) for (const s of ws.sessions) {
 <pre class="html"><code>&lt;!-- branches.html --&gt;
 &lt;button type=&quot;button&quot; data-hangar=&quot;session.overlay.submit&quot; data-hangar-args=&#39;{&quot;value&quot;:&quot;main&quot;}&#39;&gt;main&lt;/button&gt;
 &lt;form data-hangar=&quot;session.overlay.submit&quot;&gt;&lt;input name=&quot;value&quot; placeholder=&quot;other&quot;&gt;&lt;/form&gt;</code></pre>
-<p><strong>Refused from a page:</strong> commands that stream or finish after their reply (<code>zmx.present</code>, <code>zmx.reset</code>, <code>catalog.subscribe</code>, <code>session.overlay.job.run</code>, <code>session.overlay.page.serve</code> and <code>session.companion.page.attach</code>), and any request from a frame inside the page. See the <a href="/commands">command reference</a> for <code>submit</code> and <code>result --page</code>.</p>
+<p><strong>Refused from a page:</strong> commands that stream or finish after their reply (<code>zmx.present</code>, <code>zmx.reset</code>, <code>catalog.subscribe</code>, <code>session.overlay.job.run</code>, <code>session.overlay.page.serve</code> and <code>session.companion.page.attach</code>), and any request from a frame inside the page. See the <a href="commands.html">command reference</a> for <code>submit</code> and <code>result --page</code>.</p>
 </section>
           <section id="hangarctl" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
 <h2>hangarctl</h2>
-<p><code>hangarctl</code> drives Hangar from scripts over a local socket: create and arrange workspaces and sessions, type into them, run actions, open overlays and dialogs, and poll an event feed for status and lifecycle changes. It does not stream terminal output. Every command, with arguments, results and errors, is in the <a href="/commands">Command reference</a>.</p>
+<p><code>hangarctl</code> drives Hangar from scripts over a local socket: create and arrange workspaces and sessions, type into them, run actions, open overlays and dialogs, and poll an event feed for status and lifecycle changes. It does not stream terminal output. Every command, with arguments, results and errors, is in the <a href="commands.html">Command reference</a>.</p>
 <h3 id="hangarctl-addressing">Addressing</h3>
 <ul>
 <li><code>--target</code> and <code>--workspace</code> take a session or workspace UUID, a unique prefix of it (git-style), or <code>active</code>. Never a name.</li>
@@ -1713,7 +1709,7 @@ hangarctl pick result &quot;$id&quot;
 hangarctl pick cancel &quot;$id&quot;
 hangarctl tree --json | jq -r &#39;.result.tree.pickPending // empty&#39;</code></pre>
 <figure>
-<img src="/assets/docs-pick.webp" alt="Hangar picker with three deploy targets, each with a subtitle and a status glyph" width="565" height="220" loading="lazy">
+<img src="assets/docs-pick.webp" alt="Hangar picker with three deploy targets, each with a subtitle and a status glyph" width="565" height="220" loading="lazy">
 <figcaption>
 Items with subtitles and status glyphs; the prompt is the field placeholder.
 </figcaption>
@@ -1791,7 +1787,7 @@ hangarctl ask &quot;Open which?&quot; --multiple --choice 398=&quot;issue #398&q
 </tbody>
 </table>
 <figure>
-<img src="/assets/docs-ask-styles.webp" alt="The same yes/no question in the terminal style and in the gui style" width="771" height="162" loading="lazy">
+<img src="assets/docs-ask-styles.webp" alt="The same yes/no question in the terminal style and in the gui style" width="771" height="162" loading="lazy">
 <figcaption>
 The same question in the default terminal style and with <code>--style gui</code>.
 </figcaption>
@@ -1812,7 +1808,7 @@ The same question in the default terminal style and with <code>--style gui</code
 </ul>
 <p><strong>Forms</strong></p>
 <figure class="narrow">
-<img src="/assets/docs-ask-list.webp" alt="Question with a checkbox list, subtitles and a Something else row" width="270" height="244" loading="lazy">
+<img src="assets/docs-ask-list.webp" alt="Question with a checkbox list, subtitles and a Something else row" width="270" height="244" loading="lazy">
 <figcaption>
 <code>--multiple</code> with subtitles and <code>--other</code>.
 </figcaption>
@@ -1822,7 +1818,7 @@ The same question in the default terminal style and with <code>--style gui</code
 <li>Without <code>--multiple</code> a list is radio buttons and returns exactly one id.</li>
 <li><code>--other "Something else"</code> adds a free-form line after the items. Typing selects it, clearing deselects it, and while selected its text comes back as <code>text</code> beside <code>selected</code>. A radio list returns one id or that text, never both.</li>
 </ul>
-<p>Placement, sizing, input priority, result polling and cancellation are in the <a href="/commands#ask">ask reference</a>.</p>
+<p>Placement, sizing, input priority, result polling and cancellation are in the <a href="commands.html#ask">ask reference</a>.</p>
 <h3 id="hangarctl-overlays">Overlays</h3>
 <p>An overlay runs a program over a session without disturbing the shell beneath.</p>
 <pre class="bash"><code>hangarctl session overlay open &quot;revdiff HEAD~3&quot; --target 9f3c        # full, hides the shell beneath
@@ -1977,12 +1973,12 @@ hangarctl msg read --ack --wait --timeout 60                      # wait for mai
 </ul>
 <p>Two agents in one split can hold a conversation this way, each reading the other's messages as they arrive: see the <a href="https://github.com/NaikSoftware/hangar/tree/master/cookbook/two-agent-mailbox-chat">two-agent mailbox chat</a> recipe.</p>
 <figure>
-<img src="/assets/docs-mailbox.webp" alt="Claude Code and codex in one split session, exchanging messages through their pane mailboxes" width="1457" height="1126" loading="lazy">
+<img src="assets/docs-mailbox.webp" alt="Claude Code and codex in one split session, exchanging messages through their pane mailboxes" width="1457" height="1126" loading="lazy">
 <figcaption>
 Claude Code (left) asks codex (right) to check its reading; the reply arrives in Claude's pane as a message, with nothing typed into either prompt.
 </figcaption>
 </figure>
-<p>Details: <a href="/commands#msg">command reference</a>.</p>
+<p>Details: <a href="commands.html#msg">command reference</a>.</p>
 <h3 id="hangarctl-cookbook">Cookbook</h3>
 <p>The <a href="https://github.com/NaikSoftware/hangar/tree/master/cookbook">cookbook</a> collects complete workflows, each with a README and its scripts: switching the sidebar to one project, closing a project's workspaces and bringing them back, picking a path with fzf and typing it into the shell, and giving each tab its own Claude Code or Codex conversation across a restart. Copy them into your setup and edit them; <a href="https://github.com/NaikSoftware/hangar/blob/master/cookbook/CONTRIBUTING.md"><code>cookbook/CONTRIBUTING.md</code></a> has the rules for adding one.</p>
 <p>Recipes come from other people as well as the maintainer. Each is reviewed, but they are shell scripts that run on your machine against your sessions, and several close sessions or delete workspaces, so read one before running it.</p>
@@ -2156,14 +2152,14 @@ Claude Code (left) asks codex (right) to check its reading; the reply arrives in
 </table>
 <p><strong>Log pages</strong> show the last 5,000 lines, read from the end so a log of any size opens, and follow the file as it grows. The bar shows whether it follows. Scroll up to pause; scroll back to the bottom or press Resume to follow again. A rotated or truncated log is picked up, and a missing one shows waiting until it returns. <code>app.log:120</code> opens the plain page at that line instead.</p>
 <figure>
-<img src="/assets/docs-page-diff.webp" alt="A patch shown as a diff page with change and file navigation, green and red bands for added and removed lines" width="760" height="535" loading="lazy">
+<img src="assets/docs-page-diff.webp" alt="A patch shown as a diff page with change and file navigation, green and red bands for added and removed lines" width="760" height="535" loading="lazy">
 <figcaption>
 A clicked <code>.patch</code>: the bar steps between changes and between files.
 </figcaption>
 </figure>
 <p><strong>Diff pages</strong> color each file's code in its language over green and red bands for added and removed lines. A change is a run of removed and added lines; the page counts them, marks the one a step reached, and after a scroll steps on from what is shown. The file button names the file in view; its list narrows as you type, arrows and Return pick, and Escape closes it. A pick shows that file's header and marks its first change.</p>
 <figure>
-<img src="/assets/docs-page-markdown.webp" alt="A markdown file rendered as a page in the terminal theme" width="1112" height="490" loading="lazy">
+<img src="assets/docs-page-markdown.webp" alt="A markdown file rendered as a page in the terminal theme" width="1112" height="490" loading="lazy">
 <figcaption>
 A clicked <code>.md</code> file, rendered in the terminal's theme.
 </figcaption>
@@ -2188,13 +2184,13 @@ A clicked <code>.md</code> file, rendered in the terminal's theme.
 <h2>Agent status</h2>
 <p>A coding agent running in a session can put its status on that session's sidebar row, so you can tell at a glance which of many agents needs you. The glyph sits just left of the notification badge on every session that is not idle. A collapsed workspace row shows the most urgent glyph of its sessions: blocked, then active, then completed.</p>
 <figure>
-<img src="/assets/docs-status-agents.webp" alt="Two Claude Code sessions finished with green glyphs and a codex session waiting with an amber one" width="650" height="170" loading="lazy">
+<img src="assets/docs-status-agents.webp" alt="Two Claude Code sessions finished with green glyphs and a codex session waiting with an amber one" width="650" height="170" loading="lazy">
 <figcaption>
 Claude Code and codex reporting through the installed hooks: two finished (green), codex waiting on its question (amber).
 </figcaption>
 </figure>
 <figure>
-<img src="/assets/docs-status-rows.webp" alt="Sidebar with an active, a blocked and a completed session, info lines under two rows, a red and a green tinted row, and the session context in the title bar" width="655" height="233" loading="lazy">
+<img src="assets/docs-status-rows.webp" alt="Sidebar with an active, a blocked and a completed session, info lines under two rows, a red and a green tinted row, and the session context in the title bar" width="655" height="233" loading="lazy">
 <figcaption>
 Active, blocked and completed rows; an info line under two of them; two tinted rows; the selected session's context in the title bar.
 </figcaption>
@@ -2232,13 +2228,13 @@ Active, blocked and completed rows; an info line under two of them; two tinted r
 <h3 id="status-shapes">Colors and shapes</h3>
 <p>By default active draws a circle, blocked a triangle and completed a diamond, the same shapes the phone app shows, so the states stay apart at a glance without depending on color. <strong>Settings ▸ Agent Status ▸ Colors and Shapes</strong> gives each state its own color and shape.</p>
 <figure class="narrow">
-<img src="/assets/docs-settings-status.webp" alt="Colors and Shapes settings with a color well and a shape picker for Active, Blocked and Completed" width="480" height="165" loading="lazy">
+<img src="assets/docs-settings-status.webp" alt="Colors and Shapes settings with a color well and a shape picker for Active, Blocked and Completed" width="480" height="165" loading="lazy">
 <figcaption>
 One row per state: color, then shape.
 </figcaption>
 </figure>
 <figure class="narrow">
-<img src="/assets/docs-status-shapes.webp" alt="Twelve sidebar rows, each named after the status shape it shows" width="220" height="370" loading="lazy">
+<img src="assets/docs-status-shapes.webp" alt="Twelve sidebar rows, each named after the status shape it shows" width="220" height="370" loading="lazy">
 <figcaption>
 The twelve shapes, each row named after its own.
 </figcaption>
@@ -2551,7 +2547,7 @@ command = &quot;&#39;/Users/you/.config/hangar/agent-status/hangar-codex-status.
 </table>
 <p>A new mode applies after Hangar restarts. <code>hangarctl restore mode</code> reads or sets it.</p>
 <figure>
-<img src="/assets/docs-restore-mode.webp" alt="Restore sessions picker in Settings, General tab, set to Live sessions" width="470" height="190" loading="lazy">
+<img src="assets/docs-restore-mode.webp" alt="Restore sessions picker in Settings, General tab, set to Live sessions" width="470" height="190" loading="lazy">
 <figcaption>
 Settings ▸ General ▸ Restore sessions. The note under it is a reminder that a new mode applies after a restart.
 </figcaption>
@@ -2567,7 +2563,7 @@ Settings ▸ General ▸ Restore sessions. The note under it is a reminder that 
 <p>Without a supported shell or the bundled helper, Hangar uses fresh shells and Settings says why. The shell is read at launch; running panes keep theirs until <a href="#restore-reset">Reset Live Sessions</a>.</p>
 <h4 id="restore-upgrade-and-switch-modes">Upgrade and switch modes</h4>
 <ul>
-<li><strong>Upgrade:</strong> install the new version (<code>brew upgrade --cask hangar</code>), quit, reopen. Panes reconnect. <code>hangarctl version</code> shows the installed version when it differs from the running one.</li>
+<li><strong>Upgrade:</strong> install the new version from the DMG, quit, reopen. Panes reconnect. <code>hangarctl version</code> shows the installed version when it differs from the running one.</li>
 <li><strong>Switch to Live:</strong> current shells end at the next clean quit. The first Live launch restarts their commands where it can; shell state is lost.</li>
 <li><strong>Switch away from Live:</strong> after a restart, every detached live program in this state directory ends. If Live is still selected but cannot run, they are kept for a later launch.</li>
 </ul>
@@ -2634,7 +2630,7 @@ Settings ▸ General ▸ Restore sessions. The note under it is a reminder that 
 </ul>
 <p>The dialog shows how many sessions it resets. Their running work stops, and recorded commands restart where possible; agent conversations may need resuming by hand. Others are untouched. With banners on, a notification appears only when something went wrong: some sessions could not be reset (run it again for the rest), or the session list could not be read and nothing was reset. <code>hangarctl zmx reset --force</code> skips the dialog.</p>
 <figure class="narrow">
-<img src="/assets/docs-reset-live-sessions.webp" alt="Reset Live Sessions confirmation dialog saying three live sessions will be reset" width="260" height="362" loading="lazy">
+<img src="assets/docs-reset-live-sessions.webp" alt="Reset Live Sessions confirmation dialog saying three live sessions will be reset" width="260" height="362" loading="lazy">
 <figcaption>
 The confirmation names how many sessions it resets and why.
 </figcaption>
@@ -2676,8 +2672,8 @@ The confirmation names how many sessions it resets and why.
 </tr>
 </tbody>
 </table>
-<p>After <code>zmx kill</code> a split closes; a primary hands its place to its split, or the session closes. No undo time; Reopen Last Closed Item or <a href="/commands#recent"><code>hangarctl recent open</code></a> brings it back with a fresh shell.</p>
-<p><code>hangarctl tree --json</code> reports live panes: <code>surfaces[].backedByZmx</code>, and a session-level <code>backedByZmx</code> that is true when every primary and split pane is live. The sidebar has no mark for it. Full options: <a href="/commands#zmx">command reference</a>.</p>
+<p>After <code>zmx kill</code> a split closes; a primary hands its place to its split, or the session closes. No undo time; Reopen Last Closed Item or <a href="commands.html#recent"><code>hangarctl recent open</code></a> brings it back with a fresh shell.</p>
+<p><code>hangarctl tree --json</code> reports live panes: <code>surfaces[].backedByZmx</code>, and a session-level <code>backedByZmx</code> that is true when every primary and split pane is live. The sidebar has no mark for it. Full options: <a href="commands.html#zmx">command reference</a>.</p>
 <h4 id="restore-commands-from-scripts">Commands from scripts</h4>
 <p>In Live mode, <code>hangarctl session new --command</code> takes long commands fine. A surviving program reconnects without running it again; a gone one gets the usual fallback. The pane closes when the command ends, or keeps its output with <code>--wait</code>. A command that ends quickly can lose its output and show only <code>hangar: session is gone</code>.</p>
 <h3 id="restore-rerun">Re-run commands</h3>
@@ -2936,7 +2932,7 @@ The confirmation names how many sessions it resets and why.
             font-family: &quot;JetBrains Mono&quot;, monospace;
           "
         >
-          <a href="/" style="display: flex; align-items: center; gap: 10px; color: #949ba4; font-size: 13.5px" class="hv7"
+          <a href="./" style="display: flex; align-items: center; gap: 10px; color: #949ba4; font-size: 13.5px" class="hv7"
             >← naiksoftware.github.io/hangar</a
           >
           <div style="display: flex; gap: 24px; font-size: 13px">

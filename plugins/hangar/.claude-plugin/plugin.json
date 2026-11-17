@@ -1,9 +1,9 @@
 {
   "name": "hangar",
   "version": "0.42.3",
-  "description": "Drive hangar, a native macOS terminal, programmatically via its hangarctl CLI and local control socket.",
+  "description": "Drive Hangar, a native macOS terminal, programmatically via its hangarctl CLI and local control socket.",
   "author": {
-    "name": "Umputun"
+    "name": "NaikSoftware"
   },
   "homepage": "https://naiksoftware.github.io/hangar",
   "repository": "https://github.com/NaikSoftware/hangar",

@@ -40,7 +40,7 @@ All four must be green before you send a PR. `make lint` runs with `--strict`, s
 
 The OpenCode status-plugin tests inside `make test` spawn Node.js, so they need 22.7+ (or 20.19+ on the 20.x line) on `PATH`; those versions unflag module-syntax detection for the plugin's bare `.js`. Without a qualifying Node they skip, and the app itself never needs Node at runtime.
 
-None of those four runs the XCUITests in `HangarUITests/`. Those need the `hangar` scheme, which drives the running app through the accessibility API:
+None of those four runs the XCUITests in `macos/HangarUITests/`. Those need the `Hangar` scheme, which drives the running app through the accessibility API:
 
 ```
 xcodebuild test -project Hangar.xcodeproj -scheme Hangar -destination 'platform=macOS'
@@ -91,7 +91,7 @@ Anything added to `AppActions` or `AppStore` also needs all four of:
 
 1. a `Command` case, with its arguments, in `HangarCore`'s `ControlProtocol.swift`
 2. handling in `ControlDispatcher`, which owns the host-free part (argument parsing, validation, error text, response shape) and calls the app through a `ControlActions` method for the side effect alone
-3. an `hangarctl` subcommand in `hangarctlKit`
+3. a `hangarctl` subcommand in `hangarctlKit`
 4. protocol round-trip tests plus an end-to-end test
 
 The toolbar, the menu bar, and the control socket are three callers of the same seam, and they must not drift apart. A command that sets or mutates per-session state also owes a matching read-back field on the `tree` node, so a script can query the value it just wrote.

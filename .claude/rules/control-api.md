@@ -2485,7 +2485,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   reason as the row's failed page; a server refusal stays shown and is not retried. The row closes only when the
   catalog removes it; `session.detach` ends the view and `session.reattach` claims a new one.
 - A Mac in Live sessions mode serves each of its windows as a catalog too, reversing the Linux server plan's
-  headless-only rule at Eugene's request; `site/docs.html#remote-window-mac` owns the user contract.
+  headless-only rule at the owner's request; `site/docs.html#remote-window-mac` owns the user contract.
   - Advertisement: its `version` keeps `versions` nil and adds `macCatalog`, so an older viewer refuses before it
     subscribes; the hello names the window (`CatalogHello.window`, saved as `WindowSource.originWindow`).
     `OriginCatalogRefusal` answers through `CatalogFrame.refused(reason, final)`: only a closed window is retried.

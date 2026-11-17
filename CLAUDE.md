@@ -6,7 +6,8 @@ C-boundary concurrency before changing the bridge.
 `README.md` is the product synopsis, not the reference.
 The macOS app lives in `macos/`: run every command there, and read every path below relative to it,
 except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude/`, `.github/`,
-`.claude-plugin/`, `.agents/`, `plugins/`, `cookbook/`, `site/`, `docs/screenshots/` and `docs/superpowers/`.
+`.claude-plugin/`, `.agents/`, `plugins/`, `cookbook/`, `site/`, `tools/`, `docs/screenshots/` and `docs/superpowers/`.
+`linux/` holds the Qt6/KDE app and `mobile/` the Flutter Android app; each has its own README.
 
 ## Working norms
 
@@ -32,7 +33,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   not an extra.
   Every new or changed capability that works locally works there too: design the remote path (presentation,
   page serving, control routing) together with the local one, and a missing remote path is part of the task.
-  The only exception is one Eugene approves in a direct AskUserQuestion that explains what would not work
+  The only exception is one the owner approves in a direct AskUserQuestion that explains what would not work
   remotely, why, and what supporting it would cost; a plan line, PR note or peer's agreement is not that
   approval.
 - For each hideable titlebar/sidebar element, ask whether it should join host-free `InterfaceElement` and
@@ -113,6 +114,10 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   files, and 800-line types; test configs raise file/type limits to 2000 and inherit all other rules.
   Disabled/tuned rules reflect deliberate conventions. Zero findings are required.
 - Every change must build, pass `swift test`, `make test-app`, and `make lint`.
+- A `linux/` change builds with CMake and passes `ctest --test-dir build` on Linux (see `linux/README.md`).
+- A `mobile/` change passes `flutter analyze --no-pub` and `flutter test --no-pub` there; until the local
+  Flutter SDK matches `pubspec.yaml`, set a temporary `sdk:` constraint, run `flutter pub get`, and restore
+  `pubspec.yaml` and `pubspec.lock` before committing.
 - An intermittent CI failure is looked up in `docs/ci-flakes.md` by test name or log text before it is
   investigated, and gets an entry there once it is understood.
 - Run each gate ONCE, at the end, and scope everything else to what changed: a new or changed test runs
@@ -164,9 +169,9 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   `lsappinfo list | grep -A4 hangar.debug`.
   An entry marked `exited-with-subordinates` that lists `relatedCoalitionPIDs` is held by those pids:
   identify them with `ps -p`, stop the ones that are leaked test processes, and report anything else to
-  Eugene.
+  the owner.
   An entry without `relatedCoalitionPIDs` right after a run can be transient; check again after a minute
-  before acting, and report it to Eugene if it persists.
+  before acting, and report it to the owner if it persists.
 - Debug Swift code lives in `Hangar.debug.dylib`; inspect it or object files, not the stub executable.
 - For throwaway launch-time probes, append to a temp file. `NSLog` from `open -n` is unreliable; production
   logging uses `os.Logger`.
@@ -221,10 +226,10 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
 - A stopped Debug instance can leave its Dock tile; a click on it relaunches the bundle with no
   `HANGAR_STATE_DIR`, which a current build answers from `hangar-debug` and a build predating
   `DebugStateDirectory` answers from the live state and daemons. After SIGTERM, confirm the tile is gone
-  with `lsappinfo list | grep hangar.debug` and tell Eugene when one lingers.
+  with `lsappinfo list | grep hangar.debug` and tell the owner when one lingers.
 - A manual-test pane opens in `$HOME`, and a pane restored from a daemon keeps whatever directory it had.
   Never type a bare `claude` into one. Always send `cd <dir> && claude` with a directory Claude Code
-  already trusts, `~/dev.umputun/agterm` by default. A session rooted at `$HOME` treats every dotfile and
+  already trusts, `~/IdeaProjects/hangar` by default. A session rooted at `$HOME` treats every dotfile and
   repo as its project, and it stops on the folder-trust prompt, which is never yours to answer.
 - The automatic installers never run in Debug builds.
   Never invoke `AgentHooksInstaller`, `SkillInstaller` or `CLIInstaller` from a Debug or worktree
@@ -326,11 +331,11 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   `site/llms.txt` is the crawler-oriented summary and discovery index.
   These three facts stay synchronized across every surface that states them: the install commands, the
   minimum macOS version, and the positioning claim
-  (`a simply good terminal with a full control API`).
+  (`a terminal workspace for AI coding agents`).
   The command count is NOT one of them and must not become one: no surface states a total, which is what
   keeps a new command off every page that merely mentions the catalog. `control-api.md` owns that rule.
-  The positioning claim must stay consistent in substance, not byte-identical: `site/index.html`'s title and
-  social tags insert `macOS` for search intent, and `site/llms.txt` carries a libghostty-based variant.
+  The positioning claim must stay consistent in substance, not byte-identical: `site/llms.txt` carries a
+  libghostty-based variant.
 - `site/docs.html` is the complete user reference, written for people: every behavior, setting, flag, file format,
   env var and JSON field a user sees or scripts against, organized by task in short paragraphs, lists and tables,
   with screenshots for anything visual.
@@ -357,19 +362,17 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
 
 ## Website
 
-- `naiksoftware.github.io/hangar` is the static `site/` directory on Cloudflare Pages with no build step or repository deploy
-  config. Dashboard-owned wiring deploys every master push. Canonical URLs omit `.html` because Pages
-  redirects with 308.
+- `naiksoftware.github.io/hangar` is the static `site/` directory on GitHub Pages with no build step.
+  `.github/workflows/pages.yml` deploys it on every master push; the repository's Pages source must be
+  GitHub Actions.
+  The site is served under `/hangar/`, so every page and asset link is relative; a root-absolute `/assets/...`
+  breaks there.
 - Assets are self-hosted: CSS, latin woff2 fonts, WebP screenshots, 1200x630 social card, and favicons.
-  Inline page styles come from a design-tool export whose source archive is on the maintainer's Desktop.
-- Browsers cache `style.css` for 4 hours, so a page change that depends on a `style.css` change bumps the
-  `?v=` on its `<link>` in every page, or cached visitors get new HTML with old CSS.
-- Hero images must match the fixed `1187 / 696` ratio, about 1.70:1; capture dense dashboards at that
-  ratio before WebP conversion; existing shots are 2374x1392. Dashboard images may floor near 200k versus
-  85-172k for single-window shots. Crossfade duration is slides times 5 seconds, delays advance by
-  5 seconds, and the opaque keyframe plateau is about `1/slides`.
-- Auto-fit feature grids can strand orphan cards. Use a fixed column count, explicit spans, and narrow
-  media fallbacks as in `.surfaces-grid`.
+  `index.html` is built from the owner's Claude Design page and keeps its styles inline;
+  `docs.html` and `commands.html` share `style.css`.
+- A page change that depends on a `style.css` change bumps the `?v=` on its `<link>` in every page,
+  or cached visitors get new HTML with old CSS.
+- The page screenshots come from `docs/screenshots/` as `cwebp -q 82` WebP files in `site/assets/`.
 - Demo and screenshot staging shows two or three agent statuses at most, and never notification badges
   next to statuses; they are alternative mechanisms.
 - A screenshot may show the username, the hostname, the agent's plan and usage, and Claude Code or codex working
@@ -396,4 +399,4 @@ spans intact, and format long catalogs as lists.
 - `libghostty.md`: surfaces, rendering, AppKit, theme, overlays, cursor.
 - `app-icon.md`: adaptive Icon Composer build.
 - `ci.md`: jobs, filters, coverage, badge.
-- `release.md`: local signing, notarization, release, Homebrew, changelog.
+- `release.md`: local release, optional signing and notarization, changelog.

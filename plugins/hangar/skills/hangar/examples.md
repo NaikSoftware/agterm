@@ -73,7 +73,7 @@ hangarctl zmx reset --force
 ## Attach a session running on another Mac
 
 List what the other machine offers across every open window, then open one here by its ID. The far side
-has to be in `live` mode, reachable over ssh with key-based auth, and carry `hangarctl` from the cask or
+has to be in `live` mode, reachable over ssh with key-based auth, and carry `hangarctl` from
 the Help action — running Hangar alone leaves no CLI an ssh command can find. Run it with no host to ask
 the same of this app, which is the form the remote call runs over there:
 

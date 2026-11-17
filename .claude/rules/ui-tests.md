@@ -159,10 +159,10 @@ These run inside the app, so a mistake can kill the host instead of failing an a
   the same window. The correlation is measured; the causal link to the timeout is not. Diagnose with
   `log show --predicate 'subsystem == "com.apple.TCC"' --last 6m --style compact` plus
   `ps -p <pid> -o lstart` against the binary's mtime. If the retry also fails, diagnose the attribution
-  issue before considering a restart; restarting Hangar is Eugene's decision, never the agent's.
+  issue before considering a restart; restarting Hangar is the owner's decision, never the agent's.
   Hosted `HangarTests` can be blocked over the same period (2026-10-02): the host waits in
   `_prepareTestConfigurationAndIDESession` with zero test cases started, and `xcodebuild` logs
   `Connection peer refused channel request for "dtxproxy:XCTestManager_IDEInterface:..."` two minutes after
-  connecting. Both runners recovered once Eugene allowed the pending authorization, with the same stale
+  connecting. Both runners recovered once the owner allowed the pending authorization, with the same stale
   session host and the same `testmanagerd` still running, so neither needs a restart. SIP refuses
   `launchctl kickstart -k` on `testmanagerd`. [Unverified] which authorization that was.

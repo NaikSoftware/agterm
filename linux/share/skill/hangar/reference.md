@@ -13,7 +13,7 @@ result back. Errors are quoted as the app returns them; the CLI prints them as `
 - `--json` prints the response line verbatim and exits 0 even on `"ok":false`; check `.ok`. On `pick`, `ask`
   and `session overlay open --block` it returns the open reply without waiting; `events --json`
   prints one event per line instead.
-- Without `--json`: errors go to stderr with exit 1; `cannot connect to <path>: … (is hangar running?)` when no
+- Without `--json`: errors go to stderr with exit 1; `cannot connect to <path>: … (is Hangar running?)` when no
   app owns the socket. Create commands print the new id; batch close/move print `N session(s)`; reads print text.
 - Options take a value unless they are flags; flags are `--json --stdin --all --no-select --create-workspace
   --auto-reset --blink --if-idle --undoable --companion --wait --block --follow --full --markdown --sticky --no-frame

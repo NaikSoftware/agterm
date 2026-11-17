@@ -807,7 +807,7 @@ follows the lead to the Mac now leading, the origin included, and a program over
 pane's `remote` in `tree` says where its next one goes. The overlay's program still runs once on the origin, and a remote
 `overlay close` replies when the cancel is requested
 ([details](reference.md#restore)). Both run ssh non-interactively, so key-based auth must already work, and
-the far side needs `hangarctl` installed by the cask or the Help action: a machine merely running Hangar
+the far side needs `hangarctl` installed by the Help action: a machine merely running Hangar
 has no CLI an ssh command can find. Every zmx command needs a running Hangar.
 
 **clipboard** — `clipboard set [TEXT]` — copy text to the clipboard of every terminal showing the pane
@@ -839,7 +839,7 @@ are in the [command reference](reference.md#phone).
 
 **version** — `hangarctl version` — which Hangar is serving this socket, as `result.app` (`version`, plus
 `commit` when the build recorded one), and the bundle on disk as `result.installed`, which differs from
-`app` once the app was replaced under the running one (a background `brew upgrade`) and is omitted when
+`app` once the app was replaced under the running one (an update installed in the background) and is omitted when
 unknown. App-global: no target, no `--window`, no window need be open, so it
 works as a preflight from a keymap-launched script, which has no `$TERM_PROGRAM_VERSION`. Address the
 socket explicitly (`--socket "$HANGAR_SOCKET"`, or `"$AGT_SOCKET"` in a keymap child): a bare call

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Build, sign, notarize, and package a release DMG locally, and (with --publish)
-# upload it to a GitHub release and bump the Homebrew cask.
+# upload it to a GitHub release.
 #
 # Usage:
 #   scripts/release.sh <version>            # build + sign + notarize + DMG (no publish)
-#   scripts/release.sh <version> --publish  # also: gh release + cask bump/push
+#   scripts/release.sh <version> --publish  # also: gh release + upload
 #
 # Signing identity: auto-detected from the keychain ("Developer ID Application"),
 # or override with HANGAR_SIGN_IDENTITY. With no identity it produces an AD-HOC
@@ -67,7 +67,6 @@ if [ "$PUBLISH" = "1" ]; then
 fi
 APP="$BUILD_DIR/DerivedData/Build/Products/Release/Hangar.app"
 NOTARY_PROFILE="${HANGAR_NOTARY_PROFILE:-hangar-notary}"
-TAP_REPO="umputun/homebrew-apps"
 
 # resolve the signing identity: explicit override, else the first Developer ID
 # Application identity in the keychain, else ad-hoc dry-run.
@@ -119,13 +118,15 @@ release_notes() {
   ' "$ROOT/CHANGELOG.md")"
   [ -n "$section" ] || echo "WARNING: no CHANGELOG.md section for v$VERSION — release body will be the install note only" >&2
   [ -n "$section" ] && printf '%s\n\n' "$section"
+  printf -- '---\n\n'
+  if [ "$SIGNED" = "1" ]; then
+    echo "Signed with a Developer ID certificate and notarized by Apple, so macOS Gatekeeper opens it with no extra steps. Apple Silicon (arm64) only, macOS 14 or later."
+  else
+    echo "Not notarized: after installing, run \`xattr -dr com.apple.quarantine /Applications/Hangar.app\` once. Apple Silicon (arm64) only, macOS 14 or later."
+  fi
   cat <<EOF
----
 
-Signed with a Developer ID certificate and notarized by Apple, so macOS Gatekeeper opens it with no extra steps. Apple Silicon (arm64) only, macOS 14 or later.
-
-- **Homebrew:** \`brew install --cask umputun/apps/agterm\`
-- **Direct download:** open the \`.dmg\` and drag \`Hangar.app\` into \`/Applications\`.
+- **Download:** open the \`.dmg\` and drag \`Hangar.app\` into \`/Applications\`.
 EOF
 }
 
@@ -216,11 +217,11 @@ fi
 echo "==> built: $DMG"
 
 if [ "$PUBLISH" != "1" ]; then
-  echo "==> dry run complete (pass --publish to upload + bump the cask)"
+  echo "==> dry run complete (pass --publish to upload)"
   exit 0
 fi
 
-# ── publish: GitHub release + cask bump ───────────────────────────────────────
+# ── publish: GitHub release ───────────────────────────────────────────────────
 echo "==> publishing $TAG"
 NOTES_FILE="$(mktemp)"
 release_notes >"$NOTES_FILE"
@@ -232,23 +233,4 @@ fi
 rm -f "$NOTES_FILE"
 gh release upload "$TAG" "$DMG" "${SERVER_TARBALLS[@]}" --clobber
 
-SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
-TAP_DIR="$(mktemp -d)"
-gh repo clone "$TAP_REPO" "$TAP_DIR" -- --depth=1 >/dev/null
-CASK="$TAP_DIR/Casks/hangar.rb"
-if [ ! -f "$CASK" ]; then
-  mkdir -p "$TAP_DIR/Casks"
-  cp "$ROOT/packaging/hangar.rb" "$CASK" # first publish: seed from the in-repo source of truth
-fi
-sed -i '' -E "s/^( *version )\".*\"/\1\"$VERSION\"/" "$CASK"
-sed -i '' -E "s/^( *sha256 )\".*\"/\1\"$SHA\"/" "$CASK"
-git -C "$TAP_DIR" add Casks/hangar.rb
-if git -C "$TAP_DIR" diff --cached --quiet; then
-  echo "==> cask already at $VERSION, nothing to push"
-else
-  git -C "$TAP_DIR" commit -m "hangar $VERSION"
-  git -C "$TAP_DIR" push
-  echo "==> cask bumped to $VERSION"
-fi
-rm -rf "$TAP_DIR"
 echo "==> done"

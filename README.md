@@ -4,7 +4,7 @@ Hangar is a native macOS terminal built to run many coding agents at once.
 Every agent works in its own named session, sessions sit in workspaces, and the sidebar shows which agent is working, which one waits for you, and which one is done.
 A phone app follows the same sessions, so you can answer an agent from your pocket.
 
-![Hangar](docs/screenshots/main.png)
+![Hangar on macOS: workspaces of agent sessions in the sidebar, a Claude Code session and a shell split beside it](docs/screenshots/main.png)
 
 ## Why
 
@@ -27,9 +27,8 @@ The terminal engine is [Ghostty](https://ghostty.org)'s libghostty: rendering, V
 Hangar for Android watches and drives your sessions from a phone, over Wi‑Fi, USB or Bluetooth.
 
 <p align="center">
-  <img src="docs/screenshots/mobile-sessions.png" width="270" alt="Sessions: a blocked agent's question with answer buttons, a finished session, workspaces of agent sessions">
-  <img src="docs/screenshots/mobile-new-session.png" width="270" alt="New session: pick Terminal, Claude Code, Codex, OpenCode or Antigravity, a workspace and a folder">
-  <img src="docs/screenshots/mobile-session.png" width="270" alt="A Claude Code session fitted to the phone">
+  <img src="docs/screenshots/phone-sessions.png" width="270" alt="Sessions: a blocked agent's question with answer buttons, workspaces of agent sessions with their status">
+  <img src="docs/screenshots/phone-session.png" width="270" alt="A Claude Code session fitted to the phone">
 </p>
 
 - **Sessions.** The same workspace tree as the desktop. An agent's question shows as answer buttons, so a permission prompt is one tap.
@@ -55,7 +54,7 @@ Hangar runs on Apple Silicon Macs with macOS 14 or later.
 The phone app is attached to the same release as `hangar-mobile.apk`.
 Open it on the phone, or run `adb install -r hangar-mobile.apk`.
 
-A Qt6/KDE version for Linux lives in [NaikSoftware/hangar](https://github.com/NaikSoftware/hangar).
+A Qt6/KDE version for Linux lives in [`linux/`](linux/); build it from source with the steps there.
 
 ## Scripting
 
@@ -77,8 +76,8 @@ Ready-made recipes are in the [cookbook](cookbook/).
 
 ## Documentation
 
-- [User guide](site/docs.html): workspaces, sessions, splits, overlays, keymap and settings.
-- [Command reference](site/commands.html): every `hangarctl` command.
+- [User guide](https://naiksoftware.github.io/hangar/docs): workspaces, sessions, splits, overlays, keymap and settings.
+- [Command reference](https://naiksoftware.github.io/hangar/commands): every `hangarctl` command.
 - [Troubleshooting](macos/docs/troubleshooting.md): logs and common problems.
 - [CONTRIBUTING.md](CONTRIBUTING.md): build from source.
 - [ARCHITECTURE.md](macos/ARCHITECTURE.md): modules, surface ownership and the libghostty boundary.

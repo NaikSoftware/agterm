@@ -2542,7 +2542,7 @@ always, a page companion when its parent is listed, and then it attaches only un
 its parent. A row attached from another Mac is never listed. An empty list is a successful answer and does NOT diagnose the restore mode —
 `zmx list` does that. A terminal session needs the far side in `live` mode, which is what puts a daemon behind
 each pane (a page session needs none), and the far side must be new enough to answer `zmx tree` at all; an older one is refused by name rather than
-half-attached. It also needs `hangarctl` installed by the cask or the Help action: a machine merely
+half-attached. It also needs `hangarctl` installed by the Help action: a machine merely
 running Hangar has no CLI an ssh command can find, and the read fails with exit 127.
 
 `hangarctl zmx attach HOST SESSION [--window W]` opens one of those sessions here, marked remote, in
@@ -2882,7 +2882,7 @@ window need be open, so it works as a preflight from a keymap-launched script. R
   of a version comparison.
 
 It also returns `result.installed`, the same two values read from the app bundle on disk at request time.
-The two differ once the bundle is replaced under a running app, by `brew upgrade` for one, and stay
+The two differ once the bundle is replaced under a running app, by an installed update, and stay
 different until the app is restarted:
 
 ```sh

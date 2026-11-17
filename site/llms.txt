@@ -1,6 +1,6 @@
 # Hangar
 
-> Native macOS terminal on libghostty with a deliberately small interface and a full control API
+> A terminal workspace for AI coding agents, built on libghostty, with a full control API
 
 Hangar is a native macOS terminal, built on libghostty (Ghostty's engine), with a deliberately small interface and a full control API. Instead of scattering sessions across tabs, it groups them into named workspaces, and almost everything that structure holds is also an object a script can address: the bundled hangarctl creates and types into sessions, runs overlays, moves windows, sets a session's status glyph, and reads that state back over a local socket. Running many AI coding agents at once is the obvious use, and far from the only one. With nothing scripted it is a fast, modern general-purpose terminal for everyday work.
 
@@ -22,12 +22,12 @@ Hangar is a native macOS terminal, built on libghostty (Ghostty's engine), with 
 - [Documentation](https://naiksoftware.github.io/hangar/docs): full reference — install, keybindings, keymap.conf, hooks.conf, ghostty config, themes, control API
 - [Control API commands](https://naiksoftware.github.io/hangar/commands): the complete hangarctl command catalog
 - [README](https://github.com/NaikSoftware/hangar/blob/master/README.md): the project synopsis, with install, the model, and the control-API demo
-- [Architecture](https://github.com/NaikSoftware/hangar/blob/master/ARCHITECTURE.md): module split, surface ownership, and the libghostty C boundary
+- [Architecture](https://github.com/NaikSoftware/hangar/blob/master/macos/ARCHITECTURE.md): module split, surface ownership, and the libghostty C boundary
 
 ## Install
 
-- [Releases](https://github.com/NaikSoftware/hangar/releases): signed and notarized DMG downloads (Apple Silicon, macOS 14+)
-- [Homebrew cask](https://github.com/umputun/homebrew-apps): `brew install --cask umputun/apps/agterm`
+- [Releases](https://github.com/NaikSoftware/hangar/releases/latest): the macOS DMG (Apple Silicon, macOS 14+, not notarized) and the Android APK
+- [Linux](https://github.com/NaikSoftware/hangar/tree/master/linux): the Qt6/KDE app, built from source
 
 ## Optional
 
