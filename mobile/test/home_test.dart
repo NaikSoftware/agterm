@@ -51,6 +51,21 @@ void main() {
     await t.pumpWidget(const SizedBox()); // stops the snippet timer
   });
 
+  testWidgets('a closed session leaves its row in place, then the row is gone', (t) async {
+    final m = model();
+    await pumpHome(t, m);
+    m.workspaces = [m.workspaces[0], Workspace({'id': 'w2', 'name': 'sys', 'sessions': []})];
+    m.notifyListeners(); // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+    await t.pump();
+    expect(find.byKey(const Key('row-s5')), findsOneWidget);
+    expect(find.byKey(const Key('wsTile-w2')), findsNothing);
+    await t.pump(const Duration(milliseconds: 400));
+    await t.pump();
+    expect(find.byKey(const Key('row-s5')), findsNothing);
+    expect(find.byKey(const Key('wsTile-w2')), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+  });
+
   testWidgets('the workspace ⋮ opens its actions with a new session there', (t) async {
     await pumpHome(t, model());
     await t.tap(find.byKey(const Key('wsMenu-w2')));
