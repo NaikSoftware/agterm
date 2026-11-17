@@ -162,6 +162,16 @@ same scripts on itself, then merges master.
 3. Scope: terminal-output streaming is approved; `control-api.md:23` changes with M3.
 4. Take over stays, beside Fit to phone.
 
+## Notes for the M4 relay (from the M2 review)
+
+- Channels 0 and 1 have no cap in `PhoneLinkScheduler`: the relay stops reading phone requests past a pending limit
+  and drops or coalesces events, or a phone that does not read grows relay memory.
+- Credit is send-side only; Take over input needs a receive window in the relay.
+- On `.overflowed`, stop the old attach reader before RESYNC, or its late bytes follow the new screen.
+- Call `open(channel:)` before OPENED; `enqueue` on a channel that is not open returns `.closed`.
+- OPENED, GRID, LEAD, RESYNC and CLOSE bypass the scheduler, so GRID can overtake queued DATA laid out for the old grid.
+- Channel ids come from the phone: cap open channels and refuse OPEN on 0 and 1.
+
 ## Left to the builder
 
 Exact JSON fields of OPEN/OPENED/CLOSE, buffer and credit numbers within the stated ranges, Dart package layout,
