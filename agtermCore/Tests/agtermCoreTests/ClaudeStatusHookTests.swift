@@ -299,6 +299,56 @@ struct ClaudeStatusHookTests {
         #expect(result.calls == ["completed --auto-reset"])
     }
 
+    private static let runningTeammate = #"[{"id":"t1","type":"teammate","status":"running","description":"d"}]"#
+
+    private func withBusyDir(_ body: ([String: String]) throws -> Void) throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("agterm-busy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try body(["TMPDIR": dir.path])
+    }
+
+    private func post(_ event: String, agentID: String? = nil, tasks: String? = nil, args: [String] = ["active", "--blink"],
+                      env: [String: String]) throws -> [String] {
+        try run(chain: ["login", "claude"], args: args, extraEnv: env,
+                input: .pipe(Self.payload(event, agentID: agentID, tasks: tasks))).calls
+    }
+
+    @Test func stopWithAWorkingTeammateStaysActive() throws {
+        try withBusyDir { env in
+            try #expect(post("SubagentStart", agentID: "at1-0b61", env: env) == ["active --blink --if-idle"])
+            try #expect(post("Stop", tasks: Self.runningTeammate, args: ["completed", "--auto-reset"], env: env)
+                == ["active --blink"])
+        }
+    }
+
+    @Test func stopWithAnIdleTeammateCompletes() throws {
+        try withBusyDir { env in
+            _ = try post("SubagentStart", agentID: "at1-0b61", env: env)
+            _ = try post("SubagentStop", agentID: "at1-0b61", env: env)
+            try #expect(post("Stop", tasks: Self.runningTeammate, args: ["completed", "--auto-reset"], env: env)
+                == ["completed --auto-reset"])
+        }
+    }
+
+    @Test func stopWithNoTeammateDropsBusyMarks() throws {
+        try withBusyDir { env in
+            _ = try post("SubagentStart", agentID: "at1-0b61", env: env)
+            try #expect(post("Stop", tasks: "[]", args: ["completed", "--auto-reset"], env: env) == ["completed --auto-reset"])
+            try #expect(post("Stop", tasks: Self.runningTeammate, args: ["completed", "--auto-reset"], env: env)
+                == ["completed --auto-reset"])
+        }
+    }
+
+    @Test func busyMarkRejectsAPathAgentID() throws {
+        try withBusyDir { env in
+            _ = try post("SubagentStart", agentID: "../escape", env: env)
+            try #expect(post("Stop", tasks: Self.runningTeammate, args: ["completed", "--auto-reset"], env: env)
+                == ["completed --auto-reset"])
+            #expect(!FileManager.default.fileExists(atPath: env["TMPDIR"]! + "/agterm-claude-busy/escape"))
+        }
+    }
+
     @Test func stopWithoutBackgroundTasksPostsArgv() throws {
         let result = try run(chain: ["login", "claude"], args: ["completed", "--auto-reset"], input: .pipe(Self.payload("Stop")))
         #expect(result.calls == ["completed --auto-reset"])

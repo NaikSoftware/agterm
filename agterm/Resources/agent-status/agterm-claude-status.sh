@@ -110,11 +110,45 @@ running_agent() {
   return 1
 }
 
+running_teammate() {
+  n=$(field background_tasks)
+  case "$n" in '' | *[!0-9]*) return 1 ;; esac
+  i=0
+  while [ "$i" -lt "$n" ]; do
+    [ "$(field "background_tasks.$i.type")" = teammate ] && [ "$(field "background_tasks.$i.status")" = running ] && return 0
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# A teammate stays `running` in background_tasks while idle, so Stop cannot tell a working one from an idle one.
+# Each agent's SubagentStart marks it busy and its SubagentStop (fired whenever a teammate goes idle) clears it.
+safe_id() { case "$1" in '' | . | .. | */*) return 1 ;; esac; }
+
 if [ -n "$payload" ]; then
-  if [ -n "$(field agent_id)" ]; then
+  event=$(field hook_event_name)
+  sid=$(field session_id)
+  aid=$(field agent_id)
+  busy_dir=${TMPDIR:-/tmp}
+  busy_dir=${busy_dir%/}/agterm-claude-busy/$sid
+  if safe_id "$sid" && safe_id "$aid"; then
+    case "$event" in
+      SubagentStart) mkdir -p "$busy_dir" 2>/dev/null && : > "$busy_dir/$aid" 2>/dev/null ;;
+      SubagentStop) rm -f "$busy_dir/$aid" ;;
+    esac
+  fi
+  if [ -n "$aid" ]; then
     [ "${1:-}" = active ] && set -- "$@" --if-idle
-  elif [ "${1:-}" = completed ] && [ "$(field hook_event_name)" = Stop ] && running_agent; then
-    set -- active --blink
+  elif [ "${1:-}" = completed ] && [ "$event" = Stop ]; then
+    if running_agent; then
+      set -- active --blink
+    elif running_teammate; then
+      # shortcut: marks are not tied to task ids, so an agent ended without SubagentStop (killed, interrupted)
+      # leaves one that holds the row active until no teammate is listed.
+      safe_id "$sid" && [ -n "$(ls -A "$busy_dir" 2>/dev/null)" ] && set -- active --blink
+    elif safe_id "$sid"; then
+      rm -rf "$busy_dir"
+    fi
   fi
 fi
 

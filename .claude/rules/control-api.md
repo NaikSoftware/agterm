@@ -52,6 +52,11 @@ paths:
   an event carrying `agent_id` adds `--if-idle` to `active`, and a Stop whose `background_tasks` lists a
   running subagent, workflow or shell posts `active --blink` in place of `completed`, dropping the caller's flags
   so `--auto-reset` cannot idle the row. Anything else, an unreadable payload included, posts argv.
+  A `teammate` task stays `running` while idle, so it counts only while busy: `SubagentStart` touches
+  `$TMPDIR/agterm-claude-busy/<session_id>/<agent_id>` and `SubagentStop`, which fires each time a teammate goes
+  idle, removes it; a Stop listing no teammate drops the session's directory. Teammate task ids are not agent ids,
+  so a mark is not matched to its task: one any agent leaves without `SubagentStop` (killed, interrupted)
+  holds the row while any teammate is alive.
 - Codex maps SessionStart idle; prompt/pre/post tool active; Stop ending `?` blocked, otherwise completed.
   Those first four report nothing for a null `transcript_path`: Codex's ephemeral memory consolidation
   thread fires them but never a user Stop, so they would leave the pane active.
