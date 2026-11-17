@@ -35,7 +35,7 @@ STAMP_FILE=".ghostty-build-stamp"
 GHOSTTY_PATCH_DIR="scripts/ghostty-patches"
 GHOSTTY_PATCH_DIGEST="$(cat "$GHOSTTY_PATCH_DIR"/*.patch | shasum -a 256 | cut -c1-16)"
 GHOSTTY_STAMP="$GHOSTTY_REV $GHOSTTY_PATCH_DIGEST"
-ZMX_STAGE_DIR="${HANGAR_ZMX_STAGE_DIR:-hangar/Resources/zmx}"
+ZMX_STAGE_DIR="${HANGAR_ZMX_STAGE_DIR:-Hangar/Resources/zmx}"
 ZMX_STAMP_FILE="${HANGAR_ZMX_STAMP_FILE:-.zmx-build-stamp}"
 # applied in name order over the plain pin; scripts/zmx-patches/README.md says what each one is for.
 # The stamp carries their digest, so editing a patch rebuilds zmx exactly as a ZMX_REV change does.
