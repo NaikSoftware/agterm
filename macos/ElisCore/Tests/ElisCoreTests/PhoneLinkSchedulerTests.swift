@@ -74,10 +74,26 @@ import Testing
 
     @Test func grantClampsAtMax() {
         var scheduler = PhoneLinkScheduler(window: 2, bufferLimit: 100_000)
-        scheduler.grant(channel: 2, bytes: .max)
-        scheduler.grant(channel: 2, bytes: .max)
         _ = scheduler.enqueue(channel: 2, bytes(70000))
+        scheduler.grant(channel: 2, bytes: .max)
+        scheduler.grant(channel: 2, bytes: .max)
         #expect(scheduler.next(maxChunk: 1 << 20)?.payload.count == PhoneLinkFrame.maxPayload)
+    }
+
+    @Test func grantAfterCloseDoesNotResurrectChannel() {
+        var scheduler = PhoneLinkScheduler(window: 10, bufferLimit: 1000)
+        _ = scheduler.enqueue(channel: 2, bytes(1))
+        scheduler.close(channel: 2)
+        scheduler.grant(channel: 2, bytes: 100)
+        _ = scheduler.enqueue(channel: 2, bytes(60))
+        #expect(scheduler.next(maxChunk: 1000)?.payload.count == 10)
+    }
+
+    @Test func grantOnUnseenChannelIsIgnored() {
+        var scheduler = PhoneLinkScheduler(window: 10, bufferLimit: 1000)
+        scheduler.grant(channel: 7, bytes: 100)
+        #expect(scheduler.next(maxChunk: 1000) == nil)
+        #expect(scheduler.pendingBytes == 0)
     }
 
     @Test func closeDropsQueue() {

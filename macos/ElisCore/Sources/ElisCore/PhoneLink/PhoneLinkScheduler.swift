@@ -33,9 +33,8 @@ public struct PhoneLinkScheduler: Sendable {
     }
 
     public mutating func grant(channel: UInt32, bytes: UInt32) {
-        guard channel >= 2 else { return }
-        track(channel)
-        let (sum, overflow) = credits[channel, default: window].addingReportingOverflow(bytes)
+        guard channel >= 2, let current = credits[channel] else { return }
+        let (sum, overflow) = current.addingReportingOverflow(bytes)
         credits[channel] = overflow ? .max : sum
     }
 
