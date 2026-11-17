@@ -23,11 +23,11 @@ struct AgentHooksInstallTests {
         (entry["hooks"] as? [[String: Any]])?.first?["command"] as? String
     }
 
-    @Test func mergeWhenAbsentAddsAllFiveHooks() throws {
+    @Test func mergeWhenAbsentAddsAllSevenHooks() throws {
         let result = try AgentHooksInstall.mergeClaudeSettings(existing: nil, scriptDir: scriptDir)
         #expect(result.changed)
         let evts = events(result.json)
-        #expect(evts.count == 5)
+        #expect(evts.count == 7)
         #expect(evts["UserPromptSubmit"]?.count == 1)
         #expect(evts["PostToolUse"]?.count == 1)
         #expect(evts["Stop"]?.count == 1)
@@ -42,6 +42,8 @@ struct AgentHooksInstallTests {
         #expect(command(evts["Stop"]![0]) == "'\(adapter)' completed --auto-reset")
         #expect(command(evts["Notification"]![0]) == "'\(adapter)' blocked")
         #expect(command(evts["PermissionRequest"]?.first ?? [:]) == "'\(adapter)' blocked")
+        #expect(command(evts["SubagentStart"]?.first ?? [:]) == "'\(adapter)' active --blink")
+        #expect(command(evts["SubagentStop"]?.first ?? [:]) == "'\(adapter)' active --blink")
         #expect(command(evts["UserPromptSubmit"]![0])?.contains("--auto-reset") == false)
         #expect(command(evts["Notification"]![0])?.contains("--auto-reset") == false)
         #expect(evts["Notification"]![0]["matcher"] as? String == "permission_prompt")
@@ -195,8 +197,8 @@ struct AgentHooksInstallTests {
         let first = try AgentHooksInstall.mergeClaudeSettings(existing: existing, scriptDir: scriptDir)
         #expect(first.changed)
         let evts = events(first.json)
-        #expect(evts.count == 5)
-        for event in ["UserPromptSubmit", "PostToolUse", "Stop", "Notification", "PermissionRequest"] {
+        #expect(evts.count == 7)
+        for event in ["UserPromptSubmit", "PostToolUse", "Stop", "Notification", "PermissionRequest", "SubagentStart", "SubagentStop"] {
             #expect(evts[event]?.count == 1)
         }
         #expect(command(evts["PermissionRequest"]?.first ?? [:]) == "'\(adapter)' blocked")
@@ -316,13 +318,13 @@ struct AgentHooksInstallTests {
         // a whitespace-only file has no content to lose, so it starts fresh like an empty file
         let result = try AgentHooksInstall.mergeClaudeSettings(existing: "   \n\t\n", scriptDir: scriptDir)
         #expect(result.changed)
-        #expect(events(result.json).count == 5)
+        #expect(events(result.json).count == 7)
     }
 
     @Test func mergeHandlesEmptyExisting() throws {
         let result = try AgentHooksInstall.mergeClaudeSettings(existing: "", scriptDir: scriptDir)
         #expect(result.changed)
-        #expect(events(result.json).count == 5)
+        #expect(events(result.json).count == 7)
     }
 
     @Test func codexHooksBlockContainsAllSixEvents() {

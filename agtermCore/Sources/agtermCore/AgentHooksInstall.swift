@@ -132,13 +132,16 @@ public enum AgentHooksInstall {
     /// `Notification[permission_prompt]` fires only once the prompt has waited about six seconds with no
     /// keystroke, and stays for the sandboxed network prompt, which `PermissionRequest` does not cover.
     /// `Notification` alone carries a matcher, and only `Stop`→`completed` passes `--auto-reset` (it clears
-    /// on visit); the rest stay keep-state.
+    /// on visit); the rest stay keep-state. `SubagentStart`/`SubagentStop` feed the adapter's busy-teammate
+    /// marks; carrying `agent_id`, their `active` posts only onto an idle row.
     static let claudeHooks: [(event: String, matcher: String?, state: String)] = [
         ("UserPromptSubmit", nil, "active --blink"),
         ("PostToolUse", nil, "active --blink"),
         ("Stop", nil, "completed --auto-reset"),
         ("PermissionRequest", nil, "blocked"),
         ("Notification", "permission_prompt", "blocked"),
+        ("SubagentStart", nil, "active --blink"),
+        ("SubagentStop", nil, "active --blink"),
     ]
 
     /// Codex lifecycle events paired with actions the installed Codex hook understands; the adapter, not

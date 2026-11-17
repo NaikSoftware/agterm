@@ -3,7 +3,7 @@ import agtermCore
 
 /// Installs the bundled agent-status hooks package into the user's home: the scripts into
 /// `~/.config/agterm/agent-status/`, the bundled `agtermctl`'s absolute path baked into the wrapper, a
-/// marker-guarded `source` line in `~/.zshrc`/`~/.bashrc`/`~/.config/fish/config.fish`, the five Claude Code
+/// marker-guarded `source` line in `~/.zshrc`/`~/.bashrc`/`~/.config/fish/config.fish`, the seven Claude Code
 /// hooks merged into `~/.claude/settings.json`, the six Codex lifecycle hooks into `$CODEX_HOME/config.toml`
 /// (default `~/.codex`),
 /// and — when each is configured — Pi's lifecycle extension into `~/.pi/agent/extensions/` and OpenCode's
