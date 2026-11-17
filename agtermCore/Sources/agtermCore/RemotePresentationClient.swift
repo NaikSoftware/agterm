@@ -26,6 +26,7 @@ public struct RemotePresentationEffects {
     public var sound: @MainActor (PresentationSound) -> Void
     public var connection: @MainActor (RemotePresentationConnection) -> Void
     public var context: @MainActor (String?) -> Void
+    public var agentSession: @MainActor (String?) -> Void
     /// info carries the origin's sidebar info line, nil for none; a snapshot sends it too.
     public var info: @MainActor (PresentationInfo?) -> Void
     public var layout: @MainActor (PresentationLayout) -> Void
@@ -62,6 +63,7 @@ public struct RemotePresentationEffects {
                 notify: @escaping @MainActor (PresentationNotify) -> Void,
                 connection: @escaping @MainActor (RemotePresentationConnection) -> Void,
                 context: @escaping @MainActor (String?) -> Void = { _ in },
+                agentSession: @escaping @MainActor (String?) -> Void = { _ in },
                 info: @escaping @MainActor (PresentationInfo?) -> Void = { _ in },
                 mode: @escaping @MainActor (PresentationMode) -> Void = { _ in },
                 askRequest: @escaping @MainActor (PresentationAsk) -> Bool = { _ in false },
@@ -89,6 +91,7 @@ public struct RemotePresentationEffects {
         self.sound = sound
         self.connection = connection
         self.context = context
+        self.agentSession = agentSession
         self.info = info
         self.layout = layout
         self.mode = mode
@@ -267,11 +270,13 @@ public final class RemotePresentationClient {
             effects.snapshotStatus(snapshot.status)
             effects.hud(snapshot.hud)
             effects.context(snapshot.context)
+            effects.agentSession(snapshot.agentSession)
             effects.info(snapshot.info)
             effects.mail(snapshot.mail)
             if let respawns = snapshot.respawns { effects.respawns(respawns, true) }
         case .status(let status): effects.status(status)
         case .context(let context): effects.context(context)
+        case .agentSession(let id): effects.agentSession(id)
         case .info(let info): effects.info(info)
         case .layout(let layout): applyLayout(layout)
         case .hud(let hud): effects.hud(hud)

@@ -49,7 +49,7 @@ paths:
   downward `childIndex - 1` adjustment. A selected-row drag writes all `sidebarSelectionIDs` in visual
   order; an unselected-row drag writes only itself. `resolveSessions` removes the entire mixed-source
   block before inserting it atomically in visual order.
-- Workspace rows use pasteboard type `com.umputun.agterm.workspace`, which must remain registered or
+- Workspace rows use pasteboard type `ua.naiksoftware.agterm2.workspace`, which must remain registered or
   AppKit will not call validate/accept. Do not use AppKit's proposed item/index for workspace moves:
   expanded session rows make every gap appear inside a workspace. Instead, count workspace-row midpoints
   above `draggingLocation`, ignoring sessions.
@@ -60,6 +60,9 @@ paths:
 - Keep all remove/insert, drop-on-row, no-op, and index-space arithmetic host-free in `SidebarDrop`;
   the Coordinator only maps pasteboard IDs and store locations. `SidebarDropTests` table-test it, and
   `testReorderWorkspaceOntoSessionRow` covers the expanded-workspace failure.
+- Session and workspace rows also carry their ids as `.string` (`Session.dropText`) for a terminal drop,
+  so the local source mask must keep `.copy` and `SidebarOutlineView` ignores modifier keys.
+  External drags stay refused: the `forLocal: false` mask is empty.
 - The footer provides workspace creation and New Session/Open Directory. Workspace row menus repeat the
   session actions. Hover shows `workspace-add-session` only when `InterfaceElement.workspaceAddSession`
   is enabled.

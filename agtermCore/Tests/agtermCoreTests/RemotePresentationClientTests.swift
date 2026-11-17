@@ -37,6 +37,7 @@ struct RemotePresentationClientTests {
         var snapshotStatuses: [PresentationStatus?] = []
         var huds: [PresentationHud?] = []
         var contexts: [String?] = []
+        var agentSessions: [String?] = []
         var notifies: [PresentationNotify] = []
         var messages: [PresentationMessage] = []
         var mails: [PresentationMail?] = []
@@ -81,6 +82,7 @@ struct RemotePresentationClientTests {
             notify: { recorder.notifies.append($0) },
             connection: { recorder.connections.append($0) },
             context: { recorder.contexts.append($0) },
+            agentSession: { recorder.agentSessions.append($0) },
             mode: { recorder.modes.append($0) },
             askRequest: {
                 recorder.asks.append($0)
@@ -231,6 +233,16 @@ struct RemotePresentationClientTests {
         transport.deliver(line(.context(nil), rev: 3))
 
         #expect(recorder.contexts == ["PR #517", "PR #518", nil])
+    }
+
+    @Test func theSnapshotsAgentSessionIsAppliedThenEachChangeBehindIt() {
+        let client = makeClient()
+        client.start()
+
+        connect(client, snapshot: PresentationSnapshot(status: nil, hud: nil, agentSession: "c1"))
+        transport.deliver(line(.agentSession("c2"), rev: 2))
+
+        #expect(recorder.agentSessions == ["c1", "c2"])
     }
 
     @Test func aSnapshotsRespawnsAreASeedAndAFramesAreNot() {

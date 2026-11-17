@@ -333,6 +333,26 @@ struct RemotePresentationStateTests {
         #expect(session.context == nil)
     }
 
+    @Test func anOriginsAgentSessionIDLandsOnlyOnAnAttachedRow() throws {
+        let (store, session) = try attached()
+        let local = try #require(store.addSession(toWorkspace: store.addWorkspace(name: "local").id, cwd: "/tmp"))
+
+        store.applyRemoteAgentSessionID("c1", forSession: session.id)
+        store.applyRemoteAgentSessionID("c1", forSession: local.id)
+
+        #expect(session.agentSessionID == "c1")
+        #expect(local.agentSessionID == nil)
+    }
+
+    @Test func anOriginsAgentSessionIDThatIsNotAPlainTokenIsDropped() throws {
+        let (store, session) = try attached()
+
+        store.applyRemoteAgentSessionID("c1", forSession: session.id)
+        store.applyRemoteAgentSessionID("c1; rm -rf ~", forSession: session.id)
+
+        #expect(session.agentSessionID == nil)
+    }
+
     @Test func aContextSetHereWinsOverTheMirroredOne() throws {
         let (store, session) = try attached()
         store.applyRemoteContext("origin", forSession: session.id)

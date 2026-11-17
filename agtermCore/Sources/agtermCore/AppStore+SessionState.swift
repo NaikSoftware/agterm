@@ -31,6 +31,14 @@ extension AppStore {
         return true
     }
 
+    /// setAgentSessionID records the Claude conversation id the session's agent runs; runtime-only, so nothing is saved.
+    public func setAgentSessionID(_ id: String?, forSession sessionID: UUID) {
+        guard let session = session(withID: sessionID), session.agentSessionID != id else { return }
+        session.agentSessionID = id
+        presentationHub?.publish(.agentSession(id), session: sessionID)
+        scheduleTreeChanged()
+    }
+
     /// setInfo sets or clears a session's local sidebar info line. Runtime-only, so nothing is saved. Returns whether
     /// the local value CHANGED, while `tree.changed` fires only when the effective line did; a clear goes through
     /// `Session.discardInfo`, which cancels the app's expiry timer.

@@ -696,9 +696,12 @@ public struct PresentationSnapshot: Codable, Equatable, Sendable {
     public var info: PresentationInfo?
     /// mail is nil from an origin that predates mail counts.
     public var mail: PresentationMail?
+    /// agentSession is the origin's Claude conversation id, nil from an origin that predates it.
+    public var agentSession: String?
 
     public init(status: PresentationStatus?, hud: PresentationHud?, context: String? = nil, layout: PresentationLayout? = nil,
-                respawns: PresentationRespawns? = nil, info: PresentationInfo? = nil, mail: PresentationMail? = nil) {
+                respawns: PresentationRespawns? = nil, info: PresentationInfo? = nil, mail: PresentationMail? = nil,
+                agentSession: String? = nil) {
         self.status = status
         self.hud = hud
         self.context = context
@@ -706,6 +709,7 @@ public struct PresentationSnapshot: Codable, Equatable, Sendable {
         self.respawns = respawns
         self.info = info
         self.mail = mail
+        self.agentSession = agentSession
     }
 }
 
@@ -776,6 +780,7 @@ public struct PresentationFrame: Equatable, Sendable {
         case snapshot(PresentationSnapshot)
         case status(PresentationStatus?)
         case context(String?)
+        case agentSession(String?)
         case info(PresentationInfo?)
         case layout(PresentationLayout)
         case hud(PresentationHud?)
@@ -846,6 +851,7 @@ public struct PresentationFrame: Equatable, Sendable {
             case .snapshot: return "snapshot"
             case .status: return "status"
             case .context: return "context"
+            case .agentSession: return "agent.session"
             case .info: return "info"
             case .layout: return "layout"
             case .hud: return "hud"

@@ -314,6 +314,45 @@ final class WorkspaceSidebarCompanionsTests: XCTestCase {
         XCTAssertFalse(group.after.isExpanded, "a reveal is a view action")
     }
 
+    func testSessionDragWritesItsIdAsText() throws {
+        let group = try seed()
+        buildSidebar(for: group.store)
+
+        XCTAssertEqual(try dragText(group.after.id), group.after.dropID)
+    }
+
+    func testSelectedRowsDragWritesTheirIdsInVisualOrder() throws {
+        let group = try seed()
+        _ = group.store.selectSession(group.after.id, sidebarSelection: [group.after.id, group.parent.id])
+        buildSidebar(for: group.store)
+        outline.selectRowIndexes(IndexSet([try row(group.parent.id), try row(group.after.id)]), byExtendingSelection: false)
+
+        XCTAssertEqual(try dragText(group.after.id), "\(group.parent.dropID),\(group.after.dropID)")
+    }
+
+    func testWorkspaceDragWritesAllSessionIdsAsText() throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let work = store.addWorkspace(name: "work")
+        let parent = try XCTUnwrap(store.addSession(toWorkspace: work.id, cwd: "/tmp", name: "parent"))
+        let companion = try store.addCompanion(to: parent.id, options: CompanionOptions(name: "companion")).get()
+        buildSidebar(for: store)
+
+        XCTAssertEqual(try dragText(work.id), "\(parent.dropID),\(companion.dropID)")
+    }
+
+    func testEmptyWorkspaceDragWritesNoText() throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let empty = store.addWorkspace(name: "empty")
+        buildSidebar(for: store)
+
+        XCTAssertNil(try dragText(empty.id))
+    }
+
+    private func dragText(_ id: UUID) throws -> String? {
+        let writer = try XCTUnwrap(coordinator.outlineView(outline, pasteboardWriterForItem: try node(id)) as? NSPasteboardItem)
+        return writer.string(forType: .string)
+    }
+
     private func drop(_ ids: [UUID], onRow target: UUID) throws -> Bool {
         try drop(ids, onto: target)
     }

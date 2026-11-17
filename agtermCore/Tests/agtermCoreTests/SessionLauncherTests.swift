@@ -54,6 +54,42 @@ struct SessionLauncherTests {
     func claudeResumeLineQuotesTheFolderAndRefusesAnUnsafeID(json: String, expected: String?) {
         #expect(SessionLauncher.claudeResumeLine(json: Data(json.utf8)) == expected)
     }
+
+    @Test(arguments: [
+        (#"{"sessionId":"abc-1_2","cwd":"/x"}"#, "abc-1_2"),
+        (#"{"sessionId":"a b"}"#, nil),
+        ("{}", nil)
+    ] as [(String, String?)])
+    func claudeSessionIDReadsAPlainToken(json: String, expected: String?) {
+        #expect(SessionLauncher.claudeSessionID(json: Data(json.utf8)) == expected)
+    }
+
+    @MainActor @Test func dropTextJoinsIdsWithCommas() {
+        let agent = Session(initialCwd: "/a")
+        agent.agentSessionID = "c1"
+        let remote = Session(initialCwd: "/b", remoteHost: "far", remoteSessionID: "R")
+        let plain = Session(initialCwd: "/c")
+        #expect(Session.dropText([agent, remote, plain]) == "c1,R,\(plain.id.uuidString)")
+        #expect(Session.dropText([]) == nil)
+    }
+
+    @Test func dropTextExcludesOwnID() {
+        #expect(Session.dropText("a,b,c", excluding: "a") == "b,c")
+        #expect(Session.dropText("a", excluding: "a") == nil)
+        #expect(Session.dropText("a,b", excluding: nil) == "a,b")
+    }
+
+    @MainActor @Test(arguments: ["R\u{1b}[2J", "R\nrm -rf ~"])
+    func aRemoteIdThatIsNotAPlainTokenDropsAsTheLocalId(remoteID: String) {
+        let remote = Session(initialCwd: "/b", remoteHost: "far", remoteSessionID: remoteID)
+        #expect(remote.dropID == remote.id.uuidString)
+    }
+
+    @MainActor @Test func anAgentIdThatIsNotAPlainTokenDropsAsTheNextFallback() {
+        let remote = Session(initialCwd: "/b", remoteHost: "far", remoteSessionID: "R")
+        remote.agentSessionID = "c1\nrm -rf ~"
+        #expect(remote.dropID == "R")
+    }
 }
 
 struct TitleSpinnerTests {

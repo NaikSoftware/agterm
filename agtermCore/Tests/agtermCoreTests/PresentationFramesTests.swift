@@ -53,6 +53,9 @@ struct PresentationFramesTests {
         PresentationFrame(gen: 1, rev: 27, body: .overlayClosed(PresentationOverlayChange(job: "j1"))),
         PresentationFrame(gen: 1, rev: 28, body: .context("PR #517")),
         PresentationFrame(gen: 1, rev: 29, body: .context(nil)),
+        PresentationFrame(gen: 1, rev: 29, body: .agentSession("c1")),
+        PresentationFrame(gen: 1, rev: 29, body: .agentSession(nil)),
+        PresentationFrame(gen: 1, rev: 29, body: .snapshot(PresentationSnapshot(status: nil, hud: nil, agentSession: "c1"))),
         PresentationFrame(gen: 1, rev: 30, body: .snapshot(PresentationSnapshot(status: nil, hud: nil, context: "PR #517"))),
         PresentationFrame(gen: 1, rev: 30, body: .info(PresentationInfo(source: "**3** agents", markdown: true, hideAfter: 30))),
         PresentationFrame(gen: 1, rev: 30, body: .info(nil)),
@@ -421,6 +424,23 @@ struct PresentationFramesTests {
 
         #expect(try PresentationCodec.decode(line) == PresentationFrame(
             gen: 1, rev: 1, body: .snapshot(PresentationSnapshot(status: nil, hud: nil, context: nil))))
+    }
+
+    @Test @MainActor func anAgentSessionFrameTravelsAsItsOwnKind() throws {
+        let line = try PresentationCodec.encode(PresentationFrame(gen: 1, rev: 1, body: .agentSession("c1")))
+
+        #expect(String(decoding: line, as: UTF8.self).contains(#""kind":"agent.session""#))
+        #expect(String(decoding: line, as: UTF8.self).contains(#""agentSession":"c1""#))
+        #expect(PresentationHub.supportedKinds.contains("agent.session"))
+    }
+
+    @Test func aSnapshotFromAnOriginWithoutAgentSessionDecodesWithNone() throws {
+        let line = Data(#"{"kind":"snapshot","gen":1,"rev":1,"snapshot":{"context":"PR #517"}}"#.utf8)
+
+        let frame = try PresentationCodec.decode(line)
+
+        guard case .snapshot(let snapshot) = frame.body else { Issue.record("not a snapshot"); return }
+        #expect(snapshot.agentSession == nil)
     }
 
     @Test func aSnapshotFromAnOriginWithoutInfoDecodesWithNone() throws {
