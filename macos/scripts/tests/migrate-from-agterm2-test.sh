@@ -16,7 +16,7 @@ snap() {
     (cd "$1" && find . -print0 | sort -z | while IFS= read -r -d '' f; do
         if [ -L "$f" ]; then echo "L $f -> $(readlink "$f")"
         elif [ -S "$f" ]; then echo "S $f"
-        elif [ -f "$f" ]; then echo "F $f $(shasum < "$f" | cut -c1-40) $(stat -f %Lp "$f")"
+        elif [ -f "$f" ]; then echo "F $f $({ shasum < "$f"; } 2>/dev/null | cut -c1-40) $(stat -f %Lp "$f")"
         else echo "D $f"; fi
     done)
 }
@@ -29,7 +29,7 @@ mkdir -p "$state/windows" "$conf/hooks" "$status/shell" "$H/.claude/skills/agter
 
 printf '{"workspaces":[{"name":"agterm","sessions":[{"cwd":"/Users/me/agterm"}]}]}' > "$state/workspaces.json"
 printf '{"id":"w1"}' > "$state/windows/w1.json"
-printf '{\n  "configDirectory" : null,\n  "darkTheme" : "agterm",\n  "fontSize" : 13,\n  "theme" : "agterm"\n}' > "$state/settings.json"
+printf '{\n  "configDirectory" : "~/.config/agterm",\n  "darkTheme" : "agterm",\n  "fontSize" : 13,\n  "theme" : "agterm"\n}' > "$state/settings.json"
 : > "$state/agterm.lock"
 python3 -I -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$state/agterm.sock"
 
@@ -37,6 +37,7 @@ cat > "$conf/keymap.conf" <<'EOF'
 map cmd+shift+k toggle_sidebar
 command cmd+shift+j "Jump" agtermctl session focus "$AGTERM_SESSION_ID" --socket ~/Library/Application\ Support/agterm/agterm.sock
 command cmd+shift+p "Proj" cd ~/IdeaProjects/agterm && open -a agterm.app
+command cmd+shift+l "Link" printf 'agterm://session/%s' "$AGTERM_SESSION_ID"
 EOF
 printf 'theme = light:agterm,dark:agterm\nfont-size = 13\n' > "$conf/ghostty.conf"
 printf 'vim\nhtop\n' > "$conf/restore-denylist.conf"
@@ -110,7 +111,12 @@ $(ours '' 'active --blink')
 $(ours '' active agterm-agent-status.sh)
     ]
   },
-  "model" : "opus"
+  "model" : "opus",
+  "permissions" : {
+    "deny" : [
+
+    ]
+  }
 }
 EOF
 chmod 600 "$H/.claude/settings.json"
@@ -142,7 +148,12 @@ cat > "$root/expected-settings.json" <<'EOF'
       }
     ]
   },
-  "model" : "opus"
+  "model" : "opus",
+  "permissions" : {
+    "deny" : [
+
+    ]
+  }
 }
 EOF
 
@@ -170,10 +181,13 @@ rc_user='export PATH="$HOME/bin:$PATH"
 alias ll="ls -l"
 '
 block() { printf '\n# >>> agterm agent-status >>>\nsource '"'"'%s/%s'"'"'\n# <<< agterm agent-status <<<\n' "$status" "$1"; }
-{ printf '%s' "$rc_user"; block shell/integration.sh; } > "$H/.zshrc"
+zsh_user="$rc_user$(printf '# caf\351')
+"
+{ printf '%s' "$zsh_user"; block shell/integration.sh; } > "$H/.zshrc"
 { printf '%s' "$rc_user"; block shell/integration.sh; } > "$H/dotfiles/bashrc"
 ln -s dotfiles/bashrc "$H/.bashrc"
 { printf 'set -x EDITOR vim\n'; block shell/integration.fish; } > "$H/.config/fish/config.fish"
+chmod 000 "$H/.config/fish/config.fish"
 
 printf '// agterm-pi-status-extension\n' > "$H/.pi/agent/extensions/agterm-status.ts"
 printf '// agterm-opencode-status-plugin\n' > "$H/.config/opencode/plugins/agterm-status.js"
@@ -201,10 +215,11 @@ nconf="$H/.config/hangar"
 check "sessions file byte-identical" 'cmp -s "$state/workspaces.json" "$nstate/workspaces.json"'
 check "window file byte-identical" 'cmp -s "$state/windows/w1.json" "$nstate/windows/w1.json"'
 check "socket and lock not copied" '[ ! -e "$nstate/agterm.sock" ] && [ ! -e "$nstate/agterm.lock" ]'
-printf '{\n  "configDirectory" : null,\n  "darkTheme" : "hangar",\n  "fontSize" : 13,\n  "theme" : "hangar"\n}' > "$root/expected-app-settings.json"
+printf '{\n  "configDirectory" : "~/.config/hangar",\n  "darkTheme" : "hangar",\n  "fontSize" : 13,\n  "theme" : "hangar"\n}' > "$root/expected-app-settings.json"
 check "settings theme is hangar" 'cmp -s "$root/expected-app-settings.json" "$nstate/settings.json"'
 check "keymap calls hangarctl" 'grep -q "\"Jump\" hangarctl session focus \"\$HANGAR_SESSION_ID\" --socket ~/Library/Application\\\\ Support/hangar/hangar.sock" "$nconf/keymap.conf"'
 check "keymap keeps user path, renames app" 'grep -qF "cd ~/IdeaProjects/agterm && open -a Hangar.app" "$nconf/keymap.conf"'
+check "keymap session link scheme renamed" 'grep -qF "printf '"'"'hangar://session/%s'"'"'" "$nconf/keymap.conf"'
 check "keymap has no agtermctl" '! grep -q agtermctl "$nconf/keymap.conf"'
 check "ghostty theme is hangar" '[ "$(head -1 "$nconf/ghostty.conf")" = "theme = light:hangar,dark:hangar" ]'
 check "denylist byte-identical" 'cmp -s "$conf/restore-denylist.conf" "$nconf/restore-denylist.conf"'
@@ -219,9 +234,9 @@ check "agterm skill removed" '[ ! -e "$H/.claude/skills/agterm" ]'
 check "other skill kept" '[ -f "$H/.claude/skills/mine/SKILL.md" ]'
 check "unmarked codex skill kept" '[ -f "$H/.codex/skills/agterm/SKILL.md" ]'
 check "codex block removed" '[ "$(cat "$H/.codex/config.toml"; echo x)" = "$(printf "%sx" "$codex_user")" ]'
-check "zshrc block removed" '[ "$(cat "$H/.zshrc"; echo x)" = "$(printf "%sx" "$rc_user")" ]'
+check "zshrc block removed, Latin-1 byte kept" '[ "$(cat "$H/.zshrc"; echo x)" = "$(printf "%sx" "$zsh_user")" ]'
 check "bashrc edited through its symlink" '[ -L "$H/.bashrc" ] && [ "$(cat "$H/dotfiles/bashrc"; echo x)" = "$(printf "%sx" "$rc_user")" ]'
-check "fish block removed" '[ "$(cat "$H/.config/fish/config.fish")" = "set -x EDITOR vim" ]'
+check "unreadable fish config reported, later steps still ran" 'grep -q "config.fish" "$root/run1.out" && [ ! -e "$H/.claude/skills/agterm" ]'
 check "pi extension removed" '[ ! -e "$H/.pi/agent/extensions/agterm-status.ts" ]'
 check "opencode plugins removed" '[ ! -e "$H/.config/opencode/plugins/agterm-status.js" ] && [ ! -e "$H/.config/opencode/plugins/agterm-v2" ]'
 check "user opencode plugin kept" '[ -f "$H/.config/opencode/plugins/mine.js" ]'

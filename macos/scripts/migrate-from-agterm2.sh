@@ -31,8 +31,10 @@ say() { [ $dry -eq 1 ] && echo "would $1" || echo "$1"; }
 
 if [ $isolated -eq 0 ]; then
     for id in ua.naiksoftware.agterm2 ua.naiksoftware.hangar; do
-        if [ -n "$(lsappinfo find "bundleid=$id" 2>/dev/null)" ]; then
-            echo "Quit $([ $id = ua.naiksoftware.hangar ] && echo Hangar || echo Agterm2) first, then run this again." >&2
+        name=$([ $id = ua.naiksoftware.hangar ] && echo Hangar || echo agterm)
+        # pgrep also covers a session where lsappinfo cannot reach the window server (ssh)
+        if [ -n "$(lsappinfo find "bundleid=$id" 2>/dev/null)" ] || pgrep -x "$name" >/dev/null 2>&1; then
+            echo "Quit $([ $name = Hangar ] && echo Hangar || echo Agterm2) first, then run this again." >&2
             exit 1
         fi
     done
@@ -46,7 +48,7 @@ for b in os.path.realpath(sys.argv[1]).encode():
 print("/tmp/agterm-zmx-%016x" % h)' "$home/Library/Application Support/agterm")"
     pids="$(lsof -nP -U -F pcn 2>/dev/null | awk -v a="$zdir/" -v b="/private$zdir/" '
         /^p/ { p = substr($0, 2) } /^c/ { c = substr($0, 2) }
-        /^n/ { n = substr($0, 2); if ((index(n, a) == 1 || index(n, b) == 1) && (c == "zmx" || c == "agterm-session-host")) print p }' | sort -u)"
+        /^n/ { n = substr($0, 2); if ((index(n, a) == 1 || index(n, b) == 1) && (c == "zmx" || c == "agterm-session-host")) print p }' | sort -u || true)"
     if [ -n "$pids" ]; then
         count=$(echo "$pids" | wc -l | tr -d ' ')
         if [ $dry -eq 0 ]; then
@@ -74,15 +76,21 @@ def did(msg): print("D " + ("would " + msg if dry else msg))
 def left(msg): print("L " + msg)
 def short(p): return "~" + p[len(home):] if p.startswith(home + "/") else p
 
+# surrogateescape round-trips a stray Latin-1 byte in an rc file unchanged
 def read(p):
-    with open(p, encoding="utf-8") as f: return f.read()
+    with open(p, encoding="utf-8", errors="surrogateescape") as f: return f.read()
 
 def write(p, text):
     # in place: keeps the mode and writes through a dotfiles symlink; the first edit keeps a backup
     if dry: return
     bak = p + ".pre-hangar"
     if not os.path.lexists(bak): shutil.copy2(os.path.realpath(p), bak)
-    with open(p, "w", encoding="utf-8") as f: f.write(text)
+    with open(p, "w", encoding="utf-8", errors="surrogateescape") as f: f.write(text)
+
+def step(path, fn, *args):
+    # one unreadable file must not stop the cleanup of the others
+    try: fn(path, *args)
+    except OSError as e: left(f"could not edit {short(path)} ({e.strerror}): remove the agterm entries from it yourself.")
 
 RENAMES = [
     (re.compile(r"agtermctl"), "hangarctl"),
@@ -93,6 +101,7 @@ RENAMES = [
     (re.compile(r"(?<![\w.-])agterm\.app(?![\w])"), "Hangar.app"),
     (re.compile(r"(?<=Contents/MacOS/)agterm(?![\w.-])"), "Hangar"),
     (re.compile(r"(?<![\w.-])agterm(?=\.(?:sock|lock)\b)"), "hangar"),
+    (re.compile(r"(?<![\w.-])agterm(?=://)"), "hangar"),
 ]
 THEME_LINE = re.compile(r"^(\s*theme\s*=.*)$", re.M)
 THEME_WORD = re.compile(r"(?<![\w./-])agterm(?![\w./-])")
@@ -101,10 +110,15 @@ def rename_config_text(text):
     for pattern, new in RENAMES: text = pattern.sub(new, text)
     return THEME_LINE.sub(lambda m: THEME_WORD.sub("hangar", m.group(1)), text)
 
+OLD_CONFIG = {"~/.config/agterm", home + "/.config/agterm"}
+
 def rename_settings(text):
-    # only the theme values: other strings (paths, names) belong to the user
-    return re.sub(r'("(?:theme|darkTheme)"\s*:\s*")([^"]*)(")',
+    # only the theme values and a config dir set to the old default: other strings belong to the user
+    text = re.sub(r'("(?:theme|darkTheme)"\s*:\s*")([^"]*)(")',
                   lambda m: m.group(1) + THEME_WORD.sub("hangar", m.group(2)) + m.group(3), text)
+    return re.sub(r'("configDirectory"\s*:\s*")([^"]*)(")',
+                  lambda m: m.group(1) + (m.group(2)[:-6] + "hangar" if m.group(2).replace("\\/", "/") in OLD_CONFIG
+                                          else m.group(2)) + m.group(3), text)
 
 def copy_dir(src, dst, skip_top, rewrite):
     if not os.path.isdir(src): return
@@ -127,8 +141,9 @@ def copy_dir(src, dst, skip_top, rewrite):
         for n in files:
             p = os.path.join(d, n)
             if os.path.islink(p): continue
-            try: text = read(p)
-            except (UnicodeDecodeError, OSError): continue
+            try:
+                with open(p, encoding="utf-8") as f: text = f.read()
+            except (UnicodeDecodeError, OSError): continue  # binary or unreadable: copied as is
             new = rewrite(os.path.relpath(p, tmp), text)
             if new != text:
                 with open(p, "w", encoding="utf-8") as f: f.write(new)
@@ -140,7 +155,7 @@ copy_dir(state_src, home + "/Library/Application Support/hangar", {"agterm.lock"
 copy_dir(home + "/.config/agterm", home + "/.config/hangar", {"agent-status"}, lambda rel, t: rename_config_text(t))
 try:
     custom = json.loads(read(state_src + "/settings.json")).get("configDirectory")
-    if custom: left(f"Settings name a custom config folder ({custom}). Hangar keeps using it: rename agtermctl and AGTERM_ in it yourself.")
+    if custom and custom.rstrip("/") not in OLD_CONFIG: left(f"Settings name a custom config folder ({custom}). Hangar keeps using it: rename agtermctl and AGTERM_ in it yourself.")
 except (OSError, ValueError, AttributeError): pass
 
 # Claude Code: the seven hooks and the swarm-companion mod dir, matched by the old script path.
@@ -152,10 +167,12 @@ def dump_like(original, obj):
     m = re.search(r"\n( +)\S", original)
     out = json.dumps(obj, indent=len(m.group(1)) if m else 2, separators=(",", sep), ensure_ascii=False)
     if "\\/" in original: out = out.replace("/", "\\/")  # JSONSerialization escaped slashes; strings are the only place one occurs
+    if sep == " : ":  # JSONSerialization also opens empty containers over a blank line; a string value never ends a line in {} or []
+        out = re.sub(r"^( *)(.*)([\[{])([\]}])(,?)$", lambda m: f"{m[1]}{m[2]}{m[3]}\n\n{m[1]}{m[4]}{m[5]}", out, flags=re.M)
     return out + ("\n" if original.endswith("\n") else "")
 
-settings = home + "/.claude/settings.json"
-if os.path.isfile(settings):
+def edit_claude(settings):
+    if not os.path.isfile(settings): return
     text = read(settings)
     try: root = json.loads(text)
     except ValueError: root = None; left(f"{short(settings)} is not valid JSON: remove the agterm hooks from it yourself.")
@@ -195,6 +212,8 @@ if os.path.isfile(settings):
             write(settings, dump_like(text, root))
             did(f"remove {removed} agterm hooks{' and the swarm-companion mod' if dropped else ''} from {short(settings)}")
 
+step(home + "/.claude/settings.json", edit_claude)
+
 def strip_block(path, begin, end, owned):
     if not os.path.isfile(path): return
     text = read(path)
@@ -212,11 +231,11 @@ def strip_block(path, begin, end, owned):
 
 BEGIN, END = "# >>> agterm agent-status >>>", "# <<< agterm agent-status <<<"
 for rc in (".zshrc", ".bashrc", ".config/fish/config.fish"):
-    strip_block(f"{home}/{rc}", BEGIN, END, lambda body: old_status + "shell/integration" in body)
+    step(f"{home}/{rc}", strip_block, BEGIN, END, lambda body: old_status + "shell/integration" in body)
 codex = env_codex if env_codex.startswith("/") else home + "/.codex"
 # the whole block goes, Codex's [hooks.state] trust records with it: a leftover `hooks` key stops Hangar adding its own
-strip_block(codex + "/config.toml", BEGIN, END,
-            lambda body: "agterm-codex-status.sh" in body or "agterm-agent-status.sh" in body)
+step(codex + "/config.toml", strip_block, BEGIN, END,
+     lambda body: "agterm-codex-status.sh" in body or "agterm-agent-status.sh" in body)
 
 def remove_marked(path, marker, what):
     if os.path.islink(path) or not os.path.exists(path): return
@@ -235,16 +254,16 @@ def remove_marked(path, marker, what):
         if os.path.basename(parent) == "agterm-v2" and not os.listdir(parent): os.rmdir(parent)
 
 for base in (home + "/.claude", codex):
-    remove_marked(base + "/skills/agterm", "<!-- agterm-skill -->", "the agterm skill")
-remove_marked(home + "/.pi/agent/extensions/agterm-status.ts", "// agterm-pi-status-extension", "the Pi extension")
+    step(base + "/skills/agterm", remove_marked, "<!-- agterm-skill -->", "the agterm skill")
+step(home + "/.pi/agent/extensions/agterm-status.ts", remove_marked, "// agterm-pi-status-extension", "the Pi extension")
 opencode = {home + "/.config/opencode"}
 if env_opencode: opencode.add(env_opencode)
 if env_xdg: opencode.add(env_xdg + "/opencode")
 for d in sorted(opencode):
-    remove_marked(d + "/plugins/agterm-status.js", "// agterm-opencode-status-plugin", "the OpenCode plugin")
-    remove_marked(d + "/plugins/agterm-v2/tui.js", "// agterm-opencode-v2-status-plugin", "the OpenCode plugin")
+    step(d + "/plugins/agterm-status.js", remove_marked, "// agterm-opencode-status-plugin", "the OpenCode plugin")
+    step(d + "/plugins/agterm-v2/tui.js", remove_marked, "// agterm-opencode-v2-status-plugin", "the OpenCode plugin")
 PY
-python_out="$(python3 -I -c "$migrate_py" "$home" "$dry" "$isolated" "${CODEX_HOME:-}" "${OPENCODE_CONFIG_DIR:-}" "${XDG_CONFIG_HOME:-}")" || { echo "$python_out"; echo "Migration stopped with an error. Nothing was deleted; fix the error and run it again." >&2; exit 1; }
+python_out="$(python3 -I -c "$migrate_py" "$home" "$dry" "$isolated" "${CODEX_HOME:-}" "${OPENCODE_CONFIG_DIR:-}" "${XDG_CONFIG_HOME:-}")" || { echo "$python_out"; echo "Migration stopped with an error. The old folders are untouched; fix the error and run this again." >&2; exit 1; }
 
 while IFS= read -r line; do
     case "$line" in
