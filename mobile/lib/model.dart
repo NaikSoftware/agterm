@@ -286,6 +286,7 @@ class AgtermModel extends ChangeNotifier {
       final t = await call('tree');
       workspaces = [for (final m in ((t['tree'] as Map?)?['workspaces'] as List? ?? const [])) Workspace(m as Map)];
       loaded = true;
+      if (background) Watch.clear(Watch.posted.read(sessions));
       if (!_disposed) notifyListeners();
     } on AgtermError catch (e) {
       error = e.message;
@@ -339,6 +340,7 @@ class AgtermModel extends ChangeNotifier {
   }
 
   void _onEvent(Map<String, dynamic> e) {
+    if (background && e['kind'] == 'session.closed') Watch.clear(Watch.posted.closed(e['session'] as String? ?? ''));
     final a = Alert.of(e);
     if (a == null) return;
     background ? Watch.show(a, session(a.sessionId)?.workspaceName ?? '') : _alerts.add(a);

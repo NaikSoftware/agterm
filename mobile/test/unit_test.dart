@@ -154,4 +154,18 @@ void main() {
     expect(other.id, isNot(sum.id));
     expect(alertNotifications(Alert('s3', 'x', 'y', 'notify'), '').last.title, 'Sessions');
   });
+
+  test('an alert goes once the computer shows its session read, and its summary with the last one', () {
+    Session s(String id, {String status = 'idle', int unseen = 0}) => Session({'id': id, 'status': status, 'unseen': unseen}, 'w', 'W');
+    final p = PostedAlerts();
+    final [a, sum] = alertNotifications(Alert('s1', 'x', 'y', 'completed'), 'W');
+    p.add('s1', sum.id);
+    p.add('s2', sum.id);
+    expect(p.read([s('s1'), s('s2')]), isEmpty, reason: 'a tree from before the alert');
+    expect(p.read([s('s1', status: 'completed'), s('s2', unseen: 1)]), isEmpty);
+    expect(p.read([s('s1')]), [a.id]);
+    expect(p.read([s('s1')]), isEmpty);
+    expect(p.closed('s2'), [alertNotifications(Alert('s2', 'x', 'y', 'notify'), 'W').first.id, sum.id]);
+    expect(p.closed('s2'), isEmpty);
+  });
 }
