@@ -152,7 +152,7 @@ final class AppActionsPaletteTests: XCTestCase {
         red.run()
 
         XCTAssertNil(first.tint)
-        XCTAssertEqual(second.tint, SidebarTint(color: .red))
+        XCTAssertEqual(second.tint, SidebarTint(color: .red, parts: [.icon, .name]))
         let none = try XCTUnwrap(actions.paletteActions().first { $0.title == "Tint Session: None" })
         none.run()
         XCTAssertNil(second.tint)
