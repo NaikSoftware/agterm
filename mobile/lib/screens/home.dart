@@ -457,6 +457,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final tint = own ?? C.active;
     final open = !collapsed.contains(w.id);
     final folded = {for (final s in w.sessions) if (s.collapsed) s.id};
+    final shown = [for (final s in w.sessions) if (s.parent.isEmpty || !folded.contains(s.parent)) s];
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: own == null
@@ -465,11 +466,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 2, children: [
         _workspaceRow(w, tint: tint, tinted: own != null, open: open),
         if (open)
-          for (final s in w.sessions)
-            if (s.parent.isEmpty)
-              _row(s, w, tint: tint, indent: 22, chevronSlot: true, hiddenBlocked: s.collapsed && w.sessions.any((c) => c.parent == s.id && c.status == 'blocked'))
-            else if (!folded.contains(s.parent))
-              _row(s, w, tint: tint, indent: 46),
+          for (final s in shown)
+            s.parent.isEmpty
+                ? _row(s, w, tint: tint, indent: 22, chevronSlot: true, last: own != null && s == shown.last,
+                    hiddenBlocked: s.collapsed && w.sessions.any((c) => c.parent == s.id && c.status == 'blocked'))
+                : _row(s, w, tint: tint, indent: 46, last: own != null && s == shown.last),
       ]),
     );
   }
@@ -512,18 +513,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Widget _row(Session s, Workspace? w,
-      {required Color tint, required double indent, bool chevronSlot = false, bool hiddenBlocked = false, bool showWorkspace = false}) {
+      {required Color tint, required double indent, bool chevronSlot = false, bool hiddenBlocked = false, bool showWorkspace = false, bool last = false}) {
     final own = tintColor(s.tint);
     final t = own ?? tint;
     final running = s.status == 'active';
     final info = showWorkspace ? s.workspaceName : (s.context.isNotEmpty ? s.context : s.shortCwd);
     final hasCompanions = chevronSlot && (w?.sessions.any((c) => c.parent == s.id) ?? false);
-    final radius = BorderRadius.circular(running ? 0 : 12);
+    // the wave runs edge to edge, but the last row of a tinted card follows the card's corners (16 less its 4 padding)
+    final radius = !running ? BorderRadius.circular(12) : last ? const BorderRadius.vertical(bottom: Radius.circular(12)) : BorderRadius.zero;
     // no selected-session highlight: a tap opens a new screen, so "current" means nothing in this list.
     // The wave sits under the Material and the tint is Ink, so neither hides the tap ripple.
     // its own layer, so a wave frame repaints this row and not the whole workspace group
     return RepaintBoundary(
-     child: CustomPaint(
+     child: ClipRRect(
+      borderRadius: radius,
+      clipBehavior: running && last ? Clip.antiAlias : Clip.none,
+      child: CustomPaint(
       painter: running ? _WavePainter(wave, t) : null,
       child: Material(
         type: MaterialType.transparency,
@@ -588,6 +593,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
       ),
       ),
+     ),
      ),
     );
   }
