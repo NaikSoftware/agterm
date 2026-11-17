@@ -28,10 +28,12 @@ extension WorkspaceSidebar.Coordinator {
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
         let base = GhosttyApp.shared.sidebarFontSize
         let density = GhosttyApp.shared.sidebarDensity
-        guard let node = item as? SidebarNode, node.kind == .session, sessionInfo(forSession: node.id) != nil else {
-            return AppSettings.sidebarRowHeight(fontSize: base, density: density)
-        }
-        return SidebarInfoMetrics.rowHeight(base: base, density: density)
+        guard let node = item as? SidebarNode else { return AppSettings.sidebarRowHeight(fontSize: base, density: density) }
+        let extras = SidebarRowView.edgeExtras(groupEdge(for: node))
+        let content = node.kind == .session && sessionInfo(forSession: node.id) != nil
+            ? SidebarInfoMetrics.rowHeight(base: base, density: density)
+            : AppSettings.sidebarRowHeight(fontSize: base, density: density)
+        return content + extras.top + extras.bottom
     }
 
     /// sessionInfo is the info line a session row shows, shared by the height, the cell builder and the row diff.

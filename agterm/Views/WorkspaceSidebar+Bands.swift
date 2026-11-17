@@ -24,6 +24,43 @@ extension WorkspaceSidebar.Coordinator {
         }
     }
 
+    /// refreshGroupGeometry re-asks every row's height, since a fold or rebuild moves a group's last row and
+    /// with it the edge extras, then re-decorates.
+    func refreshGroupGeometry() {
+        guard let outline = outlineView else { return }
+        // a view-based table animates a height change by default, leaving row views at their old frames meanwhile
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            outline.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<outline.numberOfRows))
+        }
+        applyRowDecorations()
+    }
+
+    /// groupEdge is a row's place in its workspace group, tinted or not: nil where no workspace rows render. One
+    /// rule feeds the row height, the cell frame and the drawing, so they cannot disagree.
+    func groupEdge(for node: SidebarNode) -> SidebarBandEdge? {
+        guard rendersWorkspaceRows, let outline = outlineView else { return nil }
+        // from the model, not `parent(forItem:)`: the outline asks heights while its own row map is being built
+        let workspaceID = node.kind == .workspace ? node.id : store.workspace(forSession: node.id)?.id
+        guard let workspaceID, let workspace = nodeCache[workspaceID] else { return nil }
+        var last = workspace
+        if outline.isItemExpanded(workspace), let child = workspace.children.last {
+            last = outline.isItemExpanded(child) ? child.children.last ?? child : child
+        }
+        switch (node === workspace, node === last) {
+        case (true, true): return .single
+        case (true, false): return .first
+        case (false, true): return .last
+        case (false, false): return .middle
+        }
+    }
+
+    /// edgeExtras is the space a row adds above and below its content for the group gap and padding.
+    func edgeExtras(forRow row: Int) -> (top: CGFloat, bottom: CGFloat) {
+        guard let node = outlineView?.item(atRow: row) as? SidebarNode else { return (0, 0) }
+        return SidebarRowView.edgeExtras(groupEdge(for: node))
+    }
+
     /// groupRange is the rows of the top-level item holding `row` and everything shown under it.
     private func groupRange(containing row: Int, in outline: NSOutlineView) -> Range<Int> {
         var start = row
@@ -44,7 +81,7 @@ extension WorkspaceSidebar.Coordinator {
         let head = outline.item(atRow: group.lowerBound) as? SidebarNode
         let workspaceTint = rendersWorkspaceRows && head?.kind == .workspace
             ? store.workspaces.first { $0.id == head?.id }?.tint : nil
-        let edge = rendersWorkspaceRows ? SidebarBand.edge(index: row - group.lowerBound, count: group.count) : nil
+        let edge = groupEdge(for: node)
         rowView.groupEdge = edge
         if let workspaceTint, let edge {
             rowView.band = (NSColor.tint(workspaceTint.color), edge)

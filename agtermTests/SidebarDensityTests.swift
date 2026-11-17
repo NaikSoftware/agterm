@@ -73,8 +73,8 @@ final class SidebarDensityTests: XCTestCase {
         let base = Double(GhosttyApp.shared.sidebarFontSize)
         let plainHeight = CGFloat(AppSettings.sidebarRowHeight(fontSize: base, density: density))
         XCTAssertEqual(outline.indentationPerLevel, CGFloat(density.indentPerLevel), "indent", file: file, line: line)
-        XCTAssertEqual(outline.rect(ofRow: try row(of: plain)).height, plainHeight, "plain row", file: file, line: line)
-        XCTAssertEqual(outline.rect(ofRow: try row(of: info)).height,
+        XCTAssertEqual(outline.frameOfCell(atColumn: 0, row: try row(of: plain)).height, plainHeight, "plain row", file: file, line: line)
+        XCTAssertEqual(outline.frameOfCell(atColumn: 0, row: try row(of: info)).height,
                        SidebarInfoMetrics.rowHeight(base: base, density: density), "info row", file: file, line: line)
 
         let plainCell = try XCTUnwrap(outline.view(atColumn: 0, row: try row(of: plain), makeIfNecessary: true) as? SidebarCellView)

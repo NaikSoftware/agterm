@@ -520,7 +520,22 @@ class SidebarRowView: NSTableRowView {
 
     override func layout() {
         super.layout()
+        alignToContent()
         layoutWave()
+    }
+
+    /// alignToContent keeps the cell and chevron in the content rect: AppKit places a cell by `frameOfCell` only
+    /// when it adds it and afterwards just autoresizes it with the row, so a fold that moves the group's edge
+    /// extras would otherwise stretch the cell across them.
+    private func alignToContent() {
+        let content = contentRect
+        for subview in subviews {
+            if subview is NSTableCellView {
+                subview.frame = NSRect(x: subview.frame.minX, y: content.minY, width: subview.frame.width, height: content.height)
+            } else if subview.identifier == NSOutlineView.disclosureButtonIdentifier {
+                subview.setFrameOrigin(NSPoint(x: subview.frame.minX, y: content.midY - subview.frame.height / 2))
+            }
+        }
     }
 
     // re-adds the drift if Core Animation dropped it while the row was out of a window
@@ -568,17 +583,24 @@ class SidebarRowView: NSTableRowView {
         return rect
     }
 
-    /// rowRect is where selection, hover, wash and wave draw: the pill, kept inside the group's padding at its
-    /// outer ends.
+    /// edgeExtras is the space a row of a group adds outside its content: half the gap between groups plus the
+    /// group's padding, above the first row and below the last. Row height, cell frame and drawing all read it.
+    static func edgeExtras(_ edge: SidebarBandEdge?) -> (top: CGFloat, bottom: CGFloat) {
+        let outer = groupGap + groupPadding
+        return (edge == .first || edge == .single ? outer : 0, edge == .last || edge == .single ? outer : 0)
+    }
+
+    /// contentRect is the row less its edge extras, across the pill's width: where the cell lays out.
+    var contentRect: NSRect {
+        let pill = selectionRect, extras = Self.edgeExtras(groupEdge)
+        return NSRect(x: pill.minX, y: bounds.minY + (isFlipped ? extras.top : extras.bottom), width: pill.width,
+                      height: max(0, bounds.height - extras.top - extras.bottom))
+    }
+
+    /// rowRect is where selection, hover, wash and wave draw: the content rect, inset by the density's gap
+    /// between rows.
     var rowRect: NSRect {
-        var rect = selectionRect
-        guard let edge = groupEdge else { return rect }
-        let outer = Self.groupGap + Self.groupPadding
-        let top: CGFloat = edge == .first || edge == .single ? outer : 0
-        let bottom: CGFloat = edge == .last || edge == .single ? outer : 0
-        rect.origin.y += isFlipped ? top : bottom
-        rect.size.height = max(0, rect.height - top - bottom)
-        return rect
+        contentRect.insetBy(dx: 0, dy: GhosttyApp.shared.sidebarDensity.selectionInset)
     }
 
     /// fillBand draws the group's rounded outline once across its rows: each row's piece overhangs the edges

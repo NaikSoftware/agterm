@@ -232,6 +232,10 @@ paths:
   `SidebarRowView` draws it from the host-free `SidebarBand` edge model in `agtermCore`.
   It resets on every configure and reapplies on fold, tint, rebuild and appearance change.
   The group's tint also colors the selection pill (`SidebarRowView.selectionTint`).
+- Every group, tinted or not, adds `SidebarRowView.edgeExtras` (4pt half-gap + 3pt padding) above its first row
+  and below its last; `groupEdge(for:)` is the one rule for row height, cell frame and drawing. A fold or rebuild
+  re-notes every height with a zero-duration animation: an animated re-note leaves row views at old frames.
+  AppKit only autoresizes a cell after adding it, so `SidebarRowView.alignToContent` keeps it in the content rect.
 - An `.active` row shows a wave: a square-cornered `CAGradientLayer` sublayer animated on `transform.translation.x`,
   4.8 s per period, the period two row widths.
   The active status glyph fades under key `agent-status-fade` (1.4 s), distinct from blink.

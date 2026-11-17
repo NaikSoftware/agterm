@@ -118,6 +118,7 @@ final class SidebarBandTests: XCTestCase {
             row.layoutSubtreeIfNeeded()
             let wave = try XCTUnwrap(row.waveLayer)
             XCTAssertEqual(wave.frame, row.rowRect)
+            XCTAssertTrue(row.bandRect(try XCTUnwrap(row.groupEdge)).contains(wave.frame))
             XCTAssertEqual(wave.cornerRadius, 0)
         }
     }
@@ -149,16 +150,66 @@ final class SidebarBandTests: XCTestCase {
         XCTAssertFalse(row.isHovered)
     }
 
-    func testRowRectStaysInsideTheGroupPaddingAtItsEnds() throws {
+    func testGroupRowsCarryTheirEdgeExtrasAndKeepContentInsideTheBand() throws {
         let (store, workspace) = try twoSessionWorkspace()
+        let third = try XCTUnwrap(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
         store.setTint(SidebarTint(color: .blue), forWorkspace: workspace.id)
         mount(store)
-        for id in [workspace.id, try XCTUnwrap(workspace.sessions.last).id] {
-            let row = try rowView(forItem: id)
-            let band = row.bandRect(try XCTUnwrap(row.band?.edge))
-            XCTAssertTrue(band.insetBy(dx: SidebarRowView.groupPadding, dy: 0).contains(row.rowRect.insetBy(dx: 0, dy: 0.01)))
-            XCTAssertGreaterThanOrEqual(abs(row.rowRect.minY - band.minY) + abs(row.rowRect.maxY - band.maxY), SidebarRowView.groupPadding)
-        }
+        let ids = [workspace.id] + (try XCTUnwrap(store.workspaces.first)).sessions.map(\.id)
+        XCTAssertEqual(ids.last, third.id)
+        XCTAssertEqual(edges(), [.first, .middle, .middle, .last])
+        for id in ids { try assertGeometry(of: id) }
+
+        outline.collapseItem(try XCTUnwrap(coordinator.workspaceNode(forID: workspace.id)))
+        XCTAssertEqual(edges(), [.single])
+        try assertGeometry(of: workspace.id)
+    }
+
+    func testFoldingACompanionParentReNotesTheGroupsRowHeights() throws {
+        let (store, workspace) = try twoSessionWorkspace()
+        let parent = try XCTUnwrap(workspace.sessions.last)
+        let companion = try store.addCompanion(to: parent.id, options: CompanionOptions(name: "companion")).get()
+        mount(store)
+        let parentNode = coordinator.node(for: parent.id, kind: .session)
+        outline.expandItem(parentNode)
+        let base = AppSettings.sidebarRowHeight(fontSize: GhosttyApp.shared.sidebarFontSize)
+        let outer = SidebarRowView.groupGap + SidebarRowView.groupPadding
+        XCTAssertEqual(try rowHeight(of: parent.id), base)
+        XCTAssertEqual(try rowHeight(of: companion.id), base + outer)
+
+        outline.collapseItem(parentNode)
+        XCTAssertEqual(try rowHeight(of: parent.id), base + outer, "the parent is the group's last row now")
+        try assertGeometry(of: parent.id)
+    }
+
+    private func rowHeight(of id: UUID) throws -> CGFloat {
+        outline.layoutSubtreeIfNeeded()
+        let row = try XCTUnwrap((0..<outline.numberOfRows).first { (outline.item(atRow: $0) as? SidebarNode)?.id == id })
+        return outline.rect(ofRow: row).height
+    }
+
+    private func assertGeometry(of id: UUID, file: StaticString = #filePath, line: UInt = #line) throws {
+        let rowView = try rowView(forItem: id)
+        let row = outline.row(for: rowView)
+        rowView.layoutSubtreeIfNeeded()
+        let edge = try XCTUnwrap(rowView.groupEdge, file: file, line: line)
+        let extras = SidebarRowView.edgeExtras(edge)
+        let base = outline.frameOfCell(atColumn: 0, row: row).height
+        XCTAssertEqual(rowView.bounds.height, base + extras.top + extras.bottom, "\(edge)", file: file, line: line)
+
+        let band = rowView.bandRect(edge), content = rowView.contentRect
+        XCTAssertTrue(band.contains(content), "\(edge)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(content.minX - band.minX, SidebarRowView.groupPadding, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(band.maxX - content.maxX, SidebarRowView.groupPadding, file: file, line: line)
+        let flipped = rowView.isFlipped
+        let topGap = flipped ? content.minY - band.minY : band.maxY - content.maxY
+        let bottomGap = flipped ? band.maxY - content.maxY : content.minY - band.minY
+        if extras.top > 0 { XCTAssertEqual(topGap, SidebarRowView.groupPadding, "\(edge) top", file: file, line: line) }
+        if extras.bottom > 0 { XCTAssertEqual(bottomGap, SidebarRowView.groupPadding, "\(edge) bottom", file: file, line: line) }
+
+        let cell = outline.convert(outline.frameOfCell(atColumn: 0, row: row), to: rowView)
+        XCTAssertEqual(cell.minY, content.minY, "\(edge) cell top", file: file, line: line)
+        XCTAssertEqual(cell.maxY, content.maxY, "\(edge) cell bottom", file: file, line: line)
     }
 
     func testTheDefaultStatusDotIsDrawnUnscaledAtNinePoints() throws {

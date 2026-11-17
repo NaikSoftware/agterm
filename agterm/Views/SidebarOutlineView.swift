@@ -64,6 +64,26 @@ final class SidebarOutlineView: NSOutlineView {
     /// geometry (`usesSpecGeometry`); the earlier layout is already tight and cannot be tested here. Without the
     /// reserved strip the trim runs on every version, toward `contentMinX`.
     override func frameOfCell(atColumn column: Int, row: Int) -> NSRect {
+        inContentArea(horizontalCellFrame(atColumn: column, row: row), row: row)
+    }
+
+    override func frameOfOutlineCell(atRow row: Int) -> NSRect {
+        inContentArea(horizontalOutlineCellFrame(atRow: row), row: row)
+    }
+
+    /// inContentArea takes a group row's edge extras off a frame, so the cell and chevron center in the row's
+    /// content rect rather than the whole row.
+    private func inContentArea(_ frame: NSRect, row: Int) -> NSRect {
+        guard !frame.isEmpty, let extras = (dataSource as? WorkspaceSidebar.Coordinator)?.edgeExtras(forRow: row) else {
+            return frame
+        }
+        var frame = frame
+        frame.origin.y += isFlipped ? extras.top : extras.bottom
+        frame.size.height = max(0, frame.height - extras.top - extras.bottom)
+        return frame
+    }
+
+    private func horizontalCellFrame(atColumn column: Int, row: Int) -> NSRect {
         var frame = super.frameOfCell(atColumn: column, row: row)
         guard !frame.isEmpty, tableColumns.indices.contains(column), tableColumns[column] === outlineTableColumn else {
             return frame
@@ -86,7 +106,7 @@ final class SidebarOutlineView: NSOutlineView {
 
     /// frameOfOutlineCell hides level-0 triangles with an empty frame. `shouldShowOutlineCellForItem`
     /// would hide them too, but AppKit then refuses to collapse the item.
-    override func frameOfOutlineCell(atRow row: Int) -> NSRect {
+    private func horizontalOutlineCellFrame(atRow row: Int) -> NSRect {
         var frame = super.frameOfOutlineCell(atRow: row)
         if usesSpecGeometry, !frame.isEmpty {
             let level = level(forRow: row)

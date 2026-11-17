@@ -242,8 +242,9 @@ final class SidebarInfoRowTests: XCTestCase {
         })
     }
 
+    // the cell frame leaves out a group row's edge extras
     private func height(of id: UUID) throws -> CGFloat {
-        outline.rect(ofRow: try row(of: id)).height
+        outline.frameOfCell(atColumn: 0, row: try row(of: id)).height
     }
 
     private func infoCell(forSession id: UUID) throws -> SidebarInfoCellView {
