@@ -287,6 +287,15 @@ Each entry separates a demonstrated cause from one that is only consistent with 
 - **Fix.** The page holds the counts it reports during setup and sends them after `ready`.
   `TextPageRenderingTests` pins the message order for a diff with changes, one without, and a seeded search.
 
+### `RemotePageChannelTests.testAnOversizedBridgeRequestFailsAloneAndTheChannelStays`
+
+- **Symptom.** The hosted test process exits while this test runs; `xcodebuild` prints `Restarting after
+  unexpected exit, crash, or test timeout` and goes on. A WebContent process crash is logged shortly before.
+- **Runs.** Local only (2026-11-17): once in a full `make test-app` run on the sidebar redesign branch, which does
+  not touch remote pages; the class then passed 3 of 3 isolated runs.
+- **Cause.** Unknown; no crash report was collected.
+- **Fix.** None yet.
+
 ### Earlier hosted failures, already fixed on master
 
 - `HtmlOverlayViewTests` line 48 read the page title before it arrived; fixed in #949.
