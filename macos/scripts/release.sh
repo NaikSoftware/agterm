@@ -6,6 +6,8 @@
 #   scripts/release.sh <version>            # build + sign + notarize + DMG (no publish)
 #   scripts/release.sh <version> --publish  # also: gh release + upload
 #
+# MOBILE_APK=<path> also uploads the phone app as hangar-mobile.apk; without it the release has no APK.
+#
 # Signing identity: auto-detected from the keychain ("Developer ID Application"),
 # or override with HANGAR_SIGN_IDENTITY. With no identity it produces an AD-HOC
 # DMG (not notarized) — a dry run by default, but set HANGAR_ALLOW_UNSIGNED=1 to
@@ -27,7 +29,9 @@ if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 TAG="v$VERSION"
-DMG="$BUILD_DIR/hangar-$VERSION.dmg"
+DMG="$BUILD_DIR/Hangar-$VERSION.dmg"
+GH_REPO=NaikSoftware/hangar
+[ -z "${MOBILE_APK:-}" ] || [ -f "$MOBILE_APK" ] || { echo "MOBILE_APK not found: $MOBILE_APK" >&2; exit 1; }
 
 # ── plugin manifest version ───────────────────────────────────────────────────
 # The agent skill also ships as a Claude Code / Codex plugin, and both plugin
@@ -199,7 +203,7 @@ rm -rf "$STAGING"; mkdir -p "$STAGING"
 cp -R "$APP" "$STAGING/"
 ln -s /Applications "$STAGING/Applications"
 rm -f "$DMG"
-hdiutil create -volname hangar -srcfolder "$STAGING" -ov -format UDZO "$DMG"
+hdiutil create -volname Hangar -srcfolder "$STAGING" -ov -format UDZO "$DMG"
 rm -rf "$STAGING"
 
 # ── sign + notarize + staple the DMG ──────────────────────────────────────────
@@ -225,12 +229,24 @@ fi
 echo "==> publishing $TAG"
 NOTES_FILE="$(mktemp)"
 release_notes >"$NOTES_FILE"
-if gh release view "$TAG" >/dev/null 2>&1; then
-  gh release edit "$TAG" --title "Version $VERSION" --notes-file "$NOTES_FILE"
+if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+  gh release edit "$TAG" --repo "$GH_REPO" --title "Version $VERSION" --notes-file "$NOTES_FILE"
 else
-  gh release create "$TAG" --title "Version $VERSION" --notes-file "$NOTES_FILE"
+  gh release create "$TAG" --repo "$GH_REPO" --title "Version $VERSION" --notes-file "$NOTES_FILE"
 fi
 rm -f "$NOTES_FILE"
-gh release upload "$TAG" "$DMG" "${SERVER_TARBALLS[@]}" --clobber
+# the asset name is the file name (`path#label` sets only a display label), so the APK is copied under its asset name
+ASSETS=("$DMG" "${SERVER_TARBALLS[@]}" "$ROOT/scripts/migrate-from-agterm2.sh")
+if [ -n "${MOBILE_APK:-}" ]; then
+  APK_STAGE="$(mktemp -d)"
+  cp "$MOBILE_APK" "$APK_STAGE/hangar-mobile.apk"
+  ASSETS+=("$APK_STAGE/hangar-mobile.apk")
+fi
+gh release upload "$TAG" --repo "$GH_REPO" "${ASSETS[@]}" --clobber
+[ -z "${APK_STAGE:-}" ] || rm -rf "$APK_STAGE"
+if [ -z "${MOBILE_APK:-}" ]; then
+  echo "==> !!! NO PHONE APP UPLOADED: README and the site link hangar-mobile.apk. Re-run with MOBILE_APK=<path> or" >&2
+  echo "==> !!! upload it yourself: gh release upload $TAG --repo $GH_REPO hangar-mobile.apk --clobber" >&2
+fi
 
 echo "==> done"

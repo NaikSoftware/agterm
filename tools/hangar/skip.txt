@@ -37,3 +37,10 @@ macos/**/*.swift	line	(?i)adapted from thdxg/macterm
 
 # The phone wire-name test asserts the old name is gone.
 mobile/test/wire_names_test.dart	line	isNot\(contains\('agterm'\)\)
+
+# The install docs name the Agterm2 migration script and the old product.
+README.md	keep	migrate-from-agterm2\.sh|Agterm2
+site/docs.html	keep	migrate-from-agterm2\.sh|Agterm2
+site/index.html	keep	migrate-from-agterm2\.sh|Agterm2
+.claude/rules/release.md	keep	migrate-from-agterm2\.sh
+macos/scripts/release.sh	keep	migrate-from-agterm2\.sh

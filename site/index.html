@@ -393,7 +393,7 @@
             </div>
             <div class="steps">
               <div class="step"><span class="k">1</span><p><b>Download the DMG</b> from the <a href="https://github.com/NaikSoftware/hangar/releases/latest">latest release</a>, open it, and drag Hangar to Applications.</p></div>
-              <div class="step"><span class="k">2</span><div><p><b>Clear the download flag once.</b> The build is not notarized.</p><div class="cmd">xattr -dr com.apple.quarantine /Applications/Hangar.app</div></div></div>
+              <div class="step"><span class="k">2</span><div><p><b>Clear the download flag once.</b> The build is not notarized.</p><div class="cmd">xattr -dr com.apple.quarantine /Applications/Hangar.app</div><p>Coming from Agterm2? Run <span class="mono">migrate-from-agterm2.sh</span> from the release with <span class="mono">--dry-run</span> first, then without, before Hangar starts.</p></div></div>
               <div class="step"><span class="k">3</span><p><b>Start Hangar</b> and run an agent in the first session. To pair the phone, open the app menu ▸ Connect a Phone… and scan the code.</p></div>
             </div>
           </div>

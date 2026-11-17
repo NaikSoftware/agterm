@@ -17,7 +17,7 @@ SNAPSHOT_LIMIT = 10
 
 
 def app_pids():
-    result = subprocess.run(["pgrep", "-x", "hangar"], capture_output=True, text=True, check=False)
+    result = subprocess.run(["pgrep", "-x", "Hangar"], capture_output=True, text=True, check=False)
     if result.returncode not in (0, 1):
         raise RuntimeError(result.stderr)
     return {int(pid) for pid in result.stdout.split()}

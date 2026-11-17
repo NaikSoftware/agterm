@@ -64,6 +64,9 @@ print("/tmp/agterm-zmx-%016x" % h)' "$home/Library/Application Support/agterm")"
     fi
 fi
 
+hangar_ran=0
+[ -d "$home/Library/Application Support/hangar" ] && hangar_ran=1
+
 # read first: bash 3.2 misparses a quoted heredoc inside $(...)
 IFS= read -r -d '' migrate_py <<'PY' || true
 import json, os, re, shutil, stat, sys
@@ -140,7 +143,13 @@ def copy_dir(src, dst, skip_top, rewrite):
     for d, _, files in os.walk(tmp):
         for n in files:
             p = os.path.join(d, n)
-            if os.path.islink(p): continue
+            if os.path.islink(p):
+                # a dotfiles link is kept as is, so its target still holds the old names
+                try: stale = re.search(r"agterm|AGTERM_", read(os.path.join(src, os.path.relpath(p, tmp))))
+                except (OSError, UnicodeDecodeError): stale = None
+                if stale: left(f"{short(os.path.join(dst, os.path.relpath(p, tmp)))} links to {os.readlink(p)}, "
+                                "which still names agterm: rename agtermctl and AGTERM_ in it yourself.")
+                continue
             try:
                 with open(p, encoding="utf-8") as f: text = f.read()
             except (UnicodeDecodeError, OSError): continue  # binary or unreadable: copied as is
@@ -272,6 +281,17 @@ while IFS= read -r line; do
     esac
 done <<< "$python_out"
 
+# Hangar that started before this script installed its extras beside the old ones, and Codex then skipped its hooks
+reset="defaults delete ua.naiksoftware.hangar extrasInstalledBuild"
+why="so the next Hangar start installs the hooks, the skill and hangarctl again"
+if [ $isolated -eq 1 ]; then
+    [ $hangar_ran -eq 1 ] && note_did "would run $reset $why (skipped under --home)"
+elif defaults read ua.naiksoftware.hangar extrasInstalledBuild >/dev/null 2>&1; then
+    if [ $dry -eq 1 ]; then note_did "would run $reset $why"
+    elif out="$($reset 2>&1)" || [[ "$out" == *"does not exist"* ]]; then note_did "ran $reset $why"
+    else note_left "run $reset yourself before you start Hangar ($out)"; fi
+fi
+
 if [ $isolated -eq 0 ]; then
     link=/usr/local/bin/agtermctl
     if [ -L "$link" ]; then
@@ -301,4 +321,6 @@ cat <<'EOF'
   - Install the Hangar phone app and pair it again.
   - Sign in again to web pages you open in overlays.
   - Two Macs that attach to each other must both run Hangar.
+  - Window positions start fresh: macOS keeps them under the old app id.
+  - Your own scripts outside ~/.config/agterm that call agtermctl or read AGTERM_ variables: update them by hand.
 EOF

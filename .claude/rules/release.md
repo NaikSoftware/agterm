@@ -18,9 +18,10 @@ paths:
 - Each release also ships hangar-server: `release.sh` needs Docker running, runs `scripts/setup-zmx-linux.sh`, and
   packages `hangar-server-VERSION-linux-{aarch64,x86_64}.tar.gz` with `scripts/server-package.sh` before the Xcode
   build. Their sha256 lines go into the app as `Contents/Resources/hangar-server.sha256` before the re-seal (an
-  ad-hoc re-seal on the unsigned path), and `--publish` uploads the DMG and both tarballs in one
-  `gh release upload --clobber`. `hangarctl server install` trusts only that bundled file, so a tarball rebuilt after
-  the app was sealed no longer installs.
+  ad-hoc re-seal on the unsigned path), and `--publish` uploads the DMG, both tarballs, `migrate-from-agterm2.sh`
+  and, with `MOBILE_APK=<path>`, `hangar-mobile.apk` in one `gh release upload --clobber`.
+  `hangarctl server install` trusts only that bundled file, so a tarball rebuilt after the app was sealed no
+  longer installs.
 - Developer ID signing is inside-out: `hangarctl`, zmx and `hangar-session-host` are signed first with no
   entitlements, then the app is sealed with its TCC entitlements. The script rejects any helper carrying them.
 - Before writing or committing a release section, put the exact `CHANGELOG.md` text in a temp file and

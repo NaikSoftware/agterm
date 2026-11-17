@@ -51,6 +51,9 @@ Hangar runs on Apple Silicon Macs with macOS 14 or later.
    ```
 3. Start the app. It installs `hangarctl`, the agent status hooks and the agent skill on first launch and after each update.
 
+Coming from Agterm2? Before you start Hangar the first time, download `migrate-from-agterm2.sh` from the same release and run `bash migrate-from-agterm2.sh --dry-run`, then run it again without `--dry-run`.
+It moves your sessions and config and removes what Agterm2 installed for agents.
+
 The phone app is attached to the same release as `hangar-mobile.apk`.
 Open it on the phone, or run `adb install -r hangar-mobile.apk`.
 

@@ -469,7 +469,7 @@ public final class RemoteCatalogActions {
         let outcome = await run(words + ["--op-id", opID, "--epoch", prepared.sent.epoch], operands: operation.operands)
         if case .moveCompanion = operation, Self.tooOldForCompanionMoves(outcome) {
             entries[opID] = nil
-            let app = mirror.originIsMac ? "hangar" : "hangar-server"
+            let app = mirror.originIsMac ? "Hangar" : "hangar-server"
             return ControlResponse(ok: false, error: "the \(app) on \(host) is too old for companion moves")
         }
         switch outcome {

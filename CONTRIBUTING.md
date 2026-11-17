@@ -22,6 +22,7 @@ Weigh what a feature adds against the code it brings with it.
 Building needs macOS 14 or later, Xcode 26 with `xcodegen` on `PATH`, and Homebrew. `xcodegen` is not installed for you and nothing checks for it, but `make build`, `make run`, `make release` and `make test-app` all call it, so install it first (`brew install xcodegen`). Run every command below from `macos/`, starting with the one-time setup:
 
 ```
+cd macos
 scripts/setup.sh
 ```
 

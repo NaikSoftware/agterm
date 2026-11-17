@@ -250,5 +250,14 @@ code=$?
 check "second run exits 0" '[ $code -eq 0 ]'
 check "second run changes nothing" '[ "$(snap "$H")" = "$after" ]'
 
+H2="$root/home2"
+mkdir -p "$H2/.config/agterm" "$H2/dotfiles"
+printf 'command cmd+j "Jump" agtermctl session focus "$AGTERM_SESSION_ID"\n' > "$H2/dotfiles/keymap.conf"
+ln -s "$H2/dotfiles/keymap.conf" "$H2/.config/agterm/keymap.conf"
+env -u CODEX_HOME -u OPENCODE_CONFIG_DIR -u XDG_CONFIG_HOME /bin/bash "$script" --home "$H2" > "$root/link.out" 2>&1
+check "symlinked keymap reported" 'grep -q "keymap.conf links to .*still names agterm" "$root/link.out" && [ -L "$H2/.config/hangar/keymap.conf" ]'
+check "existing Hangar state names the extras reset" 'grep -q "extrasInstalledBuild" "$root/run2.out"'
+check "summary names window positions and own scripts" 'grep -q "Window positions" "$root/run1.out" && grep -q "Your own scripts" "$root/run1.out"'
+
 echo
 [ $fails -eq 0 ] && echo "PASS" || { echo "FAILED: $fails"; exit 1; }
