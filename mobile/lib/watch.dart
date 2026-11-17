@@ -63,12 +63,64 @@ class Watch {
   static Future<void> stop() async {
     await _android?.stopForegroundService();
     await _n.cancelAll();
+    posted.clear();
   }
 
+  static final posted = PostedAlerts();
+
   static Future<void> show(Alert a, String workspace) async {
-    for (final n in alertNotifications(a, workspace)) {
+    final shown = alertNotifications(a, workspace);
+    for (final n in shown) {
       await _n.show(id: n.id, title: n.title, body: n.body, payload: n.payload, notificationDetails: NotificationDetails(android: n.details));
     }
+    posted.add(a.sessionId, shown.last.id);
+  }
+
+  /// Takes back the alerts the computer shows read, or whose session closed.
+  static Future<void> clear(List<int> ids) async {
+    for (final id in ids) {
+      await _n.cancel(id: id);
+    }
+  }
+}
+
+int _notificationId(String key) => key.hashCode & 0x7fffffff;
+
+/// The sessions with an alert on screen. An alert goes once the computer shows its session read: no unseen badge and no
+/// blocked or finished status. The tree must first show it unread, so a tree from before the alert can't take it back.
+class PostedAlerts {
+  final _summary = <String, int>{}; // session id → its workspace summary's notification id
+  final _unread = <String>{};
+
+  void add(String sessionId, int summary) {
+    _summary[sessionId] = summary;
+    _unread.remove(sessionId);
+  }
+
+  void clear() {
+    _summary.clear();
+    _unread.clear();
+  }
+
+  /// The notifications to cancel for [sessions], the tree's sessions; a session not in it is in another window.
+  List<int> read(Iterable<Session> sessions) {
+    final ids = <int>[];
+    for (final s in sessions.where((s) => _summary.containsKey(s.id))) {
+      if (s.needsYou || s.unseen > 0) {
+        _unread.add(s.id);
+      } else if (_unread.contains(s.id)) {
+        ids.addAll(closed(s.id));
+      }
+    }
+    return ids;
+  }
+
+  /// The notifications to cancel for a session that is gone: its own, and its workspace summary once nothing is under it.
+  List<int> closed(String sessionId) {
+    final summary = _summary.remove(sessionId);
+    _unread.remove(sessionId);
+    if (summary == null) return const [];
+    return [_notificationId(sessionId), if (!_summary.containsValue(summary)) summary];
   }
 }
 
@@ -81,7 +133,7 @@ List<({int id, String title, String body, String payload, AndroidNotificationDet
       importance: Importance.high, priority: Priority.high, category: AndroidNotificationCategory.message,
       subText: name, groupKey: 'ws:$name', setAsGroupSummary: summary, groupAlertBehavior: GroupAlertBehavior.children);
   return [
-    (id: a.sessionId.hashCode & 0x7fffffff, title: a.title, body: a.body, payload: a.sessionId, details: details()),
-    (id: 'ws:$name'.hashCode & 0x7fffffff, title: name, body: '', payload: '', details: details(summary: true)),
+    (id: _notificationId(a.sessionId), title: a.title, body: a.body, payload: a.sessionId, details: details()),
+    (id: _notificationId('ws:$name'), title: name, body: '', payload: '', details: details(summary: true)),
   ];
 }
