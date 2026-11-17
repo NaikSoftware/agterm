@@ -126,6 +126,20 @@ ThemeData buildTheme() {
   );
 }
 
+// the `>_` tile beside the app name, the same on the home and pairing screens
+class AppMark extends StatelessWidget {
+  const AppMark({super.key});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 38,
+        height: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: C.surface, border: Border.all(color: C.line), borderRadius: BorderRadius.circular(11)),
+        child: const Text('>_', style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 14, color: C.indigo)),
+      );
+}
+
 const sectionLabel = TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, letterSpacing: 0.7, color: C.muted);
 
 // the desktop sidebar's glyphs: active fades, blocked blinks, completed is a diamond; `blink` (the agent's

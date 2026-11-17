@@ -317,13 +317,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 48),
                 child: Row(children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(color: C.surface, border: Border.all(color: C.line), borderRadius: BorderRadius.circular(11)),
-                    child: const Text('>_', style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 14, color: C.indigo)),
-                  ),
+                  const AppMark(),
                   const SizedBox(width: 11),
                   Flexible(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
