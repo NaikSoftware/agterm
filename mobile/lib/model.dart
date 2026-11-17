@@ -339,7 +339,7 @@ class AgtermModel extends ChangeNotifier {
   void _onEvent(Map<String, dynamic> e) {
     final a = Alert.of(e);
     if (a == null) return;
-    background ? Watch.show(a) : _alerts.add(a);
+    background ? Watch.show(a, session(a.sessionId)?.workspaceName ?? '') : _alerts.add(a);
   }
 
   @override
