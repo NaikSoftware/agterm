@@ -27,7 +27,7 @@ extension WindowContentView {
     var switcherPill: some View {
         HStack(spacing: 9) {
             SwitcherPillLabel(store: store, library: library, windowID: windowID, chromeText: chromeText,
-                              showsWorkspaceName: shows(.workspaceName), showsSessionName: shows(.sessionName),
+                              showsSessionName: shows(.sessionName),
                               showsWindowName: shows(.windowName), showsContext: shows(.sessionContext),
                               showsRemoteHost: shows(.remoteHost))
             // Ctrl-Tab is a raw key monitor in `SessionSwitcher`, not a rebindable `BuiltinAction`.
@@ -492,13 +492,13 @@ private struct SwitcherPillChrome: View {
 }
 
 /// The pill's one line: session icon, workspace, session (semibold), window and host, then the context, which
-/// truncates first. Its own view so an OSC title tick never invalidates `WindowContentView` (#516).
+/// truncates first. Its own view so an OSC title tick never invalidates `WindowContentView` (#516). The workspace
+/// breadcrumb is always shown; `InterfaceElement.workspaceName` governs only the plain title.
 struct SwitcherPillLabel: View {
     let store: AppStore
     let library: WindowLibrary
     let windowID: WindowInfo.ID
     let chromeText: Color
-    let showsWorkspaceName: Bool
     let showsSessionName: Bool
     let showsWindowName: Bool
     let showsContext: Bool
@@ -506,8 +506,7 @@ struct SwitcherPillLabel: View {
 
     var body: some View {
         let session = store.activeSession
-        let workspace = showsWorkspaceName
-            ? session.flatMap { store.workspace(forSession: $0.id) }?.name.trimmingCharacters(in: .whitespaces) : nil
+        let workspace = session.flatMap { store.workspace(forSession: $0.id) }?.name.trimmingCharacters(in: .whitespaces)
         let host = showsRemoteHost ? session?.remoteHost : nil
         // a remote window is named after its host, which the host part already shows
         let windowName = showsWindowName ? library.customWindowName(for: windowID).flatMap { $0 == host ? nil : $0 } : nil

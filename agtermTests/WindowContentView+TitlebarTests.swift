@@ -137,10 +137,14 @@ final class WindowContentViewTitlebarTests: XCTestCase {
         let scale = Int(window.backingScaleFactor)
         let titleStart = 110 * scale
         let titleEnd = (640 - 225) * scale
+        let plain = try renderTitlebar(mode: .compact, width: 640, hidden: [.recentSessions])
+        let plainHidden = try renderTitlebar(mode: .compact, width: 640, hidden: [.recentSessions, .workspaceName])
+        XCTAssertGreaterThan(differentPixels(plain, plainHidden, from: titleStart, to: titleEnd), 20)
+        XCTAssertEqual(differentPixels(plain, plainHidden, from: titleEnd, to: 640 * scale), 0)
+
         let shown = try renderTitlebar(mode: .compact, width: 640)
-        let hidden = try renderTitlebar(mode: .compact, width: 640, hidden: [.workspaceName])
-        XCTAssertGreaterThan(differentPixels(shown, hidden, from: titleStart, to: titleEnd), 20)
-        XCTAssertEqual(differentPixels(shown, hidden, from: titleEnd, to: 640 * scale), 0)
+        let pillHidden = try renderTitlebar(mode: .compact, width: 640, hidden: [.workspaceName])
+        XCTAssertEqual(differentPixels(shown, pillHidden, from: 0, to: 640 * scale), 0, "the pill always shows the workspace")
 
         store.renameWorkspace(workspace, to: "frontend")
         let renamed = try renderTitlebar(mode: .compact, width: 640)
