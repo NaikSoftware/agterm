@@ -128,15 +128,16 @@ ThemeData buildTheme() {
 
 // the `>_` tile beside the app name, the same on the home and pairing screens
 class AppMark extends StatelessWidget {
-  const AppMark({super.key});
+  const AppMark({super.key, this.size = 38});
+  final double size;
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 38,
-        height: 38,
+        width: size,
+        height: size,
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: C.surface, border: Border.all(color: C.line), borderRadius: BorderRadius.circular(11)),
-        child: const Text('>_', style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 14, color: C.indigo)),
+        decoration: BoxDecoration(color: C.surface, border: Border.all(color: C.line), borderRadius: BorderRadius.circular(size * 0.29)),
+        child: Text('>_', style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: size * 0.37, color: C.indigo)),
       );
 }
 

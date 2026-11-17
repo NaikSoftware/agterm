@@ -88,23 +88,14 @@ class _PairScreenState extends State<PairScreen> {
     appBar: widget.canGoBack ? AppBar() : null,
     body: SafeArea(
       child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(20, widget.canGoBack ? 0 : 16, 20, 28),
+        padding: const EdgeInsets.fromLTRB(20, 40, 20, 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // the home screen's header, with the step in place of the computer line
-            const SizedBox(
-              height: 48,
-              child: Row(children: [
-                AppMark(),
-                SizedBox(width: 11),
-                Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Agterm2', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                  Text('Pair a computer', style: TextStyle(fontSize: 12.5, color: C.muted)),
-                ]),
-              ]),
-            ),
-            const SizedBox(height: 20),
+            const Align(alignment: Alignment.centerLeft, child: AppMark(size: 56)),
+            const SizedBox(height: 14),
+            const Text('Pair with Agterm2', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, height: 1.2)),
+            const SizedBox(height: 14),
             const Text(
               'On your computer, open Settings ▸ Connect a Phone… in Agterm2 and switch it on, or run the command below in any terminal. Either shows a pairing code.',
               style: TextStyle(fontSize: 14, height: 1.5, color: C.muted),
