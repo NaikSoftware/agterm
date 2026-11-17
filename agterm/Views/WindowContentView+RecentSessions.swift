@@ -16,6 +16,14 @@ extension WindowContentView {
         store.navigableRecentSessions(limit: SessionSwitcher.maxCandidates)
     }
 
+    /// Recent minus the sessions Needs you already lists, still capped like the Ctrl-Tab switcher.
+    private func recentWithoutAttention(_ attention: [AttentionEntry]) -> [UUID] {
+        let listed = Set(attention.map(\.session.id))
+        return Array(store.navigableRecentSessions(limit: SessionSwitcher.maxCandidates + listed.count)
+            .filter { !listed.contains($0) }
+            .prefix(SessionSwitcher.maxCandidates))
+    }
+
     /// The newest closed sessions the switcher offers to reopen, below the open ones.
     private var recentClosedSessions: [RecentClosedItem] {
         Array(library.recentClosedItems.lazy.filter { $0.kind == .session }.prefix(15))
@@ -123,7 +131,7 @@ extension WindowContentView {
             sections: [
                 SwitcherSection(title: "Needs you",
                                 hits: attention.map { .attention(window: $0.window.id, session: $0.session.id) }),
-                SwitcherSection(title: "Recent", hits: recentSessions.map { .session($0) }),
+                SwitcherSection(title: "Recent", hits: recentWithoutAttention(attention).map { .session($0) }),
                 SwitcherSection(title: "Recently closed", hits: recentClosedSessions.map { .closed($0.id) })
             ],
             candidates: switcherCandidates,

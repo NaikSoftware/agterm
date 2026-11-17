@@ -147,11 +147,14 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
 
         let recent = app.buttons["recent-sessions-button"]
         XCTAssertTrue(pollEnabled(recent, true, timeout: 8))
-        let jumpRow = openPopoverJumpRow(button: recent, timeout: 10)
-        XCTAssertTrue(jumpRow.label.contains("api › logs"), "switcher recent row: \(jumpRow.label)")
+        XCTAssertTrue(openSwitcher(recent).exists)
         let needsYou = app.buttons["attention-session-row"]
         XCTAssertTrue(needsYou.waitForExistence(timeout: 5), "the switcher should list the blocked companion under Needs you")
         XCTAssertTrue(needsYou.label.contains("api › logs"), "switcher attention row: \(needsYou.label)")
+        // the companion is also the most recent other session; it is listed once, under Needs you
+        XCTAssertEqual(app.buttons.matching(identifier: "attention-session-row").count, 1)
+        XCTAssertEqual(app.buttons.matching(identifier: "recent-session-row").count, 0,
+                       "a session Needs you lists must not repeat under Recent")
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
 
         // the switcher's own search field tells its popover apart from the bell's, which share attention rows.

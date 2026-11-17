@@ -337,7 +337,7 @@ paths:
   radius, outline and shadow. The pill shows its open ring while the overlay is up; its hint and tooltip show the
   opener's binding.
 - The search field owns the keyboard from the moment the switcher opens. An empty query shows Needs you (every
-  window's attention entries), Recent (`navigableRecentSessions`, excluding active) and Recently closed (up to
+  window's attention entries), Recent (`navigableRecentSessions`, excluding active and every session Needs you lists) and Recently closed (up to
   15 session entries); a query swaps them for one Sessions list over `listOrdered(navigableSessions)` plus
   the closed entries, ranked by `fuzzyRank` over `paletteSearchKeys` (name, then "workspace · detail").
   ↑/↓ move one highlight over every visible row, first by default; Return commits it as a click does; Esc,
