@@ -93,16 +93,19 @@ final class SessionAgentMonitor {
                 let pids = view.map { ForegroundProcess.groupPIDs(for: $0, zmxResolver: zmxResolver) } ?? []
                 let agent = SessionLauncher.agent(group: pids.compactMap(ForegroundProcess.procArgs(pid:)))
                 if session.runningAgent != agent { session.runningAgent = agent }
-                // only a new line replaces the old, so a session closed after claude exits still resumes it
-                if agent == .claude, let line = pids.lazy.compactMap(Self.claudeResumeLine(pid:)).first {
-                    session.resumeLine = line
+                // only a new value replaces the old, so a session closed after claude exits still resumes it;
+                // another agent clears the id, since it no longer names what the session runs
+                if agent != nil, agent != .claude { store.setAgentSessionID(nil, forSession: session.id) }
+                if agent == .claude,
+                   let json = pids.lazy.compactMap(Self.claudeSessionJSON(pid:)).first(where: { SessionLauncher.claudeSessionID(json: $0) != nil }) {
+                    if let line = SessionLauncher.claudeResumeLine(json: json) { session.resumeLine = line }
+                    store.setAgentSessionID(SessionLauncher.claudeSessionID(json: json), forSession: session.id)
                 }
             }
         }
     }
 
-    private static func claudeResumeLine(pid: pid_t) -> String? {
-        let file = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/sessions/\(pid).json")
-        return (try? Data(contentsOf: file)).flatMap(SessionLauncher.claudeResumeLine(json:))
+    private static func claudeSessionJSON(pid: pid_t) -> Data? {
+        try? Data(contentsOf: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/sessions/\(pid).json"))
     }
 }

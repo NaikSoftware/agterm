@@ -23,6 +23,16 @@ extension AppStore {
         if previous != session.effectiveContext { scheduleTreeChanged() }
     }
 
+    /// applyRemoteAgentSessionID records the origin's Claude conversation id; one that is not a plain token reads as none,
+    /// since a drop types it into a terminal.
+    public func applyRemoteAgentSessionID(_ id: String?, forSession sessionID: UUID) {
+        guard let session = session(withID: sessionID), session.remotePresentation != nil else { return }
+        let id = id.flatMap(SessionLauncher.plainSessionID)
+        guard session.agentSessionID != id else { return }
+        session.agentSessionID = id
+        scheduleTreeChanged()
+    }
+
     /// applyRemoteInfo records the origin's info line, kept even while a local line hides it; one that does not
     /// parse here reads as none.
     public func applyRemoteInfo(_ info: PresentationInfo?, forSession id: UUID) {

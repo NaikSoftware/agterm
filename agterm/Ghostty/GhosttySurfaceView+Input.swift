@@ -7,8 +7,8 @@ import GhosttyKit
 extension GhosttySurfaceView {
     // MARK: - Drag and drop (issue #51)
 
-    /// Accept the drag with a copy cursor when it carries something we can insert (a file/web URL or text),
-    /// reject it otherwise — so a session-row drag from the sidebar (a private pasteboard type) is ignored.
+    /// Accept the drag with a copy cursor when it carries something we can insert (a file/web URL or text,
+    /// including a sidebar row's session ids), reject it otherwise.
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
         dropText(from: sender) != nil ? .copy : []
     }
@@ -21,10 +21,15 @@ extension GhosttySurfaceView {
         return true
     }
 
-    /// The text a drop would insert, via the shared `GhosttyCallbacks.pasteboardText` reader; nil when the
-    /// drag carries nothing usable.
+    /// The text a drop would insert; nil when the drag carries nothing usable. A sidebar drag reads the first
+    /// item only (`string(forType:)` joins every item) and omits this pane's own id.
     private func dropText(from sender: any NSDraggingInfo) -> String? {
-        GhosttyCallbacks.pasteboardText(sender.draggingPasteboard)
+        let pasteboard = sender.draggingPasteboard
+        if let types = pasteboard.types, types.contains(sessionPasteboardType) || types.contains(workspacePasteboardType) {
+            guard let text = pasteboard.pasteboardItems?.first?.string(forType: .string) else { return nil }
+            return Session.dropText(text, excluding: session?.dropID)
+        }
+        return GhosttyCallbacks.pasteboardText(pasteboard)
     }
 
     // MARK: - Keyboard

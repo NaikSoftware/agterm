@@ -52,6 +52,11 @@ paths:
   an event carrying `agent_id` adds `--if-idle` to `active`, and a Stop whose `background_tasks` lists a
   running subagent, workflow or shell posts `active --blink` in place of `completed`, dropping the caller's flags
   so `--auto-reset` cannot idle the row. Anything else, an unreadable payload included, posts argv.
+  A `teammate` task stays `running` while idle, so it counts only while busy: `SubagentStart` touches
+  `$TMPDIR/agterm-claude-busy/<session_id>/<agent_id>` and `SubagentStop`, which fires each time a teammate goes
+  idle, removes it; a Stop listing no teammate drops the session's directory. Teammate task ids are not agent ids,
+  so a mark is not matched to its task: one any agent leaves without `SubagentStop` (killed, interrupted)
+  holds the row while any teammate is alive.
 - Codex maps SessionStart idle; prompt/pre/post tool active; Stop ending `?` blocked, otherwise completed.
   Those first four report nothing for a null `transcript_path`: Codex's ephemeral memory consolidation
   thread fires them but never a user Stop, so they would leave the pane active.
@@ -2244,6 +2249,10 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   LOCAL line's source, markdown flag and configured `hideAfter` in the `info` frame and the snapshot. The
   viewer parses the source again and arms no timer: expiry is the origin's, and its clear reaches the
   viewer as a nil frame. Stream end clears only the mirror.
+- The origin's `Session.agentSessionID` rides the `agent.session` frame and snapshot field into the row's own
+  `agentSessionID`, and the viewer drops a value that is not a plain token.
+  An older origin or agterm-server sends none, so the row falls back to `remoteSessionID`.
+  Unlike status and context, stream end does not clear it, since it still names the conversation.
 - A mirrored HUD carries the origin's REMAINING time, and the viewer counts that down on its own clock.
   The two expiries are not synchronized, so the panels can close a moment apart; the origin's withdrawal
   frame closes the viewer's early. A mirrored HUD yields to a HUD or program overlay this Mac's own caller

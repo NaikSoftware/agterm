@@ -3,10 +3,10 @@ import AppKit
 import SwiftUI
 
 /// Local-only (within-outline) pasteboard type carrying a dragged session's UUID.
-let sessionPasteboardType = NSPasteboard.PasteboardType("com.umputun.agterm.session")
+let sessionPasteboardType = NSPasteboard.PasteboardType("ua.naiksoftware.agterm2.session")
 
 /// Local-only pasteboard type carrying a dragged workspace's UUID.
-let workspacePasteboardType = NSPasteboard.PasteboardType("com.umputun.agterm.workspace")
+let workspacePasteboardType = NSPasteboard.PasteboardType("ua.naiksoftware.agterm2.workspace")
 
 /// AppKit `NSOutlineView` sidebar hosted in SwiftUI via `NSViewRepresentable`, chosen over a SwiftUI
 /// `List` so cross-workspace drag-and-drop works natively: a session row dragged onto another workspace
@@ -60,9 +60,9 @@ struct WorkspaceSidebar: NSViewRepresentable {
         // reorder among themselves; Finder folder drops create sessions rooted at those folders. Without
         // the workspace type registered AppKit never delivers validate/accept for a workspace drag.
         outline.registerForDraggedTypes([sessionPasteboardType, workspacePasteboardType, .fileURL])
-        // sidebar rows are app-private move sources with no public representation; the Finder import is
-        // independent — Finder owns that external source and supplies `.fileURL`.
-        outline.setDraggingSourceOperationMask(.move, forLocal: true)
+        // rows move within the sidebar and copy their ids as text onto a terminal, which answers `.copy`;
+        // they never leave the app. The Finder import is independent: Finder supplies `.fileURL`.
+        outline.setDraggingSourceOperationMask([.move, .copy], forLocal: true)
         outline.setDraggingSourceOperationMask([], forLocal: false)
 
         context.coordinator.outlineView = outline

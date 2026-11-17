@@ -498,6 +498,7 @@ A session's right-click context menu.
 </figcaption>
 </figure>
 <p><strong>Several rows at once.</strong> Shift-click and ⌘-click select several sessions. Right-clicking inside the selection keeps it, so <strong>Flag</strong>, <strong>Tint</strong>, <strong>Close</strong> and <strong>Move to</strong> act on all of them; right-clicking a row outside it narrows the menu to that row. Dragging moves the selection, and dragged sessions keep running.</p>
+<p>Drop a session or workspace row on a terminal to type its ids, comma-separated: Claude Code's conversation id when known, else the agterm session id.</p>
 <h3 id="companions">Companions</h3>
 <p>A companion keeps a related shell or program next to a session: a log tail, a watcher, a second shell for the same task. It is an ordinary session pinned to its parent, listed right after it and indented under it.</p>
 <figure>
@@ -2387,7 +2388,7 @@ agtermctl session tint clear --target &quot;$AGTERM_SESSION_ID&quot;</code></pre
 </tr>
 <tr>
 <td>Claude Code</td>
-<td>five hooks: prompt and tool run → active, Stop → completed, permission request and permission prompt → blocked</td>
+<td>seven hooks: prompt and tool run → active, Stop → completed, permission request and permission prompt → blocked, subagent start and stop → track working teammates</td>
 </tr>
 <tr>
 <td>Codex</td>
@@ -2415,6 +2416,7 @@ agtermctl session tint clear --target &quot;$AGTERM_SESSION_ID&quot;</code></pre
 <ul>
 <li>When Claude Code runs as a worker under another agent with a shell between them, as in a tool call, its hooks stay silent, so the status of the pane that started it is not overwritten.</li>
 <li>A background subagent or workflow keeps the row working. Its activity lights an idle row but never replaces the main agent's status. While Claude Code (2.1.145 or later) reports one, or a background shell, still running, Stop posts active instead of completed; completed comes from the Stop after the last one finishes, so a background server that never exits keeps the row active.</li>
+<li>A Stop while an agent-team teammate works posts active instead of completed; completed comes from the Stop after it goes idle. An idle teammate that is still alive does not hold the row.</li>
 <li>Two gaps remain: the main agent's activity can replace a subagent's permission prompt, and when the key that answers that prompt leaves the block in place, the row stays blocked until the main agent's next event.</li>
 <li>After upgrading, restart agterm, which reinstalls the hooks: a running older app ignores the subagent's <code>--if-idle</code> and applies the write.</li>
 </ul>

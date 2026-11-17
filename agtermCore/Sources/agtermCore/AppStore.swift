@@ -441,7 +441,7 @@ public final class AppStore {
                                           commandWait: (session.initialCommand != nil && session.commandWait) ? true : nil,
                                           splitCommandWait: (session.splitInitialCommand != nil && session.splitCommandWait)
                                               ? true : nil,
-                                          agent: session.runningAgent?.rawValue,
+                                          agent: session.runningAgent?.rawValue, agentSessionId: session.agentSessionID,
                                           foreground: mainPane?.command, splitForeground: splitPane?.command,
                                           foregroundShell: mainPane?.shellName, splitForegroundShell: splitPane?.shellName,
                                           // the PERSISTED overrides, not the transient pending payloads, so

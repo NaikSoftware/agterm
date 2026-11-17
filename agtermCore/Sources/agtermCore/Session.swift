@@ -49,6 +49,8 @@ public final class Session: Identifiable {
     /// The line resuming the last Claude Code conversation seen in the focused pane. Kept after claude exits so a
     /// later close still records it; never persisted.
     @ObservationIgnored public var resumeLine: String?
+    /// Claude Code's conversation id seen in the focused pane, or mirrored from an origin; never persisted.
+    @ObservationIgnored public var agentSessionID: String?
     /// A Recent Closed reopen's resume line, typed once into the main pane; see `takePendingResumeLine`.
     @ObservationIgnored public var pendingResumeLine: String?
 
@@ -660,6 +662,22 @@ public final class Session: Identifiable {
     /// (see `focusedCwd` for the existence guard).
     private var focusedOscTitle: String? {
         (splitFocused && splitSurface != nil ? splitTitle : oscTitle).map(Self.strippingTitleSpinner)
+    }
+
+    /// The id a sidebar drag inserts: the agent's conversation, else the origin's session, else this row.
+    public var dropID: String {
+        agentSessionID.flatMap(SessionLauncher.plainSessionID) ?? remoteSessionID.flatMap(SessionLauncher.plainSessionID) ?? id.uuidString
+    }
+
+    /// The dragged sessions' ids joined by `,`; nil for none.
+    public static func dropText(_ sessions: [Session]) -> String? {
+        sessions.isEmpty ? nil : sessions.map(\.dropID).joined(separator: ",")
+    }
+
+    /// `text`'s comma-separated ids without `ownID` (the drop target); nil when none are left.
+    public nonisolated static func dropText(_ text: String, excluding ownID: String?) -> String? {
+        let ids = text.split(separator: ",").map(String.init).filter { $0 != ownID }
+        return ids.isEmpty ? nil : ids.joined(separator: ",")
     }
 
     /// Drops the leading status glyphs a coding agent animates in its title (Claude Code's `✳`, `◑`, braille

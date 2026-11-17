@@ -19,7 +19,7 @@ extension AppStore {
         return PresentationSnapshot(status: presentationStatus(of: session),
                                     hud: presentationHud(of: session, now: now), context: session.context,
                                     layout: presentationLayout(of: session), info: session.info.map(Self.presentationInfo),
-                                    mail: presentationMail(forSession: id))
+                                    mail: presentationMail(forSession: id), agentSession: session.agentSessionID)
     }
 
     /// presentationInfo is the wire form of a local info line; the origin mirrors only its own line, never a mirror.
