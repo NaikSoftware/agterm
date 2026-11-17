@@ -1,5 +1,13 @@
 # Hangar: rename and monorepo
 
+> **Name change, 2026-11-17 (owner):** the product is **Elis**, not Hangar.
+> Read every `Hangar`/`hangar` below as `Elis`/`elis`: `Elis.app`, `elisctl`, `ELIS_*`, `ElisCore`, `elis-session-host`,
+> `elis-server`, bundle id `ua.naiksoftware.elis`, `~/.config/elis`, repo `NaikSoftware/elis`,
+> site `https://naiksoftware.github.io/elis`.
+> New icon: the "Herder" Aussie sketch on the "Dry field" ground (artifact `Q6gpGG4tX1SG2qmxjqu58P`, `icons.js`),
+> for macOS, Android, Linux and the site. The app accent (buttons, selection, focus) takes the logo copper `#C8742F`.
+> The product page copy built on the hangar idea (bays, "Park every agent") is redone for Elis.
+
 ## Intent
 
 The NaikSoftware fork of agterm has become its own product: a terminal workspace for AI coding agents, on macOS, Linux and Android.

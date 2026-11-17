@@ -130,10 +130,42 @@
 - [ ] **Step 3:** Implement per the spec's Migration section. Refuse to run while `pgrep -x agterm` or `pgrep -x Hangar` finds a process. Stop the old zmx daemons and `agterm-session-host` processes whose state dir is the old one (skipped under `--home`). Edit JSON with `python3 -I` (stdlib only).
 - [ ] **Step 4:** Run the test. Expected: PASS. Commit `feat: one-time migration from Agterm2`.
 
+### Task 9: Rename Hangar to Elis
+
+**Files:** `tools/hangar/` → `tools/elis/` (scripts, skip list), then the whole tree.
+
+- [ ] **Step 1:** Extend the rename tooling with a second token map, run after the first: `HangarServerKit→ElisServerKit`, `HangarResponsibility→ElisResponsibility`, `hangarctlKitTests→elisctlKitTests`, `hangarctlKit→elisctlKit`, `HangarCoreTests→ElisCoreTests`, `HangarCore→ElisCore`, `HangarUITests→ElisUITests`, `HangarTests→ElisTests`, `ua.naiksoftware.hangar→ua.naiksoftware.elis`, `hangar-session-host→elis-session-host`, `hangar-server→elis-server`, `hangar_mobile→elis_mobile`, `hangarctl→elisctl`, `HANGAR_→ELIS_`, `HANGAR→ELIS`, `Hangar→Elis`, `hangar→elis`, `naiksoftware.github.io/hangar→naiksoftware.github.io/elis`, `NaikSoftware/hangar→NaikSoftware/elis`. The `hangar` hex in the BLE UUID tail (`68616e6761`) becomes the hex of `elis` padded to the same width (`656c697300`), regenerated on all three sides with fresh vectors.
+- [ ] **Step 2:** `check-names.sh` checks both `agterm` and `hangar`: neither may remain outside the skip list. The spec, plan and ledger are skipped.
+- [ ] **Step 3:** The product page copy that rests on the hangar idea (bay labels, "Park every agent", "Same hangar on Linux") is marked for Task 12, not renamed word by word.
+- [ ] **Step 4:** All gates (macOS four, mobile two). Commit `refactor: rename Hangar to Elis`.
+
+### Task 10: Elis icon on every platform
+
+**Files:** `macos/Elis/AppIcon.icon/`, `mobile/android/app/src/main/res/` (launcher, adaptive icon), `mobile/` iOS-free; `linux/scripts/make-icons.py` and `linux/resources/` icons; `site/assets/` favicons and the 1200x630 social card.
+
+- [ ] **Step 1:** Source: the "Dry field" SVG from artifact `Q6gpGG4tX1SG2qmxjqu58P` `icons.js` (`herder('b2', '#D2B07C', '#A27C46')`), a full-bleed 1024 square. Save it as `docs/brand/elis-icon.svg` (single source).
+- [ ] **Step 2:** macOS: Icon Composer layer from the SVG (fill solid, the system mask applies); Android: adaptive icon foreground (the face and dots) and background (the gradient), plus legacy mipmaps; Linux: hicolor sizes via `make-icons.py`; site: favicons 16/32/180 and the social card.
+- [ ] **Step 3:** Verify the built macOS app bundle's icon and the Android launcher render (screenshot each, small sizes 16/32 legible).
+- [ ] **Step 4:** Commit `feat: Elis icon`.
+
+### Task 11: Copper accent in the apps
+
+- [ ] **Step 1:** macOS: an `AccentColor` color set in `Assets.xcassets` (`#C8742F`; dark appearance `#E08A45` if contrast on the dark sidebar needs it) and `ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor` in `project.yml`, so every `Color.accentColor`/`NSColor.controlAccentColor` use follows. Check the sidebar selection and switcher rows still read.
+- [ ] **Step 2:** Phone: `C.accent` in `mobile/lib/theme.dart` becomes the copper; the brand `C.indigo` mark is replaced by the icon. Keep status colors as they are (blocked orange `#FF9F43` is a status, not the accent).
+- [ ] **Step 3:** Linux: the Qt palette highlight/accent uses the same copper if the app sets one.
+- [ ] **Step 4:** Site: the page accent becomes the copper.
+- [ ] **Step 5:** Gates touched; commit `feat: copper accent`.
+
+### Task 12: Screenshots and product page for Elis
+
+- [ ] **Step 1:** Retake the six screenshots with the same staged demo (`/tmp/hg/` recipe from the first capture), now showing Elis names, the new icon and the copper accent. Same privacy rules: no username, hostname, `/tmp`, or old names in any PNG.
+- [ ] **Step 2:** New product page design for Elis in Claude Design (the Aussie herder idea replaces the hangar bays), owner approves, then `site/index.html` is rebuilt to match.
+- [ ] **Step 3:** README and site screenshots updated. Commit `docs: Elis screenshots and product page`.
+
 ### Task 8: Final run, merge, repo rename, release
 
 - [ ] **Step 1:** The owner holds merges. `git fetch && git merge origin/master`; re-run `restructure.sh` and `rename.sh` on the merged tree (both idempotent); `check-names.sh`; every gate once.
 - [ ] **Step 2:** Open the PR (`--repo NaikSoftware/agterm`). After the owner merges, verify the merge commit on `origin/master`.
-- [ ] **Step 3:** Ask the owner to confirm, then `gh repo rename hangar --repo NaikSoftware/agterm`; update local `origin` URLs; enable Pages (source: GitHub Actions).
-- [ ] **Step 4:** Archive agterm-qt (owner's request, 2026-11-17): push one commit to `NaikSoftware/agterm-qt` `main` whose README says the project moved to `NaikSoftware/hangar` (`linux/`, `mobile/`), then `gh repo archive NaikSoftware/agterm-qt --yes`. The local clone stays; the owner removes it.
-- [ ] **Step 5:** Release with `Hangar-<ver>.dmg`, `hangar-mobile.apk` and `migrate-from-agterm2.sh`. The notes tell users to run the script, and that two attached Macs must both update.
+- [ ] **Step 3:** Ask the owner to confirm, then `gh repo rename elis --repo NaikSoftware/agterm`; update local `origin` URLs; enable Pages (source: GitHub Actions).
+- [ ] **Step 4:** Archive agterm-qt (owner's request, 2026-11-17): push one commit to `NaikSoftware/agterm-qt` `main` whose README says the project moved to `NaikSoftware/elis` (`linux/`, `mobile/`), then `gh repo archive NaikSoftware/agterm-qt --yes`. The local clone stays; the owner removes it.
+- [ ] **Step 5:** Release with `Elis-<ver>.dmg`, `elis-mobile.apk` and `migrate-from-agterm2.sh`. The notes tell users to run the script, and that two attached Macs must both update.
