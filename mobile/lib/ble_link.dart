@@ -25,7 +25,7 @@ List<Uint8List> _hkdf(List<int> salt, List<int> ikm, List<int> info, int outputs
 }
 
 class BleIds {
-  static const psmCharacteristic = 'a6e5c0de-0001-4a67-8000-6167746572d1';
+  static const psmCharacteristic = 'a6e5c0de-0001-4a67-8000-68616e6761d1';
 
   static const epochSeconds = 900;
 

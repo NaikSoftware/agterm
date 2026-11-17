@@ -214,6 +214,6 @@ class BleChannel(private val activity: Activity, messenger: BinaryMessenger) : M
         private const val REQUEST = 4201
         private const val STEP_MS = 15_000L
         private val PERMISSIONS = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-        private val PSM_CHARACTERISTIC: UUID = UUID.fromString("a6e5c0de-0001-4a67-8000-6167746572d1")
+        private val PSM_CHARACTERISTIC: UUID = UUID.fromString("a6e5c0de-0001-4a67-8000-68616e6761d1")
     }
 }

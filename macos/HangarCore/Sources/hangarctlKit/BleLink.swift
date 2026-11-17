@@ -13,7 +13,7 @@ public enum BleLinkError: Error, Equatable {
 
 public enum BleIDs {
     public static let psmCharacteristic = UUID(uuid: (0xA6, 0xE5, 0xC0, 0xDE, 0x00, 0x01, 0x4A, 0x67,
-                                                      0x80, 0x00, 0x61, 0x67, 0x74, 0x65, 0x72, 0xD1))
+                                                      0x80, 0x00, 0x68, 0x61, 0x6E, 0x67, 0x61, 0xD1))
 
     /// The advertised UUID rotates every `epochSeconds`, so a passive observer cannot follow the Mac.
     public static let epochSeconds: TimeInterval = 900

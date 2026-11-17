@@ -94,7 +94,7 @@
     "source" : "https://github.com/haskell-cryptography/cacophony/blob/master/vectors/cacophony.txt"
   },
   "psk" : "b8dcb458c725026ad76480305073f90103210953823c3796cf1541bc560ff912",
-  "psmCharacteristicUUID" : "a6e5c0de-0001-4a67-8000-6167746572d1",
+  "psmCharacteristicUUID" : "a6e5c0de-0001-4a67-8000-68616e6761d1",
   "rotatingServiceUUIDs" : [
     {
       "epoch" : 1963584,
