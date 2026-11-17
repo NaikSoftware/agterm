@@ -73,6 +73,12 @@ struct SessionLauncherTests {
         #expect(Session.dropText([]) == nil)
     }
 
+    @Test func dropTextExcludesOwnID() {
+        #expect(Session.dropText("a,b,c", excluding: "a") == "b,c")
+        #expect(Session.dropText("a", excluding: "a") == nil)
+        #expect(Session.dropText("a,b", excluding: nil) == "a,b")
+    }
+
     @MainActor @Test(arguments: ["R\u{1b}[2J", "R\nrm -rf ~"])
     func aRemoteIdThatIsNotAPlainTokenDropsAsTheLocalId(remoteID: String) {
         let remote = Session(initialCwd: "/b", remoteHost: "far", remoteSessionID: remoteID)

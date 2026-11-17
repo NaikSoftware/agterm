@@ -674,6 +674,12 @@ public final class Session: Identifiable {
         sessions.isEmpty ? nil : sessions.map(\.dropID).joined(separator: ",")
     }
 
+    /// `text`'s comma-separated ids without `ownID` (the drop target); nil when none are left.
+    public nonisolated static func dropText(_ text: String, excluding ownID: String?) -> String? {
+        let ids = text.split(separator: ",").map(String.init).filter { $0 != ownID }
+        return ids.isEmpty ? nil : ids.joined(separator: ",")
+    }
+
     /// Drops the leading status glyphs a coding agent animates in its title (Claude Code's `✳`, `◑`, braille
     /// frames), which would otherwise make the row name flicker.
     public nonisolated static func strippingTitleSpinner(_ title: String) -> String {
