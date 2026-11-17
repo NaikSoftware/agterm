@@ -148,7 +148,7 @@ xcodegen generate >/dev/null
 # timestamp, so trying to inject Developer ID at build time is racy. Instead we
 # re-sign authoritatively below, AFTER xcodebuild returns.
 GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-xcodebuild -project Hangar.xcodeproj -scheme hangar -configuration Release \
+xcodebuild -project Hangar.xcodeproj -scheme Hangar -configuration Release \
   -derivedDataPath "$BUILD_DIR/DerivedData" \
   MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$VERSION" GIT_COMMIT="$GIT_COMMIT" \
   ARCHS=arm64 build

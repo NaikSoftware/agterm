@@ -18,7 +18,7 @@ generate: prep ## regenerate Hangar.xcodeproj from project.yml
 	xcodegen generate
 
 build: generate ## debug build, no launch
-	xcodebuild -project Hangar.xcodeproj -scheme hangar -configuration Debug \
+	xcodebuild -project Hangar.xcodeproj -scheme Hangar -configuration Debug \
 	  -derivedDataPath build/DerivedData build
 
 run: ## debug build + launch (scripts/run.sh)

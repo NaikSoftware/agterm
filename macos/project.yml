@@ -1,6 +1,6 @@
 name: Hangar
 options:
-  bundleIdPrefix: com.umputun
+  bundleIdPrefix: ua.naiksoftware
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true

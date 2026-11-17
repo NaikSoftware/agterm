@@ -96,7 +96,7 @@ final class SessionHostSeamTests: XCTestCase {
             try FileManager.default.copyItem(at: Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/hangar-session-host"), to: executable)
             try FileManager.default.copyItem(at: repo.appendingPathComponent("Hangar/Resources/zmx/zmx"), to: zmx)
             try FileManager.default.copyItem(at: repo.appendingPathComponent("Hangar/Resources/ghostty/shell-integration"), to: resources.appendingPathComponent("shell-integration"))
-            let info = ["CFBundleIdentifier": "com.umputun.seamtest.\(UUID().uuidString)", "CFBundleExecutable": "hangar-session-host"]
+            let info = ["CFBundleIdentifier": "ua.naiksoftware.seamtest.\(UUID().uuidString)", "CFBundleExecutable": "hangar-session-host"]
             try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: bundle.appendingPathComponent("Contents/Info.plist"))
             try "export SEAM_ZSHENV=\"${SEAM_ZSHENV}e\"\n".write(to: zdotdir.appendingPathComponent(".zshenv"), atomically: true, encoding: .utf8)
             try "export SEAM_PROFILE=\"${SEAM_PROFILE}p\"\n".write(to: zdotdir.appendingPathComponent(".zprofile"), atomically: true, encoding: .utf8)

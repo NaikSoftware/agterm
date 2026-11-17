@@ -223,7 +223,7 @@ final class SessionHostClientTests: XCTestCase {
         let zmx: URL
         let paths: SessionHost.Paths
         let environment: [String: String]
-        let bundleID = "com.umputun.clienttest.\(UUID().uuidString)"
+        let bundleID = "ua.naiksoftware.clienttest.\(UUID().uuidString)"
         var clients: [Int32] = []
         var terminals: [Int32] = []
         private var terminalPeers: [Int32] = []

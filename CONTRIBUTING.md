@@ -43,7 +43,7 @@ The OpenCode status-plugin tests inside `make test` spawn Node.js, so they need 
 None of those four runs the XCUITests in `HangarUITests/`. Those need the `hangar` scheme, which drives the running app through the accessibility API:
 
 ```
-xcodebuild test -project Hangar.xcodeproj -scheme hangar -destination 'platform=macOS'
+xcodebuild test -project Hangar.xcodeproj -scheme Hangar -destination 'platform=macOS'
 ```
 
 Run it when your change touches UI behavior. It takes several minutes and wants the machine left alone while it drives the app, so the maintainer also runs it before merging.

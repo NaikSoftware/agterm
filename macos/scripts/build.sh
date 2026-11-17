@@ -16,7 +16,7 @@ VERSION="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null | sed 's
 [ -n "$VERSION" ] || VERSION="0.0.0"
 # ARCHS=arm64: project.yml's ARCHS does not reach the HangarCore package, which otherwise also compiles an
 # x86_64 slice the arm64-only app never links. release.sh passes the same, so CI compiles what ships.
-xcodebuild -project Hangar.xcodeproj -scheme hangar -configuration Release \
+xcodebuild -project Hangar.xcodeproj -scheme Hangar -configuration Release \
   -derivedDataPath build/DerivedData \
   MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$VERSION" GIT_COMMIT="$GIT_COMMIT" ARCHS=arm64 build
 echo "built: build/DerivedData/Build/Products/Release/Hangar.app"

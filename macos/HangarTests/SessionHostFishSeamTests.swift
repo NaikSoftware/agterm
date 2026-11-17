@@ -355,7 +355,7 @@ final class SessionHostFishSeamTests: XCTestCase {
                     at: repository.appendingPathComponent("Hangar/Resources/ghostty/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish"),
                     to: integration.appendingPathComponent("ghostty-shell-integration.fish")
                 )
-                let info = ["CFBundleIdentifier": "com.umputun.fishseam.\(UUID().uuidString)",
+                let info = ["CFBundleIdentifier": "ua.naiksoftware.fishseam.\(UUID().uuidString)",
                             "CFBundleExecutable": "hangar-session-host"]
                 try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
                     .write(to: bundle.appendingPathComponent("Contents/Info.plist"))

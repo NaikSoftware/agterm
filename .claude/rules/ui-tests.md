@@ -46,7 +46,7 @@ These run inside the app, so a mistake can kill the host instead of failing an a
 ## UI tests
 
 - `HangarUITests/` launches the real app and drives UI behavior unavailable to host-free tests.
-  Run with `xcodebuild test -project Hangar.xcodeproj -scheme hangar -destination 'platform=macOS'`.
+  Run with `xcodebuild test -project Hangar.xcodeproj -scheme Hangar -destination 'platform=macOS'`.
 - Default UI-test launches bypass live-session wrapping through the existing UI-test sentinel. Only the
   focused zmx persistence test sets `HANGAR_UITEST_ENABLE_ZMX=1`; it must kill its exact test daemons in
   teardown so they cannot leak into later tests.

@@ -5,6 +5,6 @@ cd "$(dirname "$0")/.."
 
 ./scripts/setup.sh
 xcodegen generate
-xcodebuild -project Hangar.xcodeproj -scheme hangar -configuration Debug \
+xcodebuild -project Hangar.xcodeproj -scheme Hangar -configuration Debug \
   -derivedDataPath build/DerivedData build
 open build/DerivedData/Build/Products/Debug/Hangar.app
