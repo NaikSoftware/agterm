@@ -37,3 +37,7 @@ __pycache__/
 !.claude/
 .claude/*
 !.claude/rules/
+
+# linux/ (Qt app) build outputs
+linux/build/
+linux/.deps/

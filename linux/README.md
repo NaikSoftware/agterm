@@ -23,6 +23,7 @@ SyntaxHighlighting, WindowSystem) and `konsole-kpart`. Install `wl-clipboard` (o
 (Ctrl+V) through `wl-paste`/`xclip`, and without them the paste does nothing, in agterm-qt and plain Konsole alike.
 
 ```sh
+cd linux
 sudo apt install libkf6parts-dev   # or, without root: scripts/fetch-kparts-headers.sh
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX=~/.local   # the menu entry gets an absolute Exec
 cmake --build build -j
@@ -148,7 +149,7 @@ lacks answer "not supported on this platform".
 
 ## Phone app
 
-agterm Mobile ([mobile/](mobile/README.md), Flutter, Android) watches and drives agterm-qt from a phone, over a relay
+agterm Mobile ([mobile/](../mobile/README.md), Flutter, Android) watches and drives agterm-qt from a phone, over a relay
 on the computer that runs only while you want it.
 
 <p align="center">

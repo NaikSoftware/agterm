@@ -2,7 +2,7 @@
 
 macOS shapes the square artwork at runtime ("fill": "automatic"); hicolor themes need the shape baked in,
 so the layer is clipped to a rounded square with a little margin, at every size the theme looks up.
-Usage: python3 -I scripts/make-icons.py <layer.png> <repo root>
+Usage: python3 -I scripts/make-icons.py <layer.png> linux
 """
 import os
 import sys
