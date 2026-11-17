@@ -1,4 +1,4 @@
-"""Render agterm's app icon for Linux from master's Icon Composer layer.
+"""Render agterm's app icon for Linux from the Icon Composer layer in macos/agterm/AppIcon.icon.
 
 macOS shapes the square artwork at runtime ("fill": "automatic"); hicolor themes need the shape baked in,
 so the layer is clipped to a rounded square with a little margin, at every size the theme looks up.

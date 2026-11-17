@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Phase 1 moves the macOS app into macos/ (moves only); phase 2 imports agterm-qt with history as linux/ and mobile/.
-# Each phase is idempotent: it skips once its folder exists.
-# Run from anywhere inside the repository. The tree must be clean; recover a run that fails partway with `git reset --hard`.
+# A one-time recipe for this branch, not a replay: later master changes arrive by `git merge origin/master`,
+# which follows the renames. A re-run on the merged tree is a no-op, except that phase 1 moves root files new on master.
+# The hand path fixes are in commits 958deeb1, 0dc295d1 and 32bafca2, not here.
+# Each phase skips once its folder exists. Phase 2 needs a clean tree: run, commit phase 1, run again.
+# Run from anywhere inside the repository; recover a run that fails partway with `git reset --hard`.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
