@@ -1,0 +1,30 @@
+{
+  "frames": [
+    {"name": "empty data", "kind": "data", "channel": 0, "payloadHex": "", "hex": "030000000000000000"},
+    {"name": "data hi", "kind": "data", "channel": 0, "payloadHex": "68690a", "hex": "03000000000000000368690a"},
+    {"name": "credit 16384", "kind": "credit", "channel": 2, "payloadHex": "00004000", "hex": "04000000020000000400004000"},
+    {"name": "grid 120x40", "kind": "grid", "channel": 3, "payloadHex": "00780028", "hex": "06000000030000000400780028"},
+    {"name": "resize 60x20", "kind": "resize", "channel": 3, "payloadHex": "003c0014", "hex": "050000000300000004003c0014"},
+    {"name": "resync", "kind": "resync", "channel": 2, "payloadHex": "", "hex": "070000000200000000"},
+    {"name": "data max channel", "kind": "data", "channel": 4294967295, "payloadHex": "41", "hex": "03ffffffff0000000141"}
+  ],
+  "streams": [
+    {
+      "name": "two frames",
+      "hex": "03000000000000000368690a070000000200000000",
+      "frames": [
+        {"kind": "data", "channel": 0, "payloadHex": "68690a"},
+        {"kind": "resync", "channel": 2, "payloadHex": ""}
+      ]
+    }
+  ],
+  "errors": [
+    {"name": "kind zero", "hex": "000000000000000000", "error": "unknownKind"},
+    {"name": "kind ten", "hex": "0a0000000000000000", "error": "unknownKind"},
+    {"name": "len 65537", "hex": "030000000000010001", "error": "payloadTooLarge"},
+    {"name": "credit 3 bytes", "hex": "040000000200000003000040", "error": "badPayload"},
+    {"name": "resync 1 byte", "hex": "07000000020000000100", "error": "badPayload"},
+    {"name": "grid 5 bytes", "hex": "0600000003000000050078002800", "error": "badPayload"}
+  ],
+  "json": []
+}

@@ -17,7 +17,7 @@ let package = Package(
     targets: [
         .target(name: "ElisCore", dependencies: [.product(name: "TOMLDecoder", package: "TOMLDecoder")]),
         .target(name: "ElisResponsibility"),
-        .testTarget(name: "ElisCoreTests", dependencies: ["ElisCore"]),
+        .testTarget(name: "ElisCoreTests", dependencies: ["ElisCore"], exclude: ["Fixtures"]),
         .target(
             name: "elisctlKit",
             dependencies: [
