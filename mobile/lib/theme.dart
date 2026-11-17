@@ -16,8 +16,8 @@ abstract final class C {
   static const termText = Color(0xFFD9D6E2);
   static const muted = Color(0xFFA3A3AB);
   static const dim = Color(0xFF6E6E76);
-  static const accent = Color(0xFFB9B4FF);
-  static const indigo = Color(0xFF8B8CFF);
+  static const accent = Color(0xFFC8742F); // the logo copper
+  static const indigo = Color(0xFF8B8CFF); // the flag, as on the desktop
   static const blocked = Color(0xFFFF9F43);
   static const blockedText = Color(0xFFFFB240);
   static const blockedBg = Color(0xFF2E2623); // blocked 8% over bg
@@ -126,18 +126,15 @@ ThemeData buildTheme() {
   );
 }
 
-// the `>_` tile beside the app name, the same on the home and pairing screens
+// the app icon beside the app name, the same on the home and pairing screens
 class AppMark extends StatelessWidget {
   const AppMark({super.key, this.size = 38});
   final double size;
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: C.surface, border: Border.all(color: C.line), borderRadius: BorderRadius.circular(size * 0.29)),
-        child: Text('>_', style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: size * 0.37, color: C.indigo)),
+  Widget build(BuildContext context) => ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.29),
+        child: SvgPicture.asset('assets/elis-icon.svg', width: size, height: size, semanticsLabel: 'Elis'),
       );
 }
 
@@ -273,7 +270,7 @@ const agentNames = {'claude': 'Claude Code', 'codex': 'Codex', 'opencode': 'Open
 
 Color agentColor(String agent) => switch (agent) {
       'claude' => const Color(0xFFF0B37E),
-      'codex' => C.accent,
+      'codex' => const Color(0xFFB9B4FF),
       'antigravity' => const Color(0xFF7FB2FF),
       _ => C.text,
     };

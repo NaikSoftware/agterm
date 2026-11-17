@@ -440,7 +440,7 @@ private struct PaletteRow: View {
     private static let hoverTint = Color.primary.opacity(0.04)
 
     private var rowTint: Color {
-        if isSelected { return Color.accentColor.opacity(0.25) }
+        if isSelected { return Color.appAccent.opacity(0.25) }
         // no hover tint on an inert row: the tint reads as "click this".
         return hovering && enabled ? Self.hoverTint : .clear
     }

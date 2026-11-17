@@ -452,7 +452,7 @@ struct AskDialogView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
         }
-        .tint(choice.id == ask.destructiveID ? Color.red : Color.accentColor)
+        .tint(choice.id == ask.destructiveID ? Color.red : Color.appAccent)
         if navigation.highlighted == index {
             button.buttonStyle(.borderedProminent)
         } else {

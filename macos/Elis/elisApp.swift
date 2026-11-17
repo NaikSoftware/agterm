@@ -252,6 +252,7 @@ struct elisApp: App {
                     sessionSwitcher: sessionSwitcher
                 )
                     .frame(minWidth: 640, minHeight: 400)
+                    .tint(.appAccent)
                     .task {
                         appDelegate.library = library
                         appDelegate.captureOnExit = captureOnExit
@@ -383,11 +384,11 @@ struct elisApp: App {
         .commands { appCommands }
 
         Settings {
-            SettingsView(model: settingsModel)
+            SettingsView(model: settingsModel).tint(.appAccent)
         }
 
         Window("Connect a Phone", id: Self.phoneWindowID) {
-            ConnectPhoneView(relay: phoneRelay)
+            ConnectPhoneView(relay: phoneRelay).tint(.appAccent)
         }
         .windowResizability(.contentSize)
         .commandsRemoved() // the app menu's item opens it; no second one in Window

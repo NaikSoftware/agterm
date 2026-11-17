@@ -130,7 +130,7 @@ class _NewSessionSheetState extends State<NewSessionSheet> {
                 label: const Text('+ New workspace', style: TextStyle(color: C.accent)),
                 onPressed: createWorkspace,
                 backgroundColor: Colors.transparent,
-                side: const BorderSide(color: Color(0xFF4A4766)),
+                side: const BorderSide(color: Color(0xFF573A25)), // copper 35% over bg
                 shape: const StadiumBorder(),
               ),
             ]),
@@ -175,7 +175,7 @@ class _LauncherTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: selected ? const Color(0xFF24223A) : C.surface2,
+        color: selected ? const Color(0xFF2D2521) : C.surface2, // copper 10% over bg
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: selected ? C.accent : C.line, width: selected ? 1.5 : 1)),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),

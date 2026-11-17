@@ -34,7 +34,7 @@ enum WorkspaceSetupGuidePresenter {
             // the view's closure holds the sheet; drop the view after its own button action returns
             DispatchQueue.main.async { sheet.contentViewController = nil }
         }
-        let host = NSHostingController(rootView: WorkspaceSetupGuide(store: store, finish: finish))
+        let host = NSHostingController(rootView: WorkspaceSetupGuide(store: store, finish: finish).tint(.appAccent))
         host.sizingOptions = .preferredContentSize
         sheet.contentViewController = host
         window.beginSheet(sheet)

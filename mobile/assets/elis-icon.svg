@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"><defs><linearGradient id="b2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D2B07C"/><stop offset="1" stop-color="#A27C46"/></linearGradient></defs>
+    <rect width="1024" height="1024" fill="url(#b2)"/><g transform="translate(512 630) rotate(0) scale(1.12) translate(-512 -478)">
+      <path fill="#F8F5F0" d="M352 630C290 700 236 820 210 1200L814 1200C788 820 734 700 672 630Z"/>
+      <path fill="#17161B" d="M416 318C370 300 310 314 288 360C266 410 270 500 300 580C330 560 350 520 356 470C362 420 380 360 416 318Z"/>
+      <path fill="#17161B" d="M608 318C654 300 714 314 736 360C758 410 754 500 724 580C694 560 674 520 668 470C662 420 644 360 608 318Z"/>
+      <path fill="#17161B" d="M512 270C610 270 676 320 686 400C694 470 680 540 650 610L374 610C344 540 330 470 338 400C348 320 414 270 512 270Z"/>
+      <path fill="#C8742F" d="M348 552C338 600 346 640 376 668C400 690 432 702 460 702L460 580C420 580 380 570 348 552Z"/>
+      <path fill="#C8742F" d="M676 552C686 600 678 640 648 668C624 690 592 702 564 702L564 580C604 580 644 570 676 552Z"/>
+      <path fill="#F8F5F0" d="M488 282C498 278 526 278 536 282C548 350 554 420 556 480C562 520 572 540 590 560C618 590 622 610 622 640C622 704 580 744 512 744C444 744 402 704 402 640C402 610 406 590 434 560C452 540 462 520 468 480C470 420 476 350 488 282Z"/>
+      <ellipse fill="#C8742F" cx="444" cy="446" rx="19" ry="11" transform="rotate(-14 444 446)"/>
+      <ellipse fill="#C8742F" cx="580" cy="446" rx="19" ry="11" transform="rotate(14 580 446)"/>
+      <circle fill="#8A4E22" cx="438" cy="490" r="24"/><circle fill="#17161B" cx="438" cy="491" r="13"/><circle fill="#fff" cx="446" cy="482" r="6"/>
+      <circle fill="#8A4E22" cx="586" cy="490" r="24"/><circle fill="#17161B" cx="586" cy="491" r="13"/><circle fill="#fff" cx="594" cy="482" r="6"/>
+      <path fill="#17161B" d="M482 628C496 616 528 616 542 628C546 650 530 666 512 668C494 666 478 650 482 628Z"/>
+      <path fill="none" stroke="#17161B" stroke-width="8" stroke-linecap="round" d="M512 668V684M484 690Q512 708 540 690"/>
+    </g><circle cx="412" cy="186" r="38" fill="#F8F5F0"/><circle cx="512" cy="186" r="38" fill="#F8F5F0"/><circle cx="612" cy="186" r="38" fill="#F8F5F0"/></svg>

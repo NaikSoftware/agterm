@@ -389,7 +389,7 @@ struct AskChoiceList: View {
                 .foregroundStyle(style == .terminal && current ? background : (style == .gui ? Color.primary : foreground))
                 .background {
                     if current {
-                        if style == .terminal { foreground } else { RoundedRectangle(cornerRadius: 5).fill(Color.accentColor.opacity(0.25)) }
+                        if style == .terminal { foreground } else { RoundedRectangle(cornerRadius: 5).fill(Color.appAccent.opacity(0.25)) }
                     }
                 }
                 .opacity(draft.otherEnabled ? 1 : 0.4)
@@ -417,7 +417,7 @@ struct AskChoiceList: View {
             .foregroundStyle(style == .terminal && current ? background : (style == .gui ? Color.primary : foreground))
             .background {
                 if current {
-                    if style == .terminal { foreground } else { RoundedRectangle(cornerRadius: 5).fill(Color.accentColor.opacity(0.25)) }
+                    if style == .terminal { foreground } else { RoundedRectangle(cornerRadius: 5).fill(Color.appAccent.opacity(0.25)) }
                 }
             }
             if let subtitle = choice.subtitle, !subtitle.isEmpty {
@@ -445,7 +445,7 @@ struct AskChoiceList: View {
         if style == .gui {
             Image(systemName: form.multiple ? (checked ? "checkmark.square.fill" : "square")
                                             : (checked ? "largecircle.fill.circle" : "circle"))
-                .foregroundStyle(checked ? Color.accentColor : Color.secondary)
+                .foregroundStyle(checked ? Color.appAccent : Color.secondary)
                 .frame(width: markerWidth)
         } else {
             Text(verbatim: form.multiple ? (checked ? "[x]" : "[ ]") : (checked ? "(•)" : "( )"))

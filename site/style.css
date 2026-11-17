@@ -24,7 +24,7 @@ body {
   overflow-x: clip;
 }
 ::selection {
-  background: rgba(109, 130, 243, 0.28);
+  background: rgba(200, 116, 47, 0.28);
 }
 @keyframes blink {
   0%,
@@ -72,7 +72,7 @@ a {
   display: none;
 }
 .site-nav-mobile[open] summary {
-  color: #6d82f3;
+  color: #c8742f;
 }
 .site-nav-mobile nav {
   position: absolute;
@@ -202,42 +202,42 @@ a {
   background: rgba(255, 255, 255, 0.05) !important;
 }
 .hv2:hover {
-  color: var(--accent, #6d82f3) !important;
-  border-color: rgba(109, 130, 243, 0.6) !important;
-  background: rgba(109, 130, 243, 0.08) !important;
+  color: var(--accent, #c8742f) !important;
+  border-color: rgba(200, 116, 47, 0.6) !important;
+  background: rgba(200, 116, 47, 0.08) !important;
 }
 .hv3:hover {
   color: #e6e1d7 !important;
   border-color: rgba(255, 255, 255, 0.25) !important;
 }
 .hv4:hover {
-  color: var(--accent, #6d82f3) !important;
+  color: var(--accent, #c8742f) !important;
 }
 .hv5:hover {
   background: #82cfc2 !important;
 }
 .hv6:hover {
-  border-color: var(--accent, #6d82f3) !important;
-  color: var(--accent, #6d82f3) !important;
+  border-color: var(--accent, #c8742f) !important;
+  color: var(--accent, #c8742f) !important;
 }
 .hv7:hover {
   color: #e6e1d7 !important;
 }
 .hv8:hover {
-  color: #6d82f3 !important;
-  border-color: rgba(109, 130, 243, 0.6) !important;
-  background: rgba(109, 130, 243, 0.08) !important;
+  color: #c8742f !important;
+  border-color: rgba(200, 116, 47, 0.6) !important;
+  background: rgba(200, 116, 47, 0.08) !important;
 }
 .hv9:hover {
-  color: #6d82f3 !important;
+  color: #c8742f !important;
   background: rgba(255, 255, 255, 0.04) !important;
 }
 .hv10:hover {
-  border-color: #6d82f3 !important;
-  color: #6d82f3 !important;
+  border-color: #c8742f !important;
+  color: #c8742f !important;
 }
 .hv11:hover {
-  color: #6d82f3 !important;
+  color: #c8742f !important;
 }
 
 /* === hero screenshot crossfade === */

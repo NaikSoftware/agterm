@@ -211,7 +211,7 @@ struct SessionSwitcherOverlay: View {
                                subtitle: "\(store.workspace(forSession: id)?.name ?? "") · \(session.switcherDetail)",
                                status: session.agentIndicator.status, statusColorHex: session.agentIndicator.color,
                                statusShape: session.agentIndicator.shape, remote: session.remoteHost != nil)
-                .background(selected ? Color.accentColor.opacity(0.25) : Color.clear)
+                .background(selected ? Color.appAccent.opacity(0.25) : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }

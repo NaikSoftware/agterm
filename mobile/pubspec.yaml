@@ -26,6 +26,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/agents/
+    - assets/elis-icon.svg
   fonts:
     - family: Inter
       fonts:
