@@ -161,6 +161,15 @@ final class SidebarBandTests: XCTestCase {
         }
     }
 
+    func testTheDefaultStatusDotIsDrawnUnscaledAtNinePoints() throws {
+        let icon = StatusIconView()
+        icon.apply(AgentIndicator(status: .active))
+        XCTAssertEqual(icon.imageScaling, .scaleNone, "the 16pt slot must not enlarge the dot")
+        let expected = try XCTUnwrap(NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 9, weight: .regular)))
+        XCTAssertEqual(icon.image?.size, expected.size)
+    }
+
     func testActiveGlyphFadesAndBlinkReplacesTheFade() throws {
         try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "Reduce Motion stops the fade")
         let icon = StatusIconView()

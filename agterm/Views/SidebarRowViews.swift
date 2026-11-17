@@ -292,9 +292,10 @@ final class StatusIconView: NSImageView {
     private static let blinkKey = "agent-status-blink"
     private static let fadeKey = "agent-status-fade"
     private static let glyphWidth: CGFloat = 16
-    /// Symbol point size of the glyph; the Settings shape picker previews options at the same size, so an
-    /// option looks like the glyph it installs.
-    static let glyphPointSize: CGFloat = 10
+    /// Symbol point size of the glyph: the default circle's ink measures 9pt across at 9. The view draws it
+    /// unscaled, so the 16pt slot never enlarges it. The Settings shape picker previews options at the same size,
+    /// so an option looks like the glyph it installs.
+    static let glyphPointSize: CGFloat = 9
 
     /// The view's width, collapsed to 0 on `.idle` so a status-less row reclaims the slot (its label truncates
     /// full-width); `glyphWidth` when a glyph shows. Activated in init, toggled in `apply`.
@@ -303,7 +304,7 @@ final class StatusIconView: NSImageView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        imageScaling = .scaleProportionallyUpOrDown
+        imageScaling = .scaleNone
         setAccessibilityElement(true)
         setAccessibilityRole(.staticText)
         setAccessibilityIdentifier("agent-status")
