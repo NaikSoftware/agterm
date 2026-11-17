@@ -45,6 +45,14 @@ class LinkFrame {
     return out;
   }
 
+  int? get creditBytes => kind == LinkKind.credit && payload.length == 4 ? ByteData.sublistView(payload).getUint32(0) : null;
+
+  ({int cols, int rows})? get size {
+    if ((kind != LinkKind.resize && kind != LinkKind.grid) || payload.length != 4) return null;
+    final d = ByteData.sublistView(payload);
+    return (cols: d.getUint16(0), rows: d.getUint16(2));
+  }
+
   factory LinkFrame.data(int channel, List<int> bytes) => LinkFrame(LinkKind.data, channel, Uint8List.fromList(bytes));
 
   factory LinkFrame.credit(int channel, int bytes) {

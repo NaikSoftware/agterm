@@ -52,7 +52,7 @@ class LinkDecoder {
     final fixed = switch (kind) {
       LinkKind.credit || LinkKind.resize || LinkKind.grid => 4,
       LinkKind.resync => 0,
-      _ => null,
+      LinkKind.open || LinkKind.opened || LinkKind.data || LinkKind.lead || LinkKind.close => null,
     };
     if (fixed != null && fixed != length) throw LinkError('badPayload', length);
     return LinkFrame(kind, d.getUint32(start + 1), Uint8List.fromList(_buffer.sublist(start + linkHeaderSize, end)));

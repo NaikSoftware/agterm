@@ -70,6 +70,23 @@ void main() {
     }
   });
 
+  test('payload readers match the vectors', () {
+    final byName = {for (final f in list('frames')) f['name']: LinkDecoder().feed(hex(f['hex'])).single};
+    expect(byName['credit 16384']!.creditBytes, 16384);
+    expect(byName['credit 16384']!.size, isNull);
+    expect(byName['grid 120x40']!.size, (cols: 120, rows: 40));
+    expect(byName['resize 60x20']!.size, (cols: 60, rows: 20));
+    expect(byName['resize 60x20']!.creditBytes, isNull);
+    expect(byName['data hi']!.creditBytes, isNull);
+    expect(byName['data hi']!.size, isNull);
+  });
+
+  test('a max-size data payload decodes', () {
+    final frame = LinkFrame.data(2, List.filled(linkMaxPayload, 7));
+    final back = LinkDecoder().feed(frame.encode()).single;
+    expect((back.kind, back.channel, back.payload.length), (LinkKind.data, 2, linkMaxPayload));
+  });
+
   test('a lone oversize header throws on that feed', () {
     expect(() => LinkDecoder().feed(hex('030000000000010001')), throwsLink('payloadTooLarge'));
   });
