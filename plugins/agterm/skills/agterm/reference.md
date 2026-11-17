@@ -867,7 +867,7 @@ error keeps those names for compatibility.
   `--shape` (`circle`, `square`, `triangle`, `triangle-down`, `play`, `diamond`, `capsule`, `seal`, `star`, `bolt`,
   `bell`, `checkmark`) overrides the glyph SILHOUETTE
   the same way — it rides the status, so the next `session status` without `--shape` reverts to the
-  Settings-configured shape, else the built-in plain circle (an unknown name errors, listing the accepted names).
+  Settings-configured shape, else the state's default (active circle, blocked triangle, completed diamond); an unknown name errors, listing the accepted names.
   Shape is a second channel alongside the tint, so a session stays distinguishable at a glance and for a
   color-blind user; use it to mark one session for the length of a run.
   The value is read back on `tree` as the session node's `statusShape` (the per-call override only, like

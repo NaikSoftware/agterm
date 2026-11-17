@@ -384,8 +384,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var blockedStatusColorHex: String?
     public var completedStatusColorHex: String?
     /// Silhouettes for the agent-status glyph's three states, `StatusShape` raw strings resolved by
-    /// `effectiveStatusShape(for:)`; nil each means the default plain circle, which is also what the
-    /// Settings picker stores for Circle. A per-call `session.status --shape` overrides these.
+    /// `effectiveStatusShape(for:)`; nil each means `AgentStatus.defaultShape`, which is also what the
+    /// Settings picker stores when that default is picked. A per-call `session.status --shape` overrides these.
     public var activeStatusShape: String?
     public var blockedStatusShape: String?
     public var completedStatusShape: String?
@@ -673,7 +673,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     }
 
     /// The resolved glyph silhouette for one agent status: the configured raw name when a KNOWN
-    /// `StatusShape`, else nil (the default plain circle). `idle` renders no glyph and has no shape. The
+    /// `StatusShape`, else nil (`AgentStatus.defaultShape`). `idle` renders no glyph and has no shape. The
     /// single read point.
     public func effectiveStatusShape(for status: AgentStatus) -> StatusShape? {
         let raw: String?

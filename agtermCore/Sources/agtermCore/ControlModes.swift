@@ -201,7 +201,7 @@ public struct ControlSessionStatusUpdate: Equatable, Sendable {
     public let autoReset: Bool?
     public let sound: String?
     public let color: String?
-    /// Per-call glyph silhouette; nil falls back to the Settings shape / the built-in plain circle. The
+    /// Per-call glyph silhouette; nil falls back to the Settings shape / the status's default shape. The
     /// dispatcher rejects an unknown raw value before any mutation.
     public let shape: StatusShape?
     /// Which pane set the status (`left`=main, `right`=split, `scratch`), nil when unspecified. Stamped onto

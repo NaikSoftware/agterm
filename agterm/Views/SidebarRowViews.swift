@@ -281,8 +281,8 @@ final class BadgeView: NSView {
     }
 }
 
-/// A small SF-Symbol agent-status glyph left of the count badge: by default a `circle.fill` tinted
-/// lavender-grey for `active`, amber for `blocked`, green for `completed`; a Settings shape or a per-call
+/// A small SF-Symbol agent-status glyph left of the count badge: by default a lavender-grey circle for
+/// `active`, an amber triangle for `blocked`, a green diamond for `completed`; a Settings shape or a per-call
 /// `session.status --shape` swaps the silhouette, so shape carries the state alongside the tint. Hidden on
 /// `.idle`. Accessibility: an `agent-status` static text whose value is the state name (XCUITest matches
 /// `app.staticTexts["agent-status"]`; neither tint nor silhouette is observable there). Blink is a layer

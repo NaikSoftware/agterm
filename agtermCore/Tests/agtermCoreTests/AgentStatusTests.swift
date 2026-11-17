@@ -202,10 +202,9 @@ struct AgentStatusTests {
     }
 
     @Test func symbolNameMapsNonIdleStatesAndIdleIsEmpty() {
-        // every unconfigured state draws the same plain circle; the tint is what tells them apart
         #expect(AgentStatus.active.symbolName(override: nil, configured: nil) == "circle.fill")
-        #expect(AgentStatus.blocked.symbolName(override: nil, configured: nil) == "circle.fill")
-        #expect(AgentStatus.completed.symbolName(override: nil, configured: nil) == "circle.fill")
+        #expect(AgentStatus.blocked.symbolName(override: nil, configured: nil) == "triangle.fill")
+        #expect(AgentStatus.completed.symbolName(override: nil, configured: nil) == "diamond.fill")
         #expect(AgentStatus.idle.symbolName(override: nil, configured: nil) == "")
     }
 
@@ -264,10 +263,18 @@ struct AgentStatusTests {
         #expect(StatusShape(rawValue: "") == nil)
     }
 
-    @Test func shapeResolvesOverrideThenConfiguredThenCircle() {
+    @Test func shapeResolvesOverrideThenConfiguredThenStatusDefault() {
         #expect(AgentStatus.completed.shape(override: .checkmark, configured: .star) == .checkmark)
         #expect(AgentStatus.completed.shape(override: nil, configured: .checkmark) == .checkmark)
-        #expect(AgentStatus.completed.shape(override: nil, configured: nil) == .circle)
+        #expect(AgentStatus.completed.shape(override: nil, configured: nil) == .diamond)
+        #expect(AgentStatus.blocked.shape(override: .circle, configured: .square) == .circle)
+        #expect(AgentStatus.blocked.shape(override: nil, configured: .circle) == .circle)
+    }
+
+    @Test(arguments: [(AgentStatus.active, StatusShape.circle), (.blocked, .triangle), (.completed, .diamond)])
+    func defaultShapeMatchesThePhoneApp(status: AgentStatus, shape: StatusShape) {
+        #expect(status.defaultShape == shape)
+        #expect(status.shape(override: nil, configured: nil) == shape)
     }
 
     @Test func symbolNameOverrideWinsOverConfigured() {
@@ -283,12 +290,12 @@ struct AgentStatusTests {
         #expect(AgentStatus.completed.symbolName(override: nil, configured: .square) == "square.fill")
     }
 
-    @Test func symbolNameBothNilIsThePlainCircleDefault() {
+    @Test func symbolNameBothNilIsTheStatusDefault() {
         #expect(AgentStatus.active.symbolName(override: nil, configured: nil) == StatusShape.circle.symbolName)
-        #expect(AgentStatus.blocked.symbolName(override: nil, configured: nil) == StatusShape.circle.symbolName)
-        #expect(AgentStatus.completed.symbolName(override: nil, configured: nil) == StatusShape.circle.symbolName)
+        #expect(AgentStatus.blocked.symbolName(override: nil, configured: nil) == StatusShape.triangle.symbolName)
+        #expect(AgentStatus.completed.symbolName(override: nil, configured: nil) == StatusShape.diamond.symbolName)
         #expect(AgentStatus.blocked.symbolName(override: nil, configured: nil)
-            == AgentStatus.blocked.symbolName(override: nil, configured: .circle))
+            == AgentStatus.blocked.symbolName(override: nil, configured: .triangle))
     }
 
     @Test func symbolNameIdleIsEmptyInEveryCombination() {
