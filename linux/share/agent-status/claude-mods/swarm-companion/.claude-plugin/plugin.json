@@ -1,0 +1,1 @@
+{ "name": "swarm-companion", "version": "0.1.0", "description": "Show Claude Code teammates (tmux swarm) in an agterm companion session while they run", "types": "./types/index.d.ts" }
