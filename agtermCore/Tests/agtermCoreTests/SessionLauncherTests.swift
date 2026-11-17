@@ -54,6 +54,24 @@ struct SessionLauncherTests {
     func claudeResumeLineQuotesTheFolderAndRefusesAnUnsafeID(json: String, expected: String?) {
         #expect(SessionLauncher.claudeResumeLine(json: Data(json.utf8)) == expected)
     }
+
+    @Test(arguments: [
+        (#"{"sessionId":"abc-1_2","cwd":"/x"}"#, "abc-1_2"),
+        (#"{"sessionId":"a b"}"#, nil),
+        ("{}", nil)
+    ] as [(String, String?)])
+    func claudeSessionIDReadsAPlainToken(json: String, expected: String?) {
+        #expect(SessionLauncher.claudeSessionID(json: Data(json.utf8)) == expected)
+    }
+
+    @MainActor @Test func dropTextJoinsIdsWithCommas() {
+        let agent = Session(initialCwd: "/a")
+        agent.agentSessionID = "c1"
+        let remote = Session(initialCwd: "/b", remoteHost: "far", remoteSessionID: "R")
+        let plain = Session(initialCwd: "/c")
+        #expect(Session.dropText([agent, remote, plain]) == "c1,R,\(plain.id.uuidString)")
+        #expect(Session.dropText([]) == nil)
+    }
 }
 
 struct TitleSpinnerTests {

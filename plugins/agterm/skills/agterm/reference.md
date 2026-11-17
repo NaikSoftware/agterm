@@ -265,6 +265,7 @@ for a terminal session. Such a node has no terminal, so `realized` is false and 
 directory, or the directory a top-level page was created in),
 `agent` (the coding agent running anywhere in the session's foreground process group — `claude`, `codex`,
 `opencode`, `antigravity` — even one a script started; omitted for none),
+`agentSessionId` (Claude Code's conversation id for the session, also mirrored from an origin; omitted when unknown),
 `foreground`/`splitForeground` (the live argv of each pane's foreground
 process — what it is running — omitted when the pane sits at its shell prompt, and also for a
 setuid/setgid foreground process like `top` or `sudo`, whose argv macOS refuses to expose),

@@ -37,6 +37,17 @@ struct AppStoreTreeProjectionTests {
         #expect(String(decoding: try JSONEncoder().encode(node), as: UTF8.self).contains(#""agent":"claude""#))
     }
 
+    @Test func controlTreeReportsTheAgentSessionIDAndOmitsNone() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/a"))
+        let encoded = { String(decoding: try JSONEncoder().encode(store.controlTree().workspaces[0].sessions[0]), as: UTF8.self) }
+        #expect(try !encoded().contains("agentSessionId"))
+        session.agentSessionID = "c1"
+        #expect(store.controlTree().workspaces[0].sessions[0].agentSessionId == "c1")
+        #expect(try encoded().contains(#""agentSessionId":"c1""#))
+    }
+
     @Test func surfaceNodeEncodesItsPaneIDAndOmitsAnAbsentOne() throws {
         func json(_ paneID: String?) throws -> String {
             String(decoding: try JSONEncoder().encode(ControlSurfaceNode(

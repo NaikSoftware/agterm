@@ -45,13 +45,21 @@ public enum SessionLauncher: String, CaseIterable, Sendable {
         group.lazy.compactMap { agent(argv: CommandRestore.stripLoginDash($0)) }.first
     }
 
-    /// The line that resumes a Claude Code conversation, from its `~/.claude/sessions/<pid>.json`. Nil when the
-    /// file does not parse or the id is not a plain token, since the line is typed into a shell. The `cd` comes
-    /// first because claude finds a conversation under the folder it began in.
-    public static func claudeResumeLine(json: Data) -> String? {
+    /// The conversation id in a Claude Code `~/.claude/sessions/<pid>.json`; nil unless it is a plain token,
+    /// since callers type it into a shell.
+    public static func claudeSessionID(json: Data) -> String? {
         guard let object = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
               let id = object["sessionId"] as? String, !id.isEmpty,
               id.unicodeScalars.allSatisfy({ $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "_-".unicodeScalars.contains($0)) })
+        else { return nil }
+        return id
+    }
+
+    /// The line that resumes a Claude Code conversation, from its `~/.claude/sessions/<pid>.json`. The `cd` comes
+    /// first because claude finds a conversation under the folder it began in.
+    public static func claudeResumeLine(json: Data) -> String? {
+        guard let id = claudeSessionID(json: json),
+              let object = try? JSONSerialization.jsonObject(with: json) as? [String: Any]
         else { return nil }
         let cwd = object["cwd"] as? String ?? ""
         // a control character would act as a line-editor key even inside quotes, and fish reads a backslash inside
