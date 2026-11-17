@@ -1,129 +1,30 @@
-# agterm - a simply good terminal with a full control API
+# Hangar — a terminal workspace for AI coding agents
 
-[![Build Status](https://github.com/umputun/agterm/workflows/build/badge.svg)](https://github.com/umputun/agterm/actions) [![Coverage Status](https://coveralls.io/repos/github/umputun/agterm/badge.svg?branch=master)](https://coveralls.io/github/umputun/agterm?branch=master)
+Hangar is a native macOS terminal built to run many coding agents at once.
+Every agent works in its own named session, sessions sit in workspaces, and the sidebar shows which agent is working, which one waits for you, and which one is done.
+A phone app follows the same sessions, so you can answer an agent from your pocket.
 
-> **Linux:** a Qt6/KDE implementation of this fork lives in [NaikSoftware/agterm-qt](https://github.com/NaikSoftware/agterm-qt).
+![Hangar](docs/screenshots/main.png)
 
-**[agterm.com](https://agterm.com)** · [Documentation](https://agterm.com/docs) · [Command reference](https://agterm.com/commands) · [Cookbook](cookbook/)
+## Why
 
-`agterm` is a native macOS terminal with a deliberately small interface and a full control API. Shells are organized into named workspaces, each holding the sessions for one project or context, and that hierarchy is the whole model: there is nothing else to learn before it is useful. Everything it holds is also an object a script can address. The bundled `agtermctl` creates sessions and types into them, reads a pane's text back, runs a program in an overlay and returns its exit status, sets a session's status glyph, opens the native picker, moves windows, and reads all of that state back out over a local socket.
+A tabbed terminal loses track of five agents in five projects.
+Hangar keeps them in one tree:
 
-The motivation is specific: running several coding agents at once means many long-lived sessions, each progressing on its own, and a tabbed terminal loses track of them quickly. Each agent works in a named session and reports whether it is active, blocked, or done, so it is obvious which one needs you. An installable skill teaches an agent the control model, so it can drive the terminal itself. None of that is a special agent mode; it is the same control surface anything else uses. With nothing scripted at all it is a capable general-purpose terminal for everyday multi-project work.
+- **Workspaces.** A workspace holds the sessions of one project and remembers its project folder. A new session opens there.
+- **Agent status.** Claude Code, Codex, Pi, OpenCode and other agents report their state onto their session's row. A working agent shows a slow wave across its row; a blocked one asks for you.
+- **Session switcher.** Click the session title in the title bar or press ⌃P. Search every session, see the ones that need you, and reopen recently closed ones.
+- **File panel.** A directory tree of the session's folder beside the terminal, with a context menu, clipboard, and drag and drop.
+- **Live sessions.** Quit, update or relaunch the app while your agents keep running, mid-turn included. The next launch reattaches to them with their screen state.
+- **Splits, companions and overlays.** Split a session, pin a log tail or a second shell under it, or run a program in an overlay without touching the shell underneath.
+- **Remote sessions.** Attach sessions that run on another Mac over ssh, with their status and notifications.
+- **Full control API.** The bundled `agtermctl` drives everything over a local socket. An agent skill teaches your agent to use it, so the agent can build its own layout, show you a page, or ask you a question.
 
-The design is deliberately minimal: it covers the use cases above and stops there. Features come in two kinds. One is just enough to get the work done. The other is the small set of things other terminals get wrong, done the way they should have been. There is no deep agent integration and no attempt to invent a new way of working with agents. You get a sensible minimum out of the box, plus a complete control API and CLI on top, so anything past the defaults you build yourself instead of waiting for it to ship.
-
-What it does:
-
-- **Workspaces.** Sessions are grouped under named workspaces like "work" and "personal", which keeps a screen of concurrent sessions organized. You reach a session by name, by recency, or from the keyboard.
-- **Control API and CLI.** A bundled tool, `agtermctl`, drives almost everything over a local socket: create sessions, type into them, run a program in an overlay and read its exit status, move and resize windows, or post a notification tied to a specific session. A script or an agent can set up and drive its own layout, and send you a notification from the session it was working in.
-- **Splits, scratch, and overlays.** Split a session into two shells side by side or top and bottom, open a scratch terminal over it, or run a program in a full or floating overlay without disturbing the shell underneath.
-- **Companions.** Keep a log tail, a watcher, a second shell, or an HTML page pinned under a session in the sidebar: companions move, fold, and close with it. Duplicate as Companion copies a session's split layout and starts another copy of each pane's program. They work on sessions attached from another Mac too. An HTML page can also be a session of its own, holding companions and coming back after a relaunch.
-- **Live sessions.** Quit, update, or relaunch agterm while the processes in primary and split panes keep running, an agent mid-turn included. The next launch reattaches to them with their text and TUI state. It is one of three restore modes in Settings ▸ General ▸ Restore sessions, next to fresh shells and re-running the commands captured at quit. Live mode takes effect after restarting agterm and requires zsh or fish as the macOS login shell, or as the absolute path in the ghostty `command` agterm loads.
-- **Remote sessions.** Work in sessions running on another machine over key-based ssh, from another Mac or from a Linux server. A session on another Mac running agterm in Live sessions mode opens as a row in this sidebar, split and companions included, from File ▸ Attach Remote… or with `agtermctl zmx attach --companions`; its status, notifications, HUD, and title-bar context follow it to this Mac ([setup](https://agterm.com/docs#remote-sessions)). A Linux host runs sessions under agterm-server, installed with `agtermctl server install HOST`, and shows them in a remote window; every shell keeps running there when the Mac sleeps or the network drops ([setup](https://agterm.com/docs#remote-server)).
-- **Phone app.** Watch and drive your sessions from an Android phone ([Phone app](#phone-app)).
-- **Agent skill.** An agent skill, installed automatically, teaches Claude Code or Codex the control model and the `agtermctl` commands, so an agent running inside agterm can build its own layout, run overlays, manage windows, and show images inline without you explaining the API.
-- **Agent status.** A coding agent reports its state (active, blocked, or completed) onto its session's row, so you can see which of many running agents needs you. Status hooks for Claude Code, Codex, Pi, OpenCode, and other agents install automatically.
-
-A lot of "does it have X?" questions have the same answer: bind X yourself. A `command` line in `keymap.conf` turns any shell line into a key chord, and an overlay gives an interactive program a real terminal over the session, so a file manager, a git UI, or a database browser is one line away. Bigger workflows become scripts, which is what the [cookbook](cookbook/) collects.
-
-You are not meant to write those lines by hand. Agterm installs the agent skill for you; ask the agent in your session for what you want, and it writes the line with the right syntax, targeting, and PATH handling. [Extend agterm](https://agterm.com/docs#extend) shows that, and teaches enough of the model to read and change what comes back.
-
-For the real terminal work, rendering, VT parsing, and shell I/O, `agterm` embeds [Ghostty](https://ghostty.org)'s engine (libghostty); everything above is `agterm`'s own.
-
-![agterm](docs/screenshots/main.png)
-
-<details>
-<summary>More screenshots</summary>
-
-The dashboard: several sessions' live output in one view-only grid, watched at once. A single click drops into any of them:
-
-![Dashboard](docs/screenshots/dashboard.png)
-
-An agent's interactive prompt mid-session, with attention glyphs on the sessions that need you:
-
-![Agent prompt](docs/screenshots/agent-prompt.png)
-
-The yazi file manager in a floating overlay over the active session, from one `command` line in `keymap.conf`:
-
-![Floating overlay](docs/screenshots/floating-overlay.png)
-
-A split session, two panes side by side on different color themes:
-
-![Split session](docs/screenshots/split-theme.png)
-
-</details>
-
-## The model
-
-- **Window.** A top-level bundle of workspaces and sessions in its own macOS window, with its own sidebar tree.
-- **Workspace.** A named group of sessions for one project or context.
-- **Session.** One running shell with a name, a working directory, and its own scrollback. It is the row you see in the sidebar, and it keeps running while you work in another one.
-- **Split and scratch.** A session can split into two shells side by side or top and bottom, both sharing the one sidebar row, and it can open a scratch terminal over itself for a quick aside.
-- **Companion.** A session pinned under another one, listed and folded with it in the sidebar, and closed with it. A running session can become one later: Convert to Companion nests it under a fresh shell in its place.
-- **Overlay.** One program running in a temporary terminal over a session. It disappears when the program exits and leaves the shell underneath unchanged.
-
-## Install
-
-Pre-built releases are for **Apple Silicon (arm64) Macs running macOS 14 or later**.
-
-Releases are signed with a Developer ID certificate and notarized by Apple, so macOS Gatekeeper opens them with no extra steps.
-
-Homebrew:
-
-```sh
-brew install --cask umputun/apps/agterm
-```
-
-Direct download:
-
-Download the latest `.dmg` from the [releases page](https://github.com/umputun/agterm/releases), open it, and drag `agterm.app` into `/Applications`.
-
-The Homebrew cask already installs the `agtermctl` command-line tool; a DMG build links it into `/usr/local/bin` on first launch and after each update. The same step installs the agent status hooks and the agent skill, and it stays silent unless you must act.
-
-The skill is also published as a plugin from this repository, which puts it wherever your agent looks for one:
-
-### Claude Code
-
-```sh
-claude plugin marketplace add umputun/agterm
-claude plugin install agterm@agterm
-```
-
-### Codex
-
-```sh
-codex plugin marketplace add umputun/agterm
-codex plugin add agterm@agterm
-```
-
-Install the skill by one route or the other, never both: two copies leave it undefined which one the agent picks.
-
-The Help menu installers honor an exported `CODEX_HOME`; [Agent status](https://agterm.com/docs#status) has the details.
-
-## Scripting agterm
-
-`agtermctl` drives a running agterm over a local unix socket, one command per invocation. Terminal output is not streamed; `session text` reads a session's buffer when a script needs to see it.
-
-```sh
-ws=$(agtermctl workspace new demo)                        # capture the new workspace's id
-sid=$(agtermctl session new --workspace "$ws" --cwd "$PWD" --no-select)
-agtermctl session split on --axis horizontal --target "$sid" # add a top-and-bottom shell
-agtermctl session type $'pwd\n' --target "$sid"           # drive a session you are not looking at
-agtermctl session text --target "$sid" --lines 10         # read its terminal back
-agtermctl msg send "build done" --to "$sid:bottom"        # leave a message in the bottom shell's mailbox
-agtermctl session status blocked --target "$sid"          # set the sidebar status glyph
-printf '%s\n' staging production | agtermctl pick --prompt "Deploy where?"   # open the native picker
-agtermctl ask "Deploy now?" --button yes=Deploy --button no=Not\ yet --default no  # ask a question, get the button
-agtermctl tree --json                                     # dump the whole model as JSON
-```
-
-`session type` returns once the keystrokes are queued, so a following `session text` races the shell, and `pick` and `ask` block until someone answers.
-
-The same interface covers windows, splits, overlays, dashboards, HUDs, notifications, events, themes, and restoration. Every command is at [agterm.com/commands](https://agterm.com/commands).
+The terminal engine is [Ghostty](https://ghostty.org)'s libghostty: rendering, VT parsing and shell I/O.
 
 ## Phone app
 
-[agterm Mobile](https://github.com/NaikSoftware/agterm-qt/tree/main/mobile) (Flutter, Android) watches and drives your sessions from a phone.
+Hangar for Android watches and drives your sessions from a phone, over Wi‑Fi, USB or Bluetooth.
 
 <p align="center">
   <img src="docs/screenshots/mobile-sessions.png" width="270" alt="Sessions: a blocked agent's question with answer buttons, a finished session, workspaces of agent sessions">
@@ -131,57 +32,66 @@ The same interface covers windows, splits, overlays, dashboards, HUDs, notificat
   <img src="docs/screenshots/mobile-session.png" width="270" alt="A Claude Code session fitted to the phone">
 </p>
 
-- **Sessions.** The workspace tree with status dots. An agent's question shows as answer buttons, so a permission prompt is one tap.
-- **A session's screen.** Its text, a key bar and a composer that types into it.
-- **Fit to phone.** The program gets the phone's columns and rows and redraws for them; a drag scrolls the program itself. Session ▸ Restore Terminal Size gives the grid back, and so does any window resize or the phone disconnecting.
-- **Alerts.** A notification when an agent blocks or finishes while the app is in the background.
+- **Sessions.** The same workspace tree as the desktop. An agent's question shows as answer buttons, so a permission prompt is one tap.
+- **New session.** Start a terminal or an agent in any workspace and folder.
+- **Fit to phone.** The program redraws for the phone's columns and rows. The desktop gets its size back when the phone disconnects.
+- **Alerts.** A notification when an agent blocks or finishes. It goes away when you read the session on the computer.
 
-The phone also works over Bluetooth without Wi-Fi. To pair, open agterm ▸ Connect a Phone…, switch it on, and scan the code in the app. `agtermctl mobile serve` does the same from a shell. The relay is off by default. It uses TLS pinned to this Mac's certificate, and anyone with the code controls your terminals until you revoke it. If a firewall blocks incoming connections, connect the phone by USB and run `adb reverse tcp:8765 tcp:8765`, then set the address to `127.0.0.1`. [Phone app](https://agterm.com/docs#phone-app) has the details.
+To pair, open the app menu ▸ Connect a Phone…, switch it on, and scan the code in the app.
+The relay is off by default and uses TLS pinned to this Mac's certificate.
+Anyone with the code controls your terminals until you revoke it.
+
+## Install
+
+Hangar runs on Apple Silicon Macs with macOS 14 or later.
+
+1. Download the `.dmg` from the [latest release](https://github.com/NaikSoftware/agterm/releases/latest), open it, and drag `agterm.app` to Applications.
+2. The build is not notarized. Clear the download flag once:
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/agterm.app
+   ```
+3. Start the app. It installs `agtermctl`, the agent status hooks and the agent skill on first launch and after each update.
+
+The phone app is attached to the same release as `agterm2-mobile.apk`.
+Open it on the phone, or run `adb install -r agterm2-mobile.apk`.
+
+A Qt6/KDE version for Linux lives in [NaikSoftware/agterm-qt](https://github.com/NaikSoftware/agterm-qt).
+
+## Scripting
+
+`agtermctl` drives a running app over a local unix socket, one command per call.
+
+```sh
+ws=$(agtermctl workspace new demo)
+sid=$(agtermctl session new --workspace "$ws" --cwd "$PWD" --no-select)
+agtermctl session type $'claude\n' --target "$sid"       # start an agent in a session you are not looking at
+agtermctl session text --target "$sid" --lines 10       # read its screen back
+agtermctl session status blocked --target "$sid"        # set the sidebar status
+agtermctl ask "Deploy now?" --button yes=Deploy --button no=Not\ yet --default no
+agtermctl tree --json                                   # the whole model as JSON
+```
+
+You rarely write these by hand.
+Ask the agent in your session for a key binding, a layout or a workflow, and the installed skill writes it.
+Ready-made recipes are in the [cookbook](cookbook/).
 
 ## Documentation
 
-- [Documentation](https://agterm.com/docs) is the user guide: the workspace and session model, windows, splits and overlays, keymap, and settings.
-- [Command reference](https://agterm.com/commands) documents every `agtermctl` command with its arguments and return values.
-- [cookbook/](cookbook/) collects recipes built on the control API.
-- [CONTRIBUTING.md](CONTRIBUTING.md) covers building from source.
-- [ARCHITECTURE.md](ARCHITECTURE.md) describes the internals: the module split, surface ownership, and the libghostty C boundary.
+- [User guide](site/docs.html): workspaces, sessions, splits, overlays, keymap and settings.
+- [Command reference](site/commands.html): every `agtermctl` command.
+- [Troubleshooting](docs/troubleshooting.md): logs and common problems.
+- [CONTRIBUTING.md](CONTRIBUTING.md): build from source.
+- [ARCHITECTURE.md](ARCHITECTURE.md): modules, surface ownership and the libghostty boundary.
 
-Restore modes and the limits of live restore are covered in [Restore & persistence](https://agterm.com/docs#restore), and attaching another Mac's sessions in [Remote sessions](https://agterm.com/docs#remote-sessions).
+Report bugs in [Issues](https://github.com/NaikSoftware/agterm/issues).
 
-Log locations and the common problems are in [docs/troubleshooting.md](docs/troubleshooting.md). Report bugs in [Issues](https://github.com/umputun/agterm/issues), ask questions in [Discussions](https://github.com/umputun/agterm/discussions).
+## Origins and attribution
 
-## Related projects
+Hangar started as a fork of [agterm](https://github.com/umputun/agterm) by [@umputun](https://github.com/umputun) and keeps its core model, control API and many features. Thank you.
 
-<details>
-<summary>Ports, forks, reimplementations, and companion tools</summary>
-
-A small ecosystem has grown around agterm. These are independent projects, not maintained here.
-
-**Built on agterm**
-
-- [agterm-linux](https://github.com/melonamin/agterm-linux) by [@melonamin](https://github.com/melonamin) is a Linux port (GTK4/libadwaita) built on the shared, host-free `agtermCore`. The macOS app stays here; the Linux frontend lives in that fork.
-- [Rook](https://github.com/jokius/rook) by [@jokius](https://github.com/jokius) is a native macOS terminal fork that takes agterm in a different direction, with features outside agterm's intended scope. Both projects are deliberately opinionated, with different ideas about where a focused agent terminal should stop.
-
-**Reimplementation**
-
-- [agwinterm](https://github.com/yeroo/agwinterm) by [@yeroo](https://github.com/yeroo) is a native Windows terminal for AI coding agents (C#, Win32/Direct2D), an independent from-scratch homage to agterm's design.
-
-**Companion tools**
-
-- [agterm-remote](https://github.com/k0nsta/agterm-remote) carries agterm's agent-status colors and pushes to agents running in a remote tmux over SSH.
-- [pi-agterm](https://github.com/khanton/pi-agterm) is a pi extension that reports agent status onto agterm's status indicator.
-- [agterm-experimental](https://github.com/rashpile/agterm-experimental) collects custom skills and scripts for agterm.
-
-</details>
-
-## Attribution
-
-agterm embeds **libghostty**, the terminal engine from [Ghostty](https://github.com/ghostty-org/ghostty) (MIT). It does all the real terminal work: rendering, VT parsing, and shell I/O. agterm builds it from upstream source at a pinned commit via `scripts/setup.sh`, with no fork and no prebuilt binary.
-
-The way agterm drives libghostty's C API from a SwiftUI/AppKit app, under the Swift 6 strict-concurrency toolchain, was learned from [macterm](https://github.com/thdxg/macterm) (`thdxg/macterm`, MIT). The libghostty bridge files (`GhosttyApp`, `GhosttyCallbacks`, `GhosttyResources`, `GhosttySurfaceView`, `WindowAppearance`) are adapted from it and each carries an attribution comment. The model, sidebar, persistence, control channel, and multi-window code are original to agterm.
-
-SwiftUI guidance during development came from the [SwiftUI Agent Skill](https://github.com/AvdLee/SwiftUI-Agent-Skill) by Antoine van der Lee (MIT). Special thanks to [@ksenks](https://github.com/ksenks) for recommending it.
+Hangar embeds libghostty from [Ghostty](https://github.com/ghostty-org/ghostty) (MIT), built from upstream source at a pinned commit.
+The libghostty bridge files are adapted from [macterm](https://github.com/thdxg/macterm) (MIT) and carry attribution comments.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
+MIT. See [LICENSE](LICENSE).

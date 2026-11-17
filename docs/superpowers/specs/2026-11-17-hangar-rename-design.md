@@ -86,6 +86,7 @@ Linux and mobile have no CI today and get none in this work.
 - **Saved web logins (builder's call):** WebKit keys them by bundle id, so they are lost. The script's printout tells users to sign in again.
 - **agterm-qt branches (builder's call):** import `main` only. The remote has no other branches and no open PRs.
 - **CLAUDE.md and `.claude/rules` (builder's call):** swap names and paths, replace upstream-maintainer references (Eugene, `~/dev.umputun/agterm`, Homebrew, notarization, Cloudflare) with the fork's facts. No other editorial rewrite.
+- **Product page (owner's request):** `site/index.html` gets a new design made in Claude Design, not a rename of upstream's page. The owner approves the mockup first; the page is then built to match it exactly.
 - **Root Makefile (builder's call):** none. Commands run from `macos/`; `CLAUDE.md` says so.
 
 ## Order of work
