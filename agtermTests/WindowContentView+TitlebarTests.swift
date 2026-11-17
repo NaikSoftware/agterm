@@ -79,7 +79,7 @@ final class WindowContentViewTitlebarTests: XCTestCase {
                     let hidden = try renderTitlebar(mode: mode, width: width, hidden: [.remoteHost])
                     let scale = Int(window.backingScaleFactor)
                     XCTAssertEqual(visible.pixelsWide, Int(width) * scale)
-                    XCTAssertEqual(visible.pixelsHigh, (mode == .normal ? 48 : 30) * scale)
+                    XCTAssertEqual(visible.pixelsHigh, (mode == .normal ? 52 : 30) * scale)
                     XCTAssertGreaterThan(differentPixels(visible, hidden, from: 110 * scale, to: (Int(width) - 270) * scale), 20)
                     let buttonsWidth = mode == .normal ? 250 : 225
                     XCTAssertEqual(differentPixels(visible, hidden, from: (Int(width) - buttonsWidth) * scale,
@@ -191,7 +191,7 @@ final class WindowContentViewTitlebarTests: XCTestCase {
         )
         let view = content.customTitlebar.frame(width: width).background(.white).environment(\.colorScheme, .light)
         let host = NSHostingView(rootView: view)
-        window.setContentSize(NSSize(width: width, height: mode == .normal ? 48 : 30))
+        window.setContentSize(NSSize(width: width, height: mode == .normal ? 52 : 30))
         window.contentView = host
         window.orderFront(nil)
         window.layoutIfNeeded()

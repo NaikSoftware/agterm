@@ -21,24 +21,35 @@ extension WindowContentView {
         Array(library.recentClosedItems.lazy.filter { $0.kind == .session }.prefix(15))
     }
 
-    /// The title-bar session switcher: the title wrapped in a pill that opens one popover. The title stays
-    /// non-hittable on top and the button sits behind it, so a disabled button never dims the title.
+    /// The title-bar session switcher: a one-line pill naming the active session that opens one popover. The
+    /// label stays non-hittable on top and the button sits behind it, so a disabled button never dims the title.
     /// Opening a popover is interactive-only, so it is control-API keep-in-sync exempt, like the bell.
     var switcherPill: some View {
-        HStack(spacing: 8) {
-            titleLabel.hugging()
+        HStack(spacing: 9) {
+            SwitcherPillLabel(store: store, library: library, windowID: windowID, chromeText: chromeText,
+                              showsWorkspaceName: shows(.workspaceName), showsSessionName: shows(.sessionName),
+                              showsWindowName: shows(.windowName), showsContext: shows(.sessionContext),
+                              showsRemoteHost: shows(.remoteHost))
             // Ctrl-Tab is a raw key monitor in `SessionSwitcher`, not a rebindable `BuiltinAction`.
             Text(verbatim: "⌃Tab")
-                .font(.caption)
-                .foregroundStyle(chromeText.opacity(pick.modalPending ? 0.2 : 0.45))
+                .font(.system(size: 11))
+                .foregroundStyle(chromeText.opacity(pick.modalPending ? 0.2 : 0.36))
                 .fixedSize()
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 2)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: 472)
+        .frame(height: toolbarMode == .normal ? 34 : 26)
         .allowsHitTesting(false)
         .background { recentSessionsButton }
         // hiding the pill (Interface toggle, hidden toolbar) with the popover open must not leave it marked shown.
         .onDisappear { recentSessionsShown = false }
+    }
+
+    /// The theme background moved 7% toward white on a dark theme, toward black on a light one.
+    var popoverBackground: Color {
+        let base = GhosttyApp.shared.terminalBackgroundColor ?? NSColor(srgbRed: 0.157, green: 0.173, blue: 0.204, alpha: 1)
+        let toward: NSColor = GhosttyApp.shared.terminalThemeIsDark ? .white : .black
+        return Color(nsColor: base.blended(withFraction: 0.07, of: toward) ?? base)
     }
 
     private var recentSessionsButton: some View {
@@ -46,7 +57,7 @@ extension WindowContentView {
             guard !pick.modalPending else { return }
             recentSessionsShown.toggle()
         } label: {
-            SwitcherPillChrome(chromeText: chromeText, open: recentSessionsShown)
+            SwitcherPillChrome(chromeText: chromeText, openFill: popoverBackground, open: recentSessionsShown)
         }
         .buttonStyle(.plain)
         .toolTip("Session switcher (⌃Tab)", isShown: titlebarTipsShown)
@@ -67,84 +78,101 @@ extension WindowContentView {
 
     /// The switcher popover: a jump row into the ⌃P session palette, then "Needs you" (the bell's rows),
     /// "Recent" (MRU other sessions) and "Recently closed", empty sections hidden. Themed, measured and capped
-    /// like the attention popover.
+    /// like the attention popover. A `.popover` keeps the system arrow, radius and shadow; only the fill is ours.
     private var recentSessionsPopover: some View {
         let metrics = GhosttyApp.shared.interfaceMetrics
         let attention = library.attentionAcrossWindows
+        let highlight = Color(nsColor: GhosttyApp.shared.activeStatusColor).opacity(0.2)
         // no `.accessibilityIdentifier` on this container: a SwiftUI identifier on a parent propagates to and
         // OVERRIDES its descendants', clobbering the per-row ids the tests read.
-        return ScrollView {
-            VStack(spacing: 2) {
-                SessionPopoverRow(
-                    title: "Jump to a session",
-                    subtitle: helpHint("Search all sessions", .sessionPalette),
-                    remote: false,
-                    status: nil,
-                    statusColorHex: nil,
-                    statusShape: nil,
-                    foreground: chromeText,
-                    hoverColor: popoverHoverColor,
-                    accessibilityID: "jump-session-row",
-                    icon: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)?
-                        .withSymbolConfiguration(.init(pointSize: metrics.scaled(15), weight: .regular))
-                ) { jumpToSessionPalette() }
-                if !attention.isEmpty {
-                    popoverSectionHeader("Needs you")
-                    attentionRows(attention)
-                }
-                if !recentSessions.isEmpty {
-                    popoverSectionHeader("Recent")
-                    ForEach(recentSessions, id: \.self) { id in
-                        recentSessionRow(id)
+        return VStack(spacing: 0) {
+            SwitcherJumpRow(foreground: chromeText, highlight: highlight,
+                            hint: actions.shortcutGlyph(for: .sessionPalette)) { jumpToSessionPalette() }
+                .padding(.bottom, metrics.scaled(4))
+            ScrollView {
+                VStack(spacing: 0) {
+                    if !attention.isEmpty {
+                        popoverSectionHeader("Needs you")
+                        ForEach(attention) { entry in
+                            SessionPopoverRow(
+                                title: library.attentionLabel(entry),
+                                subtitle: entry.session.switcherDetail,
+                                remote: entry.session.remoteHost != nil,
+                                status: entry.session.agentIndicator.status,
+                                statusColorHex: entry.session.agentIndicator.color,
+                                statusShape: entry.session.agentIndicator.shape,
+                                foreground: chromeText,
+                                hoverColor: highlight,
+                                accessibilityID: "attention-session-row",
+                                icon: (entry.session.runningAgent ?? .terminal).image(pointSize: metrics.scaled(14)),
+                                isEnabled: actions.canSelectAttention(windowID: entry.window.id, sessionID: entry.session.id),
+                                singleLine: true,
+                                workspace: attentionWorkspace(entry)
+                            ) { selectAttention(entry) }
+                        }
+                    }
+                    if !recentSessions.isEmpty {
+                        popoverSectionHeader("Recent")
+                        ForEach(recentSessions, id: \.self) { id in
+                            recentSessionRow(id, highlight: highlight)
+                        }
+                    }
+                    if !recentClosedSessions.isEmpty {
+                        popoverSectionHeader("Recently closed")
+                        ForEach(recentClosedSessions) { item in
+                            SessionPopoverRow(
+                                title: item.title,
+                                subtitle: item.subtitle ?? "",
+                                remote: false,
+                                status: nil,
+                                statusColorHex: nil,
+                                statusShape: nil,
+                                foreground: chromeText,
+                                hoverColor: highlight,
+                                accessibilityID: "recent-closed-row",
+                                // a resume line reopens into claude even when claude had exited before the close
+                                icon: (item.session?.agent.flatMap(SessionLauncher.init(rawValue:))
+                                       ?? (item.session?.resumeLine == nil ? .terminal : .claude))
+                                    .image(pointSize: metrics.scaled(14)),
+                                singleLine: true
+                            ) { reopenRecentClosed(item.id) }
+                        }
                     }
                 }
-                if !recentClosedSessions.isEmpty {
-                    popoverSectionHeader("Recently closed")
-                    ForEach(recentClosedSessions) { item in
-                        SessionPopoverRow(
-                            title: item.title,
-                            subtitle: item.subtitle ?? "",
-                            remote: false,
-                            status: nil,
-                            statusColorHex: nil,
-                            statusShape: nil,
-                            foreground: chromeText,
-                            hoverColor: popoverHoverColor,
-                            accessibilityID: "recent-closed-row",
-                            // a resume line reopens into claude even when claude had exited before the close
-                            icon: (item.session?.agent.flatMap(SessionLauncher.init(rawValue:))
-                                   ?? (item.session?.resumeLine == nil ? .terminal : .claude))
-                                .image(pointSize: metrics.scaled(15))
-                        ) { reopenRecentClosed(item.id) }
+                .background(
+                    GeometryReader { rows in
+                        Color.clear.preference(key: RowsHeightKey.self, value: rows.size.height)
                     }
-                }
+                )
             }
-            .background(
-                GeometryReader { rows in
-                    Color.clear.preference(key: RowsHeightKey.self, value: rows.size.height)
-                }
-            )
-        }
-        .frame(height: metrics.measuredPanelHeight(rowsHeight: recentRowsHeight,
-                                                   maxRowsHeight: metrics.scaled(Self.attentionRowsCap)).map { CGFloat($0) })
-        .scrollBounceBehavior(.basedOnSize)
-        .onPreferenceChange(RowsHeightKey.self) { height in
-            recentRowsHeight = height
+            .frame(height: metrics.measuredPanelHeight(rowsHeight: recentRowsHeight,
+                                                       maxRowsHeight: metrics.scaled(Self.attentionRowsCap)).map { CGFloat($0) })
+            .scrollBounceBehavior(.basedOnSize)
+            .onPreferenceChange(RowsHeightKey.self) { height in
+                recentRowsHeight = height
+            }
         }
         .padding(6)
-        .frame(width: metrics.scaled(320))
-        .background(terminalColor)
-        .presentationBackground(terminalColor)
+        .frame(width: metrics.scaled(472))
+        .background(popoverBackground)
+        .presentationBackground(popoverBackground)
+    }
+
+    /// The window (once several are open) and workspace an attention row lives in, for the right-hand column.
+    private func attentionWorkspace(_ entry: AttentionEntry) -> String {
+        let workspace = library.store(for: entry.window.id)?.workspace(forSession: entry.session.id)?.name ?? ""
+        return library.openIDs().count > 1 ? "\(entry.window.name) · \(workspace)" : workspace
     }
 
     private func popoverSectionHeader(_ title: String) -> some View {
         let metrics = GhosttyApp.shared.interfaceMetrics
         return Text(title)
-            .font(.system(size: metrics.secondary))
-            .foregroundStyle(chromeText.opacity(0.6))
+            .font(.system(size: metrics.scaled(11.5), weight: .semibold))
+            .foregroundStyle(chromeText.opacity(0.58))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, metrics.scaled(12))
-            .padding(.top, metrics.scaled(6))
+            .padding(.horizontal, metrics.scaled(10))
+            .padding(.top, metrics.scaled(8))
+            .padding(.bottom, metrics.scaled(4))
     }
 
     /// Closes the popover, then opens (never toggles) the session palette on the next turn.
@@ -164,19 +192,21 @@ extension WindowContentView {
         DispatchQueue.main.async { actions.openRecentClosed(id) }
     }
 
-    @ViewBuilder private func recentSessionRow(_ id: UUID) -> some View {
+    @ViewBuilder private func recentSessionRow(_ id: UUID, highlight: Color) -> some View {
         if let session = store.session(withID: id) {
             SessionPopoverRow(
                 title: store.listLabel(for: session),
-                subtitle: "\(store.workspace(forSession: id)?.name ?? "") · \(session.switcherDetail)",
+                subtitle: session.switcherDetail,
                 remote: session.remoteHost != nil,
                 status: session.agentIndicator.status,
                 statusColorHex: session.agentIndicator.color,
                 statusShape: session.agentIndicator.shape,
                 foreground: chromeText,
-                hoverColor: popoverHoverColor,
+                hoverColor: highlight,
                 accessibilityID: "recent-session-row",
-                icon: (session.runningAgent ?? .terminal).image(pointSize: GhosttyApp.shared.interfaceMetrics.scaled(15))
+                icon: (session.runningAgent ?? .terminal).image(pointSize: GhosttyApp.shared.interfaceMetrics.scaled(14)),
+                singleLine: true,
+                workspace: store.workspace(forSession: id)?.name
             ) { selectRecent(id) }
         }
     }
@@ -219,7 +249,23 @@ extension WindowContentView {
         } label: {
             Label("Attention", systemImage: blocked ? "bell.fill" : "bell")
         }
-        .foregroundStyle(blocked ? Color(nsColor: GhosttyApp.shared.blockedStatusColor) : chromeText)
+        .buttonStyle(ChromeButtonStyle(foreground: blocked ? Color(nsColor: GhosttyApp.shared.blockedStatusColor) : chromeText,
+                                       isOn: attentionPopoverShown))
+        .overlay(alignment: .topTrailing) {
+            if !empty {
+                Text(verbatim: "\(entries.count)")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .frame(minWidth: 14, minHeight: 14)
+                    .background(Capsule().fill(Color(red: 1, green: 0x45 / 255, blue: 0x3a / 255)))
+                    // a 2pt ring in the title band's own color cuts the badge out of the glyph
+                    .background(Capsule().fill(terminalColor).padding(-2))
+                    .offset(x: 2, y: -2)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         .opacity(enabled ? 1 : 0.35)
         .disabled(!enabled)
         .toolTip(helpHint(empty ? "No sessions need attention" : "Show sessions that need attention", .showAttention),
@@ -265,11 +311,11 @@ extension WindowContentView {
         }
         .padding(6)
         .frame(width: metrics.scaled(320))
-        .background(terminalColor)
-        .presentationBackground(terminalColor)
+        .background(popoverBackground)
+        .presentationBackground(popoverBackground)
     }
 
-    /// The attention rows shared by the bell's popover and the switcher's "Needs you" section.
+    /// The bell popover's rows.
     private func attentionRows(_ entries: [AttentionEntry]) -> some View {
         ForEach(entries) { entry in
             SessionPopoverRow(
@@ -309,6 +355,7 @@ extension WindowContentView {
 /// pointer-hover highlight (`hoverColor`) and a full-row hit area (`.contentShape`), so the WHOLE row selects on click, not just the text. Kept a `Button` so it reads as an
 /// actionable control to VoiceOver; `accessibilityID` distinguishes the two popovers' rows for the tests.
 /// `isEnabled` false renders the row dimmed and inert, for an attention row whose window is under a cover.
+/// `singleLine` draws the switcher popover's 30pt row: name, reason, then `workspace` right-aligned.
 private struct SessionPopoverRow: View {
     let title: String
     let subtitle: String
@@ -321,16 +368,16 @@ private struct SessionPopoverRow: View {
     let accessibilityID: String
     var icon: NSImage?
     var isEnabled = true
+    var singleLine = false
+    var workspace: String?
     let onSelect: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(action: onSelect) {
-            SessionSwitcherRow(title: title, subtitle: subtitle, foreground: foreground,
-                               status: status, statusColorHex: statusColorHex, statusShape: statusShape, remote: remote,
-                               icon: icon)
+            row
                 .background(hovering && isEnabled ? hoverColor : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: singleLine ? 7 : 6))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -339,21 +386,174 @@ private struct SessionPopoverRow: View {
         .onHover { hovering = $0 }
         .accessibilityIdentifier(accessibilityID)
     }
+
+    @ViewBuilder private var row: some View {
+        if singleLine {
+            let metrics = GhosttyApp.shared.interfaceMetrics
+            HStack(spacing: metrics.scaled(10)) {
+                Group {
+                    if let icon {
+                        Image(nsImage: icon).renderingMode(.template).foregroundStyle(foreground.opacity(0.58))
+                    }
+                }
+                .frame(width: metrics.scaled(18))
+                if remote { Image(systemName: "cloud").accessibilityLabel("Remote") }
+                Text(title)
+                    .font(.system(size: metrics.base))
+                    .layoutPriority(2)
+                Text(subtitle)
+                    .font(.system(size: metrics.scaled(12)))
+                    .foregroundStyle(foreground.opacity(0.58))
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                if let workspace, !workspace.isEmpty {
+                    Text(workspace)
+                        .font(.system(size: metrics.scaled(12)))
+                        .foregroundStyle(foreground.opacity(0.36))
+                        .layoutPriority(1)
+                }
+                if let status, status != .idle {
+                    StatusGlyph(status: status, colorHex: statusColorHex, shape: statusShape)
+                }
+            }
+            .lineLimit(1)
+            .foregroundStyle(foreground)
+            .padding(.horizontal, metrics.scaled(10))
+            .frame(maxWidth: .infinity, minHeight: metrics.scaled(30), maxHeight: metrics.scaled(30), alignment: .leading)
+        } else {
+            SessionSwitcherRow(title: title, subtitle: subtitle, foreground: foreground,
+                               status: status, statusColorHex: statusColorHex, statusShape: statusShape, remote: remote,
+                               icon: icon)
+        }
+    }
 }
 
-/// The switcher pill's rounded fill and hairline, stronger on hover and while its popover is open. Its own view,
-/// so a hover change re-renders only this and never `WindowContentView`'s body.
+/// The switcher popover's top row, styled like a search field: it opens the ⌃P session palette.
+private struct SwitcherJumpRow: View {
+    let foreground: Color
+    let highlight: Color
+    let hint: String?
+    let onSelect: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        let metrics = GhosttyApp.shared.interfaceMetrics
+        Button(action: onSelect) {
+            HStack(spacing: metrics.scaled(10)) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: metrics.scaled(15)))
+                    .frame(width: metrics.scaled(18))
+                Text("Jump to a session")
+                    .font(.system(size: metrics.base))
+                Spacer(minLength: 0)
+                if let hint {
+                    Text(verbatim: hint).font(.system(size: metrics.scaled(12)))
+                }
+            }
+            .foregroundStyle(foreground.opacity(0.36))
+            .padding(.horizontal, metrics.scaled(10))
+            .frame(maxWidth: .infinity, minHeight: metrics.scaled(36), maxHeight: metrics.scaled(36))
+            .background(hovering ? highlight : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(foreground.opacity(0.10)).frame(height: 1)
+        }
+        .accessibilityIdentifier("jump-session-row")
+    }
+}
+
+/// The switcher pill's rounded fill and inset hairline: stronger on hover, and while its popover is open the
+/// popover's own background with a ring in the active status color.
 private struct SwitcherPillChrome: View {
     let chromeText: Color
+    let openFill: Color
     let open: Bool
     @Environment(\.isEnabled) private var isEnabled
     @State private var hovering = false
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 7)
-            .fill(chromeText.opacity((hovering && isEnabled) || open ? 0.12 : 0.06))
-            .overlay(RoundedRectangle(cornerRadius: 7).stroke(chromeText.opacity(0.10), lineWidth: 1))
-            .contentShape(RoundedRectangle(cornerRadius: 7))
+        let shape = RoundedRectangle(cornerRadius: 9)
+        shape
+            .fill(open ? openFill : chromeText.opacity(hovering && isEnabled ? 0.12 : 0.07))
+            .overlay(shape.strokeBorder(chromeText.opacity(0.10), lineWidth: 1))
+            .overlay {
+                if open {
+                    shape.stroke(Color(nsColor: GhosttyApp.shared.activeStatusColor).opacity(0.5), lineWidth: 2)
+                        .padding(-1)
+                }
+            }
+            .contentShape(shape)
             .onHover { hovering = $0 }
+    }
+}
+
+/// The pill's one line: session icon, workspace, session (semibold), window and host, then the context, which
+/// truncates first. Its own view so an OSC title tick never invalidates `WindowContentView` (#516).
+struct SwitcherPillLabel: View {
+    let store: AppStore
+    let library: WindowLibrary
+    let windowID: WindowInfo.ID
+    let chromeText: Color
+    let showsWorkspaceName: Bool
+    let showsSessionName: Bool
+    let showsWindowName: Bool
+    let showsContext: Bool
+    let showsRemoteHost: Bool
+
+    var body: some View {
+        let session = store.activeSession
+        let workspace = showsWorkspaceName
+            ? session.flatMap { store.workspace(forSession: $0.id) }?.name.trimmingCharacters(in: .whitespaces) : nil
+        let host = showsRemoteHost ? session?.remoteHost : nil
+        // a remote window is named after its host, which the host part already shows
+        let windowName = showsWindowName ? library.customWindowName(for: windowID).flatMap { $0 == host ? nil : $0 } : nil
+        let context = showsContext ? session?.effectiveContext : nil
+        let name = showsSessionName ? session?.displayName ?? "Agterm" : nil
+        HStack(spacing: 9) {
+            if let icon = (session?.runningAgent ?? .terminal).image(pointSize: 14) {
+                Image(nsImage: icon).renderingMode(.template).foregroundStyle(chromeText.opacity(0.7))
+            }
+            // a narrow bar drops the identity's side parts whole, rather than squeezing each to an ellipsis
+            ViewThatFits(in: .horizontal) {
+                identity(workspace: workspace, name: name, windowName: windowName, host: host)
+                identity(workspace: workspace, name: name, windowName: nil, host: host.map { _ in "" })
+                identity(workspace: nil, name: name, windowName: nil, host: host.map { _ in "" })
+            }
+            .layoutPriority(1)
+            if let context, !context.isEmpty {
+                Text(context).font(.system(size: 12)).foregroundStyle(chromeText.opacity(0.58))
+            }
+        }
+        .font(.system(size: 13))
+        .lineLimit(1)
+        .truncationMode(.tail)
+    }
+
+    /// An empty `host` draws the cloud alone.
+    private func identity(workspace: String?, name: String?, windowName: String?, host: String?) -> some View {
+        HStack(spacing: 9) {
+            if let workspace, !workspace.isEmpty {
+                Text("\(workspace) ›").foregroundStyle(chromeText.opacity(0.58))
+            }
+            if let name {
+                Text(name).font(.system(size: 13, weight: .semibold)).layoutPriority(1)
+            }
+            if let windowName {
+                Text("— \(windowName)").foregroundStyle(chromeText.opacity(0.58))
+            }
+            if let host {
+                HStack(spacing: 4) {
+                    Image(systemName: InterfaceElement.remoteHost.symbolName!).fixedSize().accessibilityHidden(true)
+                    if !host.isEmpty {
+                        RemoteHostTextLayout { Text(verbatim: host).truncationMode(.middle) }
+                    }
+                }
+                .foregroundStyle(chromeText.opacity(0.58))
+            }
+        }
     }
 }

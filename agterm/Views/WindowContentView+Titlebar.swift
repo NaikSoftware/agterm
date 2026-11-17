@@ -41,45 +41,43 @@ extension WindowContentView {
     }
 
     /// Custom titlebar row replacing the system toolbar: the sidebar and file panel toggles pinned to the
-    /// leading columns' trailing edge (by the divider), the title (or switcher pill) at the terminal's start, and the
-    /// trailing cluster (attention popover, divider, scratch / split controls, divider, dashboard /
-    /// quick terminal / custom commands). Positions track `leadingColumnsWidth`; the left inset clears the system traffic lights.
+    /// leading columns' trailing edge (by the divider), the title at the terminal's start (or the switcher pill
+    /// centred over the terminal column), and the trailing cluster (attention popover, divider, scratch / split
+    /// controls, divider, dashboard / quick terminal / custom commands). Positions track `leadingColumnsWidth`;
+    /// the left inset clears the system traffic lights.
     private var titlebarRow: some View {
-        HStack(spacing: 0) {
-            Color.clear.frame(width: 78).allowsHitTesting(false) // system traffic lights
-            if leadingColumnsWidth > 0 {
-                HStack(spacing: 14) {
-                    Spacer(minLength: 0)
-                    // keep the columns-width frame even when the toggle is hidden, so the title still starts
-                    // at the terminal's leading edge; the Spacer fills the freed space.
-                    filePanelToggleButton.labelStyle(.iconOnly)
-                    if shows(.sidebarToggle) {
-                        sidebarToggleButton.labelStyle(.iconOnly)
-                    }
-                }
-                // the 40pt floor plus the file panel button and its spacing
-                .frame(width: max(74, leadingColumnsWidth - 1 - 78))
-                Color.clear.frame(width: 11).allowsHitTesting(false) // 1px divider + gap to the title
-            } else {
-                HStack(spacing: 14) {
-                    filePanelToggleButton.labelStyle(.iconOnly)
-                    if shows(.sidebarToggle) {
-                        sidebarToggleButton.labelStyle(.iconOnly)
-                    }
-                }
-                Spacer().frame(width: 12)
-            }
+        Group {
             if shows(.recentSessions) {
                 // the pill takes its own clicks; the rest of the row still falls through to the drag/zoom layer.
-                switcherPill
+                HStack(spacing: 0) {
+                    titlebarLeading
+                    Spacer(minLength: 12)
+                    titlebarTrailingActions
+                }
+                .overlay {
+                    // centred over the terminal column; each spacer's floor keeps it off the buttons on its side, so a
+                    // tight bar first shifts the pill, then truncates it. An overlay, not a custom `Layout`: a
+                    // `Layout`-placed pill drew in place but never received its click.
+                    HStack(spacing: 0) {
+                        Spacer(minLength: max(12, titlebarLeadingWidth - leadingColumnsWidth + 12))
+                        switcherPill
+                        Spacer(minLength: titlebarTrailingWidth + 12)
+                    }
+                    .padding(.leading, leadingColumnsWidth)
+                }
             } else {
-                titleLabel
-                    // the title text falls through to the drag/zoom layer behind it, so double-click zooms and
-                    // drag moves the window; the rest of the row is non-hittable spacers plus the buttons.
-                    .allowsHitTesting(false)
+                HStack(spacing: 0) {
+                    titlebarLeading
+                    // 1px divider + gap to the title
+                    Color.clear.frame(width: leadingColumnsWidth > 0 ? 11 : 12).allowsHitTesting(false)
+                    titleLabel
+                        // the title text falls through to the drag/zoom layer behind it, so double-click zooms and
+                        // drag moves the window; the rest of the row is non-hittable spacers plus the buttons.
+                        .allowsHitTesting(false)
+                    Spacer(minLength: 12)
+                    titlebarTrailingActions
+                }
             }
-            Spacer(minLength: 12)
-            titlebarTrailingActions
         }
         .buttonStyle(.plain)
         // tint the title text and the toolbar buttons with the terminal theme's foreground so the
@@ -96,6 +94,58 @@ extension WindowContentView {
         .background { WindowControlArea() }
     }
 
+    /// The traffic-light inset and the file panel / sidebar toggles, pinned to the leading columns' edge.
+    private var titlebarLeading: some View {
+        HStack(spacing: 0) {
+            Color.clear.frame(width: 78).allowsHitTesting(false) // system traffic lights
+            if leadingColumnsWidth > 0 {
+                HStack(spacing: 2) {
+                    Spacer(minLength: 0)
+                    // keep the columns-width frame even when the toggle is hidden, so the title still starts
+                    // at the terminal's leading edge; the Spacer fills the freed space.
+                    filePanelToggleButton
+                    if shows(.sidebarToggle) {
+                        sidebarToggleButton
+                    }
+                }
+                .padding(.trailing, 12)
+                // two 30pt buttons, their gap and the trailing padding
+                .frame(width: max(74, leadingColumnsWidth - 1 - 78))
+            } else {
+                HStack(spacing: 2) {
+                    filePanelToggleButton
+                    if shows(.sidebarToggle) {
+                        sidebarToggleButton
+                    }
+                }
+            }
+        }
+    }
+
+    /// `titlebarLeading`'s width, from the fixed 30pt `ChromeButtonStyle` geometry. Computed rather than measured so
+    /// the pill's clearance holds on the very first layout pass.
+    private var titlebarLeadingWidth: CGFloat {
+        let toggles: CGFloat = shows(.sidebarToggle) ? 2 : 1
+        return 78 + (leadingColumnsWidth > 0 ? max(74, leadingColumnsWidth - 1 - 78) : toggles * 30 + (toggles - 1) * 2)
+    }
+
+    /// `titlebarTrailingActions`' width, computed for the same reason: 30pt buttons 3 apart, each divider 1pt plus its
+    /// 6pt margins, and the 12pt trailing padding.
+    private var titlebarTrailingWidth: CGFloat {
+        let groups = titlebarGroupCounts
+        let buttons = CGFloat(groups.a + groups.b + groups.c)
+        let dividers = InterfaceElement.titlebarGroupDividers(countA: groups.a, countB: groups.b, countC: groups.c)
+        let dividerCount = CGFloat((dividers.afterA ? 1 : 0) + (dividers.afterB ? 1 : 0))
+        let items = buttons + dividerCount
+        return buttons * 30 + dividerCount * 13 + max(0, items - 1) * 3 + 12
+    }
+
+    private var titlebarGroupCounts: (a: Int, b: Int, c: Int) {
+        let flags = [attentionButtonEnabled, shows(.scratch), shows(.split), shows(.overlayToggle),
+                     shows(.dashboard), shows(.quickTerminal), shows(.customCommands)].map { $0 ? 1 : 0 }
+        return (flags[0], flags[1] + flags[2] + flags[3], flags[4] + flags[5] + flags[6])
+    }
+
     /// The title bar's trailing action cluster, each button gated by its Interface toggle: the attention
     /// popover, per-session scratch / split controls, window-overlay dashboard / quick terminal
     /// and the custom-commands popover. A separator sits ONLY where two groups that each still show 2+
@@ -109,23 +159,21 @@ extension WindowContentView {
         let showDashboard = shows(.dashboard)
         let showQuick = shows(.quickTerminal)
         let showCustom = shows(.customCommands)
-        let countA = showAttention ? 1 : 0
-        let countB = (showScratch ? 1 : 0) + (showSplit ? 1 : 0) + (showOverlayToggle ? 1 : 0)
-        let countC = (showDashboard ? 1 : 0) + (showQuick ? 1 : 0) + (showCustom ? 1 : 0)
+        let groups = titlebarGroupCounts
         // a separator only between two 2+-button groups (the host-free rule, unit-tested in agtermCore).
-        let dividers = InterfaceElement.titlebarGroupDividers(countA: countA, countB: countB, countC: countC)
-        return HStack(spacing: 14) {
-            if showAttention { attentionButton.labelStyle(.iconOnly) }
+        let dividers = InterfaceElement.titlebarGroupDividers(countA: groups.a, countB: groups.b, countC: groups.c)
+        return HStack(spacing: 3) {
+            if showAttention { attentionButton }
             if dividers.afterA { titlebarDivider }
-            if showScratch { scratchButton.labelStyle(.iconOnly) }
-            if showSplit { splitButton.labelStyle(.iconOnly) }
-            if showOverlayToggle { overlayToggleButton.labelStyle(.iconOnly) }
+            if showScratch { scratchButton }
+            if showSplit { splitButton }
+            if showOverlayToggle { overlayToggleButton }
             if dividers.afterB { titlebarDivider }
-            if showDashboard { dashboardButton.labelStyle(.iconOnly) }
-            if showQuick { quickTerminalButton.labelStyle(.iconOnly) }
-            if showCustom { customCommandsButton.labelStyle(.iconOnly) }
+            if showDashboard { dashboardButton.buttonStyle(ChromeButtonStyle(foreground: chromeText, isOn: dashboard.isOpen)) }
+            if showQuick { quickTerminalButton }
+            if showCustom { customCommandsButton.buttonStyle(ChromeButtonStyle(foreground: chromeText, isOn: customCommandsShown)) }
         }
-        .padding(.trailing, 14)
+        .padding(.trailing, 12)
     }
 
     /// Whether title-bar tooltips may show: an ask's click catcher covers the whole window, title bar included.
@@ -133,7 +181,7 @@ extension WindowContentView {
 
     /// The 1px themed separator between two title-bar button groups.
     private var titlebarDivider: some View {
-        Rectangle().fill(chromeText.opacity(0.25)).frame(width: 1, height: 16)
+        Rectangle().fill(chromeText.opacity(0.10)).frame(width: 1, height: 18).padding(.horizontal, 6)
     }
 
     /// Our own sidebar show/hide toggle (the custom split has no system one). Animated collapse.
@@ -143,6 +191,7 @@ extension WindowContentView {
         } label: {
             Label("Toggle Sidebar", systemImage: InterfaceElement.sidebarToggle.symbolName!)
         }
+        .buttonStyle(ChromeButtonStyle(foreground: chromeText, isOn: store.sidebarVisible))
         .toolTip(helpHint("Toggle Sidebar", .toggleSidebar), isShown: titlebarTipsShown)
         .accessibilityIdentifier("sidebar-toggle-button")
     }
@@ -153,6 +202,7 @@ extension WindowContentView {
         } label: {
             Label("Toggle File Panel", systemImage: "folder")
         }
+        .buttonStyle(ChromeButtonStyle(foreground: chromeText, isOn: store.filePanelVisible))
         .toolTip(helpHint("Toggle File Panel", .toggleFilePanel), isShown: titlebarTipsShown)
         .accessibilityIdentifier("file-panel-toggle-button")
     }
@@ -186,6 +236,7 @@ extension WindowContentView {
         } label: {
             Label("Split", systemImage: symbol)
         }
+        .buttonStyle(ChromeButtonStyle(foreground: chromeText, isOn: isSplit))
         .toolTip(helpHint(isSplit ? "Hide split" : (hasSplit ? "Show split" : "Split right"), shortcutAction),
                  isShown: titlebarTipsShown)
         .disabled(store.activeSession == nil)
@@ -202,6 +253,7 @@ extension WindowContentView {
         } label: {
             Label("Scratch", systemImage: active ? "rectangle.inset.filled" : InterfaceElement.scratch.symbolName!)
         }
+        .buttonStyle(ChromeButtonStyle(foreground: chromeText, isOn: active))
         .toolTip(helpHint(active ? "Hide scratch terminal" : "Show scratch terminal", .toggleScratch),
                  isShown: titlebarTipsShown)
         .disabled(store.activeSession == nil)
@@ -221,6 +273,7 @@ extension WindowContentView {
         } label: {
             Label("Overlays", systemImage: anyHidden ? "rectangle.on.rectangle.slash" : InterfaceElement.overlayToggle.symbolName!)
         }
+        .buttonStyle(ChromeButtonStyle(foreground: chromeText, isOn: anyHidden))
         .toolTip(helpHint(anyShown ? "Hide Overlays" : "Show Overlays", .toggleOverlay), isShown: titlebarTipsShown)
         // this window's own covers, the set `PaletteContext.modalActive` holds for the frontmost window
         .disabled(slots.isEmpty || pick.modalPending || terminalZoom.target != nil || dashboard.isOpen)
@@ -237,6 +290,7 @@ extension WindowContentView {
         } label: {
             Label("Quick Terminal", systemImage: InterfaceElement.quickTerminal.symbolName!)
         }
+        .buttonStyle(ChromeButtonStyle(foreground: chromeText))
         .toolTip(helpHint("Quick Terminal", .quickTerminal), isShown: titlebarTipsShown)
         .disabled(pick.modalPending)
         .accessibilityIdentifier("quick-terminal-toggle")
@@ -279,15 +333,6 @@ struct TitlebarLabel: View {
     let showsWindowName: Bool
     let showsContext: Bool
     let showsRemoteHost: Bool
-    /// False sizes the label to its text for the switcher pill, giving up the #516 fixed-width slot.
-    var fillsWidth = true
-
-    func hugging() -> TitlebarLabel {
-        var copy = self
-        copy.fillsWidth = false
-        return copy
-    }
-
     var body: some View {
         let composition = composition
         VStack(alignment: .leading, spacing: 1) {
@@ -326,7 +371,7 @@ struct TitlebarLabel: View {
         .lineLimit(1)
         .truncationMode(.tail)
         // fixed-width slot, so the label's width stays put while an animated title ticks (#516)
-        .frame(maxWidth: fillsWidth ? .infinity : nil, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var composition: TitlebarComposition {
@@ -349,7 +394,7 @@ struct TitlebarLabel: View {
 }
 
 /// Caps the host without expanding short names or preventing compression beside the sidebar.
-private struct RemoteHostTextLayout: Layout {
+struct RemoteHostTextLayout: Layout {
     static let ceiling: CGFloat = 240
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

@@ -284,12 +284,12 @@ final class ControlWindowUITests: ControlAPITestCase {
     // 14pt below the top edge, horizontally centred: clears the top resize strip, lands in the titlebar
     // band (compact 30 / normal 48) and in the empty header Spacer — clear of the traffic lights and the
     // toolbar buttons, so the click falls through to the `WindowControlArea` layer. Re-resolved at each
-    // interaction so it stays in the header after a zoom grows the window. Shifted past the switcher pill,
-    // which takes its own clicks, when a long title reaches the centre.
+    // interaction so it stays in the header after a zoom grows the window. The switcher pill takes its own
+    // clicks and sits centred over the terminal column, so the point moves to the gap left of it.
     private func emptyHeaderPoint(_ window: XCUIElement) -> XCUICoordinate {
         let pill = app.buttons["recent-sessions-button"]
         let centreX = window.frame.midX
-        let dx = pill.exists && pill.frame.maxX + 20 > centreX ? pill.frame.maxX + 20 - centreX : 0
+        let dx = pill.exists && pill.frame.minX - 20 < centreX ? pill.frame.minX - 20 - centreX : 0
         return window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: dx, dy: 14))
     }
 

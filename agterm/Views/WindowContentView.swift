@@ -103,7 +103,7 @@ struct WindowContentView: View {
     /// invisible drag strip, terminal full-bleed). The split content is inset by this.
     var titlebarHeight: CGFloat {
         switch toolbarMode {
-        case .normal: return 48
+        case .normal: return 52
         case .compact: return 30
         case .hidden: return 0
         }
