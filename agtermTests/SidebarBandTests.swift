@@ -108,7 +108,23 @@ final class SidebarBandTests: XCTestCase {
         XCTAssertNil(wave.superlayer)
     }
 
-    func testWaveFillsTheRowRectWithSquareCorners() throws {
+    func testAWaveOnTheGroupsLastRowRoundsOnlyItsBottomCorners() throws {
+        let (store, workspace) = try twoSessionWorkspace()
+        store.setTint(SidebarTint(color: .blue), forWorkspace: workspace.id)
+        for session in workspace.sessions { session.agentIndicator = AgentIndicator(status: .active) }
+        mount(store)
+        let middle = try rowView(forItem: try XCTUnwrap(workspace.sessions.first).id)
+        let last = try rowView(forItem: try XCTUnwrap(workspace.sessions.last).id)
+        last.layoutSubtreeIfNeeded()
+        middle.layoutSubtreeIfNeeded()
+        XCTAssertEqual(try XCTUnwrap(middle.waveLayer).cornerRadius, 0)
+        let wave = try XCTUnwrap(last.waveLayer)
+        XCTAssertEqual(wave.cornerRadius, SidebarRowView.bandRadius - SidebarRowView.groupPadding)
+        let bottom: CACornerMask = last.isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        XCTAssertEqual(wave.maskedCorners, bottom)
+    }
+
+    func testWaveFillsTheRowRectInsideTheBand() throws {
         let (store, workspace) = try twoSessionWorkspace()
         store.setTint(SidebarTint(color: .blue), forWorkspace: workspace.id)
         for session in workspace.sessions { session.agentIndicator = AgentIndicator(status: .active) }
@@ -119,7 +135,6 @@ final class SidebarBandTests: XCTestCase {
             let wave = try XCTUnwrap(row.waveLayer)
             XCTAssertEqual(wave.frame, row.rowRect)
             XCTAssertTrue(row.bandRect(try XCTUnwrap(row.groupEdge)).contains(wave.frame))
-            XCTAssertEqual(wave.cornerRadius, 0)
         }
     }
 

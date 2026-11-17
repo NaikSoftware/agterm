@@ -550,8 +550,15 @@ class SidebarRowView: NSTableRowView {
         let period = bounds.width * 2
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        // square corners; the row rect sits inside the band's padding, so it never pokes past a rounded corner
+        // square where the group continues; at the group's outer ends it follows the band's inner radius
         clip.frame = rowRect
+        let top: CACornerMask = isFlipped ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        let bottom: CACornerMask = isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        var corners: CACornerMask = []
+        if groupEdge == .first || groupEdge == .single { corners.formUnion(top) }
+        if groupEdge == .last || groupEdge == .single { corners.formUnion(bottom) }
+        clip.maskedCorners = corners
+        clip.cornerRadius = corners.isEmpty ? 0 : Self.bandRadius - Self.groupPadding
         gradient.frame = CGRect(x: -clip.frame.minX, y: 0, width: period * 2, height: clip.bounds.height)
         CATransaction.commit()
         guard period != wavePeriod || (!waveStill && gradient.animation(forKey: Self.waveKey) == nil) else { return }
