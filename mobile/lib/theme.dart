@@ -16,7 +16,7 @@ abstract final class C {
   static const termText = Color(0xFFD9D6E2);
   static const muted = Color(0xFFA3A3AB);
   static const dim = Color(0xFF6E6E76);
-  static const accent = Color(0xFFC8742F); // the logo copper
+  static const accent = Color(0xFFE08A45); // the logo copper tuned for dark grounds
   static const indigo = Color(0xFF8B8CFF); // the flag, as on the desktop
   static const blocked = Color(0xFFFF9F43);
   static const blockedText = Color(0xFFFFB240);

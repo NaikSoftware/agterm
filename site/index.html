@@ -48,11 +48,11 @@
       @font-face{font-family:"Archivo";font-style:normal;font-weight:700 800;font-stretch:100% 125%;font-display:swap;src:url("assets/fonts/archivo-latin.woff2") format("woff2")}
       @font-face{font-family:"Inter";font-style:normal;font-weight:400 700;font-display:swap;src:url("assets/fonts/inter-latin.woff2") format("woff2")}
       @font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 800;font-display:swap;src:url("assets/fonts/jetbrains-mono-latin.woff2") format("woff2")}
-      :root{--bg:#1c1c20;--surface:#26262b;--surface2:#2e2e34;--line:#303034;--term:#111114;--text:#e8e8ec;--muted:#a3a3ab;--dim:#6e6e76;--accent:#c8742f;--blocked:#ff9f43;--completed:#3fcf73;--active:#5b9cff;--unseen:#ff453a}
+      :root{--bg:#1c1c20;--surface:#26262b;--surface2:#2e2e34;--line:#303034;--term:#111114;--text:#e8e8ec;--muted:#a3a3ab;--dim:#6e6e76;--accent:#e08a45;--blocked:#ff9f43;--completed:#3fcf73;--active:#5b9cff;--unseen:#ff453a}
       html,body{margin:0;background:var(--bg);color:var(--text)}
       body{font-family:"Inter",-apple-system,sans-serif;font-size:16.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
       a{color:var(--accent);text-decoration:none}
-      a:hover{color:#e08a45}
+      a:hover{color:#eca46b}
       .i{width:1em;height:1em;display:inline-block;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
       .mono{font-family:"JetBrains Mono",ui-monospace,monospace}
       .wrap{max-width:1200px;margin:0 auto;padding:0 32px;box-sizing:border-box}
@@ -70,7 +70,7 @@
       .btn{display:inline-flex;align-items:center;gap:9px;height:48px;padding:0 22px;border-radius:14px;font-weight:600;font-size:15px;white-space:nowrap;box-sizing:border-box}
       .btn .i{font-size:18px}
       .btn.pri{background:var(--accent);color:var(--bg)}
-      .btn.pri:hover{background:#e08a45;color:var(--bg)}
+      .btn.pri:hover{background:#eca46b;color:var(--bg)}
       .btn.alt{background:var(--surface2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
       .btn.alt:hover{background:#36363d;color:var(--text)}
       .btn.sm{height:38px;padding:0 15px;font-size:14px;border-radius:12px}
@@ -78,7 +78,7 @@
       /* hero */
       .hero{position:relative}
       .floor{position:absolute;inset:0;background-image:linear-gradient(rgba(232,232,236,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(232,232,236,.035) 1px,transparent 1px);background-size:64px 64px;-webkit-mask:radial-gradient(ellipse 70% 55% at 50% 25%,#000 30%,transparent 75%);mask:radial-gradient(ellipse 70% 55% at 50% 25%,#000 30%,transparent 75%);pointer-events:none}
-      .glow{position:absolute;left:50%;top:420px;width:1100px;height:560px;margin-left:-550px;background:radial-gradient(closest-side,rgba(200,116,47,.14),transparent);pointer-events:none}
+      .glow{position:absolute;left:50%;top:420px;width:1100px;height:560px;margin-left:-550px;background:radial-gradient(closest-side,rgba(224,138,69,.14),transparent);pointer-events:none}
       .herobody{position:relative;padding-top:72px}
       .eyebrow{font:500 12.5px/1 "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:12px}
       .eyebrow .tick{width:22px;height:1px;background:var(--accent)}
@@ -165,7 +165,7 @@
       .step p b{color:var(--text);font-weight:600}
       .cmd{margin-top:12px;font:400 13px/1.5 "JetBrains Mono",monospace;background:var(--term);box-shadow:0 0 0 1px var(--line);border-radius:10px;padding:12px 14px;color:#d9d6e2;overflow-wrap:anywhere}
       /* closing band */
-      .band{margin-top:120px;border-top:1px solid var(--line);background:linear-gradient(180deg,rgba(200,116,47,.06),transparent 70%)}
+      .band{margin-top:120px;border-top:1px solid var(--line);background:linear-gradient(180deg,rgba(224,138,69,.06),transparent 70%)}
       .band-in{display:flex;flex-wrap:wrap;align-items:center;gap:28px;padding:72px 0}
       .band h2{flex:1;min-width:280px;font-size:clamp(30px,3.6vw,44px)}
       .foot{border-top:1px solid var(--line);padding:32px 0 48px;display:flex;flex-wrap:wrap;gap:16px 32px;align-items:center;font-size:14px;color:var(--dim)}
