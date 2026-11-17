@@ -1,25 +1,23 @@
 {
-  "fill" : "automatic",
+  "fill" : {
+    "solid" : "srgb:0.14902,0.14902,0.16863,1.00000"
+  },
   "groups" : [
     {
-      "blend-mode" : "hard-light",
-      "blur-material" : 0.5,
-      "hidden" : false,
       "layers" : [
         {
-          "glass" : false,
-          "image-name" : "21E595C3-2B37-478F-8762-21397D63C722.png",
-          "name" : "21E595C3-2B37-478F-8762-21397D63C722"
+          "glass" : true,
+          "image-name" : "prompt-glyph.png",
+          "name" : "prompt-glyph"
         }
       ],
-      "opacity" : 1,
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
       },
       "specular" : true,
       "translucency" : {
-        "enabled" : true,
+        "enabled" : false,
         "value" : 0.5
       }
     }
