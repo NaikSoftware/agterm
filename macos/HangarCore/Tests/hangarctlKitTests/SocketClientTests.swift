@@ -1542,8 +1542,8 @@ struct SocketClientTests {
         close(try socket.holdOwnershipLock(hold: false))
 
         let error = try #require(throws: SocketClientError.self) { _ = try SocketClient(path: socket.path).connect() }
-        #expect(error.description.contains("hangar may be stopped or unable to accept connections"))
-        #expect(!error.description.contains("is hangar running?"))
+        #expect(error.description.contains("Hangar may be stopped or unable to accept connections"))
+        #expect(!error.description.contains("is Hangar running?"))
     }
 
     @Test func refusedConnectWithNoOwnershipLockFileDoesNotClaimTheAppIsGone() throws {
@@ -1551,7 +1551,7 @@ struct SocketClientTests {
         defer { socket.stop() }
 
         let error = try #require(throws: SocketClientError.self) { _ = try SocketClient(path: socket.path).connect() }
-        #expect(error.description.contains("hangar may be stopped or unable to accept connections"))
+        #expect(error.description.contains("Hangar may be stopped or unable to accept connections"))
         // the absent lock file sets errno to ENOENT inside the probe, after the connect error is read
         #expect(error.description.contains("Connection refused"))
         #expect(error.connectErrno == ECONNREFUSED)
@@ -1576,7 +1576,7 @@ struct SocketClientTests {
         let path = NSTemporaryDirectory() + "hangar-absent-\(UUID().uuidString.prefix(8)).sock"
 
         let error = try #require(throws: SocketClientError.self) { _ = try SocketClient(path: path).connect() }
-        #expect(error.description.contains("hangar may be stopped or unable to accept connections"))
+        #expect(error.description.contains("Hangar may be stopped or unable to accept connections"))
         #expect(error.description.contains("No such file or directory"))
         #expect(error.connectErrno == ENOENT)
     }

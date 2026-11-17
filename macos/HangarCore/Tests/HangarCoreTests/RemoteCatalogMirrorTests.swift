@@ -620,7 +620,7 @@ final class RemoteCatalogMirrorTests {
         mirror.subscribing()
 
         #expect(!refused)
-        #expect(mirror.state == .refused("box runs hangar 0.49.0, which cannot serve a remote window; update hangar there or run hangar-server"))
+        #expect(mirror.state == .refused("box runs Hangar 0.49.0, which cannot serve a remote window; update Hangar there or run hangar-server"))
         #expect(store.workspaces.isEmpty)
     }
 

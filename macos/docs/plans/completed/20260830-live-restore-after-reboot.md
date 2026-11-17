@@ -68,7 +68,7 @@ means bare attach and a fresh shell, as today. Without this, live replay would r
 and turn currently-refused bytes into shell text.
 
 **Replay (create-only).** An eligible restored live pane attaches as `zmx attach <daemon> <shell> -lic
-<script>`. hangar does not check whether the daemon exists — zmx decides. A survivor ignores the payload; a
+<script>`. Hangar does not check whether the daemon exists — zmx decides. A survivor ignores the payload; a
 missing daemon is created running the script.
 
 **The script.** `createCmdZ` runs `argv[0]` directly, so the payload's first element is the validated

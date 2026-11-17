@@ -2076,7 +2076,7 @@ is drawn on screen.
   oldest messages, up to 32, as `messages` (`{id, from?, to, ts, body}`) plus `remaining`, the pending messages not in this
   batch, and removes
   nothing; reading again returns the same prefix. Human output is `ID from SENDER` (or
-  `from outside hangar`) followed by the body; `N more pending` goes to stderr. `--ack` removes the
+  `from outside Hangar`) followed by the body; `N more pending` goes to stderr. `--ack` removes the
   returned batch in the same mailbox operation and answers `acked` with its ids; the CLI prints nothing
   and fails unless `acked` names exactly the returned messages. This is at most once: a reply lost on
   the way is not redelivered. `--wait` repeats the same read every 250 ms until a message arrives;

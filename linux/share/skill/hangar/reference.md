@@ -372,7 +372,7 @@ Per-pane mailboxes in the app's memory; nothing is drawn.
     `msg.send takes --to or --all, not both`, `msg.send: --workspace narrows --all only`,
     `message body too large (N bytes, max 65536)`, `invalid address "X": expected SESSION:PANE`.
 - `msg read [--ack] [--wait [--timeout S]] [--as SESSION:PANE-ID]`
-  - Prints `ID from SENDER` (or `from outside hangar`) then the body, oldest first, at most 32; `N more pending`
+  - Prints `ID from SENDER` (or `from outside Hangar`) then the body, oldest first, at most 32; `N more pending`
     on stderr. Removes nothing unless `--ack`, which removes the returned batch.
   - `--wait` polls every 250 ms until mail arrives; `--timeout` exits 124 with `timed out`.
   - Result: `messages` (`{id, from?, to, ts, body}`), `remaining`, `acked` with `--ack`.

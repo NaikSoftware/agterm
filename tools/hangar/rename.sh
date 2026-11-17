@@ -65,6 +65,8 @@ my @pre = (
     ['Contents/MacOS/agterm -> Hangar', qr{Contents/MacOS/\Kagterm(?![\w.-])}, 'Hangar'],
     ['agterm.xcodeproj -> Hangar.xcodeproj', qr{(?<![\w.-])agterm(?=\.xcodeproj)}, 'Hangar'],
     ['import agterm -> import Hangar', qr{\bimport agterm(?!\w)}, 'import Hangar'],
+    # hangarctl message read prints this; the skill references quote it in code spans.
+    ['`from outside agterm` -> `from outside Hangar`', qr{`from outside \Kagterm(?=`)}, 'Hangar'],
     ['agterm.debug.dylib -> Hangar.debug.dylib', qr{(?<![\w.-])agterm(?=\.debug\.dylib)}, 'Hangar'],
     ['process name (open -a, pgrep -x, pkill, killall) -> Hangar',
         qr{(?:open -n?a|pgrep -x|pkill|killall) \Kagterm(?![\w.-])}, 'Hangar'],
@@ -132,9 +134,10 @@ for my $old (@moves) {
 # Product-name casing runs after the tokens: a lowercase hangar that names the product in prose or UI text
 # becomes Hangar. Identifiers, paths, commands and code spans keep it lowercase.
 # Not before " --" (a command). After a quote only when a sentence follows: "hangar would like…", not 'hangar'.
-my $product = qr/(?<![\w.\/~\$\@:#%{\\='"-])hangar(?![\w\/\@=-]|\.\w|:\/\/| --)|(?<=['"])hangar(?= [a-z])/;
-# In code a name followed by a number is test data ("hangar 42"), not a version line.
-my $product_code = qr/(?:$product)(?! \d)/;
+# Not after "= " (a config value such as theme = hangar).
+my $product = qr/(?<!= )(?:(?<![\w.\/~\$\@:#%{\\='"-])hangar(?![\w\/\@=-]|\.\w|:\/\/| --)|(?<=['"])hangar(?= [a-z]))/;
+# In code literals "dark: hangar" and "* hangar" print a theme name, not the product.
+my $product_code = qr/(?<!: |\* )(?:$product)/;
 sub case_scope {
     my $p = shift;
     return '' if $p =~ m{(?:^|/)(?:CMakeLists|robots)\.txt$};
@@ -159,12 +162,14 @@ sub product_case {
     $s =~ s/\b([Aa])n Hangar\b/$1 Hangar/g;
     return $s;
 }
-# Only literals that read as a sentence (they hold a space), outside interpolations. A `# >>> … >>>` marker
-# is matched in users' rc files, so it keeps its exact text.
+# Only literals that read as a sentence (they hold a space). An interpolation is code, but a literal nested
+# in it ("\(x ?? "outside hangar")") is a literal too. A `# >>> … >>>` marker is matched in users' rc files,
+# so it keeps its exact text.
+my $interp = qr/\\\((?:[^()"]|"(?:[^"\\]|\\.)*"|\([^()]*\))*\)/;
 sub case_literals {
-    return $_[0] =~ s{"((?:[^"\\]|\\.)*)"}{
-        my $body = $1;
-        '"' . ($body =~ / / && $body !~ />>>|<<<|name: hangar/ ? masked($body, qr{\\\([^)]*\)}, sub { product_case($_[0], $product_code) }) : $body) . '"'
+    return $_[0] =~ s{"((?:$interp|[^"\\]|\\.)*)"}{
+        my $body = $1 =~ s/$interp/case_literals($&)/ger;
+        '"' . ($body =~ / / && $body !~ />>>|<<<|name: hangar/ ? masked($body, $interp, sub { product_case($_[0], $product_code) }) : $body) . '"'
     }ger;
 }
 sub case_file {
@@ -179,7 +184,8 @@ sub case_file {
             if ($front) { $front = 0 if $l =~ /^---\s*$/; next unless $l =~ /^(?:description:|\s+\S)/ }
             if ($l =~ /^\s*(?:```|~~~)/) { $fence = !$fence; next }
             next if $fence;
-            if ($l =~ /<(?:pre|script|style)\b/i) { $block = 1 }
+            # Markdown mentions `<pre>` in code spans; only HTML opens a block with it.
+            if ($path =~ /\.html$/ && $l =~ /<(?:pre|script|style)\b/i) { $block = 1 }
             if ($block) { $block = 0 if $l =~ m{</(?:pre|script|style)>}i; next }
             next unless $l =~ /hangar/;
             $l =~ s{\b((?:content|alt|title|aria-label)=")([^"]*)"}{my ($k, $v) = ($1, $2); $k . ($v =~ / / ? product_case($v) : $v) . '"'}ge;
@@ -187,8 +193,11 @@ sub case_file {
         } elsif ($scope eq 'code') {
             # Multi-line and raw literals carry embedded scripts; comments are not UI text.
             my $toggles = () = $l =~ /"""/g;
+            # Inside one, a `# …` line is the comment prose of a generated config file (the keymap starter).
+            if ($multi && !$toggles && $l =~ /^\s*#\s+\S/) { $lines->[$i] = product_case($l, $product_code); next }
             if ($multi || $toggles) { $multi = !$multi if $toggles % 2; next }
-            next if $l =~ m{^\s*(?://|/\*|\*|#)} || $l =~ /#"/ || $l !~ /hangar/;
+            # `#expect` and other `#` macros are code; `#include` paths hold no space, so they are left anyway.
+            next if $l =~ m{^\s*(?://|/\*|\*(?:\s|/|$))} || $l =~ /#"/ || $l !~ /hangar/;
             $l = case_literals($l);
         } elsif ($scope eq 'plist') {
             $l =~ s{<string>([^<]* [^<]*)</string>}{'<string>' . product_case($1) . '</string>'}ge;

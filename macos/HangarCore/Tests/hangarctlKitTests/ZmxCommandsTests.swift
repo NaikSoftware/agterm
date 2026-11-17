@@ -204,7 +204,7 @@ struct ZmxCommandsTests {
 
         #expect(rendered.contains("configured: live (next launch)"))
         #expect(rendered.contains("requested rerun, active rerun"))
-        #expect(rendered.contains("restart hangar to apply the configured mode"))
+        #expect(rendered.contains("restart Hangar to apply the configured mode"))
     }
 
     @Test func aClosedWindowsPaneReadsAsClosedRatherThanAsALeak() throws {

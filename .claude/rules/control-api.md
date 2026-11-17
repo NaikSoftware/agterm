@@ -1721,14 +1721,14 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   surfaces, `realized`, `backedByZmx`, `remoteHost`, and `liveAttribution`/`splitLiveAttribution`.
 - `foregroundShell`/`splitForegroundShell` name the RECOGNIZED shell HOLDING a pane's foreground, present
   exactly when that pane's `foreground` is absent because a shell holds it.
-  For a pane that EXISTS, neither field means hangar could not determine the foreground state — a bare nil
+  For a pane that EXISTS, neither field means Hangar could not determine the foreground state — a bare nil
   foreground alone conflated the two, which `cookbook/park-and-resume` documents as a data-loss limit: an
   unreadable pane is parked as idle and replayed as a plain shell. Consult `hasSplit` before interpreting the
   split pair: with no split pane both are absent because there is no pane, and `hasSplit` is itself omitted
   when false. Do not make `hasSplit` always present to compensate.
 - The pair is NOT proof of an interactive prompt and must never be treated as permission to type. A builtin
   such as `read` or `vared`, and a shell loop, run inside the shell process, so argv stays the shell's and a
-  pane blocked on input is indistinguishable from one at a prompt; libghostty exposes no OSC 133 mark, so hangar
+  pane blocked on input is indistinguishable from one at a prompt; libghostty exposes no OSC 133 mark, so Hangar
   has no prompt signal to offer instead. This is why the field says `foregroundShell` rather than naming
   idleness. Recognized is `CommandRestore.knownShells` plus `$SHELL`; a shell outside both reports in
   `foreground` like any program, and widening that set is NOT the fix — `paneForeground` is the one
@@ -1884,7 +1884,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   daemon observed detached. It is CHECKED AND REVALIDATED, never atomic — pinned zmx has no
   kill-if-detached, `--force` is consulted only when the connection fails, and a successful connection
   kills regardless of clients. So it re-lists immediately before mutating and drops anything that gained a
-  client; a client attaching from outside hangar in the remaining gap can still be terminated, and the docs
+  client; a client attaching from outside Hangar in the remaining gap can still be terminated, and the docs
   say so. It never passes `--force`, whose failed-connection branch unlinks a socket and exits zero,
   possibly leaving a live unresponsive daemon unreachable by name. Success counts ONLY the exact
   `killed session NAME` line, which zmx prints after draining to EOF.
@@ -2017,7 +2017,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   the ids, because neither rename path nor `addWorkspace` enforces uniqueness, so two windows called
   `main` and a `dev` workspace in each are ordinary and name-grouping silently merges them.
 - A terminal session is offered only when the store reports `backedByZmx` AND every pane resolves to a `claimed`
-  daemon observed `running` under an hangar daemon name. A claimed daemon alone proves nothing: a
+  daemon observed `running` under a Hangar daemon name. A claimed daemon alone proves nothing: a
   requested-live launch that fell back preserves its daemons while showing fresh shells. An incomplete
   split is dropped whole, never offered half. These are ELIGIBILITY rules, not only a defence against a
   race, so losing the two network reads does not retire them: the zmx observation is still a subprocess
@@ -2036,7 +2036,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   reads each as `getenv orelse ""` with a length check, so empty IS unset to it, and because one
   convention across both panes beats two spellings of one intent. An inherited `ZMX_SESSION` is the
   dangerous one: attach reads it first and SWITCHES session instead of attaching, never reaching the
-  create-only guard. An inherited `ZMX_SESSION_PREFIX` resolves a name hangar never created, since its
+  create-only guard. An inherited `ZMX_SESSION_PREFIX` resolves a name Hangar never created, since its
   daemons are always unprefixed. The detach key is disabled for the same reason as locally — a detached
   pane has no way back. The tree read needs none of this: it goes through the far side's own app.
 - Two ssh shapes. Tree uses `-T` plus an outer process deadline, `ConnectTimeout` bounding the handshake
@@ -2063,7 +2063,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   terminal, which is what this closes. Remote-supplied error detail is deliberately NOT sanitized beyond
   an edge trim: an ssh failure is worth reading intact, and a chosen remote is the same trust model as
   running ssh by hand.
-- The far side needs `hangarctl` on sshd's remote-command PATH — a machine merely running hangar has no
+- The far side needs `hangarctl` on sshd's remote-command PATH — a machine merely running Hangar has no
   CLI an ssh command can find, and the read fails with exit 127. sshd's compiled-in default is
   `/usr/bin:/bin:/usr/sbin:/sbin`, so the tree chain APPENDS `CommandPath.standardDirectories`:
   `/usr/local/bin` where the Help action links, `/opt/homebrew/bin` where the cask does. Appending is what
@@ -2074,7 +2074,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   shell, where a bare `VAR=value` assignment is a syntax error in fish and tcsh — the whole read then
   fails before the first `hangarctl`, so it is not merely a PATH that failed to widen. `attachCommand`
   already followed the same one-command rule, reaching it through `/usr/bin/env ZMX_DIR=...` rather than
-  an assignment. The account shell can also change under a running hangar: live-backed panes survive a
+  an assignment. The account shell can also change under a running Hangar: live-backed panes survive a
   `chsh` that a later sshd command then honors.
 - The runner is async behind an injected seam. `ControlActions` is `@MainActor`, so a blocking wait would
   freeze the UI for the whole network deadline, and the fake is what lets the end-to-end tests run without
@@ -2193,7 +2193,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
 - `Session.locallyManagedPaneIdentities` is the single local-ownership predicate, empty for a remote
   session, read by `finalizePaneIdentities`, the direct `closeSplit` finalizer path, `liveClaims` and live
   `finalizeWindowPanes`. Without it `liveClaims` invents an `hangar-<uuid>` claim for a pane whose daemon
-  is on another machine and the zmx commands resolve a session hangar does not manage. Structural
+  is on another machine and the zmx commands resolve a session Hangar does not manage. Structural
   `paneIdentity` stays valid either way: swap, promotion and control addressing still need it.
 - `ZmxLaunch.wrapsLocally` is the one gate both surface factories read, so a remote pane is never wrapped
   in a local daemon. Wrapping buys nothing for a session that never restores, and under live mode window
@@ -2306,7 +2306,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   `ssh -tt <origin> hangarctl session overlay run-job <job>`. That helper claims the job over
   `session.overlay.job.run`, which is the claim itself: one winner against a 30-second launch deadline,
   after which a late claim spawns nothing. The helper runs the program under the ssh terminal, in the cwd a
-  local overlay would get and with hangar's session variables over the environment and `TERM` the ssh
+  local overlay would get and with Hangar's session variables over the environment and `TERM` the ssh
   session gave the helper, and reports `started` and one outcome. For `TERM=xterm-ghostty` the helper fills
   an absent or empty `TERMINFO` from the database beside its resolved CLI, when one is found
   (`OverlayJobRunner.terminalEnvironment`), since an ssh-spawned overlay bypasses libghostty's terminfo setup. The first outcome
@@ -2515,7 +2515,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   sends bytes it classifies as typing, which `session.type` on the origin is, and so is a terminal's reply
   to a Kitty keyboard-status query. `scripts/zmx-patches/0001-explicit-leadership.patch` adds an opt-in:
   a client attached with `ZMX_MANAGED=<nonce>` leads only by claiming at attach (`ZMX_MANAGED_CLAIM`), its
-  input is dropped while it follows, and a resize from it never claims a vacant slot. Every attach hangar
+  input is dropped while it follows, and a resize from it never claims a vacant slot. Every attach Hangar
   starts is managed; a stock client on the same daemon keeps upstream behaviour.
 - `zmx.attach` claims in every pane, so the attaching Mac's grid applies with no key press. A local pane
   attaches WITHOUT the claim: it leads a daemon nobody leads, and one relaunched under another Mac's lead
@@ -2531,7 +2531,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   included, while the daemon goes on enforcing a role the app never learned: a follower's
   `session.type` would answer ok for input the daemon drops. `GhosttyApp.clearStaticTitle` therefore
   clears the key in EVERY config build, reload and per-surface overlay included, keeps the string as
-  `staticTitle`, and hangar applies it itself where libghostty used to: when a pane is wired, in place of
+  `staticTitle`, and Hangar applies it itself where libghostty used to: when a pane is wired, in place of
   every title a program sets, and to every surface on a reload.
 - The client writes a report only where it cannot split an escape sequence or a UTF-8 character,
   tracked with Ghostty's own `Stream.nextSliceUntilGround`, and forces one with CAN after 250 ms. The

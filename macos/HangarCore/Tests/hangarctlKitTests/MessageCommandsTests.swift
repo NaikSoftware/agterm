@@ -150,7 +150,7 @@ struct MessageCommandsTests {
         let read = try parse(["read", "--ack"], as: Msg.Read.self)
         #expect(try read.makeRequest(env: env).args?.ack == true)
         let confirmed = try reply(ControlResult(messages: [message(first, body: "one")], remaining: 0, acked: [first.uuidString]))
-        #expect(read.output(confirmed) == MessageOutput(stdout: "\(first.uuidString) from outside hangar\none\n"))
+        #expect(read.output(confirmed) == MessageOutput(stdout: "\(first.uuidString) from outside Hangar\none\n"))
     }
 
     @Test(arguments: [nil, [String](), ["00000000-0000-4000-8000-000000000000"]])

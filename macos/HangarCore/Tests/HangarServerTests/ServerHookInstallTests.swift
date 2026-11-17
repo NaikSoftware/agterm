@@ -62,7 +62,7 @@ struct ServerHookInstallTests {
         #expect(try fixture.read(".codex/config.toml").contains(".config/hangar/agent-status"))
         #expect(FileManager.default.fileExists(atPath: fixture.home.appendingPathComponent(".claude/settings.json").path))
         #expect(FileManager.default.fileExists(atPath: fixture.home.appendingPathComponent(".codex/skills/hangar/SKILL.md").path))
-        #expect(report.lines.contains { $0.hasPrefix("hangar skill installed for Codex") })
+        #expect(report.lines.contains { $0.hasPrefix("Hangar skill installed for Codex") })
     }
 
     @Test func installedWrapperCallsTheBakedServerTool() throws {

@@ -165,7 +165,7 @@ ${CLAUDE_SKILL_DIR}/scripts/show.sh <file>
 
 It opens the page as a 95% panel with the navigation bar (back, forward, reload, open in browser) on
 this session without switching the user to it, reloads it when the same file is already shown, and
-replaces a different page. It refuses when a program overlay is running, and outside hangar opens the default
+replaces a different page. It refuses when a program overlay is running, and outside Hangar opens the default
 browser. A `failed` load exits non-zero with the page's error: fix the page and run it again.
 
 Leave the page up. Reply with one line naming what the page covers and its path. A follow-up asking for

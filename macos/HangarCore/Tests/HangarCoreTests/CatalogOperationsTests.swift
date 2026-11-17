@@ -123,7 +123,7 @@ struct CatalogOperationsTests {
 
         let response = await ControlDispatcher(actions: MockControlActions()).dispatch(request)
 
-        #expect(response?.error == "operation receipts are not taken by this hangar")
+        #expect(response?.error == "operation receipts are not taken by this Hangar")
     }
 
     @Test func catalogOpGoesToTheHostWithItsPositionAndWindow() async {

@@ -410,7 +410,7 @@ struct RemoteSessionTests {
                                                           daemon: daemon, session: "build", pane: .right)
         let run = try fake.runShell(command)
 
-        #expect(run.stdout.contains("hangar: build (right) on buildbox disconnected, exit"))
+        #expect(run.stdout.contains("Hangar: build (right) on buildbox disconnected, exit"))
         #expect(try fake.calls().first?.first == "attach", "the diagnostic runs AFTER the attach")
     }
 
@@ -456,7 +456,7 @@ struct RemoteSessionTests {
         // libghostty on macOS runs a surface command as `bash -c "exec -l <command>"`
         let run = try fake.runShell("exec -l " + command, shell: "/bin/bash")
 
-        #expect(run.stdout == "hangar: build (left) on buildbox disconnected, exit 23\n")
+        #expect(run.stdout == "Hangar: build (left) on buildbox disconnected, exit 23\n")
         #expect(run.status == 23)
     }
 
@@ -542,7 +542,7 @@ struct RemoteSessionTests {
                                                           lead: ZmxLeadAttachment(nonce: "n1", claim: true))
         let run = try fake.runShell(command)
 
-        #expect(run.stdout == "hangar: build (left) on buildbox disconnected, exit \(code)\n")
+        #expect(run.stdout == "Hangar: build (left) on buildbox disconnected, exit \(code)\n")
         #expect(run.status == code)
     }
 
@@ -554,7 +554,7 @@ struct RemoteSessionTests {
                                                           session: "build", pane: .left)
         let run = try fake.runShell(command)
 
-        #expect(run.stdout == "hangar: build (left) on buildbox disconnected, exit 255\n")
+        #expect(run.stdout == "Hangar: build (left) on buildbox disconnected, exit 255\n")
         #expect(run.status == 255)
     }
 
@@ -573,7 +573,7 @@ struct RemoteSessionTests {
         }
     }
 
-    @Test(arguments: ["hangar 42", "hangar\n42", "", "notes", "hangar-nothex"])
+    @Test(arguments: ["Hangar 42", "hangar\n42", "", "notes", "hangar-nothex"])
     func anythingButAnHangarDaemonNameIsRefused(_ name: String) {
         #expect(throws: RemoteSession.InvocationError.invalidSession) {
             try RemoteSession.attachCommand(host: "buildbox", endpoint: endpoint, daemon: name)

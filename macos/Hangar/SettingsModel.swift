@@ -719,8 +719,8 @@ final class SettingsModel {
     /// The commented starter `ghostty.conf` text; every line is a comment, so a fresh file is a no-op.
     private func starterGhosttyConfigText() -> String {
         """
-        # hangar-scoped ghostty config — applies ONLY to hangar, not the standalone Ghostty.app.
-        # Put any ghostty terminal config key here to override hangar's bundled defaults and your global
+        # hangar-scoped ghostty config — applies ONLY to Hangar, not the standalone Ghostty.app.
+        # Put any ghostty terminal config key here to override Hangar's bundled defaults and your global
         # ~/.config/ghostty/config. Full key reference: https://ghostty.org/docs/config
         # Keys for Ghostty.app's own window and split chrome are mostly not read; split-divider-color is.
         #
@@ -732,16 +732,16 @@ final class SettingsModel {
         # Example — make the macOS Option key send Alt (uncomment to enable):
         # macos-option-as-alt = true
         #
-        # NOTE: Values hangar emits from Settings load after this file and win. See the current list at
+        # NOTE: Values Hangar emits from Settings load after this file and win. See the current list at
         # https://naiksoftware.github.io/hangar/docs#ghostty; put other keys here.
         #
         # NOT SUPPORTED: the `ssh-env` and `ssh-terminfo` shell-integration features. They work by
-        # wrapping `ssh` as a call to the `ghostty` CLI absent from hangar's bundle,
-        # so hangar forces them back off. Your other shell-integration-features flags are kept.
+        # wrapping `ssh` as a call to the `ghostty` CLI absent from Hangar's bundle,
+        # so Hangar forces them back off. Your other shell-integration-features flags are kept.
         # To install the terminfo entry on a remote host once: hangarctl terminfo install <host>
         #
-        # NO EFFECT: an `env` line naming a variable hangar injects into the shell (`TERM_PROGRAM`,
-        # `TERM_PROGRAM_VERSION`, `HANGAR_*`). hangar applies those after this file. Other `env` keys
+        # NO EFFECT: an `env` line naming a variable Hangar injects into the shell (`TERM_PROGRAM`,
+        # `TERM_PROGRAM_VERSION`, `HANGAR_*`). Hangar applies those after this file. Other `env` keys
         # reach every new shell.
 
         """

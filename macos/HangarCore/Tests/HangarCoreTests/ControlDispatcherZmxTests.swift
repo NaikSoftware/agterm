@@ -296,7 +296,7 @@ struct ControlDispatcherZmxTests {
         let response = await ControlDispatcher(actions: MockControlActions()).dispatch(ControlRequest(cmd: .catalogSubscribe))
 
         #expect(response?.ok == false)
-        #expect(response?.error == "catalog.subscribe is not served by this hangar")
+        #expect(response?.error == "catalog.subscribe is not served by this Hangar")
     }
 
     @Test func zmxAttachRefusesWithoutAHostOrASessionBeforeTheHostIsCalled() async {

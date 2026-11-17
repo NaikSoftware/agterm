@@ -220,7 +220,7 @@ extension Msg {
 
         static func render(_ message: BusMessage) -> String {
             let body = message.body.hasSuffix("\n") ? message.body : message.body + "\n"
-            return "\(message.id.uuidString) from \(message.from ?? "outside hangar")\n\(body)"
+            return "\(message.id.uuidString) from \(message.from ?? "outside Hangar")\n\(body)"
         }
 
         private static func reportTimeout() {

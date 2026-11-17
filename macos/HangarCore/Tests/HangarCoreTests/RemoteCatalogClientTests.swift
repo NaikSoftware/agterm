@@ -149,7 +149,7 @@ final class RemoteCatalogClientTests {
 
         #expect(transport.links.isEmpty)
         if case .refused(let message) = mirror.state {
-            #expect(message == "box runs hangar 1.2.3, which cannot serve a remote window; update hangar there or run hangar-server")
+            #expect(message == "box runs Hangar 1.2.3, which cannot serve a remote window; update Hangar there or run hangar-server")
         } else {
             Issue.record("expected refused, got \(mirror.state)")
         }

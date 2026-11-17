@@ -37,7 +37,7 @@ public enum ConfigPaths {
     public static func starterHooksConf() -> String {
         let kinds = ControlEventKind.allCases.map(\.rawValue).joined(separator: ", ")
         return """
-        # hangar hooks — run a shell line when a control event fires. Edit this file and run
+        # Hangar hooks — run a shell line when a control event fires. Edit this file and run
         # File ▸ Reload Hooks (or `hangarctl hooks reload`) to apply. Blank lines and lines starting
         # with `#` are ignored.
         #
@@ -85,7 +85,7 @@ public enum ConfigPaths {
         let tokenLines = CommandContext.tokenNames.map { "#   {\($0)}" }.joined(separator: "\n")
 
         return """
-        # hangar keymap — a kitty-flavored config for rebinding built-in shortcuts and defining
+        # Hangar keymap — a kitty-flavored config for rebinding built-in shortcuts and defining
         # custom shell commands. Edit this file and run File ▸ Reload Keymap (or `hangarctl keymap
         # reload`) to apply. Blank lines and lines starting with `#` are ignored. A line that is
         # rejected or skipped is reported in Settings ▸ Key Mapping and by `hangarctl keymap list`.
@@ -129,15 +129,15 @@ public enum ConfigPaths {
         #
         #   global-hotkey <chord>
         #       Bind ONE system-wide chord that summons the quick terminal while any application is
-        #       frontmost — the only binding here that fires when hangar does not have the keyboard.
+        #       frontmost — the only binding here that fires when Hangar does not have the keyboard.
         #       Exactly one chord: no `|` alternatives, no leader sequence. A modifier is required
         #       except for function keys (f1 through f20). A second global-hotkey line replaces the
         #       first. macOS registers it by physical key position, so it works on a non-Latin layout.
         #       The system owns it, so it takes no part in the collision rules above. Note the
-        #       precedence: the system hotkey WINS, hangar frontmost included, so a chord shared with a
+        #       precedence: the system hotkey WINS, Hangar frontmost included, so a chord shared with a
         #       menu action fires this and the menu binding never sees it. There is no default because
         #       registering a chord takes it from every other application on your Mac, which is not a
-        #       cost to impose on someone who never summons the panel from outside hangar. Spending it
+        #       cost to impose on someone who never summons the panel from outside Hangar. Spending it
         #       on the chord the in-app binding already uses is allowed, and is how to get ONE shortcut
         #       that works everywhere — at the price of that chord no longer reaching anything else.
         #       Examples:

@@ -282,7 +282,7 @@ struct TerminfoInstallTests {
 
         #expect(outcome == .exited(0))
         let dumped = try fixture.sshStdin()
-        #expect(dumped.contains("xterm-ghostty|hangar test entry"))
+        #expect(dumped.contains("xterm-ghostty|Hangar test entry"))
         #expect(dumped.contains("cols#80"))
     }
     #endif

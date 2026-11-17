@@ -67,7 +67,7 @@ struct ConfigPathsTests {
 
     @Test func starterKeymapConfIsCommentedAndListsActions() {
         let starter = ConfigPaths.starterKeymapConf()
-        #expect(starter.contains("hangar keymap — a kitty-flavored config"))
+        #expect(starter.contains("Hangar keymap — a kitty-flavored config"))
         #expect(starter.contains("map <chord> [--repeat] <action>"))
         #expect(starter.contains("command \"<name>\" [chord] [--repeat] <shell...>"))
         #expect(starter.contains("single chord OR a leader like `ctrl+a>g`"))
