@@ -4,6 +4,9 @@ agterm is a native macOS SwiftUI terminal on libghostty with a workspace-to-sess
 Read `site/docs.html` for product behavior and `ARCHITECTURE.md` for modules, surface ownership, and
 C-boundary concurrency before changing the bridge.
 `README.md` is the product synopsis, not the reference.
+The macOS app lives in `macos/`: run every command there, and read every path below relative to it,
+except the repository-root `README.md`, `CLAUDE.md`, `.claude/`, `.github/`, `.claude-plugin/`, `.agents/`,
+`plugins/`, `cookbook/`, `site/` and `docs/screenshots/`.
 
 ## Working norms
 
@@ -106,7 +109,7 @@ C-boundary concurrency before changing the bridge.
   - `cd agtermCore && swift test`: host-free tests; `scripts/test.sh` wraps it.
   - `scripts/test-app.sh`: isolated hosted AppKit tests.
   - `make prep|build|run|release|deploy|test|test-app|lint|clean`; `make dist VERSION=x.y.z [PUBLISH=1]`.
-- `make lint` runs strict SwiftLint from the root. Root limits are 200-column lines, 1000-line source
+- `make lint` runs strict SwiftLint from `macos/`. Root limits are 200-column lines, 1000-line source
   files, and 800-line types; test configs raise file/type limits to 2000 and inherit all other rules.
   Disabled/tuned rules reflect deliberate conventions. Zero findings are required.
 - Every change must build, pass `swift test`, `make test-app`, and `make lint`.

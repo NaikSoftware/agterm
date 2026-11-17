@@ -37,10 +37,11 @@ DMG="$BUILD_DIR/agterm-$VERSION.dmg"
 # origin/master points at: the bump must be both COMMITTED and PUSHED, and both
 # are checked here. This applies the bump and stops so the diff can be reviewed
 # and committed, rather than rewriting git history from inside a release script.
+REPO_ROOT="$(cd "$ROOT/.." && pwd)"
 PLUGIN_MANIFESTS=(
-  "$ROOT/plugins/agterm/.claude-plugin/plugin.json"
-  "$ROOT/plugins/agterm/.codex-plugin/plugin.json"
-  "$ROOT/.claude-plugin/marketplace.json"
+  "$REPO_ROOT/plugins/agterm/.claude-plugin/plugin.json"
+  "$REPO_ROOT/plugins/agterm/.codex-plugin/plugin.json"
+  "$REPO_ROOT/.claude-plugin/marketplace.json"
 )
 for manifest in "${PLUGIN_MANIFESTS[@]}"; do
   sed -i '' -E "s/(\"version\"[[:space:]]*:[[:space:]]*)\"[^\"]*\"/\1\"$VERSION\"/" "$manifest"
@@ -57,7 +58,7 @@ fi
 if [ "$PUBLISH" = "1" ]; then
   git fetch -q origin master
   for manifest in "${PLUGIN_MANIFESTS[@]}"; do
-    rel="${manifest#"$ROOT"/}"
+    rel="${manifest#"$REPO_ROOT"/}"
     if ! git show "origin/master:$rel" 2>/dev/null | grep -q "\"version\"[[:space:]]*:[[:space:]]*\"$VERSION\""; then
       echo "==> $rel on origin/master is not at $VERSION — push master first" >&2
       exit 1

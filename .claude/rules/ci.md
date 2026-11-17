@@ -12,8 +12,10 @@ paths:
 - Every job carries its own `timeout-minutes`, with generous headroom over observed runtime. A job without
   one inherits GitHub's 360-minute default, so a wedge can hold its check pending for six hours. Give a new
   job a cap in the commit that adds it.
-- The `dorny/paths-filter` Swift set includes `**/*.swift`, `agtermCore/**`, `agterm/**`, `plugins/**`,
-  `.claude-plugin/**`, `.agents/**`, `project.yml`, `scripts/**`, both SwiftLint configs, and `ci.yml`.
+- The `dorny/paths-filter` Swift set includes `**/*.swift`, `macos/**`, `plugins/**`,
+  `.claude-plugin/**`, `.agents/**`, and `ci.yml`.
+  The macOS-tree jobs default to `working-directory: macos`; cache, `hashFiles` and artifact paths stay
+  workspace-relative and carry the `macos/` prefix.
   Keep all three plugin paths: `SkillInstallTests` checks the bundled `SKILL.md` command count, every
   manifest path, and agreement among the three versions. A skill/manifest-only release preflight commit
   must run the five Swift jobs.

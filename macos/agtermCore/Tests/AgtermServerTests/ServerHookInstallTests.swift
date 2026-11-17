@@ -36,7 +36,7 @@ struct ServerHookInstallTests {
         }
         try DirectoryCopy.copy(repository.appendingPathComponent("agterm/Resources/agent-status"),
                                to: fixture.resources.appendingPathComponent("agent-status"))
-        try DirectoryCopy.copy(repository.appendingPathComponent("plugins/agterm/skills/agterm"),
+        try DirectoryCopy.copy(repository.deletingLastPathComponent().appendingPathComponent("plugins/agterm/skills/agterm"),
                                to: fixture.resources.appendingPathComponent("skill/agterm"))
         return fixture
     }

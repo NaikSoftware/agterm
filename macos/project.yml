@@ -107,7 +107,7 @@ targets:
       # the Claude Code and Codex plugin manifests — one copy, three consumers. Folder reference so
       # the whole dir copies verbatim to Contents/Resources/agterm; the installer copies it from
       # there to ~/.claude/skills/agterm.
-      - path: plugins/agterm/skills/agterm
+      - path: ../plugins/agterm/skills/agterm
         type: folder
         buildPhase: resources
     settings:

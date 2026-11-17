@@ -1,10 +1,10 @@
 # downloaded prebuilt libghostty (never committed — see scripts/setup.sh)
 # no trailing slash so the symlink form (worktree setup) is ignored too, not just the dir
 GhosttyKit.xcframework
-agterm/Resources/ghostty
-agterm/Resources/terminfo
+macos/agterm/Resources/ghostty
+macos/agterm/Resources/terminfo
 .ghostty-build-stamp
-agterm/Resources/zmx
+macos/agterm/Resources/zmx
 .zmx-build-stamp
 *.tar.gz
 

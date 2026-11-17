@@ -3,9 +3,10 @@ import Testing
 @testable import agtermCore
 
 struct SkillInstallTests {
-    // the repo root, four levels up from agtermCore/Tests/agtermCoreTests/<this file>
+    // the repo root, five levels up from macos/agtermCore/Tests/agtermCoreTests/<this file>
     private var repository: URL {
         URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()

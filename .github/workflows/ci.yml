@@ -26,18 +26,12 @@ jobs:
           filters: |
             swift:
               - "**/*.swift"
-              - "agtermCore/**"
-              - "agterm/**"
+              - "macos/**"
               # the agent skill and its plugin manifests: SkillInstallTests reads
               # them, so a skill- or manifest-only change must still run the suite
               - "plugins/**"
               - ".claude-plugin/**"
               - ".agents/**"
-              - "project.yml"
-              - "scripts/**"
-              - ".swiftlint.yml"
-              - "agtermTests/.swiftlint.yml"
-              - "agtermUITests/.swiftlint.yml"
               - ".github/workflows/ci.yml"
             cookbook:
               - "cookbook/**"
@@ -49,6 +43,9 @@ jobs:
     if: needs.changes.outputs.swift == 'true'
     runs-on: macos-26
     timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: macos
     steps:
       - uses: actions/checkout@v7
       - name: Read pinned zmx revision
@@ -66,9 +63,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: |
-            agterm/Resources/zmx
-            .zmx-build-stamp
-          key: zmx-v2-${{ steps.revisions.outputs.zmx }}-${{ steps.revisions.outputs.zmx_target }}-${{ hashFiles('scripts/zmx-patches/**/*.patch') }}
+            macos/agterm/Resources/zmx
+            macos/.zmx-build-stamp
+          key: zmx-v2-${{ steps.revisions.outputs.zmx }}-${{ steps.revisions.outputs.zmx_target }}-${{ hashFiles('macos/scripts/zmx-patches/**/*.patch') }}
       # the session-host fixtures attach to a real zmx daemon; a cache miss builds it here
       - name: Stage zmx
         run: scripts/setup.sh --zmx-only
@@ -76,8 +73,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: |
-            build/linux/ghostty
-            build/linux/.shell-integration-stamp
+            macos/build/linux/ghostty
+            macos/build/linux/.shell-integration-stamp
           key: shell-integration-macos-v1-${{ steps.revisions.outputs.ghostty }}
       # the server's real-daemon panes load it; this job builds no libghostty, so it comes from ghostty's source at the pin
       - name: Stage the shell integration
@@ -88,15 +85,15 @@ jobs:
         run: which fish && fish --version
       # built outside the watchdog so a slow runner's compile cannot spend its budget; the test step reuses it
       - name: swift build tests (with coverage)
-        working-directory: agtermCore
+        working-directory: macos/agtermCore
         run: swift build --build-tests --enable-code-coverage
       - name: swift test (with coverage)
-        working-directory: agtermCore
+        working-directory: macos/agtermCore
         run: ../scripts/watchdog.sh swift test --enable-code-coverage
         env:
           AGTERM_REQUIRE_FISH: "1"
           AGTERM_REQUIRE_ZMX: "1"
-          AGTERM_SHELL_INTEGRATION: ${{ github.workspace }}/build/linux/ghostty/shell-integration
+          AGTERM_SHELL_INTEGRATION: ${{ github.workspace }}/macos/build/linux/ghostty/shell-integration
           WATCHDOG_SECONDS: "600"
           DIAG_DIR: ${{ github.workspace }}/test-hang
       # the server logs why it closed each presentation stream only to the unified log
@@ -104,9 +101,9 @@ jobs:
         if: failure()
         continue-on-error: true
         run: |
-          mkdir -p test-hang
+          mkdir -p "$GITHUB_WORKSPACE/test-hang"
           perl -e 'alarm shift; exec @ARGV' 120 log show --style compact --last 45m \
-            --predicate 'subsystem == "com.umputun.agterm"' > test-hang/agterm.log 2>&1
+            --predicate 'subsystem == "com.umputun.agterm"' > "$GITHUB_WORKSPACE/test-hang/agterm.log" 2>&1
       - name: upload hang diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -115,7 +112,7 @@ jobs:
           path: test-hang
           if-no-files-found: ignore
       - name: export lcov
-        working-directory: agtermCore
+        working-directory: macos/agtermCore
         # rewrite the absolute SF: paths llvm-cov emits to repo-relative so the
         # separate linux coverage job can resolve them against its own checkout
         run: |
@@ -133,7 +130,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-lcov
-          path: agtermCore/coverage.lcov
+          path: macos/agtermCore/coverage.lcov
 
   coverage:
     name: Coverage upload
@@ -165,6 +162,9 @@ jobs:
     if: needs.changes.outputs.swift == 'true'
     runs-on: macos-26
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: macos
     steps:
       - uses: actions/checkout@v7
       - name: Install swiftlint
@@ -183,6 +183,9 @@ jobs:
       image: swift:6.3.2-noble
       # the watchdog's lldb attaches, as root, to the test runner owned by agterm-test
       options: --cap-add=SYS_PTRACE
+    defaults:
+      run:
+        working-directory: macos
     steps:
       - uses: actions/checkout@v7
       - name: Install jq, zsh, fish and tcsh
@@ -198,8 +201,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: |
-            build/linux/ghostty
-            build/linux/.shell-integration-stamp
+            macos/build/linux/ghostty
+            macos/build/linux/.shell-integration-stamp
           key: shell-integration-linux-v1-${{ steps.zmx.outputs.ghostty }}
       - name: Stage the Linux shell integration
         # the zsh, fish and bash integration agterm-server panes load, from ghostty's source at the pin
@@ -208,8 +211,8 @@ jobs:
         id: zmx-cache
         uses: actions/cache@v6
         with:
-          path: build/linux/x86_64
-          key: zmx-linux-v2-${{ steps.zmx.outputs.rev }}-x86_64-${{ hashFiles('scripts/zmx-patches/**/*.patch') }}
+          path: macos/build/linux/x86_64
+          key: zmx-linux-v2-${{ steps.zmx.outputs.rev }}-x86_64-${{ hashFiles('macos/scripts/zmx-patches/**/*.patch') }}
       - name: Build the Linux zmx
         # the musl zmx agterm-server runs; AgtermServerTests drive real daemons with it
         if: steps.zmx-cache.outputs.cache-hit != 'true'
@@ -224,10 +227,10 @@ jobs:
           useradd --create-home agterm-test
           chown -R agterm-test "$GITHUB_WORKSPACE"
       - name: swift build
-        working-directory: agtermCore
+        working-directory: macos/agtermCore
         run: runuser --user agterm-test -- env HOME=/home/agterm-test swift build --build-tests
       - name: swift test
-        working-directory: agtermCore
+        working-directory: macos/agtermCore
         # the server's real-daemon suite and the fish cases fail rather than skip without zmx or fish
         run: >-
           ../scripts/watchdog.sh runuser --user agterm-test --
@@ -237,7 +240,7 @@ jobs:
           WATCHDOG_DIAG_SECONDS: "300"
           WATCHDOG_RUNNER: agtermCorePackageTests.xctest
           # relative: in a container job github.workspace names the host path, not the mounted one
-          DIAG_DIR: ../test-hang
+          DIAG_DIR: ../../test-hang
       - name: upload hang diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -252,6 +255,9 @@ jobs:
     if: needs.changes.outputs.swift == 'true'
     runs-on: macos-26
     timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: macos
     steps:
       - uses: actions/checkout@v7
       - name: Read pinned helper revisions
@@ -269,18 +275,18 @@ jobs:
         uses: actions/cache@v6
         with:
           path: |
-            GhosttyKit.xcframework
-            agterm/Resources/ghostty
-            agterm/Resources/terminfo
-            .ghostty-build-stamp
-          key: ghosttykit-v3-${{ steps.revisions.outputs.ghostty }}-${{ hashFiles('scripts/ghostty-patches/*.patch') }}
+            macos/GhosttyKit.xcframework
+            macos/agterm/Resources/ghostty
+            macos/agterm/Resources/terminfo
+            macos/.ghostty-build-stamp
+          key: ghosttykit-v3-${{ steps.revisions.outputs.ghostty }}-${{ hashFiles('macos/scripts/ghostty-patches/*.patch') }}
       - name: Cache zmx
         uses: actions/cache@v6
         with:
           path: |
-            agterm/Resources/zmx
-            .zmx-build-stamp
-          key: zmx-v2-${{ steps.revisions.outputs.zmx }}-${{ steps.revisions.outputs.zmx_target }}-${{ hashFiles('scripts/zmx-patches/**/*.patch') }}
+            macos/agterm/Resources/zmx
+            macos/.zmx-build-stamp
+          key: zmx-v2-${{ steps.revisions.outputs.zmx }}-${{ steps.revisions.outputs.zmx_target }}-${{ hashFiles('macos/scripts/zmx-patches/**/*.patch') }}
       - name: Install xcodegen
         run: brew install xcodegen
       - name: Build libghostty + app (Release)
@@ -293,7 +299,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: agterm-app
-          path: agterm-app.zip
+          path: macos/agterm-app.zip
       - name: Surface teardown under mailbox pressure
         run: python3 scripts/test-surface-teardown.py build/DerivedData/Build/Products/Release/agterm.app --evidence surface-teardown
       - name: Upload surface teardown diagnostics
@@ -301,7 +307,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: surface-teardown
-          path: surface-teardown
+          path: macos/surface-teardown
           if-no-files-found: ignore
       # Nested helpers are standalone executables. A deep app re-seal with entitlements can stamp the
       # app's TCC grants onto them while leaving the build green (issue #396).
@@ -376,6 +382,9 @@ jobs:
     if: needs.changes.outputs.swift == 'true'
     runs-on: macos-26
     timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: macos
     steps:
       - uses: actions/checkout@v7
       - name: Read pinned helper revisions
@@ -393,18 +402,18 @@ jobs:
         uses: actions/cache@v6
         with:
           path: |
-            GhosttyKit.xcframework
-            agterm/Resources/ghostty
-            agterm/Resources/terminfo
-            .ghostty-build-stamp
-          key: ghosttykit-v3-${{ steps.revisions.outputs.ghostty }}-${{ hashFiles('scripts/ghostty-patches/*.patch') }}
+            macos/GhosttyKit.xcframework
+            macos/agterm/Resources/ghostty
+            macos/agterm/Resources/terminfo
+            macos/.ghostty-build-stamp
+          key: ghosttykit-v3-${{ steps.revisions.outputs.ghostty }}-${{ hashFiles('macos/scripts/ghostty-patches/*.patch') }}
       - name: Cache zmx
         uses: actions/cache@v6
         with:
           path: |
-            agterm/Resources/zmx
-            .zmx-build-stamp
-          key: zmx-v2-${{ steps.revisions.outputs.zmx }}-${{ steps.revisions.outputs.zmx_target }}-${{ hashFiles('scripts/zmx-patches/**/*.patch') }}
+            macos/agterm/Resources/zmx
+            macos/.zmx-build-stamp
+          key: zmx-v2-${{ steps.revisions.outputs.zmx }}-${{ steps.revisions.outputs.zmx_target }}-${{ hashFiles('macos/scripts/zmx-patches/**/*.patch') }}
       - name: Install xcodegen
         run: brew install xcodegen
       # The zsh plain-login seam needs zsh here; the fish seam switches the runner shell below.
@@ -430,7 +439,7 @@ jobs:
         env:
           TEST_RUNNER_AGTERM_REQUIRE_FISH: "1"
           WATCHDOG_SECONDS: "600"
-          WATCHDOG_RUNNER: '^${{ github.workspace }}/build/DerivedData/Build/Products/Debug/agterm\.app/Contents/MacOS/agterm( |$)'
+          WATCHDOG_RUNNER: '^${{ github.workspace }}/macos/build/DerivedData/Build/Products/Debug/agterm\.app/Contents/MacOS/agterm( |$)'
           DIAG_DIR: ${{ github.workspace }}/hosted-test-hang
         run: |
           scripts/watchdog.sh xcodebuild test-without-building \
@@ -445,7 +454,7 @@ jobs:
           name: hosted-test-hang
           path: |
             hosted-test-hang
-            build/DerivedData/Logs/Test
+            macos/build/DerivedData/Logs/Test
           if-no-files-found: ignore
       - name: Plain fish login shell seam
         env:

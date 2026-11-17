@@ -29,7 +29,7 @@ mkdir -p "$stage/resources/skill" "$stage/licenses/zmx"
 cp "$ROOT/build/server/$arch/agterm-server" "$ROOT/build/server/$arch/agtermctl" "$zmx" "$stage/"
 cp -R "$ROOT/build/linux/ghostty/shell-integration" "$ROOT/build/linux/terminfo" "$ROOT/agterm/Resources/agent-status" \
   "$stage/resources/"
-cp -R "$ROOT/plugins/agterm/skills/agterm" "$stage/resources/skill/"
+cp -R "$ROOT/../plugins/agterm/skills/agterm" "$stage/resources/skill/"
 cp "$ROOT/build/linux/$arch/zmx/LICENSE" "$stage/licenses/zmx/"
 cp "$ROOT/scripts/server-host-install.sh" "$stage/install.sh"
 
