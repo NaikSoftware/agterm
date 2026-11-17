@@ -30,11 +30,12 @@ extension WindowContentView {
                               showsSessionName: shows(.sessionName),
                               showsWindowName: shows(.windowName), showsContext: shows(.sessionContext),
                               showsRemoteHost: shows(.remoteHost))
-            // Ctrl-Tab is a raw key monitor in `SessionSwitcher`, not a rebindable `BuiltinAction`.
-            Text(verbatim: "⌃Tab")
-                .font(.system(size: 11))
-                .foregroundStyle(chromeText.opacity(pick.modalPending ? 0.2 : 0.36))
-                .fixedSize()
+            if let hint = actions.shortcutGlyph(for: .sessionPalette) {
+                Text(verbatim: hint)
+                    .font(.system(size: 11))
+                    .foregroundStyle(chromeText.opacity(pick.modalPending ? 0.2 : 0.36))
+                    .fixedSize()
+            }
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: 472)
@@ -60,14 +61,17 @@ extension WindowContentView {
             SwitcherPillChrome(chromeText: chromeText, openFill: popoverBackground, open: recentSessionsShown)
         }
         .buttonStyle(.plain)
-        .toolTip("Session switcher (⌃Tab)", isShown: titlebarTipsShown)
+        .toolTip(helpHint("Session switcher", .sessionPalette), isShown: titlebarTipsShown)
         .disabled(pick.modalPending)
         // a disabled pill hands its clicks to the drag/zoom layer, like the rest of the title.
         .allowsHitTesting(!pick.modalPending)
         .accessibilityLabel("Session switcher")
         .accessibilityIdentifier("recent-sessions-button")
         .popover(isPresented: $recentSessionsShown, arrowEdge: .bottom) {
-            recentSessionsPopover
+            // a `.popover` keeps the system arrow, radius and shadow; only the fill is ours.
+            switcherPanel
+                .background(popoverBackground)
+                .presentationBackground(popoverBackground)
                 // suppress this window's auto-follow while the popover is open so an armed idle jump can't
                 // reshuffle the rows under the pointer. Bracketed on the content's own lifetime, so it stays
                 // balanced however the popover goes away, the pill unmounting included.
@@ -76,17 +80,55 @@ extension WindowContentView {
         }
     }
 
-    /// The switcher popover: a search field that holds the keyboard from the moment it opens, over "Needs you" (the
-    /// bell's rows), "Recent" (MRU other sessions) and "Recently closed", empty sections hidden. A query swaps the
-    /// sections for one "Sessions" list ranked like the ⌃P palette. A `.popover` keeps the system arrow, radius
-    /// and shadow; only the fill is ours.
-    private var recentSessionsPopover: some View {
+    /// Answers `PaletteController.requestSwitcher` (⌃P, Navigate ▸ Go to Session, `keymap.run session_palette`) in
+    /// the frontmost window with the `.switcher` overlay, never the pill's popover: a popover opened from a key
+    /// equivalent hands the keyboard back to the terminal within half a second (AppKit, no agterm caller), so
+    /// typing would miss its field.
+    func toggleSwitcher() {
+        guard isFrontmost, !pick.modalPending else { return }
+        recentSessionsShown = false
+        palette.toggle(.switcher)
+    }
+
+    /// The switcher opened from the keyboard or menu: the panel the pill's popover shows, centred over the terminal
+    /// area near the top of the window, with the spec's own radius, outline and shadow. A click on the scrim, Esc or
+    /// a commit closes it; the palette bracket restores focus and auto-follow.
+    var switcherOverlay: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .top) {
+                Color.black.opacity(0.2)
+                    .contentShape(Rectangle())
+                    .onTapGesture { palette.close() }
+                    .accessibilityElement()
+                    .accessibilityIdentifier("switcher-scrim")
+                switcherPanel
+                    .background(popoverBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder((GhosttyApp.shared.terminalThemeIsDark ? Color.white : Color.black).opacity(0.10)))
+                    .shadow(color: .black.opacity(0.5), radius: 24, y: 18)
+                    .padding(.top, geo.size.height * 0.12)
+                    .offset(x: terminalAreaInset / 2)
+            }
+        }
+    }
+
+    /// Closes whichever host shows the switcher.
+    private func closeSwitcher() {
+        recentSessionsShown = false
+        if palette.mode == .switcher { palette.close() }
+    }
+
+    /// The switcher body both hosts share: a search field that holds the keyboard from the moment it opens, over
+    /// "Needs you" (the bell's rows), "Recent" (MRU other sessions) and "Recently closed", empty sections hidden.
+    /// A query swaps the sections for one "Sessions" list.
+    private var switcherPanel: some View {
         let highlight = Color(nsColor: GhosttyApp.shared.activeStatusColor).opacity(0.2)
         let attention = library.attentionAcrossWindows
         // no `.accessibilityIdentifier` on this container: a SwiftUI identifier on a parent propagates to and
         // OVERRIDES its descendants', clobbering the per-row ids the tests read.
         return SwitcherPopover(
-            foreground: chromeText, highlight: highlight, hint: actions.shortcutGlyph(for: .sessionPalette),
+            foreground: chromeText, highlight: highlight,
             metrics: GhosttyApp.shared.interfaceMetrics,
             sections: [
                 SwitcherSection(title: "Needs you",
@@ -105,15 +147,13 @@ extension WindowContentView {
                     }
                 }
             },
-            onClose: { recentSessionsShown = false },
+            onClose: { closeSwitcher() },
             row: { hit, highlighted in switcherRow(hit, highlight: highlight, highlighted: highlighted) }
         )
-        .background(popoverBackground)
-        .presentationBackground(popoverBackground)
     }
 
     /// What a query searches: every navigable session of this window in sidebar order, then the recently closed
-    /// ones, keyed as the ⌃P session palette keys its rows (name, then "workspace · detail").
+    /// ones, keyed by name, then "workspace · detail".
     private var switcherCandidates: [SwitcherCandidate] {
         let open = store.listOrdered(store.navigableSessions).map { session in
             SwitcherCandidate(hit: .session(session.id), title: store.listLabel(for: session),
@@ -132,7 +172,7 @@ extension WindowContentView {
     /// The popover closes first and the reopen runs on the next turn, since it may raise another window.
     private func reopenRecentClosed(_ id: RecentClosedItem.ID) {
         guard !pick.modalPending else { return }
-        recentSessionsShown = false
+        closeSwitcher()
         DispatchQueue.main.async { actions.openRecentClosed(id) }
     }
 
@@ -215,9 +255,11 @@ extension WindowContentView {
     private func selectRecent(_ id: UUID) {
         guard !pick.modalPending else { return }
         store.noteUserActivity()
-        store.selectSession(id)
+        let indicator = store.selectSession(id)
+        closeSwitcher()
         actions.focusActiveSession()
-        recentSessionsShown = false
+        // reveal the picked session's blocked pane once the closing host's focus restore has run
+        DispatchQueue.main.async { actions.revealActiveBlockedPane(captured: indicator) }
     }
 
     /// Title-bar bell reflecting the attention state across every open window (opt-in, gated by the
@@ -333,7 +375,7 @@ extension WindowContentView {
         let sessionID = entry.session.id
         guard !pick.modalPending, actions.canSelectAttention(windowID: windowID, sessionID: sessionID) else { return }
         attentionPopoverShown = false
-        recentSessionsShown = false
+        closeSwitcher()
         DispatchQueue.main.async { actions.selectAttention(windowID: windowID, sessionID: sessionID) }
     }
 }
@@ -446,7 +488,6 @@ struct SwitcherSection {
 private struct SwitcherPopover<Row: View>: View {
     let foreground: Color
     let highlight: Color
-    let hint: String?
     let metrics: InterfaceMetrics
     let sections: [SwitcherSection]
     let candidates: [SwitcherCandidate]
@@ -535,11 +576,6 @@ private struct SwitcherPopover<Row: View>: View {
                 .onKeyPress(.upArrow) { highlighted = max(highlighted - 1, 0); return .handled }
                 .onKeyPress(.escape) { onClose(); return .handled }
                 .accessibilityIdentifier("switcher-search-field")
-            if let hint {
-                Text(verbatim: hint)
-                    .font(.system(size: metrics.scaled(12)))
-                    .foregroundStyle(foreground.opacity(0.36))
-            }
         }
         .padding(.horizontal, metrics.scaled(10))
         .frame(maxWidth: .infinity, minHeight: metrics.scaled(36), maxHeight: metrics.scaled(36))

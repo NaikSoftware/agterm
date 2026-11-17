@@ -5,7 +5,7 @@ import agtermCore
 /// one argument is either a color or `clear`.
 enum TintRequest {
     static let colorHelp = "A color (\(TintColor.validNamesList)), a #rrggbb hex, or 'clear'."
-    static let onHelp = "Where the color shows: icon, name, or icon,name. Omitted keeps the current placement, else icon."
+    static let onHelp = "Deprecated, ignored: a tint always colors icon and name."
 
     static func validate(_ value: String, on: String?) throws {
         if value == "clear" {
@@ -39,7 +39,7 @@ enum TintRequest {
 /// TintCreateOptions is the creation tint `session new` and `workspace new` share.
 struct TintCreateOptions: ParsableArguments {
     @Option(name: .long, help: "Create it tinted this color (\(TintColor.validNamesList), or a #rrggbb hex).") var tint: String?
-    @Option(name: .customLong("tint-on"), help: "With --tint: icon, name, or icon,name (default icon).") var tintOn: String?
+    @Option(name: .customLong("tint-on"), help: "Deprecated, ignored: a tint always colors icon and name.") var tintOn: String?
 
     func validate() throws {
         guard let tint else {
@@ -66,12 +66,10 @@ extension Session {
         static let configuration = CommandConfiguration(
             abstract: "Tint a session's sidebar row (a color, or clear).",
             discussion: """
-            session tint red                 tint the icon red (or recolor, keeping the placement)
-            session tint green --on name     color the name instead
-            session tint blue --on icon,name color both
-            session tint clear               remove the tint
+            session tint red      tint the row's icon and name red
+            session tint clear    remove the tint
 
-            Persists across a relaunch; read back as the tree's tint and tintOn.
+            --on is deprecated and ignored. Persists across a relaunch; read back as the tree's tint.
             """)
         @Argument(help: ArgumentHelp(TintRequest.colorHelp)) var value: String
         @Option(name: .long, help: ArgumentHelp(TintRequest.onHelp)) var on: String?
@@ -93,10 +91,10 @@ extension Workspace {
         static let configuration = CommandConfiguration(
             abstract: "Tint a workspace's own sidebar row (a color, or clear); its sessions keep their own.",
             discussion: """
-            workspace tint red --on icon,name
+            workspace tint red
             workspace tint clear
 
-            Persists across a relaunch; read back as the workspace node's tint and tintOn.
+            --on is deprecated and ignored. Persists across a relaunch; read back as the workspace node's tint.
             """)
         @Argument(help: ArgumentHelp(TintRequest.colorHelp)) var value: String
         @Option(name: .long, help: ArgumentHelp(TintRequest.onHelp)) var on: String?

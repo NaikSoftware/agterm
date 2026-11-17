@@ -1,13 +1,9 @@
 import agtermCore
 import AppKit
 
-/// The row menu's Tint submenu: None and the fixed colors, then where the color shows. A batch of sessions
-/// checks an entry only when every target shares it, and the placement entries act only on tinted rows.
+/// The row menu's Tint submenu: None and the fixed colors. A batch of sessions checks an entry only when every
+/// target shares it. A tint always colors the row's icon and name.
 extension WorkspaceSidebar.Coordinator {
-    /// tintPlacement is the last Show On pick, app-wide and in memory only. An untinted row shows it checked,
-    /// and a color pick starts the row on it.
-    static var tintPlacement: Set<TintPart> = [.icon]
-
     /// tintMenuItem builds the submenu for the menu's session targets.
     func tintMenuItem(forSessions ids: [UUID]) -> NSMenuItem {
         let tints = ids.map { store.session(withID: $0)?.tint }
@@ -36,19 +32,6 @@ extension WorkspaceSidebar.Coordinator {
         if colors.count == 1, case let .hex(hex)?? = colors.first {
             submenu.addItem(colorItem("Custom \(hex)", .hex(hex), checked: true, request: request(.color(.hex(hex)))))
         }
-        submenu.addItem(.separator())
-        submenu.addItem(.sectionHeader(title: "Show On"))
-        let allTinted = current.allSatisfy { $0 != nil }
-        let placements = Set(current.map { $0.map { Set($0.parts) } ?? Self.tintPlacement })
-        let options: [(String, Set<TintPart>)] = [("Icon", [.icon]), ("Name", [.name]), ("Icon and Name", [.icon, .name])]
-        for (title, parts) in options {
-            let item = NSMenuItem(title: title, action: #selector(menuTint(_:)), keyEquivalent: "")
-            item.isEnabled = allTinted
-            item.state = placements == [parts] ? .on : .off
-            item.target = self
-            item.representedObject = request(.parts(parts))
-            submenu.addItem(item)
-        }
         let tint = NSMenuItem(title: "Tint", action: nil, keyEquivalent: "")
         tint.submenu = submenu
         return tint
@@ -70,23 +53,16 @@ extension WorkspaceSidebar.Coordinator {
 
     @objc private func menuTint(_ sender: NSMenuItem) {
         guard let request = sender.representedObject as? TintMenuRequest else { return }
-        if case .parts(let parts) = request.choice {
-            Self.tintPlacement = parts
-        }
+        let tint = request.choice.tint
         if let workspaceID = request.workspaceID {
-            let current = store.workspaces.first { $0.id == workspaceID }?.tint
-            let tint = request.choice.applied(to: current, startingOn: Self.tintPlacement)
             if actions.sendWorkspaceTint(tint, to: workspaceID, in: store) { return }
             store.setTint(tint, forWorkspace: workspaceID)
             return
         }
-        if actions.sendTint(forSessions: request.sessionIDs, in: store, { request.choice.applied(to: $0, startingOn: Self.tintPlacement) }) {
-            return
-        }
+        if actions.sendTint(forSessions: request.sessionIDs, in: store, { _ in tint }) { return }
         switch request.choice {
-        case .color(let value?): store.setTintColor(value, forSessions: request.sessionIDs, startingOn: Self.tintPlacement)
+        case .color(let value?): store.setTintColor(value, forSessions: request.sessionIDs, startingOn: Set(TintPart.allCases))
         case .color(nil): store.setTintColor(nil, forSessions: request.sessionIDs)
-        case .parts(let parts): store.setTintParts(parts, forSessions: request.sessionIDs)
         }
     }
 
@@ -103,12 +79,10 @@ extension WorkspaceSidebar.Coordinator {
     private final class TintMenuRequest {
         enum Choice {
             case color(TintValue?)
-            case parts(Set<TintPart>)
 
-            func applied(to current: SidebarTint?, startingOn placement: Set<TintPart>) -> SidebarTint? {
+            var tint: SidebarTint? {
                 switch self {
-                case .color(let value): value.map { SidebarTint.recolor(current, to: $0, startingOn: placement) }
-                case .parts(let parts): SidebarTint.place(current, on: parts)
+                case .color(let value): value.map { SidebarTint(color: $0, parts: Set(TintPart.allCases)) }
                 }
             }
         }

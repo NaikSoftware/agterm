@@ -604,6 +604,7 @@ struct WindowContentView: View {
             dashboardOverlay
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: palette.switcherRequests) { toggleSwitcher() }
     }
 
     /// True only for the frontmost window: the palette and switcher are app-global singles on the frontmost
@@ -611,7 +612,7 @@ struct WindowContentView: View {
     /// contending for focus and showing the wrong window's candidates. `activeWindowID`
     /// (frontmost-or-first-open) matches exactly one window even before the first `didBecomeKey` sets
     /// `frontmostWindowID`, and is observed, so this reacts.
-    private var isFrontmost: Bool { library.activeWindowID == windowID }
+    var isFrontmost: Bool { library.activeWindowID == windowID }
 
     /// Where the terminal area starts ON SCREEN: `leadingColumnsWidth`, or 0 whenever no leading column is
     /// showing. The palette and switcher center their panel over THAT area rather than the whole
@@ -623,7 +624,7 @@ struct WindowContentView: View {
     /// set while covering the columns (zoom drops `alwaysMountedSplitLayer` to opacity 0, the dashboard
     /// paints over it), and `pickPaletteOverlay` is mounted through both. Reading the flag there shifts a
     /// picker by half a sidebar that is not on screen.
-    private var terminalAreaInset: Double {
+    var terminalAreaInset: Double {
         guard terminalZoom.target == nil, !dashboard.isOpen else { return 0 }
         return Double(leadingColumnsWidth)
     }
@@ -636,8 +637,12 @@ struct WindowContentView: View {
     /// Mounted only while a palette is open in the frontmost window; its content (search field + result
     /// list) is rebuilt from `palette.mode`.
     @ViewBuilder private var commandPaletteOverlay: some View {
-        if isFrontmost, !pick.modalPending, palette.mode != nil {
-            CommandPalette(controller: palette, actions: actions, terminalAreaInset: terminalAreaInset)
+        if isFrontmost, !pick.modalPending, let mode = palette.mode {
+            if mode == .switcher {
+                switcherOverlay
+            } else {
+                CommandPalette(controller: palette, actions: actions, terminalAreaInset: terminalAreaInset)
+            }
         }
     }
 

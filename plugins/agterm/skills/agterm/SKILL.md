@@ -492,10 +492,11 @@ omitted when expanded).
   whole line, so pass every flag every time. A process reporting activity must pass a positive `--hide-after`
   and set the line again before it runs out, so the line goes away if the process dies. Not kept across a
   relaunch. Read back as the tree's `info`; details in reference.md.
-- `session tint <COLOR|#rrggbb|clear> [--on icon|name|icon,name]` (COLOR: red, orange, yellow, green, blue,
+- `session tint <COLOR|#rrggbb|clear>` (COLOR: red, orange, yellow, green, blue,
   purple, gray, teal, pink, brown, indigo, mint) and `workspace tint`
   (same arguments) - color a sidebar row so it stands out, e.g. red for production; a workspace tint colors only
-  its own row. `session new`/`workspace new` take `--tint`/`--tint-on`. Read back as the tree node's `tint`/`tintOn`;
+  its own row; a tint colors the row's icon and name (`--on`/`--tint-on` are deprecated and ignored).
+  `session new`/`workspace new` take `--tint`. Read back as the tree node's `tint`;
   details in reference.md.
 - `session seen [--target] [--window W]` — clear the session's unseen-notification badge, and an `--auto-reset`
   status as a visit would, WITHOUT changing the selection or focus (the focus-free counterpart to `notify`, which raises the badge). Idempotent — a

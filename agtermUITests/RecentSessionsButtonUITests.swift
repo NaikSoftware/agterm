@@ -32,6 +32,7 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
         XCTAssertTrue(field.exists)
         // typed without clicking the field: it holds the keyboard from the moment the popover opens
         for key in "zebra" { app.typeKey(String(key), modifierFlags: []) }
+        XCTAssertEqual(field.value as? String, "zebra", "the field should hold the keyboard without a click")
         let rows = app.buttons.matching(identifier: "recent-session-row")
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline, !(rows.count == 1 && rows.firstMatch.label.contains("zebrafish")) { usleep(100_000) }
@@ -62,6 +63,49 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
                       "the jump row should be the previously-selected (renamed) session, got label: \(jumpRow.label)")
         XCTAssertEqual(app.buttons.matching(identifier: "recent-session-row").count, 1,
                        "the popover should list only the single other session, not the current one")
+    }
+
+    func testControlPOpensTheSwitcherOverlayBesideThePill() throws {
+        XCTAssertTrue(app.buttons["recent-sessions-button"].waitForExistence(timeout: 10))
+        try assertControlPSwitches()
+    }
+
+    func testControlPOpensTheSwitcherOverlayWithoutThePill() throws {
+        try relaunch(withSettings: #"{"hiddenInterfaceElements":["recentSessions"]}"#)
+        XCTAssertFalse(app.buttons["recent-sessions-button"].exists, "the setting should hide the pill")
+        try assertControlPSwitches()
+    }
+
+    /// ⌃P opens the switcher overlay with its field focused: the typed query filters the list and Return switches.
+    private func assertControlPSwitches() throws {
+        let seeded = try activeSessionID()
+        XCTAssertEqual(try sendCommand(#"{"cmd":"session.rename","target":"\#(seeded)","args":{"name":"zebrafish"}}"#)["ok"] as? Bool, true)
+        // two other sessions, so the filtered list (one row) differs from the unfiltered Recent list (two)
+        _ = try sendCommand(#"{"cmd":"session.new"}"#)
+        let created = try sendCommand(#"{"cmd":"session.new"}"#)
+        let newID = try XCTUnwrap((created["result"] as? [String: Any])?["id"] as? String)
+        XCTAssertTrue(pollActiveSessionID(try XCTUnwrap(UUID(uuidString: newID)), timeout: 8))
+
+        let field = app.textFields["switcher-search-field"]
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline, !field.exists {
+            app.typeKey("p", modifierFlags: [.control])
+            _ = field.waitForExistence(timeout: 1)
+        }
+        XCTAssertTrue(field.exists, "⌃P should open the session switcher")
+        XCTAssertTrue(app.descendants(matching: .any)["switcher-scrim"].exists, "⌃P shows the overlay, not the popover")
+
+        let rows = app.buttons.matching(identifier: "recent-session-row")
+        for key in "zebra" { app.typeKey(String(key), modifierFlags: []) }
+        let filtered = Date().addingTimeInterval(5)
+        while Date() < filtered, !(rows.count == 1 && rows.firstMatch.label.contains("zebrafish")) { usleep(100_000) }
+        XCTAssertEqual(field.value as? String, "zebra", "the field should hold the keyboard without a click")
+        XCTAssertEqual(rows.count, 1, "the query should filter the list to the matching session")
+
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(pollActiveSessionID(try XCTUnwrap(UUID(uuidString: seeded)), timeout: 8),
+                      "Return should switch to the highlighted session")
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5), "a commit closes the switcher")
     }
 
     func testRecentButtonListsAClosedSessionAlone() throws {

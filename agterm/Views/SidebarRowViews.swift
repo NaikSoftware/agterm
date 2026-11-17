@@ -184,15 +184,15 @@ class SidebarCellView: NSTableCellView {
         setCloseButtonVisible(false)
     }
 
-    /// setColors tints row text and icons from the theme for the row's real selection state, except the parts
-    /// a row `tint` colors, which keep it selected or not. Never drive it from `backgroundStyle`, which AppKit
+    /// setColors tints row text and icons from the theme for the row's selection state; a row `tint` colors both
+    /// the icon and the name whatever its stored parts say. Never drive it from `backgroundStyle`, which AppKit
     /// flips only while the table is first responder.
     func setColors(selected: Bool) {
         let color = Self.themeTextColor(selected: selected)
         let tintColor = tint.map { NSColor.tint($0.color) }
-        textField?.textColor = tint?.shows(.name) == true ? tintColor : color
+        textField?.textColor = tintColor ?? color
         let iconAlpha: CGFloat = selected ? 0.85 : 0.58
-        imageView?.contentTintColor = tint?.shows(.icon) == true ? tintColor : color.withAlphaComponent(iconAlpha)
+        imageView?.contentTintColor = tintColor ?? color.withAlphaComponent(iconAlpha)
         for button in [addButton, repeatButton].compactMap(\.self) {
             button.contentTintColor = color
             button.wantsLayer = true

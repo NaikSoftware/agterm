@@ -80,6 +80,10 @@ public struct SidebarTint: Equatable, Sendable {
     /// shows reports whether the tint colors `part` of the row.
     public func shows(_ part: TintPart) -> Bool { parts.contains(part) }
 
+    /// shownParts is what the app colors for any tint, and what `tree` reports as `tintOn`: stored parts are
+    /// kept for older readers but no longer chosen or shown.
+    public static let shownParts = TintPart.allCases.map(\.rawValue)
+
     /// recolor is the tint a row with `current` gets for `color`: its own parts kept, an untinted row
     /// starting on the icon. A nil color clears.
     public static func recolor(_ current: SidebarTint?, to color: TintColor?) -> SidebarTint? {

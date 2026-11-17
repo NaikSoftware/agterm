@@ -540,8 +540,8 @@
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">context</span> (the local context, or on an attached row without
                 one the origin's mirrored context; omitted when neither is set),
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">tint</span> and
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">tintOn</span> (the sidebar row's tint color and the parts it colors, such as
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">["icon"]</span> or <span style="font-family: &quot;JetBrains Mono&quot;, monospace">["icon","name"]</span>; both omitted when untinted),
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">tintOn</span> (the sidebar row's tint color; <span style="font-family: &quot;JetBrains Mono&quot;, monospace">tintOn</span> is deprecated and always
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">["icon","name"]</span>; both omitted when untinted),
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">status</span>,
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">statusPane</span>,
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">statusBlink</span>,
@@ -811,9 +811,8 @@
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace; white-space: nowrap">session new --no-select</span> without it
                 opening — and for the same reason a collapsed create stays OUT of the workspace focus set. A plain
                 create instead joins the marked set while the filter is applied, so a foreground workspace is never
-                hidden behind it. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--tint</span> creates it with a row tint, placed by
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--tint-on</span> as in <span style="font-family: &quot;JetBrains Mono&quot;, monospace; white-space: nowrap">workspace tint --on</span>; an invalid
-                value creates nothing. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--folder</span> pins its project folder as
+                hidden behind it. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--tint</span> creates it with a row tint;
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--tint-on</span> is deprecated and ignored. An invalid value creates nothing. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--folder</span> pins its project folder as
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace; white-space: nowrap">workspace folder set</span> does; a folder that is not an existing directory, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">/</span> or the home folder creates nothing.
                 A remote window refuses <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--folder</span>. <strong style="color: #bfbab0">Returns</strong>
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">result.id</span>.
@@ -1001,7 +1000,7 @@
               <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #6b727a; margin-top: 6px">workspace.tint</div>
               <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 10px 0 0">
                 Tint the workspace's own sidebar row, the control twin of the workspace row menu's Tint submenu. It takes
-                the same colors and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--on</span> as
+                the same colors as
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace; white-space: nowrap">session tint</span>, and colors only the workspace row: the sessions inside
                 keep their own tints. <strong style="color: #bfbab0">Returns</strong>
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">result.id</span>. Read back via the workspace node's
@@ -1085,8 +1084,8 @@
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--create-workspace</span> is also passed, which
                 reuses or creates it idempotently.
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--name</span> seeds the sidebar label.
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--tint</span> creates it with a row tint, placed by
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--tint-on</span> as in <span style="font-family: &quot;JetBrains Mono&quot;, monospace; white-space: nowrap">session tint --on</span>;
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--tint</span> creates it with a row tint;
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--tint-on</span> is deprecated and ignored;
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--tint-on</span> without <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--tint</span> is refused, and an
                 invalid value creates nothing.
                 <strong style="color: #bfbab0">Returns</strong>
@@ -2024,10 +2023,8 @@
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">brown</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">indigo</span> or
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">mint</span>, the macOS system colors, so they follow light and dark mode, or a
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">#rrggbb</span> hex for any other color, which stays the same in both modes and reads back
-                lowercase with its <span style="font-family: &quot;JetBrains Mono&quot;, monospace">#</span>. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--on</span> picks what the color shows on:
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">icon</span>, <span style="font-family: &quot;JetBrains Mono&quot;, monospace">name</span> or
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">icon,name</span>. Without it a recolor keeps the row's placement and an untinted row starts on
-                the icon. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">clear</span> removes the tint and refuses <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--on</span>.
+                lowercase with its <span style="font-family: &quot;JetBrains Mono&quot;, monospace">#</span>. A tint colors the row's icon and name.
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--on</span> is deprecated and ignored. <span style="font-family: &quot;JetBrains Mono&quot;, monospace">clear</span> removes the tint and refuses <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--on</span>.
                 <strong style="color: #bfbab0">Returns</strong>
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">result.id</span>. Read back via the node's
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">tint</span> and <span style="font-family: &quot;JetBrains Mono&quot;, monospace">tintOn</span> fields.

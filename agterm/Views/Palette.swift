@@ -61,14 +61,14 @@ enum PaletteMark: Equatable {
     case focus(Bool)
 }
 
-/// Which palette is open. Each fuzzy-searches its own source: `actions` the app's commands, `sessions` the
-/// open sessions to jump between, `themes` the bundled themes with a live preview on navigation (Enter
-/// commits, Esc reverts), `customCommands` the `custom` subset of `actions` shown without the badge.
-/// `flaggedEditor` and `focusEditor` list every session or workspace of the window and toggle its flag or
-/// focus membership in place.
+/// Which palette is open. Each fuzzy-searches its own source: `actions` the app's commands, `themes` the
+/// bundled themes with a live preview on navigation (Enter commits, Esc reverts), `customCommands` the `custom`
+/// subset of `actions` shown without the badge. `flaggedEditor` and `focusEditor` list every session or
+/// workspace of the window and toggle its flag or focus membership in place. `switcher` is not a
+/// `CommandPalette`: it is the session switcher hosted over the window when its title-bar pill is not shown.
 enum PaletteMode {
     case actions
-    case sessions
+    case switcher
     case themes
     case customCommands
     case attention
@@ -77,7 +77,7 @@ enum PaletteMode {
 
     var keepsOpenOnRun: Bool { self == .flaggedEditor || self == .focusEditor }
     /// keepsSourceOrder lists an empty query in the order the feed supplied rather than A→Z.
-    var keepsSourceOrder: Bool { self == .sessions || self == .attention || keepsOpenOnRun }
+    var keepsSourceOrder: Bool { self == .attention || keepsOpenOnRun }
 }
 
 /// Drives the command palettes: `mode` is nil when closed, else the open palette. App-global, set
@@ -86,6 +86,11 @@ enum PaletteMode {
 @MainActor
 final class PaletteController {
     private(set) var mode: PaletteMode?
+    /// Bumped to ask the frontmost window to toggle its session switcher, which it shows in its title-bar
+    /// pill's popover or, with no pill, as the `.switcher` overlay.
+    private(set) var switcherRequests = 0
+
+    func requestSwitcher() { switcherRequests += 1 }
 
     /// Toggle a palette: the same shortcut again closes it; a different one switches.
     func toggle(_ mode: PaletteMode) {
@@ -169,13 +174,12 @@ struct CommandPalette: View {
         if let explicitItems { return explicitItems }
         switch controller.mode {
         case .actions: return actions.paletteActions()
-        case .sessions: return actions.paletteSessions()
         case .themes: return actions.paletteThemes()
         case .customCommands: return actions.paletteCustomCommands()
         case .attention: return actions.paletteAttention()
         case .flaggedEditor: return actions.paletteFlaggedEditor()
         case .focusEditor: return actions.paletteFocusEditor()
-        case .none: return []
+        case .switcher, .none: return [] // `.switcher` mounts the session switcher, never this palette
         }
     }
 
@@ -208,7 +212,6 @@ struct CommandPalette: View {
     private var placeholder: String {
         if explicitItems != nil { return prompt ?? "Select…" }
         switch controller.mode {
-        case .sessions: return "Go to session…"
         case .themes: return "Select a theme…"
         case .customCommands: return "Run a custom command…"
         case .attention: return "Go to a session that needs attention…"

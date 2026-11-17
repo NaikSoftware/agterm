@@ -85,27 +85,27 @@ final class PaletteUITests: XCTestCase {
         XCTAssertTrue(poll { self.sessionCount() == 2 }, "a second session should be added")
         XCTAssertNotEqual(selectedID(), first, "the new session should be selected after add")
 
-        openPalette("Go to Session")
-        typeIntoPalette("zeta")
+        openSwitcher()
+        typeIntoSwitcher("zeta")
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(poll { self.selectedID() == first }, "Go to Session → zeta should select the first session")
     }
 
-    /// Pins the half of `paletteSearchKeys` a caller-supplied picker gives up: a built-in palette still
-    /// matches its "<workspace> · <detail>" subtitle, the only place the owning workspace is searchable.
+    /// The switcher keys a session as the palettes do: a query only its "<workspace> · <detail>" key matches still
+    /// finds it, the only place the owning workspace is searchable.
     func testSessionPaletteMatchesItsSubtitleNotOnlyTheLabel() throws {
         renameActiveSession(to: "zeta")
         XCTAssertTrue(poll { self.firstSessionName() == "zeta" })
-        let first = try XCTUnwrap(firstSessionID())
 
-        openPalette("Go to Session")
-        typeIntoPalette("workspace") // leads the subtitle, "workspace 1 · …", and is absent from the label
+        openSwitcher()
+        typeIntoSwitcher("workspace") // leads "workspace 1 · …", and is absent from the label
 
-        XCTAssertTrue(app.paletteRow(first).waitForExistence(timeout: 5),
-                      "a built-in palette row must survive a query that only its subtitle matches")
+        let row = app.buttons.matching(identifier: "recent-session-row").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5) && row.label.contains("zeta"),
+                      "a session row must survive a query that only its workspace key matches")
     }
 
-    func testSessionPaletteListsAlphabeticallyOnAnEmptyQuery() throws {
+    func testSwitcherReturnOnAnEmptyQueryPicksTheMostRecentOtherSession() throws {
         renameActiveSession(to: "zulu")
         XCTAssertTrue(poll { self.firstSessionName() == "zulu" })
         addSession(named: "mike")
@@ -116,12 +116,13 @@ final class PaletteUITests: XCTestCase {
         XCTAssertEqual(ids.count, 3, "every persisted session should carry an id")
         XCTAssertEqual(selectedID(), ids.last, "the last created session should be selected")
 
-        openPalette("Go to Session")
-        XCTAssertTrue(app.paletteRow(ids[1]).waitForExistence(timeout: 5), "every session should be listed")
+        openSwitcher()
+        XCTAssertTrue(app.buttons.matching(identifier: "recent-session-row").firstMatch.waitForExistence(timeout: 5),
+                      "the other sessions should be listed under Recent")
         app.typeKey(.return, modifierFlags: [])
 
         XCTAssertTrue(poll { self.selectedID() == ids[1] },
-                      "an empty query must still sort a built-in palette A→Z, so Return runs mike, not zulu")
+                      "an empty query highlights the first row, the most recent other session: mike, not zulu")
     }
 
     func testThemePickerCommitsOnEnterAndRevertsOnEsc() throws {
@@ -354,6 +355,18 @@ final class PaletteUITests: XCTestCase {
         let item = app.menuItems[title].firstMatch
         XCTAssertTrue(item.waitForExistence(timeout: 5), "View menu should offer \(title)")
         item.click()
+    }
+
+    /// Navigate ▸ Go to Session opens the session switcher, its field already holding the keyboard.
+    private func openSwitcher() {
+        openPalette("Go to Session")
+        XCTAssertTrue(app.textFields["switcher-search-field"].waitForExistence(timeout: 5), "the switcher should open")
+    }
+
+    /// Types without clicking: the switcher's field takes the keyboard as it opens.
+    private func typeIntoSwitcher(_ text: String) {
+        for key in text { app.typeKey(String(key), modifierFlags: []) }
+        XCTAssertEqual(app.textFields["switcher-search-field"].value as? String, text, "the field should take the typing")
     }
 
     private func typeIntoPalette(_ text: String) {

@@ -43,7 +43,7 @@ paths:
   and `runIfEnabled()` asks it again at the keystroke, returning whether it ran, so an inert row cannot close
   the palette on a keystroke that did nothing. A row that ran closes it unless the mode `keepsOpenOnRun`.
   `PaletteItem.indicator` is a closure for the same reason: a session row reads its live `agentIndicator`
-  in the row body, so an agent finishing under an open ⌃P or attention palette updates its glyph.
+  in the row body, so an agent finishing under an open attention palette updates its glyph.
 - `toggleQuickTerminal` gates on all `uiActionsEnabled`, including terminal zoom and dashboard.
   Control drives `QuickTerminalController.shared` directly, there being one panel per app. The titlebar
   button is replaced by dashboard chrome, which hides an open quick terminal before showing the grid.
@@ -276,16 +276,16 @@ paths:
 
 ## Palettes, rename, and switcher
 
-- `PaletteController`/`CommandPalette` consume `paletteActions`, `paletteSessions`, and host-free
+- `PaletteController`/`CommandPalette` consume `paletteActions` and host-free
   `fuzzyScore`/`paletteSearchKeys`. Store the visible results in state on query/mode changes so rendering
   and Enter target cannot diverge; sort by score then title. Built-in palettes match label plus subtitle;
   caller-supplied pickers match the label only, so subtitle consequence text cannot filter a safe row out
-  and leave a destructive one preselected. Ctrl-P opens sessions; Ctrl-Shift-P opens actions.
-- An empty query skips ranking in four cases: attention mode, ⌃P sessions, the two membership editors, and a
+  and leave a destructive one preselected. Ctrl-P opens the session switcher (Titlebar popovers); Ctrl-Shift-P
+  opens actions.
+- An empty query skips ranking in three cases: attention mode, the two membership editors, and a
   caller-supplied picker. All keep their source order, because every row scores 0 and the tie-break would
-  re-sort A→Z and replace the row Return runs. ⌃P's source order is `AppStore.listOrdered`: A→Z by label,
-  each parent followed by its companions. Every other palette lists everything A→Z.
-- Flat session lists title a companion `parent › child` through `AppStore.listLabel(for:)`: ⌃P, ⌃Tab, the
+  re-sort A→Z and replace the row Return runs. Every other palette lists everything A→Z.
+- Flat session lists title a companion `parent › child` through `AppStore.listLabel(for:)`: the session switcher, ⌃Tab, the
   attention palette, both titlebar popovers, the Dock menu, dashboard captions, the flagged editor and every
   flagged layout. The sidebar tree, rename and Copy Name keep the bare `displayName`. The Attach Remote picker
   builds the same label from its listing (`remotePickItem`), with the bare name when the parent is not listed.
@@ -306,7 +306,7 @@ paths:
   in the action palette. The titlebar bell opens a popover, not this palette. Palette opening is
   keep-in-sync exempt.
 - Every session list draws the status glyph TRAILING, as the sidebar does, with per-call color/shape
-  through the sidebar's helpers and nothing for idle: ⌃P, attention, the session editor, Ctrl-Tab, both
+  through the sidebar's helpers and nothing for idle: the session switcher, attention, the session editor, Ctrl-Tab, both
   titlebar popovers, and a pick whose items carry status (Attach Remote).
 - Ctrl-J/Ctrl-K move the selection through `CommandPalette.selectionStep`, which resolves the key with
   `chordKey` from `NSApp.currentEvent`; `KeyPress` carries only the typed character, which is not `j`/`k`
@@ -323,16 +323,30 @@ paths:
 
 ## Titlebar popovers
 
-- Keep clock and bell popovers in `WindowContentView+RecentSessions` so `WindowContentView.swift` remains
-  below 1000 lines. They use
-  `SessionPopoverRow`: trailing status glyph, hover selection color, full-row hit target, terminal
-  background, and chrome text.
-- Clock lists up to `maxCandidates` recent visible sessions excluding active, each with its agent icon, then
-  up to 15 Recent Closed session entries; it enables when either list has a row. Selection records activity,
-  selects, and focuses; a closed row runs `openRecentClosed`, which types a recorded Claude resume line once
-  (`Session.pendingResumeLine`, a create-only payload under Live).
+- Keep the session switcher and the bell popover in `WindowContentView+RecentSessions` so
+  `WindowContentView.swift` remains below 1000 lines. Both use `SessionPopoverRow`: trailing status glyph,
+  hover selection color, full-row hit target, chrome text.
+- The session switcher is one body (`SwitcherPopover`) with two hosts: a click on the title pill opens it in the
+  pill's popover, and every keyboard or menu opener (⌃P `session_palette`, Navigate ▸ Go to Session,
+  `keymap.run`) shows it as the `.switcher` `PaletteMode`, centred over the terminal area in `windowOverlayLayer`,
+  so the palette bracket gives it focus restore and auto-follow suppression. `.switcher` never renders a
+  `CommandPalette`. The openers call `AppActions.toggleSessionPalette`, which bumps
+  `PaletteController.requestSwitcher`, answered by the frontmost window's `toggleSwitcher`. Never route them to
+  the popover: one opened from a key equivalent is key at first, then AppKit hands the keyboard back to the
+  terminal within half a second with no agterm caller, so typing misses its field. The pill's hint and tooltip
+  show the opener's binding.
+- The search field owns the keyboard from the moment the switcher opens. An empty query shows Needs you (every
+  window's attention entries), Recent (`navigableRecentSessions`, excluding active) and Recently closed (up to
+  15 session entries); a query swaps them for one Sessions list over `listOrdered(navigableSessions)` plus
+  the closed entries, ranked by `fuzzyRank` over `paletteSearchKeys` (name, then "workspace · detail").
+  ↑/↓ move one highlight over every visible row, first by default; Return commits it as a click does; Esc,
+  a scrim click or a commit closes either host.
+- A commit records activity, selects, focuses and reveals a captured blocked pane;
+  a closed row runs `openRecentClosed`, which types a recorded Claude resume line once
+  (`Session.pendingResumeLine`, a create-only payload under Live); a Needs you row goes through
+  `selectAttention`.
 - Bell lists all non-idle sessions across open windows, current included. Selection uses the same
   pane-aware reveal as the palette; see [[notifications]] for the cross-window raise.
-- Popover opens are keep-in-sync exempt. Synthesized XCUITest clicks inside `NSPopover` do not fire the
-  SwiftUI button, though real clicks do; tests verify open/list contents, while selection is manual plus
-  host-free API coverage.
+- Popover and switcher opens are keep-in-sync exempt. Synthesized XCUITest clicks inside `NSPopover` do not fire
+  the SwiftUI button, though real clicks do; keystrokes into the switcher's field do arrive
+  (pill-click popover and ⌃P overlay), so its tests type a query and press Return.

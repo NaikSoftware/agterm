@@ -473,7 +473,7 @@ public final class AppStore {
                                           htmlOverlays: htmlOverlayNodes(session, zoom: htmlZoom),
                                           hiddenOverlays: hiddenOverlaysNode(session),
                                           lastSelectedAt: session.lastSelectedAt?.timeIntervalSince1970,
-                                          tint: session.tint?.color.rawValue, tintOn: session.tint?.parts.map(\.rawValue),
+                                          tint: session.tint?.color.rawValue, tintOn: session.tint.map { _ in SidebarTint.shownParts },
                                           parent: session.parentID?.uuidString,
                                           collapsed: !session.isExpanded && parents.contains(session.id) ? true : nil,
                                           content: session.content == .page ? "page" : nil, info: session.effectiveInfo,
@@ -483,7 +483,7 @@ public final class AppStore {
                                         active: workspace.id == activeWorkspaceID,
                                         focused: focusedWorkspaceIDs.contains(workspace.id) ? true : nil,
                                         collapsed: workspace.isExpanded ? nil : true,
-                                        tint: workspace.tint?.color.rawValue, tintOn: workspace.tint?.parts.map(\.rawValue),
+                                        tint: workspace.tint?.color.rawValue, tintOn: workspace.tint.map { _ in SidebarTint.shownParts },
                                         rememberedFolder: workspace.rememberedFolder, projectFolder: workspace.projectFolder,
                                         sessions: sessions)
         }

@@ -15,9 +15,9 @@ final class ControlAPITintUITests: ControlAPITestCase {
 
         let node = try workspaceNode(id: workspaceID)
         XCTAssertEqual(node["tint"] as? String, "red")
-        XCTAssertEqual(node["tintOn"] as? [String], ["name"])
+        XCTAssertEqual(node["tintOn"] as? [String], ["icon", "name"])
         XCTAssertEqual(try sessionNode(id: sessionID)["tint"] as? String, "orange")
-        XCTAssertEqual(try sessionNode(id: sessionID)["tintOn"] as? [String], ["icon"])
+        XCTAssertEqual(try sessionNode(id: sessionID)["tintOn"] as? [String], ["icon", "name"])
         XCTAssertTrue(poll(until: self.app.images.matching(identifier: "session-icon")
             .matching(NSPredicate(format: "value == %@", "orange tint")).count == 1, timeout: 5),
                       "the tinted row's icon should name its tint")

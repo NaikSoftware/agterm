@@ -33,13 +33,13 @@ final class PaletteTests: XCTestCase {
     func testOnlyTheMembershipEditorsStayOpenAfterARun() {
         XCTAssertTrue(PaletteMode.flaggedEditor.keepsOpenOnRun)
         XCTAssertTrue(PaletteMode.focusEditor.keepsOpenOnRun)
-        for mode in [PaletteMode.actions, .sessions, .themes, .customCommands, .attention] {
+        for mode in [PaletteMode.actions, .switcher, .themes, .customCommands, .attention] {
             XCTAssertFalse(mode.keepsOpenOnRun, "\(mode)")
         }
     }
 
     func testEmptyQueriesKeepTheFeedOrderExceptForActionsThemesAndCustomCommands() {
-        for mode in [PaletteMode.sessions, .attention, .flaggedEditor, .focusEditor] {
+        for mode in [PaletteMode.attention, .flaggedEditor, .focusEditor] {
             XCTAssertTrue(mode.keepsSourceOrder, "\(mode)")
         }
         for mode in [PaletteMode.actions, .themes, .customCommands] {
