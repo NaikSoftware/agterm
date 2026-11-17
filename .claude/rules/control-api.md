@@ -50,7 +50,7 @@ paths:
   no answer event; a subagent's cannot, being `--if-idle`.
   `agterm-claude-status.sh` reads the hook payload (non-terminal stdin, 2-second bound, plutil or jq key paths):
   an event carrying `agent_id` adds `--if-idle` to `active`, and a Stop whose `background_tasks` lists a
-  running subagent, workflow or shell posts `active --blink` in place of `completed`, dropping the caller's flags
+  running subagent, workflow or shell, or whose `session_crons` is non-empty, posts `active --blink` in place of `completed`, dropping the caller's flags
   so `--auto-reset` cannot idle the row. Anything else, an unreadable payload included, posts argv.
   A `teammate` task stays `running` while idle, so it counts only while busy: `SubagentStart` touches
   `$TMPDIR/agterm-claude-busy/<session_id>/<agent_id>` and `SubagentStop`, which fires each time a teammate goes
