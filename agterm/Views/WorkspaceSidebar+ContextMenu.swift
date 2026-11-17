@@ -11,7 +11,10 @@ extension WorkspaceSidebar.Coordinator {
     /// interval so a rename double-click never folds it. `action` never fires during a drag.
     @objc func handleSingleClick(_ sender: NSOutlineView) {
         let row = sender.clickedRow
-        guard row >= 0, let node = sender.item(atRow: row) as? SidebarNode, node.kind == .workspace else { return }
+        guard row >= 0, let node = sender.item(atRow: row) as? SidebarNode else { return }
+        // a click on the already-active row changes no selection, so it clears Done the way selecting would.
+        if node.kind == .session, node.id == store.selectedSessionID { store.markVisited(node.id) }
+        guard node.kind == .workspace else { return }
         if clickHitsWorkspaceIcon(sender, row: row) {
             pendingRowToggle?.cancel()
             pendingRowToggle = nil

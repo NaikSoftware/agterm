@@ -85,6 +85,8 @@ paths:
   pre-reset indicator. Blocked/completed pane tags reveal split, scratch, or primary; idle and active use
   ordinary focus and never dismiss a merely shown scratch. `testSidebarClickRevealsBlockedSplitPane`
   covers the split case.
+- A click on the already-selected session row changes no selection, so `handleSingleClick` calls
+  `markVisited` to clear its badge and `autoReset` status as a selection would.
 - Accessibility IDs are `session-row`, `workspace-row`, `edit-field`, and `add-session`. Rename appears
   as `TextField` for sessions but `StaticText` for workspaces, so tests match the identifier across types.
 
