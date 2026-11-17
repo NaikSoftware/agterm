@@ -263,6 +263,8 @@ top-level session), `collapsed` (true only for a parent whose companions are fol
 `content` (`"page"` for a page session, the read side of `session overlay open --companion` or `--page`; omitted
 for a terminal session. Such a node has no terminal, so `realized` is false and `cwd` reports a companion's parent
 directory, or the directory a top-level page was created in),
+`agent` (the coding agent running anywhere in the session's foreground process group — `claude`, `codex`,
+`opencode`, `antigravity` — even one a script started; omitted for none),
 `foreground`/`splitForeground` (the live argv of each pane's foreground
 process — what it is running — omitted when the pane sits at its shell prompt, and also for a
 setuid/setgid foreground process like `top` or `sudo`, whose argv macOS refuses to expose),

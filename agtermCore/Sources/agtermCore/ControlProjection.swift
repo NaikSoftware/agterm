@@ -287,6 +287,10 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     /// pid, a setuid leader like `top`/`sudo`, an unresolved zmx pane, a failed syscall. Shares the restore
     /// capture's extraction but not its rules: this read descends the process group, the capture does not.
     public let foreground: [String]?
+    /// The coding agent running anywhere in the session's foreground process group (`claude`, `codex`,
+    /// `opencode`, `antigravity`), the sidebar icon's source; nil/omitted for none. Unlike `foreground` it sees
+    /// an agent a script started, and it updates on the app's 2 s sample, not per read.
+    public let agent: String?
     /// The split (right) pane's live foreground command (full argv), the split analogue of `foreground`.
     public let splitForeground: [String]?
     /// The main pane's foreground process when it IS a recognized shell, as its basename (`zsh`, `fish`);
@@ -427,7 +431,7 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
                 scratch: Bool = false, flagged: Bool = false, ended: Bool? = nil, pending: String? = nil, scratchBacked: Bool? = nil,
                 scratchPaneID: String? = nil, scratchPendingMessages: Int? = nil, interactions: [ControlInteraction]? = nil,
                 commandWait: Bool? = nil, splitCommandWait: Bool? = nil,
-                foreground: [String]? = nil, splitForeground: [String]? = nil,
+                agent: String? = nil, foreground: [String]? = nil, splitForeground: [String]? = nil,
                 foregroundShell: String? = nil, splitForegroundShell: String? = nil,
                 restoreCommand: String? = nil, splitRestoreCommand: String? = nil, status: String? = nil,
                 statusPane: String? = nil, statusBlink: Bool? = nil, statusColor: String? = nil,
@@ -482,6 +486,7 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
         self.context = context
         self.commandWait = commandWait
         self.splitCommandWait = splitCommandWait
+        self.agent = agent
         self.foreground = foreground
         self.splitForeground = splitForeground
         self.foregroundShell = foregroundShell
