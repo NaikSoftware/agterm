@@ -29,7 +29,7 @@ public struct ControlEventPayload: Codable, Sendable, Equatable {
     public var blink: Bool?
     public var color: String?
     /// The `status` event's per-call glyph silhouette (a `StatusShape` raw value), nil when the glyph uses the
-    /// Settings shape / default plain circle. A shape-only change emits a `status` event, unexplainable without it.
+    /// Settings shape / the status's default shape. A shape-only change emits a `status` event, unexplainable without it.
     public var shape: String?
     /// previous is what the event replaced. On `status` it is the status before the accepted write, equal
     /// to `status` when only shape, color, pane or blink changed. On `session.selected` it is the id of

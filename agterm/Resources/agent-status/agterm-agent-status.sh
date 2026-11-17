@@ -3,7 +3,7 @@
 #
 #   agterm-agent-status.sh active            # agent is busy
 #   agterm-agent-status.sh completed         # agent finished a turn
-#   agterm-agent-status.sh blocked  --blink  # agent is waiting on you (pulse for attention)
+#   agterm-agent-status.sh blocked           # agent is waiting on you
 #   agterm-agent-status.sh idle              # clear the indicator
 #
 # States: idle | active | completed | blocked. An optional --blink / --auto-reset

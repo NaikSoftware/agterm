@@ -12,7 +12,7 @@ struct StatusGlyph: View {
     /// Settings-configured status color.
     var colorHex: String?
     /// Optional per-call silhouette override (the session's `AgentIndicator.shape`); nil = this status's
-    /// Settings shape, else the default plain circle.
+    /// Settings shape, else the status's default shape.
     var shape: StatusShape?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

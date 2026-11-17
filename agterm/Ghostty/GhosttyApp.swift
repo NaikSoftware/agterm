@@ -161,7 +161,7 @@ final class GhosttyApp {
     private(set) var activeStatusColor: NSColor = GhosttyApp.defaultActiveStatusColor
     private(set) var blockedStatusColor: NSColor = .systemOrange
     private(set) var completedStatusColor: NSColor = .systemGreen
-    /// The agent-status glyph silhouettes, nil meaning the built-in plain circle. The two render sites read
+    /// The agent-status glyph silhouettes, nil meaning the status's default shape. The two render sites read
     /// them through `statusSymbolName(for:override:)`, `SettingsModel` writes them (tolerantly decoded from
     /// `AppSettings`); settings-mirrored like `toolbarMode`.
     private(set) var activeStatusShape: StatusShape?
@@ -367,7 +367,7 @@ final class GhosttyApp {
 
     /// The SF Symbol for a status glyph, honoring a per-call shape OVERRIDE from `session.status --shape` (on
     /// the ephemeral `AgentIndicator`). Precedence — override, else this status's Settings shape, else the
-    /// plain circle — lives in host-free `AgentStatus.symbolName(override:configured:)`; this supplies only the
+    /// status's default shape — lives in host-free `AgentStatus.symbolName(override:configured:)`; this supplies only the
     /// mirrored Settings value. Shared by the sidebar `StatusIconView` and SwiftUI `StatusGlyph` against drift.
     func statusSymbolName(for status: AgentStatus, override shape: StatusShape?) -> String {
         status.symbolName(override: shape, configured: configuredStatusShape(for: status))

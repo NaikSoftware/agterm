@@ -330,7 +330,7 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     /// The read side of `session.status --color`.
     public let statusColor: String?
     /// The per-call glyph-silhouette override (a `StatusShape` raw value); nil/omitted when idle or drawing
-    /// the Settings shape / the default plain circle. The read side of `session.status --shape` — the
+    /// the Settings shape / the status's default shape. The read side of `session.status --shape` — the
     /// PER-CALL override only, exactly like `statusColor`.
     public let statusShape: String?
     /// When the status was last set, idle and repeated values included, as epoch seconds on the

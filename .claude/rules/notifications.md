@@ -91,9 +91,10 @@ paths:
 - `StatusIconView`, an `NSImageView` beside `BadgeView`, draws every non-idle session as an SF Symbol
   in a 16pt slot at 13pt, with no selected-row hiding. Idle collapses its width to zero; a zero-count badge
   also collapses, with the inter-item gap owned by the badge.
-- Default states share `circle.fill` and differ by tint. Discussion #277 rejected marked circles because
+- Default shapes match the phone app: active `circle`, blocked `triangle`, completed `diamond`
+  (`AgentStatus.defaultShape`). Discussion #277 rejected marked circles because
   their interior marks are illegible at row size. `AgentStatus.symbolName(override:configured:)` resolves
-  per-call shape, configured status shape, then `circle`; require both arguments so omitted settings fail
+  per-call shape, configured status shape, then the default; require both arguments so omitted settings fail
   compilation. The set is `circle`, `square`, `triangle`, `triangle-down`, `play`, `diamond`, `capsule`,
   `seal`, `star`, `bolt`, `bell`, `checkmark`. `seal` reads close to circle and `bell` is also the titlebar
   Attention glyph; both are kept deliberately. `hexagon`/`octagon`/
