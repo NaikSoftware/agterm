@@ -1,7 +1,7 @@
 {
   "name": "hangar",
   "interface": {
-    "displayName": "hangar"
+    "displayName": "Hangar"
   },
   "plugins": [
     {

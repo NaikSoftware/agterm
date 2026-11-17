@@ -41,7 +41,7 @@ test-app: ## application-hosted AppKit unit tests (scripts/test-app.sh)
 lint: ## swiftlint over the tree (strict — warnings fail too)
 	swiftlint lint --strict --quiet
 
-dist: ## signed + notarized DMG — usage: make dist VERSION=x.y.z [PUBLISH=1]
+dist: ## release DMG, signed and notarized when a Developer ID is present — usage: make dist VERSION=x.y.z [PUBLISH=1]
 	@test -n "$(VERSION)" || { echo "usage: make dist VERSION=x.y.z [PUBLISH=1]" >&2; exit 1; }
 	./scripts/release.sh $(VERSION) $(if $(PUBLISH),--publish,)
 
