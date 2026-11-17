@@ -49,7 +49,7 @@ paths:
   downward `childIndex - 1` adjustment. A selected-row drag writes all `sidebarSelectionIDs` in visual
   order; an unselected-row drag writes only itself. `resolveSessions` removes the entire mixed-source
   block before inserting it atomically in visual order.
-- Workspace rows use pasteboard type `com.umputun.agterm.workspace`, which must remain registered or
+- Workspace rows use pasteboard type `ua.naiksoftware.agterm2.workspace`, which must remain registered or
   AppKit will not call validate/accept. Do not use AppKit's proposed item/index for workspace moves:
   expanded session rows make every gap appear inside a workspace. Instead, count workspace-row midpoints
   above `draggingLocation`, ignoring sessions.

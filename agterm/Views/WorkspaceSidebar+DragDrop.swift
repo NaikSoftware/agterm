@@ -11,6 +11,7 @@ extension WorkspaceSidebar.Coordinator {
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
         guard let node = item as? SidebarNode else { return nil }
         let pbItem = NSPasteboardItem()
+        let dropText: String?
         switch node.kind {
         case .session:
             let row = outlineView.row(forItem: item)
@@ -19,11 +20,15 @@ extension WorkspaceSidebar.Coordinator {
                 ? selectedIDs
                 : [node.id]
             pbItem.setString(draggedIDs.map(\.uuidString).joined(separator: "\n"), forType: sessionPasteboardType)
+            dropText = Session.dropText(draggedIDs.compactMap { store.session(withID: $0) })
         case .workspace:
             // the flagged tree omits workspaces with nothing flagged, so a workspace drop there has no slot to aim at
             guard store.sidebarMode == .tree else { return nil }
             pbItem.setString(node.id.uuidString, forType: workspacePasteboardType)
+            dropText = Session.dropText(store.workspaces.first { $0.id == node.id }?.sessions ?? [])
         }
+        // a terminal types the ids
+        if let dropText { pbItem.setString(dropText, forType: .string) }
         return pbItem
     }
 

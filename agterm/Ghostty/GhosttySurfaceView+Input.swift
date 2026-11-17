@@ -7,8 +7,8 @@ import GhosttyKit
 extension GhosttySurfaceView {
     // MARK: - Drag and drop (issue #51)
 
-    /// Accept the drag with a copy cursor when it carries something we can insert (a file/web URL or text),
-    /// reject it otherwise — so a session-row drag from the sidebar (a private pasteboard type) is ignored.
+    /// Accept the drag with a copy cursor when it carries something we can insert (a file/web URL or text,
+    /// including a sidebar row's session ids), reject it otherwise.
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
         dropText(from: sender) != nil ? .copy : []
     }
