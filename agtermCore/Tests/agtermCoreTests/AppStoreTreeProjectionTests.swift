@@ -26,6 +26,17 @@ struct AppStoreTreeProjectionTests {
         #expect(paneIDs() == ["left": nil, "right": "one"])
     }
 
+    @Test func controlTreeReportsTheRunningAgentAndOmitsNone() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/a"))
+        #expect(store.controlTree().workspaces[0].sessions[0].agent == nil)
+        session.runningAgent = .claude
+        let node = store.controlTree().workspaces[0].sessions[0]
+        #expect(node.agent == "claude")
+        #expect(String(decoding: try JSONEncoder().encode(node), as: UTF8.self).contains(#""agent":"claude""#))
+    }
+
     @Test func surfaceNodeEncodesItsPaneIDAndOmitsAnAbsentOne() throws {
         func json(_ paneID: String?) throws -> String {
             String(decoding: try JSONEncoder().encode(ControlSurfaceNode(
