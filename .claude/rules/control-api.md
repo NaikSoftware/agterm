@@ -2244,6 +2244,10 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   LOCAL line's source, markdown flag and configured `hideAfter` in the `info` frame and the snapshot. The
   viewer parses the source again and arms no timer: expiry is the origin's, and its clear reaches the
   viewer as a nil frame. Stream end clears only the mirror.
+- The origin's `Session.agentSessionID` rides the `agent.session` frame and snapshot field into the row's own
+  `agentSessionID`, and the viewer drops a value that is not a plain token.
+  An older origin or agterm-server sends none, so the row falls back to `remoteSessionID`.
+  Unlike status and context, stream end does not clear it, since it still names the conversation.
 - A mirrored HUD carries the origin's REMAINING time, and the viewer counts that down on its own clock.
   The two expiries are not synchronized, so the panels can close a moment apart; the origin's withdrawal
   frame closes the viewer's early. A mirrored HUD yields to a HUD or program overlay this Mac's own caller
