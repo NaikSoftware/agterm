@@ -137,6 +137,10 @@ void main() {
     expect(of('status', {'status': 'completed'})!.body, 'finished');
     final n = of('notify', {'title': 'Build', 'body': 'green'})!;
     expect((n.title, n.body, n.status), ('Build', 'green', 'notify'));
+    final c = of('notify', {'name': 'Redesign tree', 'title': 'Claude Code', 'body': 'Claude needs your permission'})!;
+    expect((c.title, c.body), ('Redesign tree', 'Claude needs your permission'));
+    expect(of('notify', {'name': 'Redesign tree', 'title': 'Claude Code', 'body': ''})!.body, 'Claude Code');
+    expect(of('notify', {'name': 'Redesign tree', 'title': 'Redesign tree', 'body': ''})!.body, '');
     expect(of('status', {'status': 'active'}), isNull);
     expect(of('lifecycle', {}), isNull);
   });
