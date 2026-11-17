@@ -7,7 +7,7 @@ index 463ea9b..d1dcf52 100644
  /// handling them well requires a non-regex approach.
  const url_schemes =
 -    \\https?://|mailto:|ftp://|file:|ssh:|git://|ssh://|tel:|magnet:|ipfs://|ipns://|gemini://|gopher://|news:
-+    \\https?://|mailto:|ftp://|file:|ssh:|git://|ssh://|tel:|magnet:|ipfs://|ipns://|gemini://|gopher://|news:|agterm://session/
++    \\https?://|mailto:|ftp://|file:|ssh:|git://|ssh://|tel:|magnet:|ipfs://|ipns://|gemini://|gopher://|news:|hangar://session/
  ;
  
  const ipv6_url_pattern =
@@ -16,14 +16,14 @@ index 463ea9b..d1dcf52 100644
      }
  }
 +
-+test "agterm session link regex" {
++test "hangar session link regex" {
 +    const testing = std.testing;
 +
 +    try oni.testing.ensureInit();
 +    var re = try oni.Regex.init(regex, .{}, oni.Encoding.utf8, oni.Syntax.default, null);
 +    defer re.deinit();
 +
-+    const link = "agterm://session/3B334BAA-791C-478B-94E2-9A11F8E2DF85";
++    const link = "hangar://session/3B334BAA-791C-478B-94E2-9A11F8E2DF85";
 +    const cases = [_][]const u8{
 +        link,
 +        "Open .dot-files session (" ++ link ++ ")",
@@ -39,8 +39,8 @@ index 463ea9b..d1dcf52 100644
 +    }
 +
 +    const no_match_cases = [_][]const u8{
-+        "agterm://window/3B334BAA",
-+        "agterm://other",
++        "hangar://window/3B334BAA",
++        "hangar://other",
 +    };
 +    for (no_match_cases) |input| {
 +        var result = re.search(input, .{});

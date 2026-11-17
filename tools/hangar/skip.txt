@@ -8,14 +8,14 @@
 docs/superpowers/**
 tools/hangar/**
 .superpowers/**
-# Patches change upstream ghostty and zmx code and must keep applying.
-macos/scripts/ghostty-patches/**
-macos/scripts/zmx-patches/**
 # Released entries are history; the file has no product name in its title.
 macos/CHANGELOG.md
 # Task 7 migration script: it names the old paths it migrates from.
 macos/scripts/migrate-from-agterm2.sh
 macos/scripts/tests/migrate-from-agterm2-test.sh
+
+# Our patches are renamed, but their context and removed lines are upstream code and must keep applying.
+macos/scripts/*-patches/**.patch	line	^[ -]
 
 # Credits.
 README.md	line	^Hangar started as a fork of \[agterm\]\(https://github\.com/umputun/agterm\)
