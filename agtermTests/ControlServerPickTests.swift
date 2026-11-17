@@ -227,7 +227,7 @@ final class ControlServerPickTests: XCTestCase {
         let controller = registerPick(targetID)
         _ = library.newWindow(name: "frontmost")
         let palette = PaletteController()
-        palette.open(.sessions)
+        palette.open(.switcher)
         actions.palette = palette
         let window = registerWindow(targetID)
         let pick = makePick("followed")

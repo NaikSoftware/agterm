@@ -137,37 +137,7 @@ final class SidebarRowViewsTests: XCTestCase {
         XCTAssertEqual(try renderedIcon(forSession: remote.id), coordinator.remoteSplitSessionIcon)
     }
 
-    func testAFlaggedRemoteRowFillsItsCloudAndKeepsTheUnsplitWeight() throws {
-        let store = try XCTUnwrap(library.activeStore)
-        let remote = try XCTUnwrap(store.addSession(toWorkspace: store.workspaces[0].id, cwd: "/a", remoteHost: "buildbox"))
-        remote.flagged = true
-        buildSidebar(for: store)
-
-        XCTAssertEqual(try renderedIcon(forSession: remote.id), try XCTUnwrap(coordinator.flaggedRemoteSessionIcon))
-    }
-
-    func testAFlaggedRemoteRowWithAHiddenSplitFillsTheSplitWeight() throws {
-        let store = try XCTUnwrap(library.activeStore)
-        let remote = try XCTUnwrap(store.addSession(toWorkspace: store.workspaces[0].id, cwd: "/a", remoteHost: "buildbox"))
-        store.toggleSplit(remote.id)
-        store.toggleSplit(remote.id)
-        remote.flagged = true
-        buildSidebar(for: store)
-
-        XCTAssertEqual(try renderedIcon(forSession: remote.id), try XCTUnwrap(coordinator.flaggedRemoteSplitSessionIcon))
-    }
-
-    func testAFlaggedEndedRemoteRowFillsItsSlashedCloud() throws {
-        let store = try XCTUnwrap(library.activeStore)
-        let remote = try XCTUnwrap(store.addSession(toWorkspace: store.workspaces[0].id, cwd: "/a", remoteHost: "buildbox"))
-        remote.ended = true
-        remote.flagged = true
-        buildSidebar(for: store)
-
-        XCTAssertEqual(try renderedIcon(forSession: remote.id), try XCTUnwrap(coordinator.flaggedRemoteDisconnectedSessionIcon))
-    }
-
-    func testFlaggingAndUnflaggingARemoteRowRedrawsItsCloud() throws {
+    func testFlaggingARowKeepsItsIconAndShowsTheFlagAfterTheName() throws {
         let store = try XCTUnwrap(library.activeStore)
         let live = try XCTUnwrap(store.addSession(toWorkspace: store.workspaces[0].id, cwd: "/a", remoteHost: "buildbox"))
         let ended = try XCTUnwrap(store.addSession(toWorkspace: store.workspaces[0].id, cwd: "/b", remoteHost: "buildbox"))
@@ -178,16 +148,22 @@ final class SidebarRowViewsTests: XCTestCase {
 
         store.setFlag(true, forSessions: [live.id, ended.id])
         coordinator.reconcile()
-        XCTAssertEqual(try renderedIcon(forSession: live.id), try XCTUnwrap(coordinator.flaggedRemoteSessionIcon))
-        XCTAssertEqual(try renderedIcon(forSession: ended.id), try XCTUnwrap(coordinator.flaggedRemoteDisconnectedSplitSessionIcon))
+        XCTAssertEqual(try renderedIcon(forSession: live.id), try XCTUnwrap(coordinator.remoteSessionIcon))
+        XCTAssertEqual(try renderedIcon(forSession: ended.id), try XCTUnwrap(coordinator.remoteDisconnectedSplitSessionIcon))
+        let cell = try renderedCell(forSession: live.id)
+        cell.layoutSubtreeIfNeeded()
+        let flag = try XCTUnwrap(cell.flagMark)
+        let name = try XCTUnwrap(cell.textField)
+        XCTAssertFalse(flag.isHidden)
+        let nameEnd = name.alignmentRect(forFrame: name.frame).maxX
+        XCTAssertEqual(flag.alignmentRect(forFrame: flag.frame).minX, nameEnd + 5, accuracy: 0.5, "the flag follows the name")
 
         store.setFlag(false, forSessions: [live.id, ended.id])
         coordinator.reconcile()
-        XCTAssertEqual(try renderedIcon(forSession: live.id), try XCTUnwrap(coordinator.remoteSessionIcon))
-        XCTAssertEqual(try renderedIcon(forSession: ended.id), try XCTUnwrap(coordinator.remoteDisconnectedSplitSessionIcon))
+        XCTAssertEqual(try renderedCell(forSession: live.id).flagMark?.isHidden, true)
     }
 
-    func testTheFlatFlaggedViewLeavesAFlaggedRemoteCloudUnfilled() throws {
+    func testTheFlatFlaggedViewShowsNoFlagMark() throws {
         let store = try XCTUnwrap(library.activeStore)
         let remote = try XCTUnwrap(store.addSession(toWorkspace: store.workspaces[0].id, cwd: "/a", remoteHost: "buildbox"))
         remote.flagged = true
@@ -195,6 +171,7 @@ final class SidebarRowViewsTests: XCTestCase {
         buildSidebar(for: store)
 
         XCTAssertEqual(try renderedIcon(forSession: remote.id), try XCTUnwrap(coordinator.remoteSessionIcon))
+        XCTAssertEqual(try renderedCell(forSession: remote.id).flagMark?.isHidden, true)
     }
 
     func testHiddenSessionIconsGiveTheSlotToTheNameAndLeaveWorkspaceIcons() throws {
@@ -266,34 +243,20 @@ final class SidebarRowViewsTests: XCTestCase {
         XCTAssertNil(try renderedNameField(forSession: remote.id).toolTip, "a reconnect must clear the notice")
     }
 
-    func testASelectedCompanionParentsTriangleFollowsTheSelectedRowText() throws {
+    func testASelectedRowKeepsItsTriangleAndTextColors() throws {
         let store = try XCTUnwrap(library.activeStore)
         let parent = try XCTUnwrap(store.activeSession)
         _ = try store.addCompanion(to: parent.id).get()
         buildSidebar(for: store)
         let row = try rowIndex(forSession: parent.id)
         let triangle = try renderedTriangle(atRow: row)
+        let cell = try XCTUnwrap(outline.view(atColumn: 0, row: row, makeIfNecessary: true) as? SidebarCellView)
 
         outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-        XCTAssertEqual(triangle.appearance?.name, try selectedTriangleAppearance())
-
-        outline.deselectAll(nil)
-        XCTAssertNil(triangle.appearance, "an unselected triangle inherits the outline's theme pin")
-    }
-
-    func testAnAppearanceChangeReappliesTheSelectedTriangle() throws {
-        let store = try XCTUnwrap(library.activeStore)
-        let parent = try XCTUnwrap(store.activeSession)
-        _ = try store.addCompanion(to: parent.id).get()
-        buildSidebar(for: store)
-        let row = try rowIndex(forSession: parent.id)
-        let triangle = try renderedTriangle(atRow: row)
-        outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-        let expected = try selectedTriangleAppearance()
-        triangle.appearance = NSAppearance(named: expected == .darkAqua ? .aqua : .darkAqua)
-
         NotificationCenter.default.post(name: .agtermAppearanceChanged, object: nil)
-        XCTAssertEqual(triangle.appearance?.name, expected)
+
+        XCTAssertNil(triangle.appearance, "a selected triangle inherits the outline's theme pin")
+        XCTAssertEqual(cell.textField?.textColor, SidebarCellView.themeTextColor(selected: false))
     }
 
     func testFlaggedRenameRestoresTheLabelAfterAnUnchangedCustomName() async throws {
@@ -666,12 +629,5 @@ final class SidebarRowViewsTests: XCTestCase {
         rowView.layoutSubtreeIfNeeded()
         return try XCTUnwrap(rowView.subviews.first { $0.identifier == NSOutlineView.disclosureButtonIdentifier },
                              "the companion parent's row should host a disclosure button")
-    }
-
-    private func selectedTriangleAppearance() throws -> NSAppearance.Name {
-        let text = try XCTUnwrap(SidebarCellView.themeTextColor(selected: true).usingColorSpace(.sRGB))
-        let textIsDark = ThemeBrightness.isDark(red: Double(text.redComponent), green: Double(text.greenComponent),
-                                                blue: Double(text.blueComponent))
-        return textIsDark ? .aqua : .darkAqua
     }
 }

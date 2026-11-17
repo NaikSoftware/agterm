@@ -331,7 +331,7 @@ final class WorkspaceSidebarCompanionsTests: XCTestCase {
                                        childIndex: outline.dropChildIndex)
     }
 
-    func testAPageCompanionRowShowsThePageIconFilledWhenFlagged() throws {
+    func testAPageCompanionRowKeepsThePageIconAndShowsTheFlagWhenFlagged() throws {
         let group = try seed()
         let page = try group.store.addPageCompanion(to: group.parent.id,
                                                     overlay: HtmlOverlay(source: .file(path: "/tmp/p.html", grantRoot: nil)),
@@ -342,7 +342,8 @@ final class WorkspaceSidebarCompanionsTests: XCTestCase {
         group.store.setFlag(true, forSession: page.id)
         coordinator.reconcile()
 
-        XCTAssertTrue(try cell(page.id).imageView?.image === coordinator.flaggedPageSessionIcon)
+        XCTAssertTrue(try cell(page.id).imageView?.image === coordinator.pageSessionIcon)
+        XCTAssertEqual(try cell(page.id).flagMark?.isHidden, false)
     }
 
     func testRowMenuConvertToCompanionNestsATopLevelPageUnderAFreshParent() throws {

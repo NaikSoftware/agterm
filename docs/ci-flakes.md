@@ -258,7 +258,8 @@ Each entry separates a demonstrated cause from one that is only consistent with 
 - **Symptom.** `AppDelegateCaptureTests.swift:100` `("0") is not equal to ("1")` and `:101` `nil` is not equal to
   the expected command.
 - **Runs.** Local only (2026-11-16): 1 of 3 isolated runs failed on master 841a74d, and 1 full hosted run failed on
-  a branch that does not touch the capture path.
+  a branch that does not touch the capture path. 2026-11-17: the full hosted run and 1 of 2 isolated runs failed on
+  the sidebar redesign branch, which also does not touch it.
 - **Cause, consistent with the evidence only.** The test's zsh listing (`zselect -t 12`) starts slowly under load
   and misses the capture timeout, so nothing is captured. No stage was measured.
 - **Fix.** None yet.
@@ -285,6 +286,15 @@ Each entry separates a demonstrated cause from one that is only consistent with 
   for `text.changes` had the same window.
 - **Fix.** The page holds the counts it reports during setup and sends them after `ready`.
   `TextPageRenderingTests` pins the message order for a diff with changes, one without, and a seeded search.
+
+### `RemotePageChannelTests.testAnOversizedBridgeRequestFailsAloneAndTheChannelStays`
+
+- **Symptom.** The hosted test process exits while this test runs; `xcodebuild` prints `Restarting after
+  unexpected exit, crash, or test timeout` and goes on. A WebContent process crash is logged shortly before.
+- **Runs.** Local only (2026-11-17): once in a full `make test-app` run on the sidebar redesign branch, which does
+  not touch remote pages; the class then passed 3 of 3 isolated runs.
+- **Cause.** Unknown; no crash report was collected.
+- **Fix.** None yet.
 
 ### Earlier hosted failures, already fixed on master
 

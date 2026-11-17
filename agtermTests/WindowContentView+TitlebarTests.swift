@@ -79,7 +79,7 @@ final class WindowContentViewTitlebarTests: XCTestCase {
                     let hidden = try renderTitlebar(mode: mode, width: width, hidden: [.remoteHost])
                     let scale = Int(window.backingScaleFactor)
                     XCTAssertEqual(visible.pixelsWide, Int(width) * scale)
-                    XCTAssertEqual(visible.pixelsHigh, (mode == .normal ? 48 : 30) * scale)
+                    XCTAssertEqual(visible.pixelsHigh, (mode == .normal ? 52 : 30) * scale)
                     XCTAssertGreaterThan(differentPixels(visible, hidden, from: 110 * scale, to: (Int(width) - 270) * scale), 20)
                     let buttonsWidth = mode == .normal ? 250 : 225
                     XCTAssertEqual(differentPixels(visible, hidden, from: (Int(width) - buttonsWidth) * scale,
@@ -137,10 +137,14 @@ final class WindowContentViewTitlebarTests: XCTestCase {
         let scale = Int(window.backingScaleFactor)
         let titleStart = 110 * scale
         let titleEnd = (640 - 225) * scale
+        let plain = try renderTitlebar(mode: .compact, width: 640, hidden: [.recentSessions])
+        let plainHidden = try renderTitlebar(mode: .compact, width: 640, hidden: [.recentSessions, .workspaceName])
+        XCTAssertGreaterThan(differentPixels(plain, plainHidden, from: titleStart, to: titleEnd), 20)
+        XCTAssertEqual(differentPixels(plain, plainHidden, from: titleEnd, to: 640 * scale), 0)
+
         let shown = try renderTitlebar(mode: .compact, width: 640)
-        let hidden = try renderTitlebar(mode: .compact, width: 640, hidden: [.workspaceName])
-        XCTAssertGreaterThan(differentPixels(shown, hidden, from: titleStart, to: titleEnd), 20)
-        XCTAssertEqual(differentPixels(shown, hidden, from: titleEnd, to: 640 * scale), 0)
+        let pillHidden = try renderTitlebar(mode: .compact, width: 640, hidden: [.workspaceName])
+        XCTAssertEqual(differentPixels(shown, pillHidden, from: 0, to: 640 * scale), 0, "the pill always shows the workspace")
 
         store.renameWorkspace(workspace, to: "frontend")
         let renamed = try renderTitlebar(mode: .compact, width: 640)
@@ -191,7 +195,7 @@ final class WindowContentViewTitlebarTests: XCTestCase {
         )
         let view = content.customTitlebar.frame(width: width).background(.white).environment(\.colorScheme, .light)
         let host = NSHostingView(rootView: view)
-        window.setContentSize(NSSize(width: width, height: mode == .normal ? 48 : 30))
+        window.setContentSize(NSSize(width: width, height: mode == .normal ? 52 : 30))
         window.contentView = host
         window.orderFront(nil)
         window.layoutIfNeeded()

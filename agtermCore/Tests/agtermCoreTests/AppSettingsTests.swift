@@ -455,12 +455,12 @@ struct AppSettingsTests {
     }
 
     @Test func sidebarRowHeightScalesWithFontSize() {
-        #expect(AppSettings.sidebarRowHeight(fontSize: 13) == 28) // the historical default row
-        #expect(AppSettings.sidebarRowHeight(fontSize: 18) == 33)
-        #expect(AppSettings.sidebarRowHeight(fontSize: 14.6) == 30) // fractional in-range rounds (14.6 -> 15, +15)
+        #expect(AppSettings.sidebarRowHeight(fontSize: 13) == 31) // a 30pt row plus the 1pt gap between rows
+        #expect(AppSettings.sidebarRowHeight(fontSize: 18) == 36)
+        #expect(AppSettings.sidebarRowHeight(fontSize: 14.6) == 33) // fractional in-range rounds (14.6 -> 15, +18)
         // out-of-range sizes clamp before the padding is added.
-        #expect(AppSettings.sidebarRowHeight(fontSize: 2) == AppSettings.sidebarFontSizeRange.lowerBound.rounded() + 15)
-        #expect(AppSettings.sidebarRowHeight(fontSize: 99) == AppSettings.sidebarFontSizeRange.upperBound.rounded() + 15)
+        #expect(AppSettings.sidebarRowHeight(fontSize: 2) == AppSettings.sidebarFontSizeRange.lowerBound.rounded() + 18)
+        #expect(AppSettings.sidebarRowHeight(fontSize: 99) == AppSettings.sidebarFontSizeRange.upperBound.rounded() + 18)
     }
 
     @Test func defaultThemeIsAgtermButNotBakedIntoAppSettings() {
@@ -544,7 +544,7 @@ struct AppSettingsTests {
     }
 
     @Test(arguments: [
-        (SidebarDensity.standard, DensityMetrics(padding: 15, indent: 14, info: 6, lift: 0, inset: 1.5)),
+        (SidebarDensity.standard, DensityMetrics(padding: 18, indent: 14, info: 6, lift: 0, inset: 0.5)),
         (.compact, DensityMetrics(padding: 10, indent: 10, info: 4, lift: 1, inset: 0.5)),
     ])
     func sidebarDensityMetrics(_ density: SidebarDensity, _ expected: DensityMetrics) {
@@ -879,7 +879,10 @@ struct AppSettingsTests {
         let symbols = InterfaceElement.allCases.filter { !rowIcons.contains($0) }.compactMap(\.symbolName)
         #expect(Set(symbols).count == symbols.count)
         #expect(InterfaceElement.sessionIcons.symbolName == InterfaceElement.quickTerminal.symbolName)
-        #expect(InterfaceElement.workspaceIcons.symbolName == InterfaceElement.focusFilter.symbolName)
+        #expect(InterfaceElement.workspaceIcons.symbolName == "square.on.square")
+        #expect(InterfaceElement.workspaceIcons.assetName == "workspace-stack")
+        #expect(InterfaceElement.newWorkspace.assetName == InterfaceElement.workspaceIcons.assetName)
+        #expect(InterfaceElement.sessionIcons.assetName == "session-terminal")
     }
 
     @Test func settingsOrderListsTextOnlyElementsFirst() {
@@ -1010,20 +1013,16 @@ struct AppSettingsTests {
 
     @Test(arguments: [
         // (countA, countB, countC, afterA, afterB)
-        (1, 2, 2, false, true),  // default: lone recent flows in, one divider between the two full groups
-        (1, 1, 2, false, false), // hide a B button: B is a single, no divider anywhere
-        (2, 2, 2, true, true),   // all full: both dividers
-        (2, 0, 2, false, true),  // empty B: a full A and a full C meet directly
-        (2, 1, 2, false, false), // lone B between two full groups: no bridge, no dividers
-        (2, 2, 1, true, false),  // lone C: divider only between the two full A/B groups
-        (1, 2, 3, false, true),  // full three-button C: the same single divider as the two-button default
-        (2, 1, 3, false, false), // lone B before a full three-button C: still no bridge
+        (1, 2, 2, true, true),   // default: the bell, then both groups, each divided
+        (1, 1, 2, true, true),   // a single-button group still gets its dividers
+        (1, 0, 2, false, true),  // empty B: A and C meet across one divider
         (0, 2, 2, false, true),  // empty A: divider only between B and C
         (0, 0, 2, false, false), // only C present: no dividers at the leading edge
         (2, 2, 0, true, false),  // empty C: divider only between A and B
+        (1, 0, 0, false, false), // only the bell
         (0, 0, 0, false, false), // nothing visible
     ])
-    func titlebarGroupDividersOnlyBetweenFullGroups(countA: Int, countB: Int, countC: Int,
+    func titlebarGroupDividersBetweenNonEmptyGroups(countA: Int, countB: Int, countC: Int,
                                                     afterA: Bool, afterB: Bool) {
         let dividers = InterfaceElement.titlebarGroupDividers(countA: countA, countB: countB, countC: countC)
         #expect(dividers.afterA == afterA)

@@ -44,10 +44,18 @@ extension FileTreeOutline.Coordinator {
     }
 }
 
-/// Highlights the drop target folder with the selection pill at low alpha instead of AppKit's accent fill.
+/// A file row: a plain foreground fill marks selection, and the drop target folder takes the theme selection
+/// color at low alpha instead of AppKit's accent fill.
 final class FileTreeRowView: SidebarRowView {
+    override static var rowRadius: CGFloat { 7 }
+
+    override func drawSelectionPill(in rect: NSRect) {
+        (GhosttyApp.shared.terminalForegroundColor ?? .labelColor).withAlphaComponent(0.12).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: Self.rowRadius, yRadius: Self.rowRadius).fill()
+    }
+
     override func drawDraggingDestinationFeedback(in _: NSRect) {
         (GhosttyApp.shared.terminalSelectionBackgroundColor ?? GhosttyApp.shared.terminalForegroundColor ?? .white).withAlphaComponent(0.3).setFill()
-        NSBezierPath(roundedRect: selectionRect, xRadius: 7, yRadius: 7).fill()
+        NSBezierPath(roundedRect: selectionRect, xRadius: Self.rowRadius, yRadius: Self.rowRadius).fill()
     }
 }

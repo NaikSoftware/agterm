@@ -11,7 +11,7 @@ final class AddSessionButton: NSButton {
 }
 
 /// An `NSTableCellView` with a leading icon, the name field, and a trailing badge. The icon is the inherited
-/// `cell.imageView` (2x2 grid for a workspace, outlined terminal for a session), so AppKit re-tints it white on
+/// `cell.imageView` (overlapping squares for a workspace, outlined terminal for a session), so AppKit re-tints it white on
 /// a selected row; the name is `cell.textField`, which the rename and selection wiring drives.
 class SidebarCellView: NSTableCellView {
     /// Trailing unseen-notification count — a session's `unseenCount` or a collapsed workspace's roll-up; 0 hides.
@@ -29,10 +29,25 @@ class SidebarCellView: NSTableCellView {
     /// configure since a reused cell keeps the density it was built with.
     var titleCenter: NSLayoutConstraint?
 
+    /// flagMark is the flag after a flagged session's name in the tree, session cells only. While it shows, the
+    /// name hugs its text (`nameStretch` drops below the name's hugging) so the flag follows it.
+    var flagMark: NSImageView?
+    var flagMarkWidthConstraint: NSLayoutConstraint?
+    var flagMarkGapConstraint: NSLayoutConstraint?
+    var nameStretch: NSLayoutConstraint?
+
+    func setFlagMarkVisible(_ visible: Bool) {
+        guard let flagMark else { return }
+        flagMark.isHidden = !visible
+        flagMarkWidthConstraint?.constant = visible ? 11 : 0
+        flagMarkGapConstraint?.constant = visible ? 5 : 0
+        nameStretch?.priority = visible ? .defaultLow - 1 : .defaultLow + 1
+    }
+
     func setCompanionMarker(_ companions: [String]) {
         guard let companionMarker, let companionMarkerWidthConstraint else { return }
         companionMarker.isHidden = companions.isEmpty
-        companionMarkerWidthConstraint.constant = companions.isEmpty ? 0 : 14
+        companionMarkerWidthConstraint.constant = companions.isEmpty ? 0 : 10
         let label = companions.isEmpty ? nil : "companions need attention: " + companions.joined(separator: ", ")
         companionMarker.setAccessibilityLabel(label)
         companionMarker.toolTip = label
@@ -47,11 +62,14 @@ class SidebarCellView: NSTableCellView {
     var addButtonWidthConstraint: NSLayoutConstraint?
 
     private static let addButtonWidth: CGFloat = 16
+    /// quickStartSize is the side of the workspace row's square quick-start buttons.
+    static let quickStartSize: CGFloat = 22
 
     /// Repeat button left of `addButton`: starts the last "+" choice and shows its icon. Shares the "+" hover
     /// reveal and Interface toggle. `repeatLauncher` is read on each reveal, since the last choice changes.
     var repeatButton: NSButton?
     var repeatButtonWidthConstraint: NSLayoutConstraint?
+    var repeatButtonGapConstraint: NSLayoutConstraint?
     var repeatLauncher: (() -> SessionLauncher)?
 
     /// Hover-revealed close button at the trailing edge, session cells only (nil for workspace cells).
@@ -61,8 +79,8 @@ class SidebarCellView: NSTableCellView {
     var iconWidthConstraint: NSLayoutConstraint?
     var iconGapConstraint: NSLayoutConstraint?
 
-    static let iconWidth: CGFloat = 16
-    static let iconGap: CGFloat = 6
+    static let iconWidth: CGFloat = 18
+    static let iconGap: CGFloat = 8
 
     /// notice is the remote presentation warning.
     var notice: String? {
@@ -95,7 +113,7 @@ class SidebarCellView: NSTableCellView {
         badge.hoverHidden = visible
         statusIcon.hoverHidden = visible
         addButton.isHidden = !visible
-        addButtonWidthConstraint.constant = visible ? Self.addButtonWidth : 0
+        addButtonWidthConstraint.constant = visible ? Self.quickStartSize : 0
         guard let repeatButton, let repeatButtonWidthConstraint else { return }
         if visible, let launcher = repeatLauncher?() {
             repeatButton.image = launcher.image(pointSize: 13)
@@ -104,8 +122,8 @@ class SidebarCellView: NSTableCellView {
             repeatButton.setAccessibilityValue(launcher.rawValue)
         }
         repeatButton.isHidden = !visible
-        // the image sits leading, so the extra width is the gap before "+"
-        repeatButtonWidthConstraint.constant = visible ? Self.addButtonWidth + 6 : 0
+        repeatButtonWidthConstraint.constant = visible ? Self.quickStartSize : 0
+        repeatButtonGapConstraint?.constant = visible ? 6 : 0
     }
 
     /// Reveals or collapses the session row's close button. It shows only while the row has no badge, status
@@ -166,18 +184,24 @@ class SidebarCellView: NSTableCellView {
         setCloseButtonVisible(false)
     }
 
-    /// setColors tints row text and icons from the theme for the row's real selection state, except the parts
-    /// a row `tint` colors, which keep it selected or not. Never drive it from `backgroundStyle`, which AppKit
+    /// setColors tints row text and icons from the theme for the row's selection state; a row `tint` colors both
+    /// the icon and the name whatever its stored parts say. Never drive it from `backgroundStyle`, which AppKit
     /// flips only while the table is first responder.
     func setColors(selected: Bool) {
         let color = Self.themeTextColor(selected: selected)
         let tintColor = tint.map { NSColor.tint($0.color) }
-        textField?.textColor = tint?.shows(.name) == true ? tintColor : color
-        let iconAlpha: CGFloat = selected ? 0.85 : 0.6
-        imageView?.contentTintColor = tint?.shows(.icon) == true ? tintColor : color.withAlphaComponent(iconAlpha)
-        addButton?.contentTintColor = color.withAlphaComponent(iconAlpha)
-        repeatButton?.contentTintColor = color.withAlphaComponent(iconAlpha)
+        textField?.textColor = tintColor ?? color
+        let iconAlpha: CGFloat = selected ? 0.85 : 0.58
+        imageView?.contentTintColor = tintColor ?? color.withAlphaComponent(iconAlpha)
+        for button in [addButton, repeatButton].compactMap(\.self) {
+            button.contentTintColor = color
+            button.wantsLayer = true
+            button.layer?.cornerRadius = 6
+            button.layer?.backgroundColor = color.withAlphaComponent(0.12).cgColor
+        }
         closeButton?.contentTintColor = color.withAlphaComponent(iconAlpha)
+        companionMarker?.contentTintColor = GhosttyApp.shared.statusColor(for: .blocked)
+        flagMark?.contentTintColor = NSColor.tint(.indigo)
     }
 
     /// themeTextColor is the row text color the theme gives for a selection state, never a row tint.
@@ -227,12 +251,13 @@ final class BadgeView: NSView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    private static let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize, weight: .bold)
+    private static let font = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
     // leading-edge gap so the capsule keeps air from the status glyph to its left; a count-0 badge collapses
     // fully and lets that glyph sit flush.
     private static let leadingGap: CGFloat = 4
     private var textAttributes: [NSAttributedString.Key: Any] { [.font: Self.font, .foregroundColor: NSColor.white] }
     private var label: String { count > 99 ? "99+" : String(count) }
+    private static let fill = NSColor(srgbRed: 1, green: 0x45 / 255, blue: 0x3A / 255, alpha: 1)
 
     override var intrinsicContentSize: NSSize {
         let height: CGFloat = 16
@@ -246,9 +271,8 @@ final class BadgeView: NSView {
     override func draw(_: NSRect) {
         let capsule = NSRect(x: Self.leadingGap, y: 0, width: bounds.width - Self.leadingGap, height: bounds.height)
         let radius = capsule.height / 2
-        // systemRed (the conventional unread color) reads on dark rows and on the accent-colored selected row,
-        // where an accent capsule would blend in.
-        NSColor.systemRed.setFill()
+        // the conventional unread red, fixed so it reads the same on every theme
+        Self.fill.setFill()
         NSBezierPath(roundedRect: capsule, xRadius: radius, yRadius: radius).fill()
         let text = label as NSString
         let size = text.size(withAttributes: textAttributes)
@@ -262,13 +286,16 @@ final class BadgeView: NSView {
 /// `session.status --shape` swaps the silhouette, so shape carries the state alongside the tint. Hidden on
 /// `.idle`. Accessibility: an `agent-status` static text whose value is the state name (XCUITest matches
 /// `app.staticTexts["agent-status"]`; neither tint nor silhouette is observable there). Blink is a layer
-/// `opacity` `CABasicAnimation` (autoreverse/repeat), added only while visible AND blinking.
+/// `opacity` `CABasicAnimation` (autoreverse/repeat), added only while visible AND blinking; a non-blinking
+/// `active` glyph gets a slower fade instead. Reduce Motion stops both.
 final class StatusIconView: NSImageView {
     private static let blinkKey = "agent-status-blink"
+    private static let fadeKey = "agent-status-fade"
     private static let glyphWidth: CGFloat = 16
-    /// Symbol point size of the glyph; the Settings shape picker previews options at the same size, so an
-    /// option looks like the glyph it installs.
-    static let glyphPointSize: CGFloat = 13
+    /// Symbol point size of the glyph: the default circle's ink measures 9pt across at 9. The view draws it
+    /// unscaled, so the 16pt slot never enlarges it. The Settings shape picker previews options at the same size,
+    /// so an option looks like the glyph it installs.
+    static let glyphPointSize: CGFloat = 9
 
     /// The view's width, collapsed to 0 on `.idle` so a status-less row reclaims the slot (its label truncates
     /// full-width); `glyphWidth` when a glyph shows. Activated in init, toggled in `apply`.
@@ -277,7 +304,7 @@ final class StatusIconView: NSImageView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        imageScaling = .scaleProportionallyUpOrDown
+        imageScaling = .scaleNone
         setAccessibilityElement(true)
         setAccessibilityRole(.staticText)
         setAccessibilityIdentifier("agent-status")
@@ -290,18 +317,31 @@ final class StatusIconView: NSImageView {
     /// apply renders the indicator's tinted glyph and updates tooltip + accessibility value to the state name;
     /// `.idle` hides the view and stops the blink.
     func apply(_ indicator: AgentIndicator) {
+        self.indicator = indicator
         toolTip = indicator.status.tooltipText
         showsGlyph = indicator.status != .idle
+        applyPulses()
         guard showsGlyph else {
             image = nil
             setAccessibilityValue(AgentStatus.idle.rawValue)
-            stopBlink()
             return
         }
         image = Self.icon(for: indicator.status, override: indicator.color, shape: indicator.shape)
         setAccessibilityValue(indicator.status.rawValue)
-        let shouldBlink = indicator.blink && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        if shouldBlink { startBlink() } else { stopBlink() }
+    }
+
+    private var indicator = AgentIndicator()
+
+    // Core Animation can drop a layer's animations while the view is out of a window, so re-add on return.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyPulses()
+    }
+
+    private func applyPulses() {
+        let motion = showsGlyph && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        pulse(Self.blinkKey, indicator.blink && motion, to: 0.2, duration: 0.5)
+        pulse(Self.fadeKey, indicator.status == .active && !indicator.blink && motion, to: 0.25, duration: 1.4)
     }
 
     /// hoverHidden collapses a shown glyph while the workspace row's hover buttons take its slot.
@@ -319,19 +359,22 @@ final class StatusIconView: NSImageView {
         widthConstraint.constant = visible ? Self.glyphWidth : 0
     }
 
-    private func startBlink() {
-        guard layer?.animation(forKey: Self.blinkKey) == nil else { return }
-        let blink = CABasicAnimation(keyPath: "opacity")
-        blink.fromValue = 1.0
-        blink.toValue = 0.2
-        blink.duration = 0.5
-        blink.autoreverses = true
-        blink.repeatCount = .greatestFiniteMagnitude
-        layer?.add(blink, forKey: Self.blinkKey)
-    }
-
-    private func stopBlink() {
-        layer?.removeAnimation(forKey: Self.blinkKey)
+    /// pulse runs or stops an endless autoreversing opacity animation; a running one is left alone so a
+    /// reconfigure never restarts it at full opacity.
+    private func pulse(_ key: String, _ on: Bool, to opacity: Double, duration: CFTimeInterval) {
+        guard on else {
+            layer?.removeAnimation(forKey: key)
+            return
+        }
+        guard layer?.animation(forKey: key) == nil else { return }
+        let pulse = CABasicAnimation(keyPath: "opacity")
+        pulse.fromValue = 1.0
+        pulse.toValue = opacity
+        pulse.duration = duration
+        pulse.autoreverses = true
+        pulse.repeatCount = .greatestFiniteMagnitude
+        if key == Self.fadeKey { pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut) }
+        layer?.add(pulse, forKey: key)
     }
 
     private static func icon(for status: AgentStatus, override colorHex: String?, shape: StatusShape?) -> NSImage? {
@@ -347,20 +390,12 @@ final class StatusIconView: NSImageView {
     }
 }
 
-/// Row view drawing its own selection pill in `drawBackground`, so the selection is the terminal's
-/// `selection-background` color in every state. The table's `selectionHighlightStyle` is `.none` (`makeNSView`),
-/// or AppKit paints a gray unemphasized fill whenever the sidebar isn't first responder (the normal case, since
-/// focus lives in the terminal), overriding a custom `drawSelection`. `isEmphasized` is overridden so the row
-/// redraws on a window key-state change (dimmer for a background window).
-///
-/// It is also the single source of truth for the cell's selection tint: `isSelected` (the state the pill draws
-/// from) re-tints the hosted `SidebarCellView` whenever AppKit updates it, and `didAddSubview` tints a cell the
-/// moment it attaches. Otherwise pill and text color desync — and on the many themes where
-/// `foreground == selection-background` (the inverted-selection idiom), a stale tint renders the text invisible.
+/// Row view drawing its own selection pill in `drawBackground`: the row's group tint (`selectionTint`, else the
+/// theme selection background) as a soft fill and hairline, so cells keep their normal colors when selected.
+/// The table's `selectionHighlightStyle` is `.none` (`makeNSView`), or AppKit paints a gray unemphasized fill
+/// whenever the sidebar isn't first responder. `isEmphasized` is overridden so the row redraws on a window
+/// key-state change (dimmer for a background window).
 class SidebarRowView: NSTableRowView {
-    private static let keyAlpha: CGFloat = 0.13
-    private static let inactiveAlpha: CGFloat = 0.07
-
     override var isEmphasized: Bool {
         get { window?.isKeyWindow ?? false }
         // isEmphasized is derived from the window's key state; the setter only triggers a redraw.
@@ -369,62 +404,273 @@ class SidebarRowView: NSTableRowView {
     }
 
     override var isSelected: Bool {
-        didSet {
-            guard isSelected != oldValue else { return }
-            // AppKit won't redraw with selectionHighlightStyle == .none; re-tint the cell from the pill's state.
-            needsDisplay = true
-            retintCellViews()
-            applyDisclosureAppearance()
-        }
+        // AppKit won't redraw with selectionHighlightStyle == .none
+        didSet { if isSelected != oldValue { needsDisplay = true } }
     }
 
+    // AppKit draws the triangle in the appearance's secondary label color; dimmed it reads near the spec's fg 36%
     override func didAddSubview(_ subview: NSView) {
         super.didAddSubview(subview)
-        // a cell materialized into an already-selected row (reload/expand row-map flux can make the cell
-        // builder's own selection lookup miss) picks up the row's live state on attach.
-        (subview as? SidebarCellView)?.setColors(selected: isSelected)
-        if subview.identifier == NSOutlineView.disclosureButtonIdentifier { applyDisclosureAppearance() }
+        if subview.identifier == NSOutlineView.disclosureButtonIdentifier { subview.alphaValue = 0.65 }
     }
 
-    private func retintCellViews() {
-        for case let cell as SidebarCellView in subviews { cell.setColors(selected: isSelected) }
+    /// selectionTint is the tint of the row's group (workspace, else its own session tint); nil uses the theme.
+    var selectionTint: NSColor? {
+        didSet { if selectionTint != oldValue, isSelected { needsDisplay = true } }
     }
 
-    /// applyDisclosureAppearance gives a selected row's triangle the appearance that matches the selected row
-    /// text, since AppKit colors it from appearance alone and the outline's pin reads the sidebar background,
-    /// not the pill. An unselected triangle inherits that pin.
-    func applyDisclosureAppearance() {
-        let appearance = isSelected ? Self.selectedTriangleAppearance() : nil
-        for subview in subviews where subview.identifier == NSOutlineView.disclosureButtonIdentifier {
-            subview.appearance = appearance
+    var selectionColor: NSColor {
+        let app = GhosttyApp.shared
+        return selectionTint ?? app.terminalSelectionBackgroundColor ?? app.terminalForegroundColor ?? .white
+    }
+
+    /// band is the workspace group's opaque tint, drawn faint behind this row; the edge rounds, strokes and
+    /// insets only the group's outer ends.
+    var band: (color: NSColor, edge: SidebarBandEdge)? {
+        didSet {
+            guard band?.color != oldValue?.color || band?.edge != oldValue?.edge else { return }
+            needsDisplay = true
+            needsLayout = true
         }
     }
 
-    private static func selectedTriangleAppearance() -> NSAppearance? {
-        guard let text = SidebarCellView.themeTextColor(selected: true).usingColorSpace(.sRGB) else { return nil }
-        let textIsDark = ThemeBrightness.isDark(red: Double(text.redComponent), green: Double(text.greenComponent),
-                                                blue: Double(text.blueComponent))
-        return NSAppearance(named: textIsDark ? .aqua : .darkAqua)
+    /// groupEdge is the row's place in its workspace group, tinted or not; nil outside the tree.
+    var groupEdge: SidebarBandEdge? {
+        didSet {
+            guard groupEdge != oldValue else { return }
+            needsDisplay = true
+            needsLayout = true
+        }
+    }
+
+    /// rowWash is a tinted session's own wash, drawn over the band.
+    var rowWash: NSColor? {
+        didSet { if rowWash != oldValue { needsDisplay = true } }
+    }
+
+    /// isHovered draws the pointer's faint fill. It is cleared on reuse and when the row leaves its window, so
+    /// a row scrolled or reloaded away from under the pointer never keeps it.
+    var isHovered = false {
+        didSet { if isHovered != oldValue { needsDisplay = true } }
+    }
+    private var hoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    // a cell's own hover areas forward their events up the responder chain to this row; only its own count
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        if event.trackingArea === hoverArea { isHovered = true }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        if event.trackingArea === hoverArea { isHovered = false }
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        isHovered = false
+    }
+
+    /// waveLayer clips the drifting gradient to the row rect; nil while the row shows no wave.
+    private(set) var waveLayer: CALayer?
+    private var wave: SidebarWave?
+    private var waveStill = false
+    private var wavePeriod: CGFloat = 0
+    static let waveKey = "sidebar-wave"
+    static let bandRadius: CGFloat = 11
+
+    /// setWave shows the active-row wave, or removes it for nil. It drifts one period per 4.8 s unless
+    /// Reduce Motion is on, which leaves the gradient still.
+    func setWave(_ wave: SidebarWave?) {
+        let still = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        guard wave != self.wave || still != waveStill else { return }
+        self.wave = wave
+        waveStill = still
+        guard let wave, let base = NSColor(agtermHex: wave.base), let second = NSColor(agtermHex: wave.second) else {
+            waveLayer?.removeFromSuperlayer()
+            waveLayer = nil
+            return
+        }
+        wantsLayer = true
+        let clip = waveLayer ?? CALayer()
+        if waveLayer == nil {
+            clip.masksToBounds = true
+            clip.addSublayer(CAGradientLayer())
+            layer?.insertSublayer(clip, at: 0)
+            waveLayer = clip
+        }
+        let gradient = clip.sublayers?.first as? CAGradientLayer
+        let period = [base.withAlphaComponent(0.04), base.withAlphaComponent(0.20), second.withAlphaComponent(0.16)]
+        // two periods side by side, so a shift by one period lands on an identical frame
+        gradient?.colors = (period + period + [base.withAlphaComponent(0.04)]).map(\.cgColor)
+        gradient?.locations = [0, 0.125, 0.275, 0.5, 0.625, 0.775, 1]
+        gradient?.startPoint = CGPoint(x: 0, y: 0.5)
+        gradient?.endPoint = CGPoint(x: 1, y: 0.5)
+        wavePeriod = 0
+        layoutWave()
+    }
+
+    override func layout() {
+        super.layout()
+        alignToContent()
+        layoutWave()
+    }
+
+    /// alignToContent keeps the cell and chevron in the content rect: AppKit places a cell by `frameOfCell` only
+    /// when it adds it and afterwards just autoresizes it with the row, so a fold that moves the group's edge
+    /// extras would otherwise stretch the cell across them.
+    private func alignToContent() {
+        let content = contentRect
+        for subview in subviews {
+            if subview is NSTableCellView {
+                subview.frame = NSRect(x: subview.frame.minX, y: content.minY, width: subview.frame.width, height: content.height)
+            } else if subview.identifier == NSOutlineView.disclosureButtonIdentifier {
+                subview.setFrameOrigin(NSPoint(x: subview.frame.minX, y: content.midY - subview.frame.height / 2))
+            }
+        }
+    }
+
+    // re-adds the drift if Core Animation dropped it while the row was out of a window
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { isHovered = false }
+        needsLayout = true
+    }
+
+    private func layoutWave() {
+        guard let clip = waveLayer, let gradient = clip.sublayers?.first else { return }
+        let period = bounds.width * 2
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        // square where the group continues; at the group's outer ends it follows the band's inner radius
+        clip.frame = rowRect
+        let top: CACornerMask = isFlipped ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        let bottom: CACornerMask = isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        var corners: CACornerMask = []
+        if groupEdge == .first || groupEdge == .single { corners.formUnion(top) }
+        if groupEdge == .last || groupEdge == .single { corners.formUnion(bottom) }
+        clip.maskedCorners = corners
+        clip.cornerRadius = corners.isEmpty ? 0 : Self.bandRadius - Self.groupPadding
+        gradient.frame = CGRect(x: -clip.frame.minX, y: 0, width: period * 2, height: clip.bounds.height)
+        CATransaction.commit()
+        guard period != wavePeriod || (!waveStill && gradient.animation(forKey: Self.waveKey) == nil) else { return }
+        wavePeriod = period
+        gradient.removeAnimation(forKey: Self.waveKey)
+        guard !waveStill, period > 0 else { return }
+        let drift = CABasicAnimation(keyPath: "transform.translation.x")
+        drift.fromValue = 0
+        drift.toValue = -period
+        drift.duration = 4.8
+        drift.repeatCount = .greatestFiniteMagnitude
+        gradient.add(drift, forKey: Self.waveKey)
+    }
+
+    /// Half the gap between workspace groups, and the group's padding around its rows.
+    static let groupGap: CGFloat = 4
+    static let groupPadding: CGFloat = 3
+
+    /// bandRect is the group's frame in this row: `groupPadding` around the row rect, and `groupGap` short of
+    /// the row's edge at the group's outer ends.
+    func bandRect(_ edge: SidebarBandEdge) -> NSRect {
+        let pill = selectionRect
+        var rect = NSRect(x: pill.minX - Self.groupPadding, y: bounds.minY, width: pill.width + 2 * Self.groupPadding,
+                          height: bounds.height)
+        let top: CGFloat = edge == .first || edge == .single ? Self.groupGap : 0
+        let bottom: CGFloat = edge == .last || edge == .single ? Self.groupGap : 0
+        rect.origin.y += isFlipped ? top : bottom
+        rect.size.height -= top + bottom
+        return rect
+    }
+
+    /// edgeExtras is the space a row of a group adds outside its content: half the gap between groups plus the
+    /// group's padding, above the first row and below the last. Row height, cell frame and drawing all read it.
+    static func edgeExtras(_ edge: SidebarBandEdge?) -> (top: CGFloat, bottom: CGFloat) {
+        let outer = groupGap + groupPadding
+        return (edge == .first || edge == .single ? outer : 0, edge == .last || edge == .single ? outer : 0)
+    }
+
+    /// contentRect is the row less its edge extras, across the pill's width: where the cell lays out.
+    var contentRect: NSRect {
+        let pill = selectionRect, extras = Self.edgeExtras(groupEdge)
+        return NSRect(x: pill.minX, y: bounds.minY + (isFlipped ? extras.top : extras.bottom), width: pill.width,
+                      height: max(0, bounds.height - extras.top - extras.bottom))
+    }
+
+    /// rowRect is where selection, hover, wash and wave draw: the content rect, inset by the density's gap
+    /// between rows.
+    var rowRect: NSRect {
+        contentRect.insetBy(dx: 0, dy: GhosttyApp.shared.sidebarDensity.selectionInset)
+    }
+
+    /// fillBand draws the group's rounded outline once across its rows: each row's piece overhangs the edges
+    /// the group continues past and is clipped to the row, so only the outer edges round and stroke.
+    private func fillBand(_ fill: NSColor, edge: SidebarBandEdge, stroke: NSColor? = nil) {
+        let radius = Self.bandRadius
+        var shape = bandRect(edge)
+        let overhang = radius + 2
+        let continuesUp = edge == .middle || edge == .last, continuesDown = edge == .middle || edge == .first
+        if continuesUp { shape.size.height += overhang; if isFlipped { shape.origin.y -= overhang } }
+        if continuesDown { shape.size.height += overhang; if !isFlipped { shape.origin.y -= overhang } }
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: bounds).addClip()
+        fill.setFill()
+        NSBezierPath(roundedRect: shape, xRadius: radius, yRadius: radius).fill()
+        if let stroke {
+            let outline = NSBezierPath(roundedRect: shape.insetBy(dx: 0.5, dy: 0.5), xRadius: radius - 0.5, yRadius: radius - 0.5)
+            outline.lineWidth = 1
+            stroke.setStroke()
+            outline.stroke()
+        }
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     override func drawBackground(in dirtyRect: NSRect) {
         super.drawBackground(in: dirtyRect)
-        guard isSelected else { return }
-        if let selection = GhosttyApp.shared.terminalSelectionBackgroundColor {
-            selection.withAlphaComponent(isEmphasized ? 1 : 0.55).setFill()
-        } else {
-            (GhosttyApp.shared.terminalForegroundColor ?? .white)
-                .withAlphaComponent(isEmphasized ? Self.keyAlpha : Self.inactiveAlpha).setFill()
+        if let band {
+            fillBand(band.color.withAlphaComponent(0.10), edge: band.edge, stroke: band.color.withAlphaComponent(0.16))
         }
-        NSBezierPath(roundedRect: selectionRect, xRadius: 7, yRadius: 7).fill()
+        let rect = rowRect, radius = Self.rowRadius
+        if let rowWash {
+            rowWash.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+        }
+        if isSelected {
+            drawSelectionPill(in: rect)
+        } else if isHovered {
+            (GhosttyApp.shared.terminalForegroundColor ?? .labelColor).withAlphaComponent(0.07).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+        }
+    }
+
+    /// rowRadius rounds selection, hover and wash.
+    class var rowRadius: CGFloat { 8 }
+
+    /// drawSelectionPill fills the row rect with the selection color and rings it with a hairline.
+    func drawSelectionPill(in rect: NSRect) {
+        let color = selectionColor, radius = Self.rowRadius
+        color.withAlphaComponent(isEmphasized ? 0.20 : 0.12).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+        let hairline = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: radius - 0.5, yRadius: radius - 0.5)
+        hairline.lineWidth = 1
+        color.withAlphaComponent(isEmphasized ? 0.55 : 0.35).setStroke()
+        hairline.stroke()
     }
 
     /// selectionRect is the pill's frame in the row.
     var selectionRect: NSRect {
-        let minX = (superview as? SidebarOutlineView)?.selectionMinX ?? 8
+        let outline = superview as? SidebarOutlineView
+        let minX = outline?.selectionMinX ?? 8, maxInset = outline?.selectionMaxXInset ?? 8
         let inset = GhosttyApp.shared.sidebarDensity.selectionInset
         let pill = bounds.insetBy(dx: 0, dy: inset)
-        return NSRect(x: pill.minX + minX, y: pill.minY, width: pill.width - minX - 8, height: pill.height)
+        return NSRect(x: pill.minX + minX, y: pill.minY, width: pill.width - minX - maxInset, height: pill.height)
     }
 }
 

@@ -165,7 +165,7 @@ final class SidebarInfoRowTests: XCTestCase {
 
         for selected in [false, true] {
             cell.setColors(selected: selected)
-            let expected = SidebarCellView.themeTextColor(selected: selected).withAlphaComponent(selected ? 0.85 : 0.62)
+            let expected = SidebarCellView.themeTextColor(selected: selected).withAlphaComponent(selected ? 0.85 : 0.58)
             XCTAssertEqual(rgba(color(in: cell.infoField.attributedStringValue, at: 0)), rgba(expected), "selected: \(selected)")
             XCTAssertEqual(rgba(cell.textField?.textColor), rgba(NSColor.tint(.orange)), "the name keeps its tint")
         }
@@ -242,8 +242,9 @@ final class SidebarInfoRowTests: XCTestCase {
         })
     }
 
+    // the cell frame leaves out a group row's edge extras
     private func height(of id: UUID) throws -> CGFloat {
-        outline.rect(ofRow: try row(of: id)).height
+        outline.frameOfCell(atColumn: 0, row: try row(of: id)).height
     }
 
     private func infoCell(forSession id: UUID) throws -> SidebarInfoCellView {

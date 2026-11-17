@@ -98,9 +98,9 @@ final class ControlServerTintTests: XCTestCase {
         let tree = store.controlTree()
         let node = try XCTUnwrap(tree.workspaces.first { $0.name == "prod" })
         XCTAssertEqual(node.tint, "red")
-        XCTAssertEqual(node.tintOn, ["name"])
+        XCTAssertEqual(node.tintOn, ["icon", "name"])
         XCTAssertEqual(node.sessions.first?.tint, "orange")
-        XCTAssertEqual(node.sessions.first?.tintOn, ["icon"])
+        XCTAssertEqual(node.sessions.first?.tintOn, ["icon", "name"])
     }
 
     func testEverySessionPlacementPathCarriesTheCreationTint() throws {

@@ -36,13 +36,14 @@ struct FileTreeView: View {
         VStack(alignment: .leading, spacing: 0) {
             if case .folder(let url) = FileTreeRoot(session: store.activeSession) {
                 Text(url.lastPathComponent)
-                    .font(.system(size: GhosttyApp.shared.sidebarFontSize, weight: .medium))
-                    .foregroundStyle(chromeText.opacity(0.6))
+                    .font(.system(size: GhosttyApp.shared.sidebarFontSize - 0.5, weight: .medium))
+                    .foregroundStyle(chromeText.opacity(0.58))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(url.path)
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
+                    .padding(.top, 4)
+                    .padding(.bottom, 6)
             }
             FileTreeOutline(store: store, actions: actions)
         }
@@ -65,6 +66,11 @@ struct FileTreeOutline: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView { Self.makeScrollView(coordinator: context.coordinator) }
 
+    /// rowHeight is 26 at the default 13pt sidebar font, scaling with it.
+    @MainActor static var rowHeight: CGFloat {
+        CGFloat(AppSettings.clampSidebarFontSize(GhosttyApp.shared.sidebarFontSize).rounded()) + 13
+    }
+
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.setRoot(FileTreeRoot(session: store.activeSession))
     }
@@ -78,9 +84,9 @@ struct FileTreeOutline: NSViewRepresentable {
         outline.delegate = coordinator
         outline.headerView = nil
         outline.rowSizeStyle = .custom
-        outline.rowHeight = AppSettings.sidebarRowHeight(fontSize: GhosttyApp.shared.sidebarFontSize)
+        outline.rowHeight = FileTreeOutline.rowHeight
         outline.floatsGroupRows = false
-        outline.indentationPerLevel = 14
+        outline.indentationPerLevel = 18
         outline.autosaveExpandedItems = false
         outline.style = .plain
         outline.backgroundColor = .clear
@@ -278,7 +284,7 @@ struct FileTreeOutline: NSViewRepresentable {
             cancelRename()
             applyTheme()
             guard let outline = outlineView else { return }
-            outline.rowHeight = AppSettings.sidebarRowHeight(fontSize: GhosttyApp.shared.sidebarFontSize)
+            outline.rowHeight = FileTreeOutline.rowHeight
             outline.reloadData(forRowIndexes: IndexSet(integersIn: 0 ..< outline.numberOfRows), columnIndexes: [0])
             outline.enumerateAvailableRowViews { rowView, _ in rowView.needsDisplay = true }
         }
@@ -311,7 +317,7 @@ struct FileTreeOutline: NSViewRepresentable {
                 for: FileIconCatalog.icon(forName: name, isDirectory: node.isDirectory), pointSize: 16, dark: app.terminalThemeIsDark)
             let cut = cutChangeCount == pasteboard.changeCount && cutPaths.contains(node.url.path)
             cell.textAlpha = cut ? 0.5 : name.hasPrefix(".") ? 0.6 : 1
-            cell.setColors(selected: outlineView.isRowSelected(outlineView.row(forItem: node)))
+            cell.setColors(selected: false)
             return cell
         }
     }
@@ -375,7 +381,7 @@ extension FileTreeOutlineView: NSMenuItemValidation {
     }
 }
 
-/// A `SidebarCellView` so `SidebarRowView` retints it on selection like a sidebar row.
+/// A `SidebarCellView` so a file row looks like a sidebar row.
 final class FileTreeCellView: SidebarCellView {
     static let reuseID = NSUserInterfaceItemIdentifier("file-tree-cell")
     var textAlpha: CGFloat = 1
@@ -396,9 +402,9 @@ final class FileTreeCellView: SidebarCellView {
         NSLayoutConstraint.activate([
             icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
             icon.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: Self.iconWidth),
-            icon.heightAnchor.constraint(equalToConstant: Self.iconWidth),
-            name.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: Self.iconGap),
+            icon.widthAnchor.constraint(equalToConstant: 16),
+            icon.heightAnchor.constraint(equalToConstant: 16),
+            name.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 7),
             name.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -4),
             name.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])

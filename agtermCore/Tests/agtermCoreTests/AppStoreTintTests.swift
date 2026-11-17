@@ -157,7 +157,7 @@ struct AppStoreTintTests {
         #expect(store.workspaces.first { $0.id == work.id }?.tint == SidebarTint(color: .blue))
     }
 
-    @Test func treeReportsTintAndPlacementAndOmitsThemWhenUntinted() throws {
+    @Test func treeReportsTintOnBothPartsWhateverIsStoredAndOmitsItWhenUntinted() throws {
         let store = makeStore()
         let work = store.addWorkspace(name: "work")
         let tinted = try #require(store.addSession(toWorkspace: work.id, cwd: "/a"))
@@ -168,7 +168,7 @@ struct AppStoreTintTests {
         let node = try #require(store.controlTree().workspaces.first { $0.id == work.id.uuidString })
 
         #expect(node.tint == "#3a7bd5")
-        #expect(node.tintOn == ["name"])
+        #expect(node.tintOn == ["icon", "name"])
         #expect(node.sessions[0].tint == "green")
         #expect(node.sessions[0].tintOn == ["icon", "name"])
         #expect(node.sessions[1].tint == nil && node.sessions[1].tintOn == nil)

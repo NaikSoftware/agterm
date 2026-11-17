@@ -481,7 +481,7 @@ command &quot;Session here&quot; ctrl+a&gt;n agtermctl session new --cwd &quot;$
 <p>A <strong>session</strong> is one running shell with a name, a working directory and its own scrollback: the unit you work in, and a row in the sidebar. A <strong>workspace</strong> is a named group of sessions for one project or context. A session can move between workspaces while it runs, keeping its shell and scrollback.</p>
 <h3 id="workspaces-sidebar">The sidebar</h3>
 <ul>
-<li>The sidebar is a two-level tree: workspaces, each holding sessions. A workspace row has a filled folder icon, a session row an outlined terminal.</li>
+<li>The sidebar is a two-level tree: workspaces, each holding sessions. A workspace row has a stacked-squares icon, a session row a terminal prompt. A flagged session shows a small flag after its name.</li>
 <li>A workspace can pin a project folder. A session a script starts with <code>session new --cwd DIR</code> and no other placement lands in the workspace whose folder is <code>DIR</code> or holds it, in any open window; the deepest pin wins. A new session in a workspace with a project folder opens there unless Settings sends new sessions home or to a fixed folder. On first launch, and from <strong>File ▸ Set Up Workspaces…</strong>, a guide offers one workspace per project folder it finds. Pin or clear a folder with <code>workspace folder</code>. Remote windows do not carry project folders yet.</li>
 <li>A session is named after its working directory's last folder. Renaming pins a name of your own; clearing it restores automatic naming. Rename inline by double-clicking a row's name.</li>
 <li>The four icons at the bottom of the sidebar add a workspace, add a session, and toggle the workspace filter and the flagged view.</li>
@@ -512,7 +512,7 @@ Two parents, each with its companions indented under it; the blocked <code>logs<
 <li>Moving the parent carries its companions.</li>
 <li>Closing a companion closes only it. Closing the parent closes the group, and one Reopen Closed Item brings it all back.</li>
 <li>While a parent has companions, its shell exiting starts a fresh shell in the same directory instead of closing the session; one that exits again within 2 seconds closes the group. A Mac viewing that session attaches to the new shell.</li>
-<li>Flat lists (the ⌃P palette, the Ctrl-Tab switcher, the Dock menu and the Attach Remote picker) label a companion <code>parent › child</code>; the tree, rename and Copy Name keep the bare name.</li>
+<li>Flat lists (the session switcher, the Ctrl-Tab switcher, the Dock menu and the Attach Remote picker) label a companion <code>parent › child</code>; the tree, rename and Copy Name keep the bare name.</li>
 </ul>
 <table>
 <colgroup>
@@ -738,7 +738,7 @@ agtermctl dashboard --mru --font-size 11    # a fixed cell font size; --auto-siz
 <tbody>
 <tr>
 <td>⌃P</td>
-<td>session switcher: jump by name or working directory</td>
+<td>session switcher: type to jump by name, workspace or working directory</td>
 </tr>
 <tr>
 <td>⌃⇧P</td>
@@ -769,7 +769,8 @@ The action palette over a split session. Attach Remote is greyed out: listed, bu
 </figcaption>
 </figure>
 <p><strong>Palettes.</strong> Type to filter, arrows or Ctrl-J/Ctrl-K to move, Enter to run, Esc to close. The action palette lists every action. One the menus currently disable, such as Rename Session with no session or Focus Workspace with no workspace, still shows and matches what you type, greyed out and doing nothing when chosen, so the palette stays a complete index. Rows that could never apply are left out: Delete Workspace with one workspace left, Focus Right Pane with no split.</p>
-<p><strong>Ctrl-Tab</strong> walks the recently used sessions: hold Ctrl and tap Tab (Shift-Tab goes back, Esc cancels), release Ctrl to switch. A single tap flips straight back to the session you came from. The order survives a relaunch. The title-bar clock button opens the same recent list for the mouse, each row marked with its running agent, followed by recently closed sessions to reopen; a Claude Code session reopens with <code>claude --resume</code> on its last conversation.</p>
+<p><strong>Ctrl-Tab</strong> walks the recently used sessions: hold Ctrl and tap Tab (Shift-Tab goes back, Esc cancels), release Ctrl to switch. A single tap flips straight back to the session you came from. The order survives a relaunch. </p>
+<p><strong>Session switcher.</strong> A click on the session title in the title bar, ⌃P or Navigate ▸ Go to Session opens the session switcher under the title, or near the top of the window when <strong>Settings ▸ Interface ▸ Session switcher</strong> is off or the toolbar is hidden. Its search field takes your typing at once. With nothing typed it lists <strong>Needs you</strong>, <strong>Recent</strong> with each row marked by its running agent, and <strong>Recently closed</strong> sessions to reopen; a Claude Code session reopens with <code>claude --resume</code> on its last conversation. Typing replaces those lists with every session of the window and the recently closed ones, matched by name, workspace or working directory. Arrows move the highlight, Enter switches, Esc closes.</p>
 <p><strong>Dock menu.</strong> Right-clicking agterm's Dock icon offers New Session, New Window, Quick Terminal, Dashboard, recent sessions and sessions needing attention, all for the last-active window. They stay with that window even if another one comes forward while the menu is open. New Window belongs to no window and is always available.</p>
 <h3 id="navigation-close">Where you land after a close</h3>
 <p>Closing the session you are in returns you to the session you most recently worked in, not to the row next to it.</p>
@@ -1198,8 +1199,9 @@ The Interface tab: title-bar and sidebar controls, plus the quick terminal's siz
 <ul>
 <li><strong>Workspace name</strong> shows before the session name, cut to 24 characters.</li>
 <li><strong>Hide overlays</strong> stays in place and is dimmed while the session has no overlay to hide.</li>
+<li><strong>Session switcher</strong> makes the session title a switcher (see <a href="#navigation">Navigation</a>); off, the title is plain text.</li>
 <li><strong>Workspace add-session</strong> is the + shown on a workspace row on hover.</li>
-<li>Hiding <strong>Workspace icons</strong> or <strong>Session icons</strong> gives names more room, and takes what the icon shows with it: a session's split, flag fill, remote cloud, page glyph and icon-only tint, and a workspace's focus mark. A remote session's connection notice then shows when you hover its name.</li>
+<li>Hiding <strong>Workspace icons</strong> or <strong>Session icons</strong> gives names more room, and takes what the icon shows with it: a session's split, remote cloud and page glyph, and a workspace's focus mark. A remote session's connection notice then shows when you hover its name.</li>
 <li>Hiding <strong>Workspace chevrons</strong> moves every row left into their space; a workspace row then gives no sign of being folded.</li>
 <li><strong>Session info</strong>: where a session's <a href="#status-info">info line</a> shows: Always, Flagged (the flagged view only) or Off.</li>
 <li><strong>Active window only</strong> (off by default) shows the sidebar only in the frontmost window and hides it in the others, so the sidebar moves with focus.</li>
@@ -2267,7 +2269,7 @@ agtermctl session status idle --target &quot;$AGTERM_SESSION_ID&quot;       # cl
 </tr>
 <tr>
 <td><code>--blink</code></td>
-<td>adds an attention pulse. macOS Reduce Motion stops the repeating sidebar and dashboard animation and keeps the status; the pulse returns when Reduce Motion is off</td>
+<td>adds an attention pulse. macOS Reduce Motion stops the repeating sidebar and dashboard animation and keeps the status; the pulse returns when Reduce Motion is off. It is separate from the slow wave every active row shows: the row color drifts across the row and the status glyph fades in and out; Reduce Motion stops the wave too and keeps the static color</td>
 </tr>
 <tr>
 <td><code>--sound NAME</code></td>
@@ -2354,18 +2356,15 @@ agtermctl session info --clear --target &quot;$AGTERM_SESSION_ID&quot;</code></p
 <li><code>tree</code> reports <code>info</code>, <code>infoMarkdown</code> and <code>infoHideAfter</code>.</li>
 </ul>
 <h3 id="status-tint">Row tint</h3>
-<p>A tint tells rows apart at a glance: red for production, green for development. Pick one from <strong>Tint</strong> in a session or workspace row menu: None or one of twelve colors (red, orange, yellow, green, blue, purple, gray, teal, pink, brown, indigo, mint) that follow light and dark mode. Then <strong>Show On</strong> chooses Icon, Name, or Icon and Name.</p>
+<p>A tint tells rows apart at a glance: red for production, green for development. Pick one from <strong>Tint</strong> in a session or workspace row menu: None or one of twelve colors (red, orange, yellow, green, blue, purple, gray, teal, pink, brown, indigo, mint) that follow light and dark mode. A tint colors the row's icon and name.</p>
 <pre class="bash"><code>agtermctl session tint red --target &quot;$AGTERM_SESSION_ID&quot;
-agtermctl session tint green --on icon,name --target &quot;$AGTERM_SESSION_ID&quot;
 agtermctl workspace tint red
 agtermctl session tint clear --target &quot;$AGTERM_SESSION_ID&quot;</code></pre>
 <ul>
-<li>A workspace tint colors only the workspace row, never the sessions in it.</li>
-<li>With several rows selected, Show On is available only when every selected row is tinted.</li>
-<li>A color picked for an untinted row starts on the last Show On choice made while the app runs, and Show On shows it checked.</li>
+<li>A workspace tint colors a soft band behind the workspace row and all its sessions and companions in the tree. The flat and plain flagged lists show no band. A tinted session also gets a light wash behind its row. A selected row is outlined in its group's tint, or its own.</li>
 <li>The command palette offers <strong>Tint Session: Red</strong> through <strong>Tint Session: None</strong> for the active session.</li>
 <li>Any other color is a <code>#rrggbb</code> hex through <code>agtermctl</code>. It stays the same in light and dark mode, and the Tint submenu shows it as a checked Custom entry.</li>
-<li><code>session new --tint</code> and <code>workspace new --tint</code> create a row already tinted. <code>tree</code> reports <code>tint</code> and <code>tintOn</code>.</li>
+<li><code>session new --tint</code> and <code>workspace new --tint</code> create a row already tinted. <code>tree</code> reports <code>tint</code>. The <code>--on</code> and <code>--tint-on</code> flags of older scripts are accepted and ignored.</li>
 </ul>
 <p>A tint on a local row survives quit and relaunch; a duplicated session starts without one. On a session attached from another Mac the tint stays on this Mac: the row does not show the other Mac's tint, and a tint set here is saved with the row. A remote window's row shows the server's tint, which every Mac shares. On an older agterm, an emoji or a PROD or DEV word in the name gives a visible marker, at the cost of pinning the name: the row then no longer shows the live terminal title.</p>
 <h3 id="status-hooks">Install the agent hooks</h3>

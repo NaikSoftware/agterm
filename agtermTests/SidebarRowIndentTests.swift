@@ -53,25 +53,21 @@ final class SidebarRowIndentTests: XCTestCase {
         try await super.tearDown()
     }
 
-    func testWorkspaceRowStartsWhereTheDisclosureTriangleEnds() throws {
+    func testTheTreeTakesTheSpecGeometry() throws {
         try XCTSkipUnless(trimApplies)
+        let store = try XCTUnwrap(library.activeStore)
+        let parent = try XCTUnwrap(store.activeSession)
+        let companion = try store.addCompanion(to: parent.id).get()
         try buildSidebar()
 
-        let row = try workspaceRow()
-        XCTAssertEqual(outline.frameOfCell(atColumn: 0, row: row).minX, outline.frameOfOutlineCell(atRow: row).maxX,
-                       "a row icon stranded past the triangle is the gap this trim exists to close")
-    }
-
-    func testRowIconClearsTheTriangleByTheCellInset() throws {
-        try XCTSkipUnless(trimApplies)
-        try buildSidebar()
-
-        let row = try workspaceRow()
-        let cell = try XCTUnwrap(outline.view(atColumn: 0, row: row, makeIfNecessary: true) as? SidebarCellView)
-        cell.layoutSubtreeIfNeeded()
-        let icon = try XCTUnwrap(cell.imageView)
-        XCTAssertEqual(icon.convert(icon.bounds, to: outline).minX, outline.frameOfOutlineCell(atRow: row).maxX + 2,
-                       "the gap after the triangle should match the inset before it")
+        let workspace = try workspaceRow()
+        let chevron = outline.frameOfOutlineCell(atRow: workspace)
+        XCTAssertEqual(chevron.minX, 11)
+        XCTAssertEqual(chevron.width, 12)
+        XCTAssertEqual(try iconMinX(atRow: workspace), chevron.maxX + 8)
+        XCTAssertEqual(try iconMinX(atRow: try row(of: parent.id)) - 3, 26)
+        XCTAssertEqual(try iconMinX(atRow: try row(of: companion.id)) - 3, 46)
+        XCTAssertEqual(outline.selectionMinX, 3)
     }
 
     func testFlatLeafRowStartsWhereAParentRowDoes() throws {
@@ -84,6 +80,7 @@ final class SidebarRowIndentTests: XCTestCase {
     }
 
     func testSessionRowKeepsItsPerLevelIndent() throws {
+        try XCTSkipIf(trimApplies, "the spec geometry places each level itself")
         try buildSidebar()
 
         let workspace = outline.frameOfCell(atColumn: 0, row: try workspaceRow())
@@ -96,8 +93,10 @@ final class SidebarRowIndentTests: XCTestCase {
         let pair = buildPair()
 
         for row in 0..<pair.plain.numberOfRows {
-            XCTAssertEqual(pair.trimmed.frameOfCell(atColumn: 0, row: row).maxX,
-                           pair.plain.frameOfCell(atColumn: 0, row: row).maxX,
+            let plain = pair.plain.frameOfCell(atColumn: 0, row: row).maxX
+            // the spec geometry ends a cell 8pt short of its pill, and never past the plain frame
+            let expected = trimApplies ? min(plain, pair.trimmed.bounds.width - pair.trimmed.selectionMaxXInset - 6) : plain
+            XCTAssertEqual(pair.trimmed.frameOfCell(atColumn: 0, row: row).maxX, expected,
                            "the status glyph and badge hang off the trailing edge and must not move")
         }
     }
@@ -130,7 +129,7 @@ final class SidebarRowIndentTests: XCTestCase {
 
         let parentFrame = outline.frameOfCell(atColumn: 0, row: try row(of: parent.id))
         let companionFrame = outline.frameOfCell(atColumn: 0, row: try row(of: companion.id))
-        XCTAssertEqual(companionFrame.minX - parentFrame.minX, Self.indentationPerLevel)
+        XCTAssertEqual(companionFrame.minX - parentFrame.minX, trimApplies ? 20 : Self.indentationPerLevel)
         XCTAssertEqual(companionFrame.maxX, parentFrame.maxX)
     }
 
@@ -185,10 +184,10 @@ final class SidebarRowIndentTests: XCTestCase {
         let store = try XCTUnwrap(library.activeStore)
         let parent = try XCTUnwrap(store.activeSession)
         _ = try store.addCompanion(to: parent.id).get()
+        GhosttyApp.shared.setHiddenInterfaceElements([.workspaceChevrons])
         try buildSidebar()
         let nativeWidth = outline.frameOfOutlineCell(atRow: try row(of: parent.id)).width
         XCTAssertGreaterThan(nativeWidth, 0)
-        GhosttyApp.shared.setHiddenInterfaceElements([.workspaceChevrons])
 
         for density in [SidebarDensity.standard, .compact] {
             GhosttyApp.shared.setSidebarDensity(density)
@@ -262,12 +261,19 @@ final class SidebarRowIndentTests: XCTestCase {
 
                 store.setSidebarMode(.tree)
                 coordinator.reconcile()
-                XCTAssertEqual(try pillAndIcon(of: session.id).pill.minX, 8, "\(density) \(layout)")
+                XCTAssertEqual(try pillAndIcon(of: session.id).pill.minX, trimApplies ? 3 : 8, "\(density) \(layout)")
             }
         }
         GhosttyApp.shared.setSidebarDensity(.standard)
         postAppearanceChange()
         XCTAssertEqual(try pillAndIcon(of: session.id).pill, tree.pill)
+    }
+
+    private func iconMinX(atRow row: Int) throws -> CGFloat {
+        let cell = try XCTUnwrap(outline.view(atColumn: 0, row: row, makeIfNecessary: true) as? SidebarCellView)
+        cell.layoutSubtreeIfNeeded()
+        let icon = try XCTUnwrap(cell.imageView)
+        return icon.convert(icon.bounds, to: outline).minX
     }
 
     private func pillAndIcon(of id: UUID) throws -> (pill: NSRect, icon: NSRect) {

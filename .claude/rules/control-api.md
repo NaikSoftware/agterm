@@ -1510,8 +1510,8 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
 - `session.tint` and `workspace.tint` take mode `set` (a `TintValue`: a `TintColor` name or a `#rrggbb` hex stored
   lowercase, optional `tintOn` parts) or `clear`, which
   refuses a color or parts. `ControlDispatcher+SessionMetadata` parses both and the creation `tint`/`tintOn` on
-  `session.new`/`workspace.new` before any action runs, so a bad value creates nothing. A set without parts keeps
-  the row's own, else icon; `SidebarTint.recolor`/`place` own that rule for the CLI, the row menu and the palette.
+  `session.new`/`workspace.new` before any action runs, so a bad value creates nothing. Parts (`--on`, `--tint-on`,
+  `tintOn`) are still validated and stored for compatibility but have no effect: a tint colors icon and name.
   A workspace tint never colors its sessions. Persisted, never copied by duplicate, local to this Mac except on a
   remote window's row, where the server keeps it as a catalog field, as it does the flag; a server predating those
   fields leaves both on the Mac.
@@ -1520,7 +1520,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   calls the `TintColor` forms of `SidebarTint.init`, `recolor`, `AppStore.setTintColor` and `ControlTintUpdate.set`,
   so each keeps that signature beside a non-optional `TintValue` overload, which leaves a `nil` argument unambiguous.
   `session.info` markup keeps `TintColor`, names only.
-  Read `tint`/`tintOn` on session and workspace nodes, omitted when untinted.
+  Read `tint` on session and workspace nodes, omitted when untinted; `tintOn` always reports `SidebarTint.shownParts`.
 - `session.context set TEXT|clear` sets what a session is FOR, shown in the title bar. Read `context`.
   `set` requires `text`, `clear` forbids it, and the mode is required, so a raw client sending both or
   neither is refused. The server trims outer spaces and rejects a blank result, over 256 UTF-8 bytes, or

@@ -324,8 +324,8 @@ private struct InterfaceSettingsView: View {
         Toggle(isOn: binding(for: element)) {
             HStack(spacing: 6) {
                 Group {
-                    if let symbol = element.symbolName {
-                        Image(systemName: symbol).foregroundStyle(.secondary)
+                    if element.symbolName != nil {
+                        element.icon().foregroundStyle(.secondary)
                     } else {
                         Color.clear
                     }

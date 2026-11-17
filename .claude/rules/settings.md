@@ -39,7 +39,7 @@ paths:
 - `sidebarFontSize` and `interfaceFontSize` are separate settings, both 9...20 default 13, read through
   `effectiveSidebarFontSize`/`effectiveInterfaceFontSize`. Neither falls back to the other: the sidebar
   is a density knob, the palette a readability one.
-  `sidebarFontSize` drives sidebar rows and their height (clamped size + 15, so 13 gives 28).
+  `sidebarFontSize` drives sidebar rows and their height (clamped size + 18, so 13 gives 31).
   `interfaceFontSize` drives the palette/picker, the session switcher, and the title-bar popover rows
   that share `SessionSwitcherRow`; `InterfaceMetrics` derives the secondary (subtitle/badge) and
   shortcut sizes plus the panel scale from it, anchored so 13 reproduces the previously hardcoded
@@ -276,8 +276,7 @@ paths:
   `overlayToggle`;
   sidebar cases are `newWorkspace`, `newSession`, `flaggedView`, `focusFilter`, and row-level
   `workspaceAddSession`, `workspaceIcons`, `sessionIcons` and `workspaceChevrons` ([[sidebar]] owns its layout).
-  The two icon toggles show the glyph their rows
-  draw, so they share it with `focusFilter` and `quickTerminal`.
+  The two icon toggles show the image their rows draw (`assetName`, else `symbolName`).
   A `hiddenByDefault` case (`workspaceName`, `customCommands` and `overlayToggle`) is governed by
   `shownInterfaceElements` instead, the same shape with the opposite sense, and its name in the hidden list is ignored. Attention
   has its separate default-off setting.
@@ -290,7 +289,7 @@ paths:
   share; the tab lists `settingsOrder(in:)`, text-only elements first. Mutate the raw set, then push
   resolved known values to `GhosttyApp`. SwiftUI gates with `shows(_:)`; the AppKit row "+" checks the
   mirror on hover. Titlebar group dividers appear only between adjacent groups that each retain at least
-  two buttons, as computed by `titlebarGroupDividers`. Add a case/render gate only after user approval.
+  one button, as computed by `titlebarGroupDividers`. Add a case/render gate only after user approval.
 - `autoHideSidebarInactiveWindows` defaults off. On every become-key/main, not resign,
   `WindowLibrary.applyInactiveWindowSidebarHiding()` shows the active window and hides other open
   sidebars, even when frontmost id was pre-set. Enabling applies immediately. While on, manual hide is

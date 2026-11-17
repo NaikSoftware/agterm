@@ -152,7 +152,7 @@ final class AppActionsPaletteTests: XCTestCase {
         red.run()
 
         XCTAssertNil(first.tint)
-        XCTAssertEqual(second.tint, SidebarTint(color: .red))
+        XCTAssertEqual(second.tint, SidebarTint(color: .red, parts: [.icon, .name]))
         let none = try XCTUnwrap(actions.paletteActions().first { $0.title == "Tint Session: None" })
         none.run()
         XCTAssertNil(second.tint)
@@ -231,24 +231,6 @@ final class AppActionsPaletteTests: XCTestCase {
         XCTAssertTrue(row.isEnabled(), "and it is live again once the session is back")
         XCTAssertTrue(row.runIfEnabled(), "which is what dismisses the palette")
         XCTAssertTrue(actions.renamePending)
-    }
-
-    func testASessionRowShowsTheStatusOfTheMomentUnderTheOpenPalette() throws {
-        let store = try XCTUnwrap(library.activeStore)
-        let workspace = try XCTUnwrap(store.currentWorkspaceID)
-        let session = try XCTUnwrap(store.addSession(toWorkspace: workspace, cwd: NSHomeDirectory()))
-        let row = try XCTUnwrap(actions.paletteSessions().first { $0.id == session.id.uuidString })
-        XCTAssertEqual(row.indicator(), AgentIndicator())
-
-        store.setAgentIndicator(AgentIndicator(status: .active), forSession: session.id)
-        XCTAssertEqual(row.indicator().status, .active)
-
-        let completed = AgentIndicator(status: .completed, color: "#00aa00", shape: .star)
-        store.setAgentIndicator(completed, forSession: session.id)
-        XCTAssertEqual(row.indicator(), completed)
-
-        store.setAgentIndicator(AgentIndicator(), forSession: session.id)
-        XCTAssertEqual(row.indicator().status, .idle)
     }
 
     // an action neither a palette row nor `paletteLessHandler(for:)` covers can still be bound in
@@ -362,14 +344,14 @@ final class AppActionsPaletteTests: XCTestCase {
         _ = try store.addCompanion(to: first.id, options: CompanionOptions(name: "zz")).get()
         _ = try store.addCompanion(to: second.id, options: CompanionOptions(name: "aa")).get()
 
-        let titles = actions.paletteSessions().map(\.title)
+        let titles = store.listOrdered(store.navigableSessions).map { store.listLabel(for: $0) }
 
         XCTAssertEqual(titles.prefix(4), ["api", "api › zz", "api", "api › aa"])
         XCTAssertEqual(actions.paletteFlaggedEditor().map(\.title).suffix(4), ["api", "api › zz", "api", "api › aa"])
     }
 
-    // a flagged child dragged ahead of its parent split the group in the empty session palette
-    func testAFlaggedChildAheadOfItsParentStillListsUnderItInTheSessionPalette() throws {
+    // a flagged child dragged ahead of its parent split the group in the session switcher's list
+    func testAFlaggedChildAheadOfItsParentStillListsUnderItInTheSessionSwitcher() throws {
         let store = try XCTUnwrap(library.activeStore)
         let workspace = try XCTUnwrap(store.workspaces.first)
         for session in workspace.sessions { store.renameSession(session.id, to: "zeta") }
@@ -381,12 +363,7 @@ final class AppActionsPaletteTests: XCTestCase {
         XCTAssertTrue(store.moveFlagged([firstChild.id], to: .before, of: first.id))
         store.setSidebarMode(.flagged)
 
-        let rows = CommandPalette.ranked(actions.paletteSessions(), query: "",
-                                         keepsSourceOrder: PaletteMode.sessions.keepsSourceOrder, callerSupplied: false)
-
-        XCTAssertEqual(rows.map(\.id), [first, firstChild, second, secondChild].map(\.id.uuidString))
-        XCTAssertEqual(CommandPalette.ranked(rows.reversed(), query: "", keepsSourceOrder: false, callerSupplied: false).map(\.title),
-                       ["api", "api", "api › a", "api › b"])
+        XCTAssertEqual(store.listOrdered(store.navigableSessions).map(\.id), [first, firstChild, second, secondChild].map(\.id))
     }
 
     func testAnAttentionCompanionRowNamesItsParent() throws {

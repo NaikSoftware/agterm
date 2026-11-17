@@ -37,7 +37,7 @@ public enum SidebarDensity: String, Codable, Sendable, CaseIterable {
     /// rowPadding is the vertical padding a row adds to its rounded font size.
     public var rowPadding: Double {
         switch self {
-        case .standard: 15
+        case .standard: 18
         case .compact: 10
         }
     }
@@ -62,7 +62,7 @@ public enum SidebarDensity: String, Codable, Sendable, CaseIterable {
     /// selectionInset is the gap between a selected row's highlight and its row edge, top and bottom.
     public var selectionInset: Double {
         switch self {
-        case .standard: 1.5
+        case .standard: 0.5
         case .compact: 0.5
         }
     }
@@ -178,7 +178,7 @@ public enum InterfaceElement: String, Codable, Sendable, CaseIterable {
         case .windowName: return "Window name"
         case .remoteHost: return "Remote host"
         case .sessionContext: return "Session context"
-        case .recentSessions: return "Recent sessions"
+        case .recentSessions: return "Session switcher"
         case .scratch: return "Scratch terminal"
         case .split: return "Split view"
         case .overlayToggle: return "Hide overlays"
@@ -209,32 +209,40 @@ public enum InterfaceElement: String, Codable, Sendable, CaseIterable {
         case .sidebarToggle: return "sidebar.left"
         case .workspaceName, .sessionName, .windowName, .sessionContext: return nil
         case .remoteHost: return "cloud"
-        case .recentSessions: return "clock.arrow.circlepath"
+        case .recentSessions: return "magnifyingglass"
         case .scratch: return "rectangle"
         case .split: return "rectangle.split.2x1"
         case .overlayToggle: return "rectangle.on.rectangle"
         case .dashboard: return "rectangle.split.2x2"
         case .quickTerminal: return "terminal"
         case .customCommands: return "ellipsis.circle"
-        case .newWorkspace: return "rectangle.stack.badge.plus"
+        case .newWorkspace: return "square.on.square"
         case .newSession: return "plus.rectangle"
         case .flaggedView: return "flag"
         case .focusFilter: return "square.grid.2x2"
         case .workspaceAddSession: return "plus"
         case .sessionIcons: return "terminal"
-        case .workspaceIcons: return "square.grid.2x2"
+        case .workspaceIcons: return "square.on.square"
         case .workspaceChevrons: return "chevron.right"
+        }
+    }
+
+    /// The bundled image that replaces `symbolName` where the app draws its own icon: the Lucide workspace stack
+    /// and terminal the sidebar rows show. `symbolName` stays the closest SF Symbol for a host without them.
+    public var assetName: String? {
+        switch self {
+        case .newWorkspace, .workspaceIcons: return "workspace-stack"
+        case .sessionIcons: return "session-terminal"
+        default: return nil
         }
     }
 
     /// Which of the two title-bar trailing-cluster separators to draw, from each group's visible button
     /// count (A = recent-sessions + attention, B = scratch + split, C = dashboard + quick-terminal +
-    /// custom-commands): one sits ONLY where two groups that each still show 2+ buttons meet. Host-free so
-    /// it is unit-testable.
+    /// custom-commands): one sits between any two adjacent groups that show a button, and an empty B lets A
+    /// and C meet across `afterB`. Host-free so it is unit-testable.
     public static func titlebarGroupDividers(countA: Int, countB: Int, countC: Int) -> (afterA: Bool, afterB: Bool) {
-        let afterA = countA >= 2 && countB >= 2
-        let afterB = (countB >= 2 && countC >= 2) || (countA >= 2 && countC >= 2 && countB == 0)
-        return (afterA, afterB)
+        (countA > 0 && countB > 0, countC > 0 && (countB > 0 || countA > 0))
     }
 }
 

@@ -15,6 +15,12 @@ struct StatusGlyph: View {
     /// Settings shape, else the default plain circle.
     var shape: StatusShape?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dimmed = false
+
+    /// fades mirrors the sidebar glyph's slow fade of an active status.
+    private var fades: Bool { status == .active && !reduceMotion }
+
     private var swiftUIWeight: Font.Weight {
         GhosttyApp.shared.statusSymbolWeight(for: status, override: shape) == .heavy ? .heavy : .regular
     }
@@ -23,5 +29,11 @@ struct StatusGlyph: View {
         Image(systemName: GhosttyApp.shared.statusSymbolName(for: status, override: shape))
             .fontWeight(swiftUIWeight)
             .foregroundStyle(Color(nsColor: GhosttyApp.shared.statusColor(for: status, override: colorHex)))
+            .opacity(dimmed ? 0.25 : 1)
+            .task(id: fades) {
+                withTransaction(Transaction(animation: nil)) { dimmed = false }
+                guard fades else { return }
+                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { dimmed = true }
+            }
     }
 }

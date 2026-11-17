@@ -225,7 +225,7 @@ final class ControlServerAskTests: XCTestCase {
         windows[ownerID] = window
         WindowRegistry.shared.register(ownerID, window: window)
         let palette = PaletteController()
-        palette.open(.sessions)
+        palette.open(.switcher)
         actions.palette = palette
 
         XCTAssertTrue(open(makeAsk(), window: ownerID.uuidString, follow: true).ok)

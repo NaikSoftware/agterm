@@ -23,12 +23,13 @@ paths:
   the row. A density change re-applies `rowHeight` and `indentationPerLevel` and rebuilds; cells are reused, so
   `viewFor` resets `titleCenter` and `SidebarInfoCellView.apply` resets `infoTop` on every configure.
   `SidebarDensityTests` switches a mounted outline both ways.
-- macOS 27 reserves a wider leading strip than the disclosure triangle occupies, stranding the row icon
-  mid-gap. `SidebarOutlineView.frameOfCell` trims the surplus, gated on that version; its doc comment owns
-  the reasoning. While the strip is reserved, `frameOfOutlineCell` is native: the triangle keeps its place and
-  `handleSingleClick` reads that frame. `SidebarRowIndentTests` splits by version: the tight-gap cases run on 27
-  and up, the indent and trailing-edge cases everywhere, and `testBelowTheGateFramesMatchAPlainOutline` only
-  below the gate, where it is the only thing pinning earlier layouts as untouched. Do not re-gate or drop it.
+- macOS 27 reserves a wider leading strip than the disclosure triangle occupies, so there the tree takes the
+  redesign's geometry (`SidebarOutlineView.usesSpecGeometry`): pill 3pt in, a 12pt chevron 8pt into it, icons
+  after an 8pt gap, sessions 26 and companions 46 into the pill, trailing items 8pt short of its end.
+  `handleSingleClick` reads `frameOfOutlineCell`, so the chevron's frame is the click target too.
+  Below 27 the frames stay AppKit's: `SidebarRowIndentTests` splits by version, and
+  `testBelowTheGateFramesMatchAPlainOutline` only runs below the gate, where it is the only thing pinning earlier
+  layouts as untouched. Do not re-gate or drop it.
 - `reservesDisclosureColumn` drops that strip on every version while `InterfaceElement.workspaceChevrons` is
   hidden and in the flat and plain flagged lists, which never draw a level-0 triangle. Level-0 triangles then get
   an empty frame and a companion parent's ends at its content; never hide one through
@@ -147,14 +148,13 @@ paths:
 - GUI surfaces are `flagged-view-toggle`, row Flag/Unflag, View-menu Show Flagged/Show All, Flag Session,
   Clear Flagged, Edit Flagged Sessions, the empty-state link, palette entries, and keyless built-ins
   `toggleFlaggedView`/`toggleFlag`. Clear Flagged is not a built-in and confirms unless under XCUITest.
-- In tree mode, flagged rows swap to `terminal.fill` or `rectangle.split.2x1.fill`; flagged mode retains
-  unfilled base icons because every row is flagged. This same-size symbol swap avoids layout shift.
+- In tree mode a flagged row keeps its icon and shows the Lucide flag (`session-flag`, indigo) after its name;
+  the flagged view shows none, since every row there is flagged. While it shows, the name hugs its text so the
+  flag follows it, and an inline rename hides it so the edit box spans the row.
   `RowContent.flagged` limits reload to the changed row.
 - A remote row (`Session.remoteHost != nil`, an attached row or a remote window's) takes `cloud` instead,
-  `icloud.slash` while it shows a notice, each filled when flagged as every other row icon is.
-  A heavier WEIGHT marks its split, since a hidden split is state nothing else reveals and `.fill` is
-  already the flag; the focused-workspace icon distinguishes itself the same way. On a filled cloud the
-  bold weight is barely distinguishable, an accepted trade-off.
+  `icloud.slash` while it shows a notice.
+  A heavier WEIGHT marks its split, since a hidden split is state nothing else reveals.
   The split axis is not distinguished — no cloud symbol carries both arrangements. The title bar draws
   the same `cloud` beside the host, gated by `InterfaceElement.remoteHost`.
   See [[control-api]].
@@ -162,18 +162,17 @@ paths:
   width and gap so the name takes the slot, on every cell configuration and, through `reapplyRowIconVisibility`,
   on `.agtermAppearanceChanged`. Everything the icon encodes goes with it; only the remote notice moves, into the
   name's tooltip, because it is the one fact with nowhere else to show.
-- A row's tint (`Session.tint`, `Workspace.tint`) colors its icon and/or name through `SidebarCellView.setColors`,
-  selected rows included, so every retint keeps it; `RowContent.tint` reloads that row alone. The Tint submenu
-  checks an entry only when every target shares it and disables Show On unless every target is tinted.
-  An untinted row counts as the last Show On pick (`Coordinator.tintPlacement`, app-wide, never persisted), which a
-  menu color pick starts it on; the palette and `session.tint` keep starting on the icon.
+- A row's tint (`Session.tint`, `Workspace.tint`) always colors its icon and name through `SidebarCellView.setColors`,
+  selected rows included, whatever parts it stores; `RowContent.tint` reloads that row alone. The Tint submenu has
+  no placement and checks an entry only when every target shares it. Stored parts stay for older readers and the
+  agterm-linux fork; the app neither offers nor reads them.
 - A session with an info line (`session.info`, [[control-api]]) uses the `session-info-cell` identifier and a
   taller row from `SidebarInfoMetrics`: the plain row, plus one line set 1.5 points smaller with a 9-point
   minimum, lifted 6 points into the plain row's bottom padding. The title row centers in a band of plain
   row height, so the name sits where a plain row puts it. `heightOfRowByItem` and the cell read the same `sessionInfo(forSession:)` gate.
   `RowContent.info` reloads the row and calls `noteHeightOfRows`, which a reload alone does not do.
 - `SidebarInfoCellView` rebuilds its colors on every `setColors`. A colored fragment keeps its `TintColor`
-  on a selected row, as a row tint does, and uncolored text follows the selection foreground. Color emoji
+  whatever `selected` says, as a row tint does, and uncolored text follows the theme color for it. Color emoji
   are drawn at 0.7 of the line's size, centered on cap height, because a full-size glyph reads oversized
   and low. A text-default symbol counts as emoji only with VS16, and VS15 always keeps text form.
 - `AppSettings.sessionInfoDisplay` (`always`|`flagged`|`off`, nil = always) decides where the line shows,
@@ -224,10 +223,22 @@ paths:
   `rebuiltWorkspaceShell` lacks membership input and also serves session reopen, so it must not restore it.
   `reClosingAWorkspaceRebuiltByASessionUndoKeepsItsMembership`, focus undo/reopen tests, and legacy recent
   decode tests pin this contract.
-- Marked workspace rows use the same `square.grid.2x2` at `.black` weight, not a fill: fill identifies a
-  flagged session, weight identifies focus membership. The 16x15 black image and 15x14 regular image sit
-  in a fixed 16x16 `NSImageView`, so the 1pt size difference does not move layout. Render membership even while filtering
-  is off. `RowContent.focusMember` limits reload to that row.
+- Workspace and terminal rows draw the mobile app's Lucide icons (`workspace-stack`, `session-terminal` in
+  `Assets.xcassets`, ISC notice in `docs/third-party/`). A marked workspace draws `workspace-stack-bold`, the same
+  paths at a heavier stroke, so weight identifies focus membership. Render membership even while filtering is off.
+  `RowContent.focusMember` limits reload to that row.
+- A workspace tint draws a band behind its workspace row and every session and companion row.
+  `SidebarRowView` draws it from the host-free `SidebarBand` edge model in `agtermCore`.
+  It resets on every configure and reapplies on fold, tint, rebuild and appearance change.
+  The group's tint also colors the selection pill (`SidebarRowView.selectionTint`).
+- Every group, tinted or not, adds `SidebarRowView.edgeExtras` (4pt half-gap + 3pt padding) above its first row
+  and below its last; `groupEdge(for:)` is the one rule for row height, cell frame and drawing. A fold or rebuild
+  re-notes every height with a zero-duration animation: an animated re-note leaves row views at old frames.
+  AppKit only autoresizes a cell after adding it, so `SidebarRowView.alignToContent` keeps it in the content rect.
+- An `.active` row shows a wave: a square-cornered `CAGradientLayer` sublayer animated on `transform.translation.x`,
+  4.8 s per period, the period two row widths.
+  The active status glyph fades under key `agent-status-fade` (1.4 s), distinct from blink.
+  Reduce Motion leaves both static.
 - `focus-filter-toggle` replaces the deleted single-workspace pill. It uses a filled grid when active,
   manual 0.35 opacity and disabled state when the set is empty, and accessibility value `on`/`off`.
   It remains usable while filtering is off and is gated by `InterfaceElement.focusFilter`.

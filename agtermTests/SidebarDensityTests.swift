@@ -56,7 +56,7 @@ final class SidebarDensityTests: XCTestCase {
         for size in [AppSettings.sidebarFontSizeRange.lowerBound, AppSettings.defaultSidebarFontSize,
                      AppSettings.sidebarFontSizeRange.upperBound] {
             XCTAssertEqual(AppSettings.sidebarRowHeight(fontSize: size, density: .standard)
-                - AppSettings.sidebarRowHeight(fontSize: size, density: .compact), 5, "font \(size)")
+                - AppSettings.sidebarRowHeight(fontSize: size, density: .compact), 8, "font \(size)")
             XCTAssertGreaterThanOrEqual(AppSettings.sidebarRowHeight(fontSize: size, density: .compact)
                 - 2 * SidebarDensity.compact.selectionInset, 16, "font \(size): the 16pt row icon must fit the pill")
         }
@@ -73,8 +73,8 @@ final class SidebarDensityTests: XCTestCase {
         let base = Double(GhosttyApp.shared.sidebarFontSize)
         let plainHeight = CGFloat(AppSettings.sidebarRowHeight(fontSize: base, density: density))
         XCTAssertEqual(outline.indentationPerLevel, CGFloat(density.indentPerLevel), "indent", file: file, line: line)
-        XCTAssertEqual(outline.rect(ofRow: try row(of: plain)).height, plainHeight, "plain row", file: file, line: line)
-        XCTAssertEqual(outline.rect(ofRow: try row(of: info)).height,
+        XCTAssertEqual(outline.frameOfCell(atColumn: 0, row: try row(of: plain)).height, plainHeight, "plain row", file: file, line: line)
+        XCTAssertEqual(outline.frameOfCell(atColumn: 0, row: try row(of: info)).height,
                        SidebarInfoMetrics.rowHeight(base: base, density: density), "info row", file: file, line: line)
 
         let plainCell = try XCTUnwrap(outline.view(atColumn: 0, row: try row(of: plain), makeIfNecessary: true) as? SidebarCellView)

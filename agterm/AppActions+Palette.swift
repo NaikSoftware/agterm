@@ -240,8 +240,8 @@ extension AppActions {
         }
     }
 
-    /// tintItems are "Tint Session: <color>" plus None for the active session, each keeping the session's
-    /// placement. The session is read when the row runs, since the selection can move under an open palette.
+    /// tintItems are "Tint Session: <color>" plus None for the active session. The session is read when the row
+    /// runs, since the selection can move under an open palette.
     private func tintItems() -> [PaletteItem] {
         guard let store, store.selectedSessionID != nil else { return [] }
         let choices: [TintColor?] = TintColor.allCases + [nil]
@@ -253,8 +253,9 @@ extension AppActions {
                         },
                         run: { [weak self, weak store] in
                             guard let self, self.uiActionsEnabled, let store, let id = store.selectedSessionID else { return }
-                            if self.sendTint(forSessions: [id], in: store, { SidebarTint.recolor($0, to: color) }) { return }
-                            store.setTintColor(color, forSessions: [id])
+                            let tint = color.map { SidebarTint(color: $0, parts: Set(TintPart.allCases)) }
+                            if self.sendTint(forSessions: [id], in: store, { _ in tint }) { return }
+                            store.setTint(tint, forSession: id)
                         })
         }
     }
@@ -280,15 +281,6 @@ extension AppActions {
         customCommandItems(badge: nil)
     }
 
-    /// The VISIBLE/FILTERED sessions as palette items (the ⌃P switcher); choosing one selects it. Scoped to
-    /// `navigableSessions` — the MARKED workspaces' sessions under the focus filter, the flagged set in flagged
-    /// mode, else all — so ⌃P matches the sidebar, the Ctrl-Tab MRU switcher and `session.go`. The subtitle
-    /// leads with the owning workspace, telling same-named sessions apart and searchable, then `subtitleDetail`.
-    func paletteSessions() -> [PaletteItem] {
-        guard let store else { return [] }
-        return store.listOrdered(store.navigableSessions).map { paletteItem(for: $0, in: store) }
-    }
-
     /// Every open window's non-idle sessions as palette items (`.attention` mode), in the library's order so
     /// the empty query keeps it. Enablement asks the OWNING window, not the frontmost one, and the run
     /// defers `selectAttention` past the palette's close and focus-restore so a raise never competes with
@@ -309,26 +301,6 @@ extension AppActions {
         }
     }
 
-    /// Maps one session to a palette row — title `listLabel`, subtitle "`workspace` · `subtitleDetail`", run
-    /// selects it.
-    private func paletteItem(for session: Session, in store: AppStore) -> PaletteItem {
-        let id = session.id
-        let workspaceName = store.workspace(forSession: id)?.name ?? ""
-        let subtitle = "\(workspaceName) · \(session.subtitleDetail)"
-        return PaletteItem(id: id.uuidString, title: store.listLabel(for: session), subtitle: subtitle,
-                           indicator: { [weak session] in session?.agentIndicator ?? AgentIndicator() },
-                           run: { [weak self] in
-            guard self?.uiActionsEnabled == true else { return }
-            // a palette pick is user-initiated: note activity so it buys the full idle grace before
-            // auto-follow can pull the selection back.
-            store.noteUserActivity()
-            let indicator = store.selectSession(id)
-            // reveal the picked session's blocked pane (no-op without a pane-tagged block), async so it runs
-            // AFTER the palette closes and its focus-restore, winning the focus race.
-            DispatchQueue.main.async { self?.revealActiveBlockedPane(captured: indicator) }
-        })
-    }
-
     /// Toggle the `.attention` palette. Driven by ⌃⇧I `BuiltinAction.showAttention`, Navigate ▸ Go to
     /// Attention…, and the titlebar bell — none route through the action palette's `runItem`, so a synchronous
     /// toggle is correct; the ⌃⇧P launcher uses `openAttentionPalette()`, which must reopen async.
@@ -343,7 +315,7 @@ extension AppActions {
     /// dashboard grid the menu item refuses to open it over.
     func toggleSessionPalette() {
         guard uiActionsEnabled else { return }
-        palette?.toggle(.sessions)
+        palette?.requestSwitcher()
     }
 
     func toggleActionPalette() {

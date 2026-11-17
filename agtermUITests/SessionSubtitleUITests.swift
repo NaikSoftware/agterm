@@ -7,8 +7,8 @@ import XCTest
 /// focused shell — the shell's printf expands the `\033`/`\007` it is handed, so only printable
 /// keystrokes are injected — then read the rendered palette subtitle through the accessibility tree.
 ///
-/// The session palette, the Ctrl-Tab switcher, and the title bar all render the SAME `subtitleDetail`,
-/// so the palette is the representative surface here (the property's branches are unit-tested in
+/// The session switcher, the Ctrl-Tab switcher, and the title bar all render the SAME `subtitleDetail`,
+/// so the session switcher is the representative surface here (the property's branches are unit-tested in
 /// `SessionTests`; the title-bar second line is hidden in the default compact toolbar).
 @MainActor
 final class SessionSubtitleUITests: XCTestCase {
@@ -84,22 +84,21 @@ final class SessionSubtitleUITests: XCTestCase {
         usleep(400_000)
     }
 
-    /// Opens the Go to Session palette and returns the (single seeded) row's rendered subtitle, or ""
-    /// if it never appears. The caller closes the palette.
+    /// Opens the session switcher (Go to Session), searches it for the (single seeded) session and returns its
+    /// row's detail text, the one after the name, or "" if it never appears. The caller closes the switcher.
     private func currentPaletteSubtitle() -> String {
         app.menuBars.menuBarItems["Navigate"].click()
         let item = app.menuItems["Go to Session"]
         guard item.waitForExistence(timeout: 5) else { return "" }
         item.click()
-        let rows = app.descendants(matching: .staticText)
-            .matching(NSPredicate(format: "identifier BEGINSWITH 'palette-item-'"))
-        guard rows.firstMatch.waitForExistence(timeout: 5) else { return "" }
-        // #316 put `palette-item-<id>` on the row container and SwiftUI propagates a container identifier
-        // onto its descendant Texts, so the subtitle stopped answering to `palette-subtitle`. It is still
-        // the only row text carrying the `workspace · detail` separator, which is what finds it now.
-        return rows.allElementsBoundByIndex
-            .compactMap { $0.value as? String }
-            .first { $0.contains(" · ") } ?? ""
+        guard app.textFields["switcher-search-field"].waitForExistence(timeout: 5) else { return "" }
+        // the switcher lists other sessions until a query; "workspace" matches every session's workspace key
+        for key in "workspace" { app.typeKey(String(key), modifierFlags: []) }
+        let row = app.buttons.matching(identifier: "recent-session-row").firstMatch
+        guard row.waitForExistence(timeout: 5) else { return "" }
+        // the row button exposes its texts as one comma-joined label: name, detail, workspace
+        let parts = row.label.components(separatedBy: ", ")
+        return parts.count > 1 ? parts[1] : ""
     }
 
     private func closePalette() {

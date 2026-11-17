@@ -1,23 +1,47 @@
 import XCTest
 
-/// End-to-end tests for the title-bar recent-sessions button — the mouse equivalent of the Ctrl-Tab
-/// switcher. It opens a popover of the window's most-recently-used sessions; clicking a row commits the
-/// switch. The button is disabled while there is neither another session nor a recently closed one.
+/// End-to-end tests for the title-bar switcher pill (`recent-sessions-button`) — the mouse equivalent of the
+/// Ctrl-Tab switcher. It opens a popover of attention, recent and recently closed sessions; clicking a row
+/// commits the switch. The pill is disabled while all three lists are empty.
 ///
-/// SCOPE NOTE: the row CLICK → session switch cannot be driven from XCUITest — a synthesized click (element
+/// SCOPE NOTE (the bell popover): the row CLICK → session switch cannot be driven from XCUITest — a synthesized click (element
 /// OR coordinate) on a SwiftUI `Button` inside an `NSPopover` does not fire the button's action (confirmed
 /// by instrumenting the row action: the marker never wrote), while a real mouse click does, because it makes
 /// the popover key. So these tests cover the enable/disable state and that the popover OPENS and LISTS the
 /// correct previous session; the click → `selectSession` glue is verified by hand (see ui-tests.md).
 @MainActor
 final class RecentSessionsButtonUITests: ControlAPITestCase {
-    func testRecentButtonEnablesWithSecondSession() throws {
+    func testSwitcherOpensWithOnlyTheSearchFieldInASingleSessionWindow() throws {
         let button = app.buttons["recent-sessions-button"]
-        XCTAssertTrue(button.waitForExistence(timeout: 10), "the recent-sessions button should render in the title bar")
-        XCTAssertFalse(button.isEnabled, "a single-session window should disable the recent-sessions button")
+        XCTAssertTrue(button.waitForExistence(timeout: 10), "the switcher pill should render in the title bar")
+        XCTAssertTrue(pollEnabled(button, true, timeout: 8), "the search field can always act, so the pill stays enabled")
 
-        _ = try sendCommand(#"{"cmd":"session.new"}"#)
-        XCTAssertTrue(pollEnabled(button, true, timeout: 8), "a second session should enable the recent-sessions button")
+        let field = openSwitcher(button)
+        XCTAssertTrue(field.exists, "clicking the pill should open the switcher with its search field")
+        XCTAssertEqual(app.buttons.matching(identifier: "recent-session-row").count, 0)
+    }
+
+    func testTypingFiltersTheSwitcherAndReturnSwitches() throws {
+        let seeded = try activeSessionID()
+        XCTAssertEqual(try sendCommand(#"{"cmd":"session.rename","target":"\#(seeded)","args":{"name":"zebrafish"}}"#)["ok"] as? Bool, true)
+        let created = try sendCommand(#"{"cmd":"session.new"}"#)
+        let newID = try XCTUnwrap((created["result"] as? [String: Any])?["id"] as? String)
+        XCTAssertTrue(pollActiveSessionID(try XCTUnwrap(UUID(uuidString: newID)), timeout: 8))
+
+        let field = openSwitcher(app.buttons["recent-sessions-button"])
+        XCTAssertTrue(field.exists)
+        // typed without clicking the field: it holds the keyboard from the moment the popover opens
+        for key in "zebra" { app.typeKey(String(key), modifierFlags: []) }
+        XCTAssertEqual(field.value as? String, "zebra", "the field should hold the keyboard without a click")
+        let rows = app.buttons.matching(identifier: "recent-session-row")
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline, !(rows.count == 1 && rows.firstMatch.label.contains("zebrafish")) { usleep(100_000) }
+        XCTAssertEqual(rows.count, 1, "the query should filter the list to the matching session")
+        XCTAssertTrue(rows.firstMatch.label.contains("zebrafish"), "filtered row: \(rows.firstMatch.label)")
+
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(pollActiveSessionID(try XCTUnwrap(UUID(uuidString: seeded)), timeout: 8),
+                      "Return should switch to the highlighted session")
     }
 
     // the previous session gets a unique rename so its jump row can be told apart by label.
@@ -39,6 +63,54 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
                       "the jump row should be the previously-selected (renamed) session, got label: \(jumpRow.label)")
         XCTAssertEqual(app.buttons.matching(identifier: "recent-session-row").count, 1,
                        "the popover should list only the single other session, not the current one")
+    }
+
+    func testControlPOpensTheSwitcherOverlayUnderThePill() throws {
+        let pill = app.buttons["recent-sessions-button"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 10))
+        try assertControlPSwitches { field in
+            XCTAssertEqual(field.frame.midX, pill.frame.midX, accuracy: 40, "the switcher hangs centred under the pill")
+            XCTAssertEqual(field.frame.minY - pill.frame.maxY, 20, accuracy: 30, "the switcher hangs right under the pill")
+        }
+    }
+
+    func testControlPOpensTheSwitcherOverlayWithoutThePill() throws {
+        try relaunch(withSettings: #"{"hiddenInterfaceElements":["recentSessions"]}"#)
+        XCTAssertFalse(app.buttons["recent-sessions-button"].exists, "the setting should hide the pill")
+        try assertControlPSwitches()
+    }
+
+    /// ⌃P opens the switcher overlay with its field focused: the typed query filters the list and Return switches.
+    private func assertControlPSwitches(placement: (XCUIElement) -> Void = { _ in }) throws {
+        let seeded = try activeSessionID()
+        XCTAssertEqual(try sendCommand(#"{"cmd":"session.rename","target":"\#(seeded)","args":{"name":"zebrafish"}}"#)["ok"] as? Bool, true)
+        // two other sessions, so the filtered list (one row) differs from the unfiltered Recent list (two)
+        _ = try sendCommand(#"{"cmd":"session.new"}"#)
+        let created = try sendCommand(#"{"cmd":"session.new"}"#)
+        let newID = try XCTUnwrap((created["result"] as? [String: Any])?["id"] as? String)
+        XCTAssertTrue(pollActiveSessionID(try XCTUnwrap(UUID(uuidString: newID)), timeout: 8))
+
+        let field = app.textFields["switcher-search-field"]
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline, !field.exists {
+            app.typeKey("p", modifierFlags: [.control])
+            _ = field.waitForExistence(timeout: 1)
+        }
+        XCTAssertTrue(field.exists, "⌃P should open the session switcher")
+        XCTAssertTrue(app.descendants(matching: .any)["switcher-scrim"].exists, "⌃P shows the switcher overlay")
+        placement(field)
+
+        let rows = app.buttons.matching(identifier: "recent-session-row")
+        for key in "zebra" { app.typeKey(String(key), modifierFlags: []) }
+        let filtered = Date().addingTimeInterval(5)
+        while Date() < filtered, !(rows.count == 1 && rows.firstMatch.label.contains("zebrafish")) { usleep(100_000) }
+        XCTAssertEqual(field.value as? String, "zebra", "the field should hold the keyboard without a click")
+        XCTAssertEqual(rows.count, 1, "the query should filter the list to the matching session")
+
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(pollActiveSessionID(try XCTUnwrap(UUID(uuidString: seeded)), timeout: 8),
+                      "Return should switch to the highlighted session")
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5), "a commit closes the switcher")
     }
 
     func testRecentButtonListsAClosedSessionAlone() throws {
@@ -75,17 +147,26 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
 
         let recent = app.buttons["recent-sessions-button"]
         XCTAssertTrue(pollEnabled(recent, true, timeout: 8))
-        let jumpRow = openPopoverJumpRow(button: recent, timeout: 10)
-        XCTAssertTrue(jumpRow.label.contains("api › logs"), "clock popover row: \(jumpRow.label)")
+        XCTAssertTrue(openSwitcher(recent).exists)
+        let needsYou = app.buttons["attention-session-row"]
+        XCTAssertTrue(needsYou.waitForExistence(timeout: 5), "the switcher should list the blocked companion under Needs you")
+        XCTAssertTrue(needsYou.label.contains("api › logs"), "switcher attention row: \(needsYou.label)")
+        // the companion is also the most recent other session; it is listed once, under Needs you
+        XCTAssertEqual(app.buttons.matching(identifier: "attention-session-row").count, 1)
+        XCTAssertEqual(app.buttons.matching(identifier: "recent-session-row").count, 0,
+                       "a session Needs you lists must not repeat under Recent")
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
 
+        // the switcher's own search field tells its popover apart from the bell's, which share attention rows.
         let bell = app.buttons["attention-button"]
         let attentionRow = app.buttons["attention-session-row"]
+        let switcherJump = app.textFields["switcher-search-field"]
         let deadline = Date().addingTimeInterval(10)
-        while Date() < deadline, !attentionRow.exists {
+        while Date() < deadline, !attentionRow.exists || switcherJump.exists {
             bell.click()
             _ = attentionRow.waitForExistence(timeout: 1)
         }
+        XCTAssertFalse(switcherJump.exists, "the bell's popover, not the switcher's, should be open")
         XCTAssertTrue(attentionRow.label.contains("api › logs"), "bell popover row: \(attentionRow.label)")
     }
 
@@ -100,6 +181,17 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
             usleep(200_000)
         }
         return nil
+    }
+
+    /// Clicks the pill until the switcher's search field appears, returning it (non-existent on timeout).
+    private func openSwitcher(_ button: XCUIElement) -> XCUIElement {
+        let field = app.textFields["switcher-search-field"]
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline, !field.exists {
+            button.click()
+            _ = field.waitForExistence(timeout: 1)
+        }
+        return field
     }
 
     /// (Re)opens the recent-sessions popover until its jump row appears, returning it (or a non-existent

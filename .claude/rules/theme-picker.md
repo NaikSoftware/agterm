@@ -8,7 +8,7 @@ paths:
 
 ## Theme picker
 
-- `.themes` is the live-preview `PaletteMode` beside `.actions` and `.sessions`. It reuses
+- `.themes` is the live-preview `PaletteMode` beside `.actions`. It reuses
   `CommandPalette`; `AppActions.paletteThemes()` supplies "default ghostty" (`nil`), catalog themes, and
   the `current` badge. Theme names stay out of the action palette, which contains only keyless
   `BuiltinAction.selectTheme` ("Select Theme..."); the View menu exposes the same launcher.

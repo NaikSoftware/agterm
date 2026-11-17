@@ -55,17 +55,10 @@ enum SessionLaunchers {
 }
 
 extension SessionLauncher {
-    /// A template image: the terminal symbol, or the agent's logo from the asset catalog.
+    /// A template image from the asset catalog: the Lucide terminal, or the agent's logo.
     func image(pointSize: CGFloat) -> NSImage? {
-        let image: NSImage?
-        if self == .terminal {
-            image = NSImage(systemSymbolName: "terminal", accessibilityDescription: title)?
-                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: pointSize - 2, weight: .regular))
-        } else {
-            image = (NSImage(named: "launcher-\(rawValue)")?.copy() as? NSImage)
-            image?.size = NSSize(width: pointSize, height: pointSize)
-        }
-        image?.isTemplate = true
+        let image = NSImage.bundledIcon(self == .terminal ? "session-terminal" : "launcher-\(rawValue)", size: pointSize)
+        image?.accessibilityDescription = title
         return image
     }
 }

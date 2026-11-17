@@ -343,7 +343,7 @@ public struct ControlSessionNode: Codable, Sendable, Equatable {
     public let lastSelectedAt: Double?
     /// The row's tint color (`session.tint`); nil/omitted when untinted.
     public let tint: String?
-    /// The row parts the tint colors, `icon` and/or `name`; present exactly when `tint` is.
+    /// Deprecated: always `icon,name`, since a tint colors both; present exactly when `tint` is.
     public let tintOn: [String]?
     /// The parent's id for a companion; omitted for a top-level session.
     public let parent: String?
@@ -724,7 +724,7 @@ public struct ControlWorkspaceNode: Codable, Sendable, Equatable {
     /// The workspace row's own tint color (`workspace.tint`); nil/omitted when untinted. Never inherited by
     /// the sessions inside.
     public let tint: String?
-    /// The workspace row parts the tint colors; present exactly when `tint` is.
+    /// Deprecated: always `icon,name`, since a tint colors both; present exactly when `tint` is.
     public let tintOn: [String]?
     /// The workspace's remembered folder (the last directory a local pane reported over OSC 7); nil/omitted
     /// when none. Read-only: the shell sets it with `cd`, there is no setter command.
