@@ -1,8 +1,8 @@
-"""Render elis's app icon for Linux from the Icon Composer layer in macos/elis/AppIcon.icon.
+"""Render Elis's app icon for Linux from a square raster of docs/brand/elis-icon.svg (1024 px or more).
 
-macOS shapes the square artwork at runtime ("fill": "automatic"); hicolor themes need the shape baked in,
-so the layer is clipped to a rounded square with a little margin, at every size the theme looks up.
-Usage: python3 -I scripts/make-icons.py <layer.png> linux
+macOS shapes the full-bleed artwork at runtime; hicolor themes need the shape baked in,
+so the artwork is clipped to a rounded square with a little margin, at every size the theme looks up.
+Usage: python3 -I scripts/make-icons.py <elis-icon.png> linux
 """
 import os
 import sys

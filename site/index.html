@@ -61,8 +61,8 @@
       .nav{display:flex;align-items:center;gap:28px;height:72px}
       .brand{display:flex;align-items:center;gap:11px;color:var(--text);font-weight:700;font-size:18px;letter-spacing:-.01em}
       .brand:hover{color:var(--text)}
-      .mark{width:32px;height:32px;border-radius:9px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);display:flex;align-items:center;justify-content:center;color:var(--indigo);font:500 12px/1 "JetBrains Mono",monospace;flex:none}
-      .mark.big{width:56px;height:56px;border-radius:16px;font-size:21px}
+      .mark{display:block;width:32px;height:32px;border-radius:8px;flex:none}
+      .mark.big{width:56px;height:56px;border-radius:13px}
       .navlinks{display:flex;gap:24px;margin-left:auto;font-size:15px}
       .navlinks a{color:var(--muted)}
       .navlinks a:hover{color:var(--text)}
@@ -219,7 +219,7 @@
         <div class="glow"></div>
         <div class="wrap" style="position:relative">
           <nav class="nav">
-            <a class="brand" href="./"><span class="mark">&gt;_</span>Elis</a>
+            <a class="brand" href="./"><img class="mark" src="assets/favicon-180.png" alt="" />Elis</a>
             <div class="navlinks">
               <a href="docs.html">Docs</a>
               <a href="commands.html">Commands</a>
@@ -403,7 +403,7 @@
       <div class="band">
         <div class="wrap">
           <div class="band-in">
-            <span class="mark big">&gt;_</span>
+            <img class="mark big" src="assets/favicon-180.png" alt="" />
             <h2 class="disp">Give your agents an Elis.</h2>
             <a class="btn pri" href="#install"><svg class="i"><use href="#i-download" /></svg>Download</a>
           </div>

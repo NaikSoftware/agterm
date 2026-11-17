@@ -1,0 +1,15 @@
+<!-- themed-icon (Android 13+) layer: the face in one colour, its blaze, eyes and nose cut out -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="1536" android:viewportHeight="1536">
+    <group android:translateX="256" android:translateY="256">
+        <path android:fillColor="#FF17161B" android:pathData="M374,186a38,38 0 1,0 76,0a38,38 0 1,0 -76,0zM474,186a38,38 0 1,0 76,0a38,38 0 1,0 -76,0zM574,186a38,38 0 1,0 76,0a38,38 0 1,0 -76,0z"/>
+        <group android:translateX="512" android:translateY="630" android:scaleX="1.12" android:scaleY="1.12">
+            <group android:translateX="-512" android:translateY="-478">
+                <path android:fillColor="#FF17161B" android:pathData="M416 318C370 300 310 314 288 360C266 410 270 500 300 580C330 560 350 520 356 470C362 420 380 360 416 318Z"/>
+                <path android:fillColor="#FF17161B" android:pathData="M608 318C654 300 714 314 736 360C758 410 754 500 724 580C694 560 674 520 668 470C662 420 644 360 608 318Z"/>
+                <path android:fillColor="#FF17161B" android:fillType="evenOdd" android:pathData="M512 270C610 270 676 320 686 400C694 470 680 540 650 610L374 610C344 540 330 470 338 400C348 320 414 270 512 270ZM488 282C498 278 526 278 536 282C548 350 554 420 556 480C562 520 572 540 590 560C618 590 622 610 622 640C622 704 580 744 512 744C444 744 402 704 402 640C402 610 406 590 434 560C452 540 462 520 468 480C470 420 476 350 488 282ZM414,490a24,24 0 1,0 48,0a24,24 0 1,0 -48,0zM562,490a24,24 0 1,0 48,0a24,24 0 1,0 -48,0zM482 628C496 616 528 616 542 628C546 650 530 666 512 668C494 666 478 650 482 628Z"/>
+                <path android:fillColor="#FF17161B" android:pathData="M425,491a13,13 0 1,0 26,0a13,13 0 1,0 -26,0zM573,491a13,13 0 1,0 26,0a13,13 0 1,0 -26,0z"/>
+            </group>
+        </group>
+    </group>
+</vector>
