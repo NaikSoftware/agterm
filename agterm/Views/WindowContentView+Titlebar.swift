@@ -160,7 +160,7 @@ extension WindowContentView {
         let showQuick = shows(.quickTerminal)
         let showCustom = shows(.customCommands)
         let groups = titlebarGroupCounts
-        // a separator only between two 2+-button groups (the host-free rule, unit-tested in agtermCore).
+        // a separator between adjacent non-empty groups (the host-free rule, unit-tested in agtermCore).
         let dividers = InterfaceElement.titlebarGroupDividers(countA: groups.a, countB: groups.b, countC: groups.c)
         return HStack(spacing: 3) {
             if showAttention { attentionButton }

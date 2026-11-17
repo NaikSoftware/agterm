@@ -52,13 +52,23 @@ struct WorkspaceSetupGuide: View {
         }
     }
 
+    private static let sampleWorkspaces: [(name: String, sessions: [String])] = [
+        ("web-app", ["Fix login redirect", "Dev server"]), ("api-server", ["Review PR #128"]),
+        ("mobile-app", ["Push notifications"]),
+    ]
+
+    private func sampleRow(_ title: String, _ element: InterfaceElement) -> some View {
+        Label { Text(title) } icon: { element.icon() }
+    }
+
     private var illustration: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach([("web-app", ["Fix login redirect", "Dev server"]), ("api-server", ["Review PR #128"]),
-                     ("mobile-app", ["Push notifications"])], id: \.0) { name, sessions in
+            ForEach(Self.sampleWorkspaces, id: \.name) { workspace in
                 VStack(alignment: .leading, spacing: 2) {
-                    Label(name, systemImage: "square.on.square").fontWeight(.medium)
-                    ForEach(sessions, id: \.self) { Label($0, systemImage: "terminal").padding(.leading, 14) }
+                    sampleRow(workspace.name, .workspaceIcons).fontWeight(.medium)
+                    ForEach(workspace.sessions, id: \.self) { session in
+                        sampleRow(session, .sessionIcons).padding(.leading, 14)
+                    }
                 }
             }
         }

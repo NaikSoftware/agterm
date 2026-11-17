@@ -108,16 +108,57 @@ final class SidebarBandTests: XCTestCase {
         XCTAssertNil(wave.superlayer)
     }
 
-    func testWaveRoundsOnlyAtTheBandsOuterCorners() throws {
+    func testWaveFillsTheRowRectWithSquareCorners() throws {
         let (store, workspace) = try twoSessionWorkspace()
         store.setTint(SidebarTint(color: .blue), forWorkspace: workspace.id)
         for session in workspace.sessions { session.agentIndicator = AgentIndicator(status: .active) }
         mount(store)
-        let middle = try XCTUnwrap(rowView(forItem: try XCTUnwrap(workspace.sessions.first).id).waveLayer)
-        let last = try XCTUnwrap(rowView(forItem: try XCTUnwrap(workspace.sessions.last).id).waveLayer)
-        XCTAssertEqual(middle.cornerRadius, 0)
-        XCTAssertEqual(last.cornerRadius, SidebarRowView.bandRadius)
-        XCTAssertEqual(last.maskedCorners.rawValue.nonzeroBitCount, 2)
+        for session in workspace.sessions {
+            let row = try rowView(forItem: session.id)
+            row.layoutSubtreeIfNeeded()
+            let wave = try XCTUnwrap(row.waveLayer)
+            XCTAssertEqual(wave.frame, row.rowRect)
+            XCTAssertEqual(wave.cornerRadius, 0)
+        }
+    }
+
+    func testSelectionTakesTheGroupTintThenTheSessionTintThenTheTheme() throws {
+        let (store, workspace) = try twoSessionWorkspace()
+        let first = try XCTUnwrap(workspace.sessions.first), second = try XCTUnwrap(workspace.sessions.last)
+        store.setTint(SidebarTint(color: .red), forSession: second.id)
+        mount(store)
+        let theme = GhosttyApp.shared.terminalSelectionBackgroundColor ?? GhosttyApp.shared.terminalForegroundColor ?? .white
+        XCTAssertEqual(try rowView(forItem: first.id).selectionColor, theme)
+        XCTAssertEqual(try rowView(forItem: second.id).selectionColor, NSColor.tint(.red))
+
+        store.setTint(SidebarTint(color: .blue), forWorkspace: workspace.id)
+        coordinator.reconcile()
+        XCTAssertEqual(try rowView(forItem: first.id).selectionColor, NSColor.tint(.blue))
+        XCTAssertEqual(try rowView(forItem: second.id).selectionColor, NSColor.tint(.blue))
+    }
+
+    func testHoverClearsOnReuseAndWhenTheRowLeavesItsWindow() throws {
+        let (store, workspace) = try twoSessionWorkspace()
+        mount(store)
+        let row = try rowView(forItem: try XCTUnwrap(workspace.sessions.first).id)
+        row.isHovered = true
+        row.prepareForReuse()
+        XCTAssertFalse(row.isHovered)
+        row.isHovered = true
+        row.removeFromSuperview()
+        XCTAssertFalse(row.isHovered)
+    }
+
+    func testRowRectStaysInsideTheGroupPaddingAtItsEnds() throws {
+        let (store, workspace) = try twoSessionWorkspace()
+        store.setTint(SidebarTint(color: .blue), forWorkspace: workspace.id)
+        mount(store)
+        for id in [workspace.id, try XCTUnwrap(workspace.sessions.last).id] {
+            let row = try rowView(forItem: id)
+            let band = row.bandRect(try XCTUnwrap(row.band?.edge))
+            XCTAssertTrue(band.insetBy(dx: SidebarRowView.groupPadding, dy: 0).contains(row.rowRect.insetBy(dx: 0, dy: 0.01)))
+            XCTAssertGreaterThanOrEqual(abs(row.rowRect.minY - band.minY) + abs(row.rowRect.maxY - band.maxY), SidebarRowView.groupPadding)
+        }
     }
 
     func testActiveGlyphFadesAndBlinkReplacesTheFade() throws {
@@ -141,9 +182,13 @@ final class SidebarBandTests: XCTestCase {
         XCTAssertEqual(edges(), [nil, nil])
     }
 
-    func testWorkspaceSymbolExists() {
-        XCTAssertNotNil(NSImage(systemSymbolName: "square.on.square", accessibilityDescription: nil))
+    func testRowIconsResolveFromTheBundle() throws {
+        for name in ["workspace-stack", "workspace-stack-bold", "session-terminal", "flag-lucide"] {
+            let image = try XCTUnwrap(NSImage.bundledIcon(name, size: 15), name)
+            XCTAssertTrue(image.isTemplate, name)
+        }
         XCTAssertNotNil(NSImage(systemSymbolName: InterfaceElement.workspaceIcons.symbolName!, accessibilityDescription: nil))
+        XCTAssertEqual(SessionLauncher.terminal.image(pointSize: 15)?.size, NSSize(width: 15, height: 15))
     }
 
     private func twoSessionWorkspace() throws -> (AppStore, Workspace) {

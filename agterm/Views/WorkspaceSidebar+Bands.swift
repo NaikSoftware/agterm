@@ -36,20 +36,24 @@ extension WorkspaceSidebar.Coordinator {
     private func decorate(_ rowView: SidebarRowView, row: Int, in group: Range<Int>, outline: NSOutlineView) {
         guard let node = outline.item(atRow: row) as? SidebarNode else {
             rowView.band = nil
+            rowView.groupEdge = nil
             rowView.rowWash = nil
+            rowView.selectionTint = nil
             return rowView.setWave(nil)
         }
         let head = outline.item(atRow: group.lowerBound) as? SidebarNode
         let workspaceTint = rendersWorkspaceRows && head?.kind == .workspace
             ? store.workspaces.first { $0.id == head?.id }?.tint : nil
-        if let workspaceTint {
-            let edge = SidebarBand.edge(index: row - group.lowerBound, count: group.count)
-            rowView.band = (NSColor.tint(workspaceTint.color).withAlphaComponent(0.10), edge)
+        let edge = rendersWorkspaceRows ? SidebarBand.edge(index: row - group.lowerBound, count: group.count) : nil
+        rowView.groupEdge = edge
+        if let workspaceTint, let edge {
+            rowView.band = (NSColor.tint(workspaceTint.color), edge)
         } else {
             rowView.band = nil
         }
         let session = node.kind == .session ? store.session(withID: node.id) : nil
         rowView.rowWash = session?.tint.map { NSColor.tint($0.color).withAlphaComponent(0.09) }
+        rowView.selectionTint = (workspaceTint ?? session?.tint).map { NSColor.tint($0.color) }
         let indicator = effectiveIndicator(forSession: node.id)
         guard let session, indicator.status == .active else { return rowView.setWave(nil) }
         // dynamic system colors resolve for the sidebar's theme-pinned appearance, not the app's

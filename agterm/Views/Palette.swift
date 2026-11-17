@@ -493,17 +493,19 @@ private struct PaletteRow: View {
 
     // fill marks a flag and weight marks focus membership, as in the sidebar, so the two never read alike.
     private func markImage(_ mark: PaletteMark) -> some View {
-        let isOn: Bool, symbol: String, weight: Font.Weight, value: String
+        let isOn: Bool, image: Image, value: String
         switch mark {
         case .flag(let on):
-            (isOn, symbol, weight) = (on, on ? "flag.fill" : "flag", .regular)
+            (isOn, image) = (on, Image(systemName: on ? "flag.fill" : "flag"))
             value = on ? "flagged" : "unflagged"
         case .focus(let on):
-            (isOn, symbol, weight) = (on, "square.on.square", on ? .black : .regular)
+            (isOn, image) = (on, Image(on ? "workspace-stack-bold" : "workspace-stack").resizable())
             value = on ? "focused" : "unfocused"
         }
-        return Image(systemName: symbol)
-            .font(.system(size: metrics.base, weight: weight))
+        return image
+            .scaledToFit()
+            .font(.system(size: metrics.base))
+            .frame(height: metrics.base)
             .foregroundStyle(isOn ? Color.primary : Color.secondary)
             .frame(width: metrics.scaled(18))
             .accessibilityIdentifier("palette-mark")

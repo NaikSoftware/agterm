@@ -92,17 +92,15 @@ paths:
 - AppKit draws disclosure triangles from `NSAppearance`, not explicit tint. Pin outline appearance to
   aqua/darkAqua from perceived luminance of the sidebar-tinted theme background, using the 0.5 midpoint.
   Apply at creation and `.agtermAppearanceChanged`. Verify by eye.
-  A selected row's triangle sits on the pill instead, so `SidebarRowView` gives its button the side matching
-  the selected row text, and nil again on deselect.
 - Disable AppKit outline selection immediately after `.plain`, which otherwise restores it. Also clear
   outline/scroll backgrounds; `.plain` avoids source-list's roughly 10px top inset but installs opaque
   control background.
-- `SidebarRowView` alone draws selection and reapplies cell colors from live `isSelected` in `didSet` and
-  `didAddSubview`. Builder-time row lookup can be -1 during reload/animation, making inverted-selection
-  themes render invisible text. Rename restoration also uses row-view selection.
+- `SidebarRowView` alone draws selection: a fill and hairline of `selectionTint` (workspace, else session tint),
+  else the theme selection background. Cells keep their unselected colors, so inverted-selection themes
+  cannot hide row text and the triangle keeps the outline's pin.
 - `SidebarOutlineView.acceptsFirstResponder` is false so clicks select without terminal-to-outline focus
   bounce and pill flicker. Reconcile `TreeShape` changes with full reload and `RowContent` changes per row.
-  Inline rename uses theme foreground/background, then restores selection-aware colors. Visual tint cases
+  Inline rename uses theme foreground/background, then restores the row colors. Visual tint cases
   are manual-only.
 
 ## Resources and lifecycle
@@ -204,7 +202,7 @@ paths:
   `titlebarHeight` below `customTitlebar`. The quick terminal is NOT among them: it is a detached
   `QuickTerminalPanel` above every window, so it needs no inset and paints its own frame ([[windows]]).
   A body overlay's 0.2-opacity black scrim darkens the transparent tall titlebar.
-  The seam appears in 48px normal mode; 30px compact remains inside the native band.
+  The seam appears in 52px normal mode; 30px compact remains inside the native band.
   Keep the empty overlay layer free of Color/contentShape so it cannot intercept hits. Do not add an opaque
   titlebar background; it breaks translucent chrome.
 - With translucency, every surface has zero background opacity. A full overlay has no opaque SwiftUI

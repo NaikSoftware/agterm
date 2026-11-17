@@ -104,7 +104,7 @@ final class SidebarInfoCellView: SidebarCellView {
 
     private func color(for span: SessionInfoSpan, foreground: NSColor) -> NSColor {
         if let tint = span.color { return NSColor.tint(tint).withAlphaComponent(span.dim ? 0.55 : 1) }
-        let alpha: CGFloat = selected ? (span.dim ? 0.6 : 0.85) : (span.dim ? 0.38 : 0.62)
+        let alpha: CGFloat = selected ? (span.dim ? 0.6 : 0.85) : (span.dim ? 0.38 : span.bold ? 1 : 0.58)
         return foreground.withAlphaComponent(alpha)
     }
 }

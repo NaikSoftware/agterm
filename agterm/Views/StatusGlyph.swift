@@ -33,7 +33,7 @@ struct StatusGlyph: View {
             .task(id: fades) {
                 withTransaction(Transaction(animation: nil)) { dimmed = false }
                 guard fades else { return }
-                withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: true)) { dimmed = true }
+                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { dimmed = true }
             }
     }
 }

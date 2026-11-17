@@ -165,7 +165,7 @@ final class SidebarInfoRowTests: XCTestCase {
 
         for selected in [false, true] {
             cell.setColors(selected: selected)
-            let expected = SidebarCellView.themeTextColor(selected: selected).withAlphaComponent(selected ? 0.85 : 0.62)
+            let expected = SidebarCellView.themeTextColor(selected: selected).withAlphaComponent(selected ? 0.85 : 0.58)
             XCTAssertEqual(rgba(color(in: cell.infoField.attributedStringValue, at: 0)), rgba(expected), "selected: \(selected)")
             XCTAssertEqual(rgba(cell.textField?.textColor), rgba(NSColor.tint(.orange)), "the name keeps its tint")
         }

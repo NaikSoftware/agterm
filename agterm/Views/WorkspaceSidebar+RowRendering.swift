@@ -85,7 +85,7 @@ extension WorkspaceSidebar.Coordinator {
             let collapsed = !outlineView.isItemExpanded(node)
             cell.statusIcon.apply(collapsed ? workspace.map(displayedIndicator(for:)) ?? AgentIndicator() : AgentIndicator())
             field.stringValue = workspace?.name ?? ""
-            field.font = .systemFont(ofSize: GhosttyApp.shared.sidebarFontSize, weight: .medium)
+            field.font = .systemFont(ofSize: GhosttyApp.shared.sidebarFontSize, weight: .semibold)
             field.setAccessibilityIdentifier("workspace-row")
             // expose the workspace name so app.staticTexts["workspace 1"] resolves
             field.setAccessibilityLabel(workspace?.name ?? "")
@@ -107,16 +107,15 @@ extension WorkspaceSidebar.Coordinator {
             applyBadge(toCell: cell, count: effectiveUnseen(session?.unseenCount ?? 0))
             cell.statusIcon.apply(effectiveIndicator(forSession: node.id))
             // the split-rectangle icon (matching the toolbar split button) shows in BOTH modes so a split
-            // stays distinguishable at a glance, and `hasSplit` keeps it while merely hidden. Only the
-            // filled `flagged` variant is tree-mode only — every row in the flat flagged view is flagged,
-            // so the fill would be noise.
+            // stays distinguishable at a glance, and `hasSplit` keeps it while merely hidden. The flag mark is
+            // tree-mode only: every row in the flagged view is flagged, so it would be noise.
             let showSplitIcon = session?.hasSplit == true
-            let flagged = store.sidebarMode == .tree && session?.flagged == true
+            cell.setFlagMarkVisible(store.sidebarMode == .tree && session?.flagged == true)
             let notice = session.flatMap(presentationNotice(for:))
             cell.imageView?.image = session?.content == .page
-                ? (flagged ? flaggedPageSessionIcon : pageSessionIcon)
+                ? pageSessionIcon
                 : session?.runningAgent.flatMap { showSplitIcon ? nil : $0.image(pointSize: 15) }
-                    ?? iconForSession(split: showSplitIcon, axis: session?.splitAxis ?? .leftRight, flagged: flagged,
+                    ?? iconForSession(split: showSplitIcon, axis: session?.splitAxis ?? .leftRight,
                                       remote: session?.remoteHost != nil, disconnected: notice != nil)
             cell.notice = notice
             cell.imageView?.setAccessibilityIdentifier("session-icon")
@@ -126,14 +125,9 @@ extension WorkspaceSidebar.Coordinator {
                                                       density: GhosttyApp.shared.sidebarDensity)
             }
         }
-        // text/icon colors track the terminal theme, a selected row the selection foreground, and a row
-        // tint overrides the parts it colors. This build-time pass is a first guess: row(forItem:) can
-        // miss (-1) while the row map is in flux during a reload or expand/collapse animation.
-        // SidebarRowView.didAddSubview re-asserts the colors from the row's live isSelected when the cell
-        // attaches, and its isSelected didSet keeps them in step afterwards; refreshSelectionAppearance
-        // re-runs it on theme changes.
-        let selected = outlineView.selectedRowIndexes.contains(outlineView.row(forItem: item))
-        cell.setColors(selected: selected)
+        // the selection pill is a soft tint, so a selected row keeps the theme colors; a row tint overrides
+        // the parts it colors. refreshSelectionAppearance re-runs this on theme changes.
+        cell.setColors(selected: false)
         return cell
     }
 
@@ -157,27 +151,13 @@ extension WorkspaceSidebar.Coordinator {
         cell.badge.count = count
     }
 
-    /// iconForSession uses filled variants when flagged; the flat flagged view passes false. Remote rows use
-    /// clouds, slashed for a notice; bold marks a split but is barely distinguishable when filled. Remote split
+    /// iconForSession: remote rows use clouds, slashed for a notice, with bold marking a split. Remote split
     /// axes share a glyph.
-    private func iconForSession(split: Bool, axis: SplitAxis, flagged: Bool, remote: Bool,
-                                disconnected: Bool) -> NSImage? {
-        if remote, disconnected {
-            if flagged { return split ? flaggedRemoteDisconnectedSplitSessionIcon : flaggedRemoteDisconnectedSessionIcon }
-            return split ? remoteDisconnectedSplitSessionIcon : remoteDisconnectedSessionIcon
-        }
-        if remote {
-            if flagged { return split ? flaggedRemoteSplitSessionIcon : flaggedRemoteSessionIcon }
-            return split ? remoteSplitSessionIcon : remoteSessionIcon
-        }
-        switch (split, axis, flagged) {
-        case (true, .topBottom, true): return flaggedHorizontalSplitSessionIcon
-        case (true, .topBottom, false): return horizontalSplitSessionIcon
-        case (true, .leftRight, true): return flaggedSplitSessionIcon
-        case (true, .leftRight, false): return splitSessionIcon
-        case (false, _, true): return flaggedSessionIcon
-        case (false, _, false): return sessionIcon
-        }
+    private func iconForSession(split: Bool, axis: SplitAxis, remote: Bool, disconnected: Bool) -> NSImage? {
+        if remote, disconnected { return split ? remoteDisconnectedSplitSessionIcon : remoteDisconnectedSessionIcon }
+        if remote { return split ? remoteSplitSessionIcon : remoteSessionIcon }
+        guard split else { return sessionIcon }
+        return axis == .topBottom ? horizontalSplitSessionIcon : splitSessionIcon
     }
 
     /// Builds a view-based outline cell: a `SidebarCellView` with a leading icon (`cell.imageView`), the
@@ -270,7 +250,7 @@ extension WorkspaceSidebar.Coordinator {
             addBtn.isHidden = true
             let repeatBtn = makeRowButton(identifier: "workspace-repeat-launcher", label: "New Session",
                                           action: #selector(repeatLauncherClicked(_:)))
-            repeatBtn.imagePosition = .imageLeading
+            repeatBtn.imagePosition = .imageOnly
             repeatBtn.imageScaling = .scaleNone
             cell.addSubview(repeatBtn)
             cell.repeatButton = repeatBtn
@@ -286,18 +266,18 @@ extension WorkspaceSidebar.Coordinator {
                 repeatGap,
                 repeatBtn.centerYAnchor.constraint(equalTo: center),
                 repeatWidth,
-                repeatBtn.heightAnchor.constraint(equalToConstant: 16),
+                repeatBtn.heightAnchor.constraint(equalToConstant: SidebarCellView.quickStartSize),
                 addBtn.trailingAnchor.constraint(equalTo: statusIcon.leadingAnchor),
                 addBtn.centerYAnchor.constraint(equalTo: center),
                 width,
-                addBtn.heightAnchor.constraint(equalToConstant: 16),
+                addBtn.heightAnchor.constraint(equalToConstant: SidebarCellView.quickStartSize),
             ]
         } else {
             let marker = NSImageView()
             marker.translatesAutoresizingMaskIntoConstraints = false
-            marker.image = NSImage(systemSymbolName: "square.stack.fill", accessibilityDescription: nil)?
-                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .regular))
-            marker.contentTintColor = .controlAccentColor
+            marker.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 6, weight: .regular))
+            marker.imageScaling = .scaleNone
             marker.setAccessibilityIdentifier("companion-marker")
             marker.isHidden = true
             cell.addSubview(marker)
@@ -316,13 +296,35 @@ extension WorkspaceSidebar.Coordinator {
             cell.closeButton = closeBtn
             let closeWidth = closeBtn.widthAnchor.constraint(equalToConstant: 0)
             cell.closeButtonWidthConstraint = closeWidth
+            let flag = NSImageView()
+            flag.translatesAutoresizingMaskIntoConstraints = false
+            flag.image = NSImage.bundledIcon("flag-lucide", size: 11)
+            flag.imageScaling = .scaleNone
+            flag.setAccessibilityIdentifier("session-flag")
+            flag.setAccessibilityLabel("flagged")
+            flag.isHidden = true
+            flag.setContentCompressionResistancePriority(.required, for: .horizontal)
+            cell.addSubview(flag)
+            cell.flagMark = flag
+            let flagWidth = flag.widthAnchor.constraint(equalToConstant: 0)
+            cell.flagMarkWidthConstraint = flagWidth
+            let flagGap = flag.leadingAnchor.constraint(equalTo: field.trailingAnchor)
+            cell.flagMarkGapConstraint = flagGap
+            let nameStretch = flag.trailingAnchor.constraint(equalTo: marker.leadingAnchor, constant: -6)
+            nameStretch.priority = .defaultLow + 1
+            cell.nameStretch = nameStretch
             constraints += [
                 badge.trailingAnchor.constraint(equalTo: closeBtn.leadingAnchor),
                 closeBtn.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
                 closeBtn.centerYAnchor.constraint(equalTo: center),
                 closeBtn.heightAnchor.constraint(equalToConstant: 16),
                 closeWidth,
-                field.trailingAnchor.constraint(equalTo: marker.leadingAnchor, constant: -6),
+                flagGap,
+                flagWidth,
+                flag.centerYAnchor.constraint(equalTo: center),
+                flag.heightAnchor.constraint(equalToConstant: 11),
+                flag.trailingAnchor.constraint(lessThanOrEqualTo: marker.leadingAnchor, constant: -6),
+                nameStretch,
                 marker.trailingAnchor.constraint(equalTo: statusIcon.leadingAnchor),
                 marker.centerYAnchor.constraint(equalTo: center),
                 marker.heightAnchor.constraint(equalToConstant: 14),
@@ -371,7 +373,7 @@ extension WorkspaceSidebar.Coordinator {
         btn.image = NSImage(systemSymbolName: InterfaceElement.workspaceAddSession.symbolName!, accessibilityDescription: "New Session")?
             .withSymbolConfiguration(config)
         btn.image?.isTemplate = true
-        btn.imageScaling = .scaleProportionallyUpOrDown
+        btn.imageScaling = .scaleNone
         return btn
     }
 

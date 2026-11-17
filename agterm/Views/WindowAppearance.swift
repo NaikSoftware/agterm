@@ -63,8 +63,8 @@ enum WindowAppearance {
         // clearing the glass keeps the color constant across key/non-key — visible only with multiple windows.
         syncSidebarBackground(in: window)
 
-        // the title/terminal separator is SwiftUI's (`WindowContentView.titlebarHairline`), drawn full width
-        // by both columns and omitted in hidden mode. Nothing below draws it.
+        // the title/terminal separator is SwiftUI's (`WindowContentView.titlebarHairline`), drawn over the
+        // terminal column only and omitted in hidden mode. Nothing below draws it.
         guard let container = titlebarContainer(in: window) else { return }
         if let titlebarView = container.firstDescendant(withClassName: "NSTitlebarView") {
             titlebarView.wantsLayer = true

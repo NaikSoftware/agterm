@@ -272,13 +272,9 @@ struct WorkspaceSidebar: NSViewRepresentable {
         func refreshSelectionAppearance() {
             guard let outline = outlineView else { return }
             for row in 0 ..< outline.numberOfRows {
-                let selected = outline.selectedRowIndexes.contains(row)
-                (outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarCellView)?.setColors(selected: selected)
+                (outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarCellView)?.setColors(selected: false)
             }
-            outline.enumerateAvailableRowViews { rowView, _ in
-                rowView.needsDisplay = true
-                (rowView as? SidebarRowView)?.applyDisclosureAppearance()
-            }
+            outline.enumerateAvailableRowViews { rowView, _ in rowView.needsDisplay = true }
         }
 
         /// Pin the outline's appearance to the terminal theme's brightness so AppKit-drawn chrome — the
@@ -898,30 +894,20 @@ struct WorkspaceSidebar: NSViewRepresentable {
             return node.kind == .workspace || !node.children.isEmpty
         }
 
-        /// Leading row icons as monochrome template symbols. A flagged SESSION swaps to its base glyph's
-        /// `.fill` variant (the solid-interior idiom the scratch-active toolbar glyph uses); a workspace in
-        /// the focus SET keeps the same `square.on.square` outline at `.black` weight, so the two markers
-        /// stay distinct (fill = flagged session, black = marked workspace). Never a composited corner
-        /// badge, so each stays a single template `setColors` tints; the weight variant renders 1pt larger
-        /// (16x15 vs 15x14) but the icon view is pinned to 16x16, so neither swap moves the row. Cached.
-        lazy var workspaceIcon = Self.rowIcon("square.on.square")
-        lazy var focusedWorkspaceIcon = Self.rowIcon("square.on.square", weight: .black)
+        /// Leading row icons as monochrome templates `setColors` tints: the Lucide workspace stack and terminal,
+        /// SF Symbols for the rest. A workspace in the focus SET draws the heavier-stroked stack; a flagged session
+        /// keeps its icon and shows the flag after its name. The icon view is pinned to 16x16, so no swap moves
+        /// the row. Cached.
+        lazy var workspaceIcon = NSImage.bundledIcon("workspace-stack", size: 15)
+        lazy var focusedWorkspaceIcon = NSImage.bundledIcon("workspace-stack-bold", size: 15)
         lazy var splitSessionIcon = Self.rowIcon("rectangle.split.2x1")
         lazy var horizontalSplitSessionIcon = Self.rowIcon("rectangle.split.1x2")
-        lazy var sessionIcon = Self.rowIcon("terminal")
-        lazy var flaggedSessionIcon = Self.rowIcon("terminal.fill")
-        lazy var flaggedSplitSessionIcon = Self.rowIcon("rectangle.split.2x1.fill")
-        lazy var flaggedHorizontalSplitSessionIcon = Self.rowIcon("rectangle.split.1x2.fill")
+        lazy var sessionIcon = NSImage.bundledIcon("session-terminal", size: 15)
         lazy var pageSessionIcon = Self.rowIcon("list.bullet.rectangle")
-        lazy var flaggedPageSessionIcon = Self.rowIcon("list.bullet.rectangle.fill")
         lazy var remoteSessionIcon = Self.rowIcon("cloud")
         lazy var remoteSplitSessionIcon = Self.rowIcon("cloud", weight: .bold)
-        lazy var flaggedRemoteSessionIcon = Self.rowIcon("cloud.fill")
-        lazy var flaggedRemoteSplitSessionIcon = Self.rowIcon("cloud.fill", weight: .bold)
         lazy var remoteDisconnectedSessionIcon = Self.rowIcon("icloud.slash")
         lazy var remoteDisconnectedSplitSessionIcon = Self.rowIcon("icloud.slash", weight: .bold)
-        lazy var flaggedRemoteDisconnectedSessionIcon = Self.rowIcon("icloud.slash.fill")
-        lazy var flaggedRemoteDisconnectedSplitSessionIcon = Self.rowIcon("icloud.slash.fill", weight: .bold)
 
         private static func rowIcon(_ symbolName: String, weight: NSFont.Weight = .regular) -> NSImage? {
             let config = NSImage.SymbolConfiguration(pointSize: 13, weight: weight)

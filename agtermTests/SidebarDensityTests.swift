@@ -56,7 +56,7 @@ final class SidebarDensityTests: XCTestCase {
         for size in [AppSettings.sidebarFontSizeRange.lowerBound, AppSettings.defaultSidebarFontSize,
                      AppSettings.sidebarFontSizeRange.upperBound] {
             XCTAssertEqual(AppSettings.sidebarRowHeight(fontSize: size, density: .standard)
-                - AppSettings.sidebarRowHeight(fontSize: size, density: .compact), 5, "font \(size)")
+                - AppSettings.sidebarRowHeight(fontSize: size, density: .compact), 8, "font \(size)")
             XCTAssertGreaterThanOrEqual(AppSettings.sidebarRowHeight(fontSize: size, density: .compact)
                 - 2 * SidebarDensity.compact.selectionInset, 16, "font \(size): the 16pt row icon must fit the pill")
         }

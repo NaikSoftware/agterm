@@ -76,6 +76,8 @@ final class SidebarRenameController: NSObject, NSTextFieldDelegate {
         if node.kind == .session, let session = store.session(withID: node.id) {
             field.stringValue = session.displayName
         }
+        // the edit box spans the row; the row's reload after the edit brings the flag back
+        (field.superview as? SidebarCellView)?.setFlagMarkVisible(false)
         field.isEditable = true
         field.isBordered = true
         field.drawsBackground = true
@@ -157,14 +159,8 @@ final class SidebarRenameController: NSObject, NSTextFieldDelegate {
         field.isBordered = false
         field.drawsBackground = false
         field.setAccessibilityIdentifier(kind == .workspace ? "workspace-row" : "session-row")
-        // restore the row's selection-aware themed color so a commit that didn't change the name (no
-        // reload) doesn't leave beginEditing's edit-box color stuck on the row. read the hosting row view's
-        // live isSelected — the state the selection pill draws from — rather than recomputing via
-        // row(for:), which can miss if the row was reloaded during the edit; a stale tint here is invisible
-        // text on themes where foreground == selection-background.
-        if let cell = field.superview as? SidebarCellView {
-            cell.setColors(selected: (cell.superview as? NSTableRowView)?.isSelected ?? false)
-        }
+        // a commit that didn't change the name (no reload) must not leave beginEditing's edit-box color on the row
+        (field.superview as? SidebarCellView)?.setColors(selected: false)
     }
 }
 

@@ -30,20 +30,54 @@ final class SidebarOutlineView: NSOutlineView {
     var listsSessionsFlat = false
 
     /// selectionMinX is where a row's selection pill starts; a flat list has no strip to leave room for it.
-    var selectionMinX: CGFloat { listsSessionsFlat ? 0 : 8 }
+    var selectionMinX: CGFloat { listsSessionsFlat ? 0 : usesSpecGeometry ? 3 : 8 }
+
+    /// selectionMaxXInset is the pill's gap to the row's trailing edge.
+    var selectionMaxXInset: CGFloat { usesSpecGeometry ? 11 : 8 }
+
+    /// usesSpecGeometry lays out the tree on macOS 27 by the design's own measures: the pill 3pt into the row,
+    /// the chevron 8pt into the pill, icons after it and trailing items 8pt short of the pill's end. Earlier
+    /// releases keep AppKit's native frames (`testBelowTheGateFramesMatchAPlainOutline`).
+    var usesSpecGeometry: Bool {
+        guard #available(macOS 27.0, *) else { return false }
+        return reservesDisclosureColumn
+    }
+
+    private static let specChevronX: CGFloat = 11
+    private static let specChevronWidth: CGFloat = 12
+    /// A level-0 (workspace) cell; its icon sits 2pt in, after the chevron and an 8pt gap.
+    private static let specWorkspaceCellX: CGFloat = 29
+    /// A level-1 (session) cell, its icon 26pt into the pill.
+    private static let specSessionCellX: CGFloat = 27
+
+    /// specCellX is a cell's leading edge; each level past the session adds the density's indent scaled to the
+    /// design's 20pt step.
+    private func specCellX(level: Int) -> CGFloat {
+        guard level > 0 else { return Self.specWorkspaceCellX }
+        return Self.specSessionCellX + CGFloat(level - 1) * indentationPerLevel * 10 / 7
+    }
 
     // with the cell's 2pt icon inset, puts the icon 8pt inside a pill starting at 0, as in the tree
     private static let flatContentX: CGFloat = 6
 
-    /// macOS 27 reserves a wider leading strip than the triangle occupies — a level-0 cell starts at 26
-    /// against a triangle ending at 14 — leaving the row icon stranded mid-gap. Trim the surplus, computed
-    /// from the frame rather than fixed so a release that lays out at `contentX` keeps its own geometry,
-    /// and gated on the version because the earlier layout is already tight and cannot be tested here.
-    /// Without the reserved strip the trim runs on every version, toward `contentMinX`.
+    /// macOS 27 reserves a wider leading strip than the triangle occupies, so the tree there takes the spec
+    /// geometry (`usesSpecGeometry`); the earlier layout is already tight and cannot be tested here. Without the
+    /// reserved strip the trim runs on every version, toward `contentMinX`.
     override func frameOfCell(atColumn column: Int, row: Int) -> NSRect {
         var frame = super.frameOfCell(atColumn: column, row: row)
-        guard !frame.isEmpty, tableColumns.indices.contains(column), tableColumns[column] === outlineTableColumn,
-              let target = contentMinX(atRow: row) else { return frame }
+        guard !frame.isEmpty, tableColumns.indices.contains(column), tableColumns[column] === outlineTableColumn else {
+            return frame
+        }
+        if usesSpecGeometry {
+            let level = level(forRow: row)
+            guard level >= 0 else { return frame }
+            // the cell's trailing items sit 2pt in, so this leaves them 8pt short of the pill's end
+            let maxX = min(frame.maxX, bounds.width - selectionMaxXInset - 6)
+            frame.origin.x = specCellX(level: level)
+            frame.size.width = max(0, maxX - frame.minX)
+            return frame
+        }
+        guard let target = contentMinX(atRow: row) else { return frame }
         let trim = max(0, frame.minX - target)
         frame.origin.x -= trim
         frame.size.width += trim
@@ -54,6 +88,13 @@ final class SidebarOutlineView: NSOutlineView {
     /// would hide them too, but AppKit then refuses to collapse the item.
     override func frameOfOutlineCell(atRow row: Int) -> NSRect {
         var frame = super.frameOfOutlineCell(atRow: row)
+        if usesSpecGeometry, !frame.isEmpty {
+            let level = level(forRow: row)
+            // a nested parent's chevron keeps the same 8pt gap before its own icon
+            frame.origin.x = level > 0 ? specCellX(level: level) + 2 - 8 - Self.specChevronWidth : Self.specChevronX
+            frame.size.width = Self.specChevronWidth
+            return frame
+        }
         guard !reservesDisclosureColumn, !frame.isEmpty, let target = contentMinX(atRow: row) else { return frame }
         guard level(forRow: row) > 0 else { return .zero }
         frame.origin.x = target - frame.width
@@ -81,8 +122,7 @@ final class SidebarOutlineView: NSOutlineView {
         let indent = CGFloat(level) * indentationPerLevel
         if listsSessionsFlat { return Self.flatContentX + indent }
         guard reservesDisclosureColumn else { return max(0, Self.contentX - indentationPerLevel) + indent }
-        guard #available(macOS 27.0, *) else { return nil }
-        return Self.contentX + indent
+        return nil
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {

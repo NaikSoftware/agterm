@@ -292,8 +292,8 @@ struct WindowContentView: View {
         }
     }
 
-    /// The separator between the custom titlebar row and the content below it, themed (`chromeText` at low
-    /// opacity) so it stays visible on light themes. Both columns draw it so the line runs full width.
+    /// The separator between the custom titlebar row and the terminal column, themed (`chromeText` at low
+    /// opacity) so it stays visible on light themes. The leading columns run up behind the title band instead.
     /// Hidden mode draws nothing: `titlebarHeight` is 0 there, so with no row above it the line would sit
     /// on the window's top edge separating nothing, which reads as a rendering artifact (#368).
     @ViewBuilder private var titlebarHairline: some View {
@@ -351,15 +351,18 @@ struct WindowContentView: View {
     }
 
     private var sidebarColumn: some View {
-        VStack(spacing: 0) {
-            titlebarHairline
-            WorkspaceSidebar(store: store, actions: actions)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        }
-        .safeAreaInset(edge: .bottom) { bottomBar }
-        // sits behind the transparent outline + bottom bar so the column reads as one surface, behind the
-        // content (never tints row text) and over the window background (composes with translucency/blur).
-        .background(sidebarTintWash)
+        WorkspaceSidebar(store: store, actions: actions)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .safeAreaInset(edge: .bottom) { bottomBar }
+            // sits behind the transparent outline + bottom bar so the column reads as one surface, behind the
+            // content (never tints row text) and over the window background (composes with translucency/blur).
+            .background { leadingColumnBackground }
+    }
+
+    /// The sidebar and file panel surface, continued up behind the title band, where only the terminal
+    /// column draws the hairline.
+    private var leadingColumnBackground: some View {
+        sidebarTintWash.padding(.top, -titlebarHeight)
     }
 
     /// The wash for the current `sidebarShift`: black (darker) or white (lighter) at the shift's magnitude
@@ -373,11 +376,8 @@ struct WindowContentView: View {
     }
 
     private var filePanelColumn: some View {
-        VStack(spacing: 0) {
-            titlebarHairline
-            FileTreeView(store: store, actions: actions)
-        }
-        .background(sidebarTintWash)
+        FileTreeView(store: store, actions: actions)
+            .background { leadingColumnBackground }
     }
 
     /// A 1px themed vertical separator with a wider invisible drag handle; `onDrag` gets the pointer's window X.
@@ -386,6 +386,8 @@ struct WindowContentView: View {
             .fill(chromeText.opacity(0.1))
             .frame(width: 1)
             .frame(maxHeight: .infinity)
+            // the border runs on up through the title band, beside the leading columns' continued surface
+            .background { Rectangle().fill(chromeText.opacity(0.1)).padding(.top, -titlebarHeight) }
             .overlay {
                 Color.clear
                     .frame(width: 12)
@@ -756,11 +758,9 @@ struct WindowContentView: View {
                 Button {
                     actions.newWorkspace()
                 } label: {
-                    Image(systemName: InterfaceElement.newWorkspace.symbolName!)
-                        .frame(width: 24, height: 22)
-                        .contentShape(Rectangle())
+                    InterfaceElement.newWorkspace.icon()
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(ChromeButtonStyle(foreground: chromeText))
                 .disabled(store.serverActionsBlocked)
                 .toolTip(helpHint("New Workspace", .newWorkspace), isShown: tipsShown)
                 .accessibilityLabel("New Workspace")
@@ -773,12 +773,12 @@ struct WindowContentView: View {
                         .disabled(store.isRemoteWindow)
                 } label: {
                     Image(systemName: InterfaceElement.newSession.symbolName!)
-                        .frame(width: 24, height: 22)
-                        .contentShape(Rectangle())
+                        .frame(width: 30, height: 28)
+                        .contentShape(RoundedRectangle(cornerRadius: 7))
                 }
                 .menuStyle(.borderlessButton)
                 // a borderless Menu ignores foregroundStyle on its glyph but follows the accent tint.
-                .tint(chromeText)
+                .tint(chromeText.opacity(0.58))
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .disabled(store.serverActionsBlocked)
@@ -796,14 +796,10 @@ struct WindowContentView: View {
                     actions.toggleFocusFilter()
                 } label: {
                     Image(systemName: store.focusEnabled ? "square.grid.2x2.fill" : InterfaceElement.focusFilter.symbolName!)
-                        .frame(width: 24, height: 22)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
-                // nothing marked = nothing to filter to, and the store refuses an empty set anyway. The
-                // explicit chromeText foregroundStyle defeats SwiftUI's disabled dimming, so mute by hand.
+                .buttonStyle(ChromeButtonStyle(foreground: chromeText, isOn: store.focusEnabled))
+                // nothing marked = nothing to filter to, and the store refuses an empty set anyway.
                 .disabled(store.focusedWorkspaceIDs.isEmpty)
-                .opacity(store.focusedWorkspaceIDs.isEmpty ? 0.35 : 1)
                 .toolTip(helpHint(store.focusEnabled ? "Show all workspaces" : "Show only focused workspaces",
                                   .toggleWorkspaceFilter), isShown: tipsShown)
                 .accessibilityLabel("Toggle Workspace Filter")
@@ -820,22 +816,20 @@ struct WindowContentView: View {
                 } label: {
                     let flagged = store.sidebarMode == .flagged
                     Image(systemName: flagged ? "flag.fill" : InterfaceElement.flaggedView.symbolName!)
-                        .frame(width: 24, height: 22)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(ChromeButtonStyle(foreground: chromeText, isOn: store.sidebarMode == .flagged))
                 // disable entering an empty flagged view (tree mode + no flags); stays enabled in flagged
-                // mode so the button can always switch back to the tree. Hand-muted, like the filter above.
+                // mode so the button can always switch back to the tree.
                 .disabled(store.sidebarMode == .tree && store.flaggedSessions.isEmpty)
-                .opacity(store.sidebarMode == .tree && store.flaggedSessions.isEmpty ? 0.35 : 1)
                 .toolTip(helpHint(store.sidebarMode == .flagged ? "Show all sessions" : "Show flagged sessions", .toggleFlaggedView),
                          isShown: tipsShown)
                 .accessibilityLabel("Toggle Flagged View")
                 .accessibilityIdentifier("flagged-view-toggle")
             }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .frame(height: 44)
+        .overlay(alignment: .top) { Rectangle().fill(chromeText.opacity(0.1)).frame(height: 1) }
         // the add buttons track the terminal theme's foreground, matching the sidebar rows above.
         .foregroundStyle(chromeText)
         // no explicit background: the sidebar is transparent (the window's terminal color shows through),
