@@ -87,6 +87,7 @@ Linux and mobile have no CI today and get none in this work.
 - **agterm-qt branches (builder's call):** import `main` only. The remote has no other branches and no open PRs.
 - **CLAUDE.md and `.claude/rules` (builder's call):** swap names and paths, replace upstream-maintainer references (Eugene, `~/dev.umputun/agterm`, Homebrew, notarization, Cloudflare) with the fork's facts. No other editorial rewrite.
 - **Product page (owner's request):** `site/index.html` gets a new design made in Claude Design, not a rename of upstream's page. The owner approves the mockup first; the page is then built to match it exactly.
+- **Parallel PRs (builder's call):** PRs keep landing on master while this work runs. The restructure and rename run as scripts, so they run again on a fresh master just before the merge instead of being rebased by hand. The owner holds other merges for the short window between that final run and the merge. A branch still open after the merge runs the same scripts on itself and then merges master.
 - **Root Makefile (builder's call):** none. Commands run from `macos/`; `CLAUDE.md` says so.
 
 ## Order of work
