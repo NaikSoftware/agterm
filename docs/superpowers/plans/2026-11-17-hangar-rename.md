@@ -168,4 +168,4 @@
 - [ ] **Step 2:** Open the PR (`--repo NaikSoftware/agterm`). After the owner merges, verify the merge commit on `origin/master`.
 - [ ] **Step 3:** Ask the owner to confirm, then `gh repo rename elis --repo NaikSoftware/agterm`; update local `origin` URLs; enable Pages (source: GitHub Actions).
 - [ ] **Step 4:** Archive agterm-qt (owner's request, 2026-11-17): push one commit to `NaikSoftware/agterm-qt` `main` whose README says the project moved to `NaikSoftware/elis` (`linux/`, `mobile/`), then `gh repo archive NaikSoftware/agterm-qt --yes`. The local clone stays; the owner removes it.
-- [ ] **Step 5:** Release with `Elis-<ver>.dmg`, `elis-mobile.apk` and `migrate-from-agterm2.sh`. The notes tell users to run the script, and that two attached Macs must both update.
+- [ ] **Step 5 (deferred by the owner, 2026-11-18: no release at the end of this plan; improvements land first):** Release with `Elis-<ver>.dmg`, `elis-mobile.apk` and `migrate-from-agterm2.sh`. The notes tell users to run the script, and that two attached Macs must both update.
