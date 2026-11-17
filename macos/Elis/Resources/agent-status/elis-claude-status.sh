@@ -110,6 +110,12 @@ running_agent() {
   return 1
 }
 
+pending_cron() {
+  n=$(field session_crons)
+  case "$n" in '' | *[!0-9]*) return 1 ;; esac
+  [ "$n" -gt 0 ]
+}
+
 running_teammate() {
   n=$(field background_tasks)
   case "$n" in '' | *[!0-9]*) return 1 ;; esac
@@ -140,7 +146,7 @@ if [ -n "$payload" ]; then
   if [ -n "$aid" ]; then
     [ "${1:-}" = active ] && set -- "$@" --if-idle
   elif [ "${1:-}" = completed ] && [ "$event" = Stop ]; then
-    if running_agent; then
+    if running_agent || pending_cron; then
       set -- active --blink
     elif running_teammate; then
       # shortcut: marks are not tied to task ids, so an agent ended without SubagentStop (killed, interrupted)

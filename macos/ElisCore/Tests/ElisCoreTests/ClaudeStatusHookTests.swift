@@ -232,16 +232,30 @@ struct ClaudeStatusHookTests {
         }
     }
 
-    private static func payload(_ event: String, agentID: String? = nil, tasks: String? = nil) -> String {
+    private static func payload(_ event: String, agentID: String? = nil, tasks: String? = nil, crons: String? = nil) -> String {
         var fields = [#""session_id":"s1""#, #""hook_event_name":"\#(event)""#]
         if let agentID { fields.append(#""agent_id":"\#(agentID)""#) }
         if let tasks { fields.append(#""background_tasks":\#(tasks)"#) }
+        if let crons { fields.append(#""session_crons":\#(crons)"#) }
         return "{" + fields.joined(separator: ",") + "}"
     }
 
     private static let runningSubagent = #"[{"id":"a1","type":"subagent","status":"running","description":"d"}]"#
     private static let runningWorkflow = #"[{"id":"w1","type":"workflow","status":"running","name":"n"}]"#
     private static let runningShell = #"[{"id":"b1","type":"shell","status":"running","description":"d","command":"c"}]"#
+
+    @Test func stopWithAPendingCronStaysActive() throws {
+        let crons = #"[{"id":"c1","schedule":"*/5 * * * *","recurring":true,"prompt":"p"}]"#
+        let result = try run(chain: ["login", "claude"], args: ["completed", "--auto-reset"],
+                             input: .pipe(Self.payload("Stop", tasks: "[]", crons: crons)))
+        #expect(result.calls == ["active --blink"])
+    }
+
+    @Test func stopWithNoCronCompletes() throws {
+        let result = try run(chain: ["login", "claude"], args: ["completed", "--auto-reset"],
+                             input: .pipe(Self.payload("Stop", tasks: "[]", crons: "[]")))
+        #expect(result.calls == ["completed --auto-reset"])
+    }
 
     @Test func subagentActiveGainsIfIdle() throws {
         let result = try run(chain: ["login", "claude"], args: ["active", "--blink"],

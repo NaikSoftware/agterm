@@ -30,14 +30,14 @@ final class SettingsStoreTests {
 
     @Test func missingFileSeedsDefaultTheme() {
         #expect(!FileManager.default.fileExists(atPath: fileURL.path))
-        #expect(store.load() == AppSettings(theme: AppSettings.defaultTheme))
+        #expect(store.load() == AppSettings(theme: AppSettings.defaultTheme, restoreMode: .live))
         #expect(store.load().theme == "elis")
     }
 
     @Test func corruptFileSeedsDefaultTheme() throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try Data("{ not valid json ]".utf8).write(to: fileURL)
-        #expect(store.load() == AppSettings(theme: AppSettings.defaultTheme))
+        #expect(store.load() == AppSettings(theme: AppSettings.defaultTheme, restoreMode: .live))
     }
 
     @Test func existingFileWithoutThemeKeyStaysGhosttyDefault() throws {

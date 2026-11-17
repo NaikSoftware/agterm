@@ -2415,6 +2415,7 @@ elisctl session tint clear --target &quot;$ELIS_SESSION_ID&quot;</code></pre>
 <ul>
 <li>When Claude Code runs as a worker under another agent with a shell between them, as in a tool call, its hooks stay silent, so the status of the pane that started it is not overwritten.</li>
 <li>A background subagent or workflow keeps the row working. Its activity lights an idle row but never replaces the main agent's status. While Claude Code (2.1.145 or later) reports one, or a background shell, still running, Stop posts active instead of completed; completed comes from the Stop after the last one finishes, so a background server that never exits keeps the row active.</li>
+<li>A Stop while the session has a scheduled wakeup, from <code>/loop</code>, ScheduleWakeup or CronCreate, posts active instead of completed, so a looping session reads as working between wakeups; a job scheduled far ahead holds the row until it fires or is deleted.</li>
 <li>A Stop while an agent-team teammate works posts active instead of completed; completed comes from the Stop after it goes idle. An idle teammate that is still alive does not hold the row.</li>
 <li>Two gaps remain: the main agent's activity can replace a subagent's permission prompt, and when the key that answers that prompt leaves the block in place, the row stays blocked until the main agent's next event.</li>
 <li>After upgrading, restart Elis, which reinstalls the hooks: a running older app ignores the subagent's <code>--if-idle</code> and applies the write.</li>
@@ -2535,7 +2536,7 @@ command = &quot;&#39;/Users/you/.config/elis/agent-status/elis-codex-status.sh&#
 </thead>
 <tbody>
 <tr>
-<td>Fresh shells (default)</td>
+<td>Fresh shells</td>
 <td>a new shell in the saved directory</td>
 </tr>
 <tr>
@@ -2543,7 +2544,7 @@ command = &quot;&#39;/Users/you/.config/elis/agent-status/elis-codex-status.sh&#
 <td>the command it was running at the last clean quit, started again</td>
 </tr>
 <tr>
-<td>Live sessions</td>
+<td>Live sessions (default)</td>
 <td>the same program, still running</td>
 </tr>
 </tbody>
