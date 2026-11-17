@@ -11,19 +11,36 @@ import XCTest
 /// correct previous session; the click → `selectSession` glue is verified by hand (see ui-tests.md).
 @MainActor
 final class RecentSessionsButtonUITests: ControlAPITestCase {
-    func testSwitcherOpensWithOnlyTheJumpRowInASingleSessionWindow() throws {
+    func testSwitcherOpensWithOnlyTheSearchFieldInASingleSessionWindow() throws {
         let button = app.buttons["recent-sessions-button"]
         XCTAssertTrue(button.waitForExistence(timeout: 10), "the switcher pill should render in the title bar")
-        XCTAssertTrue(pollEnabled(button, true, timeout: 8), "the jump row can always act, so the pill stays enabled")
+        XCTAssertTrue(pollEnabled(button, true, timeout: 8), "the search field can always act, so the pill stays enabled")
 
-        let jump = app.buttons["jump-session-row"]
-        let deadline = Date().addingTimeInterval(10)
-        while Date() < deadline, !jump.exists {
-            button.click()
-            _ = jump.waitForExistence(timeout: 1)
-        }
-        XCTAssertTrue(jump.exists, "clicking the pill should open the switcher with its jump row")
+        let field = openSwitcher(button)
+        XCTAssertTrue(field.exists, "clicking the pill should open the switcher with its search field")
         XCTAssertEqual(app.buttons.matching(identifier: "recent-session-row").count, 0)
+    }
+
+    func testTypingFiltersTheSwitcherAndReturnSwitches() throws {
+        let seeded = try activeSessionID()
+        XCTAssertEqual(try sendCommand(#"{"cmd":"session.rename","target":"\#(seeded)","args":{"name":"zebrafish"}}"#)["ok"] as? Bool, true)
+        let created = try sendCommand(#"{"cmd":"session.new"}"#)
+        let newID = try XCTUnwrap((created["result"] as? [String: Any])?["id"] as? String)
+        XCTAssertTrue(pollActiveSessionID(try XCTUnwrap(UUID(uuidString: newID)), timeout: 8))
+
+        let field = openSwitcher(app.buttons["recent-sessions-button"])
+        XCTAssertTrue(field.exists)
+        // typed without clicking the field: it holds the keyboard from the moment the popover opens
+        for key in "zebra" { app.typeKey(String(key), modifierFlags: []) }
+        let rows = app.buttons.matching(identifier: "recent-session-row")
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline, !(rows.count == 1 && rows.firstMatch.label.contains("zebrafish")) { usleep(100_000) }
+        XCTAssertEqual(rows.count, 1, "the query should filter the list to the matching session")
+        XCTAssertTrue(rows.firstMatch.label.contains("zebrafish"), "filtered row: \(rows.firstMatch.label)")
+
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(pollActiveSessionID(try XCTUnwrap(UUID(uuidString: seeded)), timeout: 8),
+                      "Return should switch to the highlighted session")
     }
 
     // the previous session gets a unique rename so its jump row can be told apart by label.
@@ -88,10 +105,10 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
         XCTAssertTrue(needsYou.label.contains("api › logs"), "switcher attention row: \(needsYou.label)")
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
 
-        // the switcher's own jump row tells its popover apart from the bell's, which share attention rows.
+        // the switcher's own search field tells its popover apart from the bell's, which share attention rows.
         let bell = app.buttons["attention-button"]
         let attentionRow = app.buttons["attention-session-row"]
-        let switcherJump = app.buttons["jump-session-row"]
+        let switcherJump = app.textFields["switcher-search-field"]
         let deadline = Date().addingTimeInterval(10)
         while Date() < deadline, !attentionRow.exists || switcherJump.exists {
             bell.click()
@@ -112,6 +129,17 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
             usleep(200_000)
         }
         return nil
+    }
+
+    /// Clicks the pill until the switcher's search field appears, returning it (non-existent on timeout).
+    private func openSwitcher(_ button: XCUIElement) -> XCUIElement {
+        let field = app.textFields["switcher-search-field"]
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline, !field.exists {
+            button.click()
+            _ = field.waitForExistence(timeout: 1)
+        }
+        return field
     }
 
     /// (Re)opens the recent-sessions popover until its jump row appears, returning it (or a non-existent
