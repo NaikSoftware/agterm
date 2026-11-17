@@ -1,0 +1,35 @@
+# Text that keeps the old agterm name. rename.sh leaves it alone, check-names.sh allows it.
+# Fields are TAB-separated. A glob matches the repo-relative path; ** spans directories, * stays in one.
+#   <glob>                       whole file: no path move, no content change
+#   <glob> TAB line TAB <regex>  matching lines stay verbatim; check-names fails if no line matches
+#   <glob> TAB keep TAB <regex>  matching substrings stay verbatim, the rest of the line is renamed
+
+# The spec and plan document the old-to-new map; tools/hangar holds the map itself.
+docs/superpowers/**
+tools/hangar/**
+.superpowers/**
+# Patches change upstream ghostty and zmx code and must keep applying.
+macos/scripts/ghostty-patches/**
+macos/scripts/zmx-patches/**
+# Released entries are history; the file has no product name in its title.
+macos/CHANGELOG.md
+# Task 7 migration script: it names the old paths it migrates from.
+macos/scripts/migrate-from-agterm2.sh
+macos/scripts/tests/migrate-from-agterm2-test.sh
+
+# Credits.
+README.md	line	^Hangar started as a fork of \[agterm\]\(https://github\.com/umputun/agterm\)
+linux/LICENSE	line	^Portions copyright .*\(agterm, https://github\.com/umputun/agterm\)
+cookbook/**/README.md	line	^Author:
+macos/**/*.swift	line	(?i)adapted from thdxg/macterm
+**	keep	\[agterm\]\(https://github\.com/umputun/agterm\)
+
+# Upstream history: numbered issues, discussions, pull requests and CI runs exist only upstream.
+**	keep	umputun/agterm/(?:issues|discussions|pull)/\d+(?:#[\w-]+)?
+**	keep	umputun/agterm/actions/runs/\d+
+**	keep	umputun/agterm#\d+
+# Upstream facts that Task 6 replaces: the Homebrew tap and the maintainer's checkout path.
+**	keep	umputun/apps/agterm
+**	keep	dev\.umputun/agterm
+# External downstream repository, not part of this monorepo.
+**	keep	agterm-linux
