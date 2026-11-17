@@ -74,7 +74,7 @@ public enum AgentStatus: String, Codable, Sendable, CaseIterable {
 
     /// symbolName resolves the SF Symbol for the status glyph, shared by the AppKit sidebar and the SwiftUI
     /// attention list: the per-call `override` (from `session.status --shape`) wins, else the `configured`
-    /// Settings shape, else `StatusShape.circle`. `idle` renders no glyph, so its "" is filtered out before use.
+    /// Settings shape, else `defaultShape`. `idle` renders no glyph, so its "" is filtered out before use.
     public func symbolName(override: StatusShape?, configured: StatusShape?) -> String {
         guard self != .idle else { return "" }
         return shape(override: override, configured: configured).symbolName
@@ -82,7 +82,17 @@ public enum AgentStatus: String, Codable, Sendable, CaseIterable {
 
     /// shape resolves the silhouette `symbolName` draws, for renderers that also need the shape's weight.
     public func shape(override: StatusShape?, configured: StatusShape?) -> StatusShape {
-        override ?? configured ?? .circle
+        override ?? configured ?? defaultShape
+    }
+
+    /// defaultShape is the built-in silhouette, matching the phone app: working circle, blocked triangle,
+    /// completed diamond.
+    public var defaultShape: StatusShape {
+        switch self {
+        case .blocked: .triangle
+        case .completed: .diamond
+        case .active, .idle: .circle
+        }
     }
 
     /// Tooltip for a visible status glyph. Idle renders no glyph and therefore has no tooltip.
@@ -111,7 +121,7 @@ public enum StatusPane: String, Codable, Sendable, CaseIterable {
 
 /// StatusShape is the silhouette a status glyph draws, so shape carries the state alongside the tint. Every
 /// shape is plain, with no interior mark, selectable per status in Settings or per call via
-/// `session.status --shape`; `circle` is what an unset status draws. The raw value is the public name the CLI,
+/// `session.status --shape`; an unset status draws `AgentStatus.defaultShape`. The raw value is the public name the CLI,
 /// settings and `tree` carry, so it never changes once released; `symbolName` maps it to the SF Symbol.
 public enum StatusShape: String, Codable, Sendable, CaseIterable {
     case circle, square, triangle

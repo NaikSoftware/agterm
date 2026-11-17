@@ -288,11 +288,11 @@ final class SettingsUITests: XCTestCase {
         let activeShape = settingsControl(tab: "Agent Status", control: "settings-status-shape-active")
 
         picker.click()
-        let triangle = app.menuItems["Triangle"]
-        XCTAssertTrue(triangle.waitForExistence(timeout: 5), "the shape picker should offer 'Triangle'")
-        triangle.click()
-        XCTAssertTrue(poll { self.settingsValue("blockedStatusShape") == "triangle" },
-                      "selecting 'Triangle' should persist blockedStatusShape=triangle to settings.json")
+        let circle = app.menuItems["Circle"]
+        XCTAssertTrue(circle.waitForExistence(timeout: 5), "the shape picker should offer 'Circle'")
+        circle.click()
+        XCTAssertTrue(poll { self.settingsValue("blockedStatusShape") == "circle" },
+                      "an explicit Circle on Blocked is not its default and should persist blockedStatusShape=circle")
 
         // a second status through the same flow: a copy-pasted binding driving the wrong status only
         // shows up once two rows are exercised.
@@ -302,24 +302,24 @@ final class SettingsUITests: XCTestCase {
         star.click()
         XCTAssertTrue(poll { self.settingsValue("activeStatusShape") == "star" },
                       "selecting 'Star' on the Active row should persist activeStatusShape=star to settings.json")
-        XCTAssertEqual(settingsValue("blockedStatusShape"), "triangle", "the Active row must not rewrite the Blocked shape")
+        XCTAssertEqual(settingsValue("blockedStatusShape"), "circle", "the Active row must not rewrite the Blocked shape")
 
         app.terminate()
         app.launchForUITest()
         XCTAssertTrue(app.staticTexts["session-row"].firstMatch.waitForHittable(timeout: 20), "seeded session should be hittable")
         let restored = settingsControl(tab: "Agent Status", control: "settings-status-shape-blocked")
-        XCTAssertTrue(poll { (restored.value as? String) == "Triangle" },
-                      "after a relaunch the shape picker should show the stored Triangle, got \(String(describing: restored.value))")
+        XCTAssertTrue(poll { (restored.value as? String) == "Circle" },
+                      "after a relaunch the shape picker should show the stored Circle, got \(String(describing: restored.value))")
         let restoredActive = app.descendants(matching: .any).matching(identifier: "settings-status-shape-active").firstMatch
         XCTAssertTrue(poll { (restoredActive.value as? String) == "Star" },
                       "after a relaunch the Active picker should show the stored Star, got \(String(describing: restoredActive.value))")
 
         restored.click()
-        let fallback = app.menuItems["Circle"]
-        XCTAssertTrue(fallback.waitForExistence(timeout: 5), "the shape picker should offer 'Circle'")
+        let fallback = app.menuItems["Triangle"]
+        XCTAssertTrue(fallback.waitForExistence(timeout: 5), "the shape picker should offer 'Triangle'")
         fallback.click()
         XCTAssertTrue(poll { self.settingsObject()?["blockedStatusShape"] == nil },
-                      "selecting Circle (the default) should remove the blockedStatusShape key from settings.json")
+                      "selecting Triangle (Blocked's default) should remove the blockedStatusShape key from settings.json")
         XCTAssertEqual(settingsValue("activeStatusShape"), "star", "clearing the Blocked shape must leave the Active one alone")
 
         // without this leg, a resetAgentStatus() missing its three shape-clearing lines ships green.

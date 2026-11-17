@@ -596,10 +596,10 @@ private struct AgentStatusSettingsView: View {
         return image
     }
 
-    // the default plain circle maps back to nil; nil and `circle` render identically
+    // the status's default shape maps back to nil; nil and the default render identically
     private func statusShape(for status: AgentStatus) -> Binding<StatusShape> {
-        Binding(get: { model.settings.effectiveStatusShape(for: status) ?? .circle },
-                set: { setShape($0 == .circle ? nil : $0, for: status) })
+        Binding(get: { model.settings.effectiveStatusShape(for: status) ?? status.defaultShape },
+                set: { setShape($0 == status.defaultShape ? nil : $0, for: status) })
     }
 
     private func setShape(_ shape: StatusShape?, for status: AgentStatus) {
