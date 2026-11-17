@@ -14,12 +14,24 @@ final homePrefix = RegExp(r'^/(home|Users)/[^/]+');
 String shortHome(String path) => path.replaceFirst(homePrefix, '~');
 String expandHome(String path, String home) => path.replaceFirst(RegExp(r'^~(?=/|$)'), home);
 
+// The macOS tree reports no `agent`, only the pane's foreground argv: name the agent the way its
+// SessionLauncher.agent(argv:) does, including a script install run as `node /path/claude`.
+String agentOf(List<String> argv) {
+  const commands = {'claude': 'claude', 'codex': 'codex', 'opencode': 'opencode', 'agy': 'antigravity'};
+  String base(String a) => a.split('/').last;
+  if (argv.isEmpty) return '';
+  if (commands[base(argv.first)] case final a?) return a;
+  if (!const {'node', 'bun', 'deno'}.contains(base(argv.first))) return '';
+  final script = argv.skip(1).where((a) => !a.startsWith('-')).firstOrNull;
+  return script == null ? '' : commands[base(script)] ?? '';
+}
+
 class Session {
   Session(Map m, this.workspaceId, this.workspaceName)
       : id = m['id'] ?? '',
         name = (m['name'] as String?)?.isNotEmpty == true ? m['name'] : 'New session',
         status = m['status'] ?? 'idle',
-        agent = m['agent'] ?? '',
+        agent = (m['agent'] as String?)?.isNotEmpty == true ? m['agent'] : agentOf((m['foreground'] as List?)?.cast<String>() ?? const []),
         cwd = m['cwd'] ?? '',
         parent = m['parent'] ?? '',
         context = m['context'] ?? '',

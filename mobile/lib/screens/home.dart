@@ -24,12 +24,13 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   String filter = 'all';
   final collapsed = <String>{};
   final snippets = <String, String>{}; // blocked session id → the last rows of its screen
   StreamSubscription<Alert>? alerts;
   Timer? snippetTimer;
+  late final wave = AnimationController(vsync: this, duration: const Duration(milliseconds: 4800));
 
   AgtermModel get m => widget.model;
 
@@ -44,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     alerts?.cancel();
     snippetTimer?.cancel();
+    wave.dispose();
     super.dispose();
   }
 
@@ -151,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.pop(sheet);
                     final body = await promptText(context, 'Notify the computer', hint: 'Message', action: 'Send');
                     if (body != null && body.trim().isNotEmpty && mounted) {
-                      reportOf(context, m.act('notify', args: {'body': body.trim(), 'title': 'agterm Mobile'}));
+                      reportOf(context, m.act('notify', args: {'body': body.trim(), 'title': 'Agterm2'}));
                     }
                   }),
               StatefulBuilder(
@@ -159,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         key: const Key('watch'),
                         secondary: const Icon(Icons.notifications_active_outlined, color: C.muted),
                         title: const Text('Alerts in the background'),
-                        subtitle: Text(Watch.enabled && !Watch.permitted ? 'Notifications are off for agterm in Android settings' : 'When an agent needs you',
+                        subtitle: Text(Watch.enabled && !Watch.permitted ? 'Notifications are off for Agterm2 in Android settings' : 'When an agent needs you',
                             style: const TextStyle(fontSize: 12, color: C.muted)),
                         value: Watch.enabled,
                         onChanged: (v) async {
@@ -228,22 +230,36 @@ class _HomeScreenState extends State<HomeScreen> {
     if (id != null && mounted) reportOf(context, m.act('recent.open', target: id));
   }
 
+  // the session rows the list draws: a filter's matches, or the tree minus folded workspaces and folded companions
+  Iterable<Session> _shownRows(List<Session> all) => filter != 'all'
+      ? all.where((s) => filter == 'flagged' ? s.flagged : s.status == filter)
+      : m.workspaces.where((w) => !collapsed.contains(w.id)).expand((w) {
+          final folded = {for (final s in w.sessions) if (s.collapsed) s.id};
+          return w.sessions.where((s) => s.parent.isEmpty || !folded.contains(s.parent));
+        });
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: m,
         builder: (context, _) {
           final all = m.sessions.toList();
           final needs = all.where((s) => s.needsYou).toList()..sort((a, b) => a.status == b.status ? 0 : (a.status == 'blocked' ? -1 : 1));
+          // one ticker drives every running row; it sleeps while none is on screen, and stands still with animations off
+          if (!MediaQuery.disableAnimationsOf(context) && _shownRows(all).any((s) => s.status == 'active')) {
+            if (!wave.isAnimating) wave.repeat();
+          } else {
+            wave.value = 0;
+          }
           return Scaffold(
             floatingActionButton: m.state == LinkState.connected && m.workspaces.isNotEmpty
                 ? FloatingActionButton.extended(
                     key: const Key('newSession'),
                     onPressed: () => showNewSession(context, m),
-                    backgroundColor: C.accent,
+                    backgroundColor: C.text,
                     foregroundColor: C.bg,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     icon: const Icon(Icons.add),
-                    label: const Text('New session', style: TextStyle(fontWeight: FontWeight.w600)),
+                    label: const Text('New session', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                   )
                 : null,
             body: SafeArea(
@@ -264,13 +280,13 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
   Widget _header(List<Session> all) {
-    final (dot, line) = switch (m.state) {
-      LinkState.connected => (C.completed, 'Connected · ${m.via == 'BT' ? 'Bluetooth' : m.pairing.host}'),
-      LinkState.connecting => (C.blocked, 'Connecting…'),
-      LinkState.offline => (C.danger, 'Offline'),
+    final line = switch (m.state) {
+      LinkState.connected => m.via == 'BT' ? 'Bluetooth' : '${m.pairing.host}',
+      LinkState.connecting => 'Connecting…',
+      LinkState.offline => 'Offline',
     };
     final blocked = all.where((s) => s.status == 'blocked').length, done = all.where((s) => s.status == 'completed').length;
-    Widget chip(String id, String label, {Color? color}) {
+    Widget chip(String id, String label, {Widget? avatar}) {
       final on = filter == id;
       return Padding(
         padding: const EdgeInsets.only(right: 8),
@@ -279,66 +295,67 @@ class _HomeScreenState extends State<HomeScreen> {
           selected: on,
           showCheckmark: false,
           onSelected: (_) => setState(() => filter = on ? 'all' : id),
-          avatar: color == null ? null : Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          avatar: avatar,
           label: Text(label),
           labelStyle: TextStyle(fontSize: 13, color: on ? C.bg : C.text, fontWeight: on ? FontWeight.w600 : null),
           selectedColor: C.text,
-          backgroundColor: C.surface,
-          side: BorderSide(color: on ? C.text : C.line),
+          backgroundColor: C.hover,
+          side: on ? BorderSide.none : const BorderSide(color: C.line),
           shape: const StadiumBorder(),
         ),
       );
     }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+      padding: const EdgeInsets.fromLTRB(20, 16, 16, 6),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(
             child: InkWell(
               onTap: showComputers,
               borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
                 child: Row(children: [
                   Container(
-                    width: 36,
-                    height: 36,
+                    width: 38,
+                    height: 38,
                     alignment: Alignment.center,
-                    decoration: BoxDecoration(color: C.surface2, border: Border.all(color: C.line), borderRadius: BorderRadius.circular(10)),
-                    child: const Text('>_', style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w700, color: C.accent)),
+                    decoration: BoxDecoration(color: C.surface, border: Border.all(color: C.line), borderRadius: BorderRadius.circular(11)),
+                    child: const Text('>_', style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 14, color: C.indigo)),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 11),
                   Flexible(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(m.pairing.name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-                      Row(children: [
-                        Container(width: 7, height: 7, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
-                        const SizedBox(width: 6),
-                        Flexible(child: Text(line, style: const TextStyle(fontSize: 12, color: C.muted), overflow: TextOverflow.ellipsis)),
-                      ]),
+                      const Text('Agterm2', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                      Text('${m.pairing.name} · $line', style: const TextStyle(fontSize: 12.5, color: C.muted), maxLines: 1, overflow: TextOverflow.ellipsis),
                     ]),
                   ),
                 ]),
               ),
             ),
           ),
+          const SizedBox(width: 10),
           IconButton(
             key: const Key('menu'),
             tooltip: 'More',
             onPressed: showMenuSheet,
-            style: IconButton.styleFrom(backgroundColor: C.surface, side: const BorderSide(color: C.line), minimumSize: const Size(44, 44)),
+            style: IconButton.styleFrom(
+                backgroundColor: C.hover,
+                side: const BorderSide(color: C.line),
+                fixedSize: const Size(44, 44),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
             icon: const Icon(Icons.more_horiz, color: C.muted),
           ),
         ]),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(children: [
             chip('all', 'All'),
-            chip('blocked', 'Blocked $blocked', color: C.blocked),
-            chip('completed', 'Done $done', color: C.completed),
-            chip('flagged', 'Flagged'),
+            chip('blocked', 'Blocked $blocked', avatar: const StatusShape('blocked', size: 9, still: true)),
+            chip('completed', 'Done $done', avatar: const StatusShape('completed', size: 9)),
+            chip('flagged', 'Flagged', avatar: const Lucide(lucideFlag, size: 14, color: C.indigo)),
           ]),
         ),
       ]),
@@ -362,6 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Widget> _body(List<Session> all, List<Session> needs) {
     if (filter != 'all') {
       final list = all.where((s) => filter == 'flagged' ? s.flagged : s.status == filter).toList();
+      final byId = {for (final w in m.workspaces) w.id: w};
       return [
         if (list.isEmpty)
           SliverToBoxAdapter(
@@ -369,96 +387,213 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.all(40),
                   child: Text(filter == 'flagged' ? 'No flagged sessions' : 'Nothing ${statusLabel(filter).toLowerCase()} right now',
                       textAlign: TextAlign.center, style: const TextStyle(color: C.muted)))),
-        SliverList.list(children: [for (final s in list) _row(s, indent: 16, showWorkspace: true)]),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          sliver: SliverList.list(children: [
+            for (final s in list)
+              _row(s, byId[s.workspaceId], tint: tintColor(byId[s.workspaceId]?.tint ?? '') ?? C.active, indent: 10, showWorkspace: true),
+          ]),
+        ),
       ];
     }
     return [
       if (needs.isNotEmpty) ...[
-        const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.fromLTRB(20, 8, 20, 8), child: Text('NEEDS YOU', style: sectionLabel))),
-        SliverList.list(children: [for (final s in needs) Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 8), child: _card(s))]),
+        const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.fromLTRB(20, 18, 20, 10), child: Text('NEEDS YOU', style: sectionLabel))),
+        SliverList.list(children: [for (final s in needs) Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 8), child: _card(s))]),
       ],
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
           child: Row(children: [
             const Expanded(child: Text('WORKSPACES', style: sectionLabel)),
             if (m.windows.where((w) => w.open).length > 1) Text('Window: ${m.window?.name ?? ''}', style: const TextStyle(fontSize: 12, color: C.muted)),
           ]),
         ),
       ),
-      for (final w in m.workspaces) ...[
-        SliverToBoxAdapter(child: _workspaceHeader(w)),
-        if (!collapsed.contains(w.id)) SliverList.list(children: [for (final s in w.sessions) _row(s, indent: s.parent.isEmpty ? 32 : 52)]),
-      ],
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        sliver: SliverList.list(children: [
+          for (final w in m.workspaces.where((w) => w.sessions.isNotEmpty)) Padding(padding: const EdgeInsets.only(bottom: 10), child: _group(w)),
+          if (m.workspaces.where((w) => w.sessions.isEmpty).toList() case final empty when empty.isNotEmpty)
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              mainAxisExtent: 52,
+              children: [for (final w in empty) _emptyTile(w)],
+            ),
+        ]),
+      ),
     ];
   }
 
-  Widget _workspaceHeader(Workspace w) => InkWell(
-        onTap: () => setState(() => collapsed.contains(w.id) ? collapsed.remove(w.id) : collapsed.add(w.id)),
-        onLongPress: () => showWorkspaceActions(context, m, w),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
-          child: SizedBox(
-            height: 44,
+  // an empty workspace has nothing to fold, so it is a tile; a tap opens its actions, where a new session starts
+  Widget _emptyTile(Workspace w) => Material(
+        color: C.hover,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: C.line)),
+        child: InkWell(
+          key: Key('wsTile-${w.id}'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => showWorkspaceActions(context, m, w),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(children: [
-              Icon(collapsed.contains(w.id) ? Icons.chevron_right : Icons.expand_more, size: 18, color: C.muted),
-              const SizedBox(width: 8),
-              if (tintColor(w.tint) != null) ...[
-                Container(width: 8, height: 8, decoration: BoxDecoration(color: tintColor(w.tint), borderRadius: BorderRadius.circular(2))),
-                const SizedBox(width: 8),
-              ],
-              Expanded(child: Text(w.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-              Text('${w.sessions.length}', style: const TextStyle(fontSize: 12, color: C.muted)),
-              IconButton(
-                tooltip: 'Workspace actions',
-                icon: const Icon(Icons.more_vert, size: 18, color: C.muted),
-                onPressed: () => showWorkspaceActions(context, m, w),
-              ),
+              SizedBox(width: 20, child: Lucide(lucideSquareStack, color: tintColor(w.tint) ?? C.muted)),
+              const SizedBox(width: 9),
+              Expanded(child: Text(w.name, style: const TextStyle(fontSize: 14, color: C.muted), maxLines: 1, overflow: TextOverflow.ellipsis)),
             ]),
           ),
         ),
       );
 
-  Widget _row(Session s, {required double indent, bool showWorkspace = false}) {
-    final sub = showWorkspace ? s.workspaceName : (s.context.isNotEmpty ? s.context : (s.parent.isNotEmpty ? 'companion · ${s.shortCwd}' : s.shortCwd));
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: InkWell(
-      key: Key('row-${s.id}'),
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => open(s.id),
-      onLongPress: () => showSessionActions(context, m, s),
-      child: Container(
-        height: 56,
-        padding: EdgeInsets.only(left: indent - 8, right: 12),
-        child: Row(children: [
-          StatusDot(s.status, blink: s.blink),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(s.name, style: TextStyle(fontSize: 14, color: tintColor(s.tint) ?? C.text), maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text(sub,
-                  style: TextStyle(fontSize: 12, color: C.muted, fontFamily: s.context.isEmpty && !showWorkspace ? mono : null),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
+  // the most urgent status among a folded workspace's sessions (blocked > active > completed), the first on a tie
+  static Session? _urgent(Iterable<Session> sessions) {
+    const rank = {'blocked': 0, 'active': 1, 'completed': 2};
+    Session? best;
+    for (final s in sessions) {
+      if (rank[s.status] case final r? when best == null || r < rank[best.status]!) best = s;
+    }
+    return best;
+  }
+
+  Widget _group(Workspace w) {
+    final own = tintColor(w.tint);
+    final tint = own ?? C.active;
+    final open = !collapsed.contains(w.id);
+    final folded = {for (final s in w.sessions) if (s.collapsed) s.id};
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: own == null
+          ? null
+          : BoxDecoration(color: own.withValues(alpha: 0.10), border: Border.all(color: own.withValues(alpha: 0.16)), borderRadius: BorderRadius.circular(16)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 2, children: [
+        _workspaceRow(w, tint: tint, tinted: own != null, open: open),
+        if (open)
+          for (final s in w.sessions)
+            if (s.parent.isEmpty)
+              _row(s, w, tint: tint, indent: 22, chevronSlot: true, hiddenBlocked: s.collapsed && w.sessions.any((c) => c.parent == s.id && c.status == 'blocked'))
+            else if (!folded.contains(s.parent))
+              _row(s, w, tint: tint, indent: 46),
+      ]),
+    );
+  }
+
+  Widget _workspaceRow(Workspace w, {required Color tint, required bool tinted, required bool open}) {
+    final urgent = open ? null : _urgent(w.sessions);
+    return Row(children: [
+      Expanded(
+        child: InkWell(
+          key: Key('ws-${w.id}'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => setState(() => open ? collapsed.add(w.id) : collapsed.remove(w.id)),
+          onLongPress: () => showWorkspaceActions(context, m, w),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(children: [
+                SizedBox(width: 14, child: Icon(open ? Icons.expand_more : Icons.chevron_right, size: 16, color: C.dim)),
+                const SizedBox(width: 10),
+                SizedBox(width: 20, child: Lucide(lucideSquareStack, color: tinted ? tint : C.muted)),
+                const SizedBox(width: 10),
+                Expanded(child: Text(w.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                if (urgent != null) Padding(padding: const EdgeInsets.only(left: 8), child: StatusShape(urgent.status, blink: urgent.blink)),
+              ]),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(width: 4),
+      IconButton(
+        key: Key('wsMenu-${w.id}'),
+        tooltip: 'Workspace actions',
+        onPressed: () => showWorkspaceActions(context, m, w),
+        style: IconButton.styleFrom(fixedSize: const Size(44, 44)),
+        icon: const Icon(Icons.more_vert, color: C.muted),
+      ),
+      const SizedBox(width: 4),
+    ]);
+  }
+
+  Widget _row(Session s, Workspace? w,
+      {required Color tint, required double indent, bool chevronSlot = false, bool hiddenBlocked = false, bool showWorkspace = false}) {
+    final own = tintColor(s.tint);
+    final t = own ?? tint;
+    final running = s.status == 'active';
+    final info = showWorkspace ? s.workspaceName : (s.context.isNotEmpty ? s.context : s.shortCwd);
+    final hasCompanions = chevronSlot && (w?.sessions.any((c) => c.parent == s.id) ?? false);
+    final radius = BorderRadius.circular(running ? 0 : 12);
+    // no selected-session highlight: a tap opens a new screen, so "current" means nothing in this list.
+    // The wave sits under the Material and the tint is Ink, so neither hides the tap ripple.
+    // its own layer, so a wave frame repaints this row and not the whole workspace group
+    return RepaintBoundary(
+     child: CustomPaint(
+      painter: running ? _WavePainter(wave, t) : null,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          key: Key('row-${s.id}'),
+          borderRadius: radius,
+          onTap: () => open(s.id),
+          onLongPress: () => showSessionActions(context, m, s),
+          child: Ink(
+            decoration: BoxDecoration(color: own?.withValues(alpha: 0.09), borderRadius: radius),
+            child: Container(
+            constraints: const BoxConstraints(minHeight: 52),
+            padding: EdgeInsets.fromLTRB(chevronSlot ? 0 : indent, 6, 12, 6),
+            child: Row(children: [
+              if (chevronSlot)
+                // the whole lead-in is the fold control: a 14 px chevron alone is too small to hit
+                Semantics(
+                  button: hasCompanions,
+                  label: hasCompanions ? (s.collapsed ? 'Show companions' : 'Hide companions') : null,
+                  child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: hasCompanions ? () => reportOf(context, m.act(s.collapsed ? 'session.expand' : 'session.collapse', target: s.id)) : null,
+                  child: SizedBox(
+                    width: indent + 14,
+                    height: 40,
+                    child: hasCompanions
+                        ? Align(alignment: Alignment.centerRight, child: Icon(s.collapsed ? Icons.chevron_right : Icons.expand_more, size: 16, color: C.dim))
+                        : null,
+                  ),
+                )),
+              if (chevronSlot) const SizedBox(width: 10),
+              SizedBox(width: 20, child: Center(child: AgentLogo(s.agent, color: own ?? (s.agent.isEmpty ? C.muted : null)))),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, spacing: 1, children: [
+                  Text(s.name, style: TextStyle(fontSize: 15, color: own ?? C.text), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  if (info.isNotEmpty) Text(info, style: const TextStyle(fontSize: 12.5, color: C.muted), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ]),
+              ),
+              if (s.flagged) const Padding(padding: EdgeInsets.only(left: 10), child: Lucide(lucideFlag, size: 14, color: C.indigo)),
+              if (s.unseen > 0)
+                Container(
+                  margin: const EdgeInsets.only(left: 10),
+                  constraints: const BoxConstraints(minWidth: 20),
+                  height: 20,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: C.unseen, borderRadius: BorderRadius.circular(10)),
+                  child: Text('${s.unseen}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white)),
+                ),
+              if (hiddenBlocked)
+                Semantics(
+                  label: 'A hidden companion is blocked',
+                  child: Container(
+                      key: Key('hiddenBlocked-${s.id}'),
+                      margin: const EdgeInsets.only(left: 10), width: 7, height: 7, decoration: const BoxDecoration(color: C.blocked, shape: BoxShape.circle)),
+                ),
+              if (s.status.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 10), child: StatusShape(s.status, blink: s.blink)),
             ]),
           ),
-          if (s.flagged) const Padding(padding: EdgeInsets.only(left: 8), child: Icon(Icons.flag, size: 16, color: C.accent)),
-          if (s.agent.isNotEmpty)
-            Padding(padding: const EdgeInsets.only(left: 8), child: Text(s.agent, style: const TextStyle(fontSize: 11, color: C.muted, fontFamily: mono))),
-          if (s.unseen > 0)
-            Container(
-              margin: const EdgeInsets.only(left: 8),
-              constraints: const BoxConstraints(minWidth: 20),
-              height: 20,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: C.accent, borderRadius: BorderRadius.circular(10)),
-              child: Text('${s.unseen}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: C.bg)),
-            ),
-        ]),
+        ),
       ),
       ),
+     ),
     );
   }
 
@@ -491,32 +626,30 @@ class _HomeScreenState extends State<HomeScreen> {
         onLongPress: () => showSessionActions(context, m, s),
         child: Padding(
           padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 10, children: [
             Row(children: [
-              AgentIcon(s.agent, background: blocked ? C.blockedChip : C.surface2),
+              AgentIcon(s.agent, background: blocked ? C.blockedTile : C.surface2),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 1, children: [
                   Text(s.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
                   Text(
                       [s.workspaceName, if (s.agent.isNotEmpty) agentNames[s.agent] ?? s.agent, if (s.unseen > 0) '${s.unseen} new'].join(' · '),
-                      style: const TextStyle(fontSize: 12, color: C.muted),
+                      style: const TextStyle(fontSize: 12.5, color: C.muted),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                 ]),
               ),
-              StatusChip(s.status, blink: s.blink),
+              const SizedBox(width: 10),
+              Semantics(label: statusLabel(s.status), child: StatusShape(s.status, blink: s.blink)),
             ]),
-            if (blocked && snippet.trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
+            if (blocked && snippet.trim().isNotEmpty)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(color: C.bg, borderRadius: BorderRadius.circular(10)),
-                child: Text(promptTail(snippet), style: const TextStyle(fontFamily: mono, fontSize: 11.5, height: 1.45, color: C.termText), maxLines: 6),
+                decoration: BoxDecoration(color: C.term, borderRadius: BorderRadius.circular(10)),
+                child: Text(promptTail(snippet), style: const TextStyle(fontFamily: mono, fontSize: 11.5, height: 1.5, color: C.termText), maxLines: 6),
               ),
-            ],
-            if (blocked) ...[
-              const SizedBox(height: 10),
+            if (blocked)
               Row(children: [
                 if (options.isNotEmpty)
                   for (final (i, o) in options.take(2).indexed) ...[
@@ -527,32 +660,55 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(child: _cardButton('⏎ Enter', () => send('\r'), primary: true)),
                   const SizedBox(width: 8),
                 ],
-                Expanded(child: _cardButton('Esc', () => send('\x1b'))),
+                SizedBox(width: 72, child: _cardButton('Esc', () => send('\x1b'))),
               ]),
-            ],
           ]),
         ),
       ),
     );
   }
 
-  Widget _cardButton(String label, VoidCallback onTap, {bool primary = false}) => SizedBox(
-        height: 44,
-        child: primary
-            ? FilledButton(
-                onPressed: onTap,
-                style: FilledButton.styleFrom(
-                    backgroundColor: C.blocked, foregroundColor: const Color(0xFF1A1206), minimumSize: const Size(0, 44), padding: const EdgeInsets.symmetric(horizontal: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
-              )
-            : OutlinedButton(
-                onPressed: onTap,
-                style: OutlinedButton.styleFrom(
-                    backgroundColor: C.blockedChip, side: const BorderSide(color: C.blockedLine), padding: const EdgeInsets.symmetric(horizontal: 8)),
-                child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
-              ),
-      );
+  Widget _cardButton(String label, VoidCallback onTap, {bool primary = false}) {
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(11));
+    final text = Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: primary ? FontWeight.w600 : null));
+    return SizedBox(
+      height: 44,
+      child: primary
+          ? FilledButton(
+              onPressed: onTap,
+              style: FilledButton.styleFrom(
+                  backgroundColor: C.blocked, foregroundColor: const Color(0xFF1A1206), minimumSize: const Size(0, 44), padding: const EdgeInsets.symmetric(horizontal: 8), shape: shape),
+              child: text,
+            )
+          : OutlinedButton(
+              onPressed: onTap,
+              style: OutlinedButton.styleFrom(
+                  backgroundColor: C.blockedChip, side: const BorderSide(color: C.blockedLine), padding: const EdgeInsets.symmetric(horizontal: 8), shape: shape),
+              child: text,
+            ),
+    );
+  }
+}
+
+// agterm-qt's running-row wave: the tint, then the active blue, drifting one period (two row widths) every 4.8 s
+class _WavePainter extends CustomPainter {
+  _WavePainter(this.phase, this.tint) : super(repaint: phase);
+  final Animation<double> phase;
+  final Color tint;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final period = size.width * 2;
+    final shader = LinearGradient(
+      colors: [tint.withValues(alpha: 0.04), tint.withValues(alpha: 0.20), C.active.withValues(alpha: 0.16), tint.withValues(alpha: 0.04)],
+      stops: const [0, 0.25, 0.55, 1],
+      tileMode: TileMode.repeated,
+    ).createShader(Rect.fromLTWH(-phase.value * period, 0, period, size.height));
+    canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
+  }
+
+  @override
+  bool shouldRepaint(_WavePainter old) => old.tint != tint || old.phase != phase;
 }
 
 class StatusChip extends StatelessWidget {
@@ -573,7 +729,7 @@ class StatusChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        StatusDot(status, size: 7, blink: blink),
+        StatusShape(status, size: 8, blink: blink),
         const SizedBox(width: 6),
         Text(statusLabel(status), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
       ]),

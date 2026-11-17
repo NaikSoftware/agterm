@@ -29,6 +29,15 @@ void main() {
       expect(Session({}, 'w', 'W').blink, isFalse);
     });
 
+    test('agent comes from the foreground argv when the tree has no agent', () {
+      expect(Session({'foreground': ['claude', '--resume', 'x']}, 'w', 'W').agent, 'claude');
+      expect(Session({'foreground': ['/opt/bin/agy']}, 'w', 'W').agent, 'antigravity');
+      expect(Session({'foreground': ['node', '--no-warnings', '/usr/lib/codex']}, 'w', 'W').agent, 'codex');
+      expect(Session({'foreground': ['vim', 'claude']}, 'w', 'W').agent, '');
+      expect(Session({'agent': 'codex', 'foreground': ['claude']}, 'w', 'W').agent, 'codex');
+      expect(Session({}, 'w', 'W').agent, '');
+    });
+
     test('shortens /home and /Users prefixes', () {
       expect(shortHome('/home/ann/src'), '~/src');
       expect(shortHome('/Users/ann'), '~');

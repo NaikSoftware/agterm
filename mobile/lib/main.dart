@@ -96,7 +96,7 @@ class _AgtermAppState extends State<AgtermApp> {
   @override
   Widget build(BuildContext context) => MaterialApp(
         navigatorKey: nav,
-        title: 'agterm',
+        title: 'Agterm2',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),
         home: ListenableBuilder(
