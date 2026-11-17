@@ -1,4 +1,4 @@
-# hangarctl reference (hangar)
+# hangarctl reference (Hangar)
 
 Every command `hangarctl --help` lists, with its arguments, the errors worth handling and where to read the
 result back. Errors are quoted as the app returns them; the CLI prints them as `hangarctl: <error>` and exits 1.
@@ -519,7 +519,7 @@ The app answers `<cmd> is not supported on this platform (<reason>)` for:
 | `session lead` | pane leads belong to remote sessions |
 | `session background` | Konsole takes a pane's background from its profile |
 | `surface cursor` | Konsole's terminal part does not expose the cursor |
-| `config reload` | no Ghostty config; `keymap reload`/`hooks reload` re-read hangar's files |
+| `config reload` | no Ghostty config; `keymap reload`/`hooks reload` re-read Hangar's files |
 | `browser …`, `session overlay reload|navigate|submit|copy`, page companions | need Qt WebEngine |
 
 `session overlay open --html|--url` fails with the WebEngine reason above. Never pass master's `--image`, `--markdown`

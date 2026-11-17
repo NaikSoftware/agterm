@@ -1,6 +1,6 @@
 ---
 name: peer-chat
-description: 'Hold a back-and-forth conversation with Claude Code running in the other pane of this hangar session''s split, as peers. Use when the user says "chat with claude", "talk to claude", "work with claude", "do this with claude", "build this with claude", "discuss this with claude", or when a prompt arrives starting with "Chat from Claude:". Not for a one-shot task handed to Claude, and not for a read-only second opinion.'
+description: 'Hold a back-and-forth conversation with Claude Code running in the other pane of this Hangar session''s split, as peers. Use when the user says "chat with claude", "talk to claude", "work with claude", "do this with claude", "build this with claude", "discuss this with claude", or when a prompt arrives starting with "Chat from Claude:". Not for a one-shot task handed to Claude, and not for a read-only second opinion.'
 ---
 
 # Peer chat, Codex side
@@ -53,8 +53,8 @@ Say so and let him decide; never pass `--session` with an id you inferred, and n
 to see if it works.
 
 Before typing, the script confirms the target pane really is running Claude Code, looking for
-`claude` in what hangar reports for that pane. A wrapper script is common here, and then that name
-is what hangar sees instead: add `--target-command <name>` with the wrapper's name and the send goes
+`claude` in what Hangar reports for that pane. A wrapper script is common here, and then that name
+is what Hangar sees instead: add `--target-command <name>` with the wrapper's name and the send goes
 through; the name to use is recorded here at setup time. Never guess a name after a refusal and
 never retry with a different one until a human has told you which is right.
 

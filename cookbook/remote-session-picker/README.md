@@ -6,7 +6,7 @@ Author: [@umputun](https://github.com/umputun)
 
 ## What it does
 
-Lists what another Mac has to offer, shows it in hangar's native picker, and attaches whatever you
+Lists what another Mac has to offer, shows it in Hangar's native picker, and attaches whatever you
 choose. The row is the session's name; underneath it sits the far side's window and workspace, the
 session's own note of what it is for when its owner set one, its working directory, and what its panes
 are running.
@@ -17,30 +17,30 @@ running, and nothing this recipe does can kill them.
 
 ## Requirements
 
-hangar 0.26.0 or later, which added `zmx tree` and `zmx attach`, plus `jq`.
+Hangar 0.26.0 or later, which added `zmx tree` and `zmx attach`, plus `jq`.
 
 The far side needs more than the near side does:
 
-- it is running hangar 0.26.0 or later too, since the discovery call runs `zmx tree` over there and an
+- it is running Hangar 0.26.0 or later too, since the discovery call runs `zmx tree` over there and an
   older build does not have it;
 - its restore mode is **Live sessions**, which is what puts a daemon behind each pane. Without it there
   is nothing to attach to. The empty list does not say so, though: it reads the same as a machine that is
   in Live sessions mode with nothing eligible. Run `hangarctl zmx list` on that machine to tell them apart;
-- it has `hangarctl` installed, from the cask or Help ▸ Install, because a machine merely running hangar
+- it has `hangarctl` installed, from the cask or Help ▸ Install, because a machine merely running Hangar
   has no CLI an ssh command can find;
 - ssh key auth to it already works from this Mac. The connection is non-interactive, so a password or
   host-key prompt is a failure rather than a question.
 
-Check that last one before binding the chord, using the same non-interactive form hangar uses:
+Check that last one before binding the chord, using the same non-interactive form Hangar uses:
 
 ```sh
 ssh -o BatchMode=yes <remote-host> true
 ```
 
-Exiting silently means hangar can reach the host. A password or host-key prompt means it cannot, and
-hangar will fail the same way.
+Exiting silently means Hangar can reach the host. A password or host-key prompt means it cannot, and
+Hangar will fail the same way.
 
-One difference the check cannot show: hangar runs ssh from the app, which inherits the launch environment
+One difference the check cannot show: Hangar runs ssh from the app, which inherits the launch environment
 rather than your shell's. An agent exported in `.zshrc` passes the check above and still fails here, so
 put `IdentityAgent` and key settings in `~/.ssh/config`, which both paths read.
 
@@ -79,7 +79,7 @@ hangarctl zmx tree <remote-host>
 
 ## How it works
 
-`zmx tree HOST` is the discovery half. The local hangar runs one ssh to the far side, which runs its own
+`zmx tree HOST` is the discovery half. The local Hangar runs one ssh to the far side, which runs its own
 bare `zmx tree` there and answers with a single document: every open window's sessions, filtered to the
 ones whose every pane still has a live daemon. A session with a missing daemon is omitted rather than
 offered, because attaching to a name that no longer exists would create a fresh shell wearing it.
@@ -89,7 +89,7 @@ names are editable and repeat across workspaces, so only the id addresses one se
 the window and workspace *names*; the rows also carry `windowID` and `workspaceID`, which is what to group
 by if you extend this, since neither name is unique.
 
-Running `hangarctl zmx tree` with no host asks the same question of your own hangar. That is the exact
+Running `hangarctl zmx tree` with no host asks the same question of your own Hangar. That is the exact
 form the remote call runs on the far side, so it is the quickest way to see what another machine would
 answer before you point the recipe at it.
 

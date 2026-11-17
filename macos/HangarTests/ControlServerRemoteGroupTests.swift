@@ -87,7 +87,7 @@ final class ControlServerRemoteGroupTests: XCTestCase {
 
         let row = try XCTUnwrap(reply.result?.id)
         XCTAssertEqual(reply.error, "kept build (\(row)) and 0 companion(s); not attached: "
-                       + "c1-name (buildbox reported panes hangar cannot address)")
+                       + "c1-name (buildbox reported panes Hangar cannot address)")
     }
 
     func testAFailingPageMemberIsNamedAndTheTerminalsStay() async throws {

@@ -12,7 +12,7 @@ Two entries: one over files, one over directories. It is the terminal-side answe
 
 ## Requirements
 
-- hangar 0.8.0 or later. The commands are older, but floating overlays settled into their current behavior in that release: an overlay opens on its target session in the background, and switches to it only with `--follow`.
+- Hangar 0.8.0 or later. The commands are older, but floating overlays settled into their current behavior in that release: an overlay opens on its target session in the background, and switches to it only with `--follow`.
 - `fzf` and `fd`
 - `zsh`, which the script's shebang names
 
@@ -61,7 +61,7 @@ Two things about overlays shape the whole recipe.
 
 An overlay is a fresh pty, and the `AGT_*` values a keybinding sees belong to the custom command's own process, not to any terminal. So `$AGT_SESSION_ID` is empty inside the script, and it is passed as an argument instead: the keymap expands `{AGT_SESSION_ID}` before the command runs, once for `--target` (which session the overlay opens over) and once as the script's own argument (where to type the result). Without it `session type` falls back to `--target active`, which is right only until you switch sessions while fzf is open.
 
-The overlay pty does carry hangar's own `HANGAR_SESSION_ID`, naming the session the overlay was opened over, and a script that always opens over the current session can read that instead of taking an argument. Passing the id keeps the two independent, so the same script still works when the overlay is opened over some other session.
+The overlay pty does carry Hangar's own `HANGAR_SESSION_ID`, naming the session the overlay was opened over, and a script that always opens over the current session can read that instead of taking an argument. Passing the id keeps the two independent, so the same script still works when the overlay is opened over some other session.
 
 An overlay also runs under the app's `PATH`, which is the launchd default and does not include `/opt/homebrew/bin`. A bare `fzf-insert.zsh`, or a bare `fd` inside it, fails with exit 127 and the overlay flashes open and vanishes. Hence `zsh -lc`: a login shell sources your profile, so `PATH` is the one you normally have. The alternative is absolute paths for every binary the script touches.
 
@@ -69,7 +69,7 @@ An overlay also runs under the app's `PATH`, which is the launchd default and do
 
 ## Limits
 
-`ctrl+a` becomes a leader once bound, so hangar consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.
+`ctrl+a` becomes a leader once bound, so Hangar consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.
 
 Nothing is typed if you cancel, but the path is typed with no confirmation if you pick. A path with a space arrives unquoted, so quote it yourself before pressing Return.
 

@@ -97,7 +97,7 @@ public enum AttachedForward: Equatable, Sendable {
     /// outcome reads what the origin's `hangarctl` printed. A reply the origin did not finish sending is unknown, never
     /// a refusal: the request may have run there, so it is reported and never sent again.
     public func outcome(of result: RemoteCommandResult, host: String) -> AttachedOutcome {
-        let tooOld = "the hangar on \(host) is too old for this"
+        let tooOld = "the Hangar on \(host) is too old for this"
         if result.refusedArguments { return .refused(tooOld) }
         guard let reply = try? JSONDecoder().decode(ControlResponse.self, from: Data(result.stdout.utf8)) else {
             let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)

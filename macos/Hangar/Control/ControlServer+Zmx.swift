@@ -223,7 +223,7 @@ extension ControlServer {
         let byRole = Dictionary(remote.panes.map { (ZmxPaneRole(controlName: $0.pane), $0.daemon) },
                                 uniquingKeysWith: { first, _ in first })
         guard byRole.count == remote.panes.count, let left = byRole[.left] else {
-            return ControlResponse(ok: false, error: "\(host) reported panes hangar cannot address")
+            return ControlResponse(ok: false, error: "\(host) reported panes Hangar cannot address")
         }
         let right = byRole[.right]
         let primary: String
@@ -238,7 +238,7 @@ extension ControlServer {
                                                     session: remote.name, pane: .right, lead: leads.right)
             }
         } catch {
-            return ControlResponse(ok: false, error: "\(host) reported a session hangar cannot address")
+            return ControlResponse(ok: false, error: "\(host) reported a session Hangar cannot address")
         }
         let store = placement.store
         // the LOCAL working directory, not the remote one: libghostty chdirs the ssh process here, and a

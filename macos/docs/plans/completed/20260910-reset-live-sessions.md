@@ -3,7 +3,7 @@
 ## Overview
 
 Panes created before v0.28.0, or without the session host, lose their macOS responsible-process
-attribution when the hangar that created them exits. Every process inside such a pane becomes its own
+attribution when the Hangar that created them exits. Every process inside such a pane becomes its own
 responsible process, so a TCC-gated request is charged to that process: each new Claude Code version asks
 for the microphone again and adds a per-path row to the Microphone list. Responsibility is decided at
 spawn and cannot be reassigned (`responsibility_set_pid_responsible_for_pid` is EPERM; a re-exec keeps the
@@ -12,7 +12,7 @@ host. Today that means recreating each pane by hand, or a Fresh shells relaunch 
 to Live and a second relaunch.
 
 This plan adds one user-facing action, Help ▸ Reset Live Sessions…, and its control command `zmx.reset`.
-The action shows how many live sessions it resets and that hangar quits and reopens itself; on confirm the
+The action shows how many live sessions it resets and that Hangar quits and reopens itself; on confirm the
 app quits cleanly, ends only the confirmed daemons at the next launch, and the existing Live restore
 recreates those panes through the session host with their quit-captured commands started again. Nothing
 is automatic: no upgrade notice, no launch-time detection, only this dialog or an explicit `--force`
@@ -126,7 +126,7 @@ Three moments, one selection that only narrows:
 1. **Confirm (running app).** The action builds the reset set: every pane claim from
    `WindowLibrary.paneClaims()` whose daemon leader classifies as `orphaned` or `app`. `unknown` and
    `supervisor` are excluded. `app` is included because this quit turns it into `orphaned`. The dialog
-   counts SESSIONS (distinct `sessionID` among the targets) and says hangar quits and reopens. On confirm
+   counts SESSIONS (distinct `sessionID` among the targets) and says Hangar quits and reopens. On confirm
    the pane targets are held in memory, the quit alert is bypassed, and the app terminates normally.
 2. **Quit (`applicationWillTerminate`).** The existing best-effort capture runs, then the CHECKED snapshot
    save. Capture is invoked, not judged: its count is not a success signal. Only when the checked save

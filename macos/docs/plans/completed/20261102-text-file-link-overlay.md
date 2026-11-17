@@ -37,7 +37,7 @@
   - `path_chars` include `:`, so `/x/a.go:42:7` and `./a.go:42:7` arrive with the suffix; a slashless
     `a.go:42:7` is not a link at all (the bare relative branch needs a `dir/` prefix).
   - `resolvePathForOpening` makes a relative path absolute only when that exact path exists, so a relative
-    path with a suffix arrives raw; hangar then fails `isBarePath` and `URL(string:)` reads the first
+    path with a suffix arrives raw; Hangar then fails `isBarePath` and `URL(string:)` reads the first
     segment as a scheme, and the click is ignored.
   - Links match only when the mouse mods equal exactly `ctrlOrSuper`.
   - On Darwin `isRectangleSelectState` is `mods.alt`, recomputed from the live mods on every drag

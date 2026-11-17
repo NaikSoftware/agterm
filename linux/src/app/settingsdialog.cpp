@@ -83,7 +83,7 @@ void MainWindow::showSettings()
     auto *dlg = new KPageDialog(this);
     dlg->setObjectName(QStringLiteral("settingsDialog"));
     dlg->setAttribute(Qt::WA_DeleteOnClose);
-    dlg->setWindowTitle(tr("Configure hangar"));
+    dlg->setWindowTitle(tr("Configure Hangar"));
     dlg->setFaceType(KPageDialog::List);
     dlg->setStandardButtons(QDialogButtonBox::Close);
     dlg->resize(760, 560);
@@ -152,7 +152,7 @@ void MainWindow::showSettings()
     QComboBox *restoreBox = picker({{tr("Fresh shells"), QStringLiteral("none")}, {tr("Re-run commands"), QStringLiteral("rerun")}, {tr("Live sessions"), QStringLiteral("live")}},
                                    cur.restoreMode, [](Settings &s, const QString &v) { s.restoreMode = v; });
     sessions->addRow(tr("Restore sessions"), restoreBox);
-    auto *restoreHint = new QLabel(tr("Changes apply after restarting hangar."));
+    auto *restoreHint = new QLabel(tr("Changes apply after restarting Hangar."));
     restoreHint->setForegroundRole(QPalette::PlaceholderText);
     sessions->addRow(QString(), restoreHint);
     auto *sidebar = new QFormLayout;

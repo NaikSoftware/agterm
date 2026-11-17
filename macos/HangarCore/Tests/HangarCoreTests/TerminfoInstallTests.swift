@@ -274,7 +274,7 @@ struct TerminfoInstallTests {
 
     #if canImport(Darwin)
     @Test func theRealInfocmpDumpsAnEntryTicCompiled() throws {
-        let db = try fixture.compiledDatabase(source: "xterm-ghostty|hangar test entry,\n\tcols#80, lines#24,\n")
+        let db = try fixture.compiledDatabase(source: "xterm-ghostty|Hangar test entry,\n\tcols#80, lines#24,\n")
         let ssh = try fixture.fakeSSH(exitCode: 0)
 
         let outcome = try TerminfoInstall.run(TerminfoInstall.Connection(destination: "buildbox"), clientPath: nil,

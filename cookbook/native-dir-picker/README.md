@@ -1,18 +1,18 @@
 # Native directory picker
 
-Pick a directory in hangar's own fuzzy picker and have its path typed into the shell you pressed the key in.
+Pick a directory in Hangar's own fuzzy picker and have its path typed into the shell you pressed the key in.
 
 Author: [@umputun](https://github.com/umputun)
 
 ## What it does
 
-Press the key and the picker hangar draws for its own palettes opens in the current window, listing the directories under your search roots. Type to filter, press Return, and the path is typed into that session without a Return of its own, so it arrives as an argument to whatever you were already writing. Type `cd ` first and the pick finishes the command. Esc closes the picker and types nothing.
+Press the key and the picker Hangar draws for its own palettes opens in the current window, listing the directories under your search roots. Type to filter, press Return, and the path is typed into that session without a Return of its own, so it arrives as an argument to whatever you were already writing. Type `cd ` first and the pick finishes the command. Esc closes the picker and types nothing.
 
 Nothing runs in a terminal to make this happen. No overlay opens, no second shell starts, and no fuzzy finder has to be installed: the app draws the list itself and the script only supplies the choices and does something with the answer.
 
 ## Requirements
 
-- hangar 0.19.0 or later. That release added `hangarctl pick`, which reads choices on stdin, shows them in the native fuzzy picker, and prints the chosen one back as JSON.
+- Hangar 0.19.0 or later. That release added `hangarctl pick`, which reads choices on stdin, shows them in the native fuzzy picker, and prints the chosen one back as JSON.
 - `fd`, to enumerate the directories, and `jq`, to build the picker's items
 - `/bin/sh`. The script is POSIX shell and does not need a particular one.
 
@@ -89,6 +89,6 @@ The picker takes 1000 items at most. Past that the script posts a banner and doe
 
 Only one picker can be open per window. Pressing the key while one is already open in that window fails with `pick already pending`, which arrives as a failure banner.
 
-`ctrl+a` becomes a leader once bound, so hangar consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.
+`ctrl+a` becomes a leader once bound, so Hangar consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.
 
 Only the pane the key was pressed in receives the path. That is what `$AGT_PANE` carries, and the script passes it straight through to `session type`.

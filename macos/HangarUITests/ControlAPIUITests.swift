@@ -1964,8 +1964,8 @@ final class ControlAPIUITests: ControlAPITestCase {
         XCTAssertEqual(listed["ok"] as? Bool, true, "theme.list should succeed: \(listed)")
         let listResult = try XCTUnwrap(listed["result"] as? [String: Any], "theme.list should carry a result")
         let themes = try XCTUnwrap(listResult["themes"] as? [String], "theme.list should return themes")
-        XCTAssertTrue(themes.contains("hangar"), "the bundled theme set should include the repo's hangar theme")
-        XCTAssertEqual(listResult["theme"] as? String, "hangar", "a fresh install defaults to the hangar theme")
+        XCTAssertTrue(themes.contains("hangar"), "the bundled theme set should include the repo's Hangar theme")
+        XCTAssertEqual(listResult["theme"] as? String, "hangar", "a fresh install defaults to the Hangar theme")
 
         // set a different known theme and get it echoed back.
         let set = try sendCommand(#"{"cmd":"theme.set","args":{"name":"Dracula"}}"#)

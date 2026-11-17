@@ -501,7 +501,7 @@ helper on `Open` so the `--pane` forwarding is assertable.
       An untouched pre-existing test (`testOverlayOpenRequiresCommand`) fails identically at the same
       point, so this is a host authorization gate, not a defect in the change. Run them after approving
       the prompt:
-      `xcodebuild test -project Hangar.xcodeproj -scheme hangar -destination 'platform=macOS'
+      `xcodebuild test -project Hangar.xcodeproj -scheme Hangar -destination 'platform=macOS'
       -only-testing:HangarUITests/ControlOverlaySplitUITests/testPaneOverlayOpenAndCloseKeepSplitRatio
       -only-testing:HangarUITests/ControlOverlaySplitUITests/testPaneOverlayLeavesSiblingPaneInteractive`
 
@@ -543,7 +543,7 @@ helper on `Open` so the `--pane` forwarding is assertable.
 - ⚠️ `make test-app` could NOT be executed: `automationmodetool` reports "Automation Mode is disabled.
       This device requires user authentication to enable Automation Mode", so testmanagerd refuses
       xcodebuild's `XCTestManager_IDEInterface` channel and the host hangs in
-      `-[XCTestDriver _prepareTestConfigurationAndIDESession]` (verified with `sample`: no hangar frames
+      `-[XCTestDriver _prepareTestConfigurationAndIDESession]` (verified with `sample`: no Hangar frames
       on the stack) until `The test runner hung before establishing connection`. Reproduced twice; the
       gate engaged when Task 6's XCUITest run requested Automation Mode, minutes after the last passing
       `make test-app`. `swift test` (2151), `make build`, and `make lint` all pass. Re-run after

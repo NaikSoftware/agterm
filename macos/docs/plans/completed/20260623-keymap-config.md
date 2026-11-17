@@ -29,7 +29,7 @@ body of pure logic from the (unmerged, pre-rename) `custom-commands` branch.
 
 ## Context (from discovery)
 
-- **hangar** is a native macOS SwiftUI terminal on libghostty. `HangarCore` is the host-free
+- **Hangar** is a native macOS SwiftUI terminal on libghostty. `HangarCore` is the host-free
   model/logic package (`swift test`, no Xcode/GhosttyKit); the app target owns SwiftUI + AppKit +
   libghostty. The `hangarctl` CLI lives in the same SwiftPM package (`hangarctlKit` + `hangarctl`).
 - **Reuse source — branch `custom-commands`** (predates the `agt`→`hangar` rename, so it uses `agt`/
@@ -82,7 +82,7 @@ body of pure logic from the (unmerged, pre-rename) `custom-commands` branch.
   NSEvent monitor, the Settings tab, the directory picker). **Use `swift-concurrency`** for
   `@MainActor`/`Sendable` questions and **`swift-testing-expert`** for tests. When stuck (4+ failed
   attempts on the same problem), consult `ask-codex`.
-- Complete each task fully before the next; small focused changes; match existing hangar patterns and
+- Complete each task fully before the next; small focused changes; match existing Hangar patterns and
   the project CLAUDE.md working norms (methods-over-functions, private-by-default visibility, lowercase
   non-godoc comments, **one test file per source file**).
 - **Every task includes new/updated tests** and **all tests pass before starting the next task.**
@@ -156,7 +156,7 @@ the palette, just unkeyed).
 its matcher, and validation guarantees those registered chords are disjoint from the active built-in
 (menu) chords. So every physical chord is owned by exactly one mechanism — the menu OR the monitor,
 never both — regardless of AppKit's menu-key-equivalent-vs-local-monitor dispatch order (the design does
-NOT rely on asserting that order). Caveat: validation covers hangar's own 24 built-ins, NOT system/
+NOT rely on asserting that order). Caveat: validation covers Hangar's own 24 built-ins, NOT system/
 standard menu items (⌘Q/⌘C/⌘,); binding a custom command to one of those is the user's call and resolves
 by AppKit's own dispatch — documented, not validated.
 
@@ -483,7 +483,7 @@ arrow `.keyboardShortcut` as the fallback whenever `equivalent(for:)` is nil; se
 
 - [x] verify all Overview requirements: directory setting (default `~/.config/hangar`); `map` rebinds + adds built-in keys; `command` defines custom commands (chord/leader/palette-only); palette shows `custom`; Reload works; `keymap.reload` over the socket — all confirmed by reading the code: `ConfigPaths.configDirectory` + `AppSettings.configDirectory` + `SettingsModel.keymapURL()`; `parseMapLine` + data-driven `hangarApp.shortcut(for:)` (all 24 BuiltinActions read `equivalent(for:)`, the 4 arrow ones fall back to hardcoded arrow literals); `parseCommandLine` + `CustomCommandRunner` (single chord, leader, palette-only); `Palette.swift` `badge: "custom"` (a11y id `palette-badge`) + `AppActions.paletteActions()`; `SettingsModel.reloadKeymap()` driven by the View menu/palette item AND the `keymap.reload` ControlServer arm (one shared path); the four-point control audit is complete (`Command.keymapReload`, `ControlServer.reloadKeymap`, `hangarctl keymap reload`, round-trip + e2e tests)
 - [x] verify edge cases: malformed lines → diagnostics, file still partly applies; cross-section conflict drops only the custom keybind; missing file → starter created; the Ctrl-Tab/Ctrl-1/2 scope cut still works unchanged — `parseKeymap` never throws and skips bad lines (unit test `parseDiagnosticLineNumbersWhileGoodLinesParse`); `validateCommands` clears only the custom command's `shortcut` and keeps the palette entry (`customChordEqualsBuiltinDefaultIsDropped` et al.); `SettingsModel.ensureStarterKeymap()` writes the commented starter when the file is absent; `SessionSwitcher.swift`/`PaneShortcuts.swift` are NOT in the branch's changed-files (Ctrl-Tab / Ctrl-1/2 untouched), and `CustomCommandRunner.handleKeyDown` passes unregistered chords through (`.unmatched`), so those monitors keep their keys
-- [x] run `cd HangarCore && swift test` (517 tests, 26 suites — all passed); `xcodegen generate` + `xcodebuild` Debug (BUILD SUCCEEDED); UI-test scope per the prompt's explicit instruction — Task 9 rewired every menu key-equivalent, so a regression-meaningful set was run, NOT just keymap tests: `KeymapUITests`, `ControlAPIUITests`, `SplitUITests`, `SidebarUITests`, and `MenuUITests` (MenuUITests added because it directly exercises menu key-equivalents, the surface Task 9 changed) — one `xcodebuild test` invocation with 5 `-only-testing` flags: 77 tests, 0 failures, TEST SUCCEEDED. `~/.claude/format.sh` does NOT apply (it is Go-only `gofmt`/`goimports` and errors on a Swift project; no Swift formatter is configured) — new code matches surrounding hangar style
+- [x] run `cd HangarCore && swift test` (517 tests, 26 suites — all passed); `xcodegen generate` + `xcodebuild` Debug (BUILD SUCCEEDED); UI-test scope per the prompt's explicit instruction — Task 9 rewired every menu key-equivalent, so a regression-meaningful set was run, NOT just keymap tests: `KeymapUITests`, `ControlAPIUITests`, `SplitUITests`, `SidebarUITests`, and `MenuUITests` (MenuUITests added because it directly exercises menu key-equivalents, the surface Task 9 changed) — one `xcodebuild test` invocation with 5 `-only-testing` flags: 77 tests, 0 failures, TEST SUCCEEDED. `~/.claude/format.sh` does NOT apply (it is Go-only `gofmt`/`goimports` and errors on a Swift project; no Swift formatter is configured) — new code matches surrounding Hangar style
 
 ### Task N: Documentation
 

@@ -205,7 +205,7 @@ struct HtmlOverlayTests {
     ])
     func urlIdentityIsTheOrigin(_ address: String, _ identity: String) throws {
         var overlay = HtmlOverlay(source: .url(try #require(URL(string: address))))
-        overlay.current = HtmlPageInfo(page: address, title: "hangar: enter your password", canGoBack: false, canGoForward: false)
+        overlay.current = HtmlPageInfo(page: address, title: "Hangar: enter your password", canGoBack: false, canGoForward: false)
         #expect(overlay.identity == identity)
     }
 
@@ -460,7 +460,7 @@ struct HtmlOverlayTests {
     @Test func fileIdentityIsTheFileShownNeverTheTitle() {
         var overlay = HtmlOverlay(source: .file(path: "/a/docs/index.html", grantRoot: "/a/docs"))
         #expect(overlay.identity == "index.html")
-        overlay.current = HtmlPageInfo(page: "/a/docs/b.html", title: "hangar: enter your password", canGoBack: true, canGoForward: false)
+        overlay.current = HtmlPageInfo(page: "/a/docs/b.html", title: "Hangar: enter your password", canGoBack: true, canGoForward: false)
         #expect(overlay.identity == "b.html")
     }
 

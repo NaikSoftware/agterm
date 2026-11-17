@@ -30,7 +30,7 @@ struct WorkspaceSetupGuide: View {
                 illustration
                 VStack(alignment: .leading, spacing: 10) {
                     Text("One workspace per project").font(.title2.bold())
-                    Text("Point hangar at your projects folder. Each project you check gets its own workspace, "
+                    Text("Point Hangar at your projects folder. Each project you check gets its own workspace, "
                          + "and every session started in that folder joins it.")
                     Text("That includes sessions a tool opens with:")
                     Text("hangarctl session new --cwd").font(.body.monospaced())

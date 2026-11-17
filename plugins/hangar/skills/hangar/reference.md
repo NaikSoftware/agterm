@@ -1,4 +1,4 @@
-# hangar control reference
+# Hangar control reference
 
 Full detail for every `hangarctl` command. See `SKILL.md` for the model and addressing overview,
 `examples.md` for worked examples, and `cookbook.md` for the repository's installable recipes.
@@ -81,7 +81,7 @@ The event kinds and payloads are:
   not be realized yet. A launch whose socket could not be bound emits none.
 - `message`: a message was queued for a pane. `session` is the recipient's session and the payload
   carries the recipient's `paneID`, the sender's address as `from` (absent for a sender outside
-  hangar) and `messageID`; never the body. One event per delivered recipient. The human line reads
+  Hangar) and `messageID`; never the body. One event per delivered recipient. The human line reads
   `HH:MM:SS message NAME pane-id=ID from=SENDER id=MESSAGE-ID`, with `from=-` for an anonymous sender.
 
 Every event has `seq` (app-wide sequence), `ts` (Unix timestamp), `kind`, optional
@@ -164,11 +164,11 @@ nothing here. Poll this after creating a session unattended; `hangarctl tree` al
 `backedByZmx` (true only when every existing primary/split pane is currently zmx-backed; older servers omit
 it),
 `liveAttribution` and `splitLiveAttribution` (primary and split pane attribution: `supervisor` identifies
-the bundled persistent host, `app` the running hangar, `orphaned` a self-responsible pane or a confirmed
+the bundled persistent host, `app` the running Hangar, `orphaned` a self-responsible pane or a confirmed
 dead responsible process, and `unknown` an unavailable reading or an unrelated live responsible process;
 omitted for non-Live and remote panes; the split field includes hidden splits and is omitted without a
 split; these describe attribution, not permission grants),
-`liveHostStale` and `splitLiveHostStale` (true for a `supervisor` pane whose host is from an earlier hangar
+`liveHostStale` and `splitLiveHostStale` (true for a `supervisor` pane whose host is from an earlier Hangar
 build or login, which `zmx reset` moves to the current one; omitted otherwise),
 `remoteHost` (the machine an attached session came from — the read side of `zmx attach`; omitted for a
 local session; an attached row is saved and attached again at relaunch, while a remote window rebuilds its rows
@@ -272,11 +272,11 @@ process — what it is running — omitted when the pane sits at its shell promp
 setuid/setgid foreground process like `top` or `sudo`, whose argv macOS refuses to expose),
 `foregroundShell`/`splitForegroundShell` (the shell HOLDING each pane's foreground as a basename — `zsh`,
 `fish` — present exactly when that pane's `foreground` is omitted because a shell holds it. For a pane that
-EXISTS, both omitted together means hangar could not read the process, which is how you tell "a shell has it"
+EXISTS, both omitted together means Hangar could not read the process, which is how you tell "a shell has it"
 from "cannot tell"; check `hasSplit` before reading the split pair, since a session with no split omits both
 simply because there is no pane. It is NOT a claim the pane is at a prompt and NEVER permission to type: a
 builtin like `read` runs inside the shell, so a pane blocked on input is indistinguishable from an idle one.
-A shell hangar does not recognize, outside its known set and your `$SHELL`, reports in `foreground` like any
+A shell Hangar does not recognize, outside its known set and your `$SHELL`, reports in `foreground` like any
 other program),
 `restoreCommand`/`splitRestoreCommand` (each pane's persisted restore-command override — the read side of
 `session restore`: omitted = no override (auto-capture), `""` = pinned to nothing (a plain shell), a
@@ -302,7 +302,7 @@ pane's [msg](#msg) mailbox and is omitted at zero. `remote` is `true` on an orig
 next ask, overlay or page goes to an attached Mac (see Remote sessions), omitted otherwise. `lead` is `leader`, `follower`
 or `unowned`: whether this Mac's window size is the one the pane's program sees. A pane that does not
 lead is covered. Absent until the pane's terminal reports one (see Remote sessions).
-`reconnect` is present on a remote pane whose ssh lost its connection while hangar waits to attach it
+`reconnect` is present on a remote pane whose ssh lost its connection while Hangar waits to attach it
 again: `failures` is the retry streak, the probes of its host that failed in a row plus one for a link
 that dropped again soon after attaching, started over by a key on the pane, a wake or a network change,
 and `reason` is what ssh said on the last failed probe, omitted
@@ -366,7 +366,7 @@ that exact pane), `dashboardFontSize` (the absolute font size in points applied 
 the mode is `untouched`), and `dashboardFontMode` (`auto` for `--auto-size`, `fixed` for `--font-size`, or
 `untouched`), plus `pickPending` (the id of the native picker currently awaiting an answer in this
 window, omitted when none is pending), `askPending` (the pending GUI question's id, omitted when absent),
-and `app` (which hangar is serving this socket: `version`, plus
+and `app` (which Hangar is serving this socket: `version`, plus
 `commit` when the build recorded one — the same value `hangarctl version` returns, so an agent already
 reading the tree gets its version floor without a second round-trip; it is not duplicated onto
 `window.list`, where a caller uses `version` instead), `indexUnsaved` (true while the last write of
@@ -544,8 +544,8 @@ buys nothing. A caller with no tree uses `version`.
   `session.companion.new` with the parent as target. Returns `result.id` (the new companion; the human
   output prints it) and `result.parent` (the parent id). Against an app too old for companions the CLI
   prints `error: the running app is too old for companions`, exits 1, and nothing was created.
-  On a parent attached from another Mac, that Mac's hangar creates the companion under its own session, and
-  it is attached here under the row once its panes run; closing it here only detaches it. Errors: `the hangar
+  On a parent attached from another Mac, that Mac's Hangar creates the companion under its own session, and
+  it is attached here under the row once its panes run; closing it here only detaches it. Errors: `the Hangar
   on HOST is too old for companions`, the origin's own refusal, or `created companion ID on HOST but could not
   attach it: REASON`, which leaves it running there for `hangarctl zmx attach HOST ID`.
   Use a command companion to keep a related program next to a session:
@@ -691,7 +691,7 @@ error keeps those names for compatibility.
   A trailing newline's Return is sent a moment after the text, so a long line submits in an agent TUI;
   Returns inside a multi-line payload are not spaced, so send an agent one line per call.
   One very long line can still be taken as a paste by the receiver: Claude Code ran a 2000-character
-  `/rename ...` as a prompt, not as a slash command. hangar does not pace within a line; how a receiver
+  `/rename ...` as a prompt, not as a slash command. Hangar does not pace within a line; how a receiver
   classifies a burst is its own rule, so a caller that hits this sends shorter pieces and checks the result.
   A shell's `$(...)` strips trailing newlines; pass the newline with `--stdin` or `$'...\n'`.
   `--stdin` reads the text from stdin instead of the argument. Any session is typable without `--select`,
@@ -799,7 +799,7 @@ error keeps those names for compatibility.
   shell exists: `restart.oldPid`, `restart.newPid`, `restart.paneID`, `pane`. Those are the pane's shells;
   read the program from `tree`'s `foreground`/`splitForeground`. Live sessions mode, a local pane or a row of
   an hangar-server window (its server restarts it; an Ended row there takes `--command` on the left pane), or a
-  session attached from another host (that host restarts it, and this pane follows the new shell; an hangar there too
+  session attached from another host (that host restarts it, and this pane follows the new shell; a Hangar there too
   old for it refuses), no scratch. An unresolved `--pane-id` is an error even beside `--pane`. LINE is one shell line, at most
   4096 bytes. Clears that pane's status, ask, HUD and pane overlay; keeps its restore pin. A
   background or disowned job of the old shell is not ended. An error naming the old shell's pid means its
@@ -829,7 +829,7 @@ error keeps those names for compatibility.
   sessions mode it runs in its own daemon and comes back hidden after a relaunch; otherwise it is not persisted.
   Unknown mode errors. The tree's `scratch` flag tracks visibility. On a session attached from another
   host the scratch is that host's: `session scratch` runs there, and it shows and hides here as it does there. It
-  is refused while the session is not connected, or when that host's hangar is too old to show its scratch.
+  is refused while the session is not connected, or when that host's Hangar is too old to show its scratch.
 - `session focus [primary|split|left|right|top|bottom|other] [--target] [--window W]` - move keyboard focus between the two
   split panes (`other` toggles, the default). Errors when the session has no split. Works whether the
   split is shown in either orientation or hidden (maximized). When hidden, focusing a pane swaps which one shows.
@@ -859,7 +859,7 @@ error keeps those names for compatibility.
   Without `--sound`, a `blocked` status plays the user's Settings "Blocked sound" if they configured one
   (Appearance ▸ Agent Status; off by default); an explicit `--sound` always overrides it. On a session
   another Mac presents, either sound plays there instead while the origin reports the status pane as a
-  follower and the presenting hangar supports it; otherwise it plays here (see Remote sessions). A custom
+  follower and the presenting Hangar supports it; otherwise it plays here (see Remote sessions). A custom
   name the presenting Mac lacks plays its system alert.
   `--color` (`#rrggbb`) overrides the glyph tint for THIS call only — it rides the status, so the next
   `session status` without `--color` reverts to the Settings-configured color (a malformed hex errors).
@@ -1112,7 +1112,7 @@ error keeps those names for compatibility.
   panel that is already floating (`... need a floating overlay; pass --size-percent too` on a full one);
   `--size-percent` alone or `--full` drops them. Refused on a HUD (`a hud measures its own height`) and for
   an overlay this Mac shows for another Mac, which that Mac sizes. An overlay shown on another Mac takes them
-  there, fitted to that Mac's session; one running an hangar too old for point sizes shows the percent alone.
+  there, fitted to that Mac's session; one running a Hangar too old for point sizes shows the percent alone.
   Read back `overlayWidth`/`overlayHeight`, on the Mac that shows the panel. Units are native points on
   every transport: a page converts its CSS pixels with its `htmlOverlays[].zoom`. The overlay program keeps running across the
   resize — it is a layout re-flow, never a re-spawn. Errors `no overlay` when none is open, and
@@ -1143,7 +1143,7 @@ error keeps those names for compatibility.
   `--hangar-background` (the overlay's backing), `--hangar-foreground` and `--hangar-color-0`..`15` (the ANSI
   palette by slot); a theme change reloads a file page and reaches a URL page at its next load. Build
   generated pages from them, with a fallback at each use, and never declare them in the page. The page's
-  own JavaScript is off unless `--js` is passed; hangar's theme script runs either way, and images and
+  own JavaScript is off unless `--js` is passed; Hangar's theme script runs either way, and images and
   stylesheets load. Prefer static HTML, CSS and SVG, and pass `--js` only when the requested interaction or
   web app requires JavaScript; `--js` with a COMMAND is refused (`--js requires --html or --url`). A `--js` page, a URL page
   included, closes its own overlay with `window.close()` when the web view accepts the call; it may refuse,
@@ -1186,8 +1186,8 @@ error keeps those names for compatibility.
   — show a web page by URL in the overlay slot, typically a dev server you are running
   (`http://localhost:5173/`) or a docs page. Everything above for `--html` applies, except that URL must be
   an absolute http or https URL (`--url must be an absolute http or https URL`), `--cwd` and `--block` are
-  refused, and the page gets no bridge to hangar. The
-  server must be reachable from the hangar the command reaches, where `localhost` points: this Mac from a local
+  refused, and the page gets no bridge to Hangar. The
+  server must be reachable from the Hangar the command reaches, where `localhost` points: this Mac from a local
   session, the host from a session hangar-server or another Mac runs, whose page the Mac showing it reaches through
   an ssh forward (a page session or page companion on a loopback URL is still refused there). Plain http works for
   local addresses (localhost, `.local`, private and link-local IP addresses); use https for public hosts and IP
@@ -1200,7 +1200,7 @@ error keeps those names for compatibility.
   theme variables, which apply nothing unless the page uses them; `--background-color` therefore only
   changes `--hangar-background`, never the browser canvas. Each
   overlay gets its own in-memory browser storage, gone when it closes. With `--persistent` the page instead
-  uses one saved store shared by every `--persistent` page of this hangar state directory, so cookies,
+  uses one saved store shared by every `--persistent` page of this Hangar state directory, so cookies,
   `localStorage` and IndexedDB survive the overlay and an app restart; `--html` and a program refuse the
   flag (`--persistent requires --url`). The open fails, with nothing opened, when the store's id file
   cannot be read, or when it reaches the app before a clear's removal has finished
@@ -1241,13 +1241,13 @@ error keeps those names for compatibility.
   file in its folder or below opens that file in the same page, with back and forward through the strip and
   `session overlay navigate`; a link leaving the folder or resolving to a non-markdown file stays inert, and a
   file directly in `/` or the home folder opens with links as text and `navigation` omitted, as does a page
-  shown on an older hangar on another Mac. No bridge; Open in
+  shown on an older Hangar on another Mac. No bridge; Open in
   Browser and Show in Finder are refused. Refuses a COMMAND, `--html`, `--url`, `--image`, the other page
   flags, `--cwd`, `--wait`, `--block` and `--companion`; a relative FILE resolves
   against the caller's directory. Refused: a path that is not a regular readable file (`unreadable markdown
   file`) and a file over 4 MB (`markdown file too large`). The wire field is `markdownFile`, apart from the
   HUD's `markdown` flag. Opens on a presenting Mac like an image page, following links there too unless that
-  hangar is older. Read back `markdown` (the file opened), `navigation`, and `page`, `canGoBack` and
+  Hangar is older. Read back `markdown` (the file opened), `navigation`, and `page`, `canGoBack` and
   `canGoForward` for the file shown, in `htmlOverlays`.
 - `session overlay open --text FILE [--line N | --tail N [--follow-file] | --follow-file] [--size-percent N [--width PT] [--height PT]] [--background-color #rrggbb] [--follow] [--pane left|right] [--target] [--window W]`
   - show a source, config, text or log file read-only in the terminal theme, the view a user's ⌘-click on its
@@ -1269,7 +1269,7 @@ error keeps those names for compatibility.
   not `--follow`, which selects the session. The page has a bar with follow and search and no line numbers; a user scroll up pauses,
   the bottom or Resume follows again. A rotated, truncated or recreated file is picked up by the next check, a missing
   one shows waiting, and binary data keeps the last text marked unreadable. Both refuse `--line` and need `--text`.
-  On a session another Mac presents, a log page opens there when that Mac's hangar shows live text pages, and is
+  On a session another Mac presents, a log page opens there when that Mac's Hangar shows live text pages, and is
   refused otherwise (`session.overlay.open: the Mac presenting this session cannot show a log page`). Wire fields
   `tail` and `followFile`; `text` adds `tail`, `following`, `lines`, `clipped` (the first line is the end of one longer
   than 2 MB), `waiting` and `unreadable`, omitted on a plain page. A ⌘-click on a `.log` or `.out` path opens it
@@ -1285,7 +1285,7 @@ error keeps those names for compatibility.
   refused `no search query: set one first` without a query and `page not loaded` before the page exists, while a
   query set then runs when it loads. An empty slot answers `no overlay`, a program `the overlay is not an html page`,
   and any other page `no text page`. A slot handed to the presenting Mac runs it there and answers with that Mac's
-  result, as `follow`, `changes` and `wrap` do (Remote sessions); a presenting hangar too old for live text pages
+  result, as `follow`, `changes` and `wrap` do (Remote sessions); a presenting Hangar too old for live text pages
   answers `remote page: search it on the Mac that shows it`.
   Wire `text` and `to` (`next`, `prev`, `close`). Read back `htmlOverlays[].text.search`: `{query, matches,
   current}`, current from 1 and 0 with no match, omitted with no query. The page's own field (`/` or ⌘F, `n`/`N`,
@@ -1294,7 +1294,7 @@ error keeps those names for compatibility.
   - step the `.diff` or `.patch` page in the addressed slot to its next or previous change, a change being one run of
   removed and added lines inside a hunk; it wraps, and after the user scrolled away it goes on from the view. Returns
   `result.text` as `N of M`. Refused `no diff page` for any other page, `no changes` for a patch without any,
-  `page not loaded` before the page exists, and, from a presenting hangar too old for live text pages,
+  `page not loaded` before the page exists, and, from a presenting Hangar too old for live text pages,
   `remote page: step it on the Mac that shows it`. Wire `to` (`next`, `prev`). Read back
   `htmlOverlays[].text.changes`: `{count, current}`, current 0 before any step, omitted on any other page and until
   the page reports. The page's own buttons and the
@@ -1303,14 +1303,14 @@ error keeps those names for compatibility.
   - show one file of the `.diff` or `.patch` page in the addressed slot, named by its number from 1 or by its path as
   the page's file list shows it; the file's header goes under the bar and its first change becomes current. Returns
   `result.text` as `N of M: path`. Refused `no file X` for a number or path the page does not list, plus the
-  `changes` refusals; a presenting hangar without file jumps answers `remote page: step it on the Mac that shows it`.
+  `changes` refusals; a presenting Hangar without file jumps answers `remote page: step it on the Mac that shows it`.
   Wire `to`. Read back `htmlOverlays[].text.files`: `{count, current, path}`, the file in view, which follows
   scrolling and change steps; omitted on any other page and until the page reports. The bar's file button and `f`
   open the same list.
 - `session overlay wrap on|off|toggle [--pane left|right] [--target] [--window W]`
   - wrap the long lines of the text, log or diff page in the addressed slot, unwrap them, or toggle; returns
   `result.text` `wrapped` or `unwrapped`. A page opens unwrapped and keeps its choice until it closes. Refused
-  `no text page` for any other page, and, from a presenting hangar too old for live text pages, `remote page: wrap it
+  `no text page` for any other page, and, from a presenting Hangar too old for live text pages, `remote page: wrap it
   on the Mac that shows it`. Wire `mode`. Read back `htmlOverlays[].text.wrap`, true while wrapped and omitted
   otherwise. The page's Wrap button and `w` toggle the same state.
 - `session overlay open --html FILE|--url URL --companion [page flags] [--follow] [--target] [--window W]`
@@ -1419,7 +1419,7 @@ error keeps those names for compatibility.
   system clipboard. `--pane` reads that pane's overlay; omit it for the session-wide one. Errors
   `no overlay` with nothing in the slot, `overlay not realized` in the moment after `open` before its
   terminal is up, `no selection` when nothing is selected, and
-  `no overlay to read: the slot holds a hud` for a HUD, whose text is hangar's own, and
+  `no overlay to read: the slot holds a hud` for a HUD, whose text is Hangar's own, and
   `overlay is shown on another Mac` for a program overlay a presenting Mac draws, and
   `no overlay to read: the slot holds an html page` for a page, one shown on another Mac included.
 - `session overlay text [--all] [--lines N] [--pane left|right] [--target] [--window W]` — returns
@@ -1539,7 +1539,7 @@ error keeps those names for compatibility.
 
 **Displaying an image inline.** This skill bundles `scripts/show-image.sh`. It opens an overlay (a
 real terminal surface) and renders the image there via the kitty graphics protocol, which ghostty —
-hangar's engine — draws natively. No kitty binary and no external image viewer are used; the encoder
+Hangar's engine — draws natively. No kitty binary and no external image viewer are used; the encoder
 is plain `base64` + `printf`. Run it as `bash <skill-dir>/scripts/show-image.sh <image> [size-percent]`,
 resolving `<skill-dir>` as the directory `SKILL.md` was loaded from rather than a fixed path — the skill
 ships both as a plugin (`~/.claude/plugins/cache/…`, `~/.codex/plugins/cache/…`) and as the app's own
@@ -1711,7 +1711,7 @@ an open command palette and an active in-terminal search. The quick terminal is 
 above every window rather than a surface inside one. While zoomed, the hidden deck keeps running: `session.split`/`session.scratch`/overlay
 opens on the zoomed session still spawn their shells behind the zoom layer. A notification-banner
 click exits zoom before revealing its session. Use `surface zoom` when the user/agent needs a pane
-fullscreen inside hangar; use `window zoom` only to maximize the whole window on screen.
+fullscreen inside Hangar; use `window zoom` only to maximize the whole window on screen.
 
 `hangarctl surface cursor [--target SURFACE_ID|active|quick] [--pane-id TOKEN] [--window W]` — the surface's zero-based
 cursor column, counted from the left edge of the grid. Plain output is the bare number, so
@@ -1754,7 +1754,7 @@ explicit ids and `--close`, composes with the font flags and `--window`, and err
 sessions` when the window has none.
 
 A cell placed by a `:right` ref FOLLOWS its pane through promotion: when a split session's main shell
-exits, hangar promotes the survivor into the primary slot, and the grid rewrites that cell to `<id>:left`
+exits, Hangar promotes the survivor into the primary slot, and the grid rewrites that cell to `<id>:left`
 rather than dropping it, so a dashboard built to watch an agent in the split pane keeps watching it.
 
 A cell shows the pane's terminal, not an overlay over it. A pane covered by a full session overlay or its
@@ -1938,7 +1938,7 @@ floating panel at 90% of the focused screen up to 1100x700 unless Settings > Int
 own, not in the tree and owned by no window; its
 shell stays alive across hides). Errors with `no open window` when none is open, and with `pick pending`
 while a picker is up. Read its visibility back from the tree's top-level `quickVisible`.
-A panel YOU open with `show` stays up when hangar loses focus — including when it was already visible
+A panel YOU open with `show` stays up when Hangar loses focus — including when it was already visible
 because the user had summoned it by hotkey — so a following `quick type` / `quick text` /
 `surface zoom --target quick` still finds it. A window's terminal zoom is not a term either way: the panel
 floats above every window, so `show` is never refused for it.
@@ -2014,7 +2014,7 @@ as strings - the echo is a Double, so `300` comes back `300.0`. Read back from t
 `window list` does NOT carry it. There is no GUI half beyond dragging the divider.
 
 Terminal width is the window width minus the sidebar width minus a 1pt divider, so widening the sidebar
-is how a caller shrinks the terminal below what the window's own minimum width allows. hangar reports no
+is how a caller shrinks the terminal below what the window's own minimum width allows. Hangar reports no
 column count, so a caller fitting an exact number of columns measures its own grid and corrects; do not
 expect points to convert to columns without one.
 
@@ -2154,7 +2154,7 @@ still shows its panel. An unknown name answers `no custom command named NAME`.
   omitted for session-wide placement. The human listing shows `--repeat` and error options for opted-in commands.
 - `diagnostics[]` — `line` + `message` per parse problem (`keymap.reload` returns only the count).
 - `menu[]` — the key equivalents the menu bar carries: `chord`, the owning `menu`, the item `title`, its
-  `selector`, and `enabled: false` when the item is disabled. hangar's own items report `menuAction:`;
+  `selector`, and `enabled: false` when the item is disabled. Hangar's own items report `menuAction:`;
   anything else is an AppKit-supplied item. Nested submenus are included, attributed to their top-level
   menu. A disabled item's chord is INERT — AppKit consumes the key and fires nothing, including a
   same-chord sibling — so an entry marked `enabled: false` explains a dead binding by itself.
@@ -2162,14 +2162,14 @@ still shows its panel. An unknown name answers `no custom command named NAME`.
 **`actions` and `menu` can disagree, and that is what this command is for.** SwiftUI rebuilds the menu
 lazily, on activation or key dispatch, so right after `keymap reload` a chord can be correct in `actions`
 and stale in `menu`. It also resolves a chord collision with a stock macOS item (Close All, Minimize, Hide,
-Quit, the Edit commands) by unbinding hangar's own item; hangar takes such a chord back from the stock
+Quit, the Edit commands) by unbinding Hangar's own item; Hangar takes such a chord back from the stock
 item, so that mismatch is transient too. If a keybinding "does not work" while `actions` looks right,
 compare the two lists: find the action's `chord`, then look for that chord in `menu` and check which
 item carries it.
 
 Two built-ins are legitimately absent from `menu`, both delivered by a key monitor rather than a menu
 item: `undo_close` (⌘Z by default), so native text undo keeps working in the rename, palette and Settings
-fields, and `toggle_fullscreen` (⌃⌘F by default), because hangar ships no full screen menu item — macOS
+fields, and `toggle_fullscreen` (⌃⌘F by default), because Hangar ships no full screen menu item — macOS
 adds its own, carrying `fn+f`. Their missing menu entries are expected and not a fault. So is an
 `alternates` entry: only an action's `chord` can reach the menu bar.
 
@@ -2198,9 +2198,9 @@ Key Mapping). Three verbs, line-based; blank lines and `#` comments ignored:
   A second line replaces the first.
   macOS registers it by physical key position, so it survives a layout switch.
   It is registered with the OS rather than
-  hangar's own monitor, so it takes NO part in the collision rules below — it may share a chord with a
-  menu item, but the global hotkey wins even when hangar is frontmost.
-  `global-hotkey f5` takes F5 from every application and from hangar local map/command bindings.
+  Hangar's own monitor, so it takes NO part in the collision rules below — it may share a chord with a
+  menu item, but the global hotkey wins even when Hangar is frontmost.
+  `global-hotkey f5` takes F5 from every application and from Hangar local map/command bindings.
 
 Custom commands keep banner-only failure reporting by default, subject to the notification setting.
 To add a ten-second failure panel, put `--error-hud` after the optional chord, before the shell body:
@@ -2229,7 +2229,7 @@ Either verb's chord token may hold **alternatives** joined by `|`, with no space
 names a reserved chord or a bare arrow is diagnosed and dropped, and the next single chord takes the slot);
 every other alternative, and every alternative of a `command`, is delivered by a key monitor and so must
 start with a modifier or a function key. `global-hotkey` is outside all of this:
-the OS owns it and wins, hangar frontmost included, so a chord it shares with a menu action
+the OS owns it and wins, Hangar frontmost included, so a chord it shares with a menu action
 fires the panel and the menu binding never sees it. A `map` line with no single-chord alternative
 (`map ctrl+a>s toggle_split`) leaves the action with NO menu shortcut — its shipped default is gone, not
 kept. A malformed alternative rejects the whole line; one that merely breaks a rule or collides with
@@ -2359,20 +2359,20 @@ as the GUI's File ▸ Reload Config menu/palette item, which posts a warning ban
 ### ghostty.conf
 
 `<config dir>/ghostty.conf` (default `~/.config/hangar`, next to `keymap.conf`) is the hangar-scoped
-ghostty config and the place to put hangar overrides/customizations. It is ALWAYS loaded. The app builds
+ghostty config and the place to put Hangar overrides/customizations. It is ALWAYS loaded. The app builds
 its terminal config in order, each source overriding the one before: ghostty's bundled defaults, then
 your global `~/.config/ghostty/config` (OFF by default — opt in with Settings ▸ General ▸ Use my global
-Ghostty config), then `<config dir>/ghostty.conf`, then the values hangar emits from Settings, which
+Ghostty config), then `<config dir>/ghostty.conf`, then the values Hangar emits from Settings, which
 load last and win over matching values in `ghostty.conf`. The current list of those keys is at
 https://naiksoftware.github.io/hangar/docs#ghostty. The scoped file is
-hangar-only; the standalone Ghostty.app never reads it. hangar is self-contained by default, so a config
-written for Ghostty.app does not silently change hangar — put hangar overrides in `ghostty.conf` (e.g.
+hangar-only; the standalone Ghostty.app never reads it. Hangar is self-contained by default, so a config
+written for Ghostty.app does not silently change Hangar — put Hangar overrides in `ghostty.conf` (e.g.
 `macos-option-as-alt = true`); the full reference is at https://ghostty.org/docs/config. Editing it from
 a terminal: open `ghostty.conf` in `$EDITOR`, then `hangarctl config reload`.
 
 ## theme
 
-The app's out-of-the-box default theme is the bundled **hangar** theme (a fresh install opens on it).
+The app's out-of-the-box default theme is the bundled **Hangar** theme (a fresh install opens on it).
 A separate **default ghostty** entry means "no theme" — ghostty's own built-in colors (`theme` absent).
 
 `hangarctl theme list` — list the bundled theme names; returns `result.themes` (the names),
@@ -2401,14 +2401,14 @@ kept); over the socket `theme set` is the commit, with no preview.
 ## restore modes
 
 **Settings ▸ General ▸ Restore sessions** chooses one global launch mode. The process keeps the mode it
-started with, so a change applies after restarting hangar.
+started with, so a change applies after restarting Hangar.
 
 - **Fresh shells** restores the structural snapshot with new shells.
 - **Re-run commands** starts captured commands again. The old processes are not attached.
 - **Live sessions** wraps primary and split panes with zmx and reattaches to their running processes. Zsh or
   fish must be the macOS login shell. Scratch, overlay, and quick terminals remain temporary.
 
-Closing hangar or sending it SIGTERM ends the attach clients and leaves live daemons running. A clean quit
+Closing Hangar or sending it SIGTERM ends the attach clients and leaves live daemons running. A clean quit
 also captures each live pane's foreground command, so a daemon missing after an orderly machine restart is
 recreated under the same name running that command. Four cases still come back as a
 fresh shell: a pane in a window closed before the quit, a hard power loss or force quit that never reached
@@ -2482,7 +2482,7 @@ attaches nothing, opens no window and changes no pane's size. A name with no rea
 `hangarctl zmx prune` — kill the daemons no pane claims and nothing is attached to. It refuses outright on
 an incomplete or conflicted inventory. The gate is checked and revalidated rather than atomic: zmx has no
 kill-if-detached, so prune re-lists immediately before killing and drops anything that gained a client,
-but a client attaching from outside hangar in the remaining gap can still be terminated. It reports each
+but a client attaching from outside Hangar in the remaining gap can still be terminated. It reports each
 daemon separately, and a "cleaned up a stale socket" line is NOT a kill: zmx unlinked a socket it could
 not reach, and that daemon may still be running.
 
@@ -2505,8 +2505,8 @@ it asks for the microphone again; the reset ends those sessions' processes at th
 them under the host, starting their captured commands again where possible. It also covers every session
 whose daemon predates the recorded first launch with this zmx build: live sessions keep the zmx they started
 with through updates, so they miss a zmx change until recreated. It also moves every session still under
-the session host of an earlier hangar build or login, which can block local network access after an
-update, to the current host; at every launch hangar asks each earlier host to stop, and one stops once no live session runs under it. hangar quits and reopens itself
+the session host of an earlier Hangar build or login, which can block local network access after an
+update, to the current host; at every launch Hangar asks each earlier host to stop, and one stops once no live session runs under it. Hangar quits and reopens itself
 right after answering, so running work in the affected sessions stops and agent conversations may need to be
 resumed by hand; run from inside one of those sessions it kills the calling shell. Other supervised
 sessions are left alone. It refuses outside Live sessions mode, while a mode change waits for a restart,
@@ -2543,7 +2543,7 @@ its parent. A row attached from another Mac is never listed. An empty list is a 
 `zmx list` does that. A terminal session needs the far side in `live` mode, which is what puts a daemon behind
 each pane (a page session needs none), and the far side must be new enough to answer `zmx tree` at all; an older one is refused by name rather than
 half-attached. It also needs `hangarctl` installed by the cask or the Help action: a machine merely
-running hangar has no CLI an ssh command can find, and the read fails with exit 127.
+running Hangar has no CLI an ssh command can find, and the read fails with exit 127.
 
 `hangarctl zmx attach HOST SESSION [--window W]` opens one of those sessions here, marked remote, in
 the destination window's current workspace, selected, with the remote session's split when it has one.
@@ -2556,7 +2556,7 @@ is created, so a session that has gone since the listing fails and creates nothi
 starts and later drops is an ordinary pane exit: ssh's own 255 shows a reconnecting bar naming the host and reconnects by itself, with ssh's last
 failed-probe message along the pane's bottom edge and on the pane's `reconnect` in `tree`; any other exit prints
 one line naming the host, the session, the pane and the exit status and holds on Ghostty's press-any-key prompt.
-hangar adds ssh keepalive (`ServerAliveInterval 5`, `ServerAliveCountMax 2`) to the pane's ssh unless the
+Hangar adds ssh keepalive (`ServerAliveInterval 5`, `ServerAliveCountMax 2`) to the pane's ssh unless the
 user's config sets a nonzero interval, so a dead link is noticed within about fifteen seconds. When the
 pane's ssh joins an existing `ControlMaster` connection, that master's settings decide instead.
 
@@ -2580,8 +2580,8 @@ companions when it is a top-level session. It is the
 `attach_remote` keymap action, on Cmd-Shift-R unless `keymap.conf` maps another chord. A script composes
 `zmx tree`, `pick` and `zmx attach --companions` instead.
 
-A program in an attached session runs on the origin and talks to the origin's hangar, so what it asks
-hangar to draw would show there only. Every terminal attach therefore also opens a presentation stream (a page row
+A program in an attached session runs on the origin and talks to the origin's Hangar, so what it asks
+Hangar to draw would show there only. Every terminal attach therefore also opens a presentation stream (a page row
 uses its page channel instead and mirrors nothing), and this
 Mac mirrors the origin session's status, its `session context`, its `session info` line, its `notify` notifications, its HUD and
 the layout of panes already attached.
@@ -2589,7 +2589,7 @@ Nothing has to be set up beyond the `hangarctl` PATH precondition above. What to
 
 - The origin's context shows in this Mac's title bar and as the row's `context` in `tree`. A
   `session context` set on this Mac's row wins over it, and `--clear` here removes only that local value,
-  so the origin's latest context shows again. It cannot blank the origin's. An origin running an hangar
+  so the origin's latest context shows again. It cannot blank the origin's. An origin running a Hangar
   that predates context mirroring still connects and mirrors status and HUD, with no context.
 - The origin's `session info` line shows under this Mac's row the same way: a line set here wins, and
   `--clear` here reveals the origin's again. Origin expiry clears the mirrored line; a line set on this
@@ -2625,7 +2625,7 @@ Nothing has to be set up beyond the `hangarctl` PATH precondition above. What to
   it answers; a forward that fails shows `the port forward to HOST failed`.
 - One attached row per session holds the presenter role (`presentation.mode` is `presenter`): the first
   whose stream asks for it while none holds it. The others mirror and ask again when they reconnect, or when the
-  presenting Mac leaves if both the origin and that row's hangar are current.
+  presenting Mac leaves if both the origin and that row's Hangar are current.
 - New work goes to the attached Mac leading its pane: an `ask open`, `pick open`, `session overlay open` or
   status sound aimed at a pane goes to the Mac whose row reports `lead: leader` for it, the latest to take the
   lead when several do, and session-wide work follows the origin's primary pane. With no attached Mac leading
@@ -2637,7 +2637,7 @@ Nothing has to be set up beyond the `hangarctl` PATH precondition above. What to
   When that Mac goes away, its work moves to the Mac that would take new work, or back to the origin; a page
   keeps its result open, and one whose connection drops after loading is shown once more. The caller on the origin gets the
   answer or the exit status as usual. A Mac leading one of the session's panes also forwards link clicks and
-  status clears, as the presenter does. An origin or attached Mac whose hangar predates this sends everything to
+  status clears, as the presenter does. An origin or attached Mac whose Hangar predates this sends everything to
   the presenter. Below, "the presenting Mac" is the Mac the work went to.
 - A `session status` sound (`--sound`, or the blocked default) plays on the presenting Mac instead of the
   origin under the same rule for the status pane; a `scratch` status, or a presenter too old for it, keeps
@@ -2672,7 +2672,7 @@ Nothing has to be set up beyond the `hangarctl` PATH precondition above. What to
   own folder, under the same size limits, and shows the same page with no bridge; an image opened without a size
   is sized for that Mac's screen. Its `htmlOverlays` lists `image`, `markdown`, `document` or `text` with `replica: true`.
   A presenting Mac too old for these pages keeps the refusal (`a viewer presents this session`).
-- A presenting Mac whose hangar shows live text pages (its hello lists `page.text`) also shows log pages
+- A presenting Mac whose Hangar shows live text pages (its hello lists `page.text`) also shows log pages
   (`--tail`, `--follow-file`, a clicked `.log` or `.out`). On the origin, `session overlay follow`, `search`, `wrap`,
   `changes` and `files` (the last only on a Mac that also lists `page.files`) aimed at such a page run on that Mac
   and answer with its result, the replies a local page gives, or `presenter did not answer` after 5 seconds. The page's own bar works there, the same commands run there against
@@ -2686,11 +2686,11 @@ Nothing has to be set up beyond the `hangarctl` PATH precondition above. What to
   once when the Mac wakes or the network changes; close and reattach the session to retry by hand.
 
 `hangarctl zmx present SESSION` is the plumbing behind it: it opens the stream on the local socket and
-bridges it to stdio as newline-delimited JSON. hangar runs it over ssh on the origin; it is not meant to
+bridges it to stdio as newline-delimited JSON. Hangar runs it over ssh on the origin; it is not meant to
 be typed.
 
 Closing a remote session here ends only this side's connection: the far-side processes keep running and
-nothing hangar does from this end can kill them. An open attached row is saved and attached again at the next
+nothing Hangar does from this end can kill them. An open attached row is saved and attached again at the next
 launch whatever the restore mode is, without taking the lead from a Mac that took it meanwhile. A row whose
 session the origin no longer has shows `Ended on HOST` instead; an attached page waits for the origin to hand it
 over and retries while the host does not answer.
@@ -2709,7 +2709,7 @@ Each pane has ONE leading Mac, whose window size the program inside sees. `zmx a
 every pane at once; the same panes on the Mac the session runs on are covered ("in use from another Mac").
 Each pane's `lead` in `tree` reads `leader`, `follower` or `unowned`. It is absent when the pane has no
 daemon to lead, which is every local pane outside Live sessions mode (`hangarctl restore mode`), and when
-an hangar on either side predates the lead. `hangarctl session lead [--pane left|right]` takes the lead
+a Hangar on either side predates the lead. `hangarctl session lead [--pane left|right]` takes the lead
 for this Mac, as pressing a key on the cover does.
 
 On the Mac the session RUNS on, a covered pane stays fully drivable: `session type`, `session text` and
@@ -2718,12 +2718,12 @@ automation is unaffected by who leads. On the ATTACHING Mac a covered pane refus
 `pane is in use on the Mac it runs on`; run `session lead` first.
 
 Both commands run ssh non-interactively (`BatchMode`), so key-based auth must already work for the host —
-a password or host-key prompt is a failure, not a question. Against an origin whose hangar predates the
+a password or host-key prompt is a failure, not a question. Against an origin whose Hangar predates the
 lead, the attach follows instead: the pane arrives at the OTHER machine's window size and drops input
 until a typed key (a printable character, Return, Tab or Backspace) takes the lead.
 
-Every zmx command needs a running hangar: only the app can join its live windows, its pending closes and
-its persisted snapshots against what zmx reports. With hangar stopped there is nothing to ask.
+Every zmx command needs a running Hangar: only the app can join its live windows, its pending closes and
+its persisted snapshots against what zmx reports. With Hangar stopped there is nothing to ask.
 
 Which programs are NOT re-run is controlled by `restore-denylist.conf` in the config directory (one
 command name per line, seeded with the terminal multiplexers `tmux`/`screen`/`zellij`). It is a plain
@@ -2803,7 +2803,7 @@ text on the Mac showing it, and on the Mac it runs on as well.
 
 `hangarctl terminfo install DESTINATION [-p PORT] [-i FILE ...] [-J HOST] [-F FILE]` — install the bundled
 `xterm-ghostty` terminfo entry into a remote account's `~/.terminfo`. Local-only: it never opens the
-control socket, takes no `--socket`, `--window` or `--json`, and needs no running hangar. It dumps the
+control socket, takes no `--socket`, `--window` or `--json`, and needs no running Hangar. It dumps the
 entry with `infocmp -x` from the database next to the running `hangarctl` (falling back to `TERMINFO`
 from the environment outside a bundle), then runs the remote `tic -x -o "$HOME/.terminfo" -` over one
 ssh connection with the source on stdin. Nothing is cached; run it once per host and account.
@@ -2874,7 +2874,7 @@ Connect a Phone… window of the running app: `phone.status`, `phone.enable` (`m
 
 ## version
 
-`hangarctl version` — which hangar is serving this socket. App-global: no target, no `--window`, and no
+`hangarctl version` — which Hangar is serving this socket. App-global: no target, no `--window`, and no
 window need be open, so it works as a preflight from a keymap-launched script. Returns `result.app`:
 
 - `version` — the app's version, the number a cookbook recipe's minimum is compared against.

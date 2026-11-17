@@ -1,6 +1,6 @@
 import Foundation
 
-/// Resolves a filesystem URL handed to the app by `open -a hangar <path>` (the OS "open terminal here"
+/// Resolves a filesystem URL handed to the app by `open -a Hangar <path>` (the OS "open terminal here"
 /// integration) to the directory a new session starts in: the path itself when a directory, else its parent
 /// when an existing file. Nil for a non-file URL or a missing path, so the caller opens no stray session.
 public enum OpenPathResolver {

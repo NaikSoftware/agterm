@@ -771,7 +771,7 @@ consecutive full `HangarUITests` runs green.
       terminal, cross-window reveal (windowID-bearing identity), the `HANGAR_*` env vars, and the
       `window.*` control additions; update the Control API catalog from **19 commands to 25**
       (enumerate the six `window.*`), not just the number
-- [x] `README.md`: features list (named windows, reopen-all) + a "Scripting hangar" note for `hangarctl
+- [x] `README.md`: features list (named windows, reopen-all) + a "Scripting Hangar" note for `hangarctl
       window …`, `--window`, and the `HANGAR_WINDOW_ID`/`HANGAR_SESSION_ID`/`HANGAR_SOCKET` env vars
 - [x] `ARCHITECTURE.md`: the new top-level `WindowLibrary` owner and the per-window store split
 - [x] move this plan to `docs/plans/completed/` (physical move performed by the exec completion step after reviews)

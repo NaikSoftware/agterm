@@ -1,12 +1,12 @@
 ---
 name: agdoc
-description: Generate a context-aware HTML document and show it in an hangar overlay, end to end. With no arguments it works out the subject from the session - the issue, PR, branch, plan, diff or topic being discussed - and asks with the likely variants when that is unclear; with arguments it takes them as the brief, including subject and audience ("show me details about X from a business point of view"). It asks which design to use - editorial, a one-screen brief, classic, a custom view the model designs for the task and its content, or one the user describes. This skill should be used when the user says "agdoc", "/agdoc", "show this as a doc", "make an html doc of this and show it", or asks to see an issue, PR, plan, change or topic explained as a page in hangar. Also share a page on a private expiring link on request ("share it"), list or stop shares ("list shares", "stop sharing"), and turn a page into a copyable markdown version ("markdown version of this", "text only version").
+description: Generate a context-aware HTML document and show it in a Hangar overlay, end to end. With no arguments it works out the subject from the session - the issue, PR, branch, plan, diff or topic being discussed - and asks with the likely variants when that is unclear; with arguments it takes them as the brief, including subject and audience ("show me details about X from a business point of view"). It asks which design to use - editorial, a one-screen brief, classic, a custom view the model designs for the task and its content, or one the user describes. This skill should be used when the user says "agdoc", "/agdoc", "show this as a doc", "make an html doc of this and show it", or asks to see an issue, PR, plan, change or topic explained as a page in Hangar. Also share a page on a private expiring link on request ("share it"), list or stop shares ("list shares", "stop sharing"), and turn a page into a copyable markdown version ("markdown version of this", "text only version").
 allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/show.sh *), Bash(${CLAUDE_SKILL_DIR}/scripts/embed-md.py *), Bash(${CLAUDE_SKILL_DIR}/scripts/share.py *)
 ---
 
 # agdoc
 
-Build one static HTML page about a subject from the current work and show it in this session's hangar
+Build one static HTML page about a subject from the current work and show it in this session's Hangar
 overlay. `scripts/show.sh FILE` does the showing; `assets/<design>.html` carries the look.
 
 Every page already carries its markdown (step 6); a follow-up asking for it puts the `.md` on the clipboard

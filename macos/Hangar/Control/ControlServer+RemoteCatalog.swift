@@ -207,9 +207,9 @@ final class RemoteCatalogWindow: RemoteCatalogEffects {
         guard let command = try? RemoteSession.attachPaneCommand(host: host, endpoint: pane.endpoint, daemon: pane.daemon,
                                                                  session: pane.daemon, pane: .left, lead: lead,
                                                                  controlPath: pool.lease("pane:\(pane.identity)")) else {
-            catalogLogger.error("\(host, privacy: .public) listed pane \(pane.identity, privacy: .public) hangar cannot address")
+            catalogLogger.error("\(host, privacy: .public) listed pane \(pane.identity, privacy: .public) Hangar cannot address")
             return CommandRestore.shellQuotedLine(["/usr/bin/env", "/bin/sh", "-c",
-                                                   "printf '%s\\n' 'hangar: \(host) listed a pane hangar cannot address'; exit 1"])
+                                                   "printf '%s\\n' 'hangar: \(host) listed a pane Hangar cannot address'; exit 1"])
         }
         ZmxLeadBook.shared.begin(lead, pane: pane.identity)
         return command
@@ -219,7 +219,7 @@ final class RemoteCatalogWindow: RemoteCatalogEffects {
         (try? RemoteSession.attachPaneCommand(host: host, endpoint: pane.endpoint, daemon: pane.daemon, session: "scratch",
                                               pane: .left, linkNonce: ZmxLeadAttachment.makeNonce(), controlPath: pool.lease("pane:\(pane.identity)")))
             ?? CommandRestore.shellQuotedLine(["/usr/bin/env", "/bin/sh", "-c",
-                                               "printf '%s\\n' 'hangar: \(host) listed a scratch hangar cannot address'; exit 1"])
+                                               "printf '%s\\n' 'hangar: \(host) listed a scratch Hangar cannot address'; exit 1"])
     }
 
     /// catalogRowAdded starts a row's presentation stream, and a page row's page beside it.

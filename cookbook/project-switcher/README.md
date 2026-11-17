@@ -12,7 +12,7 @@ Run it again with another prefix to swap projects. The marked set and the filter
 
 ## Requirements
 
-- hangar 0.18.0 or later. `workspace filter` and the `workspace focus add` mode shipped in that release.
+- Hangar 0.18.0 or later. `workspace filter` and the `workspace focus add` mode shipped in that release.
 - `jq`
 - workspace names carrying a per-project prefix, for example `A / frontend` and `A / backend`
 

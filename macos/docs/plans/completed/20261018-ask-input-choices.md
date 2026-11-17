@@ -293,7 +293,7 @@ in the tree.
       survival and a real layout swap; UI test: check choice items by keyboard and read the selection
 - [x] run the touched hosted tests and the choice UI test with `-only-testing:` - must pass before next task
 - ⚠️ XCUITest text typing (`typeText`) on this desktop delivered every key with Command set: Cmd-H hid the
-  test app and the rest reached the live hangar (Cmd-O). The four typing UI tests were removed on the
+  test app and the rest reached the live Hangar (Cmd-O). The four typing UI tests were removed on the
   user's decision; typing, Return, Cmd-Return, Tab, Esc, Cmd-W, cap, composition, draft survival and a
   real layout swap are covered by hosted tests that call the editor directly. The choice-list UI test stays.
 - ➕ review fixes: cap refuses an over-budget edit before it happens (composition included, one-line field

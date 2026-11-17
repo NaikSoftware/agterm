@@ -1,4 +1,4 @@
-# git integration for hangar
+# git integration for Hangar
 
 ## Overview
 

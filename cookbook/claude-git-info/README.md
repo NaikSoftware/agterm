@@ -20,7 +20,7 @@ The branch is bold, `✓ clean` green, the changed count orange, `↑` blue, `�
 
 ## Requirements
 
-- hangar 0.40.0 or later, which shipped `session info`.
+- Hangar 0.40.0 or later, which shipped `session info`.
 - Claude Code.
 - `jq`.
 - git 2.15 or later, for `--no-optional-locks`.
@@ -60,7 +60,7 @@ Register it for four events in `~/.claude/settings.json`, alongside anything alr
 }
 ```
 
-The hooks run beside hangar's own status hooks from **Help ▸ Install Agent Hooks…**; Claude Code runs every hook registered for an event.
+The hooks run beside Hangar's own status hooks from **Help ▸ Install Agent Hooks…**; Claude Code runs every hook registered for an event.
 
 Set `HANGARCTL` to the CLI's full path if `hangarctl` is not on the `PATH` Claude Code hands its hooks.
 
@@ -84,7 +84,7 @@ One script handles every event. It reads `hook_event_name` and `cwd` from the ho
 - **Expiry.** Every set passes `--hide-after 86400`, the longest the API allows, so a Claude killed before SessionEnd still leaves no line behind past a day.
 - **Branch names are escaped.** Git allows backticks, underscores and closing brackets in a branch name, which would otherwise open a code span or break the markup; every character that could open markup is backslash-escaped before the name goes into the markup, and a name over 60 characters is cut.
 - **Headless runs stay out.** A `claude -p` started from a session inherits its `HANGAR_*` variables and would overwrite the line with its own directory. Claude Code sets `CLAUDE_CODE_ENTRYPOINT` to `cli` only for the agent in the pane, and the hook exits on anything else.
-- **The socket.** `hangarctl` does not read `HANGAR_SOCKET` itself, so the hook passes it as `--socket`, which addresses the hangar instance the session belongs to.
+- **The socket.** `hangarctl` does not read `HANGAR_SOCKET` itself, so the hook passes it as `--socket`, which addresses the Hangar instance the session belongs to.
 
 Everything fails open and prints nothing: a missing `jq` or `hangarctl`, or a closed socket, costs the update and nothing else. Silence matters for SessionStart in particular, whose output Claude Code adds to the model's context.
 

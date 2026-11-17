@@ -160,7 +160,7 @@ final class PaletteUITests: XCTestCase {
         // SettingsModel.init writes the ghostty config before GhosttyApp boots, so the theme must be in
         // <stateDir>/ghostty-settings.conf with NO interaction at all.
         XCTAssertTrue(poll { self.appliedGhosttyTheme()?.contains("hangar") == true },
-                      "a fresh launch should write the hangar default into the live ghostty config")
+                      "a fresh launch should write the Hangar default into the live ghostty config")
     }
 
     func testThemePickerPreviewsTopMatchOnFilterWithoutNavigating() throws {

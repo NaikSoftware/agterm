@@ -427,6 +427,6 @@
 - two Macs, both on this build: attach a Live session, run webrev on the origin, annotate and submit on the
   presenting Mac, and confirm the origin receives the annotations
 - a URL page and a chromeless loopback URL page (refused) on a presented session
-- an older hangar on the presenting Mac keeps the refusal
+- an older Hangar on the presenting Mac keeps the refusal
 
 Smells pre-check: skipped — non-Go project

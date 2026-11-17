@@ -14,7 +14,7 @@ Two things follow from the chord being pressed in the main pane rather than the 
 
 ## Requirements
 
-- hangar 0.26.0 or later, which shipped `session context` — the title-bar line this recipe clears when a reset comes from the main pane.
+- Hangar 0.26.0 or later, which shipped `session context` — the title-bar line this recipe clears when a reset comes from the main pane.
 - Python 3.9 or later, which macOS ships as `/usr/bin/python3`
 - Claude Code, codex, or both
 
@@ -76,7 +76,7 @@ That is what the delay before the second write is for, and it is worth more than
 
 So the codex path is two writes of the same bytes rather than one, which is why the script returns a tuple of writes per agent instead of a single string.
 
-Every call passes `--socket "$AGT_SOCKET"`, the socket of the app that fired the chord. That matters when more than one hangar is running, or when the `hangarctl` on `PATH` belongs to a different install than the app you pressed the key in: the socket decides which app is addressed, not the binary.
+Every call passes `--socket "$AGT_SOCKET"`, the socket of the app that fired the chord. That matters when more than one Hangar is running, or when the `hangarctl` on `PATH` belongs to a different install than the app you pressed the key in: the socket decides which app is addressed, not the binary.
 
 The title-bar clear is gated on the main pane's own write succeeding, and not on the split's. A failed write leaves that agent still holding its task, so the line has to keep describing it. The split's agent does not own the line either way.
 

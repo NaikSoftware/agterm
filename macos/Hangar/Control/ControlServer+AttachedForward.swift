@@ -86,7 +86,7 @@ extension ControlServer {
         guard let state = row.remotePresentation, state.connection == .connected, let layout = state.layout else {
             return "the session on \(origin.host) is not connected; the scratch did not change"
         }
-        return layout.scratchShown == nil ? "the hangar on \(origin.host) is too old to show its scratch here" : nil
+        return layout.scratchShown == nil ? "the Hangar on \(origin.host) is too old to show its scratch here" : nil
     }
 
     /// AttachedRefusal is why a request on an attached row is refused before anything is sent.
@@ -102,7 +102,7 @@ extension ControlServer {
         case .sessionRestart:
             guard remoteClients[row.id]?.originSupports(PresentationHub.restartRespawnKind) == true else {
                 return .failure(AttachedRefusal(message: remoteClients[row.id]?.originSupports("layout") == true
-                    ? "the hangar on \(origin.host) is too old to restart a pane from here"
+                    ? "the Hangar on \(origin.host) is too old to restart a pane from here"
                     : "the session on \(origin.host) is not connected; nothing was restarted"))
             }
             return originPane(args, of: row, origin: origin, token: .strict).map {
@@ -359,6 +359,6 @@ extension ControlServer: RemoteAttachLines {
 
     private static func unaddressable(_ host: String, what: String) -> String {
         CommandRestore.shellQuotedLine(["/usr/bin/env", "/bin/sh", "-c",
-                                        "printf '%s\\n' 'hangar: \(host) listed a \(what) hangar cannot address'; exit 1"])
+                                        "printf '%s\\n' 'hangar: \(host) listed a \(what) Hangar cannot address'; exit 1"])
     }
 }

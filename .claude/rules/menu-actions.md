@@ -115,7 +115,7 @@ paths:
 - View ▸ Hide/Show Overlays, the palette's Toggle Overlays, the optional title-bar button and `toggle_overlay`
   run `AppActions.toggleOverlays`, the store toggle `session.overlay.toggle` uses. The item's title follows the
   active session's state; it is enabled through `PaletteContext.activeSessionHasOverlay`.
-- The View menu carries no fullscreen item of hangar's own, and `toggle_fullscreen` rides the key monitor
+- The View menu carries no fullscreen item of Hangar's own, and `toggle_fullscreen` rides the key monitor
   rather than a menu shortcut; see [[windows]]. It remains rebindable and control-drivable.
 - Font shortcuts call libghostty binding actions on the key window's first-responder surface, falling back
   to the active session, unless an HTML page owns the keys, which zooms the pages instead ([[control-api]]).
@@ -210,7 +210,7 @@ paths:
 - The panel's two rungs read `holdsKey`, not `isVisible`. A PINNED panel (a control `quick show`) stays on
   screen without owning the keyboard, and Command-W in a terminal window must then close that session
   rather than reach past it to the panel.
-- The menu item diverts to a plain `performClose` when the key window is not an hangar terminal window —
+- The menu item diverts to a plain `performClose` when the key window is not a Hangar terminal window —
   Settings, the About panel, an open/save panel — because `applyCloseSessionChord` takes ⌘W off the stock
   File ▸ Close item and nothing else would close them (issue #401). `WindowRegistry.contains` is the
   predicate, as in `CustomCommandRunner`, EXCEPT for `QuickTerminalPanel`: it is unregistered too but it is
@@ -257,7 +257,7 @@ paths:
   hide. `PaletteContext.canStepWindows` is the enablement term, so one open window disables rather than
   no-ops. Menu, palette and `window.go` share the one step. The raise and the frontmost publication follow
   [[windows]]: `WindowRegistry.raise` directly, never the `openWindow` hub, and `takeFrontmost` explicitly,
-  because the key monitor fires this from the quick terminal with hangar inactive.
+  because the key monitor fires this from the quick terminal with Hangar inactive.
 - When selection moves, GUI callers reveal a captured blocked/completed pane; unchanged plain navigation
   only refocuses, preventing a one-item wrap from resetting split focus. Modal focus guards still apply.
 - Attention navigation defaults to Control-Option-Up/Down, includes blocked/completed (plus active under
@@ -333,7 +333,7 @@ paths:
   pill it sits centred over the terminal area near the top. The openers call `AppActions.toggleSessionPalette`,
   which bumps `PaletteController.requestSwitcher`, answered by the frontmost window's `toggleSwitcher`.
   Never host it in a SwiftUI `.popover`: one opened from a key equivalent hands the keyboard back to the terminal
-  within half a second (AppKit, no hangar caller), and a popover cannot drop its arrow or draw the design's
+  within half a second (AppKit, no Hangar caller), and a popover cannot drop its arrow or draw the design's
   radius, outline and shadow. The pill shows its open ring while the overlay is up; its hint and tooltip show the
   opener's binding.
 - The search field owns the keyboard from the moment the switcher opens. An empty query shows Needs you (every

@@ -16,7 +16,7 @@ The snapshot is plain JSON, so it can be edited by hand into the launch configur
 
 ## Requirements
 
-- hangar 0.16.0 or later. `workspace new --collapsed` shipped in that release; the rest is older.
+- Hangar 0.16.0 or later. `workspace new --collapsed` shipped in that release; the rest is older.
 - `jq`
 - `zsh`, whose login shell the replayed command runs under. *How it works* has the one-word change if your `PATH` comes from a bash profile instead.
 - workspace names carrying a per-project prefix, for example `A / frontend` and `A / backend`
@@ -31,7 +31,7 @@ cp agt-park.sh agt-resume.sh ~/bin/
 chmod +x ~/bin/agt-park.sh ~/bin/agt-resume.sh
 ```
 
-Snapshots go to `~/.hangar-projects` by default. Set `AGT_PARK_DIR` to put them elsewhere; both scripts read the same variable, so they must agree. That variable reaches the scripts only when you run them from a shell: hangar never read your shell config, so an export in `.zshrc` or `.zprofile` does not carry into a run started from a key chord or the palette. Change the fallback in both scripts if you want a different directory there.
+Snapshots go to `~/.hangar-projects` by default. Set `AGT_PARK_DIR` to put them elsewhere; both scripts read the same variable, so they must agree. That variable reaches the scripts only when you run them from a shell: Hangar never read your shell config, so an export in `.zshrc` or `.zprofile` does not carry into a run started from a key chord or the palette. Change the fallback in both scripts if you want a different directory there.
 
 Add one pair of entries per project to `~/.config/hangar/keymap.conf`:
 
@@ -59,13 +59,13 @@ Resumed workspaces come back collapsed, so a resume does not rearrange the sideb
 
 ## How it works
 
-Park takes one `hangarctl tree --json` and uses it twice. The first pass builds the snapshot: for each matching workspace it keeps the name and, per session, the `name`, `cwd` and `foreground` fields. `foreground` is the live argv of the pane's foreground process, absent when the pane sits at its shell prompt and also when hangar cannot read the process, so either way the session is recorded with an empty command and comes back as a plain shell. *Limits* has what that second case costs. The second pass deletes the workspaces by id with `workspace delete --target`.
+Park takes one `hangarctl tree --json` and uses it twice. The first pass builds the snapshot: for each matching workspace it keeps the name and, per session, the `name`, `cwd` and `foreground` fields. `foreground` is the live argv of the pane's foreground process, absent when the pane sits at its shell prompt and also when Hangar cannot read the process, so either way the session is recorded with an empty command and comes back as a plain shell. *Limits* has what that second case costs. The second pass deletes the workspaces by id with `workspace delete --target`.
 
 The snapshot is written to a temporary file and moved into place only when it holds at least one workspace. A capture that fails cannot destroy the previous snapshot, because `set -e` stops the script before the move and the deletions. Neither can a capture that succeeds and matches nothing: the temporary file is discarded, the prefix is reported on stderr, and the script exits non-zero without deleting anything. That is what makes a second park of the same prefix, or a park run with a different window frontmost, safe — both match nothing, and both leave the earlier snapshot in place.
 
 Resume replays the file. Each workspace is created with `workspace new <name> --collapsed --json`, which returns the new id, and each session with `session new --workspace <id> --no-select --cwd <dir> --name <name>`, plus `--command` when one was captured. `--no-select` keeps the current selection and focus in place while the tree is rebuilt, and `--collapsed` keeps a resumed workspace out of the sidebar focus set, so a resume does not widen a filter you have applied.
 
-hangar runs a `--command` value as `/bin/bash --noprofile --norc -c 'exec -l <command>'`, so the value passes through a shell and ordinary shell quote removal applies to it. That shell reads no profile, so it inherits the app's `PATH`: the launchd default, with no `/opt/homebrew/bin`.
+Hangar runs a `--command` value as `/bin/bash --noprofile --norc -c 'exec -l <command>'`, so the value passes through a shell and ordinary shell quote removal applies to it. That shell reads no profile, so it inherits the app's `PATH`: the launchd default, with no `/opt/homebrew/bin`.
 
 What comes back from `foreground` is the argv as it was typed. A Homebrew-installed tool is recorded as `nvim`, not as `/opt/homebrew/bin/nvim`, and run straight under that `PATH` it would fail with exit 127. So the replay goes through a login shell instead: `jq` quotes each argument with `@sh`, joins them into one line, quotes that whole line again, and prefixes `zsh -lc`, which makes the `--command` value `zsh -lc '<the original line>'`. The login shell sources your profile, so the command resolves against the `PATH` you normally have. The second round of quoting is what keeps the line intact: an argument holding a space, a single quote or a glob survives both rounds of quote removal and replays as one argument rather than several.
 
@@ -81,13 +81,13 @@ What comes back from `foreground` is the argv as it was typed. A Homebrew-instal
 
 Split panes are not restored. The snapshot records the main pane's command only, so a session that had a split comes back as a single pane.
 
-Session names come back as explicit custom names, including the ones hangar had derived automatically.
+Session names come back as explicit custom names, including the ones Hangar had derived automatically.
 
 A captured command line is re-quoted from its argv. A program invoked with unusual quoting may need the snapshot edited by hand before it replays correctly.
 
 **A snapshot holds the full command line of everything that was running**, so it can contain an API token, a database connection string or a password that was passed as an argument. `agt-park.sh` sets `umask 077` before it creates anything, so a directory and a snapshot it creates come out `0700` and `0600`, readable by you alone. A directory that already exists keeps the mode it has, so `chmod 700` one left behind by an earlier copy of the script.
 
-The snapshot can only record what the control API reports, and `foreground` comes back missing for two different reasons: the pane is idle at its shell prompt, or hangar could not read the process at all. The JSON does not distinguish them. A session whose process cannot be read is recorded as idle, comes back as a plain shell, and its workspace is deleted like any other, so the record of what it was running is gone with it. Look at `hangarctl tree --json` before parking if that matters.
+The snapshot can only record what the control API reports, and `foreground` comes back missing for two different reasons: the pane is idle at its shell prompt, or Hangar could not read the process at all. The JSON does not distinguish them. A session whose process cannot be read is recorded as idle, comes back as a plain shell, and its workspace is deleted like any other, so the record of what it was running is gone with it. Look at `hangarctl tree --json` before parking if that matters.
 
 Only processes are captured. A shell function or an alias is not one, so it never comes back by name: a session sitting in a function with nothing running under it is recorded with no command and returns as a plain shell, and one that had already started a program returns running that program directly.
 

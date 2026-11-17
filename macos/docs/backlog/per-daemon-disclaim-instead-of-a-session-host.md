@@ -36,4 +36,4 @@ entry that carries the published socket, command, environment, cwd and size acro
 daemons still need the per-build host classification, `stop` and Reset reason until they end.
 
 It does not address #985: a re-exec with disclaim keeps the daemon in its inherited coalition, so every
-daemon still shares the coalition of the hangar that created it.
+daemon still shares the coalition of the Hangar that created it.

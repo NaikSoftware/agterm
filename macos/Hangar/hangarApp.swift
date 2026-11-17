@@ -63,7 +63,7 @@ struct hangarApp: App {
             reason = "cannot claim the state directory: \(detail)"
         }
         logger.error("\(reason, privacy: .public)")
-        FileHandle.standardError.write(Data("hangar: \(reason)\n".utf8))
+        FileHandle.standardError.write(Data("Hangar: \(reason)\n".utf8))
         exit(1)
     }
 
@@ -288,10 +288,10 @@ struct hangarApp: App {
                         appDelegate.settingsModel = settingsModel
                         appDelegate.liveResetMarkerStore = liveResetMarkerStore
                         appDelegate.liveReset = liveReset
-                        // hand the delegate the action hub and drain folders `open -a hangar /path` queued
+                        // hand the delegate the action hub and drain folders `open -a Hangar /path` queued
                         // before the window store resolved.
                         appDelegate.actions = actions
-                        // hooks apply BEFORE the drain: a queued `open -a hangar /path` creates a session, and a
+                        // hooks apply BEFORE the drain: a queued `open -a Hangar /path` creates a session, and a
                         // session.created hook must already be scheduled to see it (idempotent).
                         hookController.start()
                         // a hook on it calls back over the socket, so an unbound launch emits nothing

@@ -1,10 +1,10 @@
-# Contributing to hangar
+# Contributing to Hangar
 
 ## Before you start
 
-If this is your first pull request to hangar, open a [Discussion](https://github.com/NaikSoftware/hangar/discussions) describing what you plan to build and why, then wait for a reply before writing code. Some ideas do not fit the project's direction, and finding that out early costs less than finding it out after a finished PR.
+If this is your first pull request to Hangar, open a [Discussion](https://github.com/NaikSoftware/hangar/discussions) describing what you plan to build and why, then wait for a reply before writing code. Some ideas do not fit the project's direction, and finding that out early costs less than finding it out after a finished PR.
 
-Check that what you want does not already exist: hangar carries a broad control API, custom commands you bind yourself in `keymap.conf`, and six Settings tabs, so a lot is reachable without new code. Look at `hangarctl --help`, the [README](README.md), [naiksoftware.github.io/hangar/docs](https://naiksoftware.github.io/hangar/docs), and the bundled agent skill under `plugins/hangar/skills/hangar/` before proposing anything.
+Check that what you want does not already exist: Hangar carries a broad control API, custom commands you bind yourself in `keymap.conf`, and six Settings tabs, so a lot is reachable without new code. Look at `hangarctl --help`, the [README](README.md), [naiksoftware.github.io/hangar/docs](https://naiksoftware.github.io/hangar/docs), and the bundled agent skill under `plugins/hangar/skills/hangar/` before proposing anything.
 
 Discussions are for ideas, questions, and anything open-ended. Issues are for concrete bugs and for features already agreed in a Discussion.
 
@@ -13,8 +13,8 @@ Discussions are for ideas, questions, and anything open-ended. Issues are for co
 Weigh what a feature adds against the code it brings with it.
 
 - **Does it help most users, or one setup?** A feature covering a handful of edge cases rarely pays for its maintenance cost.
-- **Does it belong in hangar or upstream in ghostty?** hangar is a SwiftUI shell around libghostty with a workspace and session sidebar on top. Rendering, terminal emulation, key handling, font behavior, and escape-sequence support all come from libghostty, so bugs and feature requests in those areas belong upstream in [ghostty](https://github.com/ghostty-org/ghostty). Working around a libghostty problem inside hangar is the wrong layer, and a PR doing it will be rejected on that ground alone.
-- **Does it change what hangar is?** It is a terminal with a two-level workspace to session sidebar. It is not a multiplexer, not a session manager for other tools, not an IDE. PRs pulling it in those directions will be closed.
+- **Does it belong in Hangar or upstream in ghostty?** Hangar is a SwiftUI shell around libghostty with a workspace and session sidebar on top. Rendering, terminal emulation, key handling, font behavior, and escape-sequence support all come from libghostty, so bugs and feature requests in those areas belong upstream in [ghostty](https://github.com/ghostty-org/ghostty). Working around a libghostty problem inside Hangar is the wrong layer, and a PR doing it will be rejected on that ground alone.
+- **Does it change what Hangar is?** It is a terminal with a two-level workspace to session sidebar. It is not a multiplexer, not a session manager for other tools, not an IDE. PRs pulling it in those directions will be closed.
 - **Is the code proportional to the value?** Several hundred lines for something a `keymap.conf` custom command already covers is a hard sell. Keep it small.
 
 ## Development setup

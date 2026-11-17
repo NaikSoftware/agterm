@@ -28,7 +28,7 @@ If you want the shape without the voice, replace `say` with a `curl` to ntfy or 
 
 ## Requirements
 
-- hangar 0.16.0 or later. Event subscription through `hangarctl events` shipped in that release.
+- Hangar 0.16.0 or later. Event subscription through `hangarctl events` shipped in that release.
 - `jq`
 - `say` and `/bin/zsh`, both of which come with macOS
 
@@ -91,7 +91,7 @@ There are two login-shell wrappers, in two different places, for one reason. The
 
 It is a demonstration, and the voice wears out its welcome quickly. Nothing here is worth keeping on for a working day.
 
-The announcer session closes itself if the event stream ends, taking its log with it. `hangarctl events` exits non-zero on a cursor, transport, or server error, and a session created with `--command` closes when its command exits, so the session simply disappears. The script prints no parting message, because a session created that way is torn down before anything written on the way out could be read. Expected when hangar quits, confusing when a transient error takes it out while hangar keeps running: the announcer is gone and nothing said so. Toggle it back on.
+The announcer session closes itself if the event stream ends, taking its log with it. `hangarctl events` exits non-zero on a cursor, transport, or server error, and a session created with `--command` closes when its command exits, so the session simply disappears. The script prints no parting message, because a session created that way is torn down before anything written on the way out could be read. Expected when Hangar quits, confusing when a transient error takes it out while Hangar keeps running: the announcer is gone and nothing said so. Toggle it back on.
 
 Bursts are announced late, not dropped. `say` blocks until it finishes talking, so three sessions blocking at once are spoken one after another while the events queue behind them.
 

@@ -28,7 +28,7 @@ Two lines of yours in that example, in the order they were made, each next to wh
 
 ## Requirements
 
-- hangar 0.13.0 or later. That is where `$AGT_PANE` began reporting which pane a custom command fired from, which is how the capture stays on the half of a split you pressed in. Everything else it uses is older: `session paste` shipped in 0.11.0 and `session text` in 0.5.0.
+- Hangar 0.13.0 or later. That is where `$AGT_PANE` began reporting which pane a custom command fired from, which is how the capture stays on the half of a split you pressed in. Everything else it uses is older: `session paste` shipped in 0.11.0 and `session text` in 0.5.0.
 - [revdiff](https://github.com/umputun/revdiff)
 - `python3`, which macOS ships
 - macOS `pbcopy` and `pbpaste`, which the reply goes through
@@ -94,4 +94,4 @@ A note lands on one line. revdiff has no visual range select, and its one range 
 
 Only one at a time per session. The overlay slot holds one occupant, so a second press is refused with `overlay already open` and the banner says exactly that; the review already up is untouched.
 
-macOS only, for `pbcopy` and `pbpaste` — which hangar is anyway.
+macOS only, for `pbcopy` and `pbpaste` — which Hangar is anyway.

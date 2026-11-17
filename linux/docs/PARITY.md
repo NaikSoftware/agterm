@@ -1,6 +1,6 @@
-# Parity with hangar master
+# Parity with Hangar master
 
-The target is hangar `master` (NaikSoftware fork), not a redesign.
+The target is Hangar `master` (NaikSoftware fork), not a redesign.
 Sources: `site/docs.html`, the site screenshots, the Swift code, and the fork-only commits.
 macOS keys map to Linux as ⌘ → Ctrl+Shift (Konsole's convention); ⌘⇧ and ⌘⌃ → Ctrl+Alt+Shift; ⌃ → Ctrl; ⌥ → Alt.
 
@@ -25,13 +25,13 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Session context menu: Tint (None, seven colours, Show On icon/name/background; batch), palette Tint Session items, `session|workspace tint`, `--tint` on new
 - [x] Drag to reorder sessions and workspaces; drag a session to another workspace; multi-select
 - [x] Drop folders from the file manager onto the tree to open sessions there
-- [x] Drop a session row on a terminal to type its Claude Code conversation id, else its hangar id (hangar only)
+- [x] Drop a session row on a terminal to type its Claude Code conversation id, else its Hangar id (Hangar only)
 - [x] Strip agent spinner glyphs (✳ ◑ braille) from terminal titles (fork)
 - [x] Close-session reselection by MRU within the workspace
 - [x] Shortcuts: new session ⌘N, new workspace ⌘⇧N, open directory ⌘O, close ⌘W, prev/next session ⌥⌘↑↓, attention ⌃⌥↑↓, toggle sidebar ⌘⌃S, flag ⌘⇧F
 - [x] Shortcuts: reopen ⌘⇧T, font ⌘+ ⌘− ⌘0 (`font inc|dec|reset`, sizes persisted; driven through Konsole's Ctrl+wheel zoom)
-- [x] A pane's grid apart from its window (hangar only, the phone's Fit to phone): `session grid <cols>x<rows> | --reset`;
-  wheel notches into a pane (hangar only, the phone's drag): `session scroll <lines>`
+- [x] A pane's grid apart from its window (Hangar only, the phone's Fit to phone): `session grid <cols>x<rows> | --reset`;
+  wheel notches into a pane (Hangar only, the phone's drag): `session scroll <lines>`
 
 ## Phase 2: terminals
 
@@ -132,15 +132,15 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   Simplified: a terminal-style ask is a dialog over the window rather than drawn in the pane; pick rows show no status glyph;
   `msg send --all` reaches the addressed window only; search counts case-insensitive matches in the pane's history;
   `pane.focused` events are not emitted
-- [x] Agent skill (`share/skill/hangar`, adapted to hangar) and Help ▸ Developer Documentation…. Unlike master, the
+- [x] Agent skill (`share/skill/hangar`, adapted to Hangar) and Help ▸ Developer Documentation…. Unlike master, the
   installers are not in the Help menu: an installed build runs all three in the background on its first launch and after
   each update (fingerprint of the shipped files and the binary path in `extras-installed`). Command line tool
   (links `~/.local/bin/hangarctl`; an hangarctl already there is left alone), agent status hooks (master's package and
   merge rules: Claude Code hooks + the swarm-companion mod, shell rc integration, Codex `config.toml` block, Pi extension,
   OpenCode v1/v2 plugin with the login-shell version probe; symlinks and modes kept, `.bak` backups, idempotent; an older
-  hangar hook install is migrated), agent skill (Claude Code and Codex, ownership marker); no first-launch welcome.
+  Hangar hook install is migrated), agent skill (Claude Code and Codex, ownership marker); no first-launch welcome.
   `hangar --install agent-hooks|skill|cli|all [--home DIR]` runs them by hand. The Codex adapter reads its hook JSON with python3 (master used macOS plutil). Not detected: an
   unparseable `config.toml` (no TOML parser; a top-level `hooks` key is found line by line)
-- [x] Phone relay (hangar only): Settings ▸ Connect a Phone… or `hangarctl mobile serve|reset` for the hangar Mobile app
+- [x] Phone relay (Hangar only): Settings ▸ Connect a Phone… or `hangarctl mobile serve|reset` for the Hangar Mobile app
   (`mobile/`): the control protocol over TLS, pinned by the certificate's SHA-256 and gated by a 256-bit token, paired by
   QR code or `hangar://pair` link; `session type --pane` types into either pane

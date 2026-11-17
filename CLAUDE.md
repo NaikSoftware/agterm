@@ -1,6 +1,6 @@
-# hangar project notes
+# Hangar project notes
 
-hangar is a native macOS SwiftUI terminal on libghostty with a workspace-to-session sidebar.
+Hangar is a native macOS SwiftUI terminal on libghostty with a workspace-to-session sidebar.
 Read `site/docs.html` for product behavior and `ARCHITECTURE.md` for modules, surface ownership, and
 C-boundary concurrency before changing the bridge.
 `README.md` is the product synopsis, not the reference.
@@ -42,11 +42,11 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   Moving within what the page was opened with is in scope: an HTML file's grant folder, a markdown file's link
   root, a URL page's origin, and any origin for a `--browse` page; a terminal click may replace a hidden clicked page.
   Features that make it a general browser (tabs, an address bar, links followed past those bounds) are declined.
-  What a mouse-capturing program does with a click is that program's, not hangar's.
+  What a mouse-capturing program does with a click is that program's, not Hangar's.
 - A decline of a feature request that a custom command covers explains the extension model with the request
   as the worked example: README's "bind X yourself", `site/docs.html#extend`, the agent skill, the cookbook.
   It also points "can you add X" requests to Discussions ▸ Ideas instead of issues.
-- Custom forks are not supported. An answer, recipe or decision is made for hangar itself and is never limited or
+- Custom forks are not supported. An answer, recipe or decision is made for Hangar itself and is never limited or
   adjusted for what a reporter's fork has or lacks. agterm-linux stays in view only as `HangarCore`'s downstream
   consumer (module boundaries below).
 - When adding a process that runs user commands or reparents a session, weigh its effect on macOS TCC
@@ -167,7 +167,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   Eugene.
   An entry without `relatedCoalitionPIDs` right after a run can be transient; check again after a minute
   before acting, and report it to Eugene if it persists.
-- Debug Swift code lives in `hangar.debug.dylib`; inspect it or object files, not the stub executable.
+- Debug Swift code lives in `Hangar.debug.dylib`; inspect it or object files, not the stub executable.
 - For throwaway launch-time probes, append to a temp file. `NSLog` from `open -n` is unreliable; production
   logging uses `os.Logger`.
 - `scripts/run.sh` activates an existing instance instead of loading a rebuild. Use a distinct isolated
@@ -213,7 +213,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
 - Every delegated agent that might touch the app or CLI must receive verbatim:
   “never execute `hangar`/`hangarctl` against the default socket, never launch or quit the app, static
   reading only.”
-- Never kill or relaunch `~/Applications/Hangar.app`, and never `pkill hangar` or `osascript … to quit`
+- Never kill or relaunch `~/Applications/Hangar.app`, and never `pkill Hangar` or `osascript … to quit`
   (both also reach dev instances). Deployment replaces files but the user decides when to restart.
 - Manual Debug UI work uses a separate `open -n` instance with isolated state and short socket. Address
   its CLI with `--socket` after the subcommand. Stop only its known PID with SIGTERM; clean quit triggers
@@ -277,7 +277,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   `DispatchQueue.main.async`.
 - Wakeup coalesces through an `OSAllocatedUnfairLock` into one main-queue `ghostty_app_tick`. Painting is
   libghostty's own render thread, not an app callback: the embedded apprt cannot emit
-  `GHOSTTY_ACTION_RENDER`, so hangar handles no draw action. Never restore the rejected continuous 120Hz
+  `GHOSTTY_ACTION_RENDER`, so Hangar handles no draw action. Never restore the rejected continuous 120Hz
   poll or use `assumeIsolated`. See [[libghostty]] before advancing `GHOSTTY_REV`.
 - `close_surface_cb` only recovers the view and dispatches; it never frees synchronously.
 - A libdispatch callback closure written inside a `@MainActor` method inherits main-actor isolation, and
@@ -351,7 +351,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   is for code the project owns, and never edit a recipe's prose unprompted.
 - A recipe's Limits list only what the recipe causes or cannot do, never general agent behavior.
   State what the recipe guarantees before a side effect, so the side effect never reads as misrouting.
-- hangar runs only on macOS, so POSIX portability is never a finding by itself. A shellcheck SC3xxx on a
+- Hangar runs only on macOS, so POSIX portability is never a finding by itself. A shellcheck SC3xxx on a
   recipe is a CI lint gate, not a runtime defect: `/bin/sh` there is bash 3.2 and `printf %q` works.
   Never propose a bash shebang as the fix; the mac shell is zsh, and CI's `.zsh` path is `zsh -n`.
 
@@ -373,7 +373,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
 - Demo and screenshot staging shows two or three agent statuses at most, and never notification badges
   next to statuses; they are alternative mechanisms.
 - A screenshot may show the username, the hostname, the agent's plan and usage, and Claude Code or codex working
-  on hangar itself with nothing private in it. A feature that serves agents is shown with real agents on hangar,
+  on Hangar itself with nothing private in it. A feature that serves agents is shown with real agents on Hangar,
   other sessions with made-up output; never another project's content, private folder or host names.
   Start codex with `--no-daemon`: a bare `codex` runs its hooks in the background service, which reports no status.
 

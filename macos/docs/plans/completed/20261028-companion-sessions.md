@@ -122,7 +122,7 @@
 - Duplicate as Companion (stage 3) copies the split layout and starts another copy of each pane's freshly observed
   foreground program in that pane's process cwd, through the restart replay seam and the restore denylist. Plain
   Duplicate keeps its directory-only contract.
-- Remote companions (stage 4) are owned by the origin: the viewer asks the origin's hangar over ssh to create the
+- Remote companions (stage 4) are owned by the origin: the viewer asks the origin's Hangar over ssh to create the
   companion under its session, waits for it to become attachable, then attaches it. Closing on the viewer detaches
   only. Origin policy (denylist, process reading) is authoritative for replay. Terminal and page companions are both
   supported on remote parents; a remote page stays owned by the origin and survives viewer detach. Until stage 4

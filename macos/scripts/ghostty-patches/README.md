@@ -54,7 +54,7 @@ thread.
 The patch also lets `TeardownDrain.finish` wake the drain through an event rather than wait out its pause.
 
 Remove the patch when `GHOSTTY_REV` offers a non-blocking surface teardown with the same guarantee: the surface
-stays allocated until its threads are gone, since hangar keeps its address from being reused
+stays allocated until its threads are gone, since Hangar keeps its address from being reused
 (`replacePane(spawnFirst:)`). Its Zig tests are named `teardown` and run with `0001`'s; the app side is pinned
 by `SurfaceRetirementTests`.
 

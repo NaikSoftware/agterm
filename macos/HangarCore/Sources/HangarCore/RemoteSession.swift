@@ -189,7 +189,7 @@ public enum RemoteSession {
         let attach = CommandRestore.shellQuotedLine(Array(argv.dropLast(2))) + " $ka "
             + CommandRestore.shellQuotedLine(Array(argv.suffix(2)))
         let label = CommandRestore.shellQuotedLine(
-            ["hangar: \(session) (\(pane.rawValue)) on \(host) disconnected, exit"])
+            ["Hangar: \(session) (\(pane.rawValue)) on \(host) disconnected, exit"])
         // the pane must exit with SSH's status, not printf's zero, or a failed connection reads as a
         // clean one to anything that looks at the exit code
         let report = "printf '%s %s\\n' \(label) \"$status\""
@@ -229,7 +229,7 @@ public enum RemoteSession {
     /// waitingForConnection runs `line`, a job helper's command, once its master answers; without one it says so and
     /// exits 255.
     public static func waitingForConnection(_ line: String, host: String, controlPath: String) -> String {
-        let failed = CommandRestore.shellQuotedLine(["hangar: no connection to \(host)"])
+        let failed = CommandRestore.shellQuotedLine(["Hangar: no connection to \(host)"])
         let script = connectionWait(host: host, controlPath: controlPath)
             + "; hangar_connection_wait || { printf '%s\\n' \(failed); exit 255; }; exec " + line
         return CommandRestore.shellQuotedLine(["/usr/bin/env", "/bin/sh", "-c", script])

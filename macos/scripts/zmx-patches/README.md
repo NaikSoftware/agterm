@@ -21,7 +21,7 @@ longer apply, and re-running `check.py`.
   daemon's own terminal, which always has the leader's layout, and `zmx type` queues input with an
   acknowledgement and without taking the lead. A session switch is ignored while the leader is managed.
   A client that does not set the variable behaves as upstream does. `.claude/rules/control-api.md` owns
-  how hangar uses it.
+  how Hangar uses it.
 
 - `0002-private-ghostty-dependency.patch` points zmx's ghostty dependency at `../zmx-ghostty`, the
   private checkout `setup.sh` patches, in place of the zig package cache. Its context names the pinned
@@ -52,7 +52,7 @@ longer apply, and re-running `check.py`.
 - `ghostty/0001-formatter-unstyled-blanks.patch` fixes the snapshot a re-attach replays. The formatter
   wrote cells a program skipped with a cursor move as spaces under the previous cell's style, so a gap
   after a colored run came back painted; a skipped cell now closes the style first. Spaces the program
-  wrote keep their style. Not hangar's `GHOSTTY_REV`: this is the ghostty zmx links, nothing else.
+  wrote keep their style. Not Hangar's `GHOSTTY_REV`: this is the ghostty zmx links, nothing else.
 
 `check.py <zmx>` drives managed clients on ptys of different sizes against one daemon in a throwaway
 `ZMX_DIR`, prints one line per rule, and exits nonzero when any of them is broken.

@@ -1,7 +1,7 @@
 # Remote window on a Mac origin
 
 ## Overview
-- File ▸ Open Remote Window… and `hangarctl window remote open HOST` accept a host that is a Mac running hangar,
+- File ▸ Open Remote Window… and `hangarctl window remote open HOST` accept a host that is a Mac running Hangar,
   not only an hangar-server host. A Mac with one open window opens it at once; with more, the same picker
   asks which window.
 - The remote window behaves like a server window for structure: its sidebar follows that Mac window live, and
@@ -100,7 +100,7 @@ The design was reviewed with codex over three revisions and the plan by the plan
   viewer sees only nil `versions` and refuses as today, before subscribing. The Mac's hello and snapshot carry a real
   `CatalogVersions` (app version, `PresentationCodec.version`, `CatalogCodec.version`), which `CatalogHub.subscribe`
   and the mirror's hello check need; the `CatalogFrames.swift:3-4` doc changes to match.
-- **Refusal texts**: a new viewer facing an old Mac says HOST runs an hangar without remote windows and needs this
+- **Refusal texts**: a new viewer facing an old Mac says HOST runs a Hangar without remote windows and needs this
   version or later; the strings saying a remote window needs hangar-server change wherever they now mislead:
   `RemoteCatalogMirror.swift:104`, `ControlActionsDefaults.swift:181`, `ControlDispatcher.swift:18`,
   `CatalogCommands.swift:8,50-53,61`, `WindowCommands.swift:142-148`, the picker prompt
@@ -335,7 +335,7 @@ The design was reviewed with codex over three revisions and the plan by the plan
 - Two real Macs, both on this build, origin in Live sessions mode: open a one-window and a two-window origin, create,
   rename, move, split, close and terminate from the mirror and watch the origin window follow, then edit on the origin
   and watch the mirror follow; close the origin window and reopen it; quit the origin app; relaunch the viewer.
-- An `ssh localhost` origin reaches the default socket of whatever hangar runs there, which is the live terminal; a
+- An `ssh localhost` origin reaches the default socket of whatever Hangar runs there, which is the live terminal; a
   same-Mac check needs an origin instance whose state directory the ssh command resolves, never the live one.
 - An old viewer against a new Mac and a new viewer against an old Mac both show a final refusal.
 

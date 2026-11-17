@@ -1,15 +1,15 @@
 <!-- hangar-skill -->
 
-# Troubleshooting hangar and reporting problems
+# Troubleshooting Hangar and reporting problems
 
-Two jobs: (1) diagnose a problem from inside an hangar session, (2) help the user file it on the repo
+Two jobs: (1) diagnose a problem from inside a Hangar session, (2) help the user file it on the repo
 as a bug (issue) or a feature/question (Discussion) — safely, never posting without approval.
 
 The full user-facing version of the diagnostics below is the repo's `docs/troubleshooting.md`.
 
 ## Diagnosing from inside a session
 
-You are inside hangar (`HANGAR_ENABLED=1`). Use:
+You are inside Hangar (`HANGAR_ENABLED=1`). Use:
 
 - **Live state** — `hangarctl tree --json`, `hangarctl window list --json`.
 - **Keymap problems** — `hangarctl keymap reload` prints the parse-diagnostic count (`0` = clean). A
@@ -24,15 +24,15 @@ You are inside hangar (`HANGAR_ENABLED=1`). Use:
 - **Ghostty settings** - `hangarctl config reload` re-reads the ghostty config and prints the diagnostic
   count (`0` = clean). The count covers every config source, not just `ghostty.conf` (libghostty does not
   record which file a diagnostic came from), so check the Console log for the offending line. `ghostty.conf`
-  (next to `keymap.conf`, always loaded) is where hangar customizations go; it overrides the bundled
+  (next to `keymap.conf`, always loaded) is where Hangar customizations go; it overrides the bundled
   defaults, and the global `~/.config/ghostty/config` is NOT loaded unless Settings ▸ General ▸ Use my
-  global Ghostty config is on. Values hangar emits from Settings load last and win over matching values
+  global Ghostty config is on. Values Hangar emits from Settings load last and win over matching values
   here; the current list is at https://naiksoftware.github.io/hangar/docs#ghostty. Use it for keys the UI does not expose,
   e.g. `macos-option-as-alt`. Most keys apply to open panes on reload, but layout keys (`window-padding-*`)
   and spawn-time keys (`term`, `shell-integration-features`) only take effect in a new session/window
   or after a relaunch. Full reference: https://ghostty.org/docs/config. Two values in it do NOT apply:
   `ssh-env` and `ssh-terminfo` for `shell-integration-features`. Ghostty implements them by replacing
-  `ssh` with a wrapper calling a `ghostty` CLI absent from hangar's bundle, so hangar forces both off
+  `ssh` with a wrapper calling a `ghostty` CLI absent from Hangar's bundle, so Hangar forces both off
   after reading the config and keeps every other flag. Setting either is by design a no-op, reports no
   diagnostic, and is NOT a bug. For remote terminfo, install the entry once per host and account with
   `hangarctl terminfo install <host>` (local-only, no socket; `-p`, `-i`, `-J`, `-F` pass through, other
@@ -86,10 +86,10 @@ key before the terminal sees it. The items enable only when the terminal can ser
 selection, Paste needs something pasteable on the clipboard (text, or a file/web URL, which pastes as a
 shell-escaped path), Select All needs a live surface. Cut stays disabled for the terminal (it still works in
 a text field, such as the inline rename or a palette's search box). Undo and Redo are not in the menu at all:
-hangar has no undo, and ⌘Z belongs to File ▸ Reopen Closed Item. Because these are standard menu shortcuts,
+Hangar has no undo, and ⌘Z belongs to File ▸ Reopen Closed Item. Because these are standard menu shortcuts,
 ⌘C/⌘V/⌘A are NOT rebindable through `ghostty.conf`.
 
-hangar's bundled ghostty defaults are the **fallback**, binding all three to the physical key POSITIONS
+Hangar's bundled ghostty defaults are the **fallback**, binding all three to the physical key POSITIONS
 (`super+key_c`/`super+key_v`/`super+key_a`), matched by keycode regardless of the character the layout
 prints. They fire whenever the menu equivalent does not: on a Russian/Greek/etc. layout the physical C key
 yields `с`, so the menu's ⌘C never matches and the keycode bind runs instead; likewise a ⌘C with no
@@ -110,10 +110,10 @@ then `hangarctl config reload`.
 
 Check these in order:
 
-- **Restart after selecting Live sessions.** The restore mode is fixed when hangar starts. Changing
+- **Restart after selecting Live sessions.** The restore mode is fixed when Hangar starts. Changing
   **Settings ▸ General ▸ Restore sessions** affects the next process, not sessions already open.
 - **Read the eligibility reason in Settings.** Live mode requires zsh or fish as the macOS login shell (or as the
-  absolute path in the ghostty `command` hangar loads, including an inherited global config and
+  absolute path in the ghostty `command` Hangar loads, including an inherited global config and
   `config-file` includes, last value winning, read only at launch) and the bundled zmx and shell-integration resources (`ZDOTDIR` for zsh, `XDG_DATA_DIRS` for fish). If the launch
   cannot use live mode, every pane starts as an ordinary shell.
 - **Inspect actual backing with `tree --json`.** Primary and split surfaces report `backedByZmx`; the session
@@ -126,17 +126,17 @@ Check these in order:
   `orphan` is what `zmx prune` takes. `unknown` means the pane inventory was incomplete, so nothing
   can be pruned until that is resolved.
 - **A missing daemon is recreated, running the captured command.** A reboot or a stale daemon leaves nothing
-  to attach, so hangar creates one under the saved name and replays the command that pane was running at the
+  to attach, so Hangar creates one under the saved name and replays the command that pane was running at the
   last clean quit. A fresh shell instead means no capture applied: the window was closed before the quit, the
   machine lost power or was force-quit, the process exited before quitting, SIGTERM was used, or the command
   is refused by `restore-denylist.conf`. `hangarctl zmx kill` is not one of these — it closes a shown split
   or promotes a primary rather than leaving a daemon to recreate. To check what was captured, read
-  `foregroundCommand` in `windows/<id>.json` while hangar is STOPPED: the next launch moves it into memory
+  `foregroundCommand` in `windows/<id>.json` while Hangar is STOPPED: the next launch moves it into memory
   and rewrites the file with nil, so a running app always shows null there.
 - **A tool asks for the microphone again after every update.** The pane was created before the session
   host and reads `orphaned` in `hangarctl tree --json`, so macOS charges each tool version separately. Hangar ▸
   Reset Live Sessions… (or `hangarctl zmx reset --force`) ends those sessions' processes at the next launch
-  and recreates them under the host; hangar quits and reopens itself, captured commands start again where
+  and recreates them under the host; Hangar quits and reopens itself, captured commands start again where
   possible, and the notification afterwards says how many sessions were covered. A session whose old process
   could not be confirmed gone gets no command restarted and the reset can be run again.
 - **After an update, an attached session still needs a key press, or a zmx change seems missing.** A live
@@ -147,7 +147,7 @@ Check these in order:
   uid 501` after a forced logout.** A changed helper build or a new login gets its own session host, and a session
   keeps the host it started under; `hangarctl tree --json` marks it `liveHostStale`. Hangar ▸ Reset Live
   Sessions… (or `hangarctl zmx reset --force`) moves it to the current host, with the same cost as any reset;
-  at every launch hangar asks each earlier host to stop, and one stops once no live session runs under it.
+  at every launch Hangar asks each earlier host to stop, and one stops once no live session runs under it.
 - **Live sessions close about 30 seconds after a GUI program starts from one.** macOS force-quits a program
   switched off in System Settings ▸ General ▸ Login Items ▸ Allow in the Background, together with the
   coalition it started in (#985). On macOS 27 and later the session host runs as its own launchd job, so
@@ -158,14 +158,14 @@ Check these in order:
   reaps the live daemons in this state directory. An unavailable launch that still requests Live sessions
   preserves its claimed daemons for a later eligible launch.
 
-SIGTERM to hangar should leave a backed pane's daemon and process alive for the next launch. Explicitly
+SIGTERM to Hangar should leave a backed pane's daemon and process alive for the next launch. Explicitly
 deleting its session, workspace, split, or window kills it after any undo grace period.
 
 A reattached screen can look slightly different without being a fresh shell. Usable text, TUI state, and
 normal colors survive, but inline images, earlier OSC 133 prompt markers, program-changed palette entries,
 and hyperlink metadata already attached to cells do not. New output behaves normally.
 
-Saving settings with this version removes the legacy `restoreRunningCommand` key. If an older hangar opens
+Saving settings with this version removes the legacy `restoreRunningCommand` key. If an older Hangar opens
 the same state directory later, it sees no restore setting and defaults to fresh shells.
 
 ### "`tree` shows `(not realized)` right after a launch that replays commands"
@@ -188,7 +188,7 @@ You set `session restore` but the pane came back as a plain shell (or re-ran the
 Check, in order:
 
 - **The launch is not in `rerun` mode.** A `set`/`--none` still saves policy, and `result.text` names the
-  active mode. Select Re-run commands in General settings and restart hangar.
+  active mode. Select Re-run commands in General settings and restart Hangar.
 - **The pane resolved to the scratch, or you pinned `--pane right` on a session with no split.** Both are
   rejected at set time (`the scratch terminal is never restored` / `session has no split`), so nothing was
   pinned — re-read the command's output.
@@ -201,7 +201,7 @@ Check, in order:
   the split is shown; the saved rerun policy applies then.
 - **You reopened a closed session or a closed window, not relaunched the app.** The override fires only on
   an app-launch restore — Reopen Closed Item and reopening a closed window deliberately do NOT arm it. Quit
-  and relaunch hangar to see it fire.
+  and relaunch Hangar to see it fire.
 - **It is not the denylist.** `restore-denylist.conf` is deliberately bypassed for overrides — an override
   names its command on purpose — so a denylisted basename is never the reason it did not run.
 
@@ -215,7 +215,7 @@ Check **Settings ▸ Notifications ▸ Show notification banners** first. With i
 the unseen badge still rises, but nothing is handed to macOS — the command answers `ok` with
 `result.text` = `badge updated, but "Show notification banners" is off, so no banner was posted`
 (a delivered notification carries no `result.text`). macOS must also have granted permission (System
-Settings ▸ Notifications ▸ hangar), and Do Not Disturb / a Focus mode suppresses banners system-wide.
+Settings ▸ Notifications ▸ Hangar), and Do Not Disturb / a Focus mode suppresses banners system-wide.
 
 To separate "never posted" from "posted but not shown": `tree --json` shows a rising `unseen` on the
 target session whenever the command reached the notification path, and the log above records both the
@@ -225,16 +225,16 @@ posted and the suppressed case under the `NotificationManager` category.
 
 Programs run in a session request Automation, Camera, Microphone, Contacts, Calendars, Reminders, Photos,
 Location, Bluetooth, local network, speech recognition, system administration and system audio recording
-through hangar while macOS attributes them to it. The prompt names hangar and the answer applies to
+through Hangar while macOS attributes them to it. The prompt names Hangar and the answer applies to
 programs with that attribution. A dismissed prompt is never re-offered (`osascript` keeps returning
 "Not authorized to send Apple events"). The user changes the answer in System Settings ▸ Privacy & Security
-under the matching service, for example Automation ▸ hangar. This is macOS policy, not an hangar bug: do not file it.
+under the matching service, for example Automation ▸ Hangar. This is macOS policy, not a Hangar bug: do not file it.
 
 ### "a permission is granted but a tool still cannot use it"
 
-A service shows hangar enabled in System Settings, yet a tool in a session is denied. One cause is a stale
-grant: macOS stores each grant with a code requirement, and a grant made while hangar was signed ad-hoc
-requires a bare code hash, so a rebuilt or reinstalled hangar no longer matches while the toggle still reads
+A service shows Hangar enabled in System Settings, yet a tool in a session is denied. One cause is a stale
+grant: macOS stores each grant with a code requirement, and a grant made while Hangar was signed ad-hoc
+requires a bare code hash, so a rebuilt or reinstalled Hangar no longer matches while the toggle still reads
 on. Confirm it before concluding anything: save the row's raw `csreq` blob from the system TCC.db to a
 file, the bytes rather than sqlite's printed output (`SELECT writefile('/tmp/ax.csreq', csreq) FROM access
 WHERE service='kTCCServiceAccessibility' AND client='ua.naiksoftware.hangar'`), then run
@@ -242,19 +242,19 @@ WHERE service='kTCCServiceAccessibility' AND client='ua.naiksoftware.hangar'`), 
 requirement(s)` is the stale grant; an extraction, parsing, or signature error needs resolving first. The
 [stale-grant diagnosis](https://github.com/NaikSoftware/hangar/blob/master/docs/troubleshooting.md#an-accessibility-permission-you-granted-stops-working-after-an-update)
 in docs covers the `tccutil reset` and the re-grant. A confirmed stale requirement is a machine-state issue,
-not an hangar bug: do not file it. A denial with a requirement that does match needs a different diagnosis.
+not a Hangar bug: do not file it. A denial with a requirement that does match needs a different diagnosis.
 
 ### "a command cannot read ~/Downloads, ~/Desktop or ~/Documents"
 
 macOS protects those folders, plus removable and network volumes, on its own: a separate mechanism from the
-services above, gated by no entitlement, and hangar is not sandboxed. The per-folder usage-description
-strings are optional and hangar ships one for each, so the prompt carries hangar's wording. The answer is
+services above, gated by no entitlement, and Hangar is not sandboxed. The per-folder usage-description
+strings are optional and Hangar ships one for each, so the prompt carries Hangar's wording. The answer is
 recorded against the app macOS holds responsible, so another terminal listing the folder proves nothing
-about hangar. The user grants it in System Settings ▸ Privacy & Security ▸ Files & Folders ▸ hangar, or
-gives hangar Full Disk Access, which covers all of them at once. A dismissed prompt is never re-offered.
+about Hangar. The user grants it in System Settings ▸ Privacy & Security ▸ Files & Folders ▸ Hangar, or
+gives Hangar Full Disk Access, which covers all of them at once. A dismissed prompt is never re-offered.
 `/bin/ls -la <folder>`, against the failing folder itself, usually tells the two causes apart: `Operation
 not permitted` for the privacy denial, `Permission denied` for ordinary permission bits, and some `ls`
-replacements print the same wording for both. Needing the grant is macOS policy, not an hangar bug: do not
+replacements print the same wording for both. Needing the grant is macOS policy, not a Hangar bug: do not
 file it.
 
 ### "a dropped screenshot reaches a Live pane but cannot be read"
@@ -263,17 +263,17 @@ The pane gets the thumbnail's `TemporaryItems/NSIRD_screencaptureui_*` path, but
 `Operation not permitted` and Claude Code drops the image silently. In the reported case Full Disk Access fixed
 it without a restart; see the [screenshot read diagnosis](https://github.com/NaikSoftware/hangar/blob/master/docs/troubleshooting.md#a-dropped-screenshot-reaches-a-live-pane-but-cannot-be-read).
 
-### "hangar would like to access data from other apps, over and over"
+### "Hangar would like to access data from other apps, over and over"
 
 Use `hangarctl tree --json` to read `liveAttribution` and `splitLiveAttribution`; see the
 [tree field definitions](reference.md#tree). The [App Data diagnosis](https://github.com/NaikSoftware/hangar/blob/master/docs/troubleshooting.md#hangar-would-like-to-access-data-from-other-apps-keeps-coming-back)
-covers the permission guidance: which panes keep hangar's attribution after a relaunch, and Full Disk
+covers the permission guidance: which panes keep Hangar's attribution after a relaunch, and Full Disk
 Access for `orphaned` and `app` panes. Needing the consent grant is macOS policy: do not file the consent
-prompt itself as an hangar bug.
+prompt itself as a Hangar bug.
 
 ### "The agent-status glyph does not update"
 
-hangar installs the hooks on the first launch after each update. For shell-integrated agents, start a fresh shell
+Hangar installs the hooks on the first launch after each update. For shell-integrated agents, start a fresh shell
 so the installer-added `source` line takes effect. For Pi, restart it or run `/reload` so it loads
 `~/.pi/agent/extensions/hangar-status.ts`; the extension installs only after Pi has created `~/.pi/agent`.
 For OpenCode, restart it to load `~/.config/opencode/plugins/hangar-status.js` (v1) or
@@ -281,7 +281,7 @@ For OpenCode, restart it to load `~/.config/opencode/plugins/hangar-status.js` (
 The installer detects the major via `opencode --version` in your interactive login shell; failed detection offers a manual choice.
 V1 uses `~/.config/opencode`. V2 uses the shell's `OPENCODE_CONFIG_DIR`, then `$XDG_CONFIG_HOME/opencode`, then `~/.config/opencode`.
 The selected directory must already exist. An empty `OPENCODE_CONFIG_DIR` skips v2 with a warning. So does an unavailable shell configuration when `~/.config/opencode` exists; without that directory OpenCode is skipped as not installed.
-After switching major versions, the next hangar update reinstalls it: v2 removes the marked v1 plugin in its selected directory; v1 leaves the v2 directory alone.
+After switching major versions, the next Hangar update reinstalls it: v2 removes the marked v1 plugin in its selected directory; v1 leaves the v2 directory alone.
 User-owned or unreadable v1 files are preserved and reported in the install result.
 The v2 CLI plugin follows the selected session and its descendants, excluding background tabs and headless runs.
 The installed wrapper resolves the bundled `hangarctl` itself; a bare development build instead needs
@@ -294,7 +294,7 @@ updating. Launching the moved app reinstalls the hooks and relinks the CLI.
 One session's glyph blinks/changes while the work is happening in a DIFFERENT session — typically when
 the agents run inside tmux (or a tmux-backed session manager like agent-deck). Cause: the working
 process inherited another session's `HANGAR_SESSION_ID`, and the agent-status hook targets whatever id
-it finds in its environment. The usual carrier is a long-lived daemon started from inside an hangar
+it finds in its environment. The usual carrier is a long-lived daemon started from inside a Hangar
 session — a tmux server captures the spawning shell's `HANGAR_*` into its GLOBAL environment
 (`tmux show-environment -g | grep HANGAR`), and every pane created on that server inherits it, no
 matter which client attaches. Diagnose: find the agent's pid and check its real environment —
@@ -303,15 +303,15 @@ lives in, it leaked. Fix a poisoned tmux server without restarting it:
 `for v in HANGAR_ENABLED HANGAR_PANE HANGAR_PANE_ID HANGAR_SESSION_ID HANGAR_SOCKET HANGAR_WINDOW_ID HANGAR_WORKSPACE_ID; do tmux set-environment -g -r "$v"; done`,
 then restart the affected panes/processes (a respawn is enough; existing processes keep their
 inherited copy). Prevent it: start daemons and session managers with the variables scrubbed
-(`env -u HANGAR_SESSION_ID … <cmd>`, full list in SKILL.md), or from a shell outside hangar.
+(`env -u HANGAR_SESSION_ID … <cmd>`, full list in SKILL.md), or from a shell outside Hangar.
 
 By default, Codex 0.160.1 CLI sessions share a background app-server daemon, started by the first
 `codex` that needs it, and the same leak follows. The server launches hooks using its inherited
 environment, so every daemon-backed session reports to the session that started the server, or to none
-when the server started outside hangar or that session has closed. Diagnose: run
+when the server started outside Hangar or that session has closed. Diagnose: run
 `ps eww <pid> | tr ' ' '\n' | grep HANGAR_SESSION_ID` on the app-server process carrying
 `--managed-daemon`. Scrubbing prevents wrong-session updates but does not restore status reporting, and
-hangar has no automatic mapping from the hook payload's Codex session id to the pane displaying it.
+Hangar has no automatic mapping from the hook payload's Codex session id to the pane displaying it.
 Fix: run `codex --no-daemon`, which keeps the session and its hooks in its own process; that running
 session is unavailable for control through the shared server from the Codex desktop or mobile app.
 To make that the default for plain `codex`, run `codex features disable daemon_auto_start` once, then
@@ -344,30 +344,30 @@ hook routing with Claude Code 2.1.311.
 
 ### "Claude Code's question/permission prompt is unresponsive after switching apps"
 
-Known upstream Claude Code bug, NOT hangar. Do not file an hangar issue for it. While Claude Code shows
+Known upstream Claude Code bug, NOT Hangar. Do not file a Hangar issue for it. While Claude Code shows
 an interactive prompt (a question menu or a permission dialog), switching to another app and back leaves
 it deaf to the keyboard (arrows and Return do nothing); the normal prompt and the shell still work. On
-refocus hangar sends the standard focus-in report (`ESC[I`, DEC mode 1004); Claude Code's dialog handler
-mishandles it. hangar emits correct paired focus-in/focus-out and is already macOS focus-first (the
+refocus Hangar sends the standard focus-in report (`ESC[I`, DEC mode 1004); Claude Code's dialog handler
+mishandles it. Hangar emits correct paired focus-in/focus-out and is already macOS focus-first (the
 refocus click is not forwarded into the pty), so the terminal is not at fault. Tracked as
 anthropics/claude-code#72188 (mouse-click variant #72273). Workaround: answer before switching away, or
 `Esc` the stuck prompt and let it re-ask.
 
 ### "Claude Code prints links as `label (url)` instead of clickable labels"
 
-Detection, not rendering. hangar identifies as `TERM_PROGRAM=hangar` (see the env list in SKILL.md) and
-Claude Code's hyperlink allowlist lacks that name, so it prints the URL. hangar renders OSC 8 links fine.
+Detection, not rendering. Hangar identifies as `TERM_PROGRAM=hangar` (see the env list in SKILL.md) and
+Claude Code's hyperlink allowlist lacks that name, so it prints the URL. Hangar renders OSC 8 links fine.
 Workaround: `FORCE_HYPERLINK=1 claude` (Claude Code reads it before any terminal check), or
 `env = FORCE_HYPERLINK=1` in `~/.config/hangar/ghostty.conf` for every new shell, after a config reload
 (`hangarctl config reload` or File ▸ Reload Config) and a new session; that form also forces links into
-redirected output. `env = TERM_PROGRAM=ghostty` there does nothing: hangar applies its identity after the
-config file. Do not file an hangar issue for it; the fix belongs upstream (Claude Code recognizing `hangar`
+redirected output. `env = TERM_PROGRAM=ghostty` there does nothing: Hangar applies its identity after the
+config file. Do not file a Hangar issue for it; the fix belongs upstream (Claude Code recognizing `hangar`
 or `TERM=xterm-ghostty`).
 
 ### "Every session restores to the directory it was created in"
 
-NOT an hangar bug when a shell wrapper is in play. hangar learns a session's cwd only from OSC 7, reported
-by Ghostty's shell integration, which is injected into the shell hangar spawns and does NOT survive that
+NOT a Hangar bug when a shell wrapper is in play. Hangar learns a session's cwd only from OSC 7, reported
+by Ghostty's shell integration, which is injected into the shell Hangar spawns and does NOT survive that
 shell replacing itself. A `.zshrc` that `exec`s a wrapper (Amazon Q CLI, Kiro CLI, Fig) replaces it before
 the first prompt, so `currentCwd` is never written and every cwd consumer falls back to the creation
 directory: restore, the directory under the session name, `session reveal`, and `{AGT_SESSION_PWD}`.
@@ -385,13 +385,13 @@ report reaches tmux, which forwards it on only with its `osc7` terminal feature 
 `terminal-features` does not grant that to `xterm-ghostty`: add
 `set -as terminal-features ',xterm-ghostty:osc7'` to `~/.tmux.conf` and restart the tmux server.
 
-Separate limit, unrelated to the block: the program runs on the wrapper's inner pty, which hangar cannot
+Separate limit, unrelated to the block: the program runs on the wrapper's inner pty, which Hangar cannot
 see into, so the capture never reaches it and restore cannot bring that program back — pin it with
 `session restore '<command>'` instead.
 
 ### "⌘-hover does not underline links inside tmux or vim"
 
-By design, NOT a bug. Do not file an hangar issue for it. libghostty detects links only while the
+By design, NOT a bug. Do not file a Hangar issue for it. libghostty detects links only while the
 foreground program has mouse reporting OFF, so a program that captures the mouse takes link handling with
 it: ⌘-hover stops underlining, the pointer stays a text bar, and ⌘-click opens nothing, all four together
 and only inside that program. Ghostty.app behaves the same. It is per-program, not per-category:
@@ -407,7 +407,7 @@ there: link detection follows the program's mouse request, not that setting.
 - A bug or a wanted change **in a cookbook recipe** whose Author line names someone other than @umputun →
   a pull request against the recipe, never an issue; see
   <https://github.com/NaikSoftware/hangar/blob/master/cookbook/CONTRIBUTING.md#bugs-and-improvements>. Bugs in
-  @umputun's recipes, and hangar bugs a recipe exposes, are reported as below.
+  @umputun's recipes, and Hangar bugs a recipe exposes, are reported as below.
 - A **supported** thing misbehaves (a documented command/feature does the wrong thing, a crash, a parse
   bug) → a GitHub **issue**.
 - The user wants something **not supported**, or it is a question / idea / "can it do X" → a GitHub
@@ -426,7 +426,7 @@ there: link detection follows the program's mouse request, not that setting.
 4. **Scrub sensitive content** before showing or posting: API tokens/keys, passwords, internal
    hostnames/IPs, usernames embedded in absolute paths (replace with `~` or `<user>`), private repo
    names, and the contents of a selection / `session.copy` / clipboard. When unsure, ask.
-5. **Gather the repro facts yourself** where you can: hangar version (the user reads it from
+5. **Gather the repro facts yourself** where you can: Hangar version (the user reads it from
    Hangar ▸ About Hangar), `hangarctl tree --json` shape, a scrubbed `keymap.conf` excerpt, a scrubbed
    `log show` excerpt.
 

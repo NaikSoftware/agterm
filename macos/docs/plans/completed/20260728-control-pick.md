@@ -3,17 +3,17 @@
 ## Overview
 
 A native fuzzy picker driven entirely over the control socket. A caller — a keymap custom command, a
-shell script, or a coding agent — hands hangar a finished list of items, hangar shows its own fuzzy
+shell script, or a coding agent — hands Hangar a finished list of items, Hangar shows its own fuzzy
 palette, and the caller gets the chosen item back.
 
 This answers [discussion #270](https://github.com/umputun/agterm/discussions/270) in a form that clears
 the objections raised against the keymap-level `--submenu` shape it originally asked for. Those three
 costs — a flag in a keymap format that has none, the palette blocking on a user shell command with no
 answer when the host hangs, and remote text spliced into a raw-substituted shell line — are all
-properties of *hangar producing the list*. Here the caller produces the finished list before it calls,
-so hangar never runs a shell command and never waits on one.
+properties of *Hangar producing the list*. Here the caller produces the finished list before it calls,
+so Hangar never runs a shell command and never waits on one.
 
-The capability this adds that nothing else covers: `notify` has no return leg. hangar can interrupt a
+The capability this adds that nothing else covers: `notify` has no return leg. Hangar can interrupt a
 human one-way (notify, status, badge, blink) and cannot ask him anything. `pick` is the ask.
 
 **Not in scope:** any keymap format change, any GUI opener, badges or status glyphs on items, multi-select,
@@ -143,7 +143,7 @@ The modal is the existing `CommandPalette` view fed an explicit item array. Noth
 | CLI sniffs stdin | Shell callers pipe bare lines directly; CLI-local, adds no second wire format |
 | JSON response on stdout | A pick's output is a machine answer; there is no useful human rendering of it |
 | Exit codes 0/1/2 | Shell callers guard without parsing; 1 already means failure (`ExitCode.failure`), 2 is unused |
-| No timeout at all, anywhere | Not hangar's concern and not the CLI's; a caller wanting a deadline writes `timeout 60 hangarctl pick …` and clears the modal with `pick cancel` |
+| No timeout at all, anywhere | Not Hangar's concern and not the CLI's; a caller wanting a deadline writes `timeout 60 hangarctl pick …` and clears the modal with `pick cancel` |
 | Background by default, `--follow` to raise | Same opt-in-to-foreground default as `session.new --no-select` and `overlay open --follow` |
 
 ## Technical Details
@@ -278,7 +278,7 @@ Blocks by default: open → poll `pick.result` → print the JSON result object 
 **There is deliberately no `--timeout`.** A caller wanting a deadline already has one — `timeout 60
 hangarctl pick …`. The only thing a built-in flag would add is clearing the modal left on screen when
 the caller dies, and that is exactly what `pick cancel` is for; the user can also just press Esc. Giving
-hangar a timer it does not need would also make "the caller gave up" a fourth outcome the protocol has
+Hangar a timer it does not need would also make "the caller gave up" a fourth outcome the protocol has
 to represent, for no gain.
 
 **Poll cadence matters.** The overlay precedent (`SessionCommands.swift:665`) sleeps a flat 0.1s, tuned
@@ -571,7 +571,7 @@ never against the deployed daily driver's default socket):
   single chord over a dynamic list
 - one line in the agent-skill docs warning that a pick blocks its caller until a human answers, so an
   unattended machine means an unbounded poll; the remedy is `timeout N hangarctl pick …`, which is the
-  caller's business, not hangar's
+  caller's business, not Hangar's
 
 ---
 

@@ -306,7 +306,7 @@ later changes in #661 and #1008.
   a session-wide one on A; with the origin leading the right pane, a session-wide one still opens on A.
 - click a file link on B while A holds the grant: the page opens on B.
 - the same cases against an hangar-server origin.
-- one viewer on an older hangar next to a current one: work for panes the older Mac leads goes to the grant
+- one viewer on an older Hangar next to a current one: work for panes the older Mac leads goes to the grant
   holder as today.
 
 Smells pre-check: skipped — non-Go project

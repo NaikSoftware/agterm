@@ -19,10 +19,10 @@ paths:
   no `|` alternatives and no leader sequence (`RegisterEventHotKey` expresses neither).
   Last line wins. It is registered with the OS
   by `GlobalHotkey`, never with `KeybindMatcher`, so it is deliberately OUTSIDE the conflict model below —
-  it may share a chord with a menu item — but the OS hotkey WINS and CONSUMES the key, hangar frontmost
+  it may share a chord with a menu item — but the OS hotkey WINS and CONSUMES the key, Hangar frontmost
   included, so the menu binding then never fires. Say that rather than "whichever app is in front decides",
   which is the precise inversion. Ship NO default: registering takes the chord from every other application
-  on the machine, a cost nobody who never summons the panel from outside hangar should pay. Binding it to
+  on the machine, a cost nobody who never summons the panel from outside Hangar should pay. Binding it to
   `quick_terminal`'s own ``ctrl+` `` is the supported way to get one chord everywhere, and both user-facing
   surfaces (`site/docs.html`, the `ConfigPaths` keymap starter) must say so.
   `parseGlobalHotkeyLine` diagnoses a base key no physical position produces,
@@ -74,7 +74,7 @@ paths:
   `CommandContext` owns the shared expansion/environment token table.
 - Built-ins use AppKit menu key equivalents from `keymap.equivalent(for:)`; apply only non-nil
   `KeyboardShortcut`s. SwiftUI rebuilds menu shortcuts lazily, on activation or key dispatch rather than on
-  `keymap reload`, and resolves stock collisions by unbinding hangar's item.
+  `keymap reload`, and resolves stock collisions by unbinding Hangar's item.
 - `AppDelegate.applyStockMenuChords` asserts every contested stock chord from the AppKit side.
   `applyCloseSessionChord` keeps the ⌘W pair with File > Close, matched by title.
   `stockMenuChords` holds the other stock chords the grammar can spell, matched by selector plus modifier
@@ -101,8 +101,8 @@ paths:
   so a window timed from the fire would close first. Autorepeat of that live tail fires too, every other
   consumed autorepeat stays swallowed. A new leader pressed while the tail is held keeps its 1.5 s timeout;
   app deactivation, a text-field or auxiliary-window key, and Esc close the window (Esc still reaching the
-  terminal). So do menu tracking starting and a window resigning key while hangar is inactive: a local
-  monitor never sees a keyUp consumed by menu tracking, and the quick terminal is key without hangar being
+  terminal). So do menu tracking starting and a window resigning key while Hangar is inactive: a local
+  monitor never sees a keyUp consumed by menu tracking, and the quick terminal is key without Hangar being
   active, so neither release would ever start the timeout. A resign inside the active app is left alone,
   or `--repeat next_window` would stop after one step. Any other chord closes it and is matched afresh; it is deliberately not `isArmed`, which would
   swallow those keys. The chord goes to the matcher before the `toggle_fullscreen` and page `close_session`
@@ -113,7 +113,7 @@ paths:
   Track held keycodes independently: a leader tail can arrive before its prefix is released.
   `.fired` launches detached `/bin/sh -c` with cwd, selection, and `$AGT_*`; stdin and stdout go to
   `/dev/null`. Only `errorHud` commands capture stderr to a temp file (`StderrFile`, `CommandFailure`),
-  reading its last 16 KiB before removing it. A pipe would break background descendants after hangar exits;
+  reading its last 16 KiB before removing it. A pipe would break background descendants after Hangar exits;
   the file avoids that, but its write size is unbounded until every writer exits.
   A spawn error or non-zero exit always calls `notifyCommandFailure`, which obeys the notification
   setting. Only `errorHud` adds a panel through injected `FailureHud`, with the name, reason and any
@@ -138,7 +138,7 @@ paths:
   picker alone, since their menu items are disabled over the dashboard. The key is
   consumed either way: the gate lives inside each action, so the runner cannot see the outcome, and passing
   a leader's last chord through after swallowing its prefix would type a stray character into the terminal.
-- Fire with a focused `GhosttySurfaceView`, or in an hangar terminal window whose focus is not an `NSText`
+- Fire with a focused `GhosttySurfaceView`, or in a Hangar terminal window whose focus is not an `NSText`
   field editor, including a zero-session window. Pass through text fields and auxiliary windows;
   `WindowRegistry.contains(keyWindow)` gates no-surface dispatch.
 - Palette `run(_:)` no-ops without an active session. A no-surface chord uses the active session when
@@ -203,7 +203,7 @@ paths:
 - `BuiltinAction.defaultChord` is the sole built-in default. Every menu item resolves
   override-or-default, including the six arrow actions. Two keyed actions are delivered by a monitor
   rather than a menu equivalent: `undo_close` through `UndoCloseShortcut`, so native text undo still
-  works, and `toggle_fullscreen` through `CustomCommandRunner`, because hangar ships no full screen menu
+  works, and `toggle_fullscreen` through `CustomCommandRunner`, because Hangar ships no full screen menu
   item for it to ride — see [[windows]]. Both are absent from `keymap list`'s `menu` by design.
   `close_session` and `toggle_overlay` keep their menu items, but `CustomCommandRunner` also matches their
   chords while an `HtmlOverlayWebView` holds focus: WebKit hands key equivalents to the page first and reports a cancelled
@@ -253,7 +253,7 @@ paths:
   Russian-Phonetic and U.S. instances, plus `cmd+d` and `cmd+1` on Dvorak - QWERTY ⌘ and Lithuanian.
   Russian-Phonetic does not cover Greek/Hebrew punctuation, which host-free measured-data tests cover.
 - `ghostty.conf` has a separate upstream grammar: bare `g` is Unicode and `key_g` physical; Unicode
-  triggers cannot fire on non-Latin layouts. hangar matches Ghostty.app and cannot fix this app-side.
+  triggers cannot fire on non-Latin layouts. Hangar matches Ghostty.app and cannot fix this app-side.
   Use `key_`, as `ghostty-defaults.conf` does for `super+key_c/key_v/key_a` (issue #30).
   The `ghostty` section of `site/docs.html` documents the distinction.
 - A built-in reaches a leader only as an alternative, never as its menu equivalent: an `NSMenuItem` holds

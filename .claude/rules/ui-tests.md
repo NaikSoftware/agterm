@@ -118,7 +118,7 @@ These run inside the app, so a mistake can kill the host instead of failing an a
   clear covered/minimized/other-Space windows before debugging the test. FB11763863 instead has no
   window/AX tree. The same timeout also came from typing that hid the app under test: on 2026-10-18
   `typeText` keys arrived as Command chords (Cmd-M minimized it, Cmd-H hid it, the rest reached the live
-  hangar the run was launched from and opened its Open Directory panel), while
+  Hangar the run was launched from and opened its Open Directory panel), while
   `typeKey(_:modifierFlags: [])` was unaffected. [Unverified] where the stuck Command came from.
   A window ordered out or an unexpected Open panel seconds into typing means stop the run; do not rerun
   it on the same desktop.
@@ -147,7 +147,7 @@ These run inside the app, so a mistake can kill the host instead of failing an a
 
 ## Runs from a shell in the live terminal
 
-- **An XCUITest run started from a shell inside a live hangar window can die at runner init** with
+- **An XCUITest run started from a shell inside a live Hangar window can die at runner init** with
   `Failed to initialize for UI testing ... Timed out while enabling automation mode` after 60s, before any
   test case runs. The block is at runner initialization, so app code under test cannot reach it; it is not
   a defect in the diff under test. The timeout is intermittent: one retry passed on the same stale host
@@ -159,7 +159,7 @@ These run inside the app, so a mistake can kill the host instead of failing an a
   the same window. The correlation is measured; the causal link to the timeout is not. Diagnose with
   `log show --predicate 'subsystem == "com.apple.TCC"' --last 6m --style compact` plus
   `ps -p <pid> -o lstart` against the binary's mtime. If the retry also fails, diagnose the attribution
-  issue before considering a restart; restarting hangar is Eugene's decision, never the agent's.
+  issue before considering a restart; restarting Hangar is Eugene's decision, never the agent's.
   Hosted `HangarTests` can be blocked over the same period (2026-10-02): the host waits in
   `_prepareTestConfigurationAndIDESession` with zero test cases started, and `xcodebuild` logs
   `Connection peer refused channel request for "dtxproxy:XCTestManager_IDEInterface:..."` two minutes after

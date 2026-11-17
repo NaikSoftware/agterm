@@ -10,7 +10,7 @@ An agent such as Claude Code often prints the path of a screenshot it made. In a
 
 ## Requirements
 
-hangar 0.36.0 or later, where a page opened with `--js` can close its overlay with `window.close()`. The script also relies on `--chromeless` from 0.35.0, `session overlay open --html` from 0.33.0, `--error-hud` from 0.31.0 and `AGT_SESSION_HOST` from 0.29.0.
+Hangar 0.36.0 or later, where a page opened with `--js` can close its overlay with `window.close()`. The script also relies on `--chromeless` from 0.35.0, `session overlay open --html` from 0.33.0, `--error-hud` from 0.31.0 and `AGT_SESSION_HOST` from 0.29.0.
 
 `perl`, which macOS includes. For an attached session, `ssh` and `scp` with key-based login to the host, which `zmx attach` already needs.
 
@@ -35,7 +35,7 @@ In the gallery, the arrow keys move between the images and wrap at the ends, and
 
 ## How it works
 
-Claude Code draws its own mouse selection, so hangar does not see it and `$AGT_SELECTION` stays empty. For this reason the script reads the visible screen with `session text` when there is no terminal selection.
+Claude Code draws its own mouse selection, so Hangar does not see it and `$AGT_SELECTION` stays empty. For this reason the script reads the visible screen with `session text` when there is no terminal selection.
 
 Claude Code also wraps long paths with an indent, so the script removes all whitespace before it searches. The match is non-greedy and stops at the first image extension, otherwise two neighbour paths become one.
 

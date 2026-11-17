@@ -145,7 +145,7 @@ struct Window: ParsableCommand {
         struct Open: RequestCommand {
             static let configuration = CommandConfiguration(
                 abstract: "Open a window mirroring HOST's hangar-server or a window of the Mac HOST, or raise the one already showing it.")
-            @Argument(help: "The ssh destination running hangar-server or hangar.") var host: String
+            @Argument(help: "The ssh destination running hangar-server or Hangar.") var host: String
             @Option(name: .long, help: "The Mac HOST's window to show, an id or unique prefix; needed when it has several open.")
             var originWindow: String?
             @OptionGroup var options: BasicOptions

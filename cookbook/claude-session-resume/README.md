@@ -12,12 +12,12 @@ Keep several Claude Code sessions open at once, and after the terminal restarts 
 - Zero mapping state: the first conversation id **is** the tab's uuid (`HANGAR_SESSION_ID`), and any recovery id is derived from it.
 - Idempotent: the first launch pins the conversation to the tab (`--session-id`); later launches continue it (`--resume`).
 - Non-destructive recovery: a metadata-only transcript is left in place and the tab advances to its next deterministic conversation id.
-- Stays out of the way: `claude mcp`, `-p`, an explicit `claude --resume <other-id>`, and any launch outside hangar pass through untouched.
+- Stays out of the way: `claude mcp`, `-p`, an explicit `claude --resume <other-id>`, and any launch outside Hangar pass through untouched.
 - Small, dependency-free, pure shell; options are function-local (zsh's `emulate -L`, fish's implicit function scoping), so nothing leaks into your interactive shell.
 
 ## Requirements
 
-- hangar 0.3.1 or later, with **Restore running commands on restart** turned on under Settings ▸ General ▸ Sessions. Both `HANGAR_SESSION_ID` and that setting predate the repository's earliest tagged release, so 0.3.1 is the first version that can be named, not the version the behavior arrived in.
+- Hangar 0.3.1 or later, with **Restore running commands on restart** turned on under Settings ▸ General ▸ Sessions. Both `HANGAR_SESSION_ID` and that setting predate the repository's earliest tagged release, so 0.3.1 is the first version that can be named, not the version the behavior arrived in.
 - `zsh`, or `fish`
 - Claude Code, with its conversations in `~/.claude/projects/` (or wherever `CLAUDE_CONFIG_DIR` points).
   The passthrough list matches the subcommands of Claude Code 2.1.319; a newer CLI can add one the
@@ -28,7 +28,7 @@ Keep several Claude Code sessions open at once, and after the terminal restarts 
 
 ### zsh
 
-The function has to be defined in `~/.zshrc`, the config your interactive login zsh reads. That matters: hangar feeds the restored command into that shell, so `.zshenv` and `.zprofile` are too early to intercept it.
+The function has to be defined in `~/.zshrc`, the config your interactive login zsh reads. That matters: Hangar feeds the restored command into that shell, so `.zshenv` and `.zprofile` are too early to intercept it.
 
 Either paste the function from `claude-resume.zsh` into `~/.zshrc`, or keep the file and source it from there:
 
@@ -45,7 +45,7 @@ source ~/.zsh/claude-resume.zsh
 
 The file is sourced, never run, so it does not need the executable bit and is committed without one. Its shebang is there to name the shell it is written for.
 
-Turn on **Restore running commands on restart** in Settings ▸ General, under Sessions. Without it hangar brings a tab back as a plain shell and there is nothing for the function to intercept.
+Turn on **Restore running commands on restart** in Settings ▸ General, under Sessions. Without it Hangar brings a tab back as a plain shell and there is nothing for the function to intercept.
 
 New tabs and shells pick the function up on their own. In an already-open shell, run `source ~/.zshrc`.
 
@@ -62,7 +62,7 @@ cp claude-resume.fish ~/.config/fish/functions/claude.fish
 
 Fish autoloads a function from that directory by filename on first call, in any shell, interactive or not, so there is no config file to source and no restart to arrange. This file too is sourced by fish's autoloader, never run, so it does not need the executable bit and is committed without one. Unlike the zsh version — which a non-interactive shell never sources at all — the function checks `status is-interactive` itself and passes non-interactive calls straight through, so a script invoking `claude` from inside a tab isn't intercepted.
 
-Turn on **Restore running commands on restart** in Settings ▸ General, under Sessions. Without it hangar brings a tab back as a plain shell and there is nothing for the function to intercept.
+Turn on **Restore running commands on restart** in Settings ▸ General, under Sessions. Without it Hangar brings a tab back as a plain shell and there is nothing for the function to intercept.
 
 New tabs and shells pick the function up on their own; an already-open shell does too, since fish resolves `claude` against the autoload path on next call.
 
@@ -76,24 +76,24 @@ To check it: open a tab, run `claude`, say a few words, then restart the termina
 
 ## How it works
 
-hangar can remember the command running in a tab and re-run it on restart. The catch: it re-runs the command verbatim, and `claude` with no arguments is a *new* conversation, not a continuation.
+Hangar can remember the command running in a tab and re-run it on restart. The catch: it re-runs the command verbatim, and `claude` with no arguments is a *new* conversation, not a continuation.
 
-The trick rests on two facts. Every hangar tab has a stable identifier (`HANGAR_SESSION_ID`) that survives a restart. And Claude Code lets you supply a session id from the outside (`--session-id`). The tab id can therefore identify its conversation and any deterministic recovery ids.
+The trick rests on two facts. Every Hangar tab has a stable identifier (`HANGAR_SESSION_ID`) that survives a restart. And Claude Code lets you supply a session id from the outside (`--session-id`). The tab id can therefore identify its conversation and any deterministic recovery ids.
 
 The function then wraps `claude`: on the first launch in a tab it pins the conversation to the tab id (`--session-id`). Later launches find that id under Claude's project directories and continue it with `--resume`. Looking up the id directly means the wrapper does not need to reproduce Claude's private project-path encoding.
 
 Claude can leave a `bridge-session`-only file after switching conversations through `/resume`. Such a file is not resumable and also prevents reusing the id. The wrapper leaves the file untouched and derives another UUID by incrementing the final 32 bits of the tab id. It applies the same rule again if that id also has a metadata-only transcript. A conversation created by an older version of the recipe is still resumed because its id remains the tab id.
 
-On restart hangar replays the remembered command, the function recognizes "its own" id, sees the conversation already exists, and reopens exactly that one. Each tab, its own.
+On restart Hangar replays the remembered command, the function recognizes "its own" id, sees the conversation already exists, and reopens exactly that one. Each tab, its own.
 
 Which account the tab belongs to is remembered separately, because the capture carries argv and not the environment. `CLAUDE_CONFIG_DIR` names the account on a launch you typed, and Claude Code has no flag that could carry it in argv instead, so a restored launch arrives without it. When the variable is set to something other than `~/.claude`, the function records that directory in `${XDG_STATE_HOME:-~/.local/state}/hangar-claude-resume/<tab-id>`, following the path the `opencode-session-resume` recipe already uses for its own state. A launch with the variable absent looks under the default account first and falls back to the recorded directory only when the default holds nothing for this tab, so a tab that really belongs to the default account is never redirected. The variable is passed to Claude Code only when that recorded account is the one picked: Claude Code reads a set `CLAUDE_CONFIG_DIR` as a separate account even when it names `~/.claude`, so a default-account launch keeps it unset.
 
-On the hangar side that replay is a foreground-process capture. At quit hangar records the argv of whatever the pane was running, and on relaunch it types that line back into the tab's fresh login shell with each argument single-quoted. Quoting suppresses alias expansion but not function lookup, which is why a shell function named `claude` still catches the replayed line; in zsh an alias would not. fish has no such distinction, since its `alias` defines a function.
+On the Hangar side that replay is a foreground-process capture. At quit Hangar records the argv of whatever the pane was running, and on relaunch it types that line back into the tab's fresh login shell with each argument single-quoted. Quoting suppresses alias expansion but not function lookup, which is why a shell function named `claude` still catches the replayed line; in zsh an alias would not. fish has no such distinction, since its `alias` defines a function.
 
 ## Limits
 
-- **hangar-specific.** It needs a stable per-tab identifier and relies on hangar feeding the restored command back *through the login shell*, which is how the function intercepts it. It will not work as-is in another terminal; you would adapt it to that terminal's equivalent.
-- **Rests on restore behavior its author verified empirically rather than from documentation.** It could change between hangar versions.
+- **hangar-specific.** It needs a stable per-tab identifier and relies on Hangar feeding the restored command back *through the login shell*, which is how the function intercepts it. It will not work as-is in another terminal; you would adapt it to that terminal's equivalent.
+- **Rests on restore behavior its author verified empirically rather than from documentation.** It could change between Hangar versions.
 - **One tab-owned conversation id at a time.** Simultaneous launches in the same tab can choose the same id and collide with Claude's transcript check. A split pane, a scratch pane and any overlay all run under the same `HANGAR_SESSION_ID` as the main pane, so a second `claude` in any of them counts as the same tab. A process that has switched elsewhere through `/resume` can leave a metadata-only id, which the next launch skips.
 - **It shadows the `claude` command** with a shell function. Passthrough is handled, but the list of subcommands and flags that must not be touched has to be kept current if the CLI grows new ones.
 - **It knows Claude Code's on-disk layout** (`~/.claude/projects/*/<id>.jsonl`, or the same tree under `CLAUDE_CONFIG_DIR`). A Claude Code storage change can require a recipe update.
@@ -101,5 +101,5 @@ On the hangar side that replay is a foreground-process capture. At quit hangar r
 - **The tab owns one conversation wherever it is used.** The lookup is by id across every project directory, deliberately, so the recipe does not have to reproduce Claude's project-path encoding. `claude --resume` reopens a conversation from the directory it was created in, so running `claude` in a tab you have since moved to another directory returns to the first directory's conversation rather than starting one for the new directory. Pin a different line with `hangarctl session restore` if you want a tab to come back to something else.
 - **zsh or fish only** (the zsh version uses `${:l}`, the `(N)` glob qualifier, and `emulate`; the fish version uses fish-only syntax throughout). Bash needs a rewrite.
 - **Existing conversations are not bound to tabs.** After installation, the first launch starts a conversation pinned to that tab. Conversations created by an older copy of this recipe are adopted by their matching tab id, but arbitrary earlier conversations are not.
-- **Claude's `/resume` picker does not rebind the tab.** It switches the running process, but the next launch returns to the conversation owned by the tab id. To make hangar capture another conversation, exit and run `claude --resume <id>` from the shell.
+- **Claude's `/resume` picker does not rebind the tab.** It switches the running process, but the next launch returns to the conversation owned by the tab id. To make Hangar capture another conversation, exit and run `claude --resume <id>` from the shell.
 - **Metadata-only transcripts remain on disk.** They are small, remain available for inspection and are skipped on later launches.

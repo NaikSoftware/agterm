@@ -1,7 +1,7 @@
-# hangar control examples
+# Hangar control examples
 
 Worked `hangarctl` examples. See `reference.md` for exact flags and return shapes. All assume
-`hangarctl` is on PATH and you are inside an hangar session (`HANGAR_ENABLED=1`).
+`hangarctl` is on PATH and you are inside a Hangar session (`HANGAR_ENABLED=1`).
 
 Installable, human-facing workflows live in the repository's cookbook — see `cookbook.md` for how to
 list, fetch and install one, or to read one as reference for a tricky case.
@@ -63,7 +63,7 @@ hangarctl zmx kill --target 3f2a --pane left --force
 ```
 
 To move every live session created before the session host under it, so a tool's microphone permission
-stops being asked per version, reset them. hangar quits and reopens itself right after the reply, so run
+stops being asked per version, reset them. Hangar quits and reopens itself right after the reply, so run
 this from outside the sessions it affects, or expect the calling shell to end:
 
 ```bash
@@ -74,7 +74,7 @@ hangarctl zmx reset --force
 
 List what the other machine offers across every open window, then open one here by its ID. The far side
 has to be in `live` mode, reachable over ssh with key-based auth, and carry `hangarctl` from the cask or
-the Help action — running hangar alone leaves no CLI an ssh command can find. Run it with no host to ask
+the Help action — running Hangar alone leaves no CLI an ssh command can find. Run it with no host to ask
 the same of this app, which is the form the remote call runs over there:
 
 ```bash
@@ -138,7 +138,7 @@ safely-interpolated values (a UUID-shaped session id) belong in it.
 
 ## Keep a forking agent session reattaching across restarts (a SessionStart hook)
 
-`claude --resume <id> --fork-session` mints a NEW claude session on every hangar restart, so restoring it
+`claude --resume <id> --fork-session` mints a NEW claude session on every Hangar restart, so restoring it
 verbatim never reattaches the session you were in. Fix it by rewriting the override to the LIVE session id
 on every start, from a Claude Code `SessionStart` hook — it runs inside the session's shell, where
 `$HANGAR_SESSION_ID` and `$HANGAR_PANE_ID` are exported:
@@ -341,7 +341,7 @@ hangarctl session overlay result --json   # errors "still running" until it exit
 ## Ask for a choice with an HTML page, and switch sessions from one
 
 A page is a richer `pick`: write the rows, open it with `--block`, and read the answer. The page needs no
-JavaScript; hangar handles the `data-hangar` tags.
+JavaScript; Hangar handles the `data-hangar` tags.
 
 ```bash
 page=$(mktemp /tmp/branchesXXXXXX)
@@ -451,7 +451,7 @@ nearest-neighbor first:
 magick favicon.png -filter point -resize 256x256 /tmp/big.png
 ```
 
-Outside hangar (`HANGAR_ENABLED` unset) there is no overlay — fall back to `open img.png` (Preview).
+Outside Hangar (`HANGAR_ENABLED` unset) there is no overlay — fall back to `open img.png` (Preview).
 
 ## Set a background watermark or color
 
@@ -762,7 +762,7 @@ hangarctl events --json --kind notify |
   ./notification-relay
 ```
 
-Foreground OSC notifications suppressed by hangar do not appear in this stream.
+Foreground OSC notifications suppressed by Hangar do not appear in this stream.
 
 ## Clean up after sessions close
 
@@ -1013,7 +1013,7 @@ that window without stealing focus.
 ## Require a yes/no answer in a cleanup hook
 
 A shell cleanup hook can require approval before removing `./build`. This example runs inside
-hangar and requires `jq`. Only an `answered` result with id `yes` reaches the removal:
+Hangar and requires `jq`. Only an `answered` result with id `yes` reaches the removal:
 
 ```bash
 #!/usr/bin/env bash
@@ -1179,7 +1179,7 @@ show() {
 
 A minimized window still reports its `geometry`, and `window move`/`window resize` apply to it — a parked
 window comes back at whatever frame was written while it sat in the Dock, so re-running the align step
-covers parked windows too. The minimized state is live-only — re-run `show` after restarting hangar.
+covers parked windows too. The minimized state is live-only — re-run `show` after restarting Hangar.
 
 ## Reload the keymap after editing it
 
@@ -1188,15 +1188,15 @@ $EDITOR ~/.config/hangar/keymap.conf
 hangarctl keymap reload          # prints the parse-diagnostic count (0 = clean)
 ```
 
-## Change a ghostty setting hangar does not expose
+## Change a ghostty setting Hangar does not expose
 
 ```bash
 $EDITOR ~/.config/hangar/ghostty.conf   # e.g. add: macos-option-as-alt = true
 hangarctl config reload                 # apply it; prints the diagnostic count (0 = clean)
 ```
 
-`ghostty.conf` is scoped to hangar and overrides the bundled defaults and your global
-`~/.config/ghostty/config`; the values hangar emits from Settings load last and win over matching values
+`ghostty.conf` is scoped to Hangar and overrides the bundled defaults and your global
+`~/.config/ghostty/config`; the values Hangar emits from Settings load last and win over matching values
 there. Current list: https://naiksoftware.github.io/hangar/docs#ghostty. Full key reference: https://ghostty.org/docs/config
 
 ## Set the terminal theme

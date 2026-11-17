@@ -9,7 +9,7 @@ CleanExec.runIfRequested()
 struct ServerCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "hangar-server",
-        abstract: "Run hangar sessions on this host for a Mac's remote window.",
+        abstract: "Run Hangar sessions on this host for a Mac's remote window.",
         version: ServerVersion.current,
         subcommands: [Serve.self, InstallHooks.self],
         defaultSubcommand: Serve.self
@@ -31,7 +31,7 @@ struct Serve: ParsableCommand {
 
 struct InstallHooks: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Install the agent status hooks and the hangar skill for this user, pointing at this server's hangarctl."
+        abstract: "Install the agent status hooks and the Hangar skill for this user, pointing at this server's hangarctl."
     )
 
     @Option(name: .long, help: "OpenCode's major version, v1 or v2; defaults to what `opencode --version` reports.")

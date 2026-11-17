@@ -253,7 +253,7 @@ void showPhoneDialog(QWidget *parent)
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     dlg->setWindowTitle(QObject::tr("Connect a Phone"));
 
-    auto *on = new QCheckBox(QObject::tr("Let hangar Mobile connect to this computer"));
+    auto *on = new QCheckBox(QObject::tr("Let Hangar Mobile connect to this computer"));
     on->setObjectName(QStringLiteral("phoneOn"));
     auto *code = new QLabel;
     code->setObjectName(QStringLiteral("phoneCode"));
@@ -275,7 +275,7 @@ void showPhoneDialog(QWidget *parent)
     status->setObjectName(QStringLiteral("phoneStatus"));
     status->setWordWrap(true);
     auto *warning = new QLabel(QObject::tr("Anyone with this code controls your terminals until you revoke it. "
-                                           "Scan it in hangar Mobile, or send the link to the phone and paste it there."));
+                                           "Scan it in Hangar Mobile, or send the link to the phone and paste it there."));
     warning->setWordWrap(true);
     auto *revoke = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-delete")), QObject::tr("Revoke Paired Phones…"));
 

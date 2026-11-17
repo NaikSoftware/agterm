@@ -2,10 +2,10 @@
 
 ## Overview
 
-A pane carried across a restart in Live sessions mode runs on a zmx daemon whose creating hangar has
+A pane carried across a restart in Live sessions mode runs on a zmx daemon whose creating Hangar has
 exited. macOS resolves the responsible process dynamically, so at that instant every process in the
 pane, and every command started in it afterwards, becomes its own responsible process. TCC then charges
-each request to that command rather than to hangar: the microphone prompt returns for every Claude Code
+each request to that command rather than to Hangar: the microphone prompt returns for every Claude Code
 version, and `docs/troubleshooting.md` documents the same loss for App Data. Reattaching from a new
 instance does not repair it, and `responsibility_set_pid_responsible_for_pid` refuses an unprivileged
 caller with EPERM.
@@ -30,7 +30,7 @@ reported as such on the tree.
 - Live path: `ZmxLaunch.surfaceSeed` (`Hangar/Ghostty/ZmxLaunch.swift`) builds the pane's command via
   `ZmxSupport.attachCommand`; it is called synchronously on the main actor from
   `LaunchSeedProvider.resolve` inside `GhosttySurfaceView.createSurface`, before `ghostty_surface_new`.
-  The environment hangar passes there is overrides only (`SurfaceEnvironment.swift`); pinned libghostty
+  The environment Hangar passes there is overrides only (`SurfaceEnvironment.swift`); pinned libghostty
   (`src/termio/Exec.zig`) composes the full environment, cwd and initial pty size, and wraps the command
   in `login -q -flp`. Nothing on the app side has the finished environment.
 - Stock zmx creates the daemon lazily by `fork()` then `setsid()` inside the attach client
@@ -101,7 +101,7 @@ execs plain `zmx attach <name>`, joining the daemon    │ poll `zmx list` for t
 
 Decisions, each answering a review finding:
 
-- **The client is the pane command; hangar never waits.** Waiting happens inside the pane after
+- **The client is the pane command; Hangar never waits.** Waiting happens inside the pane after
   libghostty has composed the environment, so the UI never blocks and the daemon gets the
   environment, cwd and winsize captured by the client (see task 6 for the Foundation cache exception). `ZmxSupport` renders the pane command from a
   structured argv, never by splitting a rendered string; the `-lic` replay script and its creation-only
@@ -192,7 +192,7 @@ bounded ensure deadline:
 Tree read-back on `ControlSessionNode`, per pane and including a hidden split, following the paired
 convention already used for other per-pane fields: `liveAttribution` and `splitLiveAttribution`, each
 one of `supervisor` (leader's responsible pid is the live host), `app` (leader resolves to the running
-hangar: a pre-host or fallback daemon, covered until the next restart), `orphaned` (resolves to itself
+Hangar: a pre-host or fallback daemon, covered until the next restart), `orphaned` (resolves to itself
 or to a dead pid), `unknown` (lookup failed or SPI absent). Absent for non-Live and remote sessions.
 `supervisor` describes attribution only; it neither implies a grant nor covers every TCC service.
 
@@ -332,7 +332,7 @@ Validated: 29 client/host package tests, five isolated hosted client tests, and 
 The hosted tests also verify environment, physical cwd and 43×132 terminal size, and assert
 that fixture hosts exit during cleanup.
 
-### Task 6: Pane command and the seam in hangar
+### Task 6: Pane command and the seam in Hangar
 
 **Files:**
 - Modify: `HangarCore/Sources/HangarCore/ZmxSupport.swift`
@@ -515,7 +515,7 @@ process scan found no acceptance fixtures remaining. Detailed PIDs and saved tre
 ### Task 10: Update documentation
 
 - [x] rewrite the App Data section of `docs/troubleshooting.md`: the loss is process attribution; the
-      supervisor keeps new Live panes attributed to hangar, verified for the microphone; App Data is
+      supervisor keeps new Live panes attributed to Hangar, verified for the microphone; App Data is
       expected to follow but keeps Full Disk Access as the documented remedy for `orphaned` and `app`
       panes until tested; `liveAttribution` on the tree says which panes are which
 - [x] remove `docs/backlog/live-session-panes-lose-responsible-app-attribution.md` with plain `rm`;

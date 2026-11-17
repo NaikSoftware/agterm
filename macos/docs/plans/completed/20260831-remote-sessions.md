@@ -2,13 +2,13 @@
 
 ## Overview
 
-Attach a local hangar to a session running on another Mac that also runs hangar, so it appears in the
+Attach a local Hangar to a session running on another Mac that also runs Hangar, so it appears in the
 local sidebar as an ordinary session marked remote. One session at a time, including its split.
 Whole-workspace teleport is out of scope.
 
 Two new control commands:
 
-- `zmx tree <host>` — ssh to the host, ask its hangar what sessions exist in its frontmost window, and
+- `zmx tree <host>` — ssh to the host, ask its Hangar what sessions exist in its frontmost window, and
   return each pane's daemon plus the endpoint metadata needed to attach.
 - `zmx attach <host> <session>` — create one local session whose panes run ssh into that remote
   session's daemons.
@@ -113,7 +113,7 @@ socket directory are private, and recomputing from the process environment insid
 would duplicate runtime selection and break hosted tests that inject a client. Expose them from
 `ZmxClient` and thread them through the restored runtime.
 
-Teleport therefore requires the remote hangar to be new enough to report endpoints. An older remote
+Teleport therefore requires the remote Hangar to be new enough to report endpoints. An older remote
 returns a clear error rather than a partial attach.
 
 ### Scope: the remote's frontmost window
@@ -170,7 +170,7 @@ returns false without dispatching anything, Ghostty shows its own "press any key
 `close_surface_cb` runs today's `closePrimaryPane`/`closeSplitPane` after the key.
 
 The ssh wrapper prints one sanitized line before exiting: host, remote session, pane, exit status. It
-says nothing about reconnecting — the picker is a keymap custom command the user supplies, so hangar
+says nothing about reconnecting — the picker is a keymap custom command the user supplies, so Hangar
 cannot name a path it does not own.
 
 **There is no timer, notification or session-wide coalescing.** An earlier draft had them, and they
@@ -373,7 +373,7 @@ displaced leader — would remove all three. It is **not** part of this work.
 
 ## Post-Completion
 
-**Manual verification** (needs a second Mac running hangar):
+**Manual verification** (needs a second Mac running Hangar):
 
 - attach to a live remote session and confirm the first keystroke reflows it
 - confirm the far side keeps working after a local close

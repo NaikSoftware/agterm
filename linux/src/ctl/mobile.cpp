@@ -182,7 +182,7 @@ void forward(const QString &socketPath, QPointer<QSslSocket> phone, QJsonObject 
     QObject::connect(local, &QLocalSocket::errorOccurred, local, [local, buffer, answer](QLocalSocket::LocalSocketError e) {
         if (e == QLocalSocket::PeerClosedError && !buffer->trimmed().isEmpty())
             return answer(QJsonDocument::fromJson(buffer->trimmed()).object());
-        answer({{"ok", false}, {"error", QStringLiteral("hangar is not reachable: %1").arg(local->errorString())}});
+        answer({{"ok", false}, {"error", QStringLiteral("Hangar is not reachable: %1").arg(local->errorString())}});
     });
     local->connectToServer(socketPath);
 }
@@ -228,7 +228,7 @@ int serve(const QString &socketPath, const QHash<QString, QString> &opt)
     const QString link = pairLink(hosts.first(), port, token, fingerprint);
     if (!opt.contains(QStringLiteral("no-qr")))
         printQr(link);
-    printf("\nScan the code in hangar Mobile, or paste the link:\n  %s\n", qPrintable(link));
+    printf("\nScan the code in Hangar Mobile, or paste the link:\n  %s\n", qPrintable(link));
     for (const QString &h : hosts.mid(1))
         printf("  %s\n", qPrintable(pairLink(h, port, token, fingerprint)));
     printf("\nListening on %s:%u. Anyone with the link controls your terminals; `hangarctl mobile reset` revokes it. Ctrl+C stops.\n",

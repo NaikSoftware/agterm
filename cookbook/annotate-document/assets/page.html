@@ -333,7 +333,7 @@ tr.slot > td { border: 0 !important; padding: 0 !important; }
   };
 
   const renderMarkdown = () => {
-    // raw html is off: the page can run hangar commands, so document markup must never become live
+    // raw html is off: the page can run Hangar commands, so document markup must never become live
     const md = window.markdownit({html: false, linkify: true});
     // yaml front matter is shown as code; blanking it keeps markdown-it's line map aligned with the file
     let front = '';

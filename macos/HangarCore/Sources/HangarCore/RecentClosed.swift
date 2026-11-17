@@ -269,7 +269,7 @@ public struct RecentClosedStore: Sendable {
             let state = RecentClosedState(items: items, remoteItems: remote.isEmpty ? nil : remote)
             try encoder.encode(state).write(to: fileURL, options: .atomic)
         } catch {
-            NSLog("hangar: save recent closed failed: %@", String(describing: error))
+            NSLog("Hangar: save recent closed failed: %@", String(describing: error))
         }
     }
 }

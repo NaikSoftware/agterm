@@ -28,7 +28,7 @@ which launcher? I never set this up
 
 ## Requirements
 
-- hangar 0.13.0 or later. That is where `{AGT_PANE}` began reporting the pane a custom command fired from, which is how the notes get routed back into the right half of a split. Everything else it uses is older: `session overlay open --block` and `notify` shipped in 0.3.1, `session type --pane` in 0.7.0.
+- Hangar 0.13.0 or later. That is where `{AGT_PANE}` began reporting the pane a custom command fired from, which is how the notes get routed back into the right half of a split. Everything else it uses is older: `session overlay open --block` and `notify` shipped in 0.3.1, `session type --pane` in 0.7.0.
 - [revdiff](https://github.com/umputun/revdiff), on your `PATH`
 - Claude Code. The recipe reads Claude Code's own session transcripts, so no other agent will work without being ported.
 - `python3`, which macOS ships
@@ -108,9 +108,9 @@ Sections run oldest first, the order the exchange happened in, with the prompt a
 
 Two things cost an hour each:
 
-An overlay's command runs through `sh -c` with the app's **GUI** `PATH`, which has neither `/opt/homebrew/bin` nor `~/.local/bin`. A bare `revdiff` there exits 127 and the overlay flashes shut, so the script resolves it to an absolute path first. The same trap applies to the script itself, which hangar runs detached in a small-`PATH` `/bin/sh` with stdio on `/dev/null`. That is why it widens `PATH` at the top and logs to `/tmp/hangar-annotate.log` instead of printing.
+An overlay's command runs through `sh -c` with the app's **GUI** `PATH`, which has neither `/opt/homebrew/bin` nor `~/.local/bin`. A bare `revdiff` there exits 127 and the overlay flashes shut, so the script resolves it to an absolute path first. The same trap applies to the script itself, which Hangar runs detached in a small-`PATH` `/bin/sh` with stdio on `/dev/null`. That is why it widens `PATH` at the top and logs to `/tmp/hangar-annotate.log` instead of printing.
 
-`session overlay open --block` exits with the program's own status, so a non-zero code can equally mean hangar refused before revdiff ever ran. Reading only the code turns "overlay already open" into a meaningless "exited with 1", so the script reads the reply text as well.
+`session overlay open --block` exits with the program's own status, so a non-zero code can equally mean Hangar refused before revdiff ever ran. Reading only the code turns "overlay already open" into a meaningless "exited with 1", so the script reads the reply text as well.
 
 Putting the notes at the prompt needs `session paste`, because `session type` sends a real Return for every newline and multi-line text would submit itself line by line. `session paste` reads the system clipboard, so the script saves what is on it, pastes, and puts it back. The script calls it without `--pane`, so the paste targets the session's main pane, and a note taken in a split or scratch pane falls back to typing a one-line pointer at the notes file instead.
 
@@ -119,7 +119,7 @@ Putting the notes at the prompt needs `session paste`, because `session type` se
 - **It types into your session and sends.** The notes are injected at the prompt of the session you pressed the chord in and submitted for you, so the agent acts on them without you seeing them first. `HANGAR_ANNOTATE_SUBMIT=0` stops at the prompt instead.
 - **It uses the clipboard.** Pasting is the only way to land multi-line text at a prompt without submitting it. What was on the clipboard is saved and put back, but only if it was plain text — an image or rich content is lost. `HANGAR_ANNOTATE_INLINE=0` avoids the clipboard entirely.
 - **A promoted pane can open the wrong replies.** The record is keyed on the pane the agent's shell was started in, but the chord reports the pane it fires from now, and those diverge after a promote: closing the left half of a split promotes the right one, so a chord in the survivor can open the replies of the pane that closed. There is no `{AGT_PANE_ID}` keymap token to reconcile the two from a script.
-- **The hook writes to `~/.cache/hangar-annotate/` on every finished turn**, in every hangar pane, whether or not you ever press the chord. Each file holds that pane's last reply in full, and `last-notes.md` holds the last set of notes. Delete the directory to clear them; nothing prunes it.
+- **The hook writes to `~/.cache/hangar-annotate/` on every finished turn**, in every Hangar pane, whether or not you ever press the chord. Each file holds that pane's last reply in full, and `last-notes.md` holds the last set of notes. Delete the directory to clear them; nothing prunes it.
 - **It reads your Claude Code transcripts**, and copies the replies into a file under `TMPDIR`. Anything in an answer is in that file, in the clear.
 - Nothing under `${TMPDIR}/hangar-annotate/` is ever deleted. Old replies and notes stay until the system clears the directory.
 - Claude Code only. No other agent hands a hook the transcript path.

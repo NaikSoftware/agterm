@@ -115,7 +115,7 @@ int main(int argc, char **argv)
     // two instances on one state dir would each rewrite the whole file from memory and lose the other's sessions
     QLockFile lock(dir + QStringLiteral("/hangar.lock"));
     if (!lock.tryLock(0)) {
-        QMessageBox::warning(nullptr, QStringLiteral("hangar"), QStringLiteral("hangar is already running on %1").arg(dir));
+        QMessageBox::warning(nullptr, QStringLiteral("hangar"), QStringLiteral("Hangar is already running on %1").arg(dir));
         return 1;
     }
 

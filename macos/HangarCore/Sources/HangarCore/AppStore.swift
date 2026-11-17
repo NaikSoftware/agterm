@@ -949,7 +949,7 @@ public final class AppStore {
     }
 
     func log(_ message: @autoclosure () -> String) {
-        NSLog("hangar: %@", message())
+        NSLog("Hangar: %@", message())
     }
 
     // MARK: - Derivation

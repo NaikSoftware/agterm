@@ -451,10 +451,10 @@ struct LiveResetTests {
     }
 
     @Test(arguments: [
-        (sessions: 1, stale: 1, sentence: "1 live session will be reset. It runs under a helper from an earlier hangar version"),
-        (sessions: 3, stale: 3, sentence: "3 live sessions will be reset. They all run under a helper from an earlier hangar version"),
-        (sessions: 3, stale: 1, sentence: "3 live sessions will be reset. 1 of them runs under a helper from an earlier hangar version"),
-        (sessions: 3, stale: 2, sentence: "3 live sessions will be reset. 2 of them run under a helper from an earlier hangar version"),
+        (sessions: 1, stale: 1, sentence: "1 live session will be reset. It runs under a helper from an earlier Hangar version"),
+        (sessions: 3, stale: 3, sentence: "3 live sessions will be reset. They all run under a helper from an earlier Hangar version"),
+        (sessions: 3, stale: 1, sentence: "3 live sessions will be reset. 1 of them runs under a helper from an earlier Hangar version"),
+        (sessions: 3, stale: 2, sentence: "3 live sessions will be reset. 2 of them run under a helper from an earlier Hangar version"),
     ])
     func dialogTextNamesTheSessionsOnAnEarlierHelper(sessions: Int, stale: Int, sentence: String) {
         let text = LiveReset.dialogText(sessionCount: sessions, staleHostSessions: stale)
@@ -465,7 +465,7 @@ struct LiveResetTests {
     @Test func dialogTextNamesOutdatedAndStaleHostSessionsTogether() {
         let text = LiveReset.dialogText(sessionCount: 3, outdatedSessions: 1, staleHostSessions: 2)
         #expect(text.body.hasPrefix("3 live sessions will be reset. 1 of them predates the last Live sessions update and "
-            + "will be recreated on the current one. 2 of them run under a helper from an earlier hangar version or login "
+            + "will be recreated on the current one. 2 of them run under a helper from an earlier Hangar version or login "
             + "and will be moved to the current one. Hangar quits"))
     }
 

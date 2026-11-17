@@ -240,7 +240,7 @@
 - [x] run `lsappinfo list | grep -A4 hangar.debug` and clear leaked test processes
 
 ### Task 6: [Final] Update documentation
-- [x] `site/docs.html`: the setting, what it covers, the fallbacks, HUD links, that logins are hangar's own
+- [x] `site/docs.html`: the setting, what it covers, the fallbacks, HUD links, that logins are Hangar's own
 - [x] `site/commands.html`: `browser links`, `--browse`, `tree.linkOpenMode`, `htmlOverlays[].browse`
 - [x] `plugins/hangar/skills/hangar/SKILL.md` and `reference.md`: the command, the flag, both read-backs
 - [x] `.claude/rules/control-api.md`: `browser.links` in the public catalog and in the bridge sentence beside `browser.clear`; record that the setting has no event and pages no restore

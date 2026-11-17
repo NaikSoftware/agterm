@@ -8,7 +8,7 @@ final class ControlHtmlOverlayUITests: ControlAPITestCase {
         try await super.setUp()
         pageDir = FileManager.default.temporaryDirectory.appendingPathComponent("hangar-html-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: pageDir, withIntermediateDirectories: true)
-        try writePage("a.html", title: "hangar: enter your password",
+        try writePage("a.html", title: "Hangar: enter your password",
                       body: #"<p>hello artifact</p><a href="b.html">next page</a><input aria-label="field">"#)
         try writePage("b.html", title: "Artifact B", body: "<p>second page</p>")
     }
@@ -22,7 +22,7 @@ final class ControlHtmlOverlayUITests: ControlAPITestCase {
         let id = try activeSessionID()
         let open = try sendCommand(openRequest(id))
         XCTAssertEqual(open["ok"] as? Bool, true, "html open should succeed: \(open)")
-        XCTAssertTrue(pollPage(id: id) { $0["state"] as? String == "loaded" && $0["title"] as? String == "hangar: enter your password" },
+        XCTAssertTrue(pollPage(id: id) { $0["state"] as? String == "loaded" && $0["title"] as? String == "Hangar: enter your password" },
                       "the page should load and report its title")
         XCTAssertTrue(app.webViews.staticTexts["hello artifact"].waitForExistence(timeout: 10), "the page should render")
 
@@ -154,9 +154,9 @@ final class ControlHtmlOverlayUITests: ControlAPITestCase {
         let id = try activeSessionID()
         XCTAssertEqual(try sendCommand(openRequest(id))["ok"] as? Bool, true)
         XCTAssertTrue(app.webViews.staticTexts["hello artifact"].waitForExistence(timeout: 10))
-        XCTAssertTrue(pollPage(id: id) { $0["title"] as? String == "hangar: enter your password" })
+        XCTAssertTrue(pollPage(id: id) { $0["title"] as? String == "Hangar: enter your password" })
         XCTAssertEqual(app.staticTexts["htmlOverlay.identity"].value as? String, "a.html", "the page title never replaces the file name")
-        XCTAssertEqual(app.staticTexts["htmlOverlay.title"].value as? String, "hangar: enter your password",
+        XCTAssertEqual(app.staticTexts["htmlOverlay.title"].value as? String, "Hangar: enter your password",
                        "the page title shows as its own element beside the file name")
         XCTAssertFalse(app.buttons["htmlOverlay.back"].exists, "no navigation buttons without --navigation")
         app.buttons["htmlOverlay.close"].click()
@@ -170,7 +170,7 @@ final class ControlHtmlOverlayUITests: ControlAPITestCase {
                            timeout: 10), "the tree should report the toolbar")
         let link = app.webViews.links["next page"]
         XCTAssertTrue(link.waitForExistence(timeout: 10), "the link should render")
-        XCTAssertTrue(pollPage(id: id) { $0["title"] as? String == "hangar: enter your password" })
+        XCTAssertTrue(pollPage(id: id) { $0["title"] as? String == "Hangar: enter your password" })
         XCTAssertEqual(app.staticTexts["htmlOverlay.identity"].value as? String, "a.html", "the toolbar names the file, never the page title")
         link.click()
         XCTAssertTrue(pollPage(id: id) { ($0["page"] as? String)?.hasSuffix("/b.html") == true && $0["canGoBack"] as? Bool == true },

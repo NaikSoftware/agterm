@@ -18,7 +18,7 @@ It works with Claude Code and codex. In a split the dialog comes from the main p
 
 ## Requirements
 
-- hangar 0.39.0 or later, which shipped `session close --undoable`
+- Hangar 0.39.0 or later, which shipped `session close --undoable`
 - [session-context-nudge](../session-context-nudge/) installed, since it is what asks the agent to clear the line
 - Claude Code, codex, or both
 - `jq`

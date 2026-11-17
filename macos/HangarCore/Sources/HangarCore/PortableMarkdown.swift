@@ -54,7 +54,7 @@ extension SessionInfoMarkup {
     // a literal head keeps the line one inline paragraph, as Foundation's inline-only mode reads it: a
     // leading `#`, `>` or list marker stays text, and leading spaces are kept. It ends in a space so a source
     // opening with `_x_` is not intraword, where CommonMark refuses underscore emphasis.
-    private static let inlineHead = "hangar "
+    private static let inlineHead = "Hangar "
 
     static func portableSpans(_ source: String) throws(ParseError) -> [SessionInfoSpan] {
         // block parsing drops a trailing newline and turns `x\n---` into a heading, so a raw line break is

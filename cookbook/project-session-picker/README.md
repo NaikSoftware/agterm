@@ -1,22 +1,22 @@
 # Project session picker
 
-Use Television to jump to an hangar session or open a zoxide project folder, reusing a session already associated with that folder.
+Use Television to jump to a Hangar session or open a zoxide project folder, reusing a session already associated with that folder.
 
 Author: [@sysradium](https://github.com/sysradium), from [discussion #933](https://github.com/umputun/agterm/discussions/933)
 
 ## What it does
 
-A key opens Television in an hangar overlay. The list combines the current window's shell sessions with folders from `zoxide query -l`. Pick a session to focus it. Pick a folder to focus a session associated with that exact folder, or create a shell session there when none matches. A new session goes into a workspace named after the folder's basename; an existing workspace with that name is reused.
+A key opens Television in a Hangar overlay. The list combines the current window's shell sessions with folders from `zoxide query -l`. Pick a session to focus it. Pick a folder to focus a session associated with that exact folder, or create a shell session there when none matches. A new session goes into a workspace named after the folder's basename; an existing workspace with that name is reused.
 
 ## Requirements
 
-- hangar 0.39.0 or later. `tree` reports each session's `lastSelectedAt` and `content` from that release; the other commands the script uses predate it.
+- Hangar 0.39.0 or later. `tree` reports each session's `lastSelectedAt` and `content` from that release; the other commands the script uses predate it.
 - `zsh`, `jq`, [zoxide](https://github.com/ajeetdsouza/zoxide), and [Television](https://github.com/alexpasmantier/television) (`tv`).
 - zoxide must be initialized in your interactive shell and have folders in its database.
 
 ## Setup
 
-Copy the script to your hangar config directory and make it executable:
+Copy the script to your Hangar config directory and make it executable:
 
 ```sh
 mkdir -p ~/.config/hangar
@@ -38,15 +38,15 @@ Press ⌘K. Type to filter the combined list. Enter chooses a session or folder;
 
 ## How it works
 
-The custom command launches an overlay because Television needs a terminal. The overlay runs the script, and Television calls its `--list` mode to generate rows. Session rows hold hangar IDs. Folder rows hold base64-encoded paths so separators and spaces in paths do not alter the selected value.
+The custom command launches an overlay because Television needs a terminal. The overlay runs the script, and Television calls its `--list` mode to generate rows. Session rows hold Hangar IDs. Folder rows hold base64-encoded paths so separators and spaces in paths do not alter the selected value.
 
 For a selected folder, the script reads `tree --json` for the window where the key was pressed. Its state file maps session IDs to folders previously selected through this picker. A saved origin takes precedence over a session's current `cwd`; otherwise an unmapped session matches only when its current `cwd` equals the selected folder. Among matches, the most recently selected session wins. The state lives at `${XDG_STATE_HOME:-$HOME/.local/state}/hangar/project-session-picker.json`.
 
-The overlay starts with hangar's app environment, which may lack Homebrew's `PATH`; the script adds the standard Homebrew directories before calling `tv`, `zoxide`, and `jq`. It passes the overlay's socket to `hangarctl` when available. If the overlay flashes and closes, a tool is likely missing and its error closed with the overlay; run the script from a shell, passing a window ID from `hangarctl tree --json`, to see it.
+The overlay starts with Hangar's app environment, which may lack Homebrew's `PATH`; the script adds the standard Homebrew directories before calling `tv`, `zoxide`, and `jq`. It passes the overlay's socket to `hangarctl` when available. If the overlay flashes and closes, a tool is likely missing and its error closed with the overlay; run the script from a shell, passing a window ID from `hangarctl tree --json`, to see it.
 
 ## Limits
 
-Only sessions in the window where you pressed the key appear or match. The recipe does not search other hangar windows.
+Only sessions in the window where you pressed the key appear or match. The recipe does not search other Hangar windows.
 
 An existing session has no recorded launch folder until you select its folder through this picker. Before that, its *current* working directory is the fallback; after you `cd` elsewhere, the script cannot infer where it started. A folder under another folder is not a match: folder paths are compared exactly, not by prefix. If several sessions match, one is selected by recency; the picker does not ask which one.
 

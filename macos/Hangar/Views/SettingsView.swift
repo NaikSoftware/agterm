@@ -136,7 +136,7 @@ private struct GeneralSettingsView: View {
                     }
                 }
                 .accessibilityIdentifier("settings-restore-mode")
-                SettingHint("Changes apply after restarting hangar.")
+                SettingHint("Changes apply after restarting Hangar.")
                     .accessibilityIdentifier("settings-restore-restart-hint")
                 if model.settings.effectiveRestoreMode == .live,
                    let reason = GhosttyApp.shared.liveRestoreUnavailableReason {
@@ -674,7 +674,7 @@ private struct KeyMappingSettingsView: View {
     var body: some View {
         Form {
             Section("Keyboard Layout") {
-                Picker("Lock in hangar", selection: terminalInputSource) {
+                Picker("Lock in Hangar", selection: terminalInputSource) {
                     Text("Off").tag(String?.none)
                     ForEach(inputSources, id: \.id) { source in
                         Text(source.name).tag(String?.some(source.id))

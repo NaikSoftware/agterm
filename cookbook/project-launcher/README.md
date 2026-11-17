@@ -6,7 +6,7 @@ Author: [@x9x9x9x9x9x91](https://github.com/x9x9x9x9x9x91)
 
 ## What it does
 
-Press the key and the picker hangar draws for its own palettes opens over the current window, listing your projects: every direct subdirectory of the roots you name. Type a few letters, press Return, and a new session opens in that project's directory, inside a workspace named after the project. The workspace is created if the sidebar does not have it yet and reused if it does, so pressing the key twice for the same project stacks a second session into the same workspace rather than making a second workspace.
+Press the key and the picker Hangar draws for its own palettes opens over the current window, listing your projects: every direct subdirectory of the roots you name. Type a few letters, press Return, and a new session opens in that project's directory, inside a workspace named after the project. The workspace is created if the sidebar does not have it yet and reused if it does, so pressing the key twice for the same project stacks a second session into the same workspace rather than making a second workspace.
 
 It closes the gap between "I am somewhere" and "I want a shell in that project". The built-in ⌘N opens a session where you already are, and reaching a different project through the sidebar means finding its workspace first — or creating one, naming it, and setting the directory by hand when it is a project you have not opened this week. Here the starting point does not matter: any session, any workspace, one key, no typing beyond the filter.
 
@@ -18,7 +18,7 @@ With that command set, the same picker line can carry the work itself: keep typi
 
 ## Requirements
 
-- hangar 0.19.0 or later. The floor comes from `hangarctl pick`, which shipped in 0.19.0: it reads choices on stdin, shows them in the native fuzzy picker, and prints the chosen one back as JSON — including, with `--allow-custom`, a line of free text that matches no row, which is what the prompt flow rides on. Everything else the script calls — `session new` with `--workspace-name`, `--create-workspace`, `--cwd`, `--command`, `--window`, and `notify` — is older than that.
+- Hangar 0.19.0 or later. The floor comes from `hangarctl pick`, which shipped in 0.19.0: it reads choices on stdin, shows them in the native fuzzy picker, and prints the chosen one back as JSON — including, with `--allow-custom`, a line of free text that matches no row, which is what the prompt flow rides on. Everything else the script calls — `session new` with `--workspace-name`, `--create-workspace`, `--cwd`, `--command`, `--window`, and `notify` — is older than that.
 - `jq`, to build the picker's items.
 - `/bin/sh`. The script is POSIX shell and does not need a particular one.
 
@@ -38,7 +38,7 @@ Add an entry to `~/.config/hangar/keymap.conf`:
 command "Launch Project" cmd+shift+g zsh -lc "$HOME/bin/project-launcher.sh"
 ```
 
-Apply it with File ▸ Reload Keymap or `hangarctl keymap reload`. ⌘⇧G is free in hangar's shipped defaults, so nothing is shadowed by taking it; any chord with a modifier works, and leaving the chord out makes the entry palette-only.
+Apply it with File ▸ Reload Keymap or `hangarctl keymap reload`. ⌘⇧G is free in Hangar's shipped defaults, so nothing is shadowed by taking it; any chord with a modifier works, and leaving the chord out makes the entry palette-only.
 
 `zsh -lc` is there for `PATH`. A custom command inherits the app's environment, which is the launchd default and has no `/opt/homebrew/bin` in it, so a bare `jq` inside the script fails. A login shell sources your profile first and gives the script the `PATH` you normally have.
 

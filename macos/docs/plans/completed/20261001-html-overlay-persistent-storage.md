@@ -4,7 +4,7 @@
 - A URL overlay keeps its cookies, `localStorage` and IndexedDB only in memory: every page gets its own
   `WKWebsiteDataStore.nonPersistent()`, so a login or cookie-saved app state is gone on every close.
 - `hangarctl session overlay open --url URL --persistent` opens the page on one persistent store shared by
-  all persistent pages of this hangar state directory. A login made there is still there on the next open
+  all persistent pages of this Hangar state directory. A login made there is still there on the next open
   and after an app relaunch.
 - The default is unchanged: without the flag a page is isolated and in memory. File pages (`--html`) are
   always in memory.

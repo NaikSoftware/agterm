@@ -6,14 +6,14 @@ The restore-running-command feature re-runs each pane's captured foreground argv
 launch. That is correct for idempotent commands (`claude --resume <uuid>` reattaches the same session every
 time) and wrong for non-idempotent ones:
 
-- `claude --resume <uuid> --fork-session` mints a **new** claude session on every hangar restart. The session
+- `claude --resume <uuid> --fork-session` mints a **new** claude session on every Hangar restart. The session
   the user was actually working in is never resumed, and near-identical transcripts accumulate (discussion
   #264 reports 6 same-titled sessions, 3 created in the same second — the restart moment).
 - `claude -r` / bare `claude --resume` capture no session id at all, so restore lands in the interactive
   picker rather than the session that was open.
 
-hangar cannot know which commands are idempotent, but it is the only layer where the user — or tooling
-acting for the user — can fix it. Capture and restore both live entirely inside hangar (foreground argv read
+Hangar cannot know which commands are idempotent, but it is the only layer where the user — or tooling
+acting for the user — can fix it. Capture and restore both live entirely inside Hangar (foreground argv read
 at quit via `sysctl`, re-run on next launch through `initial_input`), so no external process can rewrite the
 seam.
 
@@ -34,7 +34,7 @@ Benefits:
 Explicitly **out of scope**:
 
 - Settings-level pattern skip/rewrite rules (idea 2 in the discussion). Rewriting other tools' argv is a
-  rules engine hangar should not own, and the skip half already exists as `restore-denylist.conf`.
+  rules engine Hangar should not own, and the skip half already exists as `restore-denylist.conf`.
 - Shipping a bundled Claude Code `SessionStart` hook. `AgentHooksInstaller` already merges four Claude Code
   hooks, so adding a fifth is possible — but the correct invocation is user- and workflow-specific (which
   claude flags, which pane, whether to pin at all), and guessing it wrong pins the wrong command on every
@@ -169,7 +169,7 @@ ln -s <main>/Hangar/Resources/terminfo <wt>/Hangar/Resources/terminfo
 - **unit tests** (`cd HangarCore && swift test`): required for every task. The bulk of this feature is
   host-free and belongs here — precedence table, dispatcher validation, protocol round-trips, store
   mutations, snapshot round-trips, `controlTree` population.
-- **e2e tests** (XCUITest, `HangarUITests/`): hangar has no browser e2e; the equivalent is XCUITest driving
+- **e2e tests** (XCUITest, `HangarUITests/`): Hangar has no browser e2e; the equivalent is XCUITest driving
   the real app over the control socket. Required here because the payoff — a command actually re-running
   after a relaunch — is only observable end to end.
   - `RestoreCommandUITests.swift` already has the harness: an isolated `HANGAR_STATE_DIR`, a ⌘Q quit so
@@ -974,7 +974,7 @@ and `.rebuildDropsAHiddenSplitsOverrideOnEveryPath` (host-free) and by the e2e
 **Manual verification:**
 
 - Drive a full round with a real Claude Code `SessionStart` hook: confirm the override tracks the live fork
-  child across several hangar restarts, and that no duplicate claude sessions accumulate — the actual
+  child across several Hangar restarts, and that no duplicate claude sessions accumulate — the actual
   complaint in discussion #264.
 - Verify a hook writing on every session start does not produce noticeable overhead (one socket round-trip
   per start).

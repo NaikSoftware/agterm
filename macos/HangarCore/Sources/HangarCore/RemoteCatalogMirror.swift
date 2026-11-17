@@ -122,9 +122,9 @@ public final class RemoteCatalogMirror {
 
     static func versionRefusal(host: String, versions: CatalogVersions?, mac: CatalogVersions? = nil,
                                app: AppIdentity?) -> String? {
-        let build = app.map { "hangar \($0.version)" } ?? "an hangar"
+        let build = app.map { "Hangar \($0.version)" } ?? "a Hangar"
         guard let versions = versions ?? mac else {
-            return "\(host) runs \(build), which cannot serve a remote window; update hangar there or run hangar-server"
+            return "\(host) runs \(build), which cannot serve a remote window; update Hangar there or run hangar-server"
         }
         guard versions.catalog >= 1, versions.catalog <= CatalogCodec.version else {
             return "\(host) speaks catalog \(versions.catalog), this Mac speaks catalog \(CatalogCodec.version)"

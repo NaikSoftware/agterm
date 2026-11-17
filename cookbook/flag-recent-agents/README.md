@@ -14,7 +14,7 @@ It pairs with the [flagged-dashboard](../flagged-dashboard/) recipe: press this 
 
 ## Requirements
 
-- hangar 0.38.0 or later. That release added the checkbox form to `hangarctl ask` (`--choice`, `--multiple`, `--checked`). The recency rule also relies on 0.31.0, which stamps `statusChangedAt` on every accepted status write, idle included.
+- Hangar 0.38.0 or later. That release added the checkbox form to `hangarctl ask` (`--choice`, `--multiple`, `--checked`). The recency rule also relies on 0.31.0, which stamps `statusChangedAt` on every accepted status write, idle included.
 - `jq`
 
 ## Setup
@@ -37,7 +37,7 @@ Apply the file with File ▸ Reload Keymap or `hangarctl keymap reload`. Any fre
 
 This is a keymap or palette command, not a shell command: the custom-command runner supplies `AGT_SOCKET` and `AGT_WINDOW_ID`, and the script refuses to run without the socket.
 
-Custom commands do not load your shell profile. hangar prepends its bundled CLI directory and adds `/usr/local/bin` and `/opt/homebrew/bin` to `PATH`. Override these variables in the keymap line when needed:
+Custom commands do not load your shell profile. Hangar prepends its bundled CLI directory and adds `/usr/local/bin` and `/opt/homebrew/bin` to `PATH`. Override these variables in the keymap line when needed:
 
 - `FLAG_RECENT_MINUTES`: how far back a status write counts. Default `30`.
 - `JQ`: path to `jq`. Default `jq`.
@@ -67,7 +67,7 @@ The set is a snapshot. A session that starts working after the run is not added,
 
 Any accepted status write counts, a cleared or idle one included, so the rule is status recency rather than proof that an agent did work.
 
-Status and its timestamp are not saved. After hangar restarts every local session starts with no status and no stamp, so nothing matches until agents report again.
+Status and its timestamp are not saved. After Hangar restarts every local session starts with no status and no stamp, so nothing matches until agents report again.
 
 The dialog holds at most 50 rows. More recent sessions than that and `ask` refuses before any flag changes, which `--error-hud` shows.
 

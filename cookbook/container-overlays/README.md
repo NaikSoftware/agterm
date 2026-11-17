@@ -1,12 +1,12 @@
 # Container overlays
 
-Open hangar overlays — terminal programs, HTML pages and URLs — from inside a docker container, with the program running in the container and files opened by their Mac paths.
+Open Hangar overlays — terminal programs, HTML pages and URLs — from inside a docker container, with the program running in the container and files opened by their Mac paths.
 
 Author: [@Rulexec](https://github.com/Rulexec)
 
 ## What it does
 
-An hangar session whose shell runs `docker exec` into a container can manage sessions and set statuses from inside, but `hangarctl session overlay open` fails there: hangar executes the overlay COMMAND on the Mac, reads `--html` files from the Mac's filesystem, and for `--url` pages `localhost` means the Mac. This recipe installs an `hangarctl` wrapper inside the container that rewrites exactly the overlay calls, so from inside the container:
+A Hangar session whose shell runs `docker exec` into a container can manage sessions and set statuses from inside, but `hangarctl session overlay open` fails there: Hangar executes the overlay COMMAND on the Mac, reads `--html` files from the Mac's filesystem, and for `--url` pages `localhost` means the Mac. This recipe installs an `hangarctl` wrapper inside the container that rewrites exactly the overlay calls, so from inside the container:
 
 - `hangarctl session overlay open -- htop` runs htop **in the container** (the Mac-side overlay terminal runs `docker exec` back into it), in the caller's working directory, with `--block` returning the program's real exit code.
 - `hangarctl session overlay open --html FILE` opens the page. FILE under a bind mount is opened by its Mac path; a file anywhere else is copied into a bind-mounted staging directory (with its sibling assets) and the copy is opened. A read-access grant is always synthesized so relative assets load.
@@ -15,7 +15,7 @@ An hangar session whose shell runs `docker exec` into a container can manage ses
 
 ## Requirements
 
-- hangar 0.39.0 or later, which carries the `session overlay open` flag surface the wrapper's parser knows (`--companion`, its newest flag, shipped in it).
+- Hangar 0.39.0 or later, which carries the `session overlay open` flag surface the wrapper's parser knows (`--companion`, its newest flag, shipped in it).
 - docker, with `host.docker.internal` resolving to the Mac from inside containers (docker desktop setups do this; otherwise add `--add-host host.docker.internal:host-gateway`).
 - Python 3.8 or later, standard library only, in the container and on the Mac.
 - In the container image: `sh`, `printf` and `base64` (busybox counts).
@@ -39,11 +39,11 @@ Run the receiver whenever you want container-side `hangarctl` to work — it is 
 ~/bin/hangarctl-receiver.py --port 59998 &
 ```
 
-It binds `127.0.0.1` only, so nothing outside this Mac (plus its containers, via `host.docker.internal`) can reach it. It is a plain background job here; wrap it in a LaunchAgent if you want it to survive logout. The receiver's environment decides which hangar its calls drive: started from your account shell it drives your default instance; start it with a different `HANGAR_STATE_DIR` in its environment to drive another one — a request cannot retarget it (Limits). `--hangarctl` (or `HANGARCTL` in its environment) points it at a specific binary, resolved before `HANGARCTL` before PATH.
+It binds `127.0.0.1` only, so nothing outside this Mac (plus its containers, via `host.docker.internal`) can reach it. It is a plain background job here; wrap it in a LaunchAgent if you want it to survive logout. The receiver's environment decides which Hangar its calls drive: started from your account shell it drives your default instance; start it with a different `HANGAR_STATE_DIR` in its environment to drive another one — a request cannot retarget it (Limits). `--hangarctl` (or `HANGARCTL` in its environment) points it at a specific binary, resolved before `HANGARCTL` before PATH.
 
 Update the container wrapper and the receiver together — rebuild the image's `hangarctl` when you update the receiver: an older wrapper's raw overlay COMMAND is refused with a message saying so.
 
-Check where your docker CLI lives — the overlay terminal is spawned by the hangar app, which inherits the app's launch-environment PATH, not your shell's:
+Check where your docker CLI lives — the overlay terminal is spawned by the Hangar app, which inherits the app's launch-environment PATH, not your shell's:
 
 ```sh
 command -v docker   # must print /usr/local/bin/docker; if not, see below
@@ -57,7 +57,7 @@ COPY agt-ovl-expose.sh /usr/local/bin/agt-ovl-expose
 RUN chmod +x /usr/local/bin/hangarctl /usr/local/bin/agt-ovl-expose
 ```
 
-Optional, for full-color TUI programs: from an hangar pane run `infocmp -x xterm-ghostty > xterm-ghostty.terminfo` once, then add to the image (if `tic` is missing, install ncurses or skip this):
+Optional, for full-color TUI programs: from a Hangar pane run `infocmp -x xterm-ghostty > xterm-ghostty.terminfo` once, then add to the image (if `tic` is missing, install ncurses or skip this):
 
 ```dockerfile
 COPY xterm-ghostty.terminfo /tmp/
@@ -66,7 +66,7 @@ RUN tic -x -o /usr/share/terminfo /tmp/xterm-ghostty.terminfo
 
 ### Running the container
 
-Start it from an hangar shell so the session's `HANGAR_*` identity enters the container. The `-v` host path must be one your docker setup shares with the Mac — under your home directory that works everywhere:
+Start it from a Hangar shell so the session's `HANGAR_*` identity enters the container. The `-v` host path must be one your docker setup shares with the Mac — under your home directory that works everywhere:
 
 ```sh
 docker run -d --name dev --hostname dev \
@@ -112,28 +112,28 @@ python3 -m http.server 3004 &
 hangarctl session overlay open --url http://localhost:3004/
 ```
 
-Overlays open on the session that started the container (the wrapper injects `--target` from `HANGAR_SESSION_ID`); every other flag, size included, reaches hangar exactly as you passed it.
+Overlays open on the session that started the container (the wrapper injects `--target` from `HANGAR_SESSION_ID`); every other flag, size included, reaches Hangar exactly as you passed it.
 
 ## How it works
 
 The wrapper replaces `hangarctl` inside the container and rewrites only `session overlay open` and `session overlay reload`; everything else is forwarded to the receiver on the Mac, which runs the real `hangarctl` and streams back stdout, stderr and the exit code over one connection per call. The receiver only ever starts its one resolved `hangarctl` binary: it refuses `--socket` in any request, and refuses a raw COMMAND on `session overlay open` (the container wrapper never sends one).
 
 - **COMMAND** never crosses as text. The wrapper sends a structured exec request — the container name, the base64 of `cd '<cwd>' && <COMMAND>` (your `--cwd` when given, else the caller's cwd) and the open flags — and the receiver builds the one shell line it is willing to pass: `docker exec -it -e TERM=xterm-ghostty -e COLORTERM=truecolor -e HANGAR_* … dev sh -c "$(printf %s <base64> | base64 -d)"`, from its own template. The base64 armor keeps the double shell evaluation (Mac `/bin/sh` evals the overlay command, container `sh` evals the payload) from ever mangling it. The explicit `-e` forwards matter because a shell inside the exec does not inherit what the caller's shell exported after the container started. The docker path is absolute because the app, not your shell, spawns this line.
-- **`--html`** is translated through the bind map (longest matching mount prefix). A `--cwd` grant is always passed: without one, hangar loads the page via `loadHTMLString` at about:blank with **zero** file access, so relative assets silently vanish. Files not under any bind are staged: the file's parent tree is copied (capped at 200 files / 20 MiB, then file-only) into `/hangar-bridge/pages/<id>/`, and the copy's Mac path is opened. `overlay reload` re-copies every live staged entry before passing through — that is what makes the edit/reload loop above work.
+- **`--html`** is translated through the bind map (longest matching mount prefix). A `--cwd` grant is always passed: without one, Hangar loads the page via `loadHTMLString` at about:blank with **zero** file access, so relative assets silently vanish. Files not under any bind are staged: the file's parent tree is copied (capped at 200 files / 20 MiB, then file-only) into `/hangar-bridge/pages/<id>/`, and the copy's Mac path is opened. `overlay reload` re-copies every live staged entry before passing through — that is what makes the edit/reload loop above work.
 - **`--url`**: loopback URLs (`localhost`, `127.0.0.1`, `::1`, and names the container's `/etc/hosts` maps to 127.0.0.1) are rewritten through the expose command. With docker, publishing already happened at `-p`, so the default `agt-ovl-expose` is an identity that echoes the expected reply line; a two-column `/hangar-bridge/port-map.txt` (container port, host port) translates ports published under a different number. Set `AGT_OVL_EXPOSE=""` in the container to pass every `--url` through unrewritten instead.
-- The parser knows hangar 0.39.0's closed flag list and reads flags before and after COMMAND, as the host CLI does. An unparsable call carrying `--html`/`--url` passes through unrewritten — the host may know a newer flag; any other unparsable open is refused on the spot, because sent as-is it would run its COMMAND on the Mac.
-- Two hangar behaviors the wrapper compensates for: `--target` defaults to the *active* session (an overlay from a container would land on whatever terminal is focused), and a session's overlay slot holds one overlay, program or page — a second open of either kind fails with `overlay already open`; close the first. `--block` on COMMAND and page opens is one long-held call, not polling — the receiver never times a subprocess, and when the container side of a held call goes away the receiver terminates and reaps its `hangarctl` (the overlay itself belongs to the app and keeps running).
+- The parser knows Hangar 0.39.0's closed flag list and reads flags before and after COMMAND, as the host CLI does. An unparsable call carrying `--html`/`--url` passes through unrewritten — the host may know a newer flag; any other unparsable open is refused on the spot, because sent as-is it would run its COMMAND on the Mac.
+- Two Hangar behaviors the wrapper compensates for: `--target` defaults to the *active* session (an overlay from a container would land on whatever terminal is focused), and a session's overlay slot holds one overlay, program or page — a second open of either kind fails with `overlay already open`; close the first. `--block` on COMMAND and page opens is one long-held call, not polling — the receiver never times a subprocess, and when the container side of a held call goes away the receiver terminates and reaps its `hangarctl` (the overlay itself belongs to the app and keeps running).
 
 ## Limits
 
 **Anyone who reaches the receiver — every local process, and every container on this machine through `host.docker.internal` — drives your terminal as you: it still accepts `session new --command`, typing into your shells, closing sessions, rearranging windows.** It binds 127.0.0.1, which keeps other machines out but no one else on this Mac. Run it only on a single-user machine you control, and stop it when you are done.
 
-What it will not do, even if asked: it never starts anything but its one resolved `hangarctl` binary; it refuses `--socket` in any request, so a caller cannot retarget it at another hangar instance — the receiver's own environment decides which one it drives; and it refuses a raw COMMAND on `session overlay open`, so no caller-written overlay COMMAND reaches the Mac's shell — an overlay COMMAND crosses only as the structured exec request above.
+What it will not do, even if asked: it never starts anything but its one resolved `hangarctl` binary; it refuses `--socket` in any request, so a caller cannot retarget it at another Hangar instance — the receiver's own environment decides which one it drives; and it refuses a raw COMMAND on `session overlay open`, so no caller-written overlay COMMAND reaches the Mac's shell — an overlay COMMAND crosses only as the structured exec request above.
 
 - Staged pages are snapshots: edits show up only through `overlay reload`, and Show in Finder / open in browser reveal the staged copy, not the source file. A staged page nobody reloads for over 24 h can be deleted by the next staged open, and its manifest entry goes with it, so a later `overlay reload` cannot restore it — `overlay reload` refreshes the age.
 - Closing the container side of a `--block` call stops the waiting call, not the overlay: the overlay program belongs to the app and keeps running.
 - Stdin does not cross: `printf 'a\nb\n' | hangarctl pick` inside the container never reaches the pick — the receiver's child reads EOF immediately.
-- `--url` pages never get hangar's in-page command bridge (`data-hangar` buttons); interactive pages must go the `--html` route.
+- `--url` pages never get Hangar's in-page command bridge (`data-hangar` buttons); interactive pages must go the `--html` route.
 - URL pages send `Host: 127.0.0.1:<port>`; dev servers with strict host checks (Django's `ALLOWED_HOSTS`, some Vite configs) must allowlist loopback.
 - Without the terminfo entry in the image, full-screen TUI programs fall back to degraded colors or fail; the receiver template's alternative is `TERM=xterm-256color`.
 - Paths in non-overlay calls reach hangarctl unchanged and resolve on the Mac — pass Mac paths there. The one translated exception is `overlay open --html`, whose file (and `--cwd` beside it) the wrapper absolutizes against the container cwd and maps through the bind map.

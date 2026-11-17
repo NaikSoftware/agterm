@@ -120,11 +120,11 @@ struct SocketClient {
     /// lock narrows, and only to an owner being there: `ControlServer.start` keeps the lock after a failed
     /// bind, so a held lock never says how the socket came to be unreachable.
     private static func hint(forConnect failure: Int32, path: String) -> String {
-        guard failure == ECONNREFUSED || failure == ENOENT else { return "is hangar running?" }
+        guard failure == ECONNREFUSED || failure == ENOENT else { return "is Hangar running?" }
         if ownershipLockHeld(socketPath: path) == true {
             return "the socket owner is present but not accepting connections"
         }
-        return "hangar may be stopped or unable to accept connections"
+        return "Hangar may be stopped or unable to accept connections"
     }
 
     /// Whether a process holds the server's ownership lock on `<socketPath>.lock`, nil when that cannot be
@@ -398,7 +398,7 @@ struct SocketClient {
     static func formatRestoreStatus(_ status: ControlRestoreStatus) -> String {
         var lines = ["configured: \(status.configured) (next launch)",
                      "this launch: requested \(status.requestedAtLaunch), active \(status.active)"]
-        if status.restartRequired { lines.append("restart hangar to apply the configured mode") }
+        if status.restartRequired { lines.append("restart Hangar to apply the configured mode") }
         if let reason = status.unavailableReason { lines.append("live unavailable: \(reason)") }
         return lines.joined(separator: "\n")
     }

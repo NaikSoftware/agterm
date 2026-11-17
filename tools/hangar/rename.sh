@@ -65,6 +65,9 @@ my @pre = (
     ['Contents/MacOS/agterm -> Hangar', qr{Contents/MacOS/\Kagterm(?![\w.-])}, 'Hangar'],
     ['agterm.xcodeproj -> Hangar.xcodeproj', qr{(?<![\w.-])agterm(?=\.xcodeproj)}, 'Hangar'],
     ['import agterm -> import Hangar', qr{\bimport agterm(?!\w)}, 'import Hangar'],
+    ['agterm.debug.dylib -> Hangar.debug.dylib', qr{(?<![\w.-])agterm(?=\.debug\.dylib)}, 'Hangar'],
+    ['process name (open -a, pgrep -x, pkill, killall) -> Hangar',
+        qr{(?:open -n?a|pgrep -x|pkill|killall) \Kagterm(?![\w.-])}, 'Hangar'],
     ['-scheme agterm -> -scheme Hangar', qr{-scheme \Kagterm(?![\w.-])}, 'Hangar'],
     ['bundleIdPrefix com.umputun -> ua.naiksoftware', qr{bundleIdPrefix: \Kcom\.umputun\b}, 'ua.naiksoftware', 'macos/project.yml'],
     ['test bundle ids com.umputun.* -> ua.naiksoftware.*', qr{\bcom\.umputun\.(?=(?:hosttest|clienttest|fishseam|seamtest)\.)}, 'ua.naiksoftware.'],
@@ -126,19 +129,93 @@ for my $old (@moves) {
     system('git', 'mv', $old, $new) == 0 or die "git mv $old $new failed\n";
 }
 
-# Phase B: contents of text files (git grep -I drops binaries).
+# Product-name casing runs after the tokens: a lowercase hangar that names the product in prose or UI text
+# becomes Hangar. Identifiers, paths, commands and code spans keep it lowercase.
+# Not before " --" (a command). After a quote only when a sentence follows: "hangar would like…", not 'hangar'.
+my $product = qr/(?<![\w.\/~\$\@:#%{\\='"-])hangar(?![\w\/\@=-]|\.\w|:\/\/| --)|(?<=['"])hangar(?= [a-z])/;
+# In code a name followed by a number is test data ("hangar 42"), not a version line.
+my $product_code = qr/(?:$product)(?! \d)/;
+sub case_scope {
+    my $p = shift;
+    return '' if $p =~ m{(?:^|/)(?:CMakeLists|robots)\.txt$};
+    return 'prose' if $p =~ /\.(?:md|html|txt)$/;
+    return 'code' if $p =~ /\.(?:swift|cpp|h|dart|qml)$/;
+    return 'plist' if $p =~ /\.plist$/;
+    return 'desktop' if $p =~ /\.desktop(?:\.in)?$/;
+    return '';
+}
+sub masked {
+    my ($s, $mask, $f) = @_;
+    my @m;
+    $s =~ s/$mask/push @m, $&; "\x01$#m\x01"/ge;
+    $s = $f->($s);
+    $s =~ s/\x01(\d+)\x01/$m[$1]/g;
+    return $s;
+}
+sub product_case {
+    my ($s, $re) = @_;
+    $re //= $product;
+    bump('product name hangar -> Hangar', scalar($s =~ s/$re/Hangar/g));
+    $s =~ s/\b([Aa])n Hangar\b/$1 Hangar/g;
+    return $s;
+}
+# Only literals that read as a sentence (they hold a space), outside interpolations. A `# >>> … >>>` marker
+# is matched in users' rc files, so it keeps its exact text.
+sub case_literals {
+    return $_[0] =~ s{"((?:[^"\\]|\\.)*)"}{
+        my $body = $1;
+        '"' . ($body =~ / / && $body !~ />>>|<<<|name: hangar/ ? masked($body, qr{\\\([^)]*\)}, sub { product_case($_[0], $product_code) }) : $body) . '"'
+    }ger;
+}
+sub case_file {
+    my ($path, $lines) = @_;
+    my $scope = case_scope($path) or return;
+    my ($front, $fence, $block, $multi) = (0, 0, 0, 0);
+    for my $i (0 .. $#$lines) {
+        my $l = $lines->[$i];
+        if ($scope eq 'prose') {
+            if ($i == 0 && $l =~ /^---\s*$/) { $front = 1; next }
+            # Front matter: only the description and its indented continuation lines are prose.
+            if ($front) { $front = 0 if $l =~ /^---\s*$/; next unless $l =~ /^(?:description:|\s+\S)/ }
+            if ($l =~ /^\s*(?:```|~~~)/) { $fence = !$fence; next }
+            next if $fence;
+            if ($l =~ /<(?:pre|script|style)\b/i) { $block = 1 }
+            if ($block) { $block = 0 if $l =~ m{</(?:pre|script|style)>}i; next }
+            next unless $l =~ /hangar/;
+            $l =~ s{\b((?:content|alt|title|aria-label)=")([^"]*)"}{my ($k, $v) = ($1, $2); $k . ($v =~ / / ? product_case($v) : $v) . '"'}ge;
+            $l = masked($l, qr{`[^`]*`|<code\b.*?</code>|<kbd\b.*?</kbd>|<[^>]*>|\]\([^)]*\)}, \&product_case);
+        } elsif ($scope eq 'code') {
+            # Multi-line and raw literals carry embedded scripts; comments are not UI text.
+            my $toggles = () = $l =~ /"""/g;
+            if ($multi || $toggles) { $multi = !$multi if $toggles % 2; next }
+            next if $l =~ m{^\s*(?://|/\*|\*|#)} || $l =~ /#"/ || $l !~ /hangar/;
+            $l = case_literals($l);
+        } elsif ($scope eq 'plist') {
+            $l =~ s{<string>([^<]* [^<]*)</string>}{'<string>' . product_case($1) . '</string>'}ge;
+        } elsif ($l =~ /^((?:Name|GenericName|Comment)(?:\[[^\]]*\])?=)(.*)/s) {
+            my ($k, $v) = ($1, $2);
+            $l = $k . product_case($v);
+        }
+        $lines->[$i] = $l;
+    }
+}
+
+# Phase B: contents of text files (git grep -I drops binaries). Files already renamed still get the casing pass.
 my $changed = 0;
-for my $f (git_list('grep -z -I -l -i agterm')) {
+my %seen;
+for my $f (grep { !$seen{$_}++ } git_list('grep -z -I -l -i agterm'), grep { case_scope($_) } git_list('grep -z -I -l -w hangar')) {
     next if skipped($f);
     my @lines = applicable($f, 'line');
     my @keeps = applicable($f, 'keep');
     open my $in, '<:raw', $f or die "$f: $!\n";
     my $text = do { local $/; <$in> };
     close $in;
-    my $out = join '', map {
+    my @out = map {
         my $l = $_;
         (grep { $l =~ $_->{re} } @lines) ? $l : rename_line($l, $f, \@keeps)
     } split /(?<=\n)/, $text;
+    case_file($f, \@out);
+    my $out = join '', @out;
     next if $out eq $text;
     $changed++;
     next if $dry;
@@ -147,7 +224,7 @@ for my $f (git_list('grep -z -I -l -i agterm')) {
     close $o or die "$f: $!\n";
 }
 print "== content matches per rule, in order\n";
-printf "  %6d  %s\n", $count{$_} // 0, $_ for (map { $_->[0] } @pre), map { "$_->[0] -> $_->[1]" } @tokens;
+printf "  %6d  %s\n", $count{$_} // 0, $_ for (map { $_->[0] } @pre), (map { "$_->[0] -> $_->[1]" } @tokens), 'product name hangar -> Hangar';
 print "== files ", ($dry ? 'to change' : 'changed'), ": $changed\n";
 
 if (!$dry) {

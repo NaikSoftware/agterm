@@ -57,7 +57,7 @@ public enum RemoteTreeMerger {
             case .malformedProjection:
                 return "the remote did not return a readable session list"
             case .missingEndpoint:
-                return "the remote hangar is too old to report its zmx endpoint"
+                return "the remote Hangar is too old to report its zmx endpoint"
             case let .remoteFailed(reason):
                 return reason
             }

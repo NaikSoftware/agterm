@@ -14,7 +14,7 @@ Three more entries run a TUI in a 95% floating overlay over the current session:
 
 ## Requirements
 
-- hangar 0.10.0 or later. The four entries themselves work from 0.8.0, where floating overlays settled into their current behavior: an overlay opens on its target session in the background, and switches to it only with `--follow`. The `splitFocused` read-back described below arrived in 0.10.0.
+- Hangar 0.10.0 or later. The four entries themselves work from 0.8.0, where floating overlays settled into their current behavior: an overlay opens on its target session in the background, and switches to it only with `--follow`. The `splitFocused` read-back described below arrived in 0.10.0.
 - `jq`, for the `Smart Split` entry
 - whichever TUIs you want to bind: `lazygit`, `yazi`, `mc`
 
@@ -41,7 +41,7 @@ These lines call `hangarctl` and `jq` by bare name, which is the exception to th
 
 Press the leader, release, then the second key. Custom commands also show up in the ⌃⇧P action palette marked `custom`, so you can run any of them by name without the chord.
 
-`Smart Split` is a toggle, so each press flips the state and two presses put you back where you started, once the first has finished. Holding the key does not repeat it: hangar ignores key repeats for custom commands, so a held key fires exactly once and leaves you in the opposite state.
+`Smart Split` is a toggle, so each press flips the state and two presses put you back where you started, once the first has finished. Holding the key does not repeat it: Hangar ignores key repeats for custom commands, so a held key fires exactly once and leaves you in the opposite state.
 
 ## How it works
 
@@ -61,7 +61,7 @@ Read the state back the same way the toggle does. `session split` and `session f
 
 ## Limits
 
-`ctrl+a` becomes a leader once bound, so hangar consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.
+`ctrl+a` becomes a leader once bound, so Hangar consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.
 
 `Smart Split` acts on the frontmost window's selected session. It reads `tree` without a window selector, so running it against a background window needs `--window` on both the read and the writes.
 

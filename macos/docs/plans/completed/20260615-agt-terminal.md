@@ -1,4 +1,4 @@
-# hangar — minimal native macOS SwiftUI terminal on libghostty
+# Hangar — minimal native macOS SwiftUI terminal on libghostty
 
 ## Overview
 
@@ -294,7 +294,7 @@ Highest-risk task first: prove libghostty renders a working shell end-to-end AND
 
 ### Task 7: Documentation
 
-- [x] `README.md`: what hangar is, the libghostty/no-Zig approach, build/run (`scripts/setup.sh`, `scripts/run.sh`, `swift test`), the two restore limitations, attribution to macterm (MIT)
+- [x] `README.md`: what Hangar is, the libghostty/no-Zig approach, build/run (`scripts/setup.sh`, `scripts/run.sh`, `swift test`), the two restore limitations, attribution to macterm (MIT)
 - [x] `ARCHITECTURE.md`: HangarCore/app split, surface-ownership + `.id(session.id)` rule, the Concurrency contract, the fragile points
 - [x] `CLAUDE.md`: project-specific notes (toolchain, xcframework source/pin, terminfo sibling trick, surface lifecycle + C-callback isolation gotchas)
 - [x] move this plan to `docs/plans/completed/` (deferred to exec completion via move-plan.sh)

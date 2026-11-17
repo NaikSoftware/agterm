@@ -141,7 +141,7 @@ extension ControlServer {
         return await read.value
     }
 
-    private static let stopping = ControlResponse(ok: false, error: "hangar is stopping")
+    private static let stopping = ControlResponse(ok: false, error: "Hangar is stopping")
 
     private func originStore(_ window: String?) -> Result<(id: UUID, store: AppStore), OriginCatalogRefusal> {
         library.originCatalogStore(window: window, liveActive: originLiveActive())

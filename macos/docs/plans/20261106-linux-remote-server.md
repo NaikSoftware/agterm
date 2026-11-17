@@ -1,7 +1,7 @@
 # Linux remote server
 
 ## Overview
-- Run sessions and the agents in them on a headless Linux server and use them from the Mac's hangar as if they were
+- Run sessions and the agents in them on a headless Linux server and use them from the Mac's Hangar as if they were
   local: create a session, split it, swap, rename, close, and see status, context, HUD, asks, pick, program overlays
   and HTML/image/markdown/text pages drawn on the Mac. Sessions keep running while the Mac sleeps or disconnects.
 - Two pieces:
@@ -26,7 +26,7 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
 
 | Draft decision | Here | Why |
 |---|---|---|
-| hangar behavior stays in hangar's Swift handlers | changed | the server runs the same Swift core rules itself |
+| Hangar behavior stays in Hangar's Swift handlers | changed | the server runs the same Swift core rules itself |
 | server tool in Go with SQLite | dropped | Swift on `HangarCore`; one catalog store, no second authority |
 | one owner per session, last attach wins | dropped | several Macs per catalog is out of this release |
 | remote rows mixed into local windows | changed | a remote window per host decides where actions go |

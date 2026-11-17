@@ -462,7 +462,7 @@ the overlay's transparent tap-catcher (`Color.clear`, a real SwiftUI view) with 
 - [x] write the **keep-in-sync convention** into `CLAUDE.md` next to the existing "`AppActions`
       shared by toolbar and menu bar so they never drift" note — extended to the third
       surface, with the four-point definition-of-done
-- [x] add a `README.md` "Scripting hangar" subsection (user-facing: build `hangarctl`, examples,
+- [x] add a `README.md` "Scripting Hangar" subsection (user-facing: build `hangarctl`, examples,
       the never-shown-session `session.type` caveat)
 - [x] add an `ARCHITECTURE.md` note for the new module boundary (`hangarctlKit`/`hangarctl` in the
       package; `ControlServer` in the app)

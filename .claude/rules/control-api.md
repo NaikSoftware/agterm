@@ -36,7 +36,7 @@ paths:
 ## Installation and agent integrations
 
 - Xcode's CLI phase builds Release, copies/signs `hangarctl`, then deep re-signs the app; shallow signing
-  fails with `hangar.debug.dylib`. The automatic installer links into `/usr/local/bin`, directly or through one
+  fails with `Hangar.debug.dylib`. The automatic installer links into `/usr/local/bin`, directly or through one
   admin prompt. Host-free `CLIInstall` owns paths/quoting; app code owns filesystem/auth.
 - `ExtrasAutoInstaller` runs the CLI, hooks and skill installers once per build (version, commit and bundle
   path, kept in UserDefaults), Release only, alerting only when the user must act.
@@ -595,7 +595,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   The gap is blocking, never scheduled: a deferred Return can be overtaken by another injection or a keystroke.
   It is one fixed gap per call, so do not scale it by length or add one per line.
   A receiver classifying one long line or a multi-line payload as a paste is the caller's to work around
-  by sending shorter pieces; pacing inside hangar would block the main thread per piece on both routes.
+  by sending shorter pieces; pacing inside Hangar would block the main thread per piece on both routes.
   Limits: Returns inside a multi-line payload stay back to back and still read as paste in such a program;
   a writer on another Mac can land between the two daemon calls;
   a failed second daemon call answers an error with the text already typed and is never retried,

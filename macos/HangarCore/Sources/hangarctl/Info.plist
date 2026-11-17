@@ -7,6 +7,6 @@
 	<key>CFBundleName</key>
 	<string>hangarctl</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>hangarctl uses Bluetooth to let hangar Mobile on your phone connect without Wi-Fi.</string>
+	<string>hangarctl uses Bluetooth to let Hangar Mobile on your phone connect without Wi-Fi.</string>
 </dict>
 </plist>

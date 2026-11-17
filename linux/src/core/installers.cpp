@@ -329,8 +329,8 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &han
         static const QHash<Plugin, QString> lines{
             {Plugin::Installed, "Pi lifecycle extension installed to ~/.pi/agent/extensions/hangar-status.ts. Restart Pi or run /reload."},
             {Plugin::AlreadyConfigured, "Pi lifecycle extension is already current at ~/.pi/agent/extensions/hangar-status.ts."},
-            {Plugin::UserOwned, "~/.pi/agent/extensions/hangar-status.ts is user-owned, so hangar left it untouched."},
-            {Plugin::Unreadable, "~/.pi/agent/extensions/hangar-status.ts exists but could not be read, so hangar left it untouched."},
+            {Plugin::UserOwned, "~/.pi/agent/extensions/hangar-status.ts is user-owned, so Hangar left it untouched."},
+            {Plugin::Unreadable, "~/.pi/agent/extensions/hangar-status.ts exists but could not be read, so Hangar left it untouched."},
             {Plugin::WriteFailed, "Pi's lifecycle extension couldn't be written to ~/.pi/agent/extensions/ (check that directory's permissions), so it was skipped."}};
         piLine = lines.value(pi);
         warn |= pi == Plugin::UserOwned || pi == Plugin::Unreadable || pi == Plugin::WriteFailed;
@@ -379,12 +379,12 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &han
     }
 
     const QString approve = QStringLiteral("Run /hooks in Codex to review and approve them before they take effect.");
-    const QString manual = QStringLiteral("See the Add Codex hooks by hand section of the hangar docs for the block to add, then run /hooks in Codex.");
+    const QString manual = QStringLiteral("See the Add Codex hooks by hand section of the Hangar docs for the block to add, then run /hooks in Codex.");
     static const QHash<Codex, QString> codexLines{
         {Codex::Merged, "Codex lifecycle hooks merged into ~/.codex/config.toml (any old codex-notify.sh notify line was removed). "},
         {Codex::AlreadyConfigured, "Codex lifecycle hooks are already present in ~/.codex/config.toml. "},
-        {Codex::HooksExist, "Your ~/.codex/config.toml already defines its own hooks, so hangar left it untouched. "},
-        {Codex::Unreadable, "Your ~/.codex/config.toml exists but couldn't be read, so hangar left it untouched."},
+        {Codex::HooksExist, "Your ~/.codex/config.toml already defines its own hooks, so Hangar left it untouched. "},
+        {Codex::Unreadable, "Your ~/.codex/config.toml exists but couldn't be read, so Hangar left it untouched."},
         {Codex::NoCodex, "No ~/.codex found, so Codex hooks were skipped. Install Codex, then run hangar --install agent-hooks."}};
     QString codexLine = codexLines.value(codex);
     if (codex == Codex::Merged || codex == Codex::AlreadyConfigured)
@@ -474,7 +474,7 @@ Report skill(const QString &home, const QString &bundle)
         r.lines << QStringLiteral("The skill was not installed.");
     else
         r.lines << QStringLiteral("Installed for:") << installed << QString()
-                << QStringLiteral("The agent uses it automatically when you ask it to control hangar. It drives the app via the hangarctl CLI.");
+                << QStringLiteral("The agent uses it automatically when you ask it to control Hangar. It drives the app via the hangarctl CLI.");
     if (!skipped.isEmpty())
         r.lines << QString() << QStringLiteral("Skipped:") << skipped;
     if (fresh && !installed.isEmpty())

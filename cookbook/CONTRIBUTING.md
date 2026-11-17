@@ -48,7 +48,7 @@ Author: [@<login>](https://github.com/<login>)
 ## Limits
 ```
 
-**Requirements** names the minimum hangar version the recipe needs, written as "X or later", plus any external tool it calls. Work out that minimum from the commands and flags the recipe uses rather than naming the version you happen to run, and say in the same line what shipped in it.
+**Requirements** names the minimum Hangar version the recipe needs, written as "X or later", plus any external tool it calls. Work out that minimum from the commands and flags the recipe uses rather than naming the version you happen to run, and say in the same line what shipped in it.
 
 **Setup** is the exact steps, including where the file goes and how it is invoked or sourced. Anything machine-specific is a variable the reader sets, named and explained here.
 
@@ -95,7 +95,7 @@ Expect questions on all three. A recipe that is correct but silent about closing
 
 ## Bugs and improvements
 
-Each recipe names its author. Bugs in @umputun's recipes can be reported as issues. For recipes by other authors, @umputun does not provide fixes or improvements from issue reports: submit a pull request, or a new recipe for a different workflow. Issues requesting fixes or changes to those recipes are closed with a pointer here. A bug in hangar itself that a recipe exposes is an issue like any other. A recipe that stays broken and nobody fixes is dropped.
+Each recipe names its author. Bugs in @umputun's recipes can be reported as issues. For recipes by other authors, @umputun does not provide fixes or improvements from issue reports: submit a pull request, or a new recipe for a different workflow. Issues requesting fixes or changes to those recipes are closed with a pointer here. A bug in Hangar itself that a recipe exposes is an issue like any other. A recipe that stays broken and nobody fixes is dropped.
 
 ## License
 

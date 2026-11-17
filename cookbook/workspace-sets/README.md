@@ -14,7 +14,7 @@ This is the second answer to [discussion #293](https://github.com/umputun/agterm
 
 ## Requirements
 
-- hangar 0.18.0 or later. `workspace filter` and the `workspace focus add` mode shipped in that release.
+- Hangar 0.18.0 or later. `workspace filter` and the `workspace focus add` mode shipped in that release.
 - `jq`
 
 ## Setup
@@ -96,4 +96,4 @@ Selecting a session outside the marked set switches the filter off and keeps the
 
 The flagged sidebar view is a flat session list and ignores the filter entirely.
 
-`ctrl+a` becomes a leader once bound, so hangar consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.
+`ctrl+a` becomes a leader once bound, so Hangar consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.

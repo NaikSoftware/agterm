@@ -1,6 +1,6 @@
 ---
 name: mailbox-chat
-description: 'Hold a back-and-forth conversation with the agent (Claude Code or another Codex) running in the other pane of this hangar split, as peers, through hangar''s pane mailboxes. Use when the user says "chat with claude", "talk to claude", "work with claude", "discuss this with claude", "ask claude what it thinks", "chat with codex", "work with the other pane", "ask the other agent", or when a prompt arrives starting with "[peer chat]". Not for a one-shot task handed to another agent, and not for a read-only second opinion.'
+description: 'Hold a back-and-forth conversation with the agent (Claude Code or another Codex) running in the other pane of this Hangar split, as peers, through Hangar''s pane mailboxes. Use when the user says "chat with claude", "talk to claude", "work with claude", "discuss this with claude", "ask claude what it thinks", "chat with codex", "work with the other pane", "ask the other agent", or when a prompt arrives starting with "[peer chat]". Not for a one-shot task handed to another agent, and not for a read-only second opinion.'
 ---
 
 # Mailbox chat, Codex side
@@ -22,13 +22,13 @@ mailbox-chat.py say --file /tmp/mailbox-chat-<pane>.txt
 ```
 
 Use a literal path with no heredoc, redirection, variable or wrapper: the recipe's allow rule
-matches only this plain form, and anything else runs in the sandbox, which refuses hangar's
+matches only this plain form, and anything else runs in the sandbox, which refuses Hangar's
 socket. Never put the message text in an argument. The script adds the `[peer chat]` label and the
 reply line itself; do not write either. Put code, logs and long lists in another file under `/tmp`
 and name its path in a short message that still states the point.
 
 The reply is JSON. `receiver` says who serves the other pane: `claude` (a peer waiting for mail,
-`peerBusy` true while it is mid-turn), `codex` (hangar hands the mail to it), or `none`
+`peerBusy` true while it is mid-turn), `codex` (Hangar hands the mail to it), or `none`
 (the mail waits in the mailbox; tell the user nothing is listening there, and that a Codex there
 starts listening only after the user gives it a first prompt). An `error` means the mailbox
 refused the message; report it and never resend blind.

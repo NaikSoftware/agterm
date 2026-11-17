@@ -308,7 +308,7 @@ Keymap parseKeymap(const QString &text, const QMap<QString, QStringList> &defaul
             if (keys.isEmpty()) {
                 km.diagnostics.append({n, error + QStringLiteral("; map skipped")});
             } else if (!defaults.contains(action)) {
-                km.diagnostics.append({n, masterBuiltinActions().contains(action) ? QStringLiteral("action '%1' is not available in hangar").arg(action)
+                km.diagnostics.append({n, masterBuiltinActions().contains(action) ? QStringLiteral("action '%1' is not available in Hangar").arg(action)
                                                                                    : QStringLiteral("unknown action '%1'").arg(action)});
             } else {
                 maps.append({action, chord, keys, n});
@@ -327,7 +327,7 @@ Keymap parseKeymap(const QString &text, const QMap<QString, QStringList> &defaul
             if (c.repeat && !dup)
                 km.diagnostics.append({n, QStringLiteral("command '%1': --repeat is not supported yet; binding kept without it").arg(c.name)});
         } else if (verb == QLatin1String("global-hotkey")) {
-            km.diagnostics.append({n, QStringLiteral("global-hotkey summons the quick terminal, which hangar does not have; line skipped")});
+            km.diagnostics.append({n, QStringLiteral("global-hotkey summons the quick terminal, which Hangar does not have; line skipped")});
         } else {
             km.diagnostics.append({n, QStringLiteral("unknown verb '%1'").arg(verb)});
         }
@@ -413,14 +413,14 @@ QString starterKeymap(const QMap<QString, QStringList> &defaults)
     for (const QString &t : commandTokens())
         tokens += QStringLiteral("#   {%1}\n").arg(t);
     return QStringLiteral(
-               "# hangar keymap: a kitty-flavored config for rebinding built-in shortcuts and defining\n"
+               "# Hangar keymap: a kitty-flavored config for rebinding built-in shortcuts and defining\n"
                "# custom shell commands. Edit this file and run File > Reload Keymap (or `hangarctl keymap\n"
                "# reload`) to apply. Blank lines and lines starting with `#` are ignored. A line that is\n"
                "# rejected or skipped is reported in Settings > Key Mapping and by `hangarctl keymap list`.\n"
                "#\n"
                "#   map <chord> <action>\n"
                "#       Rebind a built-in action. Mods: ctrl, shift, alt (opt), super, joined by `+`, e.g.\n"
-               "#       `ctrl+alt+l`. hangar's macOS words also work: cmd alone means ctrl+shift, cmd with any\n"
+               "#       `ctrl+alt+l`. Hangar's macOS words also work: cmd alone means ctrl+shift, cmd with any\n"
                "#       other modifier means ctrl+alt+shift, opt means alt. Keys: a character, tab, space, return,\n"
                "#       delete, escape, left, right, up, down, home, end, pageup, pagedown, f1-f20. A Shift-typed\n"
                "#       symbol is shift+<base key> (shift+/ for ?). Alternatives join with `|` (no spaces), and\n"
@@ -510,14 +510,14 @@ QList<HookLine> parseHooks(const QString &text, QList<KeymapDiagnostic> *diagnos
 QString starterHooks()
 {
     return QStringLiteral(
-               "# hangar hooks: run a shell line when a control event fires. Edit this file and run\n"
+               "# Hangar hooks: run a shell line when a control event fires. Edit this file and run\n"
                "# File > Reload Hooks (or `hangarctl hooks reload`) to apply. Blank lines and lines starting\n"
                "# with `#` are ignored.\n"
                "#\n"
                "#   on <kind> <shell...>\n"
                "#\n"
                "# Kinds: %1.\n"
-               "# (pane.scratch, pane.focused and remote.* never fire in hangar.)\n"
+               "# (pane.scratch, pane.focused and remote.* never fire in Hangar.)\n"
                "# Several lines per kind run independently; an identical kind+command line is skipped with a\n"
                "# diagnostic. Everything after the kind is passed to `/bin/sh -c` untouched, detached with no\n"
                "# terminal, one process per line at a time; further events for a busy line queue in order\n"

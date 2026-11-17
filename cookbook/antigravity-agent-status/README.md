@@ -10,13 +10,13 @@ Gives Antigravity CLI (`agy`) per-turn sidebar status indicators matching the bu
 
 ## Requirements
 
-- hangar 0.7.1 or later, with the agent-status hooks package installed via **Help ▸ Install Agent Status Hooks…**. That installs `~/.config/hangar/agent-status/hangar-agent-status.sh`, which forwards `HANGAR_PANE` from 0.7.1 onward so split and scratch panes target their own slot; hangar 0.13.0 or later is recommended if you use split panes because it also forwards `HANGAR_PANE_ID`, keeping status writes on the right pane even after a split pane is promoted to main.
+- Hangar 0.7.1 or later, with the agent-status hooks package installed via **Help ▸ Install Agent Status Hooks…**. That installs `~/.config/hangar/agent-status/hangar-agent-status.sh`, which forwards `HANGAR_PANE` from 0.7.1 onward so split and scratch panes target their own slot; Hangar 0.13.0 or later is recommended if you use split panes because it also forwards `HANGAR_PANE_ID`, keeping status writes on the right pane even after a split pane is promoted to main.
 - Antigravity CLI (`agy`) with lifecycle hook support (tested on `agy` 1.4.2).
 - Python 3.8 or later, only to run the bundled `test_agy_status_hook.py`. Using the recipe needs no Python.
 
 ## Setup
 
-Run **Help ▸ Install Agent Status Hooks…** once in hangar if you have not already. That installs `~/.config/hangar/agent-status/hangar-agent-status.sh`, which this recipe calls.
+Run **Help ▸ Install Agent Status Hooks…** once in Hangar if you have not already. That installs `~/.config/hangar/agent-status/hangar-agent-status.sh`, which this recipe calls.
 
 Copy the hook adapter script into place and make it executable:
 
@@ -28,17 +28,17 @@ chmod +x ~/.config/hangar/hooks/agy/agy-status-hook.sh
 
 Merge the `"hangar-status"` block from `agy-status-hooks.json` into `~/.gemini/config/hooks.json` (create the file if it does not exist, or add the `"hangar-status"` key alongside your existing hook entries). For a workspace-only install, merge it into `<project>/.agents/hooks.json` instead.
 
-If you store `agy-status-hook.sh` at a different path, update the `"command"` paths in `hooks.json` to match. You can also override the path to hangar's status script by setting `HANGAR_STATUS_WRAPPER` or `HANGAR_STATUS_SCRIPT` in the hook environment (default: `$HOME/.config/hangar/agent-status/hangar-agent-status.sh`).
+If you store `agy-status-hook.sh` at a different path, update the `"command"` paths in `hooks.json` to match. You can also override the path to Hangar's status script by setting `HANGAR_STATUS_WRAPPER` or `HANGAR_STATUS_SCRIPT` in the hook environment (default: `$HOME/.config/hangar/agent-status/hangar-agent-status.sh`).
 
-Do **not** also add `agy` to `HANGAR_AGENT_RE` in hangar's shell integration. The shell integration sets `active` when a command starts and `idle` when it exits back to the shell prompt, which for an interactive REPL pins `active` across the entire session, including while `agy` sits idle between turns. The two approaches are alternatives, not layers.
+Do **not** also add `agy` to `HANGAR_AGENT_RE` in Hangar's shell integration. The shell integration sets `active` when a command starts and `idle` when it exits back to the shell prompt, which for an interactive REPL pins `active` across the entire session, including while `agy` sits idle between turns. The two approaches are alternatives, not layers.
 
 ## Usage
 
-Run `agy` inside hangar as usual. The sidebar row pulses `active` during model invocations and after tool calls, turns `blocked` when `ask_question` or `ask_permission` runs, and turns `completed` at the end of a turn, clearing when you focus or type in the session. Headless runs (`agy -p`, `--print`, `--prompt`) are ignored so one-shot background invocations do not overwrite the pane's interactive status.
+Run `agy` inside Hangar as usual. The sidebar row pulses `active` during model invocations and after tool calls, turns `blocked` when `ask_question` or `ask_permission` runs, and turns `completed` at the end of a turn, clearing when you focus or type in the session. Headless runs (`agy -p`, `--print`, `--prompt`) are ignored so one-shot background invocations do not overwrite the pane's interactive status.
 
 ## How it works
 
-The gotcha with `agy` hooks is stdout. hangar's stock `hangar-agent-status.sh` suppresses all stdout and stderr because Claude Code injects hook output into the prompt context. `agy`, by contrast, requires every lifecycle hook to print a single JSON object on stdout, and requires specific fields from `PreToolUse` (`{"decision":"allow"}`) and `Stop` (`{"decision":"stop"}`). Calling `hangar-agent-status.sh` directly from `hooks.json` produces empty stdout and fails the hook parsing in `agy`.
+The gotcha with `agy` hooks is stdout. Hangar's stock `hangar-agent-status.sh` suppresses all stdout and stderr because Claude Code injects hook output into the prompt context. `agy`, by contrast, requires every lifecycle hook to print a single JSON object on stdout, and requires specific fields from `PreToolUse` (`{"decision":"allow"}`) and `Stop` (`{"decision":"stop"}`). Calling `hangar-agent-status.sh` directly from `hooks.json` produces empty stdout and fails the hook parsing in `agy`.
 
 `agy-status-hook.sh` is a thin adapter that drains stdin, prints the exact JSON object `agy` expects for each action, and then invokes `hangar-agent-status.sh`:
 

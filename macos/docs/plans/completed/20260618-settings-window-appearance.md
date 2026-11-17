@@ -1,7 +1,7 @@
 # Settings Window — Phase 1 (Appearance: font, size, theme)
 
 ## Overview
-- Add a standard macOS Settings window (Cmd+,) to hangar, with three tabs: **General**, **Appearance**, **Key Mapping**. Only **Appearance** is populated in phase 1; General and Key Mapping are placeholder/stub tabs.
+- Add a standard macOS Settings window (Cmd+,) to Hangar, with three tabs: **General**, **Appearance**, **Key Mapping**. Only **Appearance** is populated in phase 1; General and Key Mapping are placeholder/stub tabs.
 - Appearance phase 1 controls: terminal **font family**, default terminal **font size**, and ghostty **theme** selection.
 - Settings persist to a dedicated file and apply **live** to running terminals (no shell loss) via ghostty's `update_config`.
 - This is phase 1 of an evolving feature; later phases fill General and Key Mapping.
@@ -9,7 +9,7 @@
 ## Context (from discovery)
 - Files/components involved:
   - `HangarCore/Sources/HangarCore/` — host-free model + persistence (new: `AppSettings`, `SettingsStore`).
-  - `Hangar/Ghostty/GhosttyApp.swift` — builds the ghostty config (`loadConfig`: `config_new` → bundled `ghostty-defaults.conf` → user `~/.config/ghostty/config` → `load_recursive_files` → `finalize`). The hangar settings file slots in here, loaded last so the UI wins.
+  - `Hangar/Ghostty/GhosttyApp.swift` — builds the ghostty config (`loadConfig`: `config_new` → bundled `ghostty-defaults.conf` → user `~/.config/ghostty/config` → `load_recursive_files` → `finalize`). The Hangar settings file slots in here, loaded last so the UI wins.
   - `Hangar/hangarApp.swift` — App scene; add a `Settings { … }` scene; load settings at launch (honor `HANGAR_STATE_DIR`).
   - `Hangar/hangarApp.swift` `makeSurface`/`makeSplitSurface`, `Hangar/Views/QuickTerminal.swift` — surfaces that must receive `ghostty_surface_update_config` on a live apply.
   - `Hangar/Resources/ghostty/themes/` — 512 theme files (names like `3024 Night`, `Adwaita Dark`) shipped by ghostty; enumerate for the theme picker.
@@ -32,7 +32,7 @@
 
 ## Testing Strategy
 - **Unit tests (HangarCore, host-free)**: `AppSettings` round-trip + optional-field decode; `SettingsStore` load/save/corrupt/missing/missing-dir.
-- **XCUITest (hangar)**: open Settings via the app menu, change theme / font size / font family in Appearance, and assert the value lands in the hermetic `settings.json` (file oracle, like `StatusBarMenuUITests`/`FontSizeUITests`). Live application to the Metal surface is verified manually (the accessibility tree can't read terminal rendering).
+- **XCUITest (Hangar)**: open Settings via the app menu, change theme / font size / font family in Appearance, and assert the value lands in the hermetic `settings.json` (file oracle, like `StatusBarMenuUITests`/`FontSizeUITests`). Live application to the Metal surface is verified manually (the accessibility tree can't read terminal rendering).
 - Run the complete suite (`cd HangarCore && swift test` + all `HangarUITests`) as the pre-commit gate.
 
 ## Progress Tracking
@@ -55,7 +55,7 @@
 - Live apply (a `ConfigApplier`-style coordinator, app target): write `ghostty-settings.conf`, build ONE fresh `ghostty_config_t` via `loadConfig` (carrying theme + font-family + the default `font-size`), call `ghostty_app_update_config(app, cfg)`, then call `ghostty_surface_update_config(surface, cfg)` on every live surface. ONE shared config for all surfaces — `update_config` re-applies the whole config (including `font-size`), so every terminal resets to the new default size; that's the user-approved behavior, which is why no per-surface config is needed.
 - **Reset per-session zoom on apply**: because the shared `update_config` resets every surface to the default size, also clear `Session.fontSize → nil` for all sessions on a settings apply, so the persisted/runtime state stays consistent with what's on screen (a later surface recreation won't resurrect a stale zoom).
 - **Surface exposure (the broadcast needs to reach the raw surface)**: `Session.surface`/`splitSurface` are typed `(any TerminalSurface)?` and `TerminalSurface` exposes only `teardown()`; the raw `ghostty_surface_t` is `private(set)` on `GhosttySurfaceView`. So the applier reaches surfaces by downcasting to `GhosttySurfaceView` (app target) and calling a new method there (e.g. `applyConfig(_ cfg: ghostty_config_t)` → `ghostty_surface_update_config`). The quick terminal's surface is held privately in `QuickTerminalController` and only reachable via `surface()` which CREATES one — add a non-creating accessor (e.g. `currentSurface() -> GhosttySurfaceView?`) so the broadcast doesn't spawn a shell.
-- ⚠️ **Config ownership (resolve first, before the broadcast)**: the header has no ownership docs on `update_config`, and the existing `loadConfig` keeps `self.config` alive for the app's lifetime (never freed except the error path) — there is no free-after-update precedent. Determine whether `update_config` copies or takes ownership (read upstream ghostty source or test one apply under Instruments). Likely model for hangar's single long-lived config: swap `self.config` to the new one and free the PREVIOUS config after the broadcast — confirm before wiring the broadcast.
+- ⚠️ **Config ownership (resolve first, before the broadcast)**: the header has no ownership docs on `update_config`, and the existing `loadConfig` keeps `self.config` alive for the app's lifetime (never freed except the error path) — there is no free-after-update precedent. Determine whether `update_config` copies or takes ownership (read upstream ghostty source or test one apply under Instruments). Likely model for Hangar's single long-lived config: swap `self.config` to the new one and free the PREVIOUS config after the broadcast — confirm before wiring the broadcast.
 - Font enumeration: `NSFontManager.shared` / `NSFontManager.shared.availableFontFamilies` filtered to fixed-pitch (e.g. via `NSFont(name:size:)?.fontDescriptor.symbolicTraits.contains(.monoSpace)` or `availableMembers(ofFontFamily:)`), sorted. Store the family name string; nil = ghostty default.
 - Theme enumeration: `Bundle.main.url(forResource: "ghostty", withExtension: nil)` → `themes/` dir contents, names sorted case-insensitively. Store the theme name string; nil = ghostty default.
 - Settings scene tabs: `TabView { GeneralSettingsView().tabItem { Label("General", systemImage: "gear") }; AppearanceSettingsView(...).tabItem { Label("Appearance", systemImage: "paintbrush") }; KeyMappingSettingsView().tabItem { Label("Key Mapping", systemImage: "keyboard") } }`. General/KeyMapping are stubs ("Coming soon" placeholder) in phase 1.
@@ -115,7 +115,7 @@
 - Create: `hangar/ConfigApplier.swift` (coordinator)
 - Modify: `Hangar/SettingsModel.swift` (trigger apply on change)
 
-- [ ] FIRST (gate the broadcast on this): resolve `update_config` config ownership — read upstream ghostty source or test one apply under Instruments. Decide free-vs-retain for hangar's single long-lived `config` (likely: swap `self.config` to the new one, free the previous after the broadcast).
+- [ ] FIRST (gate the broadcast on this): resolve `update_config` config ownership — read upstream ghostty source or test one apply under Instruments. Decide free-vs-retain for Hangar's single long-lived `config` (likely: swap `self.config` to the new one, free the previous after the broadcast).
 - [ ] write `ghostty-settings.conf` from `AppSettings.ghosttyConfigLines()` at the settings directory; `GhosttyApp.loadConfig` loads it after the user config, before `finalize` (UI wins on launch).
 - [ ] add `GhosttySurfaceView.applyConfig(_ cfg: ghostty_config_t)` → `ghostty_surface_update_config`; the coordinator reaches surfaces by downcasting `any TerminalSurface` → `GhosttySurfaceView`.
 - [ ] add `QuickTerminalController.currentSurface() -> GhosttySurfaceView?` — returns the existing surface WITHOUT creating one (so the broadcast never spawns a shell).

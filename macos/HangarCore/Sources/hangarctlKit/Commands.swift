@@ -88,7 +88,7 @@ struct SurfaceTargetOptions: ParsableArguments {
 public struct Hangarctl: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "hangarctl",
-        abstract: "Drive hangar over its control socket, and install its terminfo entry on other hosts.",
+        abstract: "Drive Hangar over its control socket, and install its terminfo entry on other hosts.",
         subcommands: [Tree.self, Events.self, Workspace.self, Session.self, Surface.self, Dashboard.self, Window.self, Quick.self,
                       Sidebar.self, FilePanel.self, Notify.self, Msg.self, Font.self, Keymap.self, Hooks.self, Browser.self, Config.self, Theme.self, Pick.self, Ask.self, Restore.self,
                       Recent.self, Zmx.self, Catalog.self, Terminfo.self] + hostSubcommands + [Clipboard.self, Version.self]

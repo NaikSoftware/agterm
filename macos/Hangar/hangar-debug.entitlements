@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Debug only: the shipping set from hangar.entitlements plus three hardened-runtime exceptions the
-     Debug layout needs. Debug builds are ad-hoc signed and split into a stub plus hangar.debug.dylib,
+     Debug layout needs. Debug builds are ad-hoc signed and split into a stub plus Hangar.debug.dylib,
      and the hosted tests load an ad-hoc .xctest into that app, so library validation would reject both
      on a Team-ID mismatch. allow-jit and allow-unsigned-executable-memory serve Xcode's preview
      executor, which JIT-links in process. The Release bundle has no dylib and no JIT, so it carries

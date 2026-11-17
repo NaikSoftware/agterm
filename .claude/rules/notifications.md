@@ -60,7 +60,7 @@ paths:
 - `DockBadgeController` shows host-free `attentionCount` over `WindowLibrary.allOpenSessions()`: sessions with unseen
   notifications or a blocked/completed status, each once; the badge toggle drops only the unseen part. Use
   `UNUserNotificationCenter.setBadgeCount`, not `NSApp.dockTile.badgeLabel`, which stores but does not draw
-  hangar's value. The modern API preserves the adaptive icon, so never override `applicationIconImage`.
+  Hangar's value. The modern API preserves the adaptive icon, so never override `applicationIconImage`.
   Clear the OS-persistent badge in `applicationWillTerminate`; `willClose` cannot do this because
   `isTerminating` makes `closeWindow` a no-op.
 - `apply()` observes and re-arms on that count. Explicitly refresh after window close, control
@@ -121,7 +121,7 @@ paths:
   `.hangarAccessibilityDisplayOptionsChanged`, and the sidebar reapplies visible glyphs. Dashboard pills
   gate their SwiftUI repeat with `accessibilityReduceMotion`. Retain `blink` so both resume when re-enabled.
 - `completed --auto-reset` clears both the session entered and the session left in
-  `AppStore.selectSession`; hooks cannot infer hangar selection.
+  `AppStore.selectSession`; hooks cannot infer Hangar selection.
 - Clear Status is the first row-menu item when non-idle and also appears in the menu bar and palette.
   Row menus target their node; global surfaces call `clearActiveSessionStatus`; all set an empty indicator.
 - Mark for Attention is the row-menu item for idle targets, with no menu bar, palette or keymap form.
@@ -170,7 +170,7 @@ paths:
   about six seconds after the last keystroke.
   The main thread's `PostToolUse` reasserts `active --blink` after an answered prompt; a subagent's is
   `--if-idle` and cannot. cmux can observe its
-  own permission UI and herdr scrapes PTY state; hangar does neither.
+  own permission UI and herdr scrapes PTY state; Hangar does neither.
 - `AgentIndicator.statusPane` also directs GUI selections needing attention. Attention and ordinary
   navigation, palettes, sidebar and Dock rows, and idle auto-follow use
   `revealActiveBlockedPane` to select split, reveal scratch, or target primary. Idle and active preserve

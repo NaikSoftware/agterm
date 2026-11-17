@@ -12,10 +12,10 @@ Each item is a relative age, an eight-word title, a one-sentence detail, and a s
 
 ## Requirements
 
-- hangar 0.10.0 or later, which shipped the `{AGT_PANE}` keymap token and `session overlay open --background-color`. The overlay itself works from 0.8.0.
+- Hangar 0.10.0 or later, which shipped the `{AGT_PANE}` keymap token and `session overlay open --background-color`. The overlay itself works from 0.8.0.
 - `zsh`, for the script
 - `jq`, for reading the transcript
-- Claude Code CLI, for the summary. Tested with 2.1.220. The flags it depends on (`--safe-mode`, `--json-schema`, `--tools`, `--no-session-persistence`) are less stable than hangar's own API, so a much newer or older CLI may need the invocation adjusted.
+- Claude Code CLI, for the summary. Tested with 2.1.220. The flags it depends on (`--safe-mode`, `--json-schema`, `--tools`, `--no-session-persistence`) are less stable than Hangar's own API, so a much newer or older CLI may need the invocation adjusted.
 
 ## Setup
 
@@ -71,7 +71,7 @@ Claude Code takes one `statusLine` command, so this is an either/or: extend the 
 
 All optional:
 
-- `HANGARCTL`, the hangar CLI, default `hangarctl`
+- `HANGARCTL`, the Hangar CLI, default `hangarctl`
 - `CLAUDE_BIN`, the Claude Code binary, default `claude`
 - `RECAP_MODEL`, the summarizing model, default `claude-haiku-4-5-20251001`
 - `CLAUDE_DIRS`, space-separated Claude Code config dirs to search, default `$HOME/.claude`. Set it if you run more than one config dir.

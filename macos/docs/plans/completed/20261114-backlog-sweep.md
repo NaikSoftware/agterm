@@ -224,7 +224,7 @@ Viewer side:
 - [x] check whether libghostty at `83fb956` gates `MOUSE_OVER_LINK` on `link-previews`; record the answer here
   - answer: it does (`Surface.zig` cursor handling): OSC 8 unless `link-previews = false`, detected links only when
     `true`, only while ⌘ is held, and an empty url clears on leaving the link, including the -1,-1 exit and hide
-    reports; hangar adds no check of its own. A HUD's label goes to the bottom-left of the pane it floats over
+    reports; Hangar adds no check of its own. A HUD's label goes to the bottom-left of the pane it floats over
     (Eugene, after the Debug look).
 - [x] handle `GHOSTTY_ACTION_MOUSE_OVER_LINK`; write the hovered link into the surface's hover model
 - [x] `TerminalView` wrapper with the `@Observable` hover model and the non-hit-testing bottom-leading label;

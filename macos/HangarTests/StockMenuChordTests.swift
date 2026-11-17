@@ -95,7 +95,7 @@ final class StockMenuChordTests: XCTestCase {
         let menu = makeFileMenu(oursKey: "e")
         AppDelegate.applyStockMenuChords(keymap([.closeSession: Chord(mods: [.command], key: "e")]), in: menu.menu)
 
-        assertOwnsCommandW(menu.stock, "nothing of hangar's wants ⌘W, so the stock Close keeps it")
+        assertOwnsCommandW(menu.stock, "nothing of Hangar's wants ⌘W, so the stock Close keeps it")
     }
 
     // the empty stock key is what a previous reconcile leaves behind while close_session held ⌘W.
@@ -103,7 +103,7 @@ final class StockMenuChordTests: XCTestCase {
         let menu = makeFileMenu(oursKey: "e", stockKey: "")
         AppDelegate.applyStockMenuChords(keymap([.closeSession: Chord(mods: [.command], key: "e")]), in: menu.menu)
 
-        assertOwnsCommandW(menu.stock, "a cleared stock chord must be restored once hangar stops wanting it")
+        assertOwnsCommandW(menu.stock, "a cleared stock chord must be restored once Hangar stops wanting it")
     }
 
     // SwiftUI defers its rebuild to the next activation, so straight after a reload that rebound
@@ -212,7 +212,7 @@ final class StockMenuChordTests: XCTestCase {
         let service = item("Some Service", "someService:", key: "v", mask: .command)
         AppDelegate.applyStockMenuChords(keymap(), in: menu([paste, service]))
 
-        XCTAssertEqual(service.keyEquivalent, "v", "only hangar's own items are ever cleared")
+        XCTAssertEqual(service.keyEquivalent, "v", "only Hangar's own items are ever cleared")
     }
 
     func testClaimingTheQuitAlternateLeavesThePrimaryQuit() {

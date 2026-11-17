@@ -12,7 +12,7 @@ What changed from the original local-signed plan:
 - **`CHANGELOG.md`** (new, repo root) — Keep-a-Changelog in the sibling style (revdiff: New Features / Improvements / Bug Fixes), hand-maintained; the release body is sourced from it. First entry: v0.3.1.
 
 Manual prerequisites for CI publish:
-- Secret **`HOMEBREW_TAP_PAT`** on `NaikSoftware/hangar`: a fine-grained PAT with **Contents: read/write on BOTH `NaikSoftware/hangar` (release) and `umputun/homebrew-apps` (cask push)** — the default `GITHUB_TOKEN` cannot push to the separate tap repo. Create it once; one job both creates the hangar release and pushes the cask.
+- Secret **`HOMEBREW_TAP_PAT`** on `NaikSoftware/hangar`: a fine-grained PAT with **Contents: read/write on BOTH `NaikSoftware/hangar` (release) and `umputun/homebrew-apps` (cask push)** — the default `GITHUB_TOKEN` cannot push to the separate tap repo. Create it once; one job both creates the Hangar release and pushes the cask.
 - First tag: **v0.3.1** (`git tag v0.3.1 && git push origin v0.3.1`).
 
 The Apple-gated tasks below (signing identity, notarization) remain the eventual target and are unaffected by the interim path.

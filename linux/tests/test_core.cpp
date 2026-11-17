@@ -120,7 +120,7 @@ private Q_SLOTS:
             messages << QString::number(d.line) + ":" + d.message;
         const QString all = messages.join('\n');
         QVERIFY2(all.contains("3:chord 'Ctrl+Shift+N' conflicts with built-in 'new_session'"), qPrintable(all));
-        QVERIFY2(all.contains("4:action 'toggle_scratch' is not available in hangar"), qPrintable(all));
+        QVERIFY2(all.contains("4:action 'toggle_scratch' is not available in Hangar"), qPrintable(all));
         QVERIFY2(all.contains("5:unknown action 'bogus'"), qPrintable(all));
         QVERIFY2(all.contains("8:command 'Edit' is already defined"), qPrintable(all));
         QVERIFY2(all.contains("9:custom command 'Clash' shortcut 'Ctrl+Alt+L' conflicts with built-in 'toggle_split'"), qPrintable(all));

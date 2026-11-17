@@ -98,7 +98,7 @@ paths:
   silently unable to prompt for that permission.
 - Debug and Release sign from different entitlements files. `Hangar/hangar-debug.entitlements` adds
   `disable-library-validation`, `allow-jit` and `allow-unsigned-executable-memory`: Debug is ad-hoc signed
-  and split into a stub plus `hangar.debug.dylib`, and `HangarTests` loads an ad-hoc `.xctest` into that
+  and split into a stub plus `Hangar.debug.dylib`, and `HangarTests` loads an ad-hoc `.xctest` into that
   app, so library validation would reject both on a Team-ID mismatch. The Release bundle holds no dylib
   and JIT-links nothing, so `Hangar/hangar.entitlements` carries none of the three. The re-sign in
   `project.yml` reads `$CODE_SIGN_ENTITLEMENTS` rather than a literal path, so it follows the

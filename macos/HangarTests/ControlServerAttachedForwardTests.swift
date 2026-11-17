@@ -148,7 +148,7 @@ final class ControlServerAttachedForwardTests: XCTestCase {
 
         let reply = try await run(server, ControlRequest(cmd: .zmxKill, target: row.id.uuidString, args: ControlArgs(force: true, pane: "left")))
 
-        XCTAssertEqual(reply.error, "the hangar on buildbox is too old for this")
+        XCTAssertEqual(reply.error, "the Hangar on buildbox is too old for this")
         XCTAssertTrue(store.session(withID: row.id) === row)
     }
 
@@ -180,7 +180,7 @@ final class ControlServerAttachedForwardTests: XCTestCase {
         let tooOld = try await run(server, restart(older))
 
         XCTAssertEqual(notConnected.error, "the session on buildbox is not connected; nothing was restarted")
-        XCTAssertEqual(tooOld.error, "the hangar on buildbox is too old to restart a pane from here")
+        XCTAssertEqual(tooOld.error, "the Hangar on buildbox is too old to restart a pane from here")
         XCTAssertTrue(runner.invocations.isEmpty)
     }
 
@@ -293,7 +293,7 @@ final class ControlServerAttachedForwardTests: XCTestCase {
         let dropped = try await run(server, scratch)
 
         XCTAssertEqual(unconnected.error, "the session on buildbox is not connected; the scratch did not change")
-        XCTAssertEqual(older.error, "the hangar on buildbox is too old to show its scratch here")
+        XCTAssertEqual(older.error, "the Hangar on buildbox is too old to show its scratch here")
         XCTAssertTrue(reply.ok, reply.error ?? "")
         XCTAssertNotNil(row.remotePresentation?.layout)
         XCTAssertEqual(dropped.error, "the session on buildbox is not connected; the scratch did not change")
@@ -494,7 +494,7 @@ final class ControlServerAttachedForwardTests: XCTestCase {
         var errors: [String] = []
         for _ in 0..<3 { errors.append(try await run(server, move(companion, under: destination)).error ?? "") }
 
-        XCTAssertEqual(errors, ["no such session", "the hangar on buildbox is too old for this", "the hangar on buildbox is too old for this"])
+        XCTAssertEqual(errors, ["no such session", "the Hangar on buildbox is too old for this", "the Hangar on buildbox is too old for this"])
         XCTAssertEqual(companion.parentID, parent)
     }
 

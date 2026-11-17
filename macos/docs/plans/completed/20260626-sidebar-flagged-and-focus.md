@@ -7,7 +7,7 @@ Two independent, related per-window sidebar features that help narrow a crowded 
 1. **Flagged working-set** — the user flags a few sessions from across different workspaces; a sidebar **mode toggle** flips the whole sidebar between the normal tree and a **flat list** of just the flagged sessions, each labeled `session : workspace` (e.g. `hangar : ai-thingz`). Durable (a flag persisted on the session). Solves "I have many workspaces but work with a few sessions across them."
 2. **Focus / unfocus a workspace** — a per-workspace toggle collapses the sidebar's tree to a single workspace (its sessions only), hiding the others, with an always-visible escape hatch. Single-workspace zoom; **orthogonal** to flagged.
 
-Both follow hangar's HARD four-surface keep-in-sync convention (GUI affordance + menu bar + ⌃⇧P palette/keybind + hangarctl control command + the bundled agent-skill docs), both are per-window, both carry host-free `HangarCore` unit tests plus a focused XCUITest.
+Both follow Hangar's HARD four-surface keep-in-sync convention (GUI affordance + menu bar + ⌃⇧P palette/keybind + hangarctl control command + the bundled agent-skill docs), both are per-window, both carry host-free `HangarCore` unit tests plus a focused XCUITest.
 
 This design is the product of a brainstorm; the decisions below are settled — do not re-derive them during implementation.
 

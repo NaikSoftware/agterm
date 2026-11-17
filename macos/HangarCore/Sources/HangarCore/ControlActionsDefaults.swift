@@ -202,7 +202,7 @@ public extension ControlActions {
 
     // only a headless server owns a catalog; a remote window must never bind to a live Mac's windows
     func catalogSubscribe() -> ControlResponse {
-        ControlResponse(ok: false, error: "catalog.subscribe is not served by this hangar")
+        ControlResponse(ok: false, error: "catalog.subscribe is not served by this Hangar")
     }
 
     func detachSessions(_: [String], window _: String?) -> ControlResponse { Self.remoteWindowOnly("session.detach") }
@@ -216,7 +216,7 @@ public extension ControlActions {
     }
 
     func catalogOperation(_: String, sent _: CatalogPosition?, window _: String?) -> ControlResponse {
-        ControlResponse(ok: false, error: "catalog.op is not served by this hangar")
+        ControlResponse(ok: false, error: "catalog.op is not served by this Hangar")
     }
 
     var takesOperationReceipts: Bool { false }

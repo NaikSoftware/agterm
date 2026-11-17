@@ -16,7 +16,7 @@ struct ConnectPhoneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Toggle("Let hangar Mobile connect to this Mac", isOn: Binding(get: { relay.state.on }, set: relay.setOn))
+            Toggle("Let Hangar Mobile connect to this Mac", isOn: Binding(get: { relay.state.on }, set: relay.setOn))
                 .toggleStyle(.switch)
             code
                 .frame(maxWidth: .infinity)

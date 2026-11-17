@@ -21,21 +21,21 @@ final class AgentHooksInstallerTests: XCTestCase {
 
     func testEveryDefaultCodexMessageAndItsCustomPathVariant() {
         let approve = "Run /hooks in Codex to review and approve them before they take effect."
-        let manual = "See the Add Codex hooks by hand section of the hangar docs for the block to add, then run /hooks in Codex."
+        let manual = "See the Add Codex hooks by hand section of the Hangar docs for the block to add, then run /hooks in Codex."
         let expected = [
             "Codex lifecycle hooks merged into ~/.codex/config.toml (any old codex-notify.sh notify line was removed). " + approve,
             "Codex lifecycle hooks are already present in ~/.codex/config.toml. " + approve,
-            "Your ~/.codex/config.toml already defines its own hooks, so hangar left it untouched. " + manual,
-            "Your ~/.codex/config.toml isn't valid TOML, so hangar left it untouched. Fix it and hangar retries on its next update. " + manual,
-            "Your ~/.codex/config.toml exists but couldn't be read, so hangar left it untouched.",
-            "No ~/.codex found, so Codex hooks were skipped. Install Codex, then hangar retries on its next update.",
-            "jq is not installed, so Codex hooks were skipped: their wrapper needs it. Install jq, then hangar retries on its next update.",
+            "Your ~/.codex/config.toml already defines its own hooks, so Hangar left it untouched. " + manual,
+            "Your ~/.codex/config.toml isn't valid TOML, so Hangar left it untouched. Fix it and Hangar retries on its next update. " + manual,
+            "Your ~/.codex/config.toml exists but couldn't be read, so Hangar left it untouched.",
+            "No ~/.codex found, so Codex hooks were skipped. Install Codex, then Hangar retries on its next update.",
+            "jq is not installed, so Codex hooks were skipped: their wrapper needs it. Install jq, then Hangar retries on its next update.",
         ]
         for (result, text) in zip(allCodexResults, expected) {
             XCTAssertEqual(result.text, text)
             let custom = result == .noCodex
                 ? "No /custom/codex home found (your CODEX_HOME), so Codex hooks were skipped. "
-                  + "Mount or create it, or fix CODEX_HOME, then hangar retries on its next update."
+                  + "Mount or create it, or fix CODEX_HOME, then Hangar retries on its next update."
                 : text.replacingOccurrences(of: "~/.codex", with: "/custom/codex home")
             XCTAssertEqual(result.text(codexHome: "/custom/codex home"),
                            custom)
@@ -70,7 +70,7 @@ final class AgentHooksInstallerTests: XCTestCase {
             } else {
                 XCTAssertFalse(fm.fileExists(atPath: custom.path))
                 XCTAssertTrue(report.text.contains("No \(custom.path) found (your CODEX_HOME), so Codex hooks were skipped. "
-                    + "Mount or create it, or fix CODEX_HOME, then hangar retries on its next update."))
+                    + "Mount or create it, or fix CODEX_HOME, then Hangar retries on its next update."))
             }
             XCTAssertEqual(try String(contentsOf: defaultConfig, encoding: .utf8), original)
             XCTAssertFalse(fm.fileExists(atPath: defaultConfig.path + ".bak"))
@@ -130,7 +130,7 @@ final class AgentHooksInstallerTests: XCTestCase {
     func testMissingOpenCodeDoesNotNameAVersion() {
         let result = AgentHooksInstaller.OpenCodeResult.noOpenCode(directory: "/custom/opencode")
         let text = result.text
-        XCTAssertEqual(text, "No /custom/opencode found, so the OpenCode plugin was skipped. Start OpenCode once, then hangar retries on its next update. "
+        XCTAssertEqual(text, "No /custom/opencode found, so the OpenCode plugin was skipped. Start OpenCode once, then Hangar retries on its next update. "
                        + "Coarse shell detection for opencode is off by default.")
         XCTAssertFalse(result.isWarning)
     }

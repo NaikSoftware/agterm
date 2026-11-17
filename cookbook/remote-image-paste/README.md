@@ -13,7 +13,7 @@ side pastes a real image. In a local session the chord does nothing.
 
 ## Requirements
 
-hangar 0.31.0 or later, which added the `--error-hud` option the keymap line uses. The script also
+Hangar 0.31.0 or later, which added the `--error-hud` option the keymap line uses. The script also
 relies on `session hud open --hide-after` from 0.30.1 and `AGT_SESSION_HOST` from 0.29.0.
 
 The remote side is a Mac, since the script sets its clipboard with `osascript`. Key-based ssh to it works

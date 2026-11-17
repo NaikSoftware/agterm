@@ -44,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// AppKit's target lifetime; replaced whenever the Dock asks for a fresh menu.
     var dockMenuActionTargets: [DockMenuActionTarget] = []
 
-    /// Directories from `open -a hangar /path` not yet turned into sessions — queued until the frontmost
+    /// Directories from `open -a Hangar /path` not yet turned into sessions — queued until the frontmost
     /// store resolves, so the new session lands in the last-active window.
     private var pendingOpenDirectories: [String] = []
 
@@ -242,7 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let closeSessionItemTitle = "Close Session"
     private static let commandW = Chord(mods: [.command], key: "w")
 
-    /// `open -a hangar /path` (the OS "open terminal here" integration): each URL resolves to a directory
+    /// `open -a Hangar /path` (the OS "open terminal here" integration): each URL resolves to a directory
     /// (folder → itself, file → its parent, via `OpenPathResolver`), queued and drained into a new session
     /// in the last-active window. WARM case only — a running instance already has a window to graft into.
     func application(_: NSApplication, open urls: [URL]) {

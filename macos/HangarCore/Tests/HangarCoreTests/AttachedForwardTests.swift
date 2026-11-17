@@ -5,7 +5,7 @@ import Testing
 @MainActor
 struct AttachedForwardTests {
     private let forward = AttachedForward.killPane(session: "s1", pane: .left, paneID: "p1")
-    private let tooOld = AttachedOutcome.refused("the hangar on box is too old for this")
+    private let tooOld = AttachedOutcome.refused("the Hangar on box is too old for this")
     private let endpoint = ControlZmxEndpoint(executable: "/bin/zmx", socketDirectory: "/tmp/zmx")
 
     private func printed(_ response: ControlResponse, status: Int32 = 0) throws -> RemoteCommandResult {

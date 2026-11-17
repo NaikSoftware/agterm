@@ -230,7 +230,7 @@ Add `case workspaceMove = "workspace.move"`. Reuse `ControlArgs.to`. No new `Con
 - [x] CLAUDE.md Control API: bump the command count (31 → 32), add `workspace.move`, note `session.move` is now mode-bearing (`--to` reorder vs `--workspace` relocate), and record the four-point keep-in-sync audit for `workspace.move`
 - [x] CLAUDE.md Sidebar section: note intra-workspace session reorder, workspace reorder, the second pasteboard type, and that drops now honor `proposedChildIndex`
 - [x] README Features bullet: update the "Move a session between workspaces…" line to also mention reordering sessions within a workspace and reordering workspaces by drag
-- [x] README "Scripting hangar": add a reorder example (`hangarctl session move --to up`, `hangarctl workspace move --to top`)
+- [x] README "Scripting Hangar": add a reorder example (`hangarctl session move --to up`, `hangarctl workspace move --to top`)
 - [x] move this plan to `docs/plans/completed/` (deferred to exec finalize — orchestrator moves the plan via move-plan.sh after the review/finalize phases)
 
 ## Post-Completion

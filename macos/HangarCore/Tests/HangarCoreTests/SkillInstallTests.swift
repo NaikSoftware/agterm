@@ -165,7 +165,7 @@ struct SkillInstallTests {
     }
 
     @Test func refusesOverwriteOfForeignSkill() {
-        let contents = "---\ndescription: someone else's hangar\n---\nbody"
+        let contents = "---\ndescription: someone else's Hangar\n---\nbody"
         #expect(SkillInstall.mayOverwrite(directoryExists: true, existingSKILL: contents) == false)
     }
 

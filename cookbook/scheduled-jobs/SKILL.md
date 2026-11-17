@@ -1,6 +1,6 @@
 ---
 name: cronn
-description: Install cronn, then add, remove, list, report on and control the scheduled jobs it runs on this Mac, including jobs that open hangar sessions. Use when the user says "cronn", "cronn status", "schedule a job", "add a cron job", "run this every morning", "what jobs are scheduled", "what runs next", "run that job now", "disable that job", "did that job run", "why did the job fail", "show the cronn dashboard", or asks for a scheduled agent session in hangar.
+description: Install cronn, then add, remove, list, report on and control the scheduled jobs it runs on this Mac, including jobs that open Hangar sessions. Use when the user says "cronn", "cronn status", "schedule a job", "add a cron job", "run this every morning", "what jobs are scheduled", "what runs next", "run that job now", "disable that job", "did that job run", "why did the job fail", "show the cronn dashboard", or asks for a scheduled agent session in Hangar.
 ---
 
 # cronn
@@ -30,7 +30,7 @@ When `cronn.env` exists but the API is down, the agent is installed and not serv
 
 ## Showing the dashboard
 
-Inside hangar (`HANGAR_SESSION_ID` set), open it in an overlay:
+Inside Hangar (`HANGAR_SESSION_ID` set), open it in an overlay:
 
 ```bash
 hangarctl session overlay open --url "http://127.0.0.1:$CRONN_PORT/" --js --chromeless \
@@ -39,7 +39,7 @@ hangarctl session overlay open --url "http://127.0.0.1:$CRONN_PORT/" --js --chro
 
 `--js` is required: the page is htmx-driven, and without it the run and toggle buttons, the
 filters and the 5s refresh do nothing. `--chromeless` drops the strip above the page; ⌘W closes
-it. Leave it up for the user to close. Outside hangar, `open` the same URL.
+it. Leave it up for the user to close. Outside Hangar, `open` the same URL.
 
 ## The jobs file
 
@@ -84,7 +84,7 @@ Keep job scripts in `$CRONN_CONFIG_DIR/jobs/` and name them absolutely in the jo
 a shell script when it is a few commands with fixed inputs; once it parses structured output,
 retries or branches a lot, write it in Python. Use an agent only where the work needs judgment.
 
-**A job can drive hangar through `hangarctl`.** `scripts/agent-session-job.sh` is the template:
+**A job can drive Hangar through `hangarctl`.** `scripts/agent-session-job.sh` is the template:
 copy it into `jobs/`, then set its variables on the command line.
 
 ```yaml
@@ -93,11 +93,11 @@ copy it into `jobs/`, then set its variables on the command line.
     name: "standup summary"
 ```
 
-The template follows four rules that any job driving hangar needs:
+The template follows four rules that any job driving Hangar needs:
 
 - Every `hangarctl` call defaults to the frontmost window. Find the window holding the target
   workspace (`window list --json`, then `tree --json --window`) and pass `--window`.
-- Outside Live sessions a `--command` session starts with hangar's GUI PATH, not the job's. Wrap the
+- Outside Live sessions a `--command` session starts with Hangar's GUI PATH, not the job's. Wrap the
   program in `/usr/bin/env PATH=...` or spell it absolutely.
 - Outside Live sessions libghostty runs `--command` as `exec <line>` under bash: wrap a command list
   in `sh -c`. A line built from job text (quotes, `$`, newlines) goes through a script `/bin/sh`
@@ -105,7 +105,7 @@ The template follows four rules that any job driving hangar needs:
 - `--no-select` keeps the new session from taking focus while the user is working.
 
 The agent's working directory must already be trusted by that agent, or the session stops on the
-trust prompt with nobody there to answer it. hangar must be running when the job fires; the
+trust prompt with nobody there to answer it. Hangar must be running when the job fires; the
 template fails with a notification when it is not.
 
 ## Removing a job

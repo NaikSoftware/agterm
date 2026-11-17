@@ -1,7 +1,7 @@
 ---
 name: hangar
 description: >
-  Drive hangar, a macOS terminal, via hangarctl. Use in an hangar session:
+  Drive Hangar, a macOS terminal, via hangarctl. Use in a Hangar session:
   manage and move sessions, companions and workspaces; split panes; toggle the scratch or file panel; run, hide or show overlays;
   read exit status; show HTML pages, URLs or dev servers in an overlay with saved logins or as a
   page row;
@@ -14,20 +14,20 @@ description: >
   another Mac's sessions or windows, hangar-server hosts, cookbook recipes, version and upgrades, diagnosing
   problems, filing a bug or feature request.
 when_to_use: >
-  Trigger on: hangar, hangarctl, HANGAR_SESSION_ID, and, from inside a session, plain requests such as
+  Trigger on: Hangar, hangarctl, HANGAR_SESSION_ID, and, from inside a session, plain requests such as
   split the pane, print a link that jumps to a session, close the overlay, hide the overlay for a moment, show a message over the session, show a question dialog, hangarctl ask,
   ask the user to type a value or a message, let the user pick one or several items from a list,
   show an image inline, show this markdown file rendered, show this source file or log at a line, show me the diff of a file or the changes as links, tail or follow this log file, search the log or text page in the overlay, wrap long lines in the text or log page, show this HTML page or artifact, make an HTML page or explainer for this and show
-  it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, pin a project folder to a workspace, route a session to its project workspace, show status or activity under a session in the sidebar, show or hide the file panel (file tree), make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, make this session a companion, move a companion under another session, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, open a page as its own session row in the sidebar, run my custom command, send a message to the other pane or another agent, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, open a remote window for my Linux server, run sessions on a Linux host with hangar-server, watch events or wait for a session on the hangar-server host, install hangar-server on a Linux host, detach or reattach a remote session, copy this to the clipboard, was hangar upgraded under the running app, upgrade hangar without losing sessions, what recipes are there, connect my phone, pair hangar Mobile, revoke a paired phone, fit a pane to the phone,
+  it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, pin a project folder to a workspace, route a session to its project workspace, show status or activity under a session in the sidebar, show or hide the file panel (file tree), make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, make this session a companion, move a companion under another session, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, open a page as its own session row in the sidebar, run my custom command, send a message to the other pane or another agent, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, open a remote window for my Linux server, run sessions on a Linux host with hangar-server, watch events or wait for a session on the hangar-server host, install hangar-server on a Linux host, detach or reattach a remote session, copy this to the clipboard, was Hangar upgraded under the running app, upgrade Hangar without losing sessions, what recipes are there, connect my phone, pair Hangar Mobile, revoke a paired phone, fit a pane to the phone,
   the keymap editor will not open.
 allowed-tools: Bash(hangarctl *)
 ---
 
 <!-- hangar-skill -->
 
-# Driving hangar
+# Driving Hangar
 
-hangar is a native macOS terminal. It exposes a programmatic control channel over a local unix
+Hangar is a native macOS terminal. It exposes a programmatic control channel over a local unix
 socket, driven by the companion CLI `hangarctl`. Use it to build and steer terminal layouts, run
 programs in overlays, type into sessions, notify the user in the exact session you are working in,
 and subscribe to control events. Events cover status, notifications, session lifecycle, split and
@@ -35,12 +35,12 @@ scratch pane visibility, structural tree changes (an overlay, page or HUD openin
 and the app's launch; `hooks.conf` runs a shell line on any of them, so `on app.launched` is where a
 script recreates what a relaunch does not restore. They do not stream terminal output; use `session text` to read a buffer.
 
-## Am I inside hangar?
+## Am I inside Hangar?
 
-Each shell hangar spawns gets these environment variables. Check `HANGAR_ENABLED` before assuming
+Each shell Hangar spawns gets these environment variables. Check `HANGAR_ENABLED` before assuming
 the control channel is available:
 
-- `HANGAR_ENABLED=1` — this shell runs inside hangar.
+- `HANGAR_ENABLED=1` — this shell runs inside Hangar.
 - `HANGAR_SESSION_ID` — the current session's UUID (the session this shell belongs to).
 - `HANGAR_WINDOW_ID` / `HANGAR_WORKSPACE_ID` — the owning window / workspace UUIDs. The workspace id is
   the one the shell started in: it is not rewritten when the session moves to another workspace, so read
@@ -51,7 +51,7 @@ the control channel is available:
   Prefer `--pane-id "$HANGAR_PANE_ID"` where supported: `session status`, `session restore`,
   `session text`, `session type`, `session restart`, `surface cursor` and `session hud`. `tree --json` lists each surface's
   token as `surfaces[].paneID`. The agent-status hook forwards both values for compatibility.
-- `TERM_PROGRAM=hangar` / `TERM_PROGRAM_VERSION` (hangar's version): the terminal identity, replacing
+- `TERM_PROGRAM=hangar` / `TERM_PROGRAM_VERSION` (Hangar's version): the terminal identity, replacing
   the `ghostty` pair embedded libghostty would set. A tool that decides a capability from a list of
   terminal names (Claude Code's OSC 8 hyperlinks) needs its own override; see troubleshooting.md.
 
@@ -64,7 +64,7 @@ daemons that outlive the shell. A tmux/screen server, a session manager (agent-d
 any background service started from inside a session captures the spawning session's `HANGAR_*` and
 passes it to every child it ever creates, so status hooks running in those children resolve
 `$HANGAR_SESSION_ID` to the session that happened to start the daemon and report to the WRONG session.
-Before starting such a process from inside hangar, scrub the variables
+Before starting such a process from inside Hangar, scrub the variables
 (`env -u HANGAR_ENABLED -u HANGAR_PANE -u HANGAR_PANE_ID -u HANGAR_SESSION_ID -u HANGAR_SOCKET -u HANGAR_WINDOW_ID -u HANGAR_WORKSPACE_ID <cmd>`);
 see troubleshooting.md ("agent-status glyph updates the wrong session") for diagnosing and fixing an
 already-poisoned tmux server, and for the Codex shared-daemon limitation, which scrubbing does not fix.
@@ -73,7 +73,7 @@ Code background sessions have no status") passes them in through `--settings`.
 
 ## Running hangarctl
 
-`hangarctl` must be on PATH (hangar links it into `/usr/local/bin` on first launch and after each update). If it
+`hangarctl` must be on PATH (Hangar links it into `/usr/local/bin` on first launch and after each update). If it
 is not on PATH, the user can install it, or you invoke it by absolute path.
 
 - When `HANGAR_SOCKET` is set, pass `--socket "$HANGAR_SOCKET"` on every call: `hangarctl` never reads it
@@ -159,22 +159,22 @@ you open overlays / type into whatever the user has selected, not your own sessi
 
 ## Restore modes
 
-**Settings ▸ General ▸ Restore sessions** is global and takes effect after restarting hangar:
+**Settings ▸ General ▸ Restore sessions** is global and takes effect after restarting Hangar:
 
 - **Fresh shells** restores the saved windows, workspaces, sessions, directories, and split layout with new shells.
 - **Re-run commands** starts each captured foreground command again. It does not reconnect to the old process.
 - **Live sessions** runs every primary and split pane through zmx and reattaches to the same process. It requires
-  zsh or fish as the macOS login shell, or as the absolute path in the ghostty `command` hangar loads
+  zsh or fish as the macOS login shell, or as the absolute path in the ghostty `command` Hangar loads
   (ghostty.conf, an inherited global config, or their includes), which then replaces the login shell in
   Live panes. The scratch runs in a daemon of its own and comes back hidden; overlay and quick terminals stay temporary.
 
-Upgrading: with Live sessions already active, install the new version, quit hangar and open it again. Local
+Upgrading: with Live sessions already active, install the new version, quit Hangar and open it again. Local
 primary and split panes reattach to the same processes and no reset is needed. `hangarctl version` adds an
 `installed:` line when the installed version or recorded commit differs from the running app. When switching
 from Fresh shells or Re-run commands to Live sessions, the current shells end at the first clean quit. The
 first Live launch starts captured foreground commands again where possible; shell state is lost.
 
-On a clean quit, hangar leaves live daemons running and captures each open pane's foreground command as a
+On a clean quit, Hangar leaves live daemons running and captures each open pane's foreground command as a
 fallback. A surviving daemon ignores that payload on the next launch. If an orderly machine restart removed
 the daemon, zmx creates it with the captured command and the pane remains live. A pane starts a fresh shell
 instead when its window was closed before quit, a hard power loss or force quit skipped capture, or the
@@ -274,7 +274,7 @@ Poll this after an unattended create),
 entries in `surfaces` report their own Boolean, while scratch and overlays omit it),
 `liveAttribution` and `splitLiveAttribution` (local Live pane attribution, including hidden splits;
 [values and omission rules](reference.md#tree)),
-`liveHostStale` and `splitLiveHostStale` (true for a pane whose session host is from an earlier hangar
+`liveHostStale` and `splitLiveHostStale` (true for a pane whose session host is from an earlier Hangar
 build or login, which `zmx reset` moves to the current one; omitted otherwise),
 `remoteHost` (the machine an attached session came from, the read side of `zmx attach`; omitted for a local
 session; an attached row is saved and attached again at relaunch, while a remote window rebuilds its rows),
@@ -394,7 +394,7 @@ omitted when expanded).
   place, keeping its program, id and companions (Convert to Companion).
   `session move --parent SID [--index N]` moves a companion under another top-level session, any workspace,
   still running (Move to in the row menu, or a sidebar drag).
-  Dropping a session or workspace row on a terminal types its session ids (Claude conversation id, else hangar id),
+  Dropping a session or workspace row on a terminal types its session ids (Claude conversation id, else Hangar id),
   comma-separated.
   `session overlay open --html FILE --companion` (or `--url URL --companion`) adds a page companion: a row
   under the target session that shows the page and runs no shell. `--page` instead of `--companion` opens a
@@ -695,7 +695,7 @@ match its owner. Tree exposes terminal asks on session nodes as `ask: {id, pane?
 top-level `askPending`. See [reference.md](reference.md#ask) for result formats and command details.
 
 **quick** — `quick [show|hide|toggle]` (visibility; read back from the tree's `quickVisible`; a panel YOU open
-with `quick show` stays up when hangar loses focus, unlike one the user summoned by hotkey, so a following
+with `quick show` stays up when Hangar loses focus, unlike one the user summoned by hotkey, so a following
 `quick type` / `quick text` / `surface zoom --target quick` still finds it) ·
 `quick type TEXT` (or `--stdin`) inject keystrokes into the quick terminal ·
 `quick text [--all] [--lines N]` read its screen back — the twins of `session type`/`session text`. There is one
@@ -746,7 +746,7 @@ with `--error-position POS` and `--error-pane left|right`; see
 terminal theme app-wide, per slot: a NAME sets the light/single theme (a dark theme, if set, is kept);
 `theme set --dark <name>` sets the dark theme, which makes the terminal track the macOS Light/Dark
 appearance automatically; `theme set --dark none` stops tracking. The app default is the bundled
-**hangar** theme; omit the name for ghostty's built-in default ("default ghostty"); an unknown name errors.
+**Hangar** theme; omit the name for ghostty's built-in default ("default ghostty"); an unknown name errors.
 
 **restore** - `restore capture` - capture every pane's running command now, into the slot the quit-time
 capture fills, so an exit that never reaches a clean quit (a force quit, a crash, a hard reset) still
@@ -778,9 +778,9 @@ one pane's daemon and the process in it (`--pane-id` refuses when the role now n
 pane no window is showing and every client attached to it, and none of its outcomes gets the undo grace ·
 `zmx reset --force` - Hangar ▸ Reset Live Sessions… without the dialog: ends every live session this app
 does not supervise, that predates the last Live sessions update, or that runs under the session host of an
-earlier hangar build or login, at the next launch and recreates it under the current session host, quitting
+earlier Hangar build or login, at the next launch and recreates it under the current session host, quitting
 and reopening
-hangar right after the reply; refused outside Live mode, on an incomplete inventory, and with nothing to
+Hangar right after the reply; refused outside Live mode, on an incomplete inventory, and with nothing to
 reset ·
 `zmx tree [HOST]` - attachable sessions across EVERY open window, on another Mac with a HOST or this app
 without one (the bare form is exactly what the remote call runs on the far side). Each row carries the id
@@ -807,8 +807,8 @@ follows the lead to the Mac now leading, the origin included, and a program over
 pane's `remote` in `tree` says where its next one goes. The overlay's program still runs once on the origin, and a remote
 `overlay close` replies when the cancel is requested
 ([details](reference.md#restore)). Both run ssh non-interactively, so key-based auth must already work, and
-the far side needs `hangarctl` installed by the cask or the Help action: a machine merely running hangar
-has no CLI an ssh command can find. Every zmx command needs a running hangar.
+the far side needs `hangarctl` installed by the cask or the Help action: a machine merely running Hangar
+has no CLI an ssh command can find. Every zmx command needs a running Hangar.
 
 **clipboard** — `clipboard set [TEXT]` — copy text to the clipboard of every terminal showing the pane
 the command runs in; the text is the argument, or stdin when omitted (`git diff | hangarctl clipboard set`).
@@ -826,18 +826,18 @@ wanted is this Mac's own. Exit 0 does not confirm receipt, and a terminal set to
 bundled `xterm-ghostty` terminfo entry into a remote account's `~/.terminfo` over one interactive ssh
 connection, the fix for `less`/`vim` on that host warning that the terminal is not fully functional. Run
 once per host and account; nothing is cached and `ssh` itself is untouched. Local-only: no socket, no
-`--json`, no running hangar needed, and it exits with ssh's status. Only those four ssh options pass
+`--json`, no running Hangar needed, and it exits with ssh's status. Only those four ssh options pass
 through; other connection settings belong in `~/.ssh/config` under a host alias, while the execution
 settings (no pty, stdin kept, plain session, no fork, no `RemoteCommand`) are the installer's and win
 over the config. The remote needs `tic` (ncurses) and says so when it is missing.
 
-**phone** — hangar Mobile (an Android app) reaches this Mac through a TLS relay that is off by default.
+**phone** — Hangar Mobile (an Android app) reaches this Mac through a TLS relay that is off by default.
 `phone status|on|off|toggle|port|host|revoke|link` drives its Connect a Phone… window, `mobile serve|reset` runs
 the relay and replaces its token, and `session grid` / `session scroll` fit and scroll a pane for the phone. The
 pairing link holds the token: never print it to a shared surface. Results, rules and the cases that clear a grid
 are in the [command reference](reference.md#phone).
 
-**version** — `hangarctl version` — which hangar is serving this socket, as `result.app` (`version`, plus
+**version** — `hangarctl version` — which Hangar is serving this socket, as `result.app` (`version`, plus
 `commit` when the build recorded one), and the bundle on disk as `result.installed`, which differs from
 `app` once the app was replaced under the running one (a background `brew upgrade`) and is omitted when
 unknown. App-global: no target, no `--window`, no window need be open, so it
@@ -857,7 +857,7 @@ hangarctl session overlay open --markdown /path/to/plan.md --size-percent 95 --t
 Pictures kept in the file's own folder show; other pictures show their alt text, raw HTML stays text, and a web
 link opens in the browser after the user confirms. Add `--navigation` to let a relative link to another `.md`
 file in its folder or below open in the same page with back and forward; a ⌘-clicked file asks for it. A file
-directly in `/` or the home folder opens without it, and so does a page shown on an older hangar on another Mac. The user gets the same view by ⌘-clicking the file's path in a
+directly in `/` or the home folder opens without it, and so does a page shown on an older Hangar on another Mac. The user gets the same view by ⌘-clicking the file's path in a
 local pane, so printing the absolute path of a plan or report you wrote is often enough there; for a user watching
 from another Mac, open it with `--markdown`. Read back `markdown` in `htmlOverlays`.
 
@@ -877,7 +877,7 @@ refused. FILE is taken literally,
 never as `path:line`. The page runs nothing, loads nothing and has no links. Markdown, HTML and SVG are not text
 pages. The user gets the same view by ⌘-clicking a path or a `path:line` location, and reveals a file on their own Mac
 in Finder with ⌘⌥-click. A click in a session attached from another Mac opens the page from the Mac the session runs
-on when both run an hangar that forwards clicks; `--text` shows it there with older ones. Read back `text`
+on when both run a Hangar that forwards clicks; `--text` shows it there with older ones. Read back `text`
 (`{file, language?, line?}`) in `htmlOverlays`.
 
 To watch a log, open its end and follow it as it grows:
@@ -892,7 +892,7 @@ hangarctl session overlay follow off --target "$HANGAR_SESSION_ID"   # pause; on
 ⌘-click on a `.log` or `.out` path opens the same following page; `app.log:120` still opens the plain page at that
 line. The user pauses by scrolling up and resumes at the bottom or with Resume. Read back `text.tail`, `following`,
 `lines`, `clipped`, `waiting` (file missing) and `unreadable`. On a session another Mac presents, the log page and
-`follow`, `search`, `wrap`, `changes` and `files` work on that Mac when its hangar shows live text pages, `files` only when
+`follow`, `search`, `wrap`, `changes` and `files` work on that Mac when its Hangar shows live text pages, `files` only when
 it also navigates files (`page.files`); an older one refuses them.
 
 Search a text or log page, not the terminal under it:
@@ -959,7 +959,7 @@ hangarctl session overlay open --image /tmp/shot.png --target "$HANGAR_SESSION_I
 
 The user can open the same view by ⌘-clicking a picture's path, so printing the absolute path of an image you
 produced is often enough. When the user watches your session from another Mac, that click works only when both
-Macs run an hangar that forwards clicks; `--image` shows it on that Mac either way, as `--markdown` and `--text`
+Macs run a Hangar that forwards clicks; `--image` shows it on that Mac either way, as `--markdown` and `--text`
 pages do. When `--image` is rejected, by an older CLI as an unknown option, by an older app, or
 by a presenting Mac too old for these pages (`a viewer presents this session`), fall back to the script below.
 
@@ -982,7 +982,7 @@ in it, so a large screenshot needs no resizing beforehand.
 
 Do NOT print graphics escapes to your own tool stdout (the agent harness escapes the control bytes)
 and do NOT run an image viewer in your tool shell (no controlling terminal). The overlay is what makes
-it render. Outside hangar (`HANGAR_ENABLED` unset) there is no overlay — fall back to `open <image>`.
+it render. Outside Hangar (`HANGAR_ENABLED` unset) there is no overlay — fall back to `open <image>`.
 
 ## Displaying an HTML artifact
 
@@ -1028,7 +1028,7 @@ To show a docs page or a web app you are running, open it by URL instead; a scri
 hangarctl session overlay open --url http://localhost:5173/ --js --target "$HANGAR_SESSION_ID" --follow
 ```
 
-- The server must already be running and reachable from the hangar the command reaches; `localhost` means this
+- The server must already be running and reachable from the Hangar the command reaches; `localhost` means this
   Mac from a local session, and the host from a session hangar-server or another Mac runs, whose page the Mac
   showing it reaches through an ssh forward. Plain http works for local addresses; use https for public hosts.
 - Pass `--js` for web apps that require client-side JavaScript; without it the page renders only its static
@@ -1039,7 +1039,7 @@ hangarctl session overlay open --url http://localhost:5173/ --js --target "$HANG
 - `--cwd` does not apply. Each overlay has its own in-memory browser storage, so cookies and logins last
   only while it is open.
 - Pass `--persistent` to keep them: the page then uses one saved store shared by every `--persistent`
-  page, so a login survives closing the overlay and restarting hangar, subject to the cookie's own lifetime. `tree` reports `persistent` for each
+  page, so a login survives closing the overlay and restarting Hangar, subject to the cookie's own lifetime. `tree` reports `persistent` for each
   page. `hangarctl browser clear` empties the store, and is refused while a `--persistent` page is open.
   A login that sends the page to another site (OAuth, SSO, a popup) still fails: the page stays on its
   origin. Apps on `localhost` with different ports share cookies in the store.
@@ -1065,11 +1065,11 @@ change reloads a file page and reaches a `--url` page at its next load. A `--url
 unless the page uses them, and none of the default look.
 
 reference.md has the full detail under `session overlay open --html`: slot conflicts and the refusals.
-Outside hangar (see [Am I inside hangar?](#am-i-inside-hangar)) `open <file>` is the fallback.
+Outside Hangar (see [Am I inside Hangar?](#am-i-inside-hangar)) `open <file>` is the fallback.
 
 ## Interactive pages
 
-A file page can drive hangar itself: switch sessions, rename, set a status, or hand a choice back to you,
+A file page can drive Hangar itself: switch sessions, rename, set a status, or hand a choice back to you,
 like `hangarctl pick` with a richer layout. Tag a button or form with `data-hangar` and the socket
 command name; it works with the page's JavaScript off. `data-hangar-target` is the target,
 `data-hangar-args` a JSON object of fixed arguments, a form's named inputs add fields (number inputs send

@@ -37,7 +37,7 @@ missing daemon restores that pane as a fresh shell."*
 Verified in pinned zmx `fb1b6b6`:
 
 - `ensureSession` decides by **connecting**: a daemon that answers logs `session already exists, ignoring
-  command`, and only the create path reaches `createCmdZ`. One zmx-controlled create-or-attach, no hangar
+  command`, and only the create path reaches `createCmdZ`. One zmx-controlled create-or-attach, no Hangar
   preflight race — but **not** strictly atomic: the liveness probe closes before the attach connection, so a
   daemon dying in that window makes attach fail rather than create.
 - `createCmdZ` with a command allocates argv **verbatim**, `argv[0]` as the executable. No shell composition

@@ -14,7 +14,7 @@ Often the name is not known yet, because the companion exists to start something
 
 ## Requirements
 
-- hangar 0.39.0 or later, which shipped companions (`session duplicate --companion`) and row tints (`session tint`)
+- Hangar 0.39.0 or later, which shipped companions (`session duplicate --companion`) and row tints (`session tint`)
 - Python 3.9 or later, which macOS ships as `/usr/bin/python3`
 - For the automatic rename only: the session-context-nudge hook in Claude Code
 
@@ -36,7 +36,7 @@ command "Companion" ctrl+a>h --error-hud ~/bin/companion.py
 
 Any free chord works. `--error-hud` shows the script's error in a panel over the session when something refuses, such as a pane whose program cannot be copied.
 
-Fired from a chord or the palette, the script runs under the PATH hangar gives custom commands: the app's own bundled CLI directory first, so `hangarctl` is the one belonging to the app that fired the chord, and `python3` resolves from `/usr/bin`. Set `HANGARCTL` to a full path to use a different CLI, as a prefix on the keymap line:
+Fired from a chord or the palette, the script runs under the PATH Hangar gives custom commands: the app's own bundled CLI directory first, so `hangarctl` is the one belonging to the app that fired the chord, and `python3` resolves from `/usr/bin`. Set `HANGARCTL` to a full path to use a different CLI, as a prefix on the keymap line:
 
 ```
 command "Companion" ctrl+a>h --error-hud HANGARCTL=/path/to/hangarctl ~/bin/companion.py
@@ -66,7 +66,7 @@ Every call passes `--socket "$AGT_SOCKET"` when the runner set it, so the app th
 
 The companion starts a second copy of every program the source session's panes run, the source being the session the chord fired in, a companion included. A source running Claude Code and codex gets a companion running two more, each starting a fresh conversation in the same directory.
 
-A program started with its session id in its arguments carries the source's id into the copy on hangar 0.39.1 and earlier, where Duplicate as Companion copies arguments verbatim; such a copy addresses the source session. A plain `hangarctl session restart` replays those same arguments, so exit the copied program and start it again through its usual launcher, or restart the pane with an explicit `--command`.
+A program started with its session id in its arguments carries the source's id into the copy on Hangar 0.39.1 and earlier, where Duplicate as Companion copies arguments verbatim; such a copy addresses the source session. A plain `hangarctl session restart` replays those same arguments, so exit the copied program and start it again through its usual launcher, or restart the pane with an explicit `--command`.
 
 The rename is a nudge to the agent, not a guarantee: it happens on the companion's next prompt at the earliest, and only in a pane where the nudge hook runs. A marker for a companion closed before it was renamed stays in `~/.cache/hangar/companion-names` until you delete it; it names a session id that will not come back, so it does nothing.
 

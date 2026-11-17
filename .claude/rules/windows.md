@@ -106,9 +106,9 @@ session drag are out of scope.
 
 - `QuickTerminalController` is an app-level singleton hosting one `QuickTerminalPanel`, a borderless
   non-activating `NSPanel` on `.canJoinAllSpaces` that lands on the POINTER's screen — it is summoned from
-  another application, where hangar's own key window is no guide to where the user is looking. Providers
+  another application, where Hangar's own key window is no guide to where the user is looking. Providers
   resolve through `activeStore` at call time rather than capturing a window, `hangarApp.wireQuickTerminal`
-  binding them once after the socket binds. `canShow` refuses with no open window, hangar terminating on an
+  binding them once after the socket binds. `canShow` refuses with no open window, Hangar terminating on an
   empty open set; the panel is not a library window, so it neither keeps the app alive nor appears in
   `openIDs`.
 - Losing key hides a HUMAN-summoned panel (hotkey, ⌃`, toolbar, Dock), which is what makes it
@@ -117,9 +117,9 @@ session drag are out of scope.
   still settling and a blur-dismissing panel is already gone by the time `quick.type` or
   `surface.zoom --target quick` arrives — measured, not theorised. `show` applies that pin even when the
   panel is ALREADY visible, which is the case a script hits over a hotkey-summoned panel; `hide` and a shell
-  exit clear it. `NSApp.activate` is never called: activating raises hangar's own windows over the
+  exit clear it. `NSApp.activate` is never called: activating raises Hangar's own windows over the
   application the panel was summoned from, so `.nonactivatingPanel` plus `orderFrontRegardless` is what lets
-  it take the keyboard while hangar stays inactive. A resign-driven hide records its time, and a show within
+  it take the keyboard while Hangar stays inactive. A resign-driven hide records its time, and a show within
   `reshowSuppression` is dropped — AppKit makes a clicked window key BEFORE delivering its button action, so
   the toolbar and Dock toggles would otherwise re-show the panel the same click dismissed. This is AppKit
   key-window behavior, so it is manually verified, not unit-tested.
@@ -133,7 +133,7 @@ session drag are out of scope.
 - While the quick terminal OWNS THE KEYBOARD, no deck surface may be active. Gate main, split, maximized
   split, scratch, and overlay with `deckInteractive && isActive && !quickTerminal.holdsKey`. Read `holdsKey`,
   never `isVisible`: the predicate is app-level, so it inerts EVERY window, and a PINNED panel (a control
-  `quick show`) stays on screen after hangar loses key. Gating on visibility there makes
+  `quick show`) stays on screen after Hangar loses key. Gating on visibility there makes
   `TerminalSurfaceHost.updateNSView` revoke first responder in every window on the next SwiftUI update, so the user
   clicks into a terminal, types, and loses the keyboard again at the next title or status change. The same
   distinction governs `focusActiveSession`, `focusSplitPane`, the scratch's `suppressAutoFocus`,
@@ -171,13 +171,13 @@ session drag are out of scope.
 - `window.fullscreen` uses `toggleFullScreen`, a distinct native Space. GUI surfaces are the palette,
   `BuiltinAction.toggleFullscreen` with Ctrl-Command-F through the key monitor, AppKit's own injected
   View menu item, and the green button. Control resolves an open ID; read back the `.fullScreen` style mask.
-- hangar ships NO full screen menu item. AppKit appends its own "Enter Full Screen" (`toggleFullScreen:`,
-  Globe+F) to the View menu as it is prepared for display, so any item of hangar's own is a visible
+- Hangar ships NO full screen menu item. AppKit appends its own "Enter Full Screen" (`toggleFullScreen:`,
+  Globe+F) to the View menu as it is prepared for display, so any item of Hangar's own is a visible
   duplicate. All of these were measured and none suppresses it: removing the injected item on
   `NSMenu.didBeginTrackingNotification` (posted once per ROOT tracking session, before the injection);
   removing it deferred one runloop turn (too late — the displayed menu is already snapshotted, so the model
   loses the item while the duplicate stays on screen); registering `NSFullScreenMenuItemEverywhere` false,
-  which macOS 26 ignores; and giving hangar's own item the `toggleFullScreen:` selector, which AppKit
+  which macOS 26 ignores; and giving Hangar's own item the `toggleFullScreen:` selector, which AppKit
   injects past anyway. Do not install a menu delegate, which would replace SwiftUI updates.
 - `toggle_fullscreen` therefore has no menu item to carry its equivalent, and is matched in
   `CustomCommandRunner`'s key monitor instead — the one built-in that does not ride a SwiftUI shortcut.
@@ -206,7 +206,7 @@ session drag are out of scope.
 - Control changes to frontmost state must call `takeFrontmost`, which records, persists, and reconciles
   auto-hidden sidebars. Inactive apps do not receive `didBecomeKey`, so relying on AppKit makes following
   untargeted commands hit the previous window. This requires manual isolated verification: background
-  hangar, select the non-active window, confirm list marks it active and untargeted session creation lands
+  Hangar, select the non-active window, confirm list marks it active and untargeted session creation lands
   there. XCUITest cannot deactivate without disturbing the user's Space.
 
 ## Live session host
@@ -220,7 +220,7 @@ session drag are out of scope.
   (#971), and the old one stays the root of its existing daemons, since responsibility cannot be moved.
   The fixed `session-host` directory is a build predating keys; it is never served again.
 - On macOS 27 and later the client starts the host as a launchd job in `gui/<uid>` (`HostJob`), so the host
-  and its daemons get a coalition of their own. A spawned host stays in the coalition of the hangar that
+  and its daemons get a coalition of their own. A spawned host stays in the coalition of the Hangar that
   started it, and loginwindow force-quitting a program BTM disallows in the background ends that whole
   coalition, live panes included (#985). Responsibility disclaim does not change the coalition.
   Each attempt has a unique label, `<bundleID>.session-host.<key>.<nonce>`, and a 0600 plist removed once
@@ -309,7 +309,7 @@ session drag are out of scope.
 
 ## Finder open
 
-- Warm `open -a hangar /path` (Discussion #230) resolves folders to themselves and files to parents,
+- Warm `open -a Hangar /path` (Discussion #230) resolves folders to themselves and files to parents,
   queues them, and drains into the active store through `openSession(atDirectory:)`. Gate on a current
   workspace and retry every 0.1 seconds for at most 50 ticks. After insertion, raise the active window so
   a minimized target becomes visible.

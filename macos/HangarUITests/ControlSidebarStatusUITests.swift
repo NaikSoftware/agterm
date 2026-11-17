@@ -17,7 +17,7 @@ final class ControlSidebarStatusUITests: ControlAPITestCase {
         XCTAssertEqual(try sendCommand(#"{"cmd":"session.new"}"#)["ok"] as? Bool, true)
         XCTAssertTrue(pollSessionCount(2, timeout: 10), "the new session should land")
 
-        let typed = try sendCommand(typeRequest(text: "printf '\\033]9;hangar test\\007'\n", target: seeded, select: false))
+        let typed = try sendCommand(typeRequest(text: "printf '\\033]9;Hangar test\\007'\n", target: seeded, select: false))
         XCTAssertEqual(typed["ok"] as? Bool, true, "typing into the realized seeded session should succeed: \(typed)")
 
         XCTAssertTrue(app.staticTexts["notify-badge"].waitForExistence(timeout: 12),

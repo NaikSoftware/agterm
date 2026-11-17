@@ -6,11 +6,11 @@ Author: [@nquo](https://github.com/nquo)
 
 ## What it does
 
-The installer's `Help ▸ Install Agent Status Hooks…` wires an agent's lifecycle hooks straight to `hangarctl` over the local control socket, which only works when the agent and hangar share an OS — the socket does not exist inside a Linux container. This recipe replaces that one hop with two: a small script inside the container turns each hook event into a JSON line and sends it over TCP to the host, and a listener on the host turns each line back into the same `hangarctl session status` call the installer's hooks would have made directly. The row pulses active while the agent works, goes blocked on a real permission prompt, and flashes completed at the end of a turn — the same behavior as a native session, one network hop removed.
+The installer's `Help ▸ Install Agent Status Hooks…` wires an agent's lifecycle hooks straight to `hangarctl` over the local control socket, which only works when the agent and Hangar share an OS — the socket does not exist inside a Linux container. This recipe replaces that one hop with two: a small script inside the container turns each hook event into a JSON line and sends it over TCP to the host, and a listener on the host turns each line back into the same `hangarctl session status` call the installer's hooks would have made directly. The row pulses active while the agent works, goes blocked on a real permission prompt, and flashes completed at the end of a turn — the same behavior as a native session, one network hop removed.
 
 ## Requirements
 
-- hangar 0.7.1 or later — `HANGAR_PANE` starts being injected into the session environment in that release (#130), which this recipe forwards so the row updates on the pane the container's shell actually runs in.
+- Hangar 0.7.1 or later — `HANGAR_PANE` starts being injected into the session environment in that release (#130), which this recipe forwards so the row updates on the pane the container's shell actually runs in.
 - `nc` (netcat) on the host and inside the container, plus `timeout` inside the container.
 - A container runtime that can pass environment variables through to the container (Docker, Podman, Apple's `container`, etc.) and reach the host over TCP — a bridge network or `host.containers.internal`-style hostname is enough; no port needs to be published to the outside world.
 - Claude Code (tested) or another agent with the same four hook events used by `Help ▸ Install Agent Status Hooks…` — see that installer's hooks for the exact event/state pairing this recipe mirrors.
@@ -31,11 +31,11 @@ chmod +x ~/bin/hangar-remote-receiver.sh
 ~/bin/hangar-remote-receiver.sh --port PORT --log-file ~/Library/Logs/hangar-remote.log &
 ```
 
-`--socket` defaults to `$HOME/Library/Application Support/hangar/hangar.sock`; pass it explicitly if hangar's socket lives somewhere else. This process has to be running whenever you want statuses to show — it is a plain background job here, not a launchd service, so it does not survive a reboot or logout on its own; wrap it in a LaunchAgent if you want that.
+`--socket` defaults to `$HOME/Library/Application Support/hangar/hangar.sock`; pass it explicitly if Hangar's socket lives somewhere else. This process has to be running whenever you want statuses to show — it is a plain background job here, not a launchd service, so it does not survive a reboot or logout on its own; wrap it in a LaunchAgent if you want that.
 
 ### Passing identity into the container
 
-Whatever starts the container needs to forward the session's own `HANGAR_*` variables plus where to send status. `HANGAR_SESSION_ID`, `HANGAR_WINDOW_ID`, `HANGAR_WORKSPACE_ID`, `HANGAR_PANE`, and `HANGAR_PANE_ID` are already exported by hangar into any shell it spawns on the host — a session that opens a Claude Code pane runs that shell with these already set, so a wrapper function only has to pass them through; `HANGAR_PANE_ID` only on releases newer than the floor above, where forwarding an unset variable costs nothing; only `HANGAR_REMOTE_HOST` is new, and it is what tells the container script to use this recipe's TCP path instead of a control socket it does not have.
+Whatever starts the container needs to forward the session's own `HANGAR_*` variables plus where to send status. `HANGAR_SESSION_ID`, `HANGAR_WINDOW_ID`, `HANGAR_WORKSPACE_ID`, `HANGAR_PANE`, and `HANGAR_PANE_ID` are already exported by Hangar into any shell it spawns on the host — a session that opens a Claude Code pane runs that shell with these already set, so a wrapper function only has to pass them through; `HANGAR_PANE_ID` only on releases newer than the floor above, where forwarding an unset variable costs nothing; only `HANGAR_REMOTE_HOST` is new, and it is what tells the container script to use this recipe's TCP path instead of a control socket it does not have.
 
 For example, a `claude` shell function that launches an Apple `container machine` container running Claude Code, with the current session's identity forwarded in (replace `CONTAINER_CLAUDE_BIN_DIR` with wherever the container image installs the `claude` binary, and `HOST_IP:PORT` with the receiver's address):
 

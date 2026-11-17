@@ -78,7 +78,7 @@
   `--as SESSION:PANE-ID`. The server refuses an identity whose pane id is not a live pane of that session,
   naming both ids. No fallback to the active pane or to a role.
 - **Anonymous send**: `send` without an identity is allowed only when both env fields are absent and no
-  `--as` is given (a script outside hangar); `from` is then nil and `--all` excludes nobody. An incomplete,
+  `--as` is given (a script outside Hangar); `from` is then nil and `--all` excludes nobody. An incomplete,
   invalid or stale identity fails and never downgrades to anonymous. `read` and `ack` always require one.
 - **Mailbox lifetime**: a mailbox lives while the same program runs in its pane in this app run. It is
   disposed whenever the pane leaves or its program is replaced: session close (hard and soft, companions
@@ -97,7 +97,7 @@
 ## Technical Details
 - Limits (fixed constants): body ≤ 64 KiB UTF-8; per mailbox ≤ 256 messages and ≤ 1 MiB of bodies; read
   batch ≤ 32. A send that would exceed a recipient's limits is rejected for that recipient only.
-- Message: `id` (UUID), `from` (`SESSION:PANE-ID` or nil for a sender outside hangar), `to`
+- Message: `id` (UUID), `from` (`SESSION:PANE-ID` or nil for a sender outside Hangar), `to`
   (`SESSION:PANE-ID`), `ts` (epoch seconds, `ControlEvent.ts` clock), `body`.
 - `msg.read` returns the oldest unacked messages up to the batch limit plus `remaining` = pending messages
   not in this batch. Re-reading before ack returns the same prefix.

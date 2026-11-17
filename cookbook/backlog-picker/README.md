@@ -24,7 +24,7 @@ The repo is whichever one the session sits in, so the same chord in another tab 
 
 ## Requirements
 
-- hangar 0.20.2 or later. `pick` itself shipped in 0.19.0; 0.20.0 is where a caller-supplied picker stopped re-sorting an empty query alphabetically and stopped matching typed text against subtitles, both of which this recipe depends on — newest-first is the order it hands over, and a query must not match the `where` path in a row's subtitle. 0.20.2 is where `tree --json` began reporting `foreground` for a pane started with `session new --command`, which is what keeps the recipe from typing a shell command into a running agent. `{AGT_PANE}`, which routes the typing back into the half of the split you pressed the chord in, shipped in 0.13.0.
+- Hangar 0.20.2 or later. `pick` itself shipped in 0.19.0; 0.20.0 is where a caller-supplied picker stopped re-sorting an empty query alphabetically and stopped matching typed text against subtitles, both of which this recipe depends on — newest-first is the order it hands over, and a query must not match the `where` path in a row's subtitle. 0.20.2 is where `tree --json` began reporting `foreground` for a pane started with `session new --command`, which is what keeps the recipe from typing a shell command into a running agent. `{AGT_PANE}`, which routes the typing back into the half of the split you pressed the chord in, shipped in 0.13.0.
 - Python 3.9 or later, which macOS ships as `/usr/bin/python3`
 - Claude Code, plus the `backlog` skill in this directory. The skill is what makes `/backlog <slug>` mean anything; without it the slash command is typed into a Claude that does not know it.
 - `docs/backlog/` in the repos you use it in. The format is in the skill and in *How it works* below.
@@ -81,7 +81,7 @@ The script also carries its own tests, which is what to run after editing the pa
 ./backlog-picker.py --test
 ```
 
-Every failure exits nonzero, and hangar banners that by itself as `Backlog › (exit 1)`, because a keybinding has no stdout anyone reads. Four of them post a second banner naming what went wrong: no items in the directory, the picker failing, the picker returning an item that is not there, and the typing failing. A failure with no `hangarctl` to talk to — the binary missing, or an `HANGARCTL` that is not executable — can only be the bare one. Everything else is in `/tmp/backlog-picker.log`, or wherever `BACKLOG_PICKER_LOG` points: a file skipped for its name, an unreadable file, and a `tree` read that failed are logged there and nowhere else.
+Every failure exits nonzero, and Hangar banners that by itself as `Backlog › (exit 1)`, because a keybinding has no stdout anyone reads. Four of them post a second banner naming what went wrong: no items in the directory, the picker failing, the picker returning an item that is not there, and the typing failing. A failure with no `hangarctl` to talk to — the binary missing, or an `HANGARCTL` that is not executable — can only be the bare one. Everything else is in `/tmp/backlog-picker.log`, or wherever `BACKLOG_PICKER_LOG` points: a file skipped for its name, an unreadable file, and a `tree` read that failed are logged there and nowhere else.
 
 ## How it works
 
@@ -108,7 +108,7 @@ The pane's live foreground argv comes from `tree --json --window`: `foreground` 
 
 Finding `hangarctl` is the part that cost an hour. Existence is not enough: several installs coexist easily, and a PATH lookup can land on an old **Install Command Line Tool…** symlink pointing at an app that is not the one holding the socket, so a `pick` call fails against a binary that looks perfectly fine. The script asks the running app's own bundle first — read out of the process list, since `pgrep` does not see GUI apps from a keybinding's environment — then falls back through `$GHOSTTY_BIN_DIR`, the usual install paths and `PATH`, probing each candidate's `--help` for a `pick` subcommand rather than trusting a version string. `HANGARCTL` skips the whole search and is used as given, without the probe: a wrapper script that adds a default `--socket` is exactly what the override is for, and it does not reproduce the help layout the probe reads. Being executable is all that is asked of it, and a path that is not stops the run saying so.
 
-Everything the script needs about where it is comes from the environment hangar exports to a custom command: `AGT_SESSION_PWD` for the repo, `AGT_SESSION_ID` and `AGT_PANE` for where to type, `AGT_WINDOW_ID` for which window shows the picker, and `AGT_SOCKET` for the instance to talk to. The repo root itself is `git rev-parse --show-toplevel` from that directory, so the chord works from a subdirectory.
+Everything the script needs about where it is comes from the environment Hangar exports to a custom command: `AGT_SESSION_PWD` for the repo, `AGT_SESSION_ID` and `AGT_PANE` for where to type, `AGT_WINDOW_ID` for which window shows the picker, and `AGT_SOCKET` for the instance to talk to. The repo root itself is `git rev-parse --show-toplevel` from that directory, so the chord works from a subdirectory.
 
 ## Limits
 

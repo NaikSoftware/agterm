@@ -12,7 +12,7 @@ A window is a named bundle of workspaces and sessions with its own sidebar, pers
 
 ## Requirements
 
-- hangar 0.17.1 or later. `window minimize` and the `minimized` read-back on `window list` shipped in that release.
+- Hangar 0.17.1 or later. `window minimize` and the `minimized` read-back on `window list` shipped in that release.
 - `jq`
 - one window per project, each with a distinct name. Create them from the File menu (New Window, then Rename Window…) or with `hangarctl window new "Project A"`.
 
@@ -57,15 +57,15 @@ The mode word on `minimize` is explicit rather than the default `toggle`, so rep
 
 `window select` deminiaturizes, so a project parked last week comes back from the Dock with the same command. It also opens a window you had closed entirely, which is why the target is not filtered on `open`.
 
-Closed windows are skipped when parking, because `window minimize` requires an open window and answers `window not open — window.select it first` otherwise. A window that cannot be parked is written to stderr and the script carries on, so one awkward window does not stop the switch. Expect that message only in a shell run: hangar sends a custom command's output to `/dev/null`, and the `||` that keeps the loop going also keeps the exit status at zero, so from a chord or the palette a skipped window produces nothing at all, not even a failure banner.
+Closed windows are skipped when parking, because `window minimize` requires an open window and answers `window not open — window.select it first` otherwise. A window that cannot be parked is written to stderr and the script carries on, so one awkward window does not stop the switch. Expect that message only in a shell run: Hangar sends a custom command's output to `/dev/null`, and the `||` that keeps the loop going also keeps the exit status at zero, so from a chord or the palette a skipped window produces nothing at all, not even a failure banner.
 
 Read the result back from `window list --json`: `minimized` says which windows are in the Dock, and `geometry` still reports the frame a minimized window will come back to.
 
 ## Limits
 
-Minimize is rejected on a window in native full screen. AppKit does nothing on `miniaturize` there, so hangar answers `cannot minimize a full-screen window — window.fullscreen it first` rather than claiming success. Exit full screen, or use `hangarctl window fullscreen` first.
+Minimize is rejected on a window in native full screen. AppKit does nothing on `miniaturize` there, so Hangar answers `cannot minimize a full-screen window — window.fullscreen it first` rather than claiming success. Exit full screen, or use `hangarctl window fullscreen` first.
 
-The minimized state is never persisted. Every window reopens un-minimized after a restart, so a script that parks windows has to run again once hangar is back.
+The minimized state is never persisted. Every window reopens un-minimized after a restart, so a script that parks windows has to run again once Hangar is back.
 
 Windows are matched by name, and the first match wins if two windows share a name. A name that matches nothing is an error, reported before anything is parked.
 

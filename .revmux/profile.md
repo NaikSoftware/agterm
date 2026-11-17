@@ -1,4 +1,4 @@
-# hangar
+# Hangar
 
 ## What it is
 

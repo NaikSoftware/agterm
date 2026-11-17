@@ -14,7 +14,7 @@ Nothing is closed or changed. The only thing either command does is raise a wind
 
 ## Requirements
 
-- hangar 0.28.0 or later. The picker marks the current window with `window list`'s `active` flag, and 0.28.0 is where that flag stopped naming the previous window after another one was revealed; everything else the script uses, `window select`, `tree --window`, `pick` with subtitles and `statusChangedAt` on the tree, is older. With the release that ships `pick --select` (after 0.29.1) the picker opens on the current window; until then it opens on the first row.
+- Hangar 0.28.0 or later. The picker marks the current window with `window list`'s `active` flag, and 0.28.0 is where that flag stopped naming the previous window after another one was revealed; everything else the script uses, `window select`, `tree --window`, `pick` with subtitles and `statusChangedAt` on the tree, is older. With the release that ships `pick --select` (after 0.29.1) the picker opens on the current window; until then it opens on the first row.
 - `jq`
 
 ## Setup

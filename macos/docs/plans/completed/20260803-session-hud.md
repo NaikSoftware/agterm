@@ -111,7 +111,7 @@ everything else to what changed. Never re-run a whole XCUITest suite to verify a
 
 The HUD is an **app-owned overlay variant**, not a new surface kind and not CLI sugar.
 
-Why a pty at all: every overlay surface is spawned with a command, and hangar drives pty *input* only — it has
+Why a pty at all: every overlay surface is spawned with a command, and Hangar drives pty *input* only — it has
 no path to paint output into a libghostty surface. A HUD is therefore necessarily a surface running a program
 that prints the message and waits. The app owns that program (a bundled helper), so caller text never
 round-trips through a shell line the caller composed.
@@ -517,7 +517,7 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
       has no card there, which is the precedent a control-only HUD with no menu, chord, or asset follows.
       `softwareVersion` is a release-time field and was left alone
 - [x] ➕ two count mentions the plan's list did not name, both found by the pattern search and updated:
-      `CONTRIBUTING.md:7` ("hangar carries 71 control commands") and `control-api.md:102`, where
+      `CONTRIBUTING.md:7` ("Hangar carries 71 control commands") and `control-api.md:102`, where
       `debug.appearance` is described as the private 72nd `Command` case and is now the 75th
 - [x] ➕ documented beyond the checkboxes, since each is a contract a caller hits: `open` as the group's
       default subcommand, `hud update` taking `--spinner`/`--size-percent` but never `--background-color`,
@@ -570,7 +570,7 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 
 - [x] update `README.md` if the feature needs more than the command-reference line
       — NO further change. Task 13 already gave the feature a Concepts sentence on the Overlay paragraph
-      (`:143`) and a `session hud` block under Scripting hangar (`:353`) covering the default subcommand,
+      (`:143`) and a `session hud` block under Scripting Hangar (`:353`) covering the default subcommand,
       `--position` and the `center` default, measured-versus-explicit sizing, in-place update replacing the
       whole spec, the replacement rules against a program overlay, and the poll-only `tree` read-back.
       That is everything a README owes a control-only feature; the per-argument detail is the command

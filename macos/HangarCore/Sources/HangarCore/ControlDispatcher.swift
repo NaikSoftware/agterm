@@ -15,7 +15,7 @@ public struct ControlDispatcher {
     public func dispatch(_ request: ControlRequest) async -> ControlResponse? {
         // a receipt the host never keeps would read as a durable answer
         if request.args?.opID != nil, !actions.takesOperationReceipts {
-            return ControlResponse(ok: false, error: "operation receipts are not taken by this hangar")
+            return ControlResponse(ok: false, error: "operation receipts are not taken by this Hangar")
         }
         switch request.cmd {
         case .tree:

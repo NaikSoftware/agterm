@@ -847,7 +847,7 @@ Menu behavior is covered by Task 15's e2e.
       contract had no e2e at all
 - [x] run `make test-app` and the UI suite — must pass before Task 16. ⚠️ `make test-app` runs the
       `HangarTests` scheme, which does NOT include `HangarUITests/`; the two suites here run with
-      `xcodebuild test -project Hangar.xcodeproj -scheme hangar -destination 'platform=macOS'
+      `xcodebuild test -project Hangar.xcodeproj -scheme Hangar -destination 'platform=macOS'
       -derivedDataPath build/DerivedData -only-testing:HangarUITests/<Class>[/<method>]`. Both were RUN:
       all 4 `FocusWorkspaceUITests` (68.8 s) and the 4 affected `ControlSidebarStatusUITests` methods (17.6 s)
       passed

@@ -34,7 +34,7 @@
   ladder in `AppActions.swift:~240`, refocus `onChange(of: session.programOverlayActive)` at
   WindowContentView+Detail.swift:178.
 - No WebKit in the app today. Deployment target macOS 14 (`project.yml`), so WKWebView, not the newer
-  SwiftUI `WebView`. hangar is not App Sandboxed; no entitlement change is expected.
+  SwiftUI `WebView`. Hangar is not App Sandboxed; no entitlement change is expected.
 - Tests: `HangarCore/Tests/HangarCoreTests` (`ControlDispatcherOverlayTests`, `SessionTests`,
   `TerminalZoomTests`, `AppStoreRemoteOverlayTests`, `AppStoreTreeProjectionTests`),
   `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`, hosted `HangarTests`, XCUITest

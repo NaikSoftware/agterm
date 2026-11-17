@@ -164,7 +164,7 @@ final class AppActions {
         focusActiveSession()
     }
 
-    /// Opens a new session at `directory` in the last-active window — the target of `open -a hangar /path`,
+    /// Opens a new session at `directory` in the last-active window — the target of `open -a Hangar /path`,
     /// the OS "open terminal here" integration. Mirrors `newSession()` but seeds the cwd from `directory`.
     /// NOT `uiActionsEnabled` gated: an external OS command, like a socket command, must land through a modal
     /// zoom/dashboard. Returns whether one was created, so the delegate's drain retries until a store resolves.

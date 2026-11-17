@@ -10,11 +10,11 @@ One key chord syncs your current working directory to the opposite split pane (`
 
 - **Bidirectional:** If you are sitting in the left pane, it syncs to the right pane. If you are sitting in the right pane, it syncs to the left pane.
 - **Auto-split:** If no split is currently shown, it opens the right split first and navigates it to the active directory.
-- **TUI Protection:** If the target pane is currently running a foreground process or TUI (such as `claude`, `lazygit`, or `nvim`), it stops immediately and displays an hangar notification rather than typing commands into an active program. This includes hidden splits: a pane hidden with `session split off` keeps its shell alive, and the script checks its foreground process before re-showing it.
+- **TUI Protection:** If the target pane is currently running a foreground process or TUI (such as `claude`, `lazygit`, or `nvim`), it stops immediately and displays a Hangar notification rather than typing commands into an active program. This includes hidden splits: a pane hidden with `session split off` keeps its shell alive, and the script checks its foreground process before re-showing it.
 
 ## Requirements
 
-- hangar 0.10.0 or later, where custom commands began exporting `AGT_*` environment variables and `tree` gained `splitFocused`, `foreground`, and `splitForeground`.
+- Hangar 0.10.0 or later, where custom commands began exporting `AGT_*` environment variables and `tree` gained `splitFocused`, `foreground`, and `splitForeground`.
 - `jq`, for parsing `hangarctl tree --json`.
 - `zsh`, the script's interpreter.
 

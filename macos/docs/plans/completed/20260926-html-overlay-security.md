@@ -3,7 +3,7 @@
 ## Overview
 - Security review of PR #659 (Claude, codex, Fable, runtime probes) found ways a hostile page can act
   without the user: it borrowed the re-theme script's user gesture to write the real clipboard, and a
-  scripted `a.click()` made hangar open any https URL in the default browser. Open in Browser opens a
+  scripted `a.click()` made Hangar open any https URL in the default browser. Open in Browser opens a
   file with its type's default app, and a dropped file hands its contents to the page.
 - Eugene chose the fixes below, plus three design changes: an identity strip, refusing `--cwd` of `/` and
   the home directory, and marking page titles untrusted in the skill and reference.

@@ -1,8 +1,8 @@
-# hangar
+# Hangar
 
 > Native macOS terminal on libghostty with a deliberately small interface and a full control API
 
-hangar is a native macOS terminal, built on libghostty (Ghostty's engine), with a deliberately small interface and a full control API. Instead of scattering sessions across tabs, it groups them into named workspaces, and almost everything that structure holds is also an object a script can address: the bundled hangarctl creates and types into sessions, runs overlays, moves windows, sets a session's status glyph, and reads that state back over a local socket. Running many AI coding agents at once is the obvious use, and far from the only one. With nothing scripted it is a fast, modern general-purpose terminal for everyday work.
+Hangar is a native macOS terminal, built on libghostty (Ghostty's engine), with a deliberately small interface and a full control API. Instead of scattering sessions across tabs, it groups them into named workspaces, and almost everything that structure holds is also an object a script can address: the bundled hangarctl creates and types into sessions, runs overlays, moves windows, sets a session's status glyph, and reads that state back over a local socket. Running many AI coding agents at once is the obvious use, and far from the only one. With nothing scripted it is a fast, modern general-purpose terminal for everyday work.
 
 ## Key Features
 
@@ -10,8 +10,8 @@ hangar is a native macOS terminal, built on libghostty (Ghostty's engine), with 
 - Agent-status glyphs on sidebar rows: active, blocked, completed, idle — auto-wired for Claude Code, Codex, Pi, and OpenCode
 - hangarctl control CLI over a local unix-domain socket: create, rename, move, and type into sessions, run overlays, move windows, capture output, post notifications tied to a session
 - Installable agent skill that teaches Claude Code and Codex the control model and the full hangarctl command set
-- Surfaces per session: split panes (two shells), a per-session scratch terminal, and floating/full overlays that run a program or show a local HTML page or a URL, where a local page can run hangar commands and hand a choice back to its caller; plus one app-wide quick terminal in a floating panel, summonable by a system-wide hotkey
-- Remote sessions: attach a live session from another Mac running hangar over ssh, together with its companions, with its status, context, notifications, HUD and the layout of attached panes mirrored to the attaching Mac, and its questions and program overlays drawn there
+- Surfaces per session: split panes (two shells), a per-session scratch terminal, and floating/full overlays that run a program or show a local HTML page or a URL, where a local page can run Hangar commands and hand a choice back to its caller; plus one app-wide quick terminal in a floating panel, summonable by a system-wide hotkey
+- Remote sessions: attach a live session from another Mac running Hangar over ssh, together with its companions, with its status, context, notifications, HUD and the layout of attached panes mirrored to the attaching Mac, and its questions and program overlays drawn there
 - Remote server: hangar-server runs sessions on a Linux host as zmx daemons under a systemd user service, and a Mac remote window mirrors its workspaces and sessions over pooled ssh, keeping them running across disconnects; installed from the Mac with hangarctl server install HOST, which downloads the matching aarch64 or x86_64 release and checks it against the sha256 the app was built with
 - Multi-window: a library of windows (e.g. "work" and "personal"), one per screen, restored on next launch
 - 512 bundled themes with a live-preview picker, fully rebindable kitty-flavored keymap.conf, event hooks in hooks.conf that run a shell line on status, session, pane and tree events, and full session persistence

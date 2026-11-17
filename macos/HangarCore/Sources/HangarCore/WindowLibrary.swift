@@ -993,6 +993,6 @@ public final class WindowLibrary {
     }
 
     func log(_ message: @autoclosure () -> String) {
-        NSLog("hangar: %@", message())
+        NSLog("Hangar: %@", message())
     }
 }

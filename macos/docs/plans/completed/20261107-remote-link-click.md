@@ -52,7 +52,7 @@
 | #891 plan Overview (`completed/20261104-remote-content-pages.md:8-10`) | ⌘-click on a path in an attached pane stays ignored | changed | The origin resolves and opens it, so the path is read where it exists |
 | #891 plan | Origin's own ⌘-click routes reach a presenter-followed session | kept | Forwarded clicks reuse those routes |
 | #891 plan | Content pages need `page.content`; clicked HTML needs `page.document` | kept | Forwarded pages pass the same gates |
-| #674 / #131 | hangar hands no terminal-printed path to LaunchServices | kept | Forwarded clicks open read-only pages only; every Finder fallback is suppressed |
+| #674 / #131 | Hangar hands no terminal-printed path to LaunchServices | kept | Forwarded clicks open read-only pages only; every Finder fallback is suppressed |
 | #844 (`LinkPolicyTests.swift:285-296`) | A remote pane reveals a local-host `file://` link in Finder | changed | It revealed this Mac's same-named file; it is forwarded now |
 | control-api.md clicked-page bullets | A click replaces a hidden clicked page, except one handed to the presenter | changed for forwarded clicks | Eugene: a forwarded click replaces its own hidden page like a local click |
 

@@ -72,7 +72,7 @@ final class ControlServerRemoteCompanionsTests: XCTestCase {
             stderr: "")])
         let (oldServer, _, _) = try makeServer(older, store: store, row: row)
         let old = await oldServer.createCompanion(row.id.uuidString, options: CompanionOptions(), window: nil)
-        XCTAssertEqual(old.error, "the hangar on buildbox is too old for companions")
+        XCTAssertEqual(old.error, "the Hangar on buildbox is too old for companions")
         XCTAssertTrue(store.companions(of: row.id).isEmpty)
     }
 
@@ -84,7 +84,7 @@ final class ControlServerRemoteCompanionsTests: XCTestCase {
 
         let reply = await server.createCompanion(row.id.uuidString, options: CompanionOptions(), window: nil)
 
-        XCTAssertEqual(reply.error, "the hangar on buildbox is too old for companions")
+        XCTAssertEqual(reply.error, "the Hangar on buildbox is too old for companions")
         XCTAssertTrue(store.companions(of: row.id).isEmpty)
 
         let pageUsage = RemoteCommandResult(status: 64, stdout: "", stderr: "Error: Unexpected argument 'page-attach'")
@@ -94,7 +94,7 @@ final class ControlServerRemoteCompanionsTests: XCTestCase {
         let page = await pageServer.attachRemotePage(created, origin: RemoteBinding.Origin(host: "buildbox", endpoint: endpoint, sessionName: "c"),
                                                      presentation: .init(version: nil, headless: false),
                                                      at: .companion(of: row.id), select: false)
-        XCTAssertEqual(page.error, "the hangar on buildbox is too old for page companions")
+        XCTAssertEqual(page.error, "the Hangar on buildbox is too old for page companions")
     }
 
     func testACompanionThatNeverBecomesAttachableWithinTheBudgetIsNamedAndNotCreatedAgain() async throws {
@@ -167,7 +167,7 @@ final class ControlServerRemoteCompanionsTests: XCTestCase {
 
         let reply = await server.createCompanion(row.id.uuidString, options: CompanionOptions(), window: nil)
 
-        XCTAssertEqual(reply.error, "created companion \(created) on buildbox but could not attach it: buildbox reported panes hangar "
+        XCTAssertEqual(reply.error, "created companion \(created) on buildbox but could not attach it: buildbox reported panes Hangar "
                        + "cannot address; `hangarctl zmx attach buildbox \(created)` attaches it")
         XCTAssertTrue(store.companions(of: row.id).isEmpty)
     }

@@ -275,7 +275,7 @@ public enum LiveReset {
 
     private static func staleHostSentence(_ stale: Int, of total: Int) -> String {
         guard stale > 0 else { return "" }
-        let tail = "under a helper from an earlier hangar version or login and will be moved to the current one. "
+        let tail = "under a helper from an earlier Hangar version or login and will be moved to the current one. "
         if stale == total { return (total == 1 ? "It runs " : "They all run ") + tail }
         return stale == 1 ? "1 of them runs " + tail : "\(stale) of them run " + tail
     }

@@ -6,7 +6,7 @@
 `site/docs.html` (2768 lines) and `site/commands.html` (the 75-command catalog), so the README duplicates
 the docs site while being harder to navigate than it.
 
-This change cuts the README to roughly 145 lines: a product synopsis that answers what hangar is, how it
+This change cuts the README to roughly 145 lines: a product synopsis that answers what Hangar is, how it
 is different, proof that the difference is real, and how to install it or keep reading. Most reference
 material goes away entirely rather than moving, because the site already has it. Three pieces do not exist
 anywhere else and must be relocated before their section is deleted.
@@ -93,7 +93,7 @@ There is no code, so there are no unit or e2e tests. Verification is:
 
 ## Solution Overview
 
-The trimmed README answers four questions in order: what is hangar, how is it different, can I see that
+The trimmed README answers four questions in order: what is Hangar, how is it different, can I see that
 difference working, how do I install it or continue reading.
 
 Structure, top to bottom:
@@ -114,7 +114,7 @@ Structure, top to bottom:
 
 Key design decisions:
 
-- **The model section is descriptive, never comparative.** No "unlike a tabbed terminal" framing: hangar is
+- **The model section is descriptive, never comparative.** No "unlike a tabbed terminal" framing: Hangar is
   itself a vertical hierarchical tab arrangement, so arguing against tabs is a straw man.
 - **The API demonstration stays** because the product now leads with "full control API" and an unsupported
   headline reads as marketing. It shows the shape — stable ids, read-back, composability — not coverage.
@@ -196,7 +196,7 @@ the minimum macOS version, and the positioning line.
 - Modify: `README.md`
 
 - [x] keep the heading exactly `## Scripting hangar` so `#scripting-hangar` still resolves
-- [x] write two opening sentences: `hangarctl` drives hangar over a local socket, terminal output is not streamed, `session text` reads a buffer
+- [x] write two opening sentences: `hangarctl` drives Hangar over a local socket, terminal output is not streamed, `session text` reads a buffer
 - [x] add the annotated demo block from Technical Details, one comment per line
 - [x] verify every flag in the block against `HangarCore/Sources/hangarctlKit/`
 - [x] add one sentence naming windows, layouts, notifications, events, dashboards, HUDs, themes, restoration
@@ -337,7 +337,7 @@ Every row is covered; three carry a minor, non-blocking detail loss, recorded be
 | Keyboard and navigation | `navigation` | covered | three palettes with ⌃P/⌃⇧P/⌃⇧O chips and Ctrl-Tab row `809-985`; disabled-actions rule `830`; close-session MRU return rules carried over verbatim `818-823` |
 | Accessibility | `accessibility` | covered | verbatim mirror including both limits `1042-1075` |
 | Settings | `settings` | covered | all six tabs and the preview/commit/cancel theme picker `1076-1175` |
-| Scripting prose, Native picker, Control events | `hangarctl` | covered | socket model `1186-1190`; `open -a hangar` `1192-1197`; standalone CLI build `1238`; targeting model `1240-1280`; picker `1287-1330`; env vars `1755-1770`. Control events live on `commands.html:534-586`, not in the `hangarctl` section |
+| Scripting prose, Native picker, Control events | `hangarctl` | covered | socket model `1186-1190`; `open -a Hangar` `1192-1197`; standalone CLI build `1238`; targeting model `1240-1280`; picker `1287-1330`; env vars `1755-1770`. Control events live on `commands.html:534-586`, not in the `hangarctl` section |
 | Customizing keys | `keymap` | covered | full bindable-action list `1885`, `{AGT_*}` tokens `1900`, GUI PATH and raw-substitution warnings, `keymap list`, v1 limitations `2060-2097` |
 | Ghostty config | `ghostty` | covered | four-source chain, `key_` physical-position rule, OSC 52, `file://` reveal, mouse-reporting caveat `2098-2222` |
 | Agent status | `status` | covered | glyphs, shapes, full `session status` flag set, auto-follow with `idleMs`/`autoFollowMs`, and the Claude Code / Codex / Pi / OpenCode / generic installers `2223-2504` |

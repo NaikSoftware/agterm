@@ -14,11 +14,11 @@ Pass `--blink` and `--sound` to get attention on the end states only — they ap
 agst --blink --sound default make test
 ```
 
-Outside hangar (`$HANGAR_SESSION_ID` unset), `agst` `exec`s the command directly — no status calls, no overhead, same exit code.
+Outside Hangar (`$HANGAR_SESSION_ID` unset), `agst` `exec`s the command directly — no status calls, no overhead, same exit code.
 
 ## Requirements
 
-- hangar 0.17.0 or later, which shipped `session status --shape`.
+- Hangar 0.17.0 or later, which shipped `session status --shape`.
 - `hangarctl` on your `PATH`, or set `HANGARCTL` to its full path.
 
 ## Setup
@@ -49,7 +49,7 @@ agst make test && agst make deploy
 
 `--blink` and `--sound` are forwarded to the end states only (`completed`/`blocked`), not to `active`, so a long-running command does not pulse or beep the whole time. `--shape` and `--socket` apply to every status call including `active`.
 
-`$HANGAR_SESSION_ID` is the gate: hangar exports it into every shell it spawns, so its presence is the signal that a status call has somewhere to land. Outside hangar the wrapper `exec`s the command directly — same exit code, same stdout, same stderr, no fork.
+`$HANGAR_SESSION_ID` is the gate: Hangar exports it into every shell it spawns, so its presence is the signal that a status call has somewhere to land. Outside Hangar the wrapper `exec`s the command directly — same exit code, same stdout, same stderr, no fork.
 
 ## Limits
 

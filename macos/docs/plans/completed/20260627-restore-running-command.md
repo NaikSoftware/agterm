@@ -2,7 +2,7 @@
 
 ## Overview
 
-Today hangar restores each session pane's working directory on relaunch, but a pane that was running a program (a gate `ssh`, `tail -f`, `top`) comes back as a plain shell. This feature optionally **re-runs the command each pane had in the foreground** at the last clean quit. Opt-in via a Settings ▸ General toggle, default off.
+Today Hangar restores each session pane's working directory on relaunch, but a pane that was running a program (a gate `ssh`, `tail -f`, `top`) comes back as a plain shell. This feature optionally **re-runs the command each pane had in the foreground** at the last clean quit. Opt-in via a Settings ▸ General toggle, default off.
 
 Approach: **re-run** (capture the foreground argv at quit, re-spawn on launch). NOT the daemon/keep-alive model (Forge/Zmx run a sidecar daemon so PTYs survive — out of scope), and NOT name-only re-run (the one prior-art fork, `ryanbreen/ghostty-with-sessionexplorer`, drops arguments). We capture the **full argv** so `ssh gate -t "ssh server"` re-runs intact.
 

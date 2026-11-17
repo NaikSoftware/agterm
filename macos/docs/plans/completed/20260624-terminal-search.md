@@ -6,7 +6,7 @@ Add live text search over the active terminal's scrollback, driven by libghostty
 
 This is **in-terminal scrollback search** — searching the text already rendered/scrolled in the terminal, NOT filesystem search and NOT a new TUI program.
 
-**Problem it solves:** there is currently no way to find text in terminal output without scrolling by eye. macterm (the project's reference app) has it; libghostty already exposes the API; hangar's bridge already has the exact seam (`performBindingAction`) and callback dispatch to wire it.
+**Problem it solves:** there is currently no way to find text in terminal output without scrolling by eye. macterm (the project's reference app) has it; libghostty already exposes the API; Hangar's bridge already has the exact seam (`performBindingAction`) and callback dispatch to wire it.
 
 ## Context (from discovery)
 
@@ -72,7 +72,7 @@ These supplement project CLAUDE.md / the global rules and gate task completion.
 ## Testing Strategy
 
 - **unit tests (`HangarCore/Tests/HangarCoreTests`)**: required for every host-free change — `Session` search fields + display text + snapshot exclusion, `BuiltinAction.toggleSearch` raw name + default chord, the keymap starter documenting `toggle_search`, and `session.search` control round-trip (request encode/decode, result count+text).
-- **XCUITest (`HangarUITests`)**: hangar has a UI e2e suite. UI changes get e2e tests in the same task family:
+- **XCUITest (`HangarUITests`)**: Hangar has a UI e2e suite. UI changes get e2e tests in the same task family:
   - a `SearchUITests` class: ⌘F opens the bar (`search-field` a11y id), type a needle, assert the `search-counter` staticText reports matches, Esc closes. Driven via the observable AX counter (the Metal surface itself is unobservable).
   - a `session.search` e2e in `ControlAPIUITests`: open + needle returns a count; `--next`/`--prev`/`--close` round-trip.
 - **cadence**: run host-free `swift test` always; run ONLY the affected XCUITest class per the CLAUDE.md "ASK before a full UI run" rule — confirm scope before committing.

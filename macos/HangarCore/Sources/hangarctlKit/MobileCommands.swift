@@ -14,13 +14,13 @@ import HangarCore
 /// hangarctl sends, plus an `id` echoed on the answer; each line is forwarded to the control socket.
 struct Mobile: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Let hangar Mobile drive this Mac over the network or Bluetooth.",
+        abstract: "Let Hangar Mobile drive this Mac over the network or Bluetooth.",
         subcommands: [Serve.self, Reset.self]
     )
 
     struct Serve: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Serve the pairing link and relay hangar Mobile's requests until stopped.",
+            abstract: "Serve the pairing link and relay Hangar Mobile's requests until stopped.",
             discussion: """
             Prints a QR code and the pairing links, then relays every authenticated phone's requests to the control \
             socket. Anyone with the link controls your terminals; `hangarctl mobile reset` revokes it. The token, key \
@@ -36,7 +36,7 @@ struct Mobile: ParsableCommand {
         var noQR = false
         @Option(name: .long, help: "Override the control socket path requests are forwarded to.")
         var socket: String?
-        @Flag(inversion: .prefixedNo, help: "Offer Bluetooth (BLE L2CAP) to hangar Mobile.")
+        @Flag(inversion: .prefixedNo, help: "Offer Bluetooth (BLE L2CAP) to Hangar Mobile.")
         var bluetooth = true
 
         func validate() throws {
@@ -84,7 +84,7 @@ struct Mobile: ParsableCommand {
             if !noQR, let matrix = try? MobilePairing.qrMatrix(links[0]) {
                 MobilePairing.qrRows(matrix).forEach { print($0) }
             }
-            print("\nScan the code in hangar Mobile, or paste the link:")
+            print("\nScan the code in Hangar Mobile, or paste the link:")
             links.forEach { print($0) }
             print("\nListening on \(bind ?? "*"):\(listening). Anyone with the link controls your terminals; "
                 + "`hangarctl mobile reset` revokes it. Ctrl+C stops.")

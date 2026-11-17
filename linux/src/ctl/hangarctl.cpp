@@ -129,7 +129,7 @@ static QByteArray roundTrip(const QString &path, const QJsonObject &request, QSt
     QLocalSocket socket;
     socket.connectToServer(path);
     if (!socket.waitForConnected(3000))
-        return *error = QStringLiteral("cannot connect to %1: %2 (is hangar running?)").arg(path, socket.errorString()), QByteArray();
+        return *error = QStringLiteral("cannot connect to %1: %2 (is Hangar running?)").arg(path, socket.errorString()), QByteArray();
     socket.write(QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n');
     QByteArray line;
     while (!line.endsWith('\n') && socket.waitForReadyRead(30000))
@@ -706,7 +706,7 @@ int main(int argc, char **argv)
         for (const auto &v : result["messages"].toArray()) {
             const QJsonObject m = v.toObject();
             ids << m["id"].toString();
-            printf("%s from %s\n%s\n", qPrintable(m["id"].toString()), qPrintable(m["from"].toString(QStringLiteral("outside hangar"))), qPrintable(m["body"].toString()));
+            printf("%s from %s\n%s\n", qPrintable(m["id"].toString()), qPrintable(m["from"].toString(QStringLiteral("outside Hangar"))), qPrintable(m["body"].toString()));
         }
         if (result["remaining"].toInt() > 0)
             fprintf(stderr, "%d more pending\n", result["remaining"].toInt());

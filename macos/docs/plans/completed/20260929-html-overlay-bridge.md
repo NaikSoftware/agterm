@@ -1,7 +1,7 @@
-# HTML overlay bridge: hangar commands from file pages
+# HTML overlay bridge: Hangar commands from file pages
 
 ## Overview
-- A file page shown with `session overlay open --html` can run any hangar command, read the tree,
+- A file page shown with `session overlay open --html` can run any Hangar command, read the tree,
   switch sessions, and return a chosen value to a script waiting on `--block`, the way `pick` does.
 - Two surfaces:
   - `data-hangar` tag attributes, handled by an hangar-injected script, work with page JavaScript off.

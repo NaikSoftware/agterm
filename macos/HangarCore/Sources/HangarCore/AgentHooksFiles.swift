@@ -285,7 +285,7 @@ extension AgentHooksFiles.Outcome {
         settingsSkipped
             ? "Your ~/.claude/settings.json couldn't be safely read or merged, so the Claude Code hooks were NOT added "
               + "(the file was left untouched). It is unreadable, not valid JSON, or has a hooks entry in a shape we "
-              + "don't recognize. Fix it and hangar retries on its next update, or add the hooks manually."
+              + "don't recognize. Fix it and Hangar retries on its next update, or add the hooks manually."
             : "Claude Code hooks merged into ~/.claude/settings.json."
     }
 }
@@ -299,26 +299,26 @@ extension AgentHooksFiles.CodexResult {
     public func text(codexHome: String?) -> String {
         let directory = codexHome ?? "~/.codex"
         let approve = "Run /hooks in Codex to review and approve them before they take effect."
-        let manual = "See the Add Codex hooks by hand section of the hangar docs for the block to add, then run /hooks in Codex."
+        let manual = "See the Add Codex hooks by hand section of the Hangar docs for the block to add, then run /hooks in Codex."
         switch self {
         case .merged:
             return "Codex lifecycle hooks merged into \(directory)/config.toml (any old codex-notify.sh notify line was removed). " + approve
         case .alreadyConfigured:
             return "Codex lifecycle hooks are already present in \(directory)/config.toml. " + approve
         case .hooksExist:
-            return "Your \(directory)/config.toml already defines its own hooks, so hangar left it untouched. " + manual
+            return "Your \(directory)/config.toml already defines its own hooks, so Hangar left it untouched. " + manual
         case .unparseable:
-            return "Your \(directory)/config.toml isn't valid TOML, so hangar left it untouched. Fix it and hangar retries on its next update. " + manual
+            return "Your \(directory)/config.toml isn't valid TOML, so Hangar left it untouched. Fix it and Hangar retries on its next update. " + manual
         case .unreadable:
-            return "Your \(directory)/config.toml exists but couldn't be read, so hangar left it untouched."
+            return "Your \(directory)/config.toml exists but couldn't be read, so Hangar left it untouched."
         case .noCodex:
             if codexHome != nil {
                 return "No \(directory) found (your CODEX_HOME), so Codex hooks were skipped. "
-                    + "Mount or create it, or fix CODEX_HOME, then hangar retries on its next update."
+                    + "Mount or create it, or fix CODEX_HOME, then Hangar retries on its next update."
             }
-            return "No \(directory) found, so Codex hooks were skipped. Install Codex, then hangar retries on its next update."
+            return "No \(directory) found, so Codex hooks were skipped. Install Codex, then Hangar retries on its next update."
         case .noJq:
-            return "jq is not installed, so Codex hooks were skipped: their wrapper needs it. Install jq, then hangar retries on its next update."
+            return "jq is not installed, so Codex hooks were skipped: their wrapper needs it. Install jq, then Hangar retries on its next update."
         }
     }
 }
@@ -332,13 +332,13 @@ extension AgentHooksFiles.PiResult {
         case .alreadyConfigured:
             return "Pi lifecycle extension is already current at ~/.pi/agent/extensions/hangar-status.ts."
         case .userOwned:
-            return "~/.pi/agent/extensions/hangar-status.ts is user-owned, so hangar left it untouched."
+            return "~/.pi/agent/extensions/hangar-status.ts is user-owned, so Hangar left it untouched."
         case .unreadable:
-            return "~/.pi/agent/extensions/hangar-status.ts exists but could not be read, so hangar left it untouched."
+            return "~/.pi/agent/extensions/hangar-status.ts exists but could not be read, so Hangar left it untouched."
         case .writeFailed:
             return "Pi's lifecycle extension couldn't be written to ~/.pi/agent/extensions/ (check that directory's permissions), so it was skipped."
         case .noPi:
-            return "No ~/.pi/agent found, so Pi's lifecycle extension was skipped. Start Pi once, then hangar retries on its next update."
+            return "No ~/.pi/agent found, so Pi's lifecycle extension was skipped. Start Pi once, then Hangar retries on its next update."
         }
     }
 }
@@ -358,20 +358,20 @@ extension AgentHooksFiles.OpenCodeResult {
         case .writeFailed(let version, let path):
             return "OpenCode \(version.rawValue) plugin couldn't be written to \(path) (check permissions), so it was skipped."
         case .noOpenCode(let directory):
-            return "No \(directory) found, so the OpenCode plugin was skipped. Start OpenCode once, then hangar retries on its next update. "
+            return "No \(directory) found, so the OpenCode plugin was skipped. Start OpenCode once, then Hangar retries on its next update. "
                 + "Coarse shell detection for opencode is off by default."
         case .skipped:
             return "OpenCode status plugin installation was skipped."
         case .v2ConfigUnavailable:
             return "OpenCode v2 installation was skipped because its configuration directory could not be determined from your login shell. "
-                + "Check shell startup and OPENCODE_CONFIG_DIR, then hangar retries on its next update."
+                + "Check shell startup and OPENCODE_CONFIG_DIR, then Hangar retries on its next update."
         case .v1CleanupUserOwned(let path):
             return "OpenCode v2 status plugin is installed, but \(path) is user-owned and was left untouched."
         case .v1CleanupUnreadable(let path):
             return "OpenCode v2 status plugin is installed, but \(path) could not be read and was left untouched."
         case .v1CleanupFailed(let path):
             return "OpenCode v2 status plugin is installed, but the v1 plugin at \(path) could not be safely removed. "
-                + "Check permissions and hangar retries on its next update."
+                + "Check permissions and Hangar retries on its next update."
         }
     }
 }

@@ -18,7 +18,7 @@ The marker is one shot: the hook consumes it on the first turn that ends, so a t
 
 ## Requirements
 
-- hangar 0.22.0 or later, which fixed a custom command spawning with a `PATH` that could not resolve a bare `hangarctl`.
+- Hangar 0.22.0 or later, which fixed a custom command spawning with a `PATH` that could not resolve a bare `hangarctl`.
 - `jq`
 - Claude Code, whose `Stop` hook fires the close. Any agent that can run a command when it finishes a turn works the same way; *How it works* says what that hook has to inherit.
 
@@ -97,7 +97,7 @@ The hook is the whole point of the recipe. `Stop` fires after Claude Code has fi
 
 `session close` kills the agent, and the agent is the hook's own parent process. A close called straight from the hook is a process closing the terminal its own caller lives in, and it can die with the session before the server acts on it. So `fire` detaches the work: `nohup` makes it ignore the `SIGHUP` that reaches the session's processes as the terminal goes away, and it re-enters this same script with an internal `close-later` verb rather than composing an `sh -c` line, which keeps the socket path — it holds a space on a default install — out of a second round of shell quoting.
 
-That socket is read from `$AGT_SOCKET` when a chord fired the script, and from `$HANGAR_SOCKET` when a session's shell or one of its hooks did. Passing it explicitly keeps a second hangar, running from a different state directory, from being the one that gets closed.
+That socket is read from `$AGT_SOCKET` when a chord fired the script, and from `$HANGAR_SOCKET` when a session's shell or one of its hooks did. Passing it explicitly keeps a second Hangar, running from a different state directory, from being the one that gets closed.
 
 Not every Claude Code run belongs to the tab whose id it carries. A background or adopted session runs inside a daemon-hosted worker — `claude daemon run`, `bg-spare`, `bg-pty-host` — and that worker keeps the `HANGAR_SESSION_ID` of whichever tab first started the daemon, which is usually a tab closed long ago and in any case says nothing about where this agent is running. Firing on that id would close a session that has nothing to do with the turn that just ended, so `fire` walks up from `$CLAUDE_PID` and stays silent when it finds one of those workers above it. The walk is bounded to twelve hops and reads `ps` only, so it costs nothing on an ordinary turn.
 
@@ -109,7 +109,7 @@ The badge costs a read that is easy to get wrong. `tree` reports one window — 
 
 ## Limits
 
-**Firing closes the session and kills everything in it.** Whatever ran there dies with it — the agent, a server in its split pane, an SSH connection — and the scrollback goes with the session. There is no undo: the grace-period reopen hangar offers covers closing sessions from the GUI, not a single close over the control API. `AGT_AUTOCLOSE_GRACE` only delays the close, it does not make it recoverable.
+**Firing closes the session and kills everything in it.** Whatever ran there dies with it — the agent, a server in its split pane, an SSH connection — and the scrollback goes with the session. There is no undo: the grace-period reopen Hangar offers covers closing sessions from the GUI, not a single close over the control API. `AGT_AUTOCLOSE_GRACE` only delays the close, it does not make it recoverable.
 
 **A stop hook fires at the end of every turn, including one that ends with a question to you.** If the agent stops to ask which of two approaches you want, that is a finished turn, and an armed tab closes while the question is on screen. Arm the tab on the prompt you expect to be the last one, not at the start of a long task.
 
@@ -117,7 +117,7 @@ The badge costs a read that is easy to get wrong. `tree` reports one window — 
 
 A run the daemon hosts never fires, by the rule above. An armed tab whose agent has been adopted that way stays armed and keeps its badge until a foreground turn ends in it, or until you disarm it.
 
-**The badge renames the session.** A session that had an automatic name — the one hangar derives for you — comes back from a disarm with that same text as an explicit custom name, and it no longer follows what the session is doing. Set `AGT_AUTOCLOSE_BADGE=` to an empty string if you would rather keep automatic names, and lose the visible arming state with it.
+**The badge renames the session.** A session that had an automatic name — the one Hangar derives for you — comes back from a disarm with that same text as an explicit custom name, and it no longer follows what the session is doing. Set `AGT_AUTOCLOSE_BADGE=` to an empty string if you would rather keep automatic names, and lose the visible arming state with it.
 
 The marker is per session, not per pane. A split running two agents shares one session id: whichever finishes first closes the tab, taking the other agent's pane with it.
 

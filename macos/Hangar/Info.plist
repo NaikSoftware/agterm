@@ -35,49 +35,49 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Umputun</string>
 	<key>NSAppDataUsageDescription</key>
-	<string>Command-line tools you run inside hangar (for example, docker talking to Docker Desktop) request access to other applications' data through hangar.</string>
+	<string>Command-line tools you run inside Hangar (for example, docker talking to Docker Desktop) request access to other applications' data through Hangar.</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Command-line tools you run inside hangar (for example, an osascript one-liner or a build script) request permission to control other apps through hangar.</string>
+	<string>Command-line tools you run inside Hangar (for example, an osascript one-liner or a build script) request permission to control other apps through Hangar.</string>
 	<key>NSAudioCaptureUsageDescription</key>
-	<string>Command-line tools you run inside hangar (for example, a system-audio capture or transcription tool) request permission to record system audio through hangar.</string>
+	<string>Command-line tools you run inside Hangar (for example, a system-audio capture or transcription tool) request permission to record system audio through Hangar.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>hangar uses Bluetooth to let hangar Mobile on your phone connect without Wi-Fi. Command-line tools you run inside hangar request Bluetooth access through hangar too.</string>
+	<string>Hangar uses Bluetooth to let Hangar Mobile on your phone connect without Wi-Fi. Command-line tools you run inside Hangar request Bluetooth access through Hangar too.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Command-line tools you run inside hangar request access to your calendars through hangar.</string>
+	<string>Command-line tools you run inside Hangar request access to your calendars through Hangar.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Command-line tools you run inside hangar request access to your calendars through hangar.</string>
+	<string>Command-line tools you run inside Hangar request access to your calendars through Hangar.</string>
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
-	<string>Command-line tools you run inside hangar request permission to add events to your calendars through hangar.</string>
+	<string>Command-line tools you run inside Hangar request permission to add events to your calendars through Hangar.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Command-line tools you run inside hangar (for example, ffmpeg capturing video) request camera access through hangar.</string>
+	<string>Command-line tools you run inside Hangar (for example, ffmpeg capturing video) request camera access through Hangar.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>Command-line tools you run inside hangar request access to your contacts through hangar.</string>
+	<string>Command-line tools you run inside Hangar request access to your contacts through Hangar.</string>
 	<key>NSDesktopFolderUsageDescription</key>
-	<string>Command-line tools you run inside hangar request access to your Desktop folder through hangar.</string>
+	<string>Command-line tools you run inside Hangar request access to your Desktop folder through Hangar.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
-	<string>Command-line tools you run inside hangar request access to your Documents folder through hangar.</string>
+	<string>Command-line tools you run inside Hangar request access to your Documents folder through Hangar.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
-	<string>Command-line tools you run inside hangar request access to your Downloads folder through hangar.</string>
+	<string>Command-line tools you run inside Hangar request access to your Downloads folder through Hangar.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Command-line tools you run inside hangar (for example, connecting to a .local host) request local network access through hangar.</string>
+	<string>Command-line tools you run inside Hangar (for example, connecting to a .local host) request local network access through Hangar.</string>
 	<key>NSLocationUsageDescription</key>
-	<string>Command-line tools you run inside hangar request your location through hangar.</string>
+	<string>Command-line tools you run inside Hangar request your location through Hangar.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Command-line tools you run inside hangar (for example, voice dictation in Claude Code) request microphone access through hangar.</string>
+	<string>Command-line tools you run inside Hangar (for example, voice dictation in Claude Code) request microphone access through Hangar.</string>
 	<key>NSNetworkVolumesUsageDescription</key>
-	<string>Command-line tools you run inside hangar request access to files on network volumes through hangar.</string>
+	<string>Command-line tools you run inside Hangar request access to files on network volumes through Hangar.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Command-line tools you run inside hangar (for example, osxphotos) request access to your photo library through hangar.</string>
+	<string>Command-line tools you run inside Hangar (for example, osxphotos) request access to your photo library through Hangar.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Command-line tools you run inside hangar request access to your reminders through hangar.</string>
+	<string>Command-line tools you run inside Hangar request access to your reminders through Hangar.</string>
 	<key>NSRemindersUsageDescription</key>
-	<string>Command-line tools you run inside hangar request access to your reminders through hangar.</string>
+	<string>Command-line tools you run inside Hangar request access to your reminders through Hangar.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
-	<string>Command-line tools you run inside hangar request access to files on removable volumes through hangar.</string>
+	<string>Command-line tools you run inside Hangar request access to files on removable volumes through Hangar.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Command-line tools you run inside hangar request speech recognition through hangar.</string>
+	<string>Command-line tools you run inside Hangar request speech recognition through Hangar.</string>
 	<key>NSSystemAdministrationUsageDescription</key>
-	<string>Command-line tools you run inside hangar (for example, dscl editing a directory record) request permission to change system configuration through hangar.</string>
+	<string>Command-line tools you run inside Hangar (for example, dscl editing a directory record) request permission to change system configuration through Hangar.</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

@@ -3,19 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>hangar — a simply good macOS terminal with a full control API</title>
+    <title>Hangar — a simply good macOS terminal with a full control API</title>
     <meta
       name="description"
       content="Native macOS terminal with named workspaces and a local control API for scripts, AI coding agents, and multi-session workflows."
     />
     <meta
       name="keywords"
-      content="hangar, macOS terminal, scriptable terminal, terminal control API, terminal for AI agents, Claude Code terminal, Codex terminal, Pi coding agent terminal, OpenCode terminal, libghostty, ghostty, hangarctl, concurrent AI agents, agentic terminal"
+      content="Hangar, macOS terminal, scriptable terminal, terminal control API, terminal for AI agents, Claude Code terminal, Codex terminal, Pi coding agent terminal, OpenCode terminal, libghostty, ghostty, hangarctl, concurrent AI agents, agentic terminal"
     />
     <meta name="author" content="umputun" />
     <link rel="canonical" href="https://naiksoftware.github.io/hangar/" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="hangar — a simply good macOS terminal with a full control API" />
+    <meta property="og:title" content="Hangar — a simply good macOS terminal with a full control API" />
     <meta
       property="og:description"
       content="Native macOS terminal with named workspaces and a local control API for scripts, AI coding agents, and multi-session workflows."
@@ -27,7 +27,7 @@
     <meta property="og:site_name" content="hangar" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@umputun" />
-    <meta name="twitter:title" content="hangar — a simply good macOS terminal with a full control API" />
+    <meta name="twitter:title" content="Hangar — a simply good macOS terminal with a full control API" />
     <meta
       name="twitter:description"
       content="Native macOS terminal with named workspaces and a local control API for scripts, AI coding agents, and multi-session workflows."
@@ -108,7 +108,7 @@
                 font-size: 16px;
                 letter-spacing: -0.01em;
               "
-              >hangar</span
+              >Hangar</span
             >
           </a>
           <div
@@ -187,7 +187,7 @@
           A simply good terminal. <span style="color: var(--accent, #6d82f3)">Full control API.</span>
         </h1>
         <p style="font-size: clamp(17px, 2vw, 21px); line-height: 1.55; color: #bfbab0; max-width: 60ch; margin: 0 0 38px">
-          hangar organizes sessions into named workspaces. The bundled
+          Hangar organizes sessions into named workspaces. The bundled
           <code style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 0.92em">hangarctl</code> drives all of it over
           a local socket: build layouts, type into any pane and read its text back, open overlays, dashboards, native pickers, and question dialogs.
           Running many AI coding agents at once is the obvious use, and far from the only one.
@@ -255,7 +255,7 @@
           <div class="hero-gallery">
             <img
               src="/assets/screenshot-main.webp"
-              alt="hangar main window: two-level sidebar grouping sessions under workspaces"
+              alt="Hangar main window: two-level sidebar grouping sessions under workspaces"
               width="1187"
               height="696"
               fetchpriority="high"
@@ -408,7 +408,7 @@
         <p style="font-size: 18px; line-height: 1.55; color: #bfbab0; max-width: 58ch; margin: 0 0 56px">
           Workspaces and sessions are the whole model, and there is nothing to learn beyond them. Everything they hold is also an
           object the control API can create, move, inspect, and read back. Running several coding agents means many long-lived
-          sessions, each progressing on its own. A tabbed terminal loses track of them quickly. hangar doesn't.
+          sessions, each progressing on its own. A tabbed terminal loses track of them quickly. Hangar doesn't.
         </p>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px">
@@ -533,7 +533,7 @@
             </h3>
             <p style="font-size: 15px; line-height: 1.6; color: #949ba4; margin: 0">
               An installable skill teaches Claude Code or Codex the control model and the full hangarctl command set, so an agent
-              running inside hangar builds its own layout, runs overlays, and manages windows without you explaining the API.
+              running inside Hangar builds its own layout, runs overlays, and manages windows without you explaining the API.
             </p>
           </div>
 
@@ -588,7 +588,7 @@
           Close the app, keep the work.
         </h2>
         <p style="font-size: 18px; line-height: 1.55; color: #bfbab0; max-width: 60ch; margin: 0 0 44px">
-          A pane's process does not have to live inside hangar. Live sessions keep it running while the app restarts, the same
+          A pane's process does not have to live inside Hangar. Live sessions keep it running while the app restarts, the same
           sessions can be opened from another Mac, and a Linux host can run them for you.
         </p>
 
@@ -620,9 +620,9 @@
               </h3>
             </div>
             <p style="font-size: 15px; line-height: 1.65; color: #949ba4; margin: 0">
-              Quit, update, or relaunch hangar while your primary and split panes keep running, an agent mid-turn included. The
+              Quit, update, or relaunch Hangar while your primary and split panes keep running, an agent mid-turn included. The
               next launch reattaches to those processes with their text and TUI state. Choose it under Settings ▸ General ▸ Restore
-              sessions; it takes effect after restarting hangar and needs zsh or fish as the macOS login shell or as the ghostty <code style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 0.92em">command</code>.
+              sessions; it takes effect after restarting Hangar and needs zsh or fish as the macOS login shell or as the ghostty <code style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 0.92em">command</code>.
               <a href="/docs#restore" style="color: #6d82f3">Restore modes</a>
             </p>
           </div>
@@ -656,7 +656,7 @@
               Open a session running on another Mac as a row in this sidebar, split included, with
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">hangarctl zmx attach HOST ID</span>.
               Its status glyph, notifications, HUD and title-bar context follow it here, and its panes take this Mac's size. The
-              other Mac runs hangar in Live sessions mode and is reached over key-based ssh. A Linux host can run your sessions
+              other Mac runs Hangar in Live sessions mode and is reached over key-based ssh. A Linux host can run your sessions
               too: under hangar-server every shell keeps running when the Mac sleeps, the network drops or the window closes, and
               a remote window on the Mac shows them with splits, companions, the scratch, overlays, asks, pages and agent status.
               <a href="/docs#remote-sessions" style="color: #6d82f3">Remote sessions</a> ·
@@ -972,7 +972,7 @@
                   line-height: 1.7;
                 "
               >
-                ▸ hangar &nbsp;·&nbsp; radio-t &nbsp;·&nbsp; go-pkgz
+                ▸ Hangar &nbsp;·&nbsp; radio-t &nbsp;·&nbsp; go-pkgz
               </div>
             </div>
             <div style="border: 1px solid rgba(255, 255, 255, 0.1); background: #15191c; border-radius: 10px; overflow: hidden">
@@ -1082,7 +1082,7 @@
               &nbsp;The yazi file manager in a floating panel over the active session, from one
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">command</span> line in
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">keymap.conf</span>.
-              <a href="/docs#extend" style="color: #6d82f3">Extend hangar</a>
+              <a href="/docs#extend" style="color: #6d82f3">Extend Hangar</a>
             </figcaption>
           </figure>
           <figure
@@ -1190,7 +1190,7 @@
                 A genuinely good terminal, first.
               </h2>
               <p style="font-size: 18px; line-height: 1.6; color: #bfbab0; margin: 0">
-                None of this is limited to agents. hangar is built on Ghostty's engine, the
+                None of this is limited to agents. Hangar is built on Ghostty's engine, the
                 same fast, GPU-accelerated rendering and VT parsing, and handles everyday multi-project work with nothing scripted
                 at all. The workspaces, palettes, and keyboard-first navigation help just as much whether you're running coding
                 agents or juggling a dozen shells.
@@ -1271,7 +1271,7 @@
               Every ability, scriptable.
             </h2>
             <p style="font-size: 18px; line-height: 1.55; color: #bfbab0; margin: 0">
-              Almost everything you can do in hangar by hand,
+              Almost everything you can do in Hangar by hand,
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">hangarctl</span> can do over a
               local socket — no hidden UI-only actions. That turns the terminal into something you program around your own flow: a
               script or an agent builds and steers its own layout, and you extend the app's behavior without ever touching its
@@ -1455,7 +1455,7 @@ hangarctl session status completed --auto-reset \
             margin: 0 0 44px;
           "
         >
-          Get hangar.
+          Get Hangar.
         </h2>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px">
@@ -1634,7 +1634,7 @@ hangarctl session status completed --auto-reset \
                 <rect x="26" y="54" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
                 <rect x="54" y="54" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
               </svg>
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; font-weight: 700; font-size: 15px">hangar</span>
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; font-weight: 700; font-size: 15px">Hangar</span>
             </div>
             <p style="font-size: 13.5px; color: #6b727a; line-height: 1.6; margin: 0">
               Terminal for agentic flow. Embeds libghostty, the terminal engine from

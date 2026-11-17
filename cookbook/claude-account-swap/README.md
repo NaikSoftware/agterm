@@ -14,7 +14,7 @@ The right pane stays available while the command runs. Escape in the picker canc
 
 ## Requirements
 
-- hangar **0.26.0 or later**, which added the tree's `foregroundShell` field used before relaunching.
+- Hangar **0.26.0 or later**, which added the tree's `foregroundShell` field used before relaunching.
   From 0.26.2, progress panels can stay over the left pane. If pane placement is unavailable or the
   pane is hidden, the script falls back to a session-wide panel.
 - macOS, Python **3.10 or later**, `jq`, and the system `bash`, `ps`, `env`, and `cat` commands.
@@ -165,7 +165,7 @@ account's directory. A retained packet's path is printed on success and included
 its shell. The original transcript and the temporary summary remain on disk; delete the summary
 when you no longer need it. There is no automatic rollback or retry after typing a command.
 
-This recipe supports a native Claude executable in a local hangar pane with shell job control.
+This recipe supports a native Claude executable in a local Hangar pane with shell job control.
 A wrapper must replace itself with Claude using `exec`; keeping the wrapper shell alive fails
 both the foreground-program and process-group checks. Node-based installs, SSH, tmux, nested
 agents, and moving/swapping panes after Claude starts are unsupported. Those can break the

@@ -677,7 +677,7 @@ void MainWindow::createMenus()
     nav->addAction(action(QStringLiteral("last_session"), tr("Last Session"), QStringLiteral("go-bottom"), {}, [this] { go(QStringLiteral("last")); }));
 
     auto *settings = menuBar()->addMenu(tr("Se&ttings"));
-    settings->addAction(action(QStringLiteral("settings"), tr("Configure hangar…"), QStringLiteral("configure"), QKeySequence(QStringLiteral("Ctrl+Shift+,")),
+    settings->addAction(action(QStringLiteral("settings"), tr("Configure Hangar…"), QStringLiteral("configure"), QKeySequence(QStringLiteral("Ctrl+Shift+,")),
                                [this] { showSettings(); }));
     settings->addAction(action(QStringLiteral("edit_profile"), tr("Edit Current Profile…"), QStringLiteral("document-edit"), {},
                                [this] { profileDialog("showEditCurrentProfileDialog"); }));

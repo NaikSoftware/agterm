@@ -184,7 +184,7 @@ targets:
           codesign --force --options runtime --sign - "$zmx_dest"
           # re-seal the whole app: this phase can run AFTER Xcode's own code-sign on incremental
           # builds, so adding the helper would otherwise break the seal. --deep because a clean
-          # build can reach here before Xcode has signed hangar.debug.dylib. Entitlements come in a
+          # build can reach here before Xcode has signed Hangar.debug.dylib. Entitlements come in a
           # SECOND pass instead: --deep applies them to every nested binary, and helpers carry no app
           # TCC entitlements.
           codesign --force --deep --options runtime --sign - "$CODESIGNING_FOLDER_PATH"

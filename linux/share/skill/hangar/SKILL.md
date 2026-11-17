@@ -1,17 +1,17 @@
 ---
 name: hangar
 description: >
-  Drive hangar, a Qt/KDE terminal for Linux, via hangarctl. Use in an hangar session:
+  Drive Hangar, a Qt/KDE terminal for Linux, via hangarctl. Use in a Hangar session:
   report agent status (active, blocked, completed) on the session's sidebar row; manage sessions, companions,
   workspaces and windows; split panes; run, hide or show a program overlay; post a passive HUD message;
   open a dashboard of live panes; show a picker, a question or an input dialog and wait for the answer;
   send messages between panes; read a pane's screen or scrollback; type into a session; notify the user;
   set a session's context line or row tint; reload the keymap or event hooks; run a custom command;
   subscribe to status, notify, lifecycle, selection, split, tree, message and launch events.
-  Covers window/workspace/session addressing, HANGAR_* variables, and what hangar does not support.
+  Covers window/workspace/session addressing, HANGAR_* variables, and what Hangar does not support.
 when_to_use: >
-  Trigger on: hangar, hangar, hangarctl, HANGAR_SESSION_ID, and, from inside a session, plain requests such as
-  tell hangar I'm blocked or done, mark the session as needing input, split the pane, open a session for a worker,
+  Trigger on: Hangar, Hangar, hangarctl, HANGAR_SESSION_ID, and, from inside a session, plain requests such as
+  tell Hangar I'm blocked or done, mark the session as needing input, split the pane, open a session for a worker,
   keep a related program next to this session, make a companion, duplicate this session as a companion,
   run this in an overlay and give me the exit code, close or hide the overlay, show a message over the session,
   show a spinner while you work, ask me a question, let me pick from a list, ask me to type a value,
@@ -19,20 +19,20 @@ when_to_use: >
   read what the other pane printed, search the scrollback, show the dashboard of my agents,
   flag every session in a workspace, tint a session or workspace row, show or hide the file panel,
   tell me when the selected session changes, wait until that worker finishes, bring back the session I just closed,
-  run my custom command, reload the keymap or hooks, which commands hangar lacks.
+  run my custom command, reload the keymap or hooks, which commands Hangar lacks.
 allowed-tools: Bash(hangarctl *)
 ---
 <!-- hangar-skill -->
 
-# Driving hangar
+# Driving Hangar
 
-hangar is a terminal for Linux (Qt 6, KDE Frameworks, a Konsole terminal per pane) organised as named
+Hangar is a terminal for Linux (Qt 6, KDE Frameworks, a Konsole terminal per pane) organised as named
 workspaces of sessions. It exposes a control channel over a local unix socket, driven by the CLI `hangarctl`.
 Use it to report what an agent is doing, build layouts, run programs in overlays, ask the user things,
 pass messages between panes, read terminal text, and subscribe to control events.
 Events do not stream terminal output; read a buffer with `session text`.
 
-## Am I inside hangar?
+## Am I inside Hangar?
 
 Every pane shell gets these variables; `HANGAR_SESSION_ID` being set is the test:
 
@@ -67,7 +67,7 @@ Scrub them before starting such a daemon:
   create commands (`session new`, `session duplicate`, `workspace new`, `window new`, `recent open`) print the new id.
 - One request per invocation, except `events`, `msg read --wait`, blocking `pick`/`ask` and
   `session overlay open --block`, which poll.
-- A command for a feature hangar lacks fails with `<cmd> is not supported on this platform (<reason>)`.
+- A command for a feature Hangar lacks fails with `<cmd> is not supported on this platform (<reason>)`.
 - `hangarctl --help` lists every command; reference.md has each one's arguments, errors and read-back.
 
 ## The model
@@ -122,13 +122,13 @@ first key, Enter, or never). Read back as the node's `status` and `blink`; each 
 Prefer status over `notify` for "I need you": it stays on the row until acted on.
 Keep `notify <body> [--title T]` for a one-off desktop notification; it also raises the row's unseen badge.
 
-Claude Code: `scripts/install-claude-hooks.sh` (from the hangar checkout) points Claude Code's hooks at the
+Claude Code: `scripts/install-claude-hooks.sh` (from the Hangar checkout) points Claude Code's hooks at the
 installed adapter `~/.local/share/hangar/agent-status/hangar-claude-status.sh`
 (prompt submit and tool use → `active --blink`, stop → `completed --auto-reset`, permission prompt → `blocked`).
 The adapter reads the hook payload with `python3`: a subagent's `active` gets `--if-idle`, and a stop while a
 background subagent or workflow still runs posts `active --blink` instead of `completed`.
 Any other agent can call `hangar-agent-status.sh <state> [--blink|--auto-reset]` from the same directory;
-outside hangar it is a silent no-op.
+outside Hangar it is a silent no-op.
 
 ## Launching a program in a session
 
@@ -280,9 +280,9 @@ re-runs (read back as `restoreCommand`/`splitRestoreCommand`; the pin is stored 
 (after a reboot) falls back to re-running the captured command. Deleting a session or window ends its daemons; a
 `none` or `rerun` launch ends them all.
 
-## Not in hangar
+## Not in Hangar
 
-These master hangar features are absent; their commands answer `<cmd> is not supported on this platform (<reason>)`:
+These master Hangar features are absent; their commands answer `<cmd> is not supported on this platform (<reason>)`:
 
 - quick terminal (`quick …`) and scratch terminal (`session scratch`);
 - every `zmx …` command (live sessions use their own daemon), remote sessions and pane leads (`session lead`), `session restart`;
@@ -300,8 +300,8 @@ shape, sound and pane, and `session new --wait|--after|--before`.
 
 ## Keys
 
-hangar's ⌘ is Ctrl+Shift here (Konsole's convention); ⌘⇧ and ⌘⌃ are Ctrl+Alt+Shift; ⌃ stays Ctrl; ⌥ is Alt.
-`keymap.conf` reads hangar's `cmd`/`opt` words by the same table.
+Hangar's ⌘ is Ctrl+Shift here (Konsole's convention); ⌘⇧ and ⌘⌃ are Ctrl+Alt+Shift; ⌃ stays Ctrl; ⌥ is Alt.
+`keymap.conf` reads Hangar's `cmd`/`opt` words by the same table.
 
 | Key | Action |
 | --- | --- |

@@ -89,7 +89,7 @@ extension ControlServer {
         }
         let result = await remoteRunner.run(argv, deadline: Self.remoteCompanionDeadline)
         if result.refusedArguments {
-            return ControlResponse(ok: false, error: "the hangar on \(host) is too old for companions")
+            return ControlResponse(ok: false, error: "the Hangar on \(host) is too old for companions")
         }
         guard let reply = try? JSONDecoder().decode(ControlResponse.self, from: Data(result.stdout.utf8)) else {
             let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -103,7 +103,7 @@ extension ControlServer {
         }
         guard result.status == 0, reply.ok else {
             if reply.refusesUnknown(request.command) {
-                return ControlResponse(ok: false, error: "the hangar on \(host) is too old for companions")
+                return ControlResponse(ok: false, error: "the Hangar on \(host) is too old for companions")
             }
             return ControlResponse(ok: false, error: reply.error ?? "the remote command failed on \(host)")
         }
@@ -214,7 +214,7 @@ extension ControlServer {
         }
         let result = await remoteRunner.run(argv, deadline: Self.remoteCompanionDeadline)
         if result.refusedArguments {
-            return .refused("the hangar on \(host) is too old for page companions")
+            return .refused("the Hangar on \(host) is too old for page companions")
         }
         guard let reply = try? JSONDecoder().decode(ControlResponse.self, from: Data(result.stdout.utf8)) else {
             let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -222,7 +222,7 @@ extension ControlServer {
         }
         guard result.status == 0, reply.ok, let page = reply.result?.companionPage else {
             if reply.refusesUnknown(.sessionCompanionPageAttach) {
-                return .refused("the hangar on \(host) is too old for page companions")
+                return .refused("the Hangar on \(host) is too old for page companions")
             }
             return .refused(reply.error ?? "\(host) did not hand the page over")
         }

@@ -16,7 +16,7 @@ Pressing the chord while the grid already shows that same set closes it, so the 
 
 ## Requirements
 
-- hangar 0.20.0 or later. The grid itself is older, but naming one pane of a session with an `<id>:left` / `<id>:right` suffix shipped in 0.20.0, and skipping the idle half of a split is the whole point here.
+- Hangar 0.20.0 or later. The grid itself is older, but naming one pane of a session with an `<id>:left` / `<id>:right` suffix shipped in 0.20.0, and skipping the idle half of a split is the whole point here.
 - `jq`
 
 ## Setup
@@ -39,7 +39,7 @@ Apply the file with File ▸ Reload Keymap or `hangarctl keymap reload`. Any fre
 
 Nothing else needs configuring, because the recipe has no list to maintain: flagging is the configuration. ⌘⇧F flags and unflags the selected session out of the box, and View ▸ Flag Session does the same from the menu.
 
-Fired from a chord or the palette, the script does not load your shell profile. From hangar 0.22.0 the app prepends its bundled CLI directory and adds `/usr/local/bin` and `/opt/homebrew/bin` to `PATH`, so `hangarctl` and a Homebrew `jq` both resolve. Before 0.22.0 the script gets only the app's own `PATH`, often just the system directories; on those versions write `jq`'s absolute path into the script and set `HANGARCTL` to the binary's full path. Set `HANGARCTL` the same way on any version if yours sits somewhere unusual.
+Fired from a chord or the palette, the script does not load your shell profile. From Hangar 0.22.0 the app prepends its bundled CLI directory and adds `/usr/local/bin` and `/opt/homebrew/bin` to `PATH`, so `hangarctl` and a Homebrew `jq` both resolve. Before 0.22.0 the script gets only the app's own `PATH`, often just the system directories; on those versions write `jq`'s absolute path into the script and set `HANGARCTL` to the binary's full path. Set `HANGARCTL` the same way on any version if yours sits somewhere unusual.
 
 ## Usage
 
@@ -69,7 +69,7 @@ A full grid needs a second rule. The grid holds nine cells and drops the rest, s
 
 Nothing here closes a session, kills a shell, or changes a flag. The grid is an overlay that comes and goes, and everything it shows keeps running whether it is on screen or not.
 
-A pane counts as busy only when hangar can read its foreground command, and a setuid or setgid program such as `sudo` or `top` will not expose its argv to be read. A pane running one of those is treated as idle and left off the grid even while it works.
+A pane counts as busy only when Hangar can read its foreground command, and a setuid or setgid program such as `sudo` or `top` will not expose its argv to be read. A pane running one of those is treated as idle and left off the grid even while it works.
 
 Membership is fixed when the grid opens. A command that finishes while you are watching leaves its pane on the grid, now sitting at a prompt, and a pane that starts working is not added. Press the chord again to rebuild the set.
 

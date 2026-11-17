@@ -132,7 +132,7 @@ struct MessageCommandsTests {
                                             remaining: 3))
         let output = try parse(["read"], as: Msg.Read.self).output(batch)
         #expect(output == MessageOutput(
-            stdout: "\(first.uuidString) from S:P\none\n\(second.uuidString) from outside hangar\ntwo\n",
+            stdout: "\(first.uuidString) from S:P\none\n\(second.uuidString) from outside Hangar\ntwo\n",
             stderr: "3 more pending\n"))
     }
 

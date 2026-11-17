@@ -40,8 +40,8 @@ public struct ServerHookInstall {
                                              codexHome: codexRoot)
         var lines = ["Scripts installed to \(files.destination.path).", outcome.claudeText, outcome.codex.text(codexHome: codexHome),
                      outcome.pi.text, openCodeResult.text]
-        lines += skill.installed.map { "hangar skill installed for \($0.agent) at \($0.skillDirectory)." }
-        lines += skill.skipped.map { "hangar skill not installed for \($0.agent): \($0.reason)." }
+        lines += skill.installed.map { "Hangar skill installed for \($0.agent) at \($0.skillDirectory)." }
+        lines += skill.skipped.map { "Hangar skill not installed for \($0.agent): \($0.reason)." }
         lines.append("The source line was added to ~/.zshrc and ~/.bashrc (and config.fish when fish is set up); "
             + "open a new shell for it to take effect.")
         return Report(lines: lines, complete: !outcome.isWarning && !openCodeResult.warning && skill.skipped.isEmpty)

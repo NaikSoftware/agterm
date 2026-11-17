@@ -237,7 +237,7 @@ inherited callback defect is out of scope here.
 
 ## Post-Completion
 
-**Manual verification** (needs a second Mac running hangar):
+**Manual verification** (needs a second Mac running Hangar):
 - attach a remote session whose cwd exists on both machines; fire a keymap command writing `pwd`,
   `$AGT_SESSION_PWD` and `$AGT_SESSION_HOST` to a file; open scratch and a new split after closing the
   attach-time split; each starts in the local twin

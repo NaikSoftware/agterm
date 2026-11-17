@@ -2,11 +2,11 @@
 
 ## Overview
 
-Let users put a normal ghostty config in hangar's own config dir (`<configDir>/ghostty.conf`, next to `keymap.conf`) to override hangar's bundled ghostty defaults and the global ghostty config, scoped to hangar only — the standalone Ghostty.app never sees it. The motivating case is setting `macos-option-as-alt`, but it covers any ghostty key hangar does not already expose in Settings (`keybind`, `window-padding-*`, etc.).
+Let users put a normal ghostty config in Hangar's own config dir (`<configDir>/ghostty.conf`, next to `keymap.conf`) to override Hangar's bundled ghostty defaults and the global ghostty config, scoped to Hangar only — the standalone Ghostty.app never sees it. The motivating case is setting `macos-option-as-alt`, but it covers any ghostty key Hangar does not already expose in Settings (`keybind`, `window-padding-*`, etc.).
 
 This adds an hangar-scoped layer on top of the existing config chain, plus Edit/Reload parity with the keymap (Edit ghostty.conf…, Reload Config, and a `config.reload` control command).
 
-Note: `~/.config/ghostty/config` already works today (`GhosttyApp.loadConfig` loads it after the bundled defaults and before hangar's UI settings) — this feature is about an hangar-*scoped* file plus discoverability and Edit/Reload tooling, not about making ghostty config possible.
+Note: `~/.config/ghostty/config` already works today (`GhosttyApp.loadConfig` loads it after the bundled defaults and before Hangar's UI settings) — this feature is about an hangar-*scoped* file plus discoverability and Edit/Reload tooling, not about making ghostty config possible.
 
 ## Context (from discovery)
 
@@ -38,21 +38,21 @@ Note: `~/.config/ghostty/config` already works today (`GhosttyApp.loadConfig` lo
 
 ## Solution Overview
 
-A fourth config layer between the global ghostty config and hangar's UI-managed settings:
+A fourth config layer between the global ghostty config and Hangar's UI-managed settings:
 
 ```
 ghostty-defaults.conf  →  ~/.config/ghostty/config  →  <configDir>/ghostty.conf  →  ghostty-settings.conf (UI)
         (lowest)                  (global)                  (hangar-scoped)              (UI wins)
 ```
 
-The hangar-scoped file overrides defaults + global for any key, but hangar's UI-managed keys (font/theme/opacity/blur/scroll) still win because `ghostty-settings.conf` loads last — so the Settings picker stays the source of truth and the file owns everything the UI does not. Edit/Reload mirror the keymap surfaces, and `config.reload` joins the control catalog.
+The hangar-scoped file overrides defaults + global for any key, but Hangar's UI-managed keys (font/theme/opacity/blur/scroll) still win because `ghostty-settings.conf` loads last — so the Settings picker stays the source of truth and the file owns everything the UI does not. Edit/Reload mirror the keymap surfaces, and `config.reload` joins the control catalog.
 
 ## Technical Details
 
 - `ConfigPaths.ghosttyConfigPath(configDirectory: URL) -> URL` → `<dir>/ghostty.conf` (mirrors `keymapPath`).
 - `ConfigPaths.editorCommand(forKeymapPath:)` → `editorCommand(forPath:)` (same `$SHELL -ilc '${VISUAL:-${EDITOR:-vi}} "$1"'` body; `$0` label generalized to `hangar-config-edit`). Both `editKeymap` and the new `editGhosttyConfig` call it.
-- `loadConfig` inserts one `ghostty_config_load_file(<configDir>/ghostty.conf)` between the global-config load and the settings-conf load. `loadConfig` is handed the resolved hangar config dir (via `AppSettings.configDirectory` + `HANGAR_STATE_DIR`, the same resolution the keymap uses) so the file is co-located with `keymap.conf`. `resolveSelectionColors`'s source list gets the same path at the matching position.
-- Starter: `SettingsModel.ensureStarterGhosttyConfig` writes a commented `ghostty.conf` on first launch (never overwrites), with a header link to `https://ghostty.org/docs/config`, a commented `# macos-option-as-alt = true` example, and a note that hangar's UI-managed keys override this file.
+- `loadConfig` inserts one `ghostty_config_load_file(<configDir>/ghostty.conf)` between the global-config load and the settings-conf load. `loadConfig` is handed the resolved Hangar config dir (via `AppSettings.configDirectory` + `HANGAR_STATE_DIR`, the same resolution the keymap uses) so the file is co-located with `keymap.conf`. `resolveSelectionColors`'s source list gets the same path at the matching position.
+- Starter: `SettingsModel.ensureStarterGhosttyConfig` writes a commented `ghostty.conf` on first launch (never overwrites), with a header link to `https://ghostty.org/docs/config`, a commented `# macos-option-as-alt = true` example, and a note that Hangar's UI-managed keys override this file.
 - `config.reload`: `ControlResult.count` carries the ghostty config-diagnostic count (0 = clean), mirroring `keymap.reload`. The GUI Reload Config posts a warning banner when count > 0.
 
 ## What Goes Where
@@ -95,7 +95,7 @@ Wiring note: `GhosttyApp` is a settings-less singleton, and its `loadConfig` run
 - Modify: `Hangar/SettingsModel.swift`
 
 - [x] add `ensureStarterGhosttyConfig` (mirrors `ensureStarterKeymap`): on first launch, if `<configDir>/ghostty.conf` is absent, write a commented starter; never overwrite an existing file
-- [x] starter text: header comment linking `https://ghostty.org/docs/config`, a commented `# macos-option-as-alt = true` example, and a note that hangar's UI-managed keys (font/theme/opacity/scroll) override this file
+- [x] starter text: header comment linking `https://ghostty.org/docs/config`, a commented `# macos-option-as-alt = true` example, and a note that Hangar's UI-managed keys (font/theme/opacity/scroll) override this file
 - [x] call `ensureStarterGhosttyConfig` from `SettingsModel.init` alongside `ensureStarterKeymap` (`SettingsModel.swift:71`)
 - [x] note (intentional, do NOT "fix" by reordering): the starter is seeded at `:71`, AFTER `applyWindowTranslucency()` (`:63`) already booted `GhosttyApp.shared` → `loadConfig`, so on a fresh install `ghostty.conf` does not exist the first time `loadConfig` reads it. Harmless — the starter is all comments (a no-op), exactly like the starter keymap
 - [x] manual verification (skipped - not automatable): fresh `HANGAR_STATE_DIR` launch creates `config/ghostty.conf` with the documented contents; relaunch does not clobber an edited file

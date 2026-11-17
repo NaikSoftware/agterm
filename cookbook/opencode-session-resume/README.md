@@ -10,17 +10,17 @@ Same idea as the Claude Code and codex recipes next door: each tab reopens its o
 
 The mechanism follows the codex one, because opencode is also unable to take a session id at launch: the function maps tab id to opencode session id in `~/.local/state/opencode/hangar/<tab-id>` and resumes that. The difference is where the session id comes from. opencode keeps conversations in sqlite rather than one file per conversation, so there is nothing to glob for; the function asks `opencode session list --format json` instead. That list holds the current project's top-level sessions, while `--session` is not scoped at all and takes any session that exists, so everything the list offers is something a resume will accept.
 
-Subcommands, `--continue`, and any launch outside hangar pass through untouched, and so does an explicit `--session` — unless the id is the one this tab already owns, which the function takes back and decides on again, so that it resumes only a conversation it has just seen listed.
+Subcommands, `--continue`, and any launch outside Hangar pass through untouched, and so does an explicit `--session` — unless the id is the one this tab already owns, which the function takes back and decides on again, so that it resumes only a conversation it has just seen listed.
 
 ## Requirements
 
-- hangar 0.3.1 or later, with **Restore running commands on restart** turned on under Settings ▸ General ▸ Sessions. Both `HANGAR_SESSION_ID` and that setting predate the repository's earliest tagged release, so 0.3.1 is the first version that can be named, not the version the behavior arrived in.
+- Hangar 0.3.1 or later, with **Restore running commands on restart** turned on under Settings ▸ General ▸ Sessions. Both `HANGAR_SESSION_ID` and that setting predate the repository's earliest tagged release, so 0.3.1 is the first version that can be named, not the version the behavior arrived in.
 - `zsh`
 - opencode 1.18.10 or later, the version its `session list --format json` output shape and `--session` validation were checked against. The function creates `~/.local/state/opencode/hangar/` for its own mapping files, next to opencode's own state directory (`$XDG_STATE_HOME` is honored if you set it).
 
 ## Setup
 
-The functions have to be defined in `~/.zshrc`, the config your interactive login zsh reads. That matters: hangar feeds the restored command into that shell, so `.zshenv` and `.zprofile` are too early to intercept it.
+The functions have to be defined in `~/.zshrc`, the config your interactive login zsh reads. That matters: Hangar feeds the restored command into that shell, so `.zshenv` and `.zprofile` are too early to intercept it.
 
 Either paste both functions from `opencode-resume.zsh` into `~/.zshrc`, or keep the file and source it from there:
 
@@ -37,7 +37,7 @@ source ~/.zsh/opencode-resume.zsh
 
 The file is sourced, never run, so it does not need the executable bit and is committed without one. Its shebang is there to name the shell it is written for.
 
-Turn on **Restore running commands on restart** in Settings ▸ General, under Sessions. Without it hangar brings a tab back as a plain shell and there is nothing for the function to intercept.
+Turn on **Restore running commands on restart** in Settings ▸ General, under Sessions. Without it Hangar brings a tab back as a plain shell and there is nothing for the function to intercept.
 
 New tabs and shells pick the functions up on their own. In an already-open shell, run `source ~/.zshrc`.
 
@@ -45,7 +45,7 @@ To remove it, delete the two function blocks, or the `source` line, from `~/.zsh
 
 ## Usage
 
-Run `opencode` the way you always do. Start it, send at least one message, quit it, then start it again in the same tab — `ps` shows `opencode --session ses_…`. Restart hangar and the tab comes back to that conversation.
+Run `opencode` the way you always do. Start it, send at least one message, quit it, then start it again in the same tab — `ps` shows `opencode --session ses_…`. Restart Hangar and the tab comes back to that conversation.
 
 The first message matters. opencode writes the session only once there is something in it, so a tab where you started opencode and typed nothing has nothing to remember and comes back empty-handed.
 
@@ -53,9 +53,9 @@ Mappings live one file per tab under `${XDG_STATE_HOME:-~/.local/state}/opencode
 
 ## How it works
 
-hangar can remember the command running in a tab and re-run it on restart. It re-runs that command verbatim, and `opencode` with no arguments is a new conversation rather than a continuation.
+Hangar can remember the command running in a tab and re-run it on restart. It re-runs that command verbatim, and `opencode` with no arguments is a new conversation rather than a continuation.
 
-Every hangar tab has a stable identifier, `HANGAR_SESSION_ID`, that survives a restart. Claude Code can be handed a session id at launch and so needs no state at all. opencode cannot: `--session` is validated against existing sessions, and an id that is not there makes opencode print an error and exit instead of starting. So, like the codex recipe, this one keeps a file named after the tab holding the session id that tab owns — and, unlike it, never passes an id it has not just seen in the session list.
+Every Hangar tab has a stable identifier, `HANGAR_SESSION_ID`, that survives a restart. Claude Code can be handed a session id at launch and so needs no state at all. opencode cannot: `--session` is validated against existing sessions, and an id that is not there makes opencode print an error and exit instead of starting. So, like the codex recipe, this one keeps a file named after the tab holding the session id that tab owns — and, unlike it, never passes an id it has not just seen in the session list.
 
 On each `opencode` the function reads `~/.local/state/opencode/hangar/<tab-id>` and lists the current project's sessions. If the mapped id is among them it runs `opencode --session <id>` and is done. Otherwise it runs opencode plainly and, when that returns, lists again: the first id that was not in the "before" list is the conversation this run created, and it goes into the mapping file for next time. The list comes back most recently updated first, which is why the first new id is the right one to take.
 
@@ -63,12 +63,12 @@ Two things about opencode shaped this. Conversations moved into `~/.local/share/
 
 The restored command line is `opencode --session <id>`, which the function recognizes as its own: it drops the flag and decides again from scratch, so a tab whose conversation was deleted in the meantime comes back to a fresh opencode rather than to an error message.
 
-On the hangar side the replay is a foreground-process capture. At quit hangar records the argv of whatever the pane was running, and on relaunch it types that line back into the tab's fresh login shell with each argument single-quoted. Quoting suppresses alias expansion but not function lookup, which is why a shell function named `opencode` still catches the replayed line and an alias would not.
+On the Hangar side the replay is a foreground-process capture. At quit Hangar records the argv of whatever the pane was running, and on relaunch it types that line back into the tab's fresh login shell with each argument single-quoted. Quoting suppresses alias expansion but not function lookup, which is why a shell function named `opencode` still catches the replayed line and an alias would not.
 
 ## Limits
 
-- **hangar-specific.** It needs a stable per-tab identifier and relies on hangar feeding the restored command back through the login shell, which is how the function intercepts it. It will not work as-is in another terminal; you would adapt it to that terminal's equivalent.
-- **Rests on restore behavior that is verified empirically, not documented.** It could change between hangar versions.
+- **hangar-specific.** It needs a stable per-tab identifier and relies on Hangar feeding the restored command back through the login shell, which is how the function intercepts it. It will not work as-is in another terminal; you would adapt it to that terminal's equivalent.
+- **Rests on restore behavior that is verified empirically, not documented.** It could change between Hangar versions.
 - **The mapping is written only after opencode exits.** A terminal restart while opencode is still running kills the shell before that line is reached, so a tab that has never exited opencode cleanly comes back to a fresh conversation. From the first clean exit onward the tab is mapped, and after that a restart is covered twice over, by the mapping file and by the replayed `--session` line.
 - **One conversation per tab.** A split pane, a scratch pane and any overlay all run under the same `HANGAR_SESSION_ID` as the main pane, so a second opencode started in one of them reads and overwrites the same mapping file as the first.
 - **The tab keeps the conversation it first adopted.** Switching to another session inside the TUI does not move the mapping, so the next launch reopens the adopted one.

@@ -14,7 +14,7 @@ The hook also carries the `-m` model flag of the running kimi process into the p
 
 ## Requirements
 
-- hangar 0.16.0 or later (`session restore` with `--pane-id` and the sticky per-pane override shipped in 0.16.0), with **Restore running commands on restart** turned on under Settings ▸ General ▸ Sessions.
+- Hangar 0.16.0 or later (`session restore` with `--pane-id` and the sticky per-pane override shipped in 0.16.0), with **Restore running commands on restart** turned on under Settings ▸ General ▸ Sessions.
 - Kimi Code with `[[hooks]]` support in `~/.kimi-code/config.toml` (SessionStart event delivering JSON on stdin; tested on kimi-code 0.31.0).
 - `python3` (ships with macOS command line tools) for the one-line JSON read.
 
@@ -42,13 +42,13 @@ To remove it, delete the `[[hooks]]` block and the script.
 
 ## Usage
 
-Run `kimi` the way you always do. Every start (and every resume) re-pins the tab to that conversation; after hangar restarts, the tab relaunches `kimi -r <that conversation>`.
+Run `kimi` the way you always do. Every start (and every resume) re-pins the tab to that conversation; after Hangar restarts, the tab relaunches `kimi -r <that conversation>`.
 
 To detach a tab from its conversation, run `hangarctl session restore --clear` in it, or just start a new `kimi` — the pin follows the newest start.
 
 ## How it works
 
-Kimi's SessionStart hook fires with `{"session_id": "session_…", …}` on stdin inside the session's shell environment, where hangar's `HANGAR_SESSION_ID`, `HANGAR_PANE_ID`, and `HANGAR_SOCKET` are already exported. The script reads the id, walks up the process tree to find the owning `kimi` process and lift its `-m` flag, and writes the pane's restore override over the control socket. hangar consumes the override on the next launch — it never touches the running session.
+Kimi's SessionStart hook fires with `{"session_id": "session_…", …}` on stdin inside the session's shell environment, where Hangar's `HANGAR_SESSION_ID`, `HANGAR_PANE_ID`, and `HANGAR_SOCKET` are already exported. The script reads the id, walks up the process tree to find the owning `kimi` process and lift its `-m` flag, and writes the pane's restore override over the control socket. Hangar consumes the override on the next launch — it never touches the running session.
 
 The gotcha that matters in agent setups: a kimi run spawned *by* another agent (a Claude Code session driving kimi as a worker) fires the same hook in the same pane, and would steal the pane's pin from the conversation that actually owns it. The script detects that case via `CLAUDE_CODE_SESSION_ID` in the environment and skips the pin.
 

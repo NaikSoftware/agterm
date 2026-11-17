@@ -153,7 +153,7 @@ final class PhoneSession: @unchecked Sendable {
                 answer = refused ? Self.encode(ControlResponse(ok: false, error: "phone.* is not available from a phone"))
                     : try SocketClient(path: socketPath).sendRaw(body)
             } catch {
-                answer = Self.encode(ControlResponse(ok: false, error: "hangar is not reachable: \(error)"))
+                answer = Self.encode(ControlResponse(ok: false, error: "Hangar is not reachable: \(error)"))
             }
             let ok = ((try? JSONSerialization.jsonObject(with: answer)) as? [String: Any])?["ok"] as? Bool == true
             queue.async {
@@ -228,7 +228,7 @@ final class PhoneSession: @unchecked Sendable {
     /// The control reply with the phone's `id` spliced in as its first key, the rest of the bytes untouched.
     static func tagged(_ answer: Data, id: Data) -> Data {
         guard answer.first == UInt8(ascii: "{"), answer.count > 2 else {
-            return tagged(encode(ControlResponse(ok: false, error: "malformed reply from hangar")), id: id)
+            return tagged(encode(ControlResponse(ok: false, error: "malformed reply from Hangar")), id: id)
         }
         return Data(#"{"id":"#.utf8) + id + Data(",".utf8) + answer.dropFirst() + Data("\n".utf8)
     }

@@ -84,7 +84,7 @@ sees an `hangar-3f2a…` process in `ps` can search one word and land on our doc
 
 One authority: every command goes over the control socket, so a running instance joins five sources into
 one answer — live stores, pending-close records, checked closed-window snapshots, the
-directory-versus-index comparison, and the observed daemon list. With hangar stopped the commands fail
+directory-versus-index comparison, and the observed daemon list. With Hangar stopped the commands fail
 with "no instance"; there is no standalone path and no hybrid fallback, because a second authority would
 report a weaker truth (it can see neither pending-close nor live-model state) under the same command name.
 
@@ -104,11 +104,11 @@ check (`loop.zig:469-471`). So a client attaching between the listing and the ki
 window is narrowed rather than closed, because closing it needs an upstream zmx capability and the
 project pins zmx and runs no fork. Prune narrows it by re-listing immediately before it mutates anything
 and dropping any candidate no longer observed at zero clients, with model resolution held on the main
-actor so hangar's own claims cannot move underneath the operation.
+actor so Hangar's own claims cannot move underneath the operation.
 
 What remains is an external attach between that second listing and the kill. It is narrow — the
 candidates are daemons no pane claims, so someone must reach an unclaimed daemon by name from outside
-hangar — but it stops being far-fetched once `zmx list` prints daemon names and the docs make the word
+Hangar — but it stops being far-fetched once `zmx list` prints daemon names and the docs make the word
 user-facing, so the docs must say plainly that such a client can be terminated.
 
 `kill --force` is the escape hatch, and it requires an explicit target and pane. Not because other close
@@ -478,7 +478,7 @@ before calling the host and name the resolved owner; owner naming belongs where 
 - [x] add `killObservedOrphan(names:)` to `ZmxClient` — invokes names individually, never passes
       `--force`, counts only the exact `killed session <name>` line as success — leaving
       `kill(paneIdentities:)` forced for semantic deletion
-- [x] re-list immediately before mutating, with model resolution on the main actor so hangar's claims
+- [x] re-list immediately before mutating, with model resolution on the main actor so Hangar's claims
       cannot change during the operation
 - [x] write failing round-trip and dispatcher tests for `zmx.prune`, extending `MockControlActions`
 - [x] add `case zmxPrune = "zmx.prune"`, the `ControlActions` member and the dispatcher arm
@@ -564,7 +564,7 @@ before calling the host and name the resolved owner; owner naming belongs where 
       user-facing — README included, since it carries the same unsupported escape hatch
 - [x] document that these commands need a running instance, and why there is no app-down path
 - [x] state that prune's gate is observed-and-revalidated rather than atomic, and that a client which
-      attaches from outside hangar in the remaining window can be terminated
+      attaches from outside Hangar in the remaining window can be terminated
 - [x] state the kill outcomes and that the reason for explicit addressing is backend-process destruction,
       not a recovery difference from other close commands
 - [x] state no total command count on any surface, per the catalog rule
@@ -579,7 +579,7 @@ before calling the host and name the resolved owner; owner naming belongs where 
 - [x] `zmx kill` refuses without explicit target, pane and force, and each row of the outcomes table
       matches; a failed kill leaves the natural exit path working
 - [x] `restore mode` reads all five fields, reports a save failure as a failure, and rolls memory back
-- [x] every command fails with a clear "no instance" error when hangar is not running
+- [x] every command fails with a clear "no instance" error when Hangar is not running
 - [x] run the gates once: `make build`, `cd HangarCore && swift test`, `make test-app`, `make lint`
 
 ### Task 12: [Final] Update documentation

@@ -10,7 +10,7 @@ Press the key and a 60% floating overlay opens over the current session, running
 
 1. Pick a workspace from the ones the window already has, or pick `＋ New workspace…` to make one.
 2. If you picked the create entry, type the new workspace's name.
-3. Type the session's name, or leave it blank to let hangar label the row itself.
+3. Type the session's name, or leave it blank to let Hangar label the row itself.
 
 The session is created in the workspace you chose and selected, and the overlay closes. Esc at any prompt cancels and creates nothing.
 
@@ -18,7 +18,7 @@ It is the answer to the gap between ⌘N, which puts a session in the workspace 
 
 ## Requirements
 
-- hangar 0.8.0 or later. `session overlay open --follow` shipped in that release, and the recipe uses it to pull you to the overlay when the key is pressed from another session. The rest of the commands — `tree`, `session new --workspace-name`/`--create-workspace`, `overlay open --size-percent` — are older.
+- Hangar 0.8.0 or later. `session overlay open --follow` shipped in that release, and the recipe uses it to pull you to the overlay when the key is pressed from another session. The rest of the commands — `tree`, `session new --workspace-name`/`--create-workspace`, `overlay open --size-percent` — are older.
 - `jq`
 - `fzf`
 - POSIX `sh`, which the script's shebang names
@@ -39,7 +39,7 @@ Add one entry to `~/.config/hangar/keymap.conf`:
 command "New Session in Workspace…" cmd+t ~/bin/agt-new-session.sh
 ```
 
-Apply it with File ▸ Reload Keymap or `hangarctl keymap reload`. Any chord with a modifier works, and leaving the chord out makes the entry palette-only. ⌘T is free in hangar's own defaults, so nothing is shadowed by taking it.
+Apply it with File ▸ Reload Keymap or `hangarctl keymap reload`. Any chord with a modifier works, and leaving the chord out makes the entry palette-only. ⌘T is free in Hangar's own defaults, so nothing is shadowed by taking it.
 
 Three things are tunable through the environment, and none needs setting on an ordinary install:
 
@@ -65,13 +65,13 @@ Three details cost real time to find.
 
 An overlay inherits the app's `PATH`, which is the launchd default: `/usr/local/bin` plus the system directories, with nothing your shell profile adds. A bare `fzf` is therefore not found, the script exits 127, and because the overlay opens without `--wait` it closes instantly and takes the error message with it — the visible symptom is an overlay that flashes and vanishes. Hence the `PATH` prepend at the top. Run the script from a shell if something looks wrong; that is where the error text goes.
 
-The overlay does not inherit the *launcher's* environment either, which is why `HANGARCTL` and `AGT_BIN_PATH` are prefixed onto the overlay command as assignments rather than exported. hangar spawns the overlay's shell itself, from the app's environment plus the `HANGAR_*` set, so a value this process exports never arrives — and a `VAR=value` prefix on the keymap line reaches only the launcher, leaving the half that runs `fzf`, `jq` and the `tree` call on the defaults. Since hangar runs the overlay command through `eval`, a leading assignment is honored, so the two values ride across in the command string. Both are single-quote-escaped for the same reason the path is.
+The overlay does not inherit the *launcher's* environment either, which is why `HANGARCTL` and `AGT_BIN_PATH` are prefixed onto the overlay command as assignments rather than exported. Hangar spawns the overlay's shell itself, from the app's environment plus the `HANGAR_*` set, so a value this process exports never arrives — and a `VAR=value` prefix on the keymap line reaches only the launcher, leaving the half that runs `fzf`, `jq` and the `tree` call on the defaults. Since Hangar runs the overlay command through `eval`, a leading assignment is honored, so the two values ride across in the command string. Both are single-quote-escaped for the same reason the path is.
 
 `fzf --print-query` prints the query whether you confirmed it or cancelled, so on the two typing prompts an empty-string test cannot tell "typed a name and pressed Esc" from "typed a name and pressed Enter". The exit status can: 130 is the cancel. That is why those two prompts capture `$?` into a variable and check it before looking at the text at all.
 
-`hangarctl` resolves its socket from `--socket`, then `HANGAR_STATE_DIR`, then the app-support default. It does **not** read `HANGAR_SOCKET`, despite hangar exporting exactly that into every session it spawns — an `export HANGAR_SOCKET=…` in a script like this looks load-bearing and does nothing. The script passes the socket through explicitly instead: `$AGT_SOCKET` in the launcher (hangar gives a custom command that one) or `$HANGAR_SOCKET` in the overlay (hangar gives a pty that one), and neither set means the default resolution stands.
+`hangarctl` resolves its socket from `--socket`, then `HANGAR_STATE_DIR`, then the app-support default. It does **not** read `HANGAR_SOCKET`, despite Hangar exporting exactly that into every session it spawns — an `export HANGAR_SOCKET=…` in a script like this looks load-bearing and does nothing. The script passes the socket through explicitly instead: `$AGT_SOCKET` in the launcher (Hangar gives a custom command that one) or `$HANGAR_SOCKET` in the overlay (Hangar gives a pty that one), and neither set means the default resolution stands.
 
-The path the script hands the overlay is absolute, because the overlay starts with its own working directory, and it is single-quote-escaped, because hangar runs the overlay command through `sh -c` and a directory name with a space or an apostrophe in it would otherwise break the line apart.
+The path the script hands the overlay is absolute, because the overlay starts with its own working directory, and it is single-quote-escaped, because Hangar runs the overlay command through `sh -c` and a directory name with a space or an apostrophe in it would otherwise break the line apart.
 
 ## Limits
 

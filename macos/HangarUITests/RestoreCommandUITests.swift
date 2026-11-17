@@ -71,7 +71,7 @@ final class RestoreCommandUITests: XCTestCase {
         XCTAssertTrue(poll { self.appliedAppearance() == "dark" }, "the launch under test must be dark")
         let probe = try XCTUnwrap(writeEnvProbe(), "the restored pane's shell should answer the env probe")
         let fields = probe.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
-        XCTAssertEqual(fields.first, "hangar", "a restored pane must keep hangar's TERM_PROGRAM identity")
+        XCTAssertEqual(fields.first, "hangar", "a restored pane must keep Hangar's TERM_PROGRAM identity")
         XCTAssertFalse(fields.last?.isEmpty ?? true, "a restored pane must keep its injected HANGAR_SESSION_ID")
     }
 

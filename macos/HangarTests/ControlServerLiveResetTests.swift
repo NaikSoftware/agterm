@@ -146,7 +146,7 @@ final class ControlServerLiveResetTests: XCTestCase {
 
         XCTAssertTrue(response.ok)
         XCTAssertEqual(response.result?.liveReset, ControlLiveResetStatus(sessions: 1, panes: 1, pending: true, staleHost: 1))
-        XCTAssertTrue(response.result?.text?.contains("It runs under a helper from an earlier hangar version or login") == true)
+        XCTAssertTrue(response.result?.text?.contains("It runs under a helper from an earlier Hangar version or login") == true)
     }
 
     func testZmxListMarksAnOutdatedDaemon() throws {

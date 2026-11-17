@@ -14,7 +14,7 @@ So this hook does not try. On every prompt it prints the line that is currently 
 
 ## Requirements
 
-- hangar 0.26.0 or later, which shipped `session context`
+- Hangar 0.26.0 or later, which shipped `session context`
 - Claude Code
 - `jq`
 - bash, which macOS ships as `/bin/bash`
@@ -48,7 +48,7 @@ Register it as a `UserPromptSubmit` hook by adding an entry to `~/.claude/settin
 }
 ```
 
-The hook changes nothing in hangar itself. What it prints becomes context on the model's next turn, and the model runs `hangarctl session context` if it decides the line needs replacing. That means the command has to be permitted: if you run Claude Code with an allowlist, add `Bash(hangarctl session context:*)` to it. A denial is worse than no nudge, because the model abandons the write for the rest of the turn.
+The hook changes nothing in Hangar itself. What it prints becomes context on the model's next turn, and the model runs `hangarctl session context` if it decides the line needs replacing. That means the command has to be permitted: if you run Claude Code with an allowlist, add `Bash(hangarctl session context:*)` to it. A denial is worse than no nudge, because the model abandons the write for the rest of the turn.
 
 Two settings, both optional:
 
@@ -74,7 +74,7 @@ That literal id matters. A Claude Code permission rule cannot match a command co
 Four smaller things the script has to get right:
 
 - `tree` reports the frontmost window only, so a session in a background window reads as absent and the hook would go quiet — which is exactly the case the nudge exists for. It passes `--window "$HANGAR_WINDOW_ID"` when the session has one.
-- Absent and unset are different answers. A session that is not in the tree at all must produce silence, not "your context is not set", so the jq returns a control character for absent, which hangar can never store as a real value.
+- Absent and unset are different answers. A session that is not in the tree at all must produce silence, not "your context is not set", so the jq returns a control character for absent, which Hangar can never store as a real value.
 - The context belongs to the session, not to a pane, so in a split only the main pane's agent writes it. Otherwise two agents in one session overwrite each other's line all day.
 - A headless `claude -p` inherits `HANGAR_*` from whoever spawned it and would write its spawner's line. Claude Code sets `CLAUDE_CODE_ENTRYPOINT` to `sdk-cli` for a headless run and `cli` for the agent in the pane, and the hook exits on anything but `cli`.
 

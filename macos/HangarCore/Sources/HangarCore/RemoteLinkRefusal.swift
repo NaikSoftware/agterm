@@ -38,7 +38,7 @@ public enum RemoteLinkRefusal: String, Equatable, Sendable, CaseIterable {
         switch self {
         case .revealIntent: return "the file is on \(host); only a file on this Mac can be revealed in Finder"
         case .notPresenter: return "another Mac presents this session, so \(host) cannot show the file here"
-        case .originTooOld: return "the hangar on \(host) is too old to open clicked files"
+        case .originTooOld: return "the Hangar on \(host) is too old to open clicked files"
         case .paneNotAttached: return "this pane is not attached to \(host)"
         case .hidden: return "the page from \(host) would be hidden here"
         case .notFound: return "no such file on \(host)"

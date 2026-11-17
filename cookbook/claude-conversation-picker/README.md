@@ -14,7 +14,7 @@ The HUD is the part worth copying on its own. Any script that makes the user wai
 
 ## Requirements
 
-- hangar 0.21.0 or later, which shipped `session hud`, the passive message panel this recipe puts up while it works. Without it the recipe still runs; the wait is just silent.
+- Hangar 0.21.0 or later, which shipped `session hud`, the passive message panel this recipe puts up while it works. Without it the recipe still runs; the wait is just silent.
 - Python 3.9 or later, which macOS ships as `/usr/bin/python3`
 - Claude Code, with its conversations in `~/.claude/projects/` (or wherever `CLAUDE_CONFIG_DIR` points), and a model to name them with
 
@@ -77,7 +77,7 @@ Naming does read them, but only at the ends. A transcript can be tens of megabyt
 
 The cache key is the transcript's mtime, with slack. An exact key would re-name the conversation you are sitting in on every press, because its file grows while the script runs, so a name survives an hour of new activity or a bounded amount of growth, whichever comes first. The size rule is what catches a session that changed subject in one long sitting, which the clock alone misses.
 
-The panel is `hangarctl session hud`: `open` the first time, `update` after that, `close` at the end. It is passive, so unlike an overlay it leaves the session focused and typable, which matters because the wait is seconds long and you may want to keep typing through it. Two details are worth copying. The width is pinned with `--size-percent`, since the panel otherwise sizes itself to its longest line and a step naming a longer conversation would resize it mid-run. And every HUD failure is ignored: an older hangar without the command, a session that went away, anything at all — a progress panel must never be the reason the thing it was reporting on fails.
+The panel is `hangarctl session hud`: `open` the first time, `update` after that, `close` at the end. It is passive, so unlike an overlay it leaves the session focused and typable, which matters because the wait is seconds long and you may want to keep typing through it. Two details are worth copying. The width is pinned with `--size-percent`, since the panel otherwise sizes itself to its longest line and a step naming a longer conversation would resize it mid-run. And every HUD failure is ignored: an older Hangar without the command, a session that went away, anything at all — a progress panel must never be the reason the thing it was reporting on fails.
 
 Closing it before the picker opens is not tidiness. A session has one overlay slot, the picker is a cover of its own, and a panel left up is how a press ends with a panel and no picker.
 

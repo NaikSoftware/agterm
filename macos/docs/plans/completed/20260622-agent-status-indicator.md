@@ -2,17 +2,17 @@
 
 ## Overview
 
-Add a per-session **agent status** indicator to hangar, driven entirely over the control channel
+Add a per-session **agent status** indicator to Hangar, driven entirely over the control channel
 (`hangarctl`), plus an installable hooks package that wires coding agents to it. Inspired by
 [`oleg-koval/kitty-agent-status`](https://github.com/oleg-koval/kitty-agent-status) but adapted to
-hangar's CLI/icon model — no direct agent integration, just a thin control command + a sidebar icon.
+Hangar's CLI/icon model — no direct agent integration, just a thin control command + a sidebar icon.
 
 A coding agent (Claude Code / a shell agent / Codex) running inside an hangar-spawned shell calls
-`hangarctl session status <state>` to set its session's status. hangar renders a small SF Symbol on
+`hangarctl session status <state>` to set its session's status. Hangar renders a small SF Symbol on
 that session's sidebar row, just left of the existing OSC-notification count badge. By default the
 indicator is **stored and kept** (keep-state: hidden while you view the session, restored on
 switch-away); a caller-set `--auto-reset` flag makes it **clear on visit** — the indicator resets to
-idle for good once that session is selected. hangar hard-codes nothing per-status; the policy lives
+idle for good once that session is selected. Hangar hard-codes nothing per-status; the policy lives
 entirely in the flag. The indicator is always shown ONLY on sessions you are not currently looking at
 — the selected session of the frontmost window hides its icon; switching away re-reveals it (for a
 kept indicator).
@@ -30,7 +30,7 @@ control-native (no GUI action to set status) and cross-window aware (the hook al
 
 ## Context (from discovery)
 
-- **Project:** hangar — native macOS SwiftUI terminal on libghostty. Two build systems: `HangarCore`
+- **Project:** Hangar — native macOS SwiftUI terminal on libghostty. Two build systems: `HangarCore`
   SwiftPM package (`swift test`, host-free, strict concurrency) + the app target (`xcodegen` +
   `xcodebuild`). This is a **Swift project (no `go.mod`)** — Go-specific planning rules don't apply.
 - **Near-exact template:** the `unseenCount` / `BadgeView` notification-badge path.
@@ -100,12 +100,12 @@ control-native (no GUI action to set status) and cross-window aware (the hook al
 
 - **Model (HangarCore):** an `AgentStatus` enum + an `AgentIndicator` value struct; one ephemeral
   `Session.agentIndicator` field (parallel to `unseenCount`); a single `AppStore.setAgentIndicator`
-  mutation point. No workspace roll-up, no priority/ranking logic — hangar only set/resets per-session
+  mutation point. No workspace roll-up, no priority/ranking logic — Hangar only set/resets per-session
   glyphs and never reasons about ordering.
 - **Behavior:** the indicator is kept by default — only an `autoReset` indicator clears on visit
   (`selectSession` resets it to idle when `agentIndicator.autoReset` is true, right after
   `clearUnseen`; a non-auto-reset indicator is left untouched). `autoReset` is a caller-set,
-  status-agnostic flag (symmetrical with `blink`); hangar hard-codes no per-status policy. The icon's
+  status-agnostic flag (symmetrical with `blink`); Hangar hard-codes no per-status policy. The icon's
   appear/disappear is otherwise purely **render-time gating** in the sidebar: hidden iff the session is
   the selected session of the frontmost window. `NSApp.isActive` is deliberately left OUT of the gate
   (it would flicker the selected row's icon on every app-switch for no benefit).
@@ -274,8 +274,8 @@ visible AND `blink == true`.
 - Create: `Hangar/Resources/agent-status/codex-notify.sh`
 - Modify: `project.yml` (bundle `Hangar/Resources/agent-status` as a Contents/Resources folder, mirroring the `Resources/ghostty` entry)
 
-- [x] `hangar-agent-status.sh <state> [--blink]`: guard `[ -n "$HANGAR_SESSION_ID" ] || exit 0`, then `exec ${HANGARCTL:-hangarctl} --socket "$HANGAR_SOCKET" session status "$1" --target "$HANGAR_SESSION_ID" "${@:2}"` (no-op outside hangar). RESOLUTION ORDER for the binary, documented once here: (1) an `HANGARCTL` env var if the caller set one, (2) the absolute bundled-binary path the installer bakes in (see Task 9), (3) `hangarctl` on `PATH`. The installer guarantees (2) so the hook fires even when the CLI tool was never symlinked into `PATH`
-- [x] `shell/integration.sh`: bash/zsh `preexec`/`precmd` — `active` while a command matching `HANGAR_AGENT_RE` runs (Claude excluded; its hooks are precise), `idle` at the next prompt; all calls best-effort/no-op outside hangar
+- [x] `hangar-agent-status.sh <state> [--blink]`: guard `[ -n "$HANGAR_SESSION_ID" ] || exit 0`, then `exec ${HANGARCTL:-hangarctl} --socket "$HANGAR_SOCKET" session status "$1" --target "$HANGAR_SESSION_ID" "${@:2}"` (no-op outside Hangar). RESOLUTION ORDER for the binary, documented once here: (1) an `HANGARCTL` env var if the caller set one, (2) the absolute bundled-binary path the installer bakes in (see Task 9), (3) `hangarctl` on `PATH`. The installer guarantees (2) so the hook fires even when the CLI tool was never symlinked into `PATH`
+- [x] `shell/integration.sh`: bash/zsh `preexec`/`precmd` — `active` while a command matching `HANGAR_AGENT_RE` runs (Claude excluded; its hooks are precise), `idle` at the next prompt; all calls best-effort/no-op outside Hangar
 - [x] `codex-notify.sh`: set `completed`/`blocked` per turn, then forward an existing notify program via `HANGAR_NOTIFY_FORWARD` if set
 - [x] add the `agent-status` resource folder to `project.yml`, `xcodegen generate`, confirm it lands in `Hangar.app/Contents/Resources/agent-status`
 - [x] tests: this task ships shell scripts + a build-config change (no Swift logic); verification is a build + a manual `bash hangar-agent-status.sh active` no-op-outside-hangar check (note in checklist), so no unit test — covered by Task 9's manual install verification. Verified: `env -u HANGAR_SESSION_ID bash hangar-agent-status.sh active` exits 0 without invoking hangarctl; all three scripts pass `bash -n`/`zsh -n`; `xcodebuild` BUILD SUCCEEDED; the folder bundled at `Hangar.app/Contents/Resources/agent-status/` (incl. `shell/integration.sh`) with exec bits preserved

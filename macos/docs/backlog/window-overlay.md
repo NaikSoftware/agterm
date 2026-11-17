@@ -66,7 +66,7 @@ with no sessions, and a page over a session needs that session first. Postponed 
 
 **Rejected:** an `hangarctl pick --html` modal (a pick-shaped page that only returns a value). It fit the
 requester's launcher but named a general overlay after the mechanism it reused and could not drive
-hangar itself. Today's workaround for a launcher is a sessionless keymap chord plus `hangarctl pick`
+Hangar itself. Today's workaround for a launcher is a sessionless keymap chord plus `hangarctl pick`
 (window-scoped, works with zero sessions) and `session new`.
 
 **Related, separate change:** `workspace new` has no `--after`/`--before` placement (`AppStore.addWorkspace`

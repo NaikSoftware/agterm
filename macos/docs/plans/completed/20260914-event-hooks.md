@@ -2,9 +2,9 @@
 
 ## Overview
 
-Today the only way to react to an hangar event is a running process polling `events.read` over the control
+Today the only way to react to a Hangar event is a running process polling `events.read` over the control
 socket. This adds `hooks.conf`, a file beside `keymap.conf`, where each line binds a shell command to an
-event kind. hangar runs the command detached when a matching event enters the control event ring, with the
+event kind. Hangar runs the command detached when a matching event enters the control event ring, with the
 event JSON on stdin and a small fixed `$AGT_*` environment. No process has to stay alive, the file survives
 restarts, and reload/edit reuse the keymap UX.
 

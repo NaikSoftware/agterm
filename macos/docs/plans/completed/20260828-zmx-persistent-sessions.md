@@ -24,7 +24,7 @@ shell in v1; every other shell starts as an ordinary unwrapped shell and Setting
 | persistence should be enabled per session | Eugene chose one global mode. |
 | primary and split daemon names can follow pane role | Promotion changes roles, so live mode needs a stable persisted pane identity. |
 | shell integration requires a Ghostty fork | Zsh integration is environment-only and survives through the wrapper. |
-| an attach client must detach cleanly | SIGTERM to hangar drops the client to zero while the daemon and shell remain alive. |
+| an attach client must detach cleanly | SIGTERM to Hangar drops the client to zero while the daemon and shell remain alive. |
 | a missing daemon needs recovery code | `zmx attach` creates a fresh daemon under the persisted name. |
 
 The committed spike at `495accd7` also proves OSC 7 cwd updates, one-time `initial_input`, Claude Code input
@@ -76,7 +76,7 @@ Daemon action follows semantic deletion, never `TerminalSurface.teardown()`.
 | Requested-live launch | Reap zero-client app daemons absent from a complete persisted-name set. Preserve claimed daemons even when eligibility falls back. Skip reap if inventory is incomplete. |
 | Deliberate non-live launch | Reap every zero-client app daemon in this instance namespace. |
 
-The zmx directory is a short hash-derived path under `/tmp`, scoped by the canonical hangar state directory.
+The zmx directory is a short hash-derived path under `/tmp`, scoped by the canonical Hangar state directory.
 A stale control socket pathname can remain after SIGTERM, so tests wait for a successful request rather than
 checking only that the socket exists.
 

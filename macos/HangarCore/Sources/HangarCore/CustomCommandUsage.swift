@@ -67,7 +67,7 @@ public struct CustomCommandUsageStore: Sendable {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(usage).write(to: fileURL, options: .atomic)
         } catch {
-            NSLog("hangar: save custom command usage failed: %@", String(describing: error))
+            NSLog("Hangar: save custom command usage failed: %@", String(describing: error))
         }
     }
 }
