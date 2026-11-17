@@ -142,8 +142,8 @@ extension WorkspaceSidebar.Coordinator {
                      draggingSession session: NSDraggingSession,
                      endedAt screenPoint: NSPoint,
                      operation: NSDragOperation) {
-        // a completed drop (operation != []) already ran acceptDrop, which keeps a spring-opened
-        // workspace open; only a cancelled drag (dropped nowhere) collapses back to the pre-drag state.
+        // a completed sidebar drop already ran acceptDrop, which keeps a spring-opened workspace open, and a
+        // drop elsewhere (a terminal) passed draggingExited, which collapsed it; only a cancelled drag collapses here.
         finishDraggingSequence(collapseSpringLoaded: operation.isEmpty)
     }
 

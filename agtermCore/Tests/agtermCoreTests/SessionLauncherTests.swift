@@ -72,6 +72,12 @@ struct SessionLauncherTests {
         #expect(Session.dropText([agent, remote, plain]) == "c1,R,\(plain.id.uuidString)")
         #expect(Session.dropText([]) == nil)
     }
+
+    @MainActor @Test(arguments: ["R\u{1b}[2J", "R\nrm -rf ~"])
+    func aRemoteIdThatIsNotAPlainTokenDropsAsTheLocalId(remoteID: String) {
+        let remote = Session(initialCwd: "/b", remoteHost: "far", remoteSessionID: remoteID)
+        #expect(remote.dropID == remote.id.uuidString)
+    }
 }
 
 struct TitleSpinnerTests {

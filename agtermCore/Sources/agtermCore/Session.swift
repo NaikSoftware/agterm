@@ -665,7 +665,7 @@ public final class Session: Identifiable {
     }
 
     /// The id a sidebar drag inserts: the agent's conversation, else the origin's session, else this row.
-    public var dropID: String { agentSessionID ?? remoteSessionID ?? id.uuidString }
+    public var dropID: String { agentSessionID ?? remoteSessionID.flatMap(SessionLauncher.plainSessionID) ?? id.uuidString }
 
     /// The dragged sessions' ids joined by `,`; nil for none.
     public static func dropText(_ sessions: [Session]) -> String? {

@@ -347,6 +347,7 @@ struct RemotePresentationStateTests {
     @Test func anOriginsAgentSessionIDThatIsNotAPlainTokenIsDropped() throws {
         let (store, session) = try attached()
 
+        store.applyRemoteAgentSessionID("c1", forSession: session.id)
         store.applyRemoteAgentSessionID("c1; rm -rf ~", forSession: session.id)
 
         #expect(session.agentSessionID == nil)

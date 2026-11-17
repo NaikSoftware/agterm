@@ -321,6 +321,15 @@ final class WorkspaceSidebarCompanionsTests: XCTestCase {
         XCTAssertEqual(try dragText(group.after.id), group.after.dropID)
     }
 
+    func testSelectedRowsDragWritesTheirIdsInVisualOrder() throws {
+        let group = try seed()
+        _ = group.store.selectSession(group.after.id, sidebarSelection: [group.after.id, group.parent.id])
+        buildSidebar(for: group.store)
+        outline.selectRowIndexes(IndexSet([try row(group.parent.id), try row(group.after.id)]), byExtendingSelection: false)
+
+        XCTAssertEqual(try dragText(group.after.id), "\(group.parent.dropID),\(group.after.dropID)")
+    }
+
     func testWorkspaceDragWritesAllSessionIdsAsText() throws {
         let store = try XCTUnwrap(library.activeStore)
         let work = store.addWorkspace(name: "work")
