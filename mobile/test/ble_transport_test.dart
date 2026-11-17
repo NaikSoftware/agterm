@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:hangar_mobile/ble_link.dart';
-import 'package:hangar_mobile/ble_transport.dart';
-import 'package:hangar_mobile/client.dart';
-import 'package:hangar_mobile/model.dart';
+import 'package:elis_mobile/ble_link.dart';
+import 'package:elis_mobile/ble_transport.dart';
+import 'package:elis_mobile/client.dart';
+import 'package:elis_mobile/model.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,33 +52,33 @@ void main() {
 
   group('pairing link', () {
     test('h and p with b=1', () {
-      final p = Pairing.parse('hangar://pair?h=10.0.0.2&p=8765&t=$token&f=$fp&n=mac&b=1')!;
+      final p = Pairing.parse('elis://pair?h=10.0.0.2&p=8765&t=$token&f=$fp&n=mac&b=1')!;
       expect((p.host, p.port, p.bluetooth, p.key), ('10.0.0.2', 8765, true, fp));
     });
 
     test('b=1 without h or p', () {
-      final p = Pairing.parse('hangar://pair?t=$token&f=$fp&n=mac&b=1')!;
+      final p = Pairing.parse('elis://pair?t=$token&f=$fp&n=mac&b=1')!;
       expect((p.host, p.port, p.bluetooth, p.name, p.address), (null, null, true, 'mac', 'Bluetooth'));
     });
 
     test('h without b is TLS only', () {
-      expect(Pairing.parse('hangar://pair?h=h&p=2&t=$token&f=$fp')!.bluetooth, isFalse);
+      expect(Pairing.parse('elis://pair?h=h&p=2&t=$token&f=$fp')!.bluetooth, isFalse);
     });
 
     test('refuses no usable address without b', () {
-      expect(Pairing.parse('hangar://pair?t=$token&f=$fp&n=mac'), isNull);
-      expect(Pairing.parse('hangar://pair?h=h&p=0&t=$token&f=$fp'), isNull);
+      expect(Pairing.parse('elis://pair?t=$token&f=$fp&n=mac'), isNull);
+      expect(Pairing.parse('elis://pair?h=h&p=0&t=$token&f=$fp'), isNull);
     });
 
     test('with b=1 a missing or bad port leaves the pairing Bluetooth only', () {
       for (final q in ['h=h', 'h=h&p=0', 'h=h&p=x', 'h=h&p=70000']) {
-        final p = Pairing.parse('hangar://pair?$q&t=$token&f=$fp&n=mac&b=1')!;
+        final p = Pairing.parse('elis://pair?$q&t=$token&f=$fp&n=mac&b=1')!;
         expect((p.host, p.port, p.bluetooth), (null, null, true), reason: q);
       }
     });
 
     test('a Bluetooth-only pairing round-trips through JSON', () {
-      final p = Pairing.parse('hangar://pair?t=$token&f=$fp&n=mac&b=1')!;
+      final p = Pairing.parse('elis://pair?t=$token&f=$fp&n=mac&b=1')!;
       expect(Pairing.fromJson(p.toJson()).toJson(), p.toJson());
     });
 
@@ -95,7 +95,7 @@ void main() {
   });
 
   group('transport order', () {
-    final both = Pairing.parse('hangar://pair?h=h&p=2&t=$token&f=$fp&b=1')!;
+    final both = Pairing.parse('elis://pair?h=h&p=2&t=$token&f=$fp&b=1')!;
 
     // each fake records its call, then connects or fails as [up] says
     Future<String> order({required bool tlsUp, required bool bleUp, bool prefer = false}) async {
@@ -124,7 +124,7 @@ void main() {
     });
 
     test('TLS-only pairings keep the 8 s timeout and never scan', () async {
-      final tlsOnly = Pairing.parse('hangar://pair?h=h&p=2&t=$token&f=$fp')!;
+      final tlsOnly = Pairing.parse('elis://pair?h=h&p=2&t=$token&f=$fp')!;
       Duration? timeout;
       final c = await Connection.open(tlsOnly, tls: (p, t) async {
         timeout = t;
@@ -137,13 +137,13 @@ void main() {
     test('a definite error beats not found, which beats cannot reach', () async {
       await expectLater(
           Connection.open(both, tls: (p, t) async => throw SocketException('x'), ble: (p) async => throw BleNotFound()), throwsA(isA<BleNotFound>()));
-      await expectLater(Connection.open(both, tls: (p, t) async => throw HangarError('cert'), ble: (p) async => throw BleNotFound()),
-          throwsA(isA<HangarError>().having((e) => e.message, 'message', 'cert')));
+      await expectLater(Connection.open(both, tls: (p, t) async => throw ElisError('cert'), ble: (p) async => throw BleNotFound()),
+          throwsA(isA<ElisError>().having((e) => e.message, 'message', 'cert')));
     });
   });
 
   group('messages', () {
-    final ble = Pairing.parse('hangar://pair?t=$token&f=$fp&n=studio&b=1')!;
+    final ble = Pairing.parse('elis://pair?t=$token&f=$fp&n=studio&b=1')!;
 
     Future<Object> rejected(int code) async {
       try {
@@ -163,12 +163,12 @@ void main() {
     test("not found for 2 minutes says can't find", () {
       expect(connectError(BleNotFound(), ble, const Duration(seconds: 119)), 'Looking for studio over Bluetooth…');
       expect(connectError(BleNotFound(), ble, const Duration(minutes: 2)), "Can't find studio: out of range, Bluetooth off, or the pairing was reset.");
-      expect(connectError(HangarError('x'), ble, const Duration(minutes: 5)), 'x');
+      expect(connectError(ElisError('x'), ble, const Duration(minutes: 5)), 'x');
     });
   });
 
   group('revoked', () {
-    final both = Pairing.parse('hangar://pair?h=h&p=2&t=$token&f=$fp&b=1')!;
+    final both = Pairing.parse('elis://pair?h=h&p=2&t=$token&f=$fp&b=1')!;
 
     test('TLS unauthorized never scans', () async {
       var scanned = false;
@@ -181,7 +181,7 @@ void main() {
 
     test('stops the reconnect loop and shows the revoked message', () async {
       var calls = 0;
-      final m = HangarModel(both, open: (p, {preferBluetooth = false}) async {
+      final m = ElisModel(both, open: (p, {preferBluetooth = false}) async {
         calls++;
         throw Revoked();
       })..start();
@@ -192,11 +192,11 @@ void main() {
   });
 
   test("resume restarts the 2-minute clock, so can't find needs 2 real minutes", () async {
-    final p = Pairing.parse('hangar://pair?t=$token&f=$fp&n=studio&b=1')!;
+    final p = Pairing.parse('elis://pair?t=$token&f=$fp&n=studio&b=1')!;
     AndroidFlutterLocalNotificationsPlugin.registerWith(); // resume asks it whether notifications are on
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('dexterous.com/flutter/local_notifications'), (_) async => null);
-    final m = HangarModel(p, open: (p, {preferBluetooth = false}) async => throw BleNotFound());
+    final m = ElisModel(p, open: (p, {preferBluetooth = false}) async => throw BleNotFound());
     m.seen = DateTime.now().subtract(const Duration(minutes: 3));
     m.resume();
     await Future.delayed(Duration.zero);
@@ -205,15 +205,15 @@ void main() {
   });
 
   group("a revoked Bluetooth pairing with a blocked address says can't find", () {
-    final p = Pairing.parse('hangar://pair?h=h&p=2&t=$token&f=$fp&n=studio&b=1')!;
+    final p = Pairing.parse('elis://pair?h=h&p=2&t=$token&f=$fp&n=studio&b=1')!;
     const cantFind = "Can't find studio: out of range, Bluetooth off, or the pairing was reset.";
     const looking = 'Looking for studio over Bluetooth…';
 
-    HangarModel model(Duration unseen) {
+    ElisModel model(Duration unseen) {
       AndroidFlutterLocalNotificationsPlugin.registerWith(); // resume asks it whether notifications are on
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(const MethodChannel('dexterous.com/flutter/local_notifications'), (_) async => null);
-      return HangarModel(p,
+      return ElisModel(p,
           open: (p, {preferBluetooth = false}) => Connection.open(p,
               preferBluetooth: preferBluetooth, tls: (p, t) async => throw TimeoutException('tls'), ble: (p) async => throw BleNotFound()))
         ..seen = DateTime.now().subtract(unseen);
@@ -239,15 +239,15 @@ void main() {
 
   group('platform channel', () {
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    final p = Pairing.parse('hangar://pair?t=$token&f=$fp&n=studio&b=1')!;
+    final p = Pairing.parse('elis://pair?t=$token&f=$fp&n=studio&b=1')!;
     late List<String> calls;
     Map connectArgs = {};
 
     // the Kotlin side: permissions as [granted], and connect failing with [code]
     void android({bool granted = true, String code = 'failed', String? message}) {
       calls = [];
-      messenger.setMockMethodCallHandler(const MethodChannel('hangar/ble/data'), (_) async => null);
-      messenger.setMockMethodCallHandler(const MethodChannel('hangar/ble'), (c) async {
+      messenger.setMockMethodCallHandler(const MethodChannel('elis/ble/data'), (_) async => null);
+      messenger.setMockMethodCallHandler(const MethodChannel('elis/ble'), (c) async {
         calls.add(c.method);
         if (c.method == 'connect') connectArgs = c.arguments as Map;
         return switch (c.method) {
@@ -290,8 +290,8 @@ void main() {
     });
 
     tearDown(() {
-      messenger.setMockMethodCallHandler(const MethodChannel('hangar/ble'), null);
-      messenger.setMockMethodCallHandler(const MethodChannel('hangar/ble/data'), null);
+      messenger.setMockMethodCallHandler(const MethodChannel('elis/ble'), null);
+      messenger.setMockMethodCallHandler(const MethodChannel('elis/ble/data'), null);
     });
   });
 

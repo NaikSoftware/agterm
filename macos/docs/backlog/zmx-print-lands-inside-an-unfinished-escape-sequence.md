@@ -1,13 +1,13 @@
 ---
 worth: later
-where: HangarCore/Sources/HangarCore/TerminalClipboard.swift:copy
+where: ElisCore/Sources/ElisCore/TerminalClipboard.swift:copy
 added: 2026-10-08
 ---
 # zmx print can land inside the program's unfinished escape sequence
 
 The zmx daemon reads the pty in 4096-byte chunks and forwards each as its own message. `handleOutput`
 (loop.zig, pinned `8bab1f0`) forwards a `zmx print` payload at once, so it can sit between two chunks
-where the program's escape sequence or multi-byte character is half written. `hangarctl clipboard set`
+where the program's escape sequence or multi-byte character is half written. `elisctl clipboard set`
 injects its OSC 52 write this way.
 
 Measured in a throwaway zmx session with a marker OSC: against a program writing one short line every

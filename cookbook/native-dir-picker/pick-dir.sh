@@ -1,5 +1,5 @@
 #!/bin/sh
-# pick a directory with hangar's native picker and type its path into the session that asked for it.
+# pick a directory with elis's native picker and type its path into the session that asked for it.
 #
 # takes no arguments: it runs as a keymap custom command, and the runner exports the session, window,
 # pane and socket as $AGT_* environment variables and starts the process in the session's directory.
@@ -8,7 +8,7 @@
 # the depth below each root from $AGT_PICK_DEPTH.
 set -eu
 
-HANGARCTL=${HANGARCTL:-hangarctl}
+ELISCTL=${ELISCTL:-elisctl}
 ROOTS=${AGT_PICK_ROOTS:-$PWD}
 DEPTH=${AGT_PICK_DEPTH:-4}
 LIMIT=1000
@@ -17,9 +17,9 @@ tilde='~'  # shortens $HOME in a row label; a display string, never expanded as 
 # carry the socket when the session names one, so the recipe also works in a second instance
 agt() {
     if [ -n "${AGT_SOCKET:-}" ]; then
-        "$HANGARCTL" "$@" --socket "$AGT_SOCKET"
+        "$ELISCTL" "$@" --socket "$AGT_SOCKET"
     else
-        "$HANGARCTL" "$@"
+        "$ELISCTL" "$@"
     fi
 }
 

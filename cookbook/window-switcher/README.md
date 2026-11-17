@@ -6,7 +6,7 @@ Author: [@anadale](https://github.com/anadale), grew out of [discussion #592](ht
 
 ## What it does
 
-`window-switcher.sh goto 3` raises window number 3. One keymap line per number turns ⌘1…⌘9 into addresses: a window's number is its position in `hangarctl window list`, the library order File ▸ Open Window shows, closed windows included. So ⌘3 is always the same window no matter which one is frontmost, the numbers do not shift when a window closes, and ⌘N on a closed window opens it again. They move only when a bundle is deleted for good.
+`window-switcher.sh goto 3` raises window number 3. One keymap line per number turns ⌘1…⌘9 into addresses: a window's number is its position in `elisctl window list`, the library order File ▸ Open Window shows, closed windows included. So ⌘3 is always the same window no matter which one is frontmost, the numbers do not shift when a window closes, and ⌘N on a closed window opens it again. They move only when a bundle is deleted for good.
 
 `window-switcher.sh pick` opens a native picker over every window. Each row carries its ⌘N shortcut on the left, a ● in place of the number on the window you are in, the window name, and a `◆ N` badge when the window has sessions needing attention. The subtitle says where the window stands, `general › api` for the workspace and the session selected there, or spells out up to two of the attention sessions with how long they have waited, `◆ api blocked 2m, worker done 5m, +1`. Type to filter by name, Return raises the window.
 
@@ -14,7 +14,7 @@ Nothing is closed or changed. The only thing either command does is raise a wind
 
 ## Requirements
 
-- Hangar 0.28.0 or later. The picker marks the current window with `window list`'s `active` flag, and 0.28.0 is where that flag stopped naming the previous window after another one was revealed; everything else the script uses, `window select`, `tree --window`, `pick` with subtitles and `statusChangedAt` on the tree, is older. With the release that ships `pick --select` (after 0.29.1) the picker opens on the current window; until then it opens on the first row.
+- Elis 0.28.0 or later. The picker marks the current window with `window list`'s `active` flag, and 0.28.0 is where that flag stopped naming the previous window after another one was revealed; everything else the script uses, `window select`, `tree --window`, `pick` with subtitles and `statusChangedAt` on the tree, is older. With the release that ships `pick --select` (after 0.29.1) the picker opens on the current window; until then it opens on the first row.
 - `jq`
 
 ## Setup
@@ -27,7 +27,7 @@ cp window-switcher.sh ~/bin/
 chmod +x ~/bin/window-switcher.sh
 ```
 
-Add the picker and one line per number to `~/.config/hangar/keymap.conf`:
+Add the picker and one line per number to `~/.config/elis/keymap.conf`:
 
 ```
 command "Pick Window"  cmd+opt+=  ~/bin/window-switcher.sh pick
@@ -42,9 +42,9 @@ command "Window 8"     cmd+8      ~/bin/window-switcher.sh goto 8
 command "Window 9"     cmd+9      ~/bin/window-switcher.sh goto 9
 ```
 
-Bind as many numbers as you have windows; the picker shows ⌘N for the first nine either way, so a number without a line is a shortcut that does nothing. Apply the file with File ▸ Reload Keymap or `hangarctl keymap reload`.
+Bind as many numbers as you have windows; the picker shows ⌘N for the first nine either way, so a number without a line is a shortcut that does nothing. Apply the file with File ▸ Reload Keymap or `elisctl keymap reload`.
 
-Fired from a key chord or the palette, the script runs under the app's `PATH` rather than your shell's. That is the launchd default plus the `hangarctl` bundled inside the app, `/usr/local/bin` and `/opt/homebrew/bin`, so a bare `hangarctl` resolves to the CLI that ships with the running app whether or not you have run **Help ▸ Install Command Line Tool…**, and a system or Homebrew `jq` resolves on its own. Anything else your profile adds is out of reach: a `jq` from another package manager needs its absolute path written into the script, and an `hangarctl` that sits somewhere unusual needs `HANGARCTL` set to its full path.
+Fired from a key chord or the palette, the script runs under the app's `PATH` rather than your shell's. That is the launchd default plus the `elisctl` bundled inside the app, `/usr/local/bin` and `/opt/homebrew/bin`, so a bare `elisctl` resolves to the CLI that ships with the running app whether or not you have run **Help ▸ Install Command Line Tool…**, and a system or Homebrew `jq` resolves on its own. Anything else your profile adds is out of reach: a `jq` from another package manager needs its absolute path written into the script, and an `elisctl` that sits somewhere unusual needs `ELISCTL` set to its full path.
 
 The gutter before the window name is made of spaces, since the picker has no columns, and the counts are tuned for the default palette font. If the names do not line up on your setup, set `PAD_SHORTCUT` (after `⌘N`), `PAD_CURRENT` (after `●`) and `PAD_NONE` (windows past the ninth) in the keymap line, `PAD_CURRENT='    ' ~/bin/window-switcher.sh pick`, and check the rows with `window-switcher.sh items` until they do.
 
@@ -66,11 +66,11 @@ The picker is for looking before you leap. For stepping, `previous_window` and `
 
 ## How it works
 
-`hangarctl window list --json` returns every window with its `id`, `name`, `open` and `active`, in library order. The index in that array is the window's number, and `goto` is a lookup followed by `window select`, which raises an open window and opens a closed one, the same verb either way.
+`elisctl window list --json` returns every window with its `id`, `name`, `open` and `active`, in library order. The index in that array is the window's number, and `goto` is a lookup followed by `window select`, which raises an open window and opens a closed one, the same verb either way.
 
-For the picker the script reads `hangarctl tree --window <id> --json` for each open window. A session node's `status` is `blocked`, `completed` or `active` when an agent has reported one, and `statusChangedAt` is the epoch second it was last written, so `now - statusChangedAt` is the age shown in the subtitle. Sessions in `blocked` or `completed` make up the badge, the same set ⌃⌥↑/↓ walk within a window; `active` is not waiting for anyone and is left out. The session on screen in the current window is left out of its window's badge too, since you can already see it. Closed windows have no tree and get no round trip. An auto-named session is named after its working directory, which does not fit a picker row, so a path-like name is cut down to its last component.
+For the picker the script reads `elisctl tree --window <id> --json` for each open window. A session node's `status` is `blocked`, `completed` or `active` when an agent has reported one, and `statusChangedAt` is the epoch second it was last written, so `now - statusChangedAt` is the age shown in the subtitle. Sessions in `blocked` or `completed` make up the badge, the same set ⌃⌥↑/↓ walk within a window; `active` is not waiting for anyone and is left out. The session on screen in the current window is left out of its window's badge too, since you can already see it. Closed windows have no tree and get no round trip. An auto-named session is named after its working directory, which does not fit a picker row, so a path-like name is cut down to its last component.
 
-The rows go to `hangarctl pick` as JSON with `id`, `label` and `subtitle`. The picker matches the query against labels only, so the attention text in a subtitle never filters a row in or out, and an empty query keeps the supplied order, which is what makes the row order the window order. When the CLI knows `--select`, the picker opens on the current window's row, so Return on an untouched list stays put and ↑/↓ read as the window above and below. The script checks for the flag with `hangarctl pick open --help`, because an older CLI rejects an unknown option before it opens anything; the check costs no socket round trip and lets the same script run on either side of that release.
+The rows go to `elisctl pick` as JSON with `id`, `label` and `subtitle`. The picker matches the query against labels only, so the attention text in a subtitle never filters a row in or out, and an empty query keeps the supplied order, which is what makes the row order the window order. When the CLI knows `--select`, the picker opens on the current window's row, so Return on an untouched list stays put and ↑/↓ read as the window above and below. The script checks for the flag with `elisctl pick open --help`, because an older CLI rejects an unknown option before it opens anything; the check costs no socket round trip and lets the same script run on either side of that release.
 
 `pick` has no columns, so the shortcut gutter is spaces, counted so that `⌘N` plus its padding, `●` plus its padding and the no-shortcut padding come out the same width in the palette font. The subtitle is set in a smaller font, so no whole number of spaces would line it up with the name, and it is deliberately not indented; a near miss looks worse than none.
 

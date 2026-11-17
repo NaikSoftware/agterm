@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
     <application
-        android:label="Hangar"
+        android:label="Elis"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

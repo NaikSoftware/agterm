@@ -9,7 +9,7 @@ Each entry separates a demonstrated cause from one that is only consistent with 
 ## How these were found
 
 - **Raw job logs name the failing test.** Read them with
-  `gh api repos/NaikSoftware/hangar/actions/jobs/<job-id>/logs --allow-escape-sequences`. Without the flag `gh`
+  `gh api repos/NaikSoftware/elis/actions/jobs/<job-id>/logs --allow-escape-sequences`. Without the flag `gh`
   refuses logs carrying terminal escapes.
 - **A probe workflow repeats the suites on CI hardware.** A 3-vCPU `macos-26` runner fails tests that never
   fail on a 20-core Mac, so a local pass proves little. The temporary `flake-probe.yml` ran on every push to
@@ -18,7 +18,7 @@ Each entry separates a demonstrated cause from one that is only consistent with 
   continuing past them:
   - teardown: `scripts/build.sh`, then `scripts/test-surface-teardown.py` 8 times with `--evidence` per
     iteration, in 4 shards;
-  - core: `scripts/watchdog.sh swift test` 6 times in `HangarCore`, each run's output to its own log, in 4
+  - core: `scripts/watchdog.sh swift test` 6 times in `ElisCore`, each run's output to its own log, in 4
     shards;
   - hosted: one `xcodebuild build-for-testing`, then `scripts/watchdog.sh xcodebuild test-without-building` 3
     times, in 2 shards.
@@ -32,7 +32,7 @@ Each entry separates a demonstrated cause from one that is only consistent with 
 - **Local repetition with the suspected component swapped.** For example the DA test ran 24 times against the
   patched zmx and 24 times against the unpatched one.
 
-## Core tests (`swift test` in `HangarCore`)
+## Core tests (`swift test` in `ElisCore`)
 
 ### `SessionHostServerTests.realHostStartupReplyAndClientlessControl`
 
@@ -180,7 +180,7 @@ Each entry separates a demonstrated cause from one that is only consistent with 
   60 s read. A probe queuing 3000 2 ms jobs got its reply when the last finished, 6.0 s under a one-thread pool
   (`LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`), and in 0.00 s with the jobs at background priority or the reply at
   `.high`. Passing runs of other PRs had the socket suite end 49 to 73 s in, so the margin predates the PR.
-- **Fix.** `runBlocking` starts its task at `.high`, in hangar-server and in the app's `ControlServer`, each
+- **Fix.** `runBlocking` starts its task at `.high`, in elis-server and in the app's `ControlServer`, each
   pinned by a test that sends a request behind 600 queued same-priority jobs. `ControlAcceptLoopTests` also
   parked `loop.next()` on the pool through `Task.detached`, which deadlocked the one-thread run; it runs on a
   plain thread now.
@@ -219,14 +219,14 @@ Each entry separates a demonstrated cause from one that is only consistent with 
   mid-run with no failure line and no summary.
 - **Cause, demonstrated.** Two parameterized ask cases printed a 65 KB argument line, and `gh run view` stops at
   it: for job 129484718181 it returns 16334 lines and no `✘`, while the raw job log
-  (`gh api repos/NaikSoftware/hangar/actions/jobs/<id>/logs --allow-escape-sequences`) has 24189 lines with the
+  (`gh api repos/NaikSoftware/elis/actions/jobs/<id>/logs --allow-escape-sequences`) has 24189 lines with the
   failures and the summary. Read the raw job log first.
 - **Fix.** Already on master in 4ebd6e52 (#966), which shortened those lines.
 
 ### Pre-merge runs of the `linux-remote-server` branch (#949)
 
 - **Runs.** Jobs 129484718181, 129507459737, 129526370375 and 129569809198 (runs 42712267063, 42718862438,
-  42724427691, 42737362694), four pushes within three hours on 2026-11-09, all in `HangarServerTests`, the
+  42724427691, 42737362694), four pushes within three hours on 2026-11-09, all in `ElisServerTests`, the
   module that PR added.
 - **`ServerStreamsTests` page and presenter tests** (the last three jobs). 27 to 46 issues per run, across
   `everyPageKindOpensInEveryLinkMode`, `aPageClosedOnThePresenterAfterItsChannelEndedIsEnded` and their
@@ -242,7 +242,7 @@ Each entry separates a demonstrated cause from one that is only consistent with 
   `ClaudeStatusHookTests.swift` (`posix_openpt` not in scope). The branch fixed it before #959 merged; its final
   run 42940587374 passed the Linux job.
 
-## App-hosted tests (`HangarTests`)
+## App-hosted tests (`ElisTests`)
 
 ### `TextPageRenderingTests.testANearCapFileRendersInBoundedTime`
 
@@ -312,7 +312,7 @@ above. That it follows the drag and paste tests releasing their named pasteboard
 
 ### `spam-8` stalls on `session new` (case retired)
 
-- **Symptom.** `scripts/test-surface-teardown.py`, eight title producers: one `hangarctl session new`, `tree` or
+- **Symptom.** `scripts/test-surface-teardown.py`, eight title producers: one `elisctl session new`, `tree` or
   `session close` gets no reply, usually with two to seven producers running.
 - **Runs.** 40747601941, 41121304109, 41408692761, 41424943333, 41481808137, 41525711638, 41899293201,
   41719380918, 41905113022, 42292892846, 42302198754, 42471836035, 42663853160, 42750078737, 42763210167,
@@ -347,7 +347,7 @@ Causes not found, left as backlog items with their capture steps:
 
 ## CI speed changes in the same PR
 
-- The app build's helper phase (`project.yml`) compiles `hangarctl` and `hangar-session-host` after the app,
+- The app build's helper phase (`project.yml`) compiles `elisctl` and `elis-session-host` after the app,
   serially: 211 s of the hosted job's 418 s build step and 147 s of the Release job's 364 s in one measured run.
   `scripts/with-helper-prebuild.sh` starts them before the app compile in both jobs. The phase still runs and stays
   authoritative. A signalled `swift build` leaves its compiler jobs running, so the script removes them on any

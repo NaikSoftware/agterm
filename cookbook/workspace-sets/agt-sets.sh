@@ -7,7 +7,7 @@
 # peeks at the whole tree and puts it back. Nothing is closed.
 set -e
 
-HANGARCTL=${HANGARCTL:-hangarctl}
+ELISCTL=${ELISCTL:-elisctl}
 
 # --- sets ------------------------------------------------------------------
 # One arm per set. One workspace name per line, matched exactly, so names
@@ -18,7 +18,7 @@ workspaces_in() {
 	work)
 		cat <<-'EOF'
 			umputun.dev
-			hangar
+			elis
 			ai-thingz
 		EOF
 		;;
@@ -52,7 +52,7 @@ wanted=$(printf '%s\n' "$wanted" | sed '/^[[:space:]]*$/d')
 
 # One read of the tree answers everything: which workspaces exist, which are
 # already marked, and whether the filter is currently applied.
-snapshot=$("$HANGARCTL" tree --json)
+snapshot=$("$ELISCTL" tree --json)
 
 # Workspace ids the set resolves to, and the names that matched nothing. A name
 # that matches nothing is a typo or a renamed workspace, and silence there is
@@ -78,20 +78,20 @@ fi
 applied=$(printf '%s' "$snapshot" | jq -r '.result.tree.workspaceFilter // false')
 marked=$(printf '%s' "$snapshot" | jq -r '.result.tree.workspaces[] | select(.focused) | .id' | sort)
 if [ "$applied" = true ] && [ "$marked" = "$desired" ]; then
-	"$HANGARCTL" workspace filter off >/dev/null
+	"$ELISCTL" workspace filter off >/dev/null
 	exit 0
 fi
 
 # Suspend the filter before rebuilding the set. An add never switches the filter
 # on by itself, but a filter left on would hide the rows still to be marked.
-"$HANGARCTL" workspace filter off >/dev/null
+"$ELISCTL" workspace filter off >/dev/null
 
 printf '%s' "$snapshot" | jq -r --arg names "$wanted" '
 	($names | split("\n")) as $want
 	| .result.tree.workspaces[]
 	| "\(if (.name as $n | $want | index($n)) then "add" else "off" end) \(.id)"' |
 	while read -r mode id; do
-		"$HANGARCTL" workspace focus "$mode" --target "$id" >/dev/null
+		"$ELISCTL" workspace focus "$mode" --target "$id" >/dev/null
 	done
 
-"$HANGARCTL" workspace filter on >/dev/null
+"$ELISCTL" workspace filter on >/dev/null

@@ -6,7 +6,7 @@
 `site/docs.html` (2768 lines) and `site/commands.html` (the 75-command catalog), so the README duplicates
 the docs site while being harder to navigate than it.
 
-This change cuts the README to roughly 145 lines: a product synopsis that answers what Hangar is, how it
+This change cuts the README to roughly 145 lines: a product synopsis that answers what Elis is, how it
 is different, proof that the difference is real, and how to install it or keep reading. Most reference
 material goes away entirely rather than moving, because the site already has it. Three pieces do not exist
 anywhere else and must be relocated before their section is deleted.
@@ -26,7 +26,7 @@ Files involved:
 - `site/llms.txt` — line 22, the README description
 - `CONTRIBUTING.md` — 114 lines, covers building except the Node.js prereq
 - `site/docs.html` — section ids: overview, install, workspaces, terminals, navigation, windows,
-  notifications, accessibility, settings, hangarctl, keymap, ghostty, status, restore, troubleshooting, related
+  notifications, accessibility, settings, elisctl, keymap, ghostty, status, restore, troubleshooting, related
 
 Measured README section sizes, total lines including code fences:
 
@@ -38,7 +38,7 @@ Measured README section sizes, total lines including code fences:
  14  ## Keyboard and navigation
   6  ## Accessibility
   6  ## Settings
-220  ## Scripting hangar
+220  ## Scripting elis
   6  ## Cookbook
  80  ## Customizing keys
  38  ## Ghostty config
@@ -54,10 +54,10 @@ Measured README section sizes, total lines including code fences:
 
 - `README.md:110` — the Node.js 22.7+ / 20.19+ prereq for `OpenCodeStatusHookTests`. `CONTRIBUTING.md` never
   mentions Node; its only "node" match is the phrase "tree node".
-- `README.md:217-222` — `cd HangarCore && swift build -c release`, the only documented way to build
-  `hangarctl` without Xcode or libghostty.
+- `README.md:217-222` — `cd ElisCore && swift build -c release`, the only documented way to build
+  `elisctl` without Xcode or libghostty.
 - `README.md:215` — the marketplace caveat: do not install the skill by both routes; `marketplace add` clones
-  the whole repository; `--sparse` must cover the manifest as well as `plugins/hangar`. `site/docs.html:475`
+  the whole repository; `--sparse` must cover the manifest as well as `plugins/elis`. `site/docs.html:475`
   has the one-liners without any of it, and `--sparse` appears nowhere else.
 
 **Related projects**: README lists seven, `site/docs.html`'s `related` section names five. Only
@@ -93,7 +93,7 @@ There is no code, so there are no unit or e2e tests. Verification is:
 
 ## Solution Overview
 
-The trimmed README answers four questions in order: what is Hangar, how is it different, can I see that
+The trimmed README answers four questions in order: what is Elis, how is it different, can I see that
 difference working, how do I install it or continue reading.
 
 Structure, top to bottom:
@@ -105,8 +105,8 @@ Structure, top to bottom:
 5. Hero screenshot plus a collapsed gallery trimmed to 3-4 shots
 6. **The model** — new, 5-8 lines, descriptive
 7. Install — brew, DMG, CLI-install note, plugin/skill one-liners
-8. **`## Scripting hangar`** — rewritten to ~15 lines, one demo block. Heading text and its
-   `#scripting-hangar` anchor are unchanged, so inbound external links keep working.
+8. **`## Scripting elis`** — rewritten to ~15 lines, one demo block. Heading text and its
+   `#scripting-elis` anchor are unchanged, so inbound external links keep working.
 9. **Documentation** — new, routes to docs, commands, cookbook, CONTRIBUTING, ARCHITECTURE
 10. Restore boundary, one sentence; troubleshooting, one line
 11. Related projects, collapsed into `<details>` with every entry kept
@@ -114,7 +114,7 @@ Structure, top to bottom:
 
 Key design decisions:
 
-- **The model section is descriptive, never comparative.** No "unlike a tabbed terminal" framing: Hangar is
+- **The model section is descriptive, never comparative.** No "unlike a tabbed terminal" framing: Elis is
   itself a vertical hierarchical tab arrangement, so arguing against tabs is a straw man.
 - **The API demonstration stays** because the product now leads with "full control API" and an unsupported
   headline reads as marketing. It shows the shape — stable ids, read-back, composability — not coverage.
@@ -131,13 +131,13 @@ Key design decisions:
 The Scripting demo block, annotated rather than runnable:
 
 ```sh
-ws=$(hangarctl workspace new demo)                        # objects have stable ids
-sid=$(hangarctl session new --workspace "$ws" --cwd "$PWD" --no-select)
-hangarctl session type --target "$sid" $'pwd\n'           # drive a session you are not looking at
-hangarctl session text --target "$sid" --lines 10         # read its terminal back
-hangarctl session status blocked --target "$sid"          # set the sidebar status glyph
-printf '%s\n' staging production | hangarctl pick --prompt "Deploy where?"   # borrow the native picker
-hangarctl tree --json                                     # the whole model, inspectable
+ws=$(elisctl workspace new demo)                        # objects have stable ids
+sid=$(elisctl session new --workspace "$ws" --cwd "$PWD" --no-select)
+elisctl session type --target "$sid" $'pwd\n'           # drive a session you are not looking at
+elisctl session text --target "$sid" --lines 10         # read its terminal back
+elisctl session status blocked --target "$sid"          # set the sidebar status glyph
+printf '%s\n' staging production | elisctl pick --prompt "Deploy where?"   # borrow the native picker
+elisctl tree --json                                     # the whole model, inspectable
 ```
 
 The CLAUDE.md replacement defines roles rather than reversing the mirror direction, because "README mirrors
@@ -165,7 +165,7 @@ the minimum macOS version, and the positioning line.
 - Modify: `site/docs.html`
 
 - [x] add the Node.js 22.7+ / 20.19+ prereq for `OpenCodeStatusHookTests` to CONTRIBUTING's development setup
-- [x] add `cd HangarCore && swift build -c release` to `site/docs.html`'s hangarctl section as the way to build the CLI without Xcode
+- [x] add `cd ElisCore && swift build -c release` to `site/docs.html`'s elisctl section as the way to build the CLI without Xcode
 - [x] add the marketplace caveat (one route not both, full-repo clone, `--sparse` must cover the manifest) beside the one-liners at `site/docs.html:475`
 - [x] verify each of the three now appears in its new home with `grep`
 
@@ -177,7 +177,7 @@ the minimum macOS version, and the positioning line.
 - [x] delete `## Concepts`, `## Keyboard and navigation`, `## Accessibility`, `## Settings`
 - [x] delete `## Customizing keys`, `## Ghostty config`, `## Agent status`
 - [x] delete `## Troubleshooting`, `## Restore limitations`, `## Build from source`, `## Cookbook`
-- [x] delete the `### Native picker` and `### Control events` subsections and the reference prose in `## Scripting hangar`, leaving the heading itself in place
+- [x] delete the `### Native picker` and `### Control events` subsections and the reference prose in `## Scripting elis`, leaving the heading itself in place
 - [x] record every internal anchor these deletions orphan, for Task 6
 - [x] confirm the three Task 1 items are gone from README and present in their new homes
 
@@ -195,10 +195,10 @@ the minimum macOS version, and the positioning line.
 **Files:**
 - Modify: `README.md`
 
-- [x] keep the heading exactly `## Scripting hangar` so `#scripting-hangar` still resolves
-- [x] write two opening sentences: `hangarctl` drives Hangar over a local socket, terminal output is not streamed, `session text` reads a buffer
+- [x] keep the heading exactly `## Scripting elis` so `#scripting-elis` still resolves
+- [x] write two opening sentences: `elisctl` drives Elis over a local socket, terminal output is not streamed, `session text` reads a buffer
 - [x] add the annotated demo block from Technical Details, one comment per line
-- [x] verify every flag in the block against `HangarCore/Sources/hangarctlKit/`
+- [x] verify every flag in the block against `ElisCore/Sources/elisctlKit/`
 - [x] add one sentence naming windows, layouts, notifications, events, dashboards, HUDs, themes, restoration
 - [x] link to the command reference and confirm the command count matches `site/commands.html`
 
@@ -207,9 +207,9 @@ the minimum macOS version, and the positioning line.
 **Files:**
 - Modify: `README.md`
 
-- [x] keep brew and DMG; fold `### Optional Help-menu installers` down to the CLI-install note (brew includes `hangarctl`, DMG users install it from Help) plus one line for the status hooks and agent skill
+- [x] keep brew and DMG; fold `### Optional Help-menu installers` down to the CLI-install note (brew includes `elisctl`, DMG users install it from Help) plus one line for the status hooks and agent skill
 - [x] keep the plugin/skill marketplace one-liners for Claude Code and Codex
-- [x] add a `## Documentation` section routing to `naiksoftware.github.io/hangar/docs`, `naiksoftware.github.io/hangar/commands`, `cookbook/`, `CONTRIBUTING.md` for building, `ARCHITECTURE.md` for internals
+- [x] add a `## Documentation` section routing to `naiksoftware.github.io/elis/docs`, `naiksoftware.github.io/elis/commands`, `cookbook/`, `CONTRIBUTING.md` for building, `ARCHITECTURE.md` for internals
 - [x] name the model explicitly in the docs link text so the dropped vocabulary has a one-click definition
 - [x] add the restore boundary in one sentence: restoration reconstructs structure, not running processes
 - [x] add the troubleshooting pointer in one line, to the docs section plus Issues and Discussions
@@ -217,15 +217,15 @@ the minimum macOS version, and the positioning line.
 
 Decisions taken in this task:
 
-+ [decision] the marketplace one-liners were removed with `## Scripting hangar`'s reference prose in Task 2; restored
++ [decision] the marketplace one-liners were removed with `## Scripting elis`'s reference prose in Task 2; restored
   from `c08ce8dc^:README.md` into `## Install`, where the rest of the skill installation now lives.
-+ [decision] dropped the old "the cask also installs `hangarctl`" sentence that followed the brew fence, since the
++ [decision] dropped the old "the cask also installs `elisctl`" sentence that followed the brew fence, since the
   folded install line carries the same fact once.
 + [deviation] the troubleshooting pointer links `docs/troubleshooting.md` directly instead of the docs-site section,
   because `site/docs.html`'s `troubleshooting` section is itself only a forward to that file. Issues and Discussions
   are linked alongside it as planned.
 + `~/.claude/skills/writing-style/scripts/lint.sh README.md` reports one violation at `README.md:165`, in the
-  untouched Attribution paragraph: `hangar` opening a sentence as a code identifier, a false positive.
+  untouched Attribution paragraph: `elis` opening a sentence as a code identifier, a false positive.
 
 ### Task 6: Fix anchors and the screenshot gallery
 
@@ -238,7 +238,7 @@ Decisions taken in this task:
 - [x] check every link newly added or reworded by this change resolves
 - [x] run `wc -l README.md` and confirm it is near the ~145 target
 + [x] fix the `## Attribution` writing-style violation at former `README.md:165`: the sentence opening with the
-  lowercase identifier `hangar` after a period now reads "The app builds it from upstream source at a pinned
+  lowercase identifier `elis` after a period now reads "The app builds it from upstream source at a pinned
   commit via `scripts/setup.sh`, with no fork and no prebuilt binary." Meaning, MIT attribution, project names
   and links are unchanged. `lint.sh README.md` now reports zero violations.
 
@@ -258,7 +258,7 @@ Anchors orphaned by Task 2's deletions (recorded for this task):
 
 + `README.md:97` — `[Agent status](#agent-status)`, in the Help-menu installers bullet list. `## Agent status`
   is deleted, so the link is dangling; Task 5 rewrites that bullet list, which is where it gets fixed.
-+ `#scripting-hangar` at `README.md:96` still resolves; the heading was kept deliberately.
++ `#scripting-elis` at `README.md:96` still resolves; the heading was kept deliberately.
 + no other `](#…)` link survives in README; every other internal anchor lived inside a deleted section.
 
 ### Task 7: Collapse Related projects
@@ -278,7 +278,7 @@ Decisions taken in this task:
 + [decision] summary line: `Ports, forks, and companion tools maintained by others`.
 + [correction] the section lists **six** projects, not seven; the plan's count in Context and in this task's first
   checkbox was wrong. Verified against `df76f7a3:README.md`, the pre-trim original: agterm-linux, Rook, agwinterm,
-  hangar-remote, pi-hangar, hangar-experimental. Nothing was lost by an earlier task. `diff` of the section before
+  elis-remote, pi-elis, elis-experimental. Nothing was lost by an earlier task. `diff` of the section before
   and after this change shows only the four added markup lines; every entry, description, link and handle is
   byte-identical, and Rook / @jokius survives.
 + [deviation] GitHub preview was not opened; rendering was verified structurally instead (blank line after
@@ -309,7 +309,7 @@ Decisions taken in this task:
   trailing sentence on the roles bullet, since it states a different obligation (feature and version parity)
   from the roles it would otherwise be appended to.
 + [decision] `CONTRIBUTING.md:7` still lists `[README](README.md)` among the places to look before proposing
-  a feature, alongside `naiksoftware.github.io/hangar/docs` and the bundled skill. Left as is: the README's "What it does"
+  a feature, alongside `naiksoftware.github.io/elis/docs` and the bundled skill. Left as is: the README's "What it does"
   bullets survive the trim, so the line asserts nothing the README no longer holds, and the file is not in
   this task's scope.
 + [decision] `.claude/rules/control-api.md:566` keeps README in the command-count alignment list. Verified
@@ -321,7 +321,7 @@ Decisions taken in this task:
 
 ### Task 9: Verify acceptance criteria
 
-- [x] for each deleted section, name the `site/docs.html` id that covers it and confirm the content is actually there: Concepts to `workspaces`/`terminals`, Keyboard and navigation to `navigation`, Accessibility to `accessibility`, Settings to `settings`, Scripting reference to `hangarctl`, Customizing keys to `keymap`, Ghostty config to `ghostty`, Agent status to `status`, Troubleshooting to `troubleshooting`, Restore limitations to `restore`, Build from source to CONTRIBUTING
+- [x] for each deleted section, name the `site/docs.html` id that covers it and confirm the content is actually there: Concepts to `workspaces`/`terminals`, Keyboard and navigation to `navigation`, Accessibility to `accessibility`, Settings to `settings`, Scripting reference to `elisctl`, Customizing keys to `keymap`, Ghostty config to `ghostty`, Agent status to `status`, Troubleshooting to `troubleshooting`, Restore limitations to `restore`, Build from source to CONTRIBUTING
 - [x] README is near 145 lines and answers the four questions from Solution Overview
 - [x] no dangling internal anchors
 - [x] `~/.claude/skills/writing-style/scripts/lint.sh README.md` shows no new violations on changed lines
@@ -337,7 +337,7 @@ Every row is covered; three carry a minor, non-blocking detail loss, recorded be
 | Keyboard and navigation | `navigation` | covered | three palettes with ⌃P/⌃⇧P/⌃⇧O chips and Ctrl-Tab row `809-985`; disabled-actions rule `830`; close-session MRU return rules carried over verbatim `818-823` |
 | Accessibility | `accessibility` | covered | verbatim mirror including both limits `1042-1075` |
 | Settings | `settings` | covered | all six tabs and the preview/commit/cancel theme picker `1076-1175` |
-| Scripting prose, Native picker, Control events | `hangarctl` | covered | socket model `1186-1190`; `open -a Hangar` `1192-1197`; standalone CLI build `1238`; targeting model `1240-1280`; picker `1287-1330`; env vars `1755-1770`. Control events live on `commands.html:534-586`, not in the `hangarctl` section |
+| Scripting prose, Native picker, Control events | `elisctl` | covered | socket model `1186-1190`; `open -a Elis` `1192-1197`; standalone CLI build `1238`; targeting model `1240-1280`; picker `1287-1330`; env vars `1755-1770`. Control events live on `commands.html:534-586`, not in the `elisctl` section |
 | Customizing keys | `keymap` | covered | full bindable-action list `1885`, `{AGT_*}` tokens `1900`, GUI PATH and raw-substitution warnings, `keymap list`, v1 limitations `2060-2097` |
 | Ghostty config | `ghostty` | covered | four-source chain, `key_` physical-position rule, OSC 52, `file://` reveal, mouse-reporting caveat `2098-2222` |
 | Agent status | `status` | covered | glyphs, shapes, full `session status` flag set, auto-follow with `idleMs`/`autoFollowMs`, and the Claude Code / Codex / Pi / OpenCode / generic installers `2223-2504` |
@@ -358,8 +358,8 @@ Minor detail losses, recorded not fixed:
 Other checks:
 
 + `wc -l README.md` is 150, against the ~145 target. The five lines over are Task 7's `<details>` markup.
-+ `grep -n '](#' README.md` finds no internal anchors at all, so none can dangle. `## Scripting hangar` survives, so
-  the external `#scripting-hangar` link still resolves.
++ `grep -n '](#' README.md` finds no internal anchors at all, so none can dangle. `## Scripting elis` survives, so
+  the external `#scripting-elis` link still resolves.
 + `lint.sh README.md` exits 0 with no violations.
 + render check ran through `gh api --method POST /markdown -f mode=gfm -F text=@README.md`, since the branch is not
   pushed. Both `<details>` produced real `<details>` elements with their inner markdown rendered: the gallery block

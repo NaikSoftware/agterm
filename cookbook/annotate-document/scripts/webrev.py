@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Review a markdown or text file in an hangar HTML overlay and print the annotations.
+"""Review a markdown or text file in an elis HTML overlay and print the annotations.
 
 Usage:
     webrev.py review FILE [--pane left|right] [--output PATH] [--title T] [--size N | --fit]
@@ -32,8 +32,8 @@ TEMPLATE = ASSETS / "page.html"
 MARKDOWN_EXT = {".md", ".markdown", ".mdx"}
 STYLES = ("", "terminal")
 POLL_SECONDS = 1.0
-HANGAR_STATE_DEFAULT = Path.home() / "Library" / "Application Support" / "hangar"
-# short-draft geometry in points (--fit), measured at hangar's default HTML zoom of 1.0 and rounded up to fit both
+ELIS_STATE_DEFAULT = Path.home() / "Library" / "Application Support" / "elis"
+# short-draft geometry in points (--fit), measured at elis's default HTML zoom of 1.0 and rounded up to fit both
 # looks: plain text is hard-wrapped at 80 columns, markdown wraps to the window, so its width follows its longest line
 FIT_TEXT_COLUMNS = 80
 FIT_MIN_COLUMNS = 60
@@ -73,13 +73,13 @@ def display_path(path: Path) -> str:
         return str(absolute)
 
 
-def hangar_settings() -> Path:
-    state = os.environ.get("HANGAR_STATE_DIR")
-    return (Path(state) if state else HANGAR_STATE_DEFAULT) / "settings.json"
+def elis_settings() -> Path:
+    state = os.environ.get("ELIS_STATE_DIR")
+    return (Path(state) if state else ELIS_STATE_DEFAULT) / "settings.json"
 
 
 def sidebar_shift(settings: Path) -> float:
-    """Mirror hangar's sidebar tint formula."""
+    """Mirror elis's sidebar tint formula."""
     try:
         strength = json.loads(settings.read_text(encoding="utf-8")).get("sidebarBackgroundShift", 5)
         return (min(10, max(0, int(strength))) - 5) * 0.06
@@ -122,7 +122,7 @@ def render(file: Path, out: Path, title: str = "") -> None:
     """Write the review page for file to out."""
     source = file.read_text(encoding="utf-8")
     kind = doc_kind(file)
-    data = PageData(display_path(file), kind, source, uuid.uuid4().hex, sidebar_shift(hangar_settings()), title, page_style())
+    data = PageData(display_path(file), kind, source, uuid.uuid4().hex, sidebar_shift(elis_settings()), title, page_style())
     out.write_text(build_page(data), encoding="utf-8")
 
 
@@ -145,7 +145,7 @@ def fit_rows(source: str, columns: int) -> int:
 
 
 def fit_size(source: str, kind: str) -> tuple[int, int]:
-    """Return the overlay (width, height) in points for a short draft; hangar clamps each to 80% of the session."""
+    """Return the overlay (width, height) in points for a short draft; elis clamps each to 80% of the session."""
     cols = fit_columns(source, kind)
     width = math.ceil(FIT_BASE_WIDTH + FIT_COLUMN_WIDTH * cols)
     return width, math.ceil(FIT_BASE_HEIGHT + FIT_ROW_HEIGHT * fit_rows(source, cols))
@@ -153,8 +153,8 @@ def fit_size(source: str, kind: str) -> tuple[int, int]:
 
 def page_zoom(page_id: str) -> float:
     try:
-        win = os.environ.get("HANGAR_WINDOW_ID")
-        tree = json.loads(hangarctl("tree", "--json", *(["--window", win] if win else [])).stdout)
+        win = os.environ.get("ELIS_WINDOW_ID")
+        tree = json.loads(elisctl("tree", "--json", *(["--window", win] if win else [])).stdout)
     except json.JSONDecodeError:
         return 1.0
     nodes = [tree]
@@ -173,31 +173,31 @@ def page_zoom(page_id: str) -> float:
 
 
 def zoom_fit(page_id: str, session: str, width: int, height: int) -> None:
-    """hangar exposes page zoom only after the page opens."""
+    """elis exposes page zoom only after the page opens."""
     zoom = page_zoom(page_id)
     if zoom <= 0 or zoom == 1:
         return
-    res = hangarctl("session", "overlay", "resize", "--size-percent", "95", "--width", str(math.ceil(width * zoom)),
+    res = elisctl("session", "overlay", "resize", "--size-percent", "95", "--width", str(math.ceil(width * zoom)),
                     "--height", str(math.ceil(height * zoom)), "--target", session)
     if res.returncode != 0:
         print(f"webrev: zoom resize failed: {(res.stderr or res.stdout).strip()}", file=sys.stderr)
 
 
-def hangarctl(*args: str) -> subprocess.CompletedProcess[str]:
-    """Run the hangar CLI; it never reads HANGAR_SOCKET, so a session on a custom socket is passed one."""
-    cmd = [os.environ.get("HANGARCTL") or "hangarctl", *args]
-    if sock := os.environ.get("HANGAR_SOCKET"):
+def elisctl(*args: str) -> subprocess.CompletedProcess[str]:
+    """Run the elis CLI; it never reads ELIS_SOCKET, so a session on a custom socket is passed one."""
+    cmd = [os.environ.get("ELISCTL") or "elisctl", *args]
+    if sock := os.environ.get("ELIS_SOCKET"):
         cmd += ["--socket", sock]
     return subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 
 def read_outcome(page_id: str) -> tuple[str, str]:
     """Return (state, text): submitted with the annotations, dismissed, pending, or error with its message."""
-    res = hangarctl("session", "overlay", "result", "--page", page_id)
+    res = elisctl("session", "overlay", "result", "--page", page_id)
     try:
         outcome = json.loads(res.stdout)
     except json.JSONDecodeError:
-        return "error", (res.stderr or res.stdout).strip() or f"hangarctl exited {res.returncode}"
+        return "error", (res.stderr or res.stdout).strip() or f"elisctl exited {res.returncode}"
     state = outcome.get("outcome", "")
     if state not in ("submitted", "dismissed", "pending"):
         return "error", f"unexpected outcome: {res.stdout.strip()}"
@@ -225,13 +225,13 @@ def write_backup(path: Path, state: str, text: str) -> None:
 
 
 def wait_outcome(page_id: str, session: str, pane: str) -> tuple[str, str]:
-    """keep both status writes on the same pane; hangar rejects another pane's reset."""
+    """keep both status writes on the same pane; elis rejects another pane's reset."""
     target = ["--target", session]
     if pane in ("left", "right", "scratch"):
         target += ["--pane", pane]
-    if pane_id := os.environ.get("HANGAR_PANE_ID"):
+    if pane_id := os.environ.get("ELIS_PANE_ID"):
         target += ["--pane-id", pane_id]
-    hangarctl("session", "status", "blocked", "--blink", *target)
+    elisctl("session", "status", "blocked", "--blink", *target)
     prev = signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     try:
         state, text = read_outcome(page_id)
@@ -243,20 +243,20 @@ def wait_outcome(page_id: str, session: str, pane: str) -> tuple[str, str]:
         signal.signal(signal.SIGTERM, prev)
         # idle, not a saved snapshot: replaying one could claim another pane's block,
         # and an agent's own status hooks set its next state
-        hangarctl("session", "status", "idle", *target)
+        elisctl("session", "status", "idle", *target)
 
 
 def review(file: Path, opts: ReviewOptions) -> int:
-    session = os.environ.get("HANGAR_SESSION_ID")
+    session = os.environ.get("ELIS_SESSION_ID")
     if not session:
-        print("webrev: HANGAR_SESSION_ID is not set; it names the hangar session to open the page in", file=sys.stderr)
+        print("webrev: ELIS_SESSION_ID is not set; it names the elis session to open the page in", file=sys.stderr)
         return 1
     workdir = Path(tempfile.gettempdir()) / "webrev"
     workdir.mkdir(exist_ok=True)
     page_file = workdir / f"{uuid.uuid4().hex}.html"
     render(file, page_file, opts.title)
     cmd = ["session", "overlay", "open", "--html", str(page_file), "--chromeless", "--js", "--target", session, "--json"]
-    # hangar refuses --size-percent with --pane, a pane overlay is always full; it takes points only with a percent
+    # elis refuses --size-percent with --pane, a pane overlay is always full; it takes points only with a percent
     if opts.pane:
         cmd += ["--pane", opts.pane]
     elif opts.fit:
@@ -264,7 +264,7 @@ def review(file: Path, opts: ReviewOptions) -> int:
         cmd += ["--size-percent", "95", "--width", str(width), "--height", str(height)]
     else:
         cmd += ["--size-percent", str(opts.size)]
-    res = hangarctl(*cmd)
+    res = elisctl(*cmd)
     if res.returncode != 0:
         print(f"webrev: overlay open failed: {(res.stderr or res.stdout).strip()}", file=sys.stderr)
         page_file.unlink(missing_ok=True)
@@ -275,7 +275,7 @@ def review(file: Path, opts: ReviewOptions) -> int:
         zoom_fit(page_id, session, width, height)
     if opts.output:
         write_backup(opts.output, "pending", page_id)
-    state, text = wait_outcome(page_id, session, opts.pane or os.environ.get("HANGAR_PANE", ""))
+    state, text = wait_outcome(page_id, session, opts.pane or os.environ.get("ELIS_PANE", ""))
     # the file backs theme reloads while the page is up, so a killed waiter or a failed read leaves it
     if state in ("submitted", "dismissed"):
         page_file.unlink(missing_ok=True)
@@ -289,7 +289,7 @@ def result(page_id: str) -> int:
 
 
 def size_percent(value: str) -> int:
-    """Parse --size within the 1..100 hangar accepts for --size-percent."""
+    """Parse --size within the 1..100 elis accepts for --size-percent."""
     n = int(value)
     if not 1 <= n <= 100:
         raise argparse.ArgumentTypeError(f"{n} is outside 1..100")
@@ -306,7 +306,7 @@ class Parser(argparse.ArgumentParser):
 
 
 def main() -> int:
-    parser = Parser(description="review a file in an hangar overlay")
+    parser = Parser(description="review a file in an elis overlay")
     sub = parser.add_subparsers(dest="cmd", required=True)
     p_review = sub.add_parser("review", help="open the page and wait for annotations")
     p_review.add_argument("file", type=Path)

@@ -1,0 +1,165 @@
+/// One rebindable built-in and the chord the keymap currently resolves it to.
+public struct ControlKeymapAction: Codable, Sendable, Equatable {
+    /// The action's `keymap.conf` name, e.g. `close_session`.
+    public var action: String
+    /// The resolved chord in kitty syntax (`cmd+shift+e`), omitted when the action is keyless.
+    ///
+    /// One shipped default cannot be typed back into `keymap.conf`: `increase_font_size` is ⌘+, rendering
+    /// `cmd++`, which does not re-parse (`+` is the chord joiner). Reported verbatim anyway — the live `menu`
+    /// half renders that item identically, so a placeholder would turn the one row that compares correctly
+    /// into a false mismatch.
+    public var chord: String?
+    /// The action's monitor-bound alternatives in kitty syntax (`ctrl+space>s`), omitted when it has none.
+    ///
+    /// `chord` stays the MENU key equivalent alone so it keeps comparing directly against the `menu` half;
+    /// a leader sequence or a second chord can only reach the key monitor, never an `NSMenuItem`.
+    public var alternates: [String]?
+    /// `true` when the action's resolved chord DIFFERS from its shipped default; omitted otherwise.
+    ///
+    /// Deliberately a chord comparison rather than "a `map` line exists for this action": a redundant
+    /// `map cmd+w close_session` parses fine and leaves the action on its default, and marking that overridden
+    /// would report a difference a caller cannot see anywhere else.
+    public var overridden: Bool?
+    /// `true` when the `map` line carried `--repeat` and kept a monitor-bound sequence; omitted otherwise.
+    public var repeats: Bool?
+
+    public init(action: String, chord: String? = nil, alternates: [String]? = nil, overridden: Bool? = nil,
+                repeats: Bool? = nil) {
+        self.action = action
+        self.chord = chord
+        self.alternates = alternates
+        self.overridden = overridden
+        self.repeats = repeats
+    }
+}
+
+/// One `command` line from `keymap.conf`.
+public struct ControlKeymapCommand: Codable, Sendable, Equatable {
+    public var name: String
+    /// The raw kitty-syntax shortcut, omitted for a palette-only command (or one whose chord was
+    /// dropped as colliding — the diagnostics say which).
+    public var shortcut: String?
+
+    public var errorHud: Bool
+    public var errorPosition: HudPosition
+    public var errorPane: OverlayPane?
+    public var repeats: Bool
+
+    public init(name: String, shortcut: String? = nil, errorHud: Bool = false,
+                errorPosition: HudPosition = .defaultPosition, errorPane: OverlayPane? = nil, repeats: Bool = false) {
+        self.name = name
+        self.shortcut = shortcut
+        self.errorHud = errorHud
+        self.errorPosition = errorPosition
+        self.errorPane = errorPane
+        self.repeats = repeats
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, shortcut, errorHud, errorPosition, errorPane, repeats
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decode(String.self, forKey: .name)
+        shortcut = try values.decodeIfPresent(String.self, forKey: .shortcut)
+        errorHud = try values.decodeIfPresent(Bool.self, forKey: .errorHud) ?? false
+        errorPosition = try values.decodeIfPresent(HudPosition.self, forKey: .errorPosition) ?? .defaultPosition
+        errorPane = try values.decodeIfPresent(OverlayPane.self, forKey: .errorPane)
+        repeats = try values.decodeIfPresent(Bool.self, forKey: .repeats) ?? false
+    }
+}
+
+/// A `keymap.conf` parse problem, the same pair the Key Mapping settings tab shows.
+public struct ControlKeymapDiagnostic: Codable, Sendable, Equatable {
+    /// 1-based. `0` is the sentinel for a whole-file or cross-section problem (a chord collision between
+    /// two sections) that belongs to no single line.
+    public var line: Int
+    public var message: String
+
+    public init(line: Int, message: String) {
+        self.line = line
+        self.message = message
+    }
+}
+
+/// A live menu item that carries a key equivalent.
+///
+/// The half that makes `keymap.list` diagnostic rather than merely descriptive: `actions` says what the keymap
+/// RESOLVED, this says what the menu bar is actually dispatching, and the two can disagree — SwiftUI defers its
+/// menu rebuild to the next app activation, so a chord can be correct in the model and stale in the menu.
+public struct ControlKeymapMenuItem: Codable, Sendable, Equatable {
+    /// The owning top-level menu's title, e.g. `File`.
+    public var menu: String
+    public var title: String
+    /// The chord in kitty syntax, so it compares directly against an action's `chord`.
+    public var chord: String
+    /// The item's Objective-C action selector. elis's own SwiftUI items all report `menuAction:`;
+    /// anything else is an AppKit-supplied item (`performClose:`, `closeAll:`, …), which is what a
+    /// stock item competing for an elis chord looks like.
+    public var selector: String?
+    /// `false` when the item is disabled and its chord therefore INERT — AppKit consumes the key equivalent
+    /// and fires nothing, so a same-chord enabled sibling does not run either. Omitted when enabled.
+    ///
+    /// Reported because disabled items are routine here rather than exotic: most File/View/Navigate items carry
+    /// a `modalActive` gate, so with the dashboard open the menu is largely inert while still holding every
+    /// chord, and a caller comparing `actions` against `menu` would see the binding present and think it fine.
+    public var enabled: Bool?
+
+    public init(menu: String, title: String, chord: String, selector: String? = nil, enabled: Bool? = nil) {
+        self.menu = menu
+        self.title = title
+        self.chord = chord
+        self.selector = selector
+        self.enabled = enabled
+    }
+}
+
+/// The `keymap.list` payload: what the keymap resolved, plus what the menu bar is really carrying.
+public struct ControlKeymap: Codable, Sendable, Equatable {
+    /// The `keymap.conf` that produced this, so a caller knows which file to edit.
+    public var path: String
+    public var actions: [ControlKeymapAction]
+    public var commands: [ControlKeymapCommand]
+    public var diagnostics: [ControlKeymapDiagnostic]
+    /// Live menu key equivalents; omitted when the caller could not read the menu bar.
+    public var menu: [ControlKeymapMenuItem]?
+
+    public init(path: String, actions: [ControlKeymapAction], commands: [ControlKeymapCommand],
+                diagnostics: [ControlKeymapDiagnostic], menu: [ControlKeymapMenuItem]? = nil) {
+        self.path = path
+        self.actions = actions
+        self.commands = commands
+        self.diagnostics = diagnostics
+        self.menu = menu
+    }
+}
+
+public extension ControlKeymap {
+    /// Project a parsed keymap into the `keymap.list` payload. Host-free: the caller supplies the live `menu`
+    /// separately, since only the app target can read `NSApp.mainMenu`.
+    ///
+    /// Actions come out in `BuiltinAction.allCases` order rather than sorted, so the listing groups the way the
+    /// file's own reference comment does (window, workspace, session, …) instead of scattering them
+    /// alphabetically.
+    static func project(keymap: Keymap, diagnostics: [KeymapDiagnostic], path: String,
+                        menu: [ControlKeymapMenuItem]? = nil) -> ControlKeymap {
+        let actions = BuiltinAction.allCases.map { action in
+            let resolved = keymap.equivalent(for: action)
+            let alternates = keymap.sequences(for: action).map(\.displayString)
+            return ControlKeymapAction(action: action.rawValue,
+                                       chord: resolved?.displayString,
+                                       alternates: alternates.isEmpty ? nil : alternates,
+                                       overridden: resolved != action.defaultChord ? true : nil,
+                                       repeats: keymap.builtinRepeating.contains(action) ? true : nil)
+        }
+        let commands = keymap.commands.map {
+            ControlKeymapCommand(name: $0.name, shortcut: $0.shortcut.isEmpty ? nil : $0.shortcut,
+                                errorHud: $0.errorHud, errorPosition: $0.errorPosition, errorPane: $0.errorPane,
+                                repeats: $0.repeats)
+        }
+        return ControlKeymap(path: path, actions: actions, commands: commands,
+                             diagnostics: diagnostics.map { ControlKeymapDiagnostic(line: $0.line, message: $0.message) },
+                             menu: menu)
+    }
+}

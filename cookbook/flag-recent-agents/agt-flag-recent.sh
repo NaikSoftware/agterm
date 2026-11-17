@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HANGARCTL=${HANGARCTL:-hangarctl}
+ELISCTL=${ELISCTL:-elisctl}
 JQ=${JQ:-jq}
 FLAG_RECENT_MINUTES=${FLAG_RECENT_MINUTES:-30}
 
-socket=${AGT_SOCKET:?run this as an hangar custom command, which supplies AGT_SOCKET}
+socket=${AGT_SOCKET:?run this as an elis custom command, which supplies AGT_SOCKET}
 win=${AGT_WINDOW_ID:-active}
-ctl() { "$HANGARCTL" "$@" --socket "$socket"; }
+ctl() { "$ELISCTL" "$@" --socket "$socket"; }
 
 cutoff=$(($(date +%s) - FLAG_RECENT_MINUTES * 60))
 rows=$(ctl tree --json --window "$win" | CUTOFF=$cutoff "$JQ" -r '

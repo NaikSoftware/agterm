@@ -144,7 +144,7 @@ diff -ruN zmx-orig/src/socket.zig zmx/src/socket.zig
 +    const dir = try tmp.make();
 +    defer tmp.remove();
 +    var buf: [max_socket_path_len + 1]u8 = undefined;
-+    const sesh = try std.fmt.bufPrintZ(&buf, "{s}/hangar-s", .{dir});
++    const sesh = try std.fmt.bufPrintZ(&buf, "{s}/elis-s", .{dir});
 +
 +    var staged = try bindStaged(sesh);
 +    defer lib_posix.close(staged.fd);
@@ -170,7 +170,7 @@ diff -ruN zmx-orig/src/socket.zig zmx/src/socket.zig
 +    const dir = try tmp.make();
 +    defer tmp.remove();
 +    var buf: [max_socket_path_len + 1]u8 = undefined;
-+    const sesh = try std.fmt.bufPrintZ(&buf, "{s}/hangar-s", .{dir});
++    const sesh = try std.fmt.bufPrintZ(&buf, "{s}/elis-s", .{dir});
 +
 +    const first = try createSocket(sesh);
 +    defer lib_posix.close(first);

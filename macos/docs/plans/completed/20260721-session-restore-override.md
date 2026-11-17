@@ -6,14 +6,14 @@ The restore-running-command feature re-runs each pane's captured foreground argv
 launch. That is correct for idempotent commands (`claude --resume <uuid>` reattaches the same session every
 time) and wrong for non-idempotent ones:
 
-- `claude --resume <uuid> --fork-session` mints a **new** claude session on every Hangar restart. The session
+- `claude --resume <uuid> --fork-session` mints a **new** claude session on every Elis restart. The session
   the user was actually working in is never resumed, and near-identical transcripts accumulate (discussion
   #264 reports 6 same-titled sessions, 3 created in the same second — the restart moment).
 - `claude -r` / bare `claude --resume` capture no session id at all, so restore lands in the interactive
   picker rather than the session that was open.
 
-Hangar cannot know which commands are idempotent, but it is the only layer where the user — or tooling
-acting for the user — can fix it. Capture and restore both live entirely inside Hangar (foreground argv read
+Elis cannot know which commands are idempotent, but it is the only layer where the user — or tooling
+acting for the user — can fix it. Capture and restore both live entirely inside Elis (foreground argv read
 at quit via `sysctl`, re-run on next launch through `initial_input`), so no external process can rewrite the
 seam.
 
@@ -34,7 +34,7 @@ Benefits:
 Explicitly **out of scope**:
 
 - Settings-level pattern skip/rewrite rules (idea 2 in the discussion). Rewriting other tools' argv is a
-  rules engine Hangar should not own, and the skip half already exists as `restore-denylist.conf`.
+  rules engine Elis should not own, and the skip half already exists as `restore-denylist.conf`.
 - Shipping a bundled Claude Code `SessionStart` hook. `AgentHooksInstaller` already merges four Claude Code
   hooks, so adding a fifth is possible — but the correct invocation is user- and workflow-specific (which
   claude flags, which pane, whether to pin at all), and guessing it wrong pins the wrong command on every
@@ -44,42 +44,42 @@ Explicitly **out of scope**:
 
 Files/components involved:
 
-- `HangarCore/Sources/HangarCore/CommandRestore.swift` — host-free restore judgement: `restorePlan`,
+- `ElisCore/Sources/ElisCore/CommandRestore.swift` — host-free restore judgement: `restorePlan`,
   `shouldRestore`, `parseDenylist`, `shellQuotedLine`, `parseProcArgs`
-- `HangarCore/Sources/HangarCore/Session.swift` — `foregroundCommand` / `splitForegroundCommand` /
+- `ElisCore/Sources/ElisCore/Session.swift` — `foregroundCommand` / `splitForegroundCommand` /
   `initialCommand` / `wasRestored`, plus `paneRole(forToken:)` (live-slot pane resolution, the #199 fix)
-- `HangarCore/Sources/HangarCore/Snapshot.swift` — `SessionSnapshot` persisted fields + the custom decoder
-- `HangarCore/Sources/HangarCore/AppStore.swift` — `restore(from:)`, `session(from:)` /
+- `ElisCore/Sources/ElisCore/Snapshot.swift` — `SessionSnapshot` persisted fields + the custom decoder
+- `ElisCore/Sources/ElisCore/AppStore.swift` — `restore(from:)`, `session(from:)` /
   `workspace(from:)` (snapshot rebuild), `sessionSnapshot(_:)` (capture), `controlTree` (the tree builder)
-- `HangarCore/Sources/HangarCore/WindowLibrary.swift` — `loadStore(for:)` (calls `restore(from:)`),
+- `ElisCore/Sources/ElisCore/WindowLibrary.swift` — `loadStore(for:)` (calls `restore(from:)`),
   `closeWindow` (drops the store), and the three bootstrap load sites
-- `Hangar/ContentView.swift` — `resolveStore()`, the RUNTIME `loadStore` caller
-- `HangarCore/Sources/HangarCore/AppStore+RecentClosed.swift` — Reopen Closed Item; rebuilds sessions from
+- `Elis/ContentView.swift` — `resolveStore()`, the RUNTIME `loadStore` caller
+- `ElisCore/Sources/ElisCore/AppStore+RecentClosed.swift` — Reopen Closed Item; rebuilds sessions from
   snapshots at three call sites
-- `HangarCore/Sources/HangarCore/AppStore+PendingClose.swift` — the grace-window undo; reinserts the ORIGINAL
+- `ElisCore/Sources/ElisCore/AppStore+PendingClose.swift` — the grace-window undo; reinserts the ORIGINAL
   `Session` object rather than rebuilding
-- `HangarCore/Sources/HangarCore/AppStore+Panes.swift` — `closeSplit` (split teardown state clearing),
+- `ElisCore/Sources/ElisCore/AppStore+Panes.swift` — `closeSplit` (split teardown state clearing),
   `closePrimaryPane` (promotion, which already migrates `splitForegroundCommand` up)
-- `HangarCore/Sources/HangarCore/AppStore+Status.swift` — 64-line `AppStore` extension; the precedent for
+- `ElisCore/Sources/ElisCore/AppStore+Status.swift` — 64-line `AppStore` extension; the precedent for
   giving a small store concern its own file
-- `HangarCore/Sources/HangarCore/AppStore+Duplicate.swift` — duplicate builds a fresh `Session` via
+- `ElisCore/Sources/ElisCore/AppStore+Duplicate.swift` — duplicate builds a fresh `Session` via
   `addSession`, so it copies no per-session command state
-- `HangarCore/Sources/HangarCore/ControlProtocol.swift` — `Command` enum, `ControlArgs`, `ControlSessionNode`
-- `HangarCore/Sources/HangarCore/ControlModes.swift` — `ControlSessionStatusUpdate` and friends
-- `HangarCore/Sources/HangarCore/ControlDispatcher.swift` — `ControlActions` protocol + host-free dispatch
-- `HangarCore/Sources/hangarctlKit/SessionCommands.swift` — the `session` CLI subcommand tree
-- `HangarCore/Sources/hangarctlKit/MiscCommands.swift` — the existing top-level `Restore` (`restore clear`)
-- `Hangar/Control/ControlServer+SessionActions.swift` — app-side action arms (**998 lines / 1000 limit**)
-- `Hangar/Control/ControlServer.swift` — `clearRestoreCommands` (the `restore.clear` arm)
-- `Hangar/hangarApp.swift` — `makeSurface` / `makeSplitSurface` / `restoreInitialInput`
-- `Hangar/AppDelegate.swift` — `captureForegroundCommands` at quit
-- `HangarUITests/RestoreCommandUITests.swift` — the relaunch e2e harness
+- `ElisCore/Sources/ElisCore/ControlProtocol.swift` — `Command` enum, `ControlArgs`, `ControlSessionNode`
+- `ElisCore/Sources/ElisCore/ControlModes.swift` — `ControlSessionStatusUpdate` and friends
+- `ElisCore/Sources/ElisCore/ControlDispatcher.swift` — `ControlActions` protocol + host-free dispatch
+- `ElisCore/Sources/elisctlKit/SessionCommands.swift` — the `session` CLI subcommand tree
+- `ElisCore/Sources/elisctlKit/MiscCommands.swift` — the existing top-level `Restore` (`restore clear`)
+- `Elis/Control/ControlServer+SessionActions.swift` — app-side action arms (**998 lines / 1000 limit**)
+- `Elis/Control/ControlServer.swift` — `clearRestoreCommands` (the `restore.clear` arm)
+- `Elis/elisApp.swift` — `makeSurface` / `makeSplitSurface` / `restoreInitialInput`
+- `Elis/AppDelegate.swift` — `captureForegroundCommands` at quit
+- `ElisUITests/RestoreCommandUITests.swift` — the relaunch e2e harness
 
 Related patterns found:
 
 - **Pane addressing**: `session.status` takes `--pane left|right|scratch` plus `--pane-id`, resolving the
   token through `Session.paneRole(forToken:)` first (live slot, survives split promotion) and falling back to
-  the baked `--pane`. Shells already export `HANGAR_PANE` and `HANGAR_PANE_ID`.
+  the baked `--pane`. Shells already export `ELIS_PANE` and `ELIS_PANE_ID`.
 - **Run-once consumption**: `foregroundCommand` / `splitForegroundCommand` are read then nil'd by the surface
   factories, which is what stops a re-shown split from re-firing them.
 - **Dispatcher-first**: parsing/validation/response shape belong in `ControlDispatcher`; the app target
@@ -147,32 +147,32 @@ Constraints verified against tooling:
 
 Project-specific gates (from `CLAUDE.md`), applied before marking **any** task complete:
 
-1. `cd HangarCore && swift test` is green
+1. `cd ElisCore && swift test` is green
 2. **`make build` succeeds** — required on every task marked *(app target)*, because `swift test` compiles
-   only `HangarCore`/`hangarctlKit` and would silently defer an app-target break
+   only `ElisCore`/`elisctlKit` and would silently defer an app-target break
 3. `make lint` passes (swiftlint `--strict`, zero findings)
 4. no source file crosses 1000 lines, no test file crosses 2000
-5. `HangarCore` stays host-free — no GhosttyKit, AppKit, Metal, **or CoreGraphics** types
+5. `ElisCore` stays host-free — no GhosttyKit, AppKit, Metal, **or CoreGraphics** types
 
 Work happens in an **isolated git worktree** (project rule for non-trivial changes). Before creating it, run
 `git fetch origin master` so it forks the current remote tip. A fresh worktree lacks the gitignored build
-artifacts, so symlink them before the first build (absolute targets for the two under `Hangar/Resources/`):
+artifacts, so symlink them before the first build (absolute targets for the two under `Elis/Resources/`):
 
 ```
 ln -s <main>/GhosttyKit.xcframework GhosttyKit.xcframework
-ln -s <main>/Hangar/Resources/ghostty  <wt>/Hangar/Resources/ghostty
-ln -s <main>/Hangar/Resources/terminfo <wt>/Hangar/Resources/terminfo
+ln -s <main>/Elis/Resources/ghostty  <wt>/Elis/Resources/ghostty
+ln -s <main>/Elis/Resources/terminfo <wt>/Elis/Resources/terminfo
 ```
 
 ## Testing Strategy
 
-- **unit tests** (`cd HangarCore && swift test`): required for every task. The bulk of this feature is
+- **unit tests** (`cd ElisCore && swift test`): required for every task. The bulk of this feature is
   host-free and belongs here — precedence table, dispatcher validation, protocol round-trips, store
   mutations, snapshot round-trips, `controlTree` population.
-- **e2e tests** (XCUITest, `HangarUITests/`): Hangar has no browser e2e; the equivalent is XCUITest driving
+- **e2e tests** (XCUITest, `ElisUITests/`): Elis has no browser e2e; the equivalent is XCUITest driving
   the real app over the control socket. Required here because the payoff — a command actually re-running
   after a relaunch — is only observable end to end.
-  - `RestoreCommandUITests.swift` already has the harness: an isolated `HANGAR_STATE_DIR`, a ⌘Q quit so
+  - `RestoreCommandUITests.swift` already has the harness: an isolated `ELIS_STATE_DIR`, a ⌘Q quit so
     `applicationWillTerminate` fires the capture, and a `tee <marker>` foreground whose recreated marker file
     proves a re-run. The harness deletes the marker before quitting, so a recreated marker means a re-run.
     Reuse it rather than inventing a new mechanism.
@@ -250,12 +250,12 @@ Key design decisions and rationale:
 
 Fit with the existing system: control-native, no GUI surface. No `AppActions` seam, no menu item, no palette
 entry, and no Settings ▸ Interface toggle (there is no toggleable chrome here), so the GUI keep-in-sync rules
-do not bind. The control-API keep-in-sync rules bind fully — new `Command` case, dispatcher arm, `hangarctl`
+do not bind. The control-API keep-in-sync rules bind fully — new `Command` case, dispatcher arm, `elisctl`
 subcommand, round-trip + e2e tests, plus the `tree` read-back that every state-mutating command owes.
 
 ## Technical Details
 
-### New persisted state (`HangarCore`)
+### New persisted state (`ElisCore`)
 
 ```swift
 // Session.swift — @ObservationIgnored, mirroring foregroundCommand/splitForegroundCommand
@@ -323,7 +323,7 @@ restoreOverride == "cmd"            -> "cmd\n"                (verbatim + newlin
 `restorePlan` short-circuits when an override is present: `command` is always nil (never the exec path) and
 `initialInput` comes from `restoreInput`. With no override it reproduces today's logic exactly.
 
-### Surface factories (app target, `hangarApp.swift`)
+### Surface factories (app target, `elisApp.swift`)
 
 - `makeSurface` builds `RestoreInputs` with
   `restoreOverride: session.takePendingRestoreOverride(pane: .left)`.
@@ -493,8 +493,8 @@ orphan, and the next `save()` writes the drop through to `windows/<id>.json`.
 
 ```
 hook (SessionStart, inside the session's shell)
-  hangarctl session restore "claude --resume $CLAUDE_SESSION_ID" \
-      --target "$HANGAR_SESSION_ID" --pane-id "$HANGAR_PANE_ID"
+  elisctl session restore "claude --resume $CLAUDE_SESSION_ID" \
+      --target "$ELIS_SESSION_ID" --pane-id "$ELIS_PANE_ID"
         -> ControlDispatcher: parse + validate -> ControlSessionRestoreUpdate
         -> ControlServer.setSessionRestore: resolve session + live pane slot
         -> AppStore.setRestoreCommand -> Session.restoreCommand = "claude --resume …" + save()
@@ -533,30 +533,30 @@ Boundary: extract the **app-global, non-session** arms into a new file, parallel
 `typeQuick`, `readQuickText`) removes roughly 250 lines, leaving both files with real headroom.
 
 **Files:**
-- Create: `Hangar/Control/ControlServer+AppCommands.swift`
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Create: `Elis/Control/ControlServer+AppCommands.swift`
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`
 
-- [x] create `Hangar/Control/ControlServer+AppCommands.swift` with an `extension ControlServer` and a file
+- [x] create `Elis/Control/ControlServer+AppCommands.swift` with an `extension ControlServer` and a file
       header comment describing the split
 - [x] move the app-global arms listed above verbatim, preserving their doc comments and any `// MARK:` groups
 - [x] verify no private helper is orphaned across the boundary (move helpers used only by moved arms; keep
       shared ones where the majority of callers live)
-- [x] confirm both files are comfortably under 1000 lines (`wc -l Hangar/Control/*.swift`) — 756 and 256
+- [x] confirm both files are comfortably under 1000 lines (`wc -l Elis/Control/*.swift`) — 756 and 256
 - [x] run `make build` — a pure move must compile with zero source changes elsewhere
-- [x] run `cd HangarCore && swift test` — must stay green (no host-free code moved)
+- [x] run `cd ElisCore && swift test` — must stay green (no host-free code moved)
 - [x] run `make lint` — must report zero findings
 - [x] no new tests: behavior is unchanged and the moved arms keep their existing dispatcher/e2e coverage
 
 ### Task 2: Add the per-pane override fields to `Session` and `SessionSnapshot`
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`
-- Modify: `HangarCore/Sources/HangarCore/Snapshot.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (`sessionSnapshot(_:)`, `session(from:)`, `restore(from:)`)
-- Modify: `HangarCore/Sources/HangarCore/WindowLibrary.swift` (`loadStore(for:)` + the three bootstrap sites)
-- Modify: `HangarCore/Tests/HangarCoreTests/SessionTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/SnapshotRoundTripTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/WindowLibraryTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`
+- Modify: `ElisCore/Sources/ElisCore/Snapshot.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift` (`sessionSnapshot(_:)`, `session(from:)`, `restore(from:)`)
+- Modify: `ElisCore/Sources/ElisCore/WindowLibrary.swift` (`loadStore(for:)` + the three bootstrap sites)
+- Modify: `ElisCore/Tests/ElisCoreTests/SessionTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/SnapshotRoundTripTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/WindowLibraryTests.swift`
 
 - [x] add `restoreCommand` / `splitRestoreCommand` to `Session` as `@ObservationIgnored public var`, with
       doc comments stating the tri-state (nil = auto-capture, "" = pinned to nothing, "cmd" = run it), that
@@ -600,14 +600,14 @@ Boundary: extract the **app-global, non-session** arms into a new file, parallel
       to seeding neither
 - [x] write `WindowLibraryTests` for the runtime-reload gate: bootstrap-load a window with a pinned override,
       `closeWindow` it, `loadStore` it again without `launchRestore`, and assert nothing is pending
-- [x] run `cd HangarCore && swift test` - must pass before next task
+- [x] run `cd ElisCore && swift test` - must pass before next task
 
 ### Task 3: Add override precedence to `CommandRestore` *(app target)*
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/CommandRestore.swift`
-- Modify: `Hangar/hangarApp.swift` (the existing `restorePlan` call site)
-- Modify: `HangarCore/Tests/HangarCoreTests/CommandRestoreTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/CommandRestore.swift`
+- Modify: `Elis/elisApp.swift` (the existing `restorePlan` call site)
+- Modify: `ElisCore/Tests/ElisCoreTests/CommandRestoreTests.swift`
 
 - [x] add the `RestoreInputs` options struct (six `let`s + memberwise `public init`) with a doc comment, and
       change `restorePlan` to take it — required because a sixth parameter fails `make lint --strict`
@@ -617,7 +617,7 @@ Boundary: extract the **app-global, non-session** arms into a new file, parallel
       `restoreInput`) and otherwise reproduce today's logic unchanged
 - [x] update the `restorePlan` doc comment: the override wins over both the capture and `initialCommand`, is
       gated on the setting, bypasses the denylist structurally, and is typed verbatim (never `shellQuotedLine`)
-- [x] update the call site in `Hangar/hangarApp.swift` to the new signature (passing `restoreOverride: nil`
+- [x] update the call site in `Elis/elisApp.swift` to the new signature (passing `restoreOverride: nil`
       for now; Task 4 wires the real value) so the app still builds
 - [x] write `CommandRestoreTests` for `restoreInput`: nil override falls through to the captured input;
       `"cmd"` + enabled yields `"cmd\n"`; `"cmd"` + disabled yields nil; `""` yields nil regardless
@@ -625,12 +625,12 @@ Boundary: extract the **app-global, non-session** arms into a new file, parallel
       suppresses a non-nil `initialCommand`; `""` suppresses a captured `foregroundInput`
 - [x] write the regression guard: every pre-existing `restorePlan` case reproduces its old result with
       `restoreOverride: nil` (port the existing assertions to the struct, do not delete them)
-- [x] run `cd HangarCore && swift test` + `make build` - must pass before next task
+- [x] run `cd ElisCore && swift test` + `make build` - must pass before next task
 
 ### Task 4: Wire both surface factories to consume the override *(app target)*
 
 **Files:**
-- Modify: `Hangar/hangarApp.swift`
+- Modify: `Elis/elisApp.swift`
 
 - [x] in `makeSurface`, build `RestoreInputs` with
       `restoreOverride: session.takePendingRestoreOverride(pane: .left)` and pass it to `restorePlan`
@@ -642,24 +642,24 @@ Boundary: extract the **app-global, non-session** arms into a new file, parallel
       `takePendingRestoreOverride`'s own, and the only writer of `pending*` is `AppStore.session(from:)`)
 - [x] update both factories' comments to describe the override precedence and the take-and-nil guard
 - [x] run `make build` and smoke-test an isolated dev instance
-      (`open -n --env HANGAR_STATE_DIR=/tmp/hangar-restore-dev …`): normal sessions and splits still spawn
+      (`open -n --env ELIS_STATE_DIR=/tmp/elis-restore-dev …`): normal sessions and splits still spawn
       plain shells, splits still restore their captured command
 - [x] note: nothing can SET an override until Task 6, so this smoke exercises only the nil path — it is a
       no-regression check, not positive verification of the feature
 - [x] no new unit tests here: the decision logic is fully covered in Task 3 and the factories are app-target
       glue with no host-free seam. End-to-end proof lands in Task 9.
-- [x] run `cd HangarCore && swift test` + `make lint` - must pass before next task
+- [x] run `cd ElisCore && swift test` + `make lint` - must pass before next task
 
 ### Task 5: Add `AppStore.setRestoreCommand` and the pane-lifecycle handling
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/AppStore+Restore.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/AppStoreRestoreTests.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+PendingClose.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePaneTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreDuplicateTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/RecentClosedTests.swift`
+- Create: `ElisCore/Sources/ElisCore/AppStore+Restore.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/AppStoreRestoreTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Panes.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+PendingClose.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStorePaneTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreDuplicateTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/RecentClosedTests.swift`
 
 - [x] create `AppStore+Restore.swift` (following the `AppStore+Status.swift` precedent; `AppStore.swift` is
       at 955 and already modified by Tasks 2 and 7) holding `setRestoreCommand(_:pane:forSession:)`
@@ -699,7 +699,7 @@ Boundary: extract the **app-global, non-session** arms into a new file, parallel
       while the persisted field survives
 - [x] write the soft-close/undo test: soft-close a session whose pending payload was never consumed, undo
       within the grace window, and assert nothing is pending
-- [x] run `cd HangarCore && swift test` - must pass before next task
+- [x] run `cd ElisCore && swift test` - must pass before next task
 
 ### Task 6: Add the whole control surface, atomically *(app target)*
 
@@ -710,14 +710,14 @@ adding the `ControlActions` requirement breaks `ControlServer`'s conformance (no
 defaults). Enum case, value types, protocol requirement, mock, dispatcher routing, and app arm land together.
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlModes.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `Hangar/Control/ControlServer.swift` (the fallback switch's case list)
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift` (has headroom after Task 1)
-- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlModes.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `Elis/Control/ControlServer.swift` (the fallback switch's case list)
+- Modify: `Elis/Control/ControlServer+SessionActions.swift` (has headroom after Task 1)
+- Modify: `ElisCore/Tests/ElisCoreTests/MockControlActions.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherTests.swift`
 
 - [x] add `case sessionRestore = "session.restore"` to the `Command` enum, placed with the other
       session-scoped cases
@@ -743,7 +743,7 @@ defaults). Enum case, value types, protocol requirement, mock, dispatcher routin
       defaulting to `.left`
 - [x] reject an unresolvable `--pane-id` given WITHOUT an explicit `--pane` — unlike `session.status`, a
       silent `.left` fallback here would overwrite the wrong pane's persisted restore command. An EMPTY
-      token counts as ABSENT (an older shell exporting no `HANGAR_PANE_ID`), taking the `--pane`/main path
+      token counts as ABSENT (an older shell exporting no `ELIS_PANE_ID`), taking the `--pane`/main path
 - [x] reject a `.scratch` pane with a clear error (the scratch terminal is never restored)
 - [x] reject `.right` when `!session.hasSplit`, gated like the focus helpers
 - [x] map `ControlRestoreOverride` to the stored value (`pin(cmd)` → cmd, `pinNone` → `""`, `unpin` → nil) and
@@ -769,15 +769,15 @@ defaults). Enum case, value types, protocol requirement, mock, dispatcher routin
       `ControlDispatcherTests.swift` under 2000 (1653 before) — 808 and 1791
 - [x] no host-free unit tests for the app arm itself (app-target side effects); its inputs are covered by the
       dispatcher tests above and its behavior by Task 9's e2e
-- [x] run `cd HangarCore && swift test` + `make build` + `make lint` - must pass before next task
+- [x] run `cd ElisCore && swift test` + `make build` + `make lint` - must pass before next task
 
 ### Task 7: Add the `tree` read-back fields
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (the `controlTree` builder)
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePaneTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift` (the `controlTree` builder)
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStorePaneTests.swift`
 
 - [x] add `restoreCommand` / `splitRestoreCommand` to `ControlSessionNode` as `public let … = nil`-defaulted
       init parameters, with doc comments naming them the read side of `session.restore`
@@ -791,14 +791,14 @@ defaults). Enum case, value types, protocol requirement, mock, dispatcher routin
 - [x] write the `controlTree` populate test (`AppStorePaneTests`, alongside `controlTreeReportsSplitRatio`
       and friends) — mandated by `.claude/rules/control-api.md` for every read-back field. It must assert the
       value survives a `takePendingRestoreOverride`, which is what catches a builder reading the pending slot
-- [x] run `cd HangarCore && swift test` - must pass before next task
+- [x] run `cd ElisCore && swift test` - must pass before next task
 
-### Task 8: Add the `hangarctl session restore` subcommand
+### Task 8: Add the `elisctl session restore` subcommand
 
 **Files:**
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/MiscCommands.swift` (help-text cross-reference only)
-- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift`
+- Modify: `ElisCore/Sources/elisctlKit/MiscCommands.swift` (help-text cross-reference only)
+- Modify: `ElisCore/Tests/elisctlKitTests/CommandsTests.swift`
 
 - [x] add a `Restore` subcommand to the `Session` namespace, registered in its `subcommands:` list (it nests
       under `Session`, so it does not collide with the existing top-level `Restore` in `MiscCommands.swift`)
@@ -813,19 +813,19 @@ defaults). Enum case, value types, protocol requirement, mock, dispatcher routin
       `command` populated only for `set`
 - [x] write help text stating the override is consumed on the NEXT launch, wins over the captured foreground,
       and is read back on `tree`
-- [x] cross-reference the two restore verbs in BOTH help strings — `hangarctl restore clear` is app-global and
-      capture-scoped, `hangarctl session restore --clear` is per-session and override-scoped; they are easy to
+- [x] cross-reference the two restore verbs in BOTH help strings — `elisctl restore clear` is app-global and
+      capture-scoped, `elisctl session restore --clear` is per-session and override-scoped; they are easy to
       confuse
 - [x] write `CommandsTests` mapping cases: each of the three forms produces the expected `ControlRequest`;
       `--pane` / `--pane-id` / `--target` / `--window` are carried through
 - [x] write `CommandsTests` validation cases: no argument at all, and two forms given together, both error
-- [x] run `cd HangarCore && swift test` - must pass before next task
+- [x] run `cd ElisCore && swift test` - must pass before next task
 
 ### Task 9: End-to-end tests *(app target)*
 
 **Files:**
-- Modify: `HangarUITests/RestoreCommandUITests.swift`
-- Modify: `HangarUITests/ControlAPIUITests.swift`
+- Modify: `ElisUITests/RestoreCommandUITests.swift`
+- Modify: `ElisUITests/ControlAPIUITests.swift`
 
 - [x] add an e2e proving a pinned override re-runs ITS command and not the captured one: run a
       `tee <markerA>` foreground, pin an override that writes `<markerB>`, delete BOTH markers, quit,
@@ -857,7 +857,7 @@ defaults). Enum case, value types, protocol requirement, mock, dispatcher routin
 - [x] add `ControlAPIUITests` read-back assertions: after set / `--none` / `--clear`, `tree` reports the
       command, an empty string, and an omitted field respectively
 - [x] add a promotion round-trip: with a split, exit the MAIN pane so the right pane is promoted, then pin
-      via the survivor's `$HANGAR_PANE_ID` and assert `tree` reports it on `restoreCommand` (the main field),
+      via the survivor's `$ELIS_PANE_ID` and assert `tree` reports it on `restoreCommand` (the main field),
       not `splitRestoreCommand` — the live-slot resolution that `--pane-id` exists for
 - [x] add `ControlAPIUITests` error assertions: `--pane right` on a session with no split, a `--pane-id`
       resolving to the scratch, and an unresolvable `--pane-id` with no `--pane`
@@ -882,9 +882,9 @@ defaults). Enum case, value types, protocol requirement, mock, dispatcher routin
       `initialCommand`
 - [x] grep the tree to confirm the surface factories read ONLY `pending*` and `setRestoreCommand` writes ONLY
       the persisted fields — the invariant the whole safety argument rests on
-- [x] verify the control-API four-point audit is complete: `Command` case, dispatcher arm, `hangarctl`
+- [x] verify the control-API four-point audit is complete: `Command` case, dispatcher arm, `elisctl`
       subcommand, round-trip + e2e tests — plus the `tree` read-back and its `controlTree` populate test
-- [x] run the full unit suite: `cd HangarCore && swift test`
+- [x] run the full unit suite: `cd ElisCore && swift test`
 - [x] run the e2e suite (XCUITest) and `make build`
 - [x] run `make lint` — zero findings, `--strict`
 - [x] verify no source file exceeds 1000 lines and no test file exceeds 2000 (`wc -l` across changed files)
@@ -902,10 +902,10 @@ All five keep-in-sync surfaces. **`CHANGELOG.md` is release-only — do not touc
 - Modify: `README.md`
 - Modify: `site/docs.html`
 - Modify: `site/commands.html`
-- Modify: `Hangar/Resources/agent-skill/SKILL.md`
-- Modify: `Hangar/Resources/agent-skill/reference.md`
-- Modify: `Hangar/Resources/agent-skill/examples.md`
-- Modify: `Hangar/Resources/agent-skill/troubleshooting.md`
+- Modify: `Elis/Resources/agent-skill/SKILL.md`
+- Modify: `Elis/Resources/agent-skill/reference.md`
+- Modify: `Elis/Resources/agent-skill/examples.md`
+- Modify: `Elis/Resources/agent-skill/troubleshooting.md`
 - Modify: `.claude/rules/control-api.md`
 - Modify: `CLAUDE.md` (only if a new pattern emerged — see the last checkbox)
 
@@ -913,16 +913,16 @@ All five keep-in-sync surfaces. **`CHANGELOG.md` is release-only — do not touc
       tri-state, the next-launch timing, and the hook-driven ownership tradeoff
 - [x] bump the command count from 61 to 62 in all eight occurrences: `README.md` ×1, `site/docs.html` ×1,
       `site/commands.html` ×4 (meta description, og and twitter tags, page copy),
-      `Hangar/Resources/agent-skill/SKILL.md` ×1, and `.claude/rules/control-api.md` **×5** (the agent-skill
+      `Elis/Resources/agent-skill/SKILL.md` ×1, and `.claude/rules/control-api.md` **×5** (the agent-skill
       description, the catalog heading, the "public command count stays 61" note, the skill-count note, and
       the site-copy note — grep, do not eyeball)
 - [x] mirror the README change into `site/docs.html` (hand-authored mirror — both must agree)
 - [x] add the `session.restore` entry to `site/commands.html`: invocation, arguments, and the
       `restoreCommand` / `splitRestoreCommand` read-back fields, matching the surrounding entry format
-- [x] add the command to `Hangar/Resources/agent-skill/reference.md` and the `SKILL.md` command summary
+- [x] add the command to `Elis/Resources/agent-skill/reference.md` and the `SKILL.md` command summary
 - [x] add an `examples.md` entry showing the payoff — a Claude Code `SessionStart` hook running
-      `hangarctl session restore "claude --resume $CLAUDE_SESSION_ID" --target "$HANGAR_SESSION_ID"
-      --pane-id "$HANGAR_PANE_ID"` (the selector is `--target`; there is no `--session`) — noting that
+      `elisctl session restore "claude --resume $CLAUDE_SESSION_ID" --target "$ELIS_SESSION_ID"
+      --pane-id "$ELIS_PANE_ID"` (the selector is `--target`; there is no `--session`) — noting that
       write-once-and-forget pins a stale id, and that only safely-interpolated values (a UUID-shaped session
       id) belong in the command
 - [x] document that the pinned value is SHELL CODE: it persists in `windows/<id>.json`, is readable via
@@ -974,18 +974,18 @@ and `.rebuildDropsAHiddenSplitsOverrideOnEveryPath` (host-free) and by the e2e
 **Manual verification:**
 
 - Drive a full round with a real Claude Code `SessionStart` hook: confirm the override tracks the live fork
-  child across several Hangar restarts, and that no duplicate claude sessions accumulate — the actual
+  child across several Elis restarts, and that no duplicate claude sessions accumulate — the actual
   complaint in discussion #264.
 - Verify a hook writing on every session start does not produce noticeable overhead (one socket round-trip
   per start).
-- Confirm behavior with the deployed build after `make deploy`, since the deployed `/usr/local/bin/hangarctl`
+- Confirm behavior with the deployed build after `make deploy`, since the deployed `/usr/local/bin/elisctl`
   shadows the dev binary and hooks resolve it from PATH.
 
 **External system updates:**
 
 - Reply on discussion #264 once merged, confirming the shape that shipped and the tri-state semantics; the
   reporter offered to test builds.
-- The installed agent-skill copies at `~/.claude/skills/hangar/` and `~/.codex/skills/hangar/` are install
+- The installed agent-skill copies at `~/.claude/skills/elis/` and `~/.codex/skills/elis/` are install
   OUTPUTS regenerated by Help ▸ Install Agent Skill — never edit them; the user re-runs the installer to pick
   up the new command.
 

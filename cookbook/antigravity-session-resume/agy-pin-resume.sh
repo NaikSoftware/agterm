@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Antigravity CLI (agy) SessionStart hook: pin this hangar pane's restore
-# command to `agy --conversation <conversationId>` so restarting hangar
+# Antigravity CLI (agy) SessionStart hook: pin this elis pane's restore
+# command to `agy --conversation <conversationId>` so restarting elis
 # reopens the pane's own conversation.
 
 set -u
@@ -8,9 +8,9 @@ set -u
 payload=$(cat)
 printf '{}\n'
 
-[ -n "${HANGAR_SESSION_ID:-}" ] || exit 0
-[ -n "${HANGAR_PANE_ID:-}" ] || exit 0
-[ -n "${HANGAR_SOCKET:-}" ] || exit 0
+[ -n "${ELIS_SESSION_ID:-}" ] || exit 0
+[ -n "${ELIS_PANE_ID:-}" ] || exit 0
+[ -n "${ELIS_SOCKET:-}" ] || exit 0
 
 # An agy worker spawned inside a Claude Code session shares the pane with its
 # parent. The pane's restore pin belongs to the outer session, not the child.
@@ -58,20 +58,20 @@ case "$conversation_id" in
   ""|-*|*[!A-Za-z0-9_-]*) exit 0 ;;
 esac
 
-hangarctl_bin=${HANGARCTL:-hangarctl}
-if ! command -v "$hangarctl_bin" >/dev/null 2>&1; then
-  if [ -z "${HANGARCTL:-}" ] && [ -x "${HOME:-}/Applications/Hangar.app/Contents/MacOS/hangarctl" ]; then
-    hangarctl_bin="${HOME:-}/Applications/Hangar.app/Contents/MacOS/hangarctl"
-  elif [ -z "${HANGARCTL:-}" ] && [ -x /Applications/Hangar.app/Contents/MacOS/hangarctl ]; then
-    hangarctl_bin=/Applications/Hangar.app/Contents/MacOS/hangarctl
+elisctl_bin=${ELISCTL:-elisctl}
+if ! command -v "$elisctl_bin" >/dev/null 2>&1; then
+  if [ -z "${ELISCTL:-}" ] && [ -x "${HOME:-}/Applications/Elis.app/Contents/MacOS/elisctl" ]; then
+    elisctl_bin="${HOME:-}/Applications/Elis.app/Contents/MacOS/elisctl"
+  elif [ -z "${ELISCTL:-}" ] && [ -x /Applications/Elis.app/Contents/MacOS/elisctl ]; then
+    elisctl_bin=/Applications/Elis.app/Contents/MacOS/elisctl
   else
     exit 0
   fi
 fi
 
-"$hangarctl_bin" session restore "agy --conversation $conversation_id" \
-  --target "$HANGAR_SESSION_ID" \
-  --pane-id "$HANGAR_PANE_ID" \
-  --socket "$HANGAR_SOCKET" >/dev/null 2>&1 || true
+"$elisctl_bin" session restore "agy --conversation $conversation_id" \
+  --target "$ELIS_SESSION_ID" \
+  --pane-id "$ELIS_PANE_ID" \
+  --socket "$ELIS_SOCKET" >/dev/null 2>&1 || true
 
 exit 0

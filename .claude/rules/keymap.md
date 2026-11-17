@@ -1,28 +1,28 @@
 ---
 paths:
-  - "macos/HangarCore/Sources/HangarCore/Keybind.swift"
-  - "macos/HangarCore/Sources/HangarCore/KeybindMatcher.swift"
-  - "macos/HangarCore/Sources/HangarCore/Keymap.swift"
-  - "macos/HangarCore/Sources/HangarCore/BuiltinAction.swift"
-  - "macos/HangarCore/Sources/HangarCore/CustomCommand.swift"
-  - "macos/HangarCore/Sources/HangarCore/ConfigPaths.swift"
-  - "macos/Hangar/Commands/CustomCommandRunner.swift"
-  - "macos/HangarUITests/KeymapUITests.swift"
+  - "macos/ElisCore/Sources/ElisCore/Keybind.swift"
+  - "macos/ElisCore/Sources/ElisCore/KeybindMatcher.swift"
+  - "macos/ElisCore/Sources/ElisCore/Keymap.swift"
+  - "macos/ElisCore/Sources/ElisCore/BuiltinAction.swift"
+  - "macos/ElisCore/Sources/ElisCore/CustomCommand.swift"
+  - "macos/ElisCore/Sources/ElisCore/ConfigPaths.swift"
+  - "macos/Elis/Commands/CustomCommandRunner.swift"
+  - "macos/ElisUITests/KeymapUITests.swift"
 ---
 
 ## Keymap
 
-- `<configDir>/keymap.conf` (default `~/.config/hangar`) rebinds built-in menu shortcuts and defines
+- `<configDir>/keymap.conf` (default `~/.config/elis`) rebinds built-in menu shortcuts and defines
   custom shell commands, which appear in the action palette as `custom`. One parsed `Keymap` drives the
-  menu, custom-command monitor, and palette; host-free logic lives in `HangarCore`.
+  menu, custom-command monitor, and palette; host-free logic lives in `ElisCore`.
 - `global-hotkey <chord>` is the third verb: ONE chord, modifier or function key required,
   no `|` alternatives and no leader sequence (`RegisterEventHotKey` expresses neither).
   Last line wins. It is registered with the OS
   by `GlobalHotkey`, never with `KeybindMatcher`, so it is deliberately OUTSIDE the conflict model below —
-  it may share a chord with a menu item — but the OS hotkey WINS and CONSUMES the key, Hangar frontmost
+  it may share a chord with a menu item — but the OS hotkey WINS and CONSUMES the key, Elis frontmost
   included, so the menu binding then never fires. Say that rather than "whichever app is in front decides",
   which is the precise inversion. Ship NO default: registering takes the chord from every other application
-  on the machine, a cost nobody who never summons the panel from outside Hangar should pay. Binding it to
+  on the machine, a cost nobody who never summons the panel from outside Elis should pay. Binding it to
   `quick_terminal`'s own ``ctrl+` `` is the supported way to get one chord everywhere, and both user-facing
   surfaces (`site/docs.html`, the `ConfigPaths` keymap starter) must say so.
   `parseGlobalHotkeyLine` diagnoses a base key no physical position produces,
@@ -74,7 +74,7 @@ paths:
   `CommandContext` owns the shared expansion/environment token table.
 - Built-ins use AppKit menu key equivalents from `keymap.equivalent(for:)`; apply only non-nil
   `KeyboardShortcut`s. SwiftUI rebuilds menu shortcuts lazily, on activation or key dispatch rather than on
-  `keymap reload`, and resolves stock collisions by unbinding Hangar's item.
+  `keymap reload`, and resolves stock collisions by unbinding Elis's item.
 - `AppDelegate.applyStockMenuChords` asserts every contested stock chord from the AppKit side.
   `applyCloseSessionChord` keeps the ⌘W pair with File > Close, matched by title.
   `stockMenuChords` holds the other stock chords the grammar can spell, matched by selector plus modifier
@@ -82,9 +82,9 @@ paths:
   mask finds the item again on release. A freed chord first leaves any `menuAction:` item still carrying it,
   even with the stock item absent (AppKit adds some alternates lazily), then returns to the stock item.
   Stale-chord cleanup touches only `menuAction:` items; user Services are left alone.
-  Run at launch, `.hangarKeymapChanged`, asynchronously after `didBecomeActive`, and during menu tracking,
+  Run at launch, `.elisKeymapChanged`, asynchronously after `didBecomeActive`, and during menu tracking,
   because every rebuild can reapply the collision. No shipped default sits on a stock chord except ⌘W.
-- Diagnose live shortcut state with `hangarctl keymap list`, whose `actions` and `menu` expose parsed and
+- Diagnose live shortcut state with `elisctl keymap list`, whose `actions` and `menu` expose parsed and
   dispatched chords through host-free `namedKey(forKeyEquivalent:)`; the actions column's contract is owned
   by [[control-api]], and only its first field can appear under `menu`. `overridden` compares the resolved
   menu chord against the shipped default, so an action left with alternatives only reports `overridden` with
@@ -101,8 +101,8 @@ paths:
   so a window timed from the fire would close first. Autorepeat of that live tail fires too, every other
   consumed autorepeat stays swallowed. A new leader pressed while the tail is held keeps its 1.5 s timeout;
   app deactivation, a text-field or auxiliary-window key, and Esc close the window (Esc still reaching the
-  terminal). So do menu tracking starting and a window resigning key while Hangar is inactive: a local
-  monitor never sees a keyUp consumed by menu tracking, and the quick terminal is key without Hangar being
+  terminal). So do menu tracking starting and a window resigning key while Elis is inactive: a local
+  monitor never sees a keyUp consumed by menu tracking, and the quick terminal is key without Elis being
   active, so neither release would ever start the timeout. A resign inside the active app is left alone,
   or `--repeat next_window` would stop after one step. Any other chord closes it and is matched afresh; it is deliberately not `isArmed`, which would
   swallow those keys. The chord goes to the matcher before the `toggle_fullscreen` and page `close_session`
@@ -113,7 +113,7 @@ paths:
   Track held keycodes independently: a leader tail can arrive before its prefix is released.
   `.fired` launches detached `/bin/sh -c` with cwd, selection, and `$AGT_*`; stdin and stdout go to
   `/dev/null`. Only `errorHud` commands capture stderr to a temp file (`StderrFile`, `CommandFailure`),
-  reading its last 16 KiB before removing it. A pipe would break background descendants after Hangar exits;
+  reading its last 16 KiB before removing it. A pipe would break background descendants after Elis exits;
   the file avoids that, but its write size is unbounded until every writer exits.
   A spawn error or non-zero exit always calls `notifyCommandFailure`, which obeys the notification
   setting. Only `errorHud` adds a panel through injected `FailureHud`, with the name, reason and any
@@ -125,7 +125,7 @@ paths:
   `PaletteCommand.allCases` on `builtinAction`, falling
   back to `paletteLessHandler(for:)` — the sole listing of the actions holding no palette row, partitioned
   against `PaletteCommand` by `AppActionsPaletteTests`. Rebuild the matcher from commands AND
-  `builtinSequences` on `.hangarKeymapChanged`.
+  `builtinSequences` on `.elisKeymapChanged`.
 - **An alternative does what its line's MENU chord does, no more and no less.** So `perform(_:in:)` runs the
   palette row's body behind `PaletteCommand.isEnabled(in:)`, the single predicate the menu item spells as
   its `.disabled(…)`; [[menu-actions]] owns it, so never restate a menu term here or in `perform`.
@@ -138,7 +138,7 @@ paths:
   picker alone, since their menu items are disabled over the dashboard. The key is
   consumed either way: the gate lives inside each action, so the runner cannot see the outcome, and passing
   a leader's last chord through after swallowing its prefix would type a stray character into the terminal.
-- Fire with a focused `GhosttySurfaceView`, or in a Hangar terminal window whose focus is not an `NSText`
+- Fire with a focused `GhosttySurfaceView`, or in an Elis terminal window whose focus is not an `NSText`
   field editor, including a zero-session window. Pass through text fields and auxiliary windows;
   `WindowRegistry.contains(keyWindow)` gates no-surface dispatch.
 - Palette `run(_:)` no-ops without an active session. A no-surface chord uses the active session when
@@ -203,7 +203,7 @@ paths:
 - `BuiltinAction.defaultChord` is the sole built-in default. Every menu item resolves
   override-or-default, including the six arrow actions. Two keyed actions are delivered by a monitor
   rather than a menu equivalent: `undo_close` through `UndoCloseShortcut`, so native text undo still
-  works, and `toggle_fullscreen` through `CustomCommandRunner`, because Hangar ships no full screen menu
+  works, and `toggle_fullscreen` through `CustomCommandRunner`, because Elis ships no full screen menu
   item for it to ride — see [[windows]]. Both are absent from `keymap list`'s `menu` by design.
   `close_session` and `toggle_overlay` keep their menu items, but `CustomCommandRunner` also matches their
   chords while an `HtmlOverlayWebView` holds focus: WebKit hands key equivalents to the page first and reports a cancelled
@@ -253,7 +253,7 @@ paths:
   Russian-Phonetic and U.S. instances, plus `cmd+d` and `cmd+1` on Dvorak - QWERTY ⌘ and Lithuanian.
   Russian-Phonetic does not cover Greek/Hebrew punctuation, which host-free measured-data tests cover.
 - `ghostty.conf` has a separate upstream grammar: bare `g` is Unicode and `key_g` physical; Unicode
-  triggers cannot fire on non-Latin layouts. Hangar matches Ghostty.app and cannot fix this app-side.
+  triggers cannot fire on non-Latin layouts. Elis matches Ghostty.app and cannot fix this app-side.
   Use `key_`, as `ghostty-defaults.conf` does for `super+key_c/key_v/key_a` (issue #30).
   The `ghostty` section of `site/docs.html` documents the distinction.
 - A built-in reaches a leader only as an alternative, never as its menu equivalent: an `NSMenuItem` holds
@@ -288,10 +288,10 @@ paths:
   to `CommandContext.expand`.
 - File > Reload Keymap, the palette entry, and `keymap.reload` all call
   `AppActions.reloadKeymap()` > `SettingsModel.reloadKeymap()`, which reparses and posts
-  `.hangarKeymapChanged`. Apply the Control API four-point audit.
+  `.elisKeymapChanged`. Apply the Control API four-point audit.
 - Edit Keymap is GUI-only. `AppActions.editKeymap()` opens a 95% floating overlay with
   `ConfigPaths.editorCommand(forPath:)`:
-  `${SHELL:-/bin/zsh} -ilc 'exec /bin/sh -c '\''${VISUAL:-${EDITOR:-vi}} "$1"'\'' hangar-config-edit '<path>''`.
+  `${SHELL:-/bin/zsh} -ilc 'exec /bin/sh -c '\''${VISUAL:-${EDITOR:-vi}} "$1"'\'' elis-config-edit '<path>''`.
   The interactive login shell loads exported editor variables; inner POSIX `sh` handles
   `${VAR:-default}` for fish and receives the single-quoted path as `$1`. Supported shells must accept
   `-ilc` and preserve single quotes (sh/bash/zsh/fish, not csh/tcsh); non-exported editor variables fall

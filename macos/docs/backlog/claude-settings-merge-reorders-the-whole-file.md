@@ -1,6 +1,6 @@
 ---
 worth: no
-where: HangarCore/Sources/HangarCore/AgentHooksInstall.swift:serialize
+where: ElisCore/Sources/ElisCore/AgentHooksInstall.swift:serialize
 added: 2026-08-19
 ---
 # merging Claude hooks reorders and reformats the user's whole settings.json

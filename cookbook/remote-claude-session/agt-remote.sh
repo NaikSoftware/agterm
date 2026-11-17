@@ -1,6 +1,6 @@
 #!/bin/sh
 # agt-remote.sh - run a coding agent in a tmux session on a remote host, one
-# hangar tab per remote session, reconnecting on its own. See README.md.
+# elis tab per remote session, reconnecting on its own. See README.md.
 #
 #   open                  chord: pick a remote session to reattach, or a project
 #                         and a name for a new one, and open a tab for it
@@ -17,13 +17,13 @@
 # it, then closes the local tab. Read the README's Limits.
 set -u
 
-HANGARCTL=${HANGARCTL:-hangarctl}
+ELISCTL=${ELISCTL:-elisctl}
 CONFIG=${AGT_REMOTE_CONFIG:-$HOME/.config/agt-remote/config}
 STATE_DIR=${AGT_REMOTE_STATE:-$HOME/.agt-remote}
 SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 
 # a config file, not keymap-line variables: the tab's process and the restore
-# line hangar replays after a restart never see the keymap's environment.
+# line elis replays after a restart never see the keymap's environment.
 # shellcheck source=/dev/null
 [ -f "$CONFIG" ] && . "$CONFIG"
 
@@ -38,17 +38,17 @@ RETRY=${AGT_REMOTE_RETRY:-5}
 # 0 opens no port on the host and posts no statuses
 STATUS=${AGT_REMOTE_STATUS:-1}
 
-# a chord exports AGT_SOCKET; a session's process exports HANGAR_SOCKET.
-socket=${AGT_SOCKET:-${HANGAR_SOCKET:-}}
-window=${AGT_WINDOW_ID:-${HANGAR_WINDOW_ID:-}}
+# a chord exports AGT_SOCKET; a session's process exports ELIS_SOCKET.
+socket=${AGT_SOCKET:-${ELIS_SOCKET:-}}
+window=${AGT_WINDOW_ID:-${ELIS_WINDOW_ID:-}}
 
 # the socket path holds a space on a default install; one wrapper keeps every
 # call quoted, and --socket is a subcommand option, so it goes last.
 agt() {
 	if [ -n "$socket" ]; then
-		"$HANGARCTL" "$@" --socket "$socket"
+		"$ELISCTL" "$@" --socket "$socket"
 	else
-		"$HANGARCTL" "$@"
+		"$ELISCTL" "$@"
 	fi
 }
 
@@ -70,7 +70,7 @@ report() {
 		printf '%s\n' "$msg${detail:+: $detail}" >&2
 		return
 	fi
-	target=${AGT_SESSION_ID:-${HANGAR_SESSION_ID:-active}}
+	target=${AGT_SESSION_ID:-${ELIS_SESSION_ID:-active}}
 	# a shell has no arrays, and an unquoted ${detail:+--detail "$detail"} would
 	# split a detail that holds spaces into several arguments
 	if [ -n "$detail" ]; then
@@ -229,16 +229,16 @@ open() {
 	sid=$(printf '%s' "$out" | jq -r '.result.id')
 	[ -n "$sid" ] || fail "session new returned no id"
 
-	# the tab reattaches on its own after an hangar restart: a pinned line rather
+	# the tab reattaches on its own after an elis restart: a pinned line rather
 	# than the captured foreground, which would replay a bare ssh with no loop.
 	if ! agt session restore "$run" --target "$sid" >/dev/null 2>&1; then
-		notify "$name opened, but its reconnect line could not be pinned: after an hangar restart run: $run"
+		notify "$name opened, but its reconnect line could not be pinned: after an elis restart run: $run"
 	else
 		# the pin replays under Re-run commands or Live sessions only, and Fresh
 		# shells is the default, so a setting loses the reattach more often than a
 		# failure does. Best-effort: `restore mode` is newer than 0.22.0.
 		case $(agt restore mode --json 2>/dev/null | jq -r '.result.restore.configured // empty' 2>/dev/null) in
-		none) notify "$name opened, but Settings ▸ General ▸ Sessions is on Fresh shells: after an hangar restart the tab comes back as a plain shell" ;;
+		none) notify "$name opened, but Settings ▸ General ▸ Sessions is on Fresh shells: after an elis restart the tab comes back as a plain shell" ;;
 		esac
 	fi
 
@@ -272,7 +272,7 @@ attach() {
 	# bytes, which rules out $TMPDIR. One socket per attach also means a tab
 	# taking the session over on this same Mac never shares a path with the
 	# relay it replaces.
-	if [ "$STATUS" = 1 ] && [ -n "$socket" ] && [ -n "${HANGAR_SESSION_ID:-}" ]; then
+	if [ "$STATUS" = 1 ] && [ -n "$socket" ] && [ -n "${ELIS_SESSION_ID:-}" ]; then
 		if ! command -v python3 >/dev/null 2>&1; then
 			printf '[%s] no python3 on this Mac; statuses stay idle\n' "$name"
 		elif ! relay_dir=$(mktemp -d /tmp/agt-remote.XXXXXXXX); then
@@ -280,8 +280,8 @@ attach() {
 			printf '[%s] no private directory for the status relay; statuses stay idle\n' "$name"
 		else
 			relay_sock=$relay_dir/$name.sock
-			python3 "$(dirname "$SELF")/agt-remote-relay.py" --listen "$relay_sock" --hangar "$socket" \
-				--target "$HANGAR_SESSION_ID" --pane "${HANGAR_PANE:-}" --pane-id "${HANGAR_PANE_ID:-}" &
+			python3 "$(dirname "$SELF")/agt-remote-relay.py" --listen "$relay_sock" --elis "$socket" \
+				--target "$ELIS_SESSION_ID" --pane "${ELIS_PANE:-}" --pane-id "${ELIS_PANE_ID:-}" &
 			relay_pid=$!
 			i=0
 			while [ ! -S "$relay_sock" ] && [ "$i" -lt 20 ]; do
@@ -386,7 +386,7 @@ attach() {
 end() {
 	require_host
 	command -v jq >/dev/null 2>&1 || fail "jq is not on PATH"
-	sid=$(canonical_id "${1:-${AGT_SESSION_ID:-${HANGAR_SESSION_ID:-}}}") || fail "not a session id: '${1:-}'"
+	sid=$(canonical_id "${1:-${AGT_SESSION_ID:-${ELIS_SESSION_ID:-}}}") || fail "not a session id: '${1:-}'"
 
 	name=""
 	project=""
@@ -396,7 +396,7 @@ end() {
 	fi
 	# no marker (the tab came from another machine's state): the badge names it
 	if [ -z "$name" ] && [ -n "$BADGE" ]; then
-		label=$(session_name "$sid") || fail "cannot reach hangar"
+		label=$(session_name "$sid") || fail "cannot reach elis"
 		case $label in
 		"$BADGE"*) name=${label#"$BADGE"} ;;
 		esac

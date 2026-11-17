@@ -4,18 +4,18 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setImmediate as nextTurn, setTimeout as delay } from "node:timers/promises";
-import plugin from "../../Hangar/Resources/agent-status/opencode/hangar-v2/tui.js";
+import plugin from "../../Elis/Resources/agent-status/opencode/elis-v2/tui.js";
 
 async function fixture(run, { selected = "root", sessions, active = {}, env = {}, configure } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), "hangar-v2-"));
+  const directory = mkdtempSync(join(tmpdir(), "elis-v2-"));
   const output = join(directory, "calls");
   const wrapper = join(directory, "wrapper");
   writeFileSync(output, "");
-  writeFileSync(wrapper, '#!/bin/sh\nprintf "%s|%s|%s|%s|%s\\n" "$HANGAR_SESSION_ID" "$HANGAR_PANE" "$HANGAR_PANE_ID" "$HANGAR_SOCKET" "$*" >> "$HANGAR_TEST_OUTPUT"\n', { mode: 0o755 });
+  writeFileSync(wrapper, '#!/bin/sh\nprintf "%s|%s|%s|%s|%s\\n" "$ELIS_SESSION_ID" "$ELIS_PANE" "$ELIS_PANE_ID" "$ELIS_SOCKET" "$*" >> "$ELIS_TEST_OUTPUT"\n', { mode: 0o755 });
   const original = { ...process.env };
   Object.assign(process.env, {
-    HANGAR_SESSION_ID: "pane-a", HANGAR_PANE: "right", HANGAR_PANE_ID: "stable-a",
-    HANGAR_SOCKET: join(directory, "isolated.sock"), HANGAR_STATUS_WRAPPER: wrapper, HANGAR_TEST_OUTPUT: output,
+    ELIS_SESSION_ID: "pane-a", ELIS_PANE: "right", ELIS_PANE_ID: "stable-a",
+    ELIS_SOCKET: join(directory, "isolated.sock"), ELIS_STATUS_WRAPPER: wrapper, ELIS_TEST_OUTPUT: output,
     ...env,
   });
   const records = new Map((sessions ?? [{ id: "root" }, { id: "child", parentID: "root" }, { id: "other" }]).map(info => [info.id, info]));
@@ -503,15 +503,15 @@ test("two CLI clients observing the same events keep independent pane ownership"
       await second.waitFor("active --blink");
       assert.ok(first.calls().every(line => line.startsWith("pane-a|")));
       assert.ok(second.calls().every(line => line.startsWith("pane-b|")));
-    }, { selected: "other", env: { HANGAR_SESSION_ID: "pane-b" } });
+    }, { selected: "other", env: { ELIS_SESSION_ID: "pane-b" } });
   });
 });
 
-test("outside hangar setup is a no-op", async () => {
+test("outside elis setup is a no-op", async () => {
   await fixture(async ({ handlers, calls }) => {
     assert.equal(handlers.size, 0);
     assert.deepEqual(calls(), []);
-  }, { env: { HANGAR_SESSION_ID: "" } });
+  }, { env: { ELIS_SESSION_ID: "" } });
 });
 
 test("reporting failures do not reject into OpenCode", async () => {
@@ -519,7 +519,7 @@ test("reporting failures do not reject into OpenCode", async () => {
     event("session.execution.started", { sessionID: "root" });
     await nextTurn();
     await assert.doesNotReject(dispose());
-  }, { env: { HANGAR_STATUS_WRAPPER: "/nonexistent/hangar-test-wrapper" } });
+  }, { env: { ELIS_STATUS_WRAPPER: "/nonexistent/elis-test-wrapper" } });
 });
 
 test("paginated descendants hydrate through the public client API", async () => {

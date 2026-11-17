@@ -59,9 +59,9 @@ private Q_SLOTS:
 
     void phoneCodeShowsTheChosenAddress()
     {
-        const QString link = QStringLiteral("hangar://pair?h=172.17.0.1&p=8765&t=tok-en_&f=ab12&n=my%20pc");
+        const QString link = QStringLiteral("elis://pair?h=172.17.0.1&p=8765&t=tok-en_&f=ab12&n=my%20pc");
         const QString moved = pairLinkWithHost(link, QStringLiteral(" pc.tail1234.ts.net "));
-        QCOMPARE(moved, QStringLiteral("hangar://pair?h=pc.tail1234.ts.net&p=8765&t=tok-en_&f=ab12&n=my%20pc"));
+        QCOMPARE(moved, QStringLiteral("elis://pair?h=pc.tail1234.ts.net&p=8765&t=tok-en_&f=ab12&n=my%20pc"));
         QCOMPARE(pairLinkWithHost(link, QString()), link); // no choice keeps what serve printed
         const QImage code = qrImage(link);
         QCOMPARE(code.width(), code.height());
@@ -124,10 +124,10 @@ private Q_SLOTS:
         QCOMPARE(linkClickModifiers(ctrl | Qt::AltModifier, true, true), ctrl | Qt::AltModifier);
     }
 
-    // the config dir follows HANGAR_STATE_DIR (set by ctest), so nothing here touches ~/.config
+    // the config dir follows ELIS_STATE_DIR (set by ctest), so nothing here touches ~/.config
     static QString writeConfig(const QString &name, const QString &text)
     {
-        const QString dir = qEnvironmentVariable("HANGAR_STATE_DIR") + QStringLiteral("/config");
+        const QString dir = qEnvironmentVariable("ELIS_STATE_DIR") + QStringLiteral("/config");
         QDir().mkpath(dir);
         QFile f(dir + QLatin1Char('/') + name);
         if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
@@ -979,7 +979,7 @@ private Q_SLOTS:
                     if (!a->isSeparator())
                         help << a->text();
         QCOMPARE(help, QStringList{"Developer Documentation…"}); // the installers run on install or update instead
-        QVERIFY(!bundled("agent-status").isEmpty() && !bundled("skill/hangar").isEmpty());
+        QVERIFY(!bundled("agent-status").isEmpty() && !bundled("skill/elis").isEmpty());
         QCOMPARE(extrasFingerprint(), extrasFingerprint());
         QCOMPARE(extrasFingerprint().size(), 64);
     }

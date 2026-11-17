@@ -5,28 +5,28 @@
   task. "Convert to Companion" turns a running top-level session S into a companion without touching its
   running program: a fresh session N takes S's slot in the sidebar, and S nests under N.
 - S keeps its identity (id, name, flag, tint, status, context, surfaces, pane identities, zmx daemons,
-  mailboxes), so `HANGAR_SESSION_ID`, agent hooks and chat mailboxes keep working.
+  mailboxes), so `ELIS_SESSION_ID`, agent hooks and chat mailboxes keep working.
 - S may already have companions. They stay with S: all of them, S first, become companions of N.
 - S ends selected so the user sees the conversion took effect; N is never selected.
 - The design was agreed with codex in the brainstorm; Eugene chose the label and the CLI spelling.
 
 ## Context (from discovery)
-- Companion store logic: `HangarCore/Sources/HangarCore/AppStore+Companions.swift` (`addCompanion`,
+- Companion store logic: `ElisCore/Sources/ElisCore/AppStore+Companions.swift` (`addCompanion`,
   `companionSlot`, `groupEnd`, `regroupedCompanions`, `respawnsOnLastPaneExit`).
-- `Session.parentID` (`HangarCore/Sources/HangarCore/Session.swift:84`) is documented "set once at
+- `Session.parentID` (`ElisCore/Sources/ElisCore/Session.swift:84`) is documented "set once at
   creation, never changed" (#840); this plan changes that contract.
 - Reopen paths that resolve a recorded parent: `restoreRecentClosed`
-  (`HangarCore/Sources/HangarCore/AppStore+RecentClosed.swift`), `restorePendingSession`
-  (`HangarCore/Sources/HangarCore/AppStore+PendingClose.swift`), and `holdsTopLevelSession` /
+  (`ElisCore/Sources/ElisCore/AppStore+RecentClosed.swift`), `restorePendingSession`
+  (`ElisCore/Sources/ElisCore/AppStore+PendingClose.swift`), and `holdsTopLevelSession` /
   `recentClosedItemLacksParent` / `reopenRecentClosedOutcome`
-  (`HangarCore/Sources/HangarCore/WindowLibrary+RecentClosed.swift`).
+  (`ElisCore/Sources/ElisCore/WindowLibrary+RecentClosed.swift`).
 - Control: `ControlProtocol.swift` (`session.companion.*` cases), `ControlDispatcher+Companions.swift`,
-  `ControlActions.swift` / `ControlActionsDefaults.swift`, app side `Hangar/Control/ControlServer+Companions.swift`.
-- CLI: `HangarCore/Sources/hangarctlKit/SessionCommands.swift` (companion forms are flags on existing
+  `ControlActions.swift` / `ControlActionsDefaults.swift`, app side `Elis/Control/ControlServer+Companions.swift`.
+- CLI: `ElisCore/Sources/elisctlKit/SessionCommands.swift` (companion forms are flags on existing
   subcommands: `session new --parent`, `session duplicate --companion`).
-- GUI: `HangarCore/Sources/HangarCore/BuiltinAction.swift`, `PaletteCatalog.swift`,
-  `Hangar/AppActions+Companions.swift`, `Hangar/hangarApp+Menus.swift`,
-  `Hangar/Views/WorkspaceSidebar+ContextMenu.swift`.
+- GUI: `ElisCore/Sources/ElisCore/BuiltinAction.swift`, `PaletteCatalog.swift`,
+  `Elis/AppActions+Companions.swift`, `Elis/elisApp+Menus.swift`,
+  `Elis/Views/WorkspaceSidebar+ContextMenu.swift`.
 - Rules to read before each layer: `.claude/rules/control-api.md`, `sidebar.md`, `menu-actions.md`, `keymap.md`.
 
 ## Development Approach
@@ -40,11 +40,11 @@
   verification task, per this repo's CLAUDE.md
 
 ## Testing Strategy
-- **unit tests** (host-free, `cd HangarCore && swift test`): store conversion, reopen resolution,
+- **unit tests** (host-free, `cd ElisCore && swift test`): store conversion, reopen resolution,
   dispatcher, CLI request shaping, palette/builtin catalogs.
 - **hosted tests** (`make test-app`): `AppActions` entry point, `ControlServer` command, sidebar context menu.
-- **UI test**: one end-to-end case in `HangarUITests/ControlCompanionsUITests.swift`, run alone with
-  `-only-testing:HangarUITests/ControlCompanionsUITests/<test>`; never the whole suite for this change.
+- **UI test**: one end-to-end case in `ElisUITests/ControlCompanionsUITests.swift`, run alone with
+  `-only-testing:ElisUITests/ControlCompanionsUITests/<test>`; never the whole suite for this change.
 
 ## Progress Tracking
 - mark completed items with `[x]` immediately when done
@@ -53,7 +53,7 @@
 - keep plan in sync with actual work done
 
 ## Solution Overview
-- One store operation in `HangarCore` does the whole conversion and is the seam every caller shares:
+- One store operation in `ElisCore` does the whole conversion and is the seam every caller shares:
   menu, row context menu, palette, keymap and control.
 - The conversion keeps S's `Session` object, so nothing about the running program changes; zmx daemon
   names derive from pane identity, not from the parent.
@@ -107,7 +107,7 @@
   `finalizeParkedCompanions`. Otherwise "soft-close C under S, convert S, hard-close N" leaves C parked
   with `parentID == S`, and its undo brings C back top-level with both recorded parents gone.
 
-**Refusal text**: owned once in `HangarCore`, as a `message` on `ConvertRefusal` ("already a
+**Refusal text**: owned once in `ElisCore`, as a `message` on `ConvertRefusal` ("already a
 companion", "convert it on the Mac it runs on"), used by both `ControlServer` and
 `AppActions.convertToCompanion`.
 
@@ -119,7 +119,7 @@ attach-time local state and nothing pushes a regroup. Accepted: a later attach r
 - Target is a session (id/prefix/active) plus `--window`.
 - Reply: `result.id` = S, `result.parent` = N, matching the companion receipts.
 - Read-back needs nothing new: session nodes already carry `parent`.
-- CLI: `hangarctl session convert --companion [--target X] [--window W]`. `--companion` is required, so
+- CLI: `elisctl session convert --companion [--target X] [--window W]`. `--companion` is required, so
   `convert` alone is a validation error naming the flag. `Convert` lives in `Session+Companions.swift`
   (`SessionCommands.swift` only registers it; it is 900 lines against the 1000-line cap). Human output
   prints N's id, the created session. An app predating the command answers through
@@ -148,12 +148,12 @@ attach-time local state and nothing pushes a regroup. Accepted: a later attach r
 
 ## Implementation Steps
 
-### Task 1: Store conversion in HangarCore
+### Task 1: Store conversion in ElisCore
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Companions.swift`
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreCompanionsTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Companions.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreCompanionsTests.swift`
 
 - [x] write failing tests: plain conversion (N at S's slot, S under N, N's cwd from S, N not selected,
   S keeps id/name/flag, and the same `Session` object, surfaces and pane identities survive); selection
@@ -169,14 +169,14 @@ attach-time local state and nothing pushes a regroup. Accepted: a later attach r
 ### Task 2: Reopen resolves a recorded parent to its current root
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Companions.swift` (`groupRoot(of:)`)
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RecentClosed.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+PendingClose.swift`
-- Modify: `HangarCore/Sources/HangarCore/WindowLibrary+RecentClosed.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreCompanionsTests.swift` (the pending-close cases sit beside
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Companions.swift` (`groupRoot(of:)`)
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RecentClosed.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+PendingClose.swift`
+- Modify: `ElisCore/Sources/ElisCore/WindowLibrary+RecentClosed.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreCompanionsTests.swift` (the pending-close cases sit beside
   the existing parked-companion tests there, not in `AppStorePendingCloseTests`)
-- Modify: `HangarCore/Tests/HangarCoreTests/WindowLibraryRecentClosedTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/WindowLibraryRecentClosedTests.swift`
 
 - [x] write failing tests for the four reopen sequences in Technical Details, the pending-close undo case,
   and "soft-close C, convert S, hard-close N: C's pending close is final"; confirm each fails on the
@@ -191,21 +191,21 @@ attach-time local state and nothing pushes a regroup. Accepted: a later attach r
 ### Task 3: Control command and CLI
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlActions.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Companions.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/Session+Companions.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
-- Modify: `Hangar/Control/ControlServer.swift`
-- Modify: `Hangar/Control/ControlServer+Companions.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherCompanionsTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/SessionCompanionsCommandsTests.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/SocketClientTests.swift`
-- Modify: `HangarTests/ControlServerCompanionsTests.swift`
-- Modify: `HangarUITests/ControlCompanionsUITests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlActions.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlActionsDefaults.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Companions.swift`
+- Modify: `ElisCore/Sources/elisctlKit/Session+Companions.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift`
+- Modify: `Elis/Control/ControlServer.swift`
+- Modify: `Elis/Control/ControlServer+Companions.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherCompanionsTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/MockControlActions.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/SessionCompanionsCommandsTests.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/SocketClientTests.swift`
+- Modify: `ElisTests/ControlServerCompanionsTests.swift`
+- Modify: `ElisUITests/ControlCompanionsUITests.swift`
 
 - [x] write failing tests: dispatcher routing; CLI `session convert --companion` request shape, the
   missing-flag validation error and the human output naming N (`SessionCompanionsCommandsTests`); the
@@ -218,7 +218,7 @@ attach-time local state and nothing pushes a regroup. Accepted: a later attach r
   the convert is local only), add the `ControlActions` method and its default, the `ControlServer`
   implementation over `convertToCompanion`, and the `Convert` CLI subcommand
 - [x] run the dispatcher, CLI and hosted tests; run the single UI test only after asking Eugene
-  (ui-tests.md); then `lsappinfo list | grep -A4 hangar.debug` - must pass before task 4
+  (ui-tests.md); then `lsappinfo list | grep -A4 elis.debug` - must pass before task 4
 - ⚠️ the tests were written first but not run red before the implementation; they referenced symbols that
   did not exist yet, which is not an observed failing run
 - ⚠️ the UI test's first run died at runner init ("Timed out while enabling automation mode", no test case
@@ -227,17 +227,17 @@ attach-time local state and nothing pushes a regroup. Accepted: a later attach r
 ### Task 4: Menu, row context menu, palette and keymap
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/BuiltinAction.swift`
-- Modify: `HangarCore/Sources/HangarCore/PaletteCatalog.swift`
-- Modify: `Hangar/AppActions+Companions.swift`
-- Modify: `Hangar/AppActions+Palette.swift`
-- Modify: `Hangar/hangarApp+Menus.swift`
-- Modify: `Hangar/Views/WorkspaceSidebar+ContextMenu.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/BuiltinActionTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/PaletteCatalogTests.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/SocketClientTests.swift`
-- Modify: `HangarTests/AppActionsCompanionsTests.swift`
-- Modify: `HangarTests/WorkspaceSidebarCompanionsTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/BuiltinAction.swift`
+- Modify: `ElisCore/Sources/ElisCore/PaletteCatalog.swift`
+- Modify: `Elis/AppActions+Companions.swift`
+- Modify: `Elis/AppActions+Palette.swift`
+- Modify: `Elis/elisApp+Menus.swift`
+- Modify: `Elis/Views/WorkspaceSidebar+ContextMenu.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/BuiltinActionTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/PaletteCatalogTests.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/SocketClientTests.swift`
+- Modify: `ElisTests/AppActionsCompanionsTests.swift`
+- Modify: `ElisTests/WorkspaceSidebarCompanionsTests.swift`
 
 - [x] write failing tests: `convert_companion` parses and is keyless (`BuiltinActionTests` `allCases`
   count 54 to 55, plus the two tables that pin every action); the palette row exists (`PaletteCatalogTests` count 61 to 62 and its title list) and
@@ -247,7 +247,7 @@ attach-time local state and nothing pushes a regroup. Accepted: a later attach r
   omits it on a companion row, and disables it on a remote row
 - [x] add the builtin action, the `PaletteContext` terms and `isEnabled(in:)` case, the `terminalOnly`
   entry, the palette row, `AppActions` entries, the Session menu item and the row context menu item
-- [x] run the affected core and hosted tests, then `lsappinfo list | grep -A4 hangar.debug` - must pass
+- [x] run the affected core and hosted tests, then `lsappinfo list | grep -A4 elis.debug` - must pass
   before task 5
 - ⚠️ as in Task 3, the tests were written first but failed only at compile time against the missing symbols
 
@@ -257,10 +257,10 @@ attach-time local state and nothing pushes a regroup. Accepted: a later attach r
 - Modify: `README.md` (its Companion line said "pinned for life")
 - Modify: `site/docs.html`
 - Modify: `site/commands.html`
-- Modify: `plugins/hangar/skills/hangar/SKILL.md`
-- Modify: `HangarCore/Tests/HangarCoreTests/SkillInstallTests.swift` (run only; edit only if a pinned
+- Modify: `plugins/elis/skills/elis/SKILL.md`
+- Modify: `ElisCore/Tests/ElisCoreTests/SkillInstallTests.swift` (run only; edit only if a pinned
   string changes)
-- Modify: `plugins/hangar/skills/hangar/reference.md`
+- Modify: `plugins/elis/skills/elis/reference.md`
 - Modify: `.claude/rules/control-api.md`
 - Modify: `.claude/rules/sidebar.md`
 - Modify: `.claude/rules/menu-actions.md`
@@ -280,10 +280,10 @@ attach-time local state and nothing pushes a regroup. Accepted: a later attach r
 
 ### Task 6: Verify acceptance criteria
 - [x] verify every Overview requirement, including selection and existing companions
-- [x] `cd HangarCore && swift test`
+- [x] `cd ElisCore && swift test`
 - [x] `make test-app`
 - [x] `make lint` with zero findings
-- [x] `lsappinfo list | grep -A4 hangar.debug` after the hosted and UI runs
+- [x] `lsappinfo list | grep -A4 elis.debug` after the hosted and UI runs
 - ➕ `make test-app` failed on `AppDelegateCaptureTests/testExitCaptureReadsALiveListingSlowerThanAHundredMilliseconds`
   (from master, unrelated) in two of four full runs. Its fake zmx (`/bin/sh` plus `/bin/sleep`) finished as late as
   287 ms against the 300 ms budget under the suite's load; lowering the sleep to 0.12 s did not hold. It is now one

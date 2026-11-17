@@ -24,22 +24,22 @@ static QJsonObject fail(const QString &error)
 QString unsupportedReason(const QString &cmd)
 {
     static const QList<std::pair<QString, QString>> absent{
-        {"zmx", "Hangar's live sessions run on hangar-session-host, not zmx"},
-        {"session.restart", "it is not ported to Hangar's live sessions"},
-        {"session.lead", "pane leads belong to remote sessions, which Hangar does not have"},
-        {"browser", "Hangar has no built-in browser: page overlays need Qt WebEngine"},
-        {"session.companion.page", "page companions need Qt WebEngine, which Hangar does not have"},
-        {"session.overlay.reload", "page overlays need Qt WebEngine, which Hangar does not have"},
-        {"session.overlay.navigate", "page overlays need Qt WebEngine, which Hangar does not have"},
-        {"session.overlay.submit", "page overlays need Qt WebEngine, which Hangar does not have"},
-        {"session.overlay.copy", "page overlays need Qt WebEngine, which Hangar does not have"},
-        {"session.overlay.job.run", "remote overlay jobs need a remote viewer, which Hangar does not have"},
-        {"session.overlay.page.serve", "page overlays need Qt WebEngine, which Hangar does not have"},
-        {"quick", "Hangar has no quick terminal"},
-        {"session.scratch", "Hangar has no scratch terminal"},
+        {"zmx", "Elis's live sessions run on elis-session-host, not zmx"},
+        {"session.restart", "it is not ported to Elis's live sessions"},
+        {"session.lead", "pane leads belong to remote sessions, which Elis does not have"},
+        {"browser", "Elis has no built-in browser: page overlays need Qt WebEngine"},
+        {"session.companion.page", "page companions need Qt WebEngine, which Elis does not have"},
+        {"session.overlay.reload", "page overlays need Qt WebEngine, which Elis does not have"},
+        {"session.overlay.navigate", "page overlays need Qt WebEngine, which Elis does not have"},
+        {"session.overlay.submit", "page overlays need Qt WebEngine, which Elis does not have"},
+        {"session.overlay.copy", "page overlays need Qt WebEngine, which Elis does not have"},
+        {"session.overlay.job.run", "remote overlay jobs need a remote viewer, which Elis does not have"},
+        {"session.overlay.page.serve", "page overlays need Qt WebEngine, which Elis does not have"},
+        {"quick", "Elis has no quick terminal"},
+        {"session.scratch", "Elis has no scratch terminal"},
         {"session.background", "Konsole takes a pane's background from its profile, not per session"},
         {"surface.cursor", "Konsole's terminal part does not expose the cursor position"},
-        {"config.reload", "Hangar has no Ghostty config; keymap reload and hooks reload re-read its own files"},
+        {"config.reload", "Elis has no Ghostty config; keymap reload and hooks reload re-read its own files"},
         {"debug.appearance", "it is a macOS UI-test hook"},
     };
     for (const auto &[name, why] : absent)
@@ -48,7 +48,7 @@ QString unsupportedReason(const QString &cmd)
     return {};
 }
 
-static const QStringList leftPane{"left", "top", "primary", "main"}, rightPane{"right", "bottom", "split"}; // main: HANGAR_PANE
+static const QStringList leftPane{"left", "top", "primary", "main"}, rightPane{"right", "bottom", "split"}; // main: ELIS_PANE
 
 // workspace.go: the visible workspaces in order, wrapping; lands on the workspace's first session
 static QJsonObject workspaceGo(Store &store, const QJsonObject &args)

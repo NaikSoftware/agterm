@@ -8,8 +8,8 @@ import '../model.dart';
 import '../notice.dart';
 import '../theme.dart';
 
-const macAppUrl = 'https://github.com/NaikSoftware/hangar/releases/latest';
-const linuxAppUrl = 'https://github.com/NaikSoftware/hangar#build-and-install';
+const macAppUrl = 'https://github.com/NaikSoftware/elis/releases/latest';
+const linuxAppUrl = 'https://github.com/NaikSoftware/elis#build-and-install';
 
 class PairScreen extends StatefulWidget {
   const PairScreen({super.key, required this.onPaired, this.canGoBack = false});
@@ -27,14 +27,14 @@ class _PairScreenState extends State<PairScreen> {
 
   Future<void> connect([String? text]) async {
     final p = Pairing.parse(text ?? link.text);
-    if (p == null) return setState(() => error = 'That is not a pairing link. It starts with hangar://pair?');
+    if (p == null) return setState(() => error = 'That is not a pairing link. It starts with elis://pair?');
     setState(() => (busy = true, error = null));
     try {
       if (p.bluetooth) await requestBluetooth(); // the one foreground moment to ask; background connects only check
       (await Connection.open(p,preferBluetooth: BluetoothPref.prefer)).close(); // prove the token and certificate before saving them
       await widget.onPaired(p);
       if (mounted && widget.canGoBack) Navigator.of(context).pop();
-    } on HangarError catch (e) {
+    } on ElisError catch (e) {
       setState(() => error = e.message);
     } catch (_) {
       final where = [if (p.host != null) 'on the same network', if (p.bluetooth) 'near the computer with Bluetooth on'].join(' or ');
@@ -63,7 +63,7 @@ class _PairScreenState extends State<PairScreen> {
       child: OutlinedButton.icon(
         key: Key('app-$label'),
         onPressed: () async {
-          final opened = await const MethodChannel('hangar/open').invokeMethod<bool>('view', url).catchError((_) => false);
+          final opened = await const MethodChannel('elis/open').invokeMethod<bool>('view', url).catchError((_) => false);
           if (opened != true && mounted) copy();
         },
         style: _quiet,
@@ -94,10 +94,10 @@ class _PairScreenState extends State<PairScreen> {
           children: [
             const Align(alignment: Alignment.centerLeft, child: AppMark(size: 56)),
             const SizedBox(height: 14),
-            const Text('Pair with Hangar', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, height: 1.2)),
+            const Text('Pair with Elis', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, height: 1.2)),
             const SizedBox(height: 14),
             const Text(
-              'On your computer, open Settings ▸ Connect a Phone… in Hangar and switch it on, or run the command below in any terminal. Either shows a pairing code.',
+              'On your computer, open Settings ▸ Connect a Phone… in Elis and switch it on, or run the command below in any terminal. Either shows a pairing code.',
               style: TextStyle(fontSize: 14, height: 1.5, color: C.muted),
             ),
             const SizedBox(height: 16),
@@ -107,7 +107,7 @@ class _PairScreenState extends State<PairScreen> {
             ]),
             const SizedBox(height: 24),
             GestureDetector(
-              onLongPress: () => Clipboard.setData(const ClipboardData(text: 'hangarctl mobile serve')),
+              onLongPress: () => Clipboard.setData(const ClipboardData(text: 'elisctl mobile serve')),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
@@ -122,7 +122,7 @@ class _PairScreenState extends State<PairScreen> {
                         text: r'$ ',
                         style: TextStyle(color: C.muted),
                       ),
-                      TextSpan(text: 'hangarctl mobile serve'),
+                      TextSpan(text: 'elisctl mobile serve'),
                     ],
                   ),
                   style: TextStyle(fontFamily: mono, fontSize: 13, color: C.termText),
@@ -159,7 +159,7 @@ class _PairScreenState extends State<PairScreen> {
               controller: link,
               style: const TextStyle(fontFamily: mono, fontSize: 13),
               decoration: const InputDecoration(
-                hintText: 'hangar://pair?h=…&t=…',
+                hintText: 'elis://pair?h=…&t=…',
                 fillColor: C.hover,
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)), borderSide: BorderSide(color: C.muted)),
               ),
@@ -213,7 +213,7 @@ class _ScanScreenState extends State<ScanScreen> {
       children: [
         MobileScanner(
           onDetect: (capture) {
-            final value = capture.barcodes.map((b) => b.rawValue).whereType<String>().where((v) => v.startsWith('hangar://pair')).firstOrNull;
+            final value = capture.barcodes.map((b) => b.rawValue).whereType<String>().where((v) => v.startsWith('elis://pair')).firstOrNull;
             if (value == null || done) return;
             done = true;
             Navigator.of(context).pop(value);

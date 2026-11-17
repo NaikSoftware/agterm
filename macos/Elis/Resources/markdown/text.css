@@ -1,0 +1,110 @@
+#elis-page { display: flex; position: relative; max-width: none; min-width: max-content; margin: 0; padding: 0; }
+.elis-gutter, #elis-page pre {
+  margin: 0; padding: 12px 16px; font: 13px/20px var(--mono); white-space: pre; border-radius: 0; background: none;
+}
+.elis-gutter { flex: none; text-align: right; color: var(--muted); border-right: 1px solid var(--rule); user-select: none; }
+#elis-page pre { flex: 1; overflow: visible; }
+.elis-wrapped #elis-page, .elis-wrapped #elis-page pre { min-width: 0; }
+.elis-wrapped #elis-page pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.elis-band {
+  position: absolute; left: 0; right: 0; height: 20px; pointer-events: none;
+  background: color-mix(in srgb, var(--elis-color-11, #d9b45a) 22%, transparent);
+}
+/* fixed: a sticky bar as wide as body scrolls away sideways, and 100vw runs under a layout scroll bar */
+body { padding-top: 35px; }
+.elis-bar {
+  position: fixed; top: 0; left: 0; right: 0; height: 35px; z-index: 1; display: flex; gap: 12px; align-items: center;
+  box-sizing: border-box; padding: 4px 6px; font: 12px/20px var(--mono); color: var(--muted);
+  background: var(--elis-background, Canvas); border-bottom: 1px solid var(--rule);
+  white-space: nowrap; overflow: hidden;
+}
+/* one line at any width: a wrapping bar changes the page height as it scrolls sideways, which moves the view */
+.elis-search { display: flex; gap: 8px; align-items: center; }
+/* the note is a bar item of its own and shrinks faster than the search box, which keeps room for its controls */
+.elis-logbar { display: contents; }
+.elis-logbar > span { flex: 0 2 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.elis-logbar > span:empty { display: none; }
+/* the full paused label, Wrap and the search box's floor need about 460px */
+@media (max-width: 480px) { .elis-prefix, .elis-changes span { display: none; } }
+.elis-bar button { flex: none; }
+.elis-logbar button, .elis-wrap {
+  font: inherit; color: var(--fg); background: var(--tint); border: 1px solid var(--rule); border-radius: 4px;
+  padding: 0 8px; cursor: pointer;
+}
+.elis-logbar button.elis-paused { color: var(--elis-color-11, #d9b45a); }
+/* matches TerminalSearchBar: change the two together */
+.elis-search {
+  margin-left: auto; min-width: 0; flex: 0 1 auto; padding: 3px 6px 3px 10px; border-radius: 8px;
+  background: var(--elis-background, Canvas); border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+  font: 13px/18px -apple-system, system-ui, sans-serif; color: var(--fg);
+}
+.elis-search svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.elis-magnifier { flex: none; color: color-mix(in srgb, var(--fg) 70%, transparent); }
+.elis-search input {
+  flex: 0 1 120px; width: 120px; min-width: 2.5em; padding: 0; font: inherit; color: var(--fg);
+  background: none; border: none; outline: none;
+}
+.elis-search input::placeholder { color: color-mix(in srgb, var(--fg) 45%, transparent); }
+/* a fixed slot, so the box keeps its width as the count appears and changes */
+.elis-count {
+  flex: 0 1 76px; width: 76px; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; font-size: 11px;
+  color: color-mix(in srgb, var(--fg) 70%, transparent);
+}
+.elis-search button {
+  flex: none; display: flex; padding: 0; color: color-mix(in srgb, var(--fg) 80%, transparent); background: none;
+  border: none; cursor: pointer;
+}
+.elis-search button:disabled { opacity: 0.4; cursor: default; }
+::highlight(elis-match) { background-color: color-mix(in srgb, var(--elis-color-11, #d9b45a) 35%, transparent); }
+::highlight(elis-current) {
+  background-color: var(--elis-color-11, #d9b45a); color: var(--elis-background, #000);
+}
+/* a light tint: a stronger one washes out the diff's own colors */
+.elis-change {
+  position: absolute; left: 0; right: 0; pointer-events: none;
+  background: color-mix(in srgb, var(--elis-color-12, #6ca0dc) 4%, transparent);
+  box-shadow: inset 4px 0 0 var(--elis-color-12, #6ca0dc);
+}
+/* positioned, so the row bands drawn before them in the page paint under the text */
+.elis-diff > pre, .elis-diff > .elis-gutter { position: relative; }
+/* zero width rather than removed, so search, copy and change stepping still read the file as written; an inherited
+   line height on the empty box would grow every row past the 20px the bands assume */
+.elis-marker { font-size: 0; line-height: 0; }
+.elis-added, .elis-removed { position: absolute; left: 0; right: 0; pointer-events: none; }
+.elis-added { background: color-mix(in srgb, var(--elis-color-2, #5fb36a) 16%, transparent); }
+.elis-removed { background: color-mix(in srgb, var(--elis-color-1, #c8463c) 16%, transparent); }
+.elis-changes { display: flex; gap: 6px; align-items: center; flex: none; }
+.elis-changes button {
+  display: flex; padding: 2px 4px; color: var(--fg); background: var(--tint); border: 1px solid var(--rule);
+  border-radius: 4px; cursor: pointer;
+}
+.elis-changes svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.elis-changes span { margin-left: 4px; }
+/* shrinks faster than the search box, cutting its path at the left so the file name stays; place and chevron always show */
+.elis-bar .elis-files {
+  flex: 0 2 auto; display: grid; grid-template-columns: minmax(0, max-content) auto auto; gap: 6px; align-items: center;
+  font: inherit; color: var(--fg);
+  background: var(--tint); border: 1px solid var(--rule); border-radius: 4px; padding: 0 6px 0 8px; cursor: pointer;
+}
+.elis-file-path { overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+.elis-file-place { color: var(--muted); }
+.elis-files svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.elis-files-menu {
+  position: fixed; top: 38px; z-index: 2; width: min(560px, calc(100vw - 12px)); max-height: 60vh; display: flex;
+  flex-direction: column; box-sizing: border-box; padding: 6px; border-radius: 8px;
+  background: var(--elis-background, Canvas); border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 28%);
+}
+.elis-files-menu[hidden] { display: none; }
+.elis-files-menu input {
+  flex: none; margin-bottom: 6px; padding: 4px 8px; border-radius: 6px; outline: none; color: var(--fg);
+  background: none; border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+  font: 13px/18px -apple-system, system-ui, sans-serif;
+}
+.elis-files-menu input::placeholder { color: color-mix(in srgb, var(--fg) 45%, transparent); }
+.elis-files-list { overflow-y: auto; font: 12px/22px var(--mono); }
+.elis-files-row { display: flex; gap: 10px; padding: 0 8px; border-radius: 4px; color: var(--fg); white-space: nowrap; cursor: pointer; }
+.elis-files-row:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.elis-files-row[aria-selected="true"] { background: color-mix(in srgb, var(--elis-color-12, #6ca0dc) 28%, transparent); }
+.elis-files-number { flex: none; min-width: 2.5em; text-align: right; color: var(--muted); }
+.elis-files-empty { padding: 0 8px; color: var(--muted); }

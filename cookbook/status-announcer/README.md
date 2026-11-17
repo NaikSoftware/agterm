@@ -28,7 +28,7 @@ If you want the shape without the voice, replace `say` with a `curl` to ntfy or 
 
 ## Requirements
 
-- Hangar 0.16.0 or later. Event subscription through `hangarctl events` shipped in that release.
+- Elis 0.16.0 or later. Event subscription through `elisctl events` shipped in that release.
 - `jq`
 - `say` and `/bin/zsh`, both of which come with macOS
 
@@ -42,7 +42,7 @@ cp agt-announce.sh ~/bin/
 chmod +x ~/bin/agt-announce.sh
 ```
 
-Add one entry to `~/.config/hangar/keymap.conf`:
+Add one entry to `~/.config/elis/keymap.conf`:
 
 ```
 command "Toggle Status Announcer"  /bin/zsh -lc '~/bin/agt-announce.sh'
@@ -50,9 +50,9 @@ command "Toggle Status Announcer"  /bin/zsh -lc '~/bin/agt-announce.sh'
 
 No chord, so the entry is palette-only, which suits something you turn on once and forget. Add one if you want it on a key: the token after the quoted name is a chord when it carries a modifier.
 
-The login shell in that line is load-bearing. A custom command runs under the app's `PATH` rather than yours, which is the launchd default: `/usr/local/bin` plus the system directories, with no `/opt/homebrew/bin`. `hangarctl` resolves there because **Help ▸ Install Command Line Tool…** symlinks it into `/usr/local/bin`, but a Homebrew `jq` does not, and a custom command's output goes nowhere, so it would fail with nothing on screen to say why. `/bin/zsh -lc` sources your profile and puts your own `PATH` back.
+The login shell in that line is load-bearing. A custom command runs under the app's `PATH` rather than yours, which is the launchd default: `/usr/local/bin` plus the system directories, with no `/opt/homebrew/bin`. `elisctl` resolves there because **Help ▸ Install Command Line Tool…** symlinks it into `/usr/local/bin`, but a Homebrew `jq` does not, and a custom command's output goes nowhere, so it would fail with nothing on screen to say why. `/bin/zsh -lc` sources your profile and puts your own `PATH` back.
 
-Apply the file with File ▸ Reload Keymap or `hangarctl keymap reload`.
+Apply the file with File ▸ Reload Keymap or `elisctl keymap reload`.
 
 Two variables at the top of the script are worth knowing about. `ANNOUNCER_NAME` is the session name the toggle matches on, and `SPOKEN` is the space-separated list of statuses to announce.
 
@@ -63,21 +63,21 @@ Press ⌃⇧P, type "announcer", hit Enter. ⌃⇧O opens a palette holding the 
 To hear it do something without waiting for an agent:
 
 ```sh
-hangarctl session status blocked --target <some-session-id>
-hangarctl session status idle --target <some-session-id>
+elisctl session status blocked --target <some-session-id>
+elisctl session status idle --target <some-session-id>
 ```
 
 The script also runs from a shell, `agt-announce.sh` to toggle, which is where error text goes when something is wrong.
 
 ## How it works
 
-`hangarctl events --json --kind status` prints one JSON object per status change and keeps printing. Each carries the session id, the window id, the workspace id, and a payload holding the session name and the new status. One `jq` filters the whole stream in a single pass: it drops the announcer's own session by comparing against `$HANGAR_SESSION_ID`, drops statuses outside `SPOKEN`, and emits the four fields it kept as a tab-separated line for a plain `read` loop.
+`elisctl events --json --kind status` prints one JSON object per status change and keeps printing. Each carries the session id, the window id, the workspace id, and a payload holding the session name and the new status. One `jq` filters the whole stream in a single pass: it drops the announcer's own session by comparing against `$ELIS_SESSION_ID`, drops statuses outside `SPOKEN`, and emits the four fields it kept as a tab-separated line for a plain `read` loop.
 
 `--unbuffered` on that `jq` is what makes announcements arrive per event. Without it jq buffers, and the voice waits for a block to fill.
 
-The workspace name is the interesting part, because the event does not carry it. It carries the workspace id, so the loop reads `hangarctl tree --json --window <window>` and matches the id against `.result.tree.workspaces[]`. The `--window` matters: a bare `tree` projects the frontmost window, so an agent blocking in a background window would resolve to no workspace at all, and that only shows up once you have a second window open. Looking it up per event rather than caching a map and invalidating it on `tree.changed` costs nothing here, since these events fire only on real transitions.
+The workspace name is the interesting part, because the event does not carry it. It carries the workspace id, so the loop reads `elisctl tree --json --window <window>` and matches the id against `.result.tree.workspaces[]`. The `--window` matters: a bare `tree` projects the frontmost window, so an agent blocking in a background window would resolve to no workspace at all, and that only shows up once you have a second window open. Looking it up per event rather than caching a map and invalidating it on `tree.changed` costs nothing here, since these events fire only on real transitions.
 
-The toggle searches every open window for the announcer, walking `hangarctl window list --json` and reading each window's tree, rather than looking only at the frontmost one. A frontmost-only search would fail to find an announcer started from another window and start a second one talking over the first.
+The toggle searches every open window for the announcer, walking `elisctl window list --json` and reading each window's tree, rather than looking only at the frontmost one. A frontmost-only search would fail to find an announcer started from another window and start a second one talking over the first.
 
 It creates the session with `--no-select`, which leaves your selection and focus untouched. Without it, turning the announcer on drops you into a session you have no reason to be looking at.
 
@@ -91,7 +91,7 @@ There are two login-shell wrappers, in two different places, for one reason. The
 
 It is a demonstration, and the voice wears out its welcome quickly. Nothing here is worth keeping on for a working day.
 
-The announcer session closes itself if the event stream ends, taking its log with it. `hangarctl events` exits non-zero on a cursor, transport, or server error, and a session created with `--command` closes when its command exits, so the session simply disappears. The script prints no parting message, because a session created that way is torn down before anything written on the way out could be read. Expected when Hangar quits, confusing when a transient error takes it out while Hangar keeps running: the announcer is gone and nothing said so. Toggle it back on.
+The announcer session closes itself if the event stream ends, taking its log with it. `elisctl events` exits non-zero on a cursor, transport, or server error, and a session created with `--command` closes when its command exits, so the session simply disappears. The script prints no parting message, because a session created that way is torn down before anything written on the way out could be read. Expected when Elis quits, confusing when a transient error takes it out while Elis keeps running: the announcer is gone and nothing said so. Toggle it back on.
 
 Bursts are announced late, not dropped. `say` blocks until it finishes talking, so three sessions blocking at once are spoken one after another while the events queue behind them.
 

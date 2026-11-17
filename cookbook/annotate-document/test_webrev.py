@@ -102,18 +102,18 @@ class TestOutcome(unittest.TestCase):
             (0, '{"outcome":"weird"}', "", ("error", 'unexpected outcome: {"outcome":"weird"}')),
         ]
         for rc, out, err, want in cases:
-            with mock.patch.object(webrev, "hangarctl", return_value=done(rc, out, err)):
+            with mock.patch.object(webrev, "elisctl", return_value=done(rc, out, err)):
                 self.assertEqual(webrev.read_outcome("id"), want)
 
     def test_wait_outcome_blinks_then_restores(self) -> None:
         pending = done(1, '{"outcome":"pending"}')
         submitted = done(0, '{"outcome":"submitted","value":""}')
         cases = (("right", {}, ["--pane", "right"]), ("", {}, []), ("bogus", {}, []),
-                 ("right", {"HANGAR_PANE_ID": "P1"}, ["--pane", "right", "--pane-id", "P1"]),
-                 ("", {"HANGAR_PANE_ID": "P1"}, ["--pane-id", "P1"]), ("", {"HANGAR_PANE_ID": ""}, []))
+                 ("right", {"ELIS_PANE_ID": "P1"}, ["--pane", "right", "--pane-id", "P1"]),
+                 ("", {"ELIS_PANE_ID": "P1"}, ["--pane-id", "P1"]), ("", {"ELIS_PANE_ID": ""}, []))
         for pane, env, want in cases:
             with mock.patch.dict(os.environ, env, clear=True), \
-                    mock.patch.object(webrev, "hangarctl", side_effect=[done(), pending, submitted, done()]) as m, \
+                    mock.patch.object(webrev, "elisctl", side_effect=[done(), pending, submitted, done()]) as m, \
                     mock.patch("time.sleep"):
                 self.assertEqual(webrev.wait_outcome("id", "S", pane), ("submitted", ""))
             calls = [c.args for c in m.call_args_list]
@@ -122,7 +122,7 @@ class TestOutcome(unittest.TestCase):
 
     def test_wait_outcome_restores_on_interrupt(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True), \
-                mock.patch.object(webrev, "hangarctl", side_effect=[done(), KeyboardInterrupt, done()]) as m, \
+                mock.patch.object(webrev, "elisctl", side_effect=[done(), KeyboardInterrupt, done()]) as m, \
                 self.assertRaises(KeyboardInterrupt):
             webrev.wait_outcome("id", "S", "")
         self.assertEqual(m.call_args_list[-1].args, ("session", "status", "idle", "--target", "S"))
@@ -136,7 +136,7 @@ class TestOutcome(unittest.TestCase):
                 return done(1, '{"outcome":"pending"}')
             return done()
 
-        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(webrev, "hangarctl", side_effect=ctl) as m, \
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(webrev, "elisctl", side_effect=ctl) as m, \
                 mock.patch("time.sleep"), self.assertRaises(SystemExit) as e:
             webrev.wait_outcome("id", "S", "left")
         self.assertEqual(e.exception.code, 143)
@@ -145,17 +145,17 @@ class TestOutcome(unittest.TestCase):
 
 
 class TestControl(unittest.TestCase):
-    def test_hangarctl_command(self) -> None:
+    def test_elisctl_command(self) -> None:
         cases = [
-            ({}, ["hangarctl", "tree", "--json"]),
-            ({"HANGARCTL": "", "HANGAR_SOCKET": ""}, ["hangarctl", "tree", "--json"]),
-            ({"HANGARCTL": "/opt/bin/hangarctl"}, ["/opt/bin/hangarctl", "tree", "--json"]),
-            ({"HANGAR_SOCKET": "/tmp/a.sock"}, ["hangarctl", "tree", "--json", "--socket", "/tmp/a.sock"]),
+            ({}, ["elisctl", "tree", "--json"]),
+            ({"ELISCTL": "", "ELIS_SOCKET": ""}, ["elisctl", "tree", "--json"]),
+            ({"ELISCTL": "/opt/bin/elisctl"}, ["/opt/bin/elisctl", "tree", "--json"]),
+            ({"ELIS_SOCKET": "/tmp/a.sock"}, ["elisctl", "tree", "--json", "--socket", "/tmp/a.sock"]),
         ]
         for env, want in cases:
             with mock.patch.dict(os.environ, env, clear=True), \
                     mock.patch("subprocess.run", return_value=done()) as run:
-                webrev.hangarctl("tree", "--json")
+                webrev.elisctl("tree", "--json")
             self.assertEqual(run.call_args.args[0], want, env)
 
     def test_page_zoom(self) -> None:
@@ -163,14 +163,14 @@ class TestControl(unittest.TestCase):
         cases = ((json.dumps(tree), 1.25), (json.dumps({"windows": []}), 1.0), ("not json", 1.0),
                  (json.dumps({"htmlOverlays": [{"id": "P"}]}), 1.0), (json.dumps({"htmlOverlays": [{"id": "P", "zoom": "2"}]}), 1.0))
         for out, want in cases:
-            with mock.patch.object(webrev, "hangarctl", return_value=done(0, out)):
+            with mock.patch.object(webrev, "elisctl", return_value=done(0, out)):
                 self.assertEqual(webrev.page_zoom("P"), want, out)
 
     def test_page_zoom_scopes_tree_to_window(self) -> None:
-        for env, want in (({"HANGAR_WINDOW_ID": "W1"}, ("tree", "--json", "--window", "W1")),
-                          ({"HANGAR_WINDOW_ID": ""}, ("tree", "--json")), ({}, ("tree", "--json"))):
+        for env, want in (({"ELIS_WINDOW_ID": "W1"}, ("tree", "--json", "--window", "W1")),
+                          ({"ELIS_WINDOW_ID": ""}, ("tree", "--json")), ({}, ("tree", "--json"))):
             with mock.patch.dict(os.environ, env, clear=True), \
-                    mock.patch.object(webrev, "hangarctl", return_value=done(0, "{}")) as m:
+                    mock.patch.object(webrev, "elisctl", return_value=done(0, "{}")) as m:
                 webrev.page_zoom("P")
             self.assertEqual(m.call_args.args, want, env)
 
@@ -178,7 +178,7 @@ class TestControl(unittest.TestCase):
         cases = ((1.0, None), (0.0, None), (1.5, ["--width", "1263", "--height", "255"]), (0.8, ["--width", "674", "--height", "136"]))
         for zoom, want in cases:
             with mock.patch.object(webrev, "page_zoom", return_value=zoom), \
-                    mock.patch.object(webrev, "hangarctl", return_value=done()) as m:
+                    mock.patch.object(webrev, "elisctl", return_value=done()) as m:
                 webrev.zoom_fit("P", "S", 842, 170)
             if want is None:
                 m.assert_not_called()
@@ -204,8 +204,8 @@ class TestReview(unittest.TestCase):
             doc = Path(d) / "a.md"
             doc.write_text("x\n", encoding="utf-8")
             for pane, has, lacks in (("right", ["--pane", "right"], "--size-percent"), (None, ["--size-percent", "60"], "--pane")):
-                with mock.patch.dict(os.environ, {"HANGAR_SESSION_ID": "S"}), \
-                        mock.patch.object(webrev, "hangarctl", return_value=done(1, "", "boom")) as m:
+                with mock.patch.dict(os.environ, {"ELIS_SESSION_ID": "S"}), \
+                        mock.patch.object(webrev, "elisctl", return_value=done(1, "", "boom")) as m:
                     self.assertEqual(webrev.review(doc, ReviewOptions(pane, None, "", 60)), 1)
                 args = list(m.call_args.args)
                 i = args.index(has[0])
@@ -219,8 +219,8 @@ class TestReview(unittest.TestCase):
             for name, body, want in cases:
                 doc = Path(d) / name
                 doc.write_text(body, encoding="utf-8")
-                with mock.patch.dict(os.environ, {"HANGAR_SESSION_ID": "S"}), \
-                        mock.patch.object(webrev, "hangarctl", return_value=done(1, "", "boom")) as m:
+                with mock.patch.dict(os.environ, {"ELIS_SESSION_ID": "S"}), \
+                        mock.patch.object(webrev, "elisctl", return_value=done(1, "", "boom")) as m:
                     self.assertEqual(webrev.review(doc, ReviewOptions(fit=True)), 1)
                 args = list(m.call_args.args)
                 i = args.index("--size-percent")
@@ -252,8 +252,8 @@ class TestReview(unittest.TestCase):
             doc = Path(d) / "draft.txt"
             doc.write_text("fix(x): subject\n\nbody line\n", encoding="utf-8")
             for fit, calls in ((True, [mock.call("P", "S", 842, 170)]), (False, [])):
-                with mock.patch.dict(os.environ, {"HANGAR_SESSION_ID": "S"}), \
-                        mock.patch.object(webrev, "hangarctl", return_value=opened), \
+                with mock.patch.dict(os.environ, {"ELIS_SESSION_ID": "S"}), \
+                        mock.patch.object(webrev, "elisctl", return_value=opened), \
                         mock.patch.object(webrev, "wait_outcome", return_value=("dismissed", "")), \
                         mock.patch.object(webrev, "zoom_fit") as z:
                     self.assertEqual(webrev.review(doc, ReviewOptions(fit=fit)), 2)
@@ -275,8 +275,8 @@ class TestReview(unittest.TestCase):
                     seen.append(out.read_text())
                     return outcome
 
-                with mock.patch.dict(os.environ, {"HANGAR_SESSION_ID": "S"}), \
-                        mock.patch.object(webrev, "hangarctl", return_value=opened), \
+                with mock.patch.dict(os.environ, {"ELIS_SESSION_ID": "S"}), \
+                        mock.patch.object(webrev, "elisctl", return_value=opened), \
                         mock.patch.object(webrev, "wait_outcome", side_effect=wait), mock.patch("sys.stdout"), mock.patch("sys.stderr"):
                     webrev.review(doc, ReviewOptions(output=out))
                 self.assertEqual(seen, ["pending P\n"], outcome)

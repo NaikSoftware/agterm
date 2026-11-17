@@ -6,11 +6,11 @@
 <style>
 :root {
   color-scheme: light dark;
-  --bg: var(--hangar-background, Canvas);
-  --fg: var(--hangar-foreground, CanvasText);
-  --accent: var(--hangar-color-4, #3d7fd9);
-  --warn: var(--hangar-color-3, #c99a1e);
-  --bad: var(--hangar-color-1, #c8463c);
+  --bg: var(--elis-background, Canvas);
+  --fg: var(--elis-foreground, CanvasText);
+  --accent: var(--elis-color-4, #3d7fd9);
+  --warn: var(--elis-color-3, #c99a1e);
+  --bad: var(--elis-color-1, #c8463c);
   --muted: color-mix(in srgb, var(--fg) 55%, transparent);
   --faint: color-mix(in srgb, var(--fg) 32%, transparent);
   --rule: color-mix(in srgb, var(--fg) 13%, transparent);
@@ -21,10 +21,10 @@
   --tint: color-mix(in srgb, var(--fg) 4%, transparent);
   --hover: color-mix(in srgb, var(--fg) 4%, transparent);
   --current: color-mix(in srgb, var(--accent) 10%, transparent);
-  --h1: var(--hangar-color-12, #6aa4f0);
-  --code: color-mix(in srgb, var(--hangar-color-9, #e07a6e) 75%, var(--fg));
-  --link: var(--hangar-color-6, #3fb5c0);
-  --done: var(--hangar-color-2, #5fb36a);
+  --h1: var(--elis-color-12, #6aa4f0);
+  --code: color-mix(in srgb, var(--elis-color-9, #e07a6e) 75%, var(--fg));
+  --link: var(--elis-color-6, #3fb5c0);
+  --done: var(--elis-color-2, #5fb36a);
   --mono: "JetBrainsMono Nerd Font Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
   --rail: 64px;
 }
@@ -129,11 +129,11 @@ span.tp { display: block; }
 pre.code .cl { padding: 0 12px; white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1.35em; }
 pre.code .note, pre.code .editor { margin: 4px 12px; white-space: normal; }
 pre.code .note .text { white-space: pre-wrap; }
-pre.code .hljs-keyword, pre.code .hljs-selector-tag, pre.code .hljs-doctag { color: var(--hangar-color-5, #b67ad8); }
-pre.code .hljs-string, pre.code .hljs-regexp, pre.code .hljs-addition, pre.code .hljs-symbol { color: var(--hangar-color-2, #5fb36a); }
-pre.code .hljs-number, pre.code .hljs-literal, pre.code .hljs-attr, pre.code .hljs-attribute, pre.code .hljs-property, pre.code .hljs-variable, pre.code .hljs-template-variable { color: var(--hangar-color-6, #3fb5c0); }
-pre.code .hljs-title, pre.code .hljs-section, pre.code .hljs-built_in { color: var(--hangar-color-4, #3d7fd9); }
-pre.code .hljs-type, pre.code .hljs-title.class_ { color: var(--hangar-color-11, #d9b45a); }
+pre.code .hljs-keyword, pre.code .hljs-selector-tag, pre.code .hljs-doctag { color: var(--elis-color-5, #b67ad8); }
+pre.code .hljs-string, pre.code .hljs-regexp, pre.code .hljs-addition, pre.code .hljs-symbol { color: var(--elis-color-2, #5fb36a); }
+pre.code .hljs-number, pre.code .hljs-literal, pre.code .hljs-attr, pre.code .hljs-attribute, pre.code .hljs-property, pre.code .hljs-variable, pre.code .hljs-template-variable { color: var(--elis-color-6, #3fb5c0); }
+pre.code .hljs-title, pre.code .hljs-section, pre.code .hljs-built_in { color: var(--elis-color-4, #3d7fd9); }
+pre.code .hljs-type, pre.code .hljs-title.class_ { color: var(--elis-color-11, #d9b45a); }
 pre.code .hljs-comment, pre.code .hljs-quote, pre.code .hljs-meta { color: var(--muted); font-style: italic; }
 pre.code .hljs-deletion { color: var(--bad); }
 pre.code .hljs-emphasis { font-style: italic; }
@@ -265,7 +265,7 @@ tr.slot > td { border: 0 !important; padding: 0 !important; }
 <script>
 (() => {
   const data = JSON.parse(document.getElementById('doc-data').textContent);
-  // match hangar's sidebar with an opaque page surface; the terminal look keeps the terminal's own background
+  // match elis's sidebar with an opaque page surface; the terminal look keeps the terminal's own background
   (() => {
     if (data.style === 'terminal') return;
     const cs = getComputedStyle(document.documentElement);
@@ -275,8 +275,8 @@ tr.slot > td { border: 0 !important; padding: 0 !important; }
     };
     const mix = (a, b, t) => a.map((c, i) => Math.round(c * (1 - t) + b[i] * t));
     const hex = (c) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
-    const bg = rgb('--hangar-background');
-    const fg = rgb('--hangar-foreground');
+    const bg = rgb('--elis-background');
+    const fg = rgb('--elis-foreground');
     if (!bg) return;
     const shift = Number(data.sidebar_shift) || 0;
     const page = mix(bg, shift >= 0 ? [0, 0, 0] : [255, 255, 255], Math.abs(shift));
@@ -333,7 +333,7 @@ tr.slot > td { border: 0 !important; padding: 0 !important; }
   };
 
   const renderMarkdown = () => {
-    // raw html is off: the page can run Hangar commands, so document markup must never become live
+    // raw html is off: the page can run Elis commands, so document markup must never become live
     const md = window.markdownit({html: false, linkify: true});
     // yaml front matter is shown as code; blanking it keeps markdown-it's line map aligned with the file
     let front = '';
@@ -535,7 +535,7 @@ tr.slot > td { border: 0 !important; padding: 0 !important; }
   const showError = (e) => { document.getElementById('error').textContent = String(e && e.message ? e.message : e); };
   const submit = () => {
     if (editing) editing.commit();
-    hangar.request('session.overlay.submit', {args: {value: output()}}).then(clearSaved).catch(showError);
+    elis.request('session.overlay.submit', {args: {value: output()}}).then(clearSaved).catch(showError);
   };
   // ⌘↵ also saves a note, so with saved notes the chord needs a second press within 3s;
   // a click, q, or ⌘↵ with no saved notes, submits at once
@@ -576,7 +576,7 @@ tr.slot > td { border: 0 !important; padding: 0 !important; }
       return;
     }
     clearSaved();
-    hangar.request('session.overlay.close', {}).catch(showError);
+    elis.request('session.overlay.close', {}).catch(showError);
   };
 
   const setCur = (el, scroll = true) => {

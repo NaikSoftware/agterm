@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send one peer-chat message between Claude Code and Codex in an hangar split."""
+"""Send one peer-chat message between Claude Code and Codex in an elis split."""
 
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ CLAUDE_EMPTY_PROMPTS = {
 # which then reaches the suggestion with its own quotes intact.
 CLAUDE_STARTUP_HINT_RE = re.compile(r'^Try ".+"$')
 MESSAGE_NAME_RE = re.compile(r"peer-chat-[a-z0-9][a-z0-9-]{2,48}\.txt")
-MESSAGE_SPOOL = Path(tempfile.gettempdir()) / f"hangar-peer-chat-{os.getuid()}"
+MESSAGE_SPOOL = Path(tempfile.gettempdir()) / f"elis-peer-chat-{os.getuid()}"
 
 
 @dataclass(frozen=True)
@@ -136,7 +136,7 @@ class DeliveryAmbiguous(RuntimeError):
 
 
 def ctl(*args: str, input_text: str | None = None) -> str:
-    command = os.environ.get("HANGARCTL", "hangarctl")
+    command = os.environ.get("ELISCTL", "elisctl")
     result = subprocess.run(
         [command, *args],
         capture_output=True,
@@ -147,7 +147,7 @@ def ctl(*args: str, input_text: str | None = None) -> str:
     )
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(f"hangarctl {' '.join(args)} failed: {detail}")
+        raise RuntimeError(f"elisctl {' '.join(args)} failed: {detail}")
     return result.stdout
 
 
@@ -177,7 +177,7 @@ def tree(window: str | None = None) -> Any:
 
 def resolve_window(explicit: str | None) -> str:
     target = configured_selector(
-        explicit, "HANGAR_WINDOW_ID", "window", "active"
+        explicit, "ELIS_WINDOW_ID", "window", "active"
     )
     assert target is not None
     payload = json.loads(ctl("window", "list", "--json"))
@@ -197,9 +197,9 @@ def resolve_window(explicit: str | None) -> str:
         ]
     if len(matches) != 1 or not matches[0].get("id"):
         detail = "ambiguous" if len(matches) > 1 else "not found"
-        raise RuntimeError(f"hangar window {target!r} is {detail}")
+        raise RuntimeError(f"elis window {target!r} is {detail}")
     if not matches[0].get("open"):
-        raise RuntimeError(f"hangar window {target!r} is not open")
+        raise RuntimeError(f"elis window {target!r} is not open")
     return str(matches[0]["id"])
 
 
@@ -324,7 +324,7 @@ def target_pane(info: dict[str, Any], profile: Profile) -> str | None:
         home_runs = leading_command(info.get(PANE_FIELDS[home])) != peer
     if home_runs:
         return home
-    # hangar addresses panes by position, so the far pane is taken only when the profile's own pane
+    # elis addresses panes by position, so the far pane is taken only when the profile's own pane
     # demonstrably holds the other agent; anything else there could be the caller itself.
     if away_runs and peer_home:
         return away
@@ -401,7 +401,7 @@ def require_session(
 def resolve_session(
     explicit: str | None, profile: Profile, window: str | None = None
 ) -> str:
-    sid = configured_selector(explicit, "HANGAR_SESSION_ID", "session")
+    sid = configured_selector(explicit, "ELIS_SESSION_ID", "session")
     if sid:
         return require_session(sid, profile, window)
     wanted = checkout_key(os.getcwd())
@@ -423,7 +423,7 @@ def resolve_session(
         )
     raise RuntimeError(
         "more than one session shares this checkout; pass --session ID or launch "
-        "Codex with shell_environment_policy.set.HANGAR_SESSION_ID"
+        "Codex with shell_environment_policy.set.ELIS_SESSION_ID"
     )
 
 
@@ -434,10 +434,10 @@ def resolve_target(
 ) -> tuple[str, str]:
     """Resolve one session and pin its owning window before any pane read."""
     session = configured_selector(
-        explicit_session, "HANGAR_SESSION_ID", "session"
+        explicit_session, "ELIS_SESSION_ID", "session"
     )
     window_selector = (
-        configured_selector(explicit_window, "HANGAR_WINDOW_ID", "window")
+        configured_selector(explicit_window, "ELIS_WINDOW_ID", "window")
         if explicit_window is not None or explicit_session is None
         else None
     )
@@ -1598,7 +1598,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--window",
         type=selector_argument,
-        help="hangar window id or prefix (defaults to HANGAR_WINDOW_ID)",
+        help="elis window id or prefix (defaults to ELIS_WINDOW_ID)",
     )
     parser.add_argument(
         "--target-command",

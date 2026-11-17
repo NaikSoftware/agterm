@@ -9,11 +9,11 @@ Author: [@umputun](https://github.com/umputun)
 Claude Code shows a pasted screenshot in its transcript as a `[Image #N]` placeholder, so scrolling back
 tells you an image was there but not which one. This recipe is a Claude Code mod that draws each pasted
 image as a picture right under your prompt, sized to the terminal, using the kitty graphics protocol that
-Hangar's terminal engine speaks.
+Elis's terminal engine speaks.
 
 ## Requirements
 
-Hangar 0.3.1 or later. The recipe calls no `hangarctl` command; it needs only the terminal engine, and every
+Elis 0.3.1 or later. The recipe calls no `elisctl` command; it needs only the terminal engine, and every
 release embeds a libghostty that answers the XTVERSION query as `ghostty` and draws kitty graphics.
 
 Claude Code 2.1.312 or later, the release the mod was tested on. Mods arrived in 2.1.287; the releases in
@@ -21,7 +21,7 @@ between are untested.
 
 ## Setup
 
-1. From the `cookbook` directory of a Hangar checkout, copy this recipe's folder, including the hidden
+1. From the `cookbook` directory of an Elis checkout, copy this recipe's folder, including the hidden
    `.claude-plugin` directory, to where you keep mods:
 
    ```sh
@@ -66,7 +66,7 @@ without a new session start, and an id captured at startup would look in the pre
 folder and could show its image under a new prompt with the same number.
 
 Claude Code draws a mod's `Image` through the kitty graphics protocol only after the terminal identifies
-itself. It asks with XTVERSION and a kitty graphics query; Hangar's libghostty answers XTVERSION with
+itself. It asks with XTVERSION and a kitty graphics query; Elis's libghostty answers XTVERSION with
 `ghostty <version>`, which Claude Code accepts.
 
 The box is at most 80 columns wide and 30 rows tall, and never more than half the window's height. Its

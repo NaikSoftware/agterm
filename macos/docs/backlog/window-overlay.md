@@ -1,6 +1,6 @@
 ---
 worth: later
-where: HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift:htmlOverlaySlot
+where: ElisCore/Sources/ElisCore/AppStore+HtmlOverlay.swift:htmlOverlaySlot
 added: 2026-11-13
 ---
 # window overlay: an HTML page owned by the window, shown with or without a session
@@ -16,11 +16,11 @@ with no sessions, and a page over a session needs that session first. Postponed 
   (same sizing flags), owns input while shown, sidebar stays usable, stays on top across session switches,
   `hide`/`show`/`toggle` keep its state (the dashboard case), closed by the strip button, Cmd-W or the
   page's `window.close()`.
-- Same page powers as a session file page: `data-hangar` tags, `hangar.request` with `--js`, `--cwd` grant,
+- Same page powers as a session file page: `data-elis` tags, `elis.request` with `--js`, `--cwd` grant,
   `--block` with `session.overlay.submit`-style result through `HtmlPageOutcomes` (already keyed by page id).
 - Draws above every session-level layer (program, page, HUD, terminal ask) without closing it; the
   session's own overlay stays underneath untouched.
-- Full remote parity: a script inside a remote session (hangar-server or another Mac) opens it over the
+- Full remote parity: a script inside a remote session (elis-server or another Mac) opens it over the
   Mac window presenting that session.
 - New wire commands (`window.overlay.open|close|hide|show|toggle|resize|reload|navigate|submit`), not a
   flag on `session.overlay.*`: an older app drops an unknown arg and would open on a session instead.
@@ -64,11 +64,11 @@ with no sessions, and a page over a session needs that session first. Postponed 
   formats; log/search/wrap callbacks need owner adaptation; loopback URLs stay refused from a Mac origin.
   Non-HTML sources never gain the control bridge.
 
-**Rejected:** an `hangarctl pick --html` modal (a pick-shaped page that only returns a value). It fit the
+**Rejected:** an `elisctl pick --html` modal (a pick-shaped page that only returns a value). It fit the
 requester's launcher but named a general overlay after the mechanism it reused and could not drive
-Hangar itself. Today's workaround for a launcher is a sessionless keymap chord plus `hangarctl pick`
+Elis itself. Today's workaround for a launcher is a sessionless keymap chord plus `elisctl pick`
 (window-scoped, works with zero sessions) and `session new`.
 
 **Related, separate change:** `workspace new` has no `--after`/`--before` placement (`AppStore.addWorkspace`
 appends; `workspace move` steps only up/down/top/bottom), which the launcher case also needs. Small
-locally; a remote window forwards `workspace.new` to hangar-server, whose catalog needs the same insert.
+locally; a remote window forwards `workspace.new` to elis-server, whose catalog needs the same insert.

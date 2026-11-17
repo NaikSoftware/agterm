@@ -5,7 +5,7 @@
 A per-window modal overlay that shows a user-picked set of live terminal sessions in a grid (max 9,
 laid out `ceil(sqrt(n))`). The dashboard is **view-only**: no cell receives input (keyboard or mouse),
 the keyboard navigates a highlight between cells, and Enter jumps into the highlighted session
-interactively. It is **opened over the control socket** (`hangarctl dashboard <ids…>`) and **closed over
+interactively. It is **opened over the control socket** (`elisctl dashboard <ids…>`) and **closed over
 the socket** (`--close`) **or from the keyboard** (Esc, or Enter which also jumps in). Once open, the
 keyboard drives it. Font size is controllable over the API: `--font-size <pt>` (absolute) or `--auto-size`
 (relative to the Settings default font size, shrinking as the grid grows so dense grids stay readable).
@@ -18,17 +18,17 @@ inverted (zoom focuses its surface; the dashboard focuses none).
 ## Context (from discovery)
 
 Files/components involved:
-- **Reparent precedent**: `Hangar/Views/WindowContentView+Zoom.swift` — `deckHostsSurface(session:surface:)`,
+- **Reparent precedent**: `Elis/Views/WindowContentView+Zoom.swift` — `deckHostsSurface(session:surface:)`,
   `zoomedSessionTerminal`, `handleZoomTargetChange` (the modal lifecycle: closes palette/search/quick
   terminal on open, restores focus on close). The dashboard generalizes all of this.
-- **Surface bridge**: `Hangar/Views/TerminalView.swift` — `makeNSView` returns the session-owned
+- **Surface bridge**: `Elis/Views/TerminalView.swift` — `makeNSView` returns the session-owned
   `GhosttySurfaceView` (`:39`). `isActive:false` only stops auto-focus and resigns first responder if
   held (`:50`); it does **not** disable `mouseDown`/keyboard/first-responder eligibility. So view-only
   requires `.allowsHitTesting(false)` + a separate hit target, not just `isActive:false`.
 - **Font machinery** (the correctness crux): there is **no absolute font setter** — only relative
   bindings (`increase/decrease/reset_font_size`, `GhosttySurfaceView.swift:519`) and whole-config
   `update_config` (`:557`, `:574`). A font change round-trips into the model: `reportFontSize` →
-  `onFontSizeChange` (`:641`) → `store.setFontSize` (`hangarApp.swift:239`). Reloads reset+re-emit
+  `onFontSizeChange` (`:641`) → `store.setFontSize` (`elisApp.swift:239`). Reloads reset+re-emit
   `session.fontSize` (`SettingsModel.reloadConfigClearingSessionZoom` → `resetSessionFontSizesAllWindows`;
   `GhosttyApp.reloadConfig` → `reapplySessionConfigIfNeeded`, `:329`). ⇒ a transient dashboard font must be
   a real surface-level override, not a record-restore of `session.fontSize`.
@@ -39,7 +39,7 @@ Files/components involved:
 - **Overlay placement**: `WindowContentView.windowOverlayLayer` (ZStack sibling inset by `titlebarHeight`
   at `zIndex 1`; zoom is higher at `zIndex 10/11`). `deckInteractive` (`WindowContentView.swift:333`)
   currently gates pane/scratch/overlay interactivity on zoom-closed; the dashboard must join that gate.
-- **Host-free controller + registry precedent**: `HangarCore/…/TerminalZoom.swift` —
+- **Host-free controller + registry precedent**: `ElisCore/…/TerminalZoom.swift` —
   `@Observable @MainActor public final class TerminalZoomController` + `TerminalZoomRegistry`
   (`register`/`unregister`/`controller(for:)`); `ControlServer` reaches a specific window's controller
   through it (`ControlServer.swift:455`, `+SessionActions.swift:790`).
@@ -47,11 +47,11 @@ Files/components involved:
   app-supplied closures (`quickVisible`, `zoomedSurface`) into `ControlTree(...)`.
 - **Control seam**: `ControlProtocol.swift`, `ControlDispatcher.swift` (host-free parse/validate/response +
   the `ControlActions` protocol), `ControlServer*.swift` (app side effects; window resolution via
-  `ControlTargetResolver.swift:32` honoring `ControlArgs.window`), `hangarctlKit/MiscCommands.swift`
-  (CLI "misc" family; tests in `hangarctlKitTests/CommandsTests.swift`).
+  `ControlTargetResolver.swift:32` honoring `ControlArgs.window`), `elisctlKit/MiscCommands.swift`
+  (CLI "misc" family; tests in `elisctlKitTests/CommandsTests.swift`).
 
 Related patterns / facts:
-- Pure logic hoisted into `HangarCore`; app target is a thin side-effect adapter (dispatcher-first rule).
+- Pure logic hoisted into `ElisCore`; app target is a thin side-effect adapter (dispatcher-first rule).
 - `ControlArgs` has no `fontSize`/`autoSize`/`close` fields yet. `AppSettings.fontSize` is `Double?`
   (nil = ghostty default → resolve to the ghostty default when computing the auto-size base).
 - Adding a `ControlActions` requirement leaves the **app target non-building until `ControlServer`
@@ -62,12 +62,12 @@ Related patterns / facts:
 - **Testing approach**: **test-alongside** — each task writes the code, then its tests, before moving on.
 - **Host-free-first**: `DashboardLayout`, `DashboardController` + registry, the protocol additions, the
   `AppStore.controlTree` closures, and the dispatcher + `ControlActions` method (Tasks 1–5) live in
-  `HangarCore`/`hangarctlKit` and are covered by `swift test` in the same task.
+  `ElisCore`/`elisctlKit` and are covered by `swift test` in the same task.
 - **App-target tasks (6–10)**: the app target (SwiftUI/AppKit/libghostty) is **not** host-free
   unit-testable — verified by XCUITest e2e (Task 11) plus `make build` + `make lint` gates per task, plus a
   manual dev-instance check for the font/reload interplay. Tasks 6–10 note which Task-11 assertion covers
   them. This is the project's real testing model, not a coverage gap.
-- **Build-order**: Tasks 3–5 gate on `swift test` (HangarCore/hangarctlKit) — they do NOT build the app.
+- **Build-order**: Tasks 3–5 gate on `swift test` (ElisCore/elisctlKit) — they do NOT build the app.
   The **first `make build` is Task 6**, which implements the `ControlActions.setDashboard` conformance that
   Task 4 declared, so no task ever crosses a red `make build` gate.
 - **CRITICAL**: all gates pass before the next task; small focused changes; run gates after each change.
@@ -76,7 +76,7 @@ Related patterns / facts:
 
 ## Testing Strategy
 
-- **Unit (HangarCore / hangarctlKit)**, in-task for Tasks 1–5:
+- **Unit (ElisCore / elisctlKit)**, in-task for Tasks 1–5:
   - `DashboardLayoutTests` — grid table `n=1…9`; cell placement; `move` clamp in all directions incl. the
     **ragged last row** (`n=3,5,7,8`); `dashboardFontSize` factors × base (13 and 16) + floor at small base.
   - `DashboardControllerTests` — open/close, highlight init + movement (incl. ragged count), member set,
@@ -87,9 +87,9 @@ Related patterns / facts:
   - `ControlDispatcherTests` — empty targets→error, both font flags→error, non-positive `--font-size`→error,
     `--close` with ids/font flags→error, `>9`→capped-with-reported-drop, and the arm **routes to
     `ControlActions.setDashboard`** (mock conformer) with the right args (incl. the `window` passthrough).
-  - `CommandsTests` (`hangarctlKitTests`) — `dashboard <ids>`, `--font-size N`, `--auto-size`, `--close`,
+  - `CommandsTests` (`elisctlKitTests`) — `dashboard <ids>`, `--font-size N`, `--auto-size`, `--close`,
     `--window`, and the mutually-exclusive/invalid-arg rejections at the CLI layer.
-- **e2e (XCUITest, Task 11)** `HangarUITests/DashboardUITests.swift` (`launchForUITest` + control-socket per
+- **e2e (XCUITest, Task 11)** `ElisUITests/DashboardUITests.swift` (`launchForUITest` + control-socket per
   `.claude/rules/ui-tests.md`):
   - open (2–3 sessions) → overlay + correct `dashboard-cell` count; arrows move `dashboard-highlighted`;
     Enter selects+closes (selection changed); Esc closes (selection unchanged);
@@ -108,7 +108,7 @@ Related patterns / facts:
 The dashboard = terminal-zoom's reparent pattern generalized to N surfaces, focus inverted, plus a real
 transient font override:
 
-- **Host-free core** (`HangarCore`): `DashboardLayout` (pure grid geometry + highlight nav + auto-size
+- **Host-free core** (`ElisCore`): `DashboardLayout` (pure grid geometry + highlight nav + auto-size
   font math) and `@Observable @MainActor DashboardController` (per-window state: `members: [UUID]`,
   `highlighted`, `fontMode`, applied-size) + `DashboardControllerRegistry` — all unit-tested.
 - **Control path**: one `dashboard` command (open with `targets`, `--close`, `--font-size`/`--auto-size`),
@@ -143,7 +143,7 @@ Key decisions:
 
 ## Technical Details
 
-`DashboardLayout` (pure, `HangarCore`):
+`DashboardLayout` (pure, `ElisCore`):
 - `grid(count:) -> (cols,rows)` = `ceil(sqrt(n))` / `ceil(n/cols)`; `count` clamped `1…9` at the call site.
 - `cell(index:cols:) -> (col,row)` row-major; `move(from:direction:cols:count:) -> Int` clamped 2-D nav
   (no wrap), `count` clamps into a partial last row.
@@ -188,21 +188,21 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
 ### Task 1: DashboardLayout — pure grid, navigation, auto-size math
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/DashboardLayout.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/DashboardLayoutTests.swift`
+- Create: `ElisCore/Sources/ElisCore/DashboardLayout.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/DashboardLayoutTests.swift`
 
 - [x] `grid(count:)`, `cell(index:cols:)`, `move(from:direction:cols:count:)`, `dashboardFontSize(cols:rows:base:)`
       — pure, `Int`/`Double` only, tunable factor/floor constants + the direction type
 - [x] tests: grid table `n=1…9` + cell placement
 - [x] tests: `move` clamp every direction incl. ragged last row (`n=3,5,7,8`) and full grids (`n=2,4,9`)
 - [x] tests: `dashboardFontSize` factors × base (13, 16) + floor at small base
-- [x] run `cd HangarCore && swift test` + `make lint` — pass before Task 2
+- [x] run `cd ElisCore && swift test` + `make lint` — pass before Task 2
 
 ### Task 2: DashboardController + registry — host-free observable state
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/DashboardController.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/DashboardControllerTests.swift`
+- Create: `ElisCore/Sources/ElisCore/DashboardController.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/DashboardControllerTests.swift`
 
 - [x] `@Observable @MainActor public final class DashboardController` with `members`/`highlighted`/`fontMode`/
       `appliedFontSize` + `DashboardFontMode`; `open`/`close`/`move`/`isOpen`; highlight init prefers a
@@ -210,15 +210,15 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
 - [x] `DashboardControllerRegistry` (mirror `TerminalZoomRegistry`: `shared`/`register`/`unregister`/`controller(for:)`)
 - [x] tests: open/close, member set, highlight init, movement (incl. ragged count), fontMode/applied-size state
 - [x] tests: registry register/unregister/lookup
-- [x] run `cd HangarCore && swift test` + `make lint` — pass before Task 3
+- [x] run `cd ElisCore && swift test` + `make lint` — pass before Task 3
 
 ### Task 3: ControlProtocol + AppStore.controlTree — command, args, tree read-back
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreTests.swift`
 
 - [x] `Command.dashboard`; add `close/fontSize/autoSize` to `ControlArgs` (init + docs)
 - [x] add `dashboardMembers`/`dashboardHighlighted`/`dashboardFontSize`/`dashboardFontMode` to `ControlTree`
@@ -226,13 +226,13 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
 - [x] add four defaulted closure params to `AppStore.controlTree(...)` and thread into `ControlTree(...)`
 - [x] tests: `ControlProtocolTests` round-trips (request + tree fields, present + omitted-when-nil)
 - [x] tests: `AppStoreTests` populate test for the new closures
-- [x] run `cd HangarCore && swift test` + `make lint` — pass before Task 4
+- [x] run `cd ElisCore && swift test` + `make lint` — pass before Task 4
 
 ### Task 4: ControlDispatcher — validation, response, ControlActions.setDashboard
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherTests.swift`
 
 - [x] add `setDashboard(targets:window:close:fontMode:) -> ControlResponse` to the `ControlActions` protocol
       (**note**: this leaves the app target non-building until Task 6 implements it — Tasks 4–5 gate on
@@ -241,14 +241,14 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
       `--font-size`, `--close`+ids/font; cap `>9` with a reported drop; build `fontMode`; route to `setDashboard`
 - [x] tests (mock `ControlActions`): each rejection, the cap-with-drop, and that a valid open/close routes to
       `setDashboard` with the right args incl. `window`
-- [x] run `cd HangarCore && swift test` + `make lint` — pass before Task 5
+- [x] run `cd ElisCore && swift test` + `make lint` — pass before Task 5
 
-### Task 5: hangarctl — dashboard CLI subcommand
+### Task 5: elisctl — dashboard CLI subcommand
 
 **Files:**
-- Modify: `HangarCore/Sources/hangarctlKit/MiscCommands.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/Commands.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/MiscCommands.swift`
+- Modify: `ElisCore/Sources/elisctlKit/Commands.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/CommandsTests.swift`
 
 - [x] add a `dashboard` `ParsableCommand` in `MiscCommands.swift` (family-grouped): `dashboard <ids…>
       [--font-size <pt>] [--auto-size] [--window <id>]` and `dashboard --close [--window <id>]`
@@ -256,12 +256,12 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
       at the CLI layer; help text covers open/close/font/window
 - [x] register in the root tree (`Commands.swift`)
 - [x] tests in `CommandsTests.swift` for each form + the invalid-arg rejections
-- [x] run `cd HangarCore && swift test` + `make lint` — pass before Task 6
+- [x] run `cd ElisCore && swift test` + `make lint` — pass before Task 6
 
 ### Task 6: ControlServer — setDashboard side effect + tree read-back closures
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer.swift` (or `ControlServer+SessionActions.swift`)
+- Modify: `Elis/Control/ControlServer.swift` (or `ControlServer+SessionActions.swift`)
 
 - [x] implement `ControlActions.setDashboard`: resolve ids via `ControlTargetResolver` inside `args.window ??
       frontmost`, dedup by resolved UUID (preserve order), drop+report unresolved, resolve each to its
@@ -270,13 +270,13 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
 - [x] supply `dashboardMembers`/`dashboardHighlighted`/`dashboardFontSize`/`dashboardFontMode` closures at the
       `controlTree(...)` build site (read from the target window's controller via the registry)
 - [x] first `make build` — restores app conformance; behavior asserted by Task 11 e2e
-- [x] run `cd HangarCore && swift test` + `make build` + `make lint` — pass before Task 7
+- [x] run `cd ElisCore && swift test` + `make build` + `make lint` — pass before Task 7
 
 ### Task 7: GhosttySurfaceView — transient dashboard font override
 
 **Files:**
-- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift`
-- Modify: `Hangar/Ghostty/GhosttyApp.swift` (if `reapplySessionConfigIfNeeded` lives there / needs the override)
+- Modify: `Elis/Ghostty/GhosttySurfaceView.swift`
+- Modify: `Elis/Ghostty/GhosttyApp.swift` (if `reapplySessionConfigIfNeeded` lives there / needs the override)
 
 - [x] add `dashboardFontOverride: Double?`; the per-surface config composer uses `dashboardFontOverride ??
       session.fontSize`
@@ -290,7 +290,7 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
 ### Task 8: DashboardView — grid overlay, cells, key-catcher
 
 **Files:**
-- Create: `Hangar/Views/DashboardView.swift`
+- Create: `Elis/Views/DashboardView.swift`
 
 - [x] render the grid from `DashboardLayout.grid(count:)`; each cell a `TerminalView` of the member's resolved
       `addressableSurface` slot (`\.surface`, or `\.splitSurface` for a promoted survivor) with
@@ -309,10 +309,10 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
 ### Task 9: WindowContentView wiring — overlay, deck yield, interactivity, font, exclusivity
 
 **Files:**
-- Create: `Hangar/Views/WindowContentView+Dashboard.swift`
-- Modify: `Hangar/Views/WindowContentView.swift` (own + register/unregister the `DashboardController`; overlay
+- Create: `Elis/Views/WindowContentView+Dashboard.swift`
+- Modify: `Elis/Views/WindowContentView.swift` (own + register/unregister the `DashboardController`; overlay
   branch; `deckInteractive` gate; call the generalized `deckHostsSurface`)
-- Modify: `Hangar/Views/WindowContentView+Zoom.swift` (generalize `deckHostsSurface` to exclude zoom-owned
+- Modify: `Elis/Views/WindowContentView+Zoom.swift` (generalize `deckHostsSurface` to exclude zoom-owned
   OR dashboard-hosted surfaces, matched on the member's resolved surface kind)
 
 - [x] own a per-window `DashboardController`; `register`/`unregister` with `DashboardControllerRegistry` on
@@ -350,7 +350,7 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
 ### Task 11: End-to-end XCUITests
 
 **Files:**
-- Create: `HangarUITests/DashboardUITests.swift`
+- Create: `ElisUITests/DashboardUITests.swift`
 
 - [x] follow `.claude/rules/ui-tests.md` (`launchForUITest`, control-socket driving, occlusion-timeout note)
 - [x] open (2–3 sessions) → overlay + correct `dashboard-cell` count
@@ -363,7 +363,7 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
 - [x] busy/resize: 1/4/9 members with output flowing + a live window resize (no blank cells)
       (covered with 4 members = a full 2×2 grid; true "no blank cell" is a pixel property not XCUITest-observable
       — asserted count-unchanged + a live `tree` read after each resize proves no crash/hang)
-- [x] run the e2e scheme + `cd HangarCore && swift test` + `make build` + `make lint` — pass before Task 12
+- [x] run the e2e scheme + `cd ElisCore && swift test` + `make build` + `make lint` — pass before Task 12
 - ➕ Fixed a real view-only bug the e2e surfaced (Task 8/9): a member cell's `GhosttySurfaceView` grabbed
       first responder while the dashboard was open (a click reached `mouseDown`, and `focusActiveSession`'s
       retry loop re-grabbed the active session's surface), so keystrokes leaked to the terminal and the
@@ -374,7 +374,7 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
 ### Task 12: Keep-in-sync documentation surfaces
 
 **Files:**
-- Modify: `Hangar/Resources/agent-skill/SKILL.md`, `reference.md`, `examples.md`, `troubleshooting.md` (as
+- Modify: `Elis/Resources/agent-skill/SKILL.md`, `reference.md`, `examples.md`, `troubleshooting.md` (as
   relevant) — the SINGLE source of truth; never edit installed copies
 - Modify: `README.md`
 - Modify: `site/docs.html`, `site/index.html`
@@ -406,7 +406,7 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
       transient override; both-flags/non-positive/`--close`+flags → error; reload while open doesn't strand;
       restored on close; never persisted to `session.fontSize`
 - [x] `tree` reports members/highlighted/font/mode; zoom ↔ dashboard mutually exclusive both ways
-- [x] run full suite: `cd HangarCore && swift test`, `make build`, the e2e scheme, `make lint` (zero findings)
+- [x] run full suite: `cd ElisCore && swift test`, `make build`, the e2e scheme, `make lint` (zero findings)
 
 ### Task 14: Finalize documentation and archive plan
 
@@ -429,12 +429,12 @@ override + reapply; record `controller.appliedFontSize`. On close, clear the ove
 *Manual / external — no checkboxes.*
 
 **Manual verification:**
-- Isolated dev instance (per CLAUDE.md — short `/tmp` `HANGAR_STATE_DIR`, copy the user's config in). Drive
-  `hangarctl dashboard <ids> --auto-size`: confirm the live grid renders, cells are view-only (typing AND
+- Isolated dev instance (per CLAUDE.md — short `/tmp` `ELIS_STATE_DIR`, copy the user's config in). Drive
+  `elisctl dashboard <ids> --auto-size`: confirm the live grid renders, cells are view-only (typing AND
   clicking do nothing), arrows/Enter/Esc behave, fonts restore on close. Then, with the dashboard open,
   trigger File ▸ Reload and a Settings font change — confirm the dashboard font is not stranded and restores
   cleanly. Manually inspect scrollback after the close-time font increase (the known blank-drawable class a
-  buffer read can't detect). Do NOT touch the deployed `~/Applications/Hangar.app`.
+  buffer read can't detect). Do NOT touch the deployed `~/Applications/Elis.app`.
 - Note the unavoidable pty-resize behavior: opening/closing the dashboard resizes each member's pty to/from
   its cell, so programs receive resize events and may redraw — "view-only" means no input, not no process
   effect. Documented in `.claude/rules/libghostty.md` (Task 12).
@@ -452,7 +452,7 @@ Additions beyond the original plan:
   sessions (up to 9, fewer if fewer) via a host-free `AppStore.recentSessions(limit:)` (in
   `AppStore+Recency.swift`), with full four-point keep-in-sync (`ControlArgs.mru`, dispatcher validation +
   routing, `ControlActions.setDashboard(mru:)`, CLI `--mru` flag, round-trip/dispatcher/CLI/e2e tests, docs).
-  A `ctrl+a>d` custom command (`hangarctl dashboard --mru --auto-size`) was added to the maintainer's
+  A `ctrl+a>d` custom command (`elisctl dashboard --mru --auto-size`) was added to the maintainer's
   `keymap.conf`.
 - **Rebased onto master** (#121 promote-split-survivor-into-main-pane, #200 focus-flicker generation
   counter). Reconciled the `focusSplitPane` `dashboardActive(for:)` guard with #200's `focusGeneration`

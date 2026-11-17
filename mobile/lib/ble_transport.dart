@@ -57,7 +57,7 @@ class BleTransport {
       close();
       throw switch (e) {
         BleLinkError.wrongKey => Revoked(),
-        BleLinkError.busy => HangarError(busyMessage),
+        BleLinkError.busy => ElisError(busyMessage),
         _ => e,
       };
     }
@@ -73,7 +73,7 @@ class BleTransport {
   }
 }
 
-const _method = MethodChannel('hangar/ble');
+const _method = MethodChannel('elis/ble');
 final _inputs = <int, StreamController<List<int>>>{};
 StreamSubscription? _events;
 int _nextId = 0;
@@ -91,9 +91,9 @@ const notAllowedMessage = 'Bluetooth needs the Nearby devices permission. Allow 
 /// Scans for the pairing's service UUID, opens its L2CAP channel and runs the handshake. Never asks for permissions:
 /// it may run in the background.
 Future<Link> openBle(Pairing p) async {
-  if (!await bluetoothGranted()) throw HangarError(notAllowedMessage);
+  if (!await bluetoothGranted()) throw ElisError(notAllowedMessage);
   // one subscription for all links, alive before any connect, so no early bytes are dropped
-  _events ??= const EventChannel('hangar/ble/data').receiveBroadcastStream().listen((e) {
+  _events ??= const EventChannel('elis/ble/data').receiveBroadcastStream().listen((e) {
     final m = e as Map;
     final input = _inputs[m['id']];
     if (m['data'] case final Uint8List data) return input?.add(data);
@@ -112,9 +112,9 @@ Future<Link> openBle(Pairing p) async {
     close();
     throw switch (e.code) {
       'notFound' => BleNotFound(),
-      'off' => HangarError('Bluetooth is off.'),
-      'scanFailed' => HangarError('Bluetooth scanning failed (${e.message}). Try again in a minute.'),
-      _ => HangarError('Bluetooth connection failed: ${e.message ?? e.code}'),
+      'off' => ElisError('Bluetooth is off.'),
+      'scanFailed' => ElisError('Bluetooth scanning failed (${e.message}). Try again in a minute.'),
+      _ => ElisError('Bluetooth connection failed: ${e.message ?? e.code}'),
     };
   }
   final raw = Link(input.stream, (b) => _method.invokeMethod('write', {'id': id, 'data': Uint8List.fromList(b)}).catchError((_) => close()), close,

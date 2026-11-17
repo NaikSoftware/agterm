@@ -6,7 +6,7 @@
 - This adds one operation: a companion joins a different top-level session of the same window, in any
   workspace, at a chosen slot in that session's group or at its end.
 - The `Session` object moves as it is, so its panes, split, scratch, overlays, pages and daemons are untouched.
-- The same operation serves the sidebar, the row menu, `hangarctl`, a server window's rows and rows attached
+- The same operation serves the sidebar, the row menu, `elisctl`, a server window's rows and rows attached
   from another Mac.
 
 ## Context (from discovery)
@@ -17,11 +17,11 @@
 - `AppStore.nest(_:under:)` only re-points links (used by the attached Convert follow-up); it does not relocate.
 - `SidebarDrop.swift`: a drop ON a session row maps to `sessionIndex + 1` ("land right after this row");
   `companionChildIndex` maps a gap among a parent's companions.
-- `Hangar/Views/WorkspaceSidebar+DragDrop.swift`: `validateDrop`/`acceptDrop`/`outlineSlot` infer the
+- `Elis/Views/WorkspaceSidebar+DragDrop.swift`: `validateDrop`/`acceptDrop`/`outlineSlot` infer the
   highlighted group from the dragged row's own parent; a selected-row drag writes every selected id.
 - Companions nest only in the tree mode (`WorkspaceSidebar+Companions.swift` `nestsCompanions`); the flagged
   tree shows them unindented.
-- `Hangar/Views/WorkspaceSidebar+ContextMenu.swift`: the existing "Move to" submenu lists workspaces and is
+- `Elis/Views/WorkspaceSidebar+ContextMenu.swift`: the existing "Move to" submenu lists workspaces and is
   empty for a companion.
 - `syncSelection` (`WorkspaceSidebar.swift`) reveals a selected row only when the selected id changes;
   `.claude/rules/sidebar.md` lets only a mode or layout switch clear `lastRevealedSelection`.
@@ -32,7 +32,7 @@
   `ControlDispatcher.refusesArguments` so a request with bad arguments reaches the dispatcher's own error.
 - `RemoteCatalogActions.run` turns an older server's argument refusal (exit 64, empty stdout) into `.lost`,
   which reports "outcome unknown".
-- hangar-server runs the same `AppStore` code; its catalog carries `parent` and `AppStore+Catalog.swift`
+- elis-server runs the same `AppStore` code; its catalog carries `parent` and `AppStore+Catalog.swift`
   applies it on the Mac. A server window can detach a single companion (`RemoteCatalogMirror+Detach.swift`),
   so a group visible here can be shorter than the server's.
 
@@ -44,10 +44,10 @@
 - **CRITICAL: update this plan file when scope changes during implementation**
 
 ## Testing Strategy
-- host-free: `HangarCore` tests for the store operation, validators, drop resolution, dispatcher, CLI, remote
+- host-free: `ElisCore` tests for the store operation, validators, drop resolution, dispatcher, CLI, remote
   operation and server actions
-- hosted: `HangarTests` for `AppActions`, `ControlServer` routing (local, server window, attached) and the sidebar
-- UI: `HangarUITests/ControlCompanionsUITests` gets an end-to-end case for the command and its `tree` read-back
+- hosted: `ElisTests` for `AppActions`, `ControlServer` routing (local, server window, attached) and the sidebar
+- UI: `ElisUITests/ControlCompanionsUITests` gets an end-to-end case for the command and its `tree` read-back
 
 ## Progress Tracking
 - mark completed items with `[x]` immediately when done
@@ -120,12 +120,12 @@
 - `ControlActions` gains `moveCompanion(_ target: String?, parent: String, index: Int?, window: String?) async -> ControlResponse`;
   its default in `ControlActionsDefaults.swift` refuses by name, so the agterm-linux conformer owes no change.
 - GUI adapter: `AppActions.moveCompanion(_ id: UUID, under parentID: UUID, at index: Int?, in store: AppStore)`
-  in `Hangar/AppActions+Companions.swift`, modeled on `convertToCompanion`; drop and menu only. The control
+  in `Elis/AppActions+Companions.swift`, modeled on `convertToCompanion`; drop and menu only. The control
   handler calls `AppStore.moveCompanion` directly for a local row and relies on `remoteRoute` (server window)
   and `attachedRoute` (attached row) for the rest, both awaited, so its reply carries the actual outcome.
-- CLI: `hangarctl session move --target C --parent P [--index N]`. `--parent` excludes the workspace
+- CLI: `elisctl session move --target C --parent P [--index N]`. `--parent` excludes the workspace
   positional, `--to`, `--after`/`--before` and a repeated `--target`; `--index` needs `--parent`. The branch
-  that builds the request lives in `hangarctlKit/Session+Companions.swift` (`SessionCommands.swift` is near the
+  that builds the request lives in `elisctlKit/Session+Companions.swift` (`SessionCommands.swift` is near the
   1000-line limit) and keeps `operation.stamp`, since the server path passes `--op-id`/`--epoch`.
 - Server window: `RemoteOperation.moveCompanion(UUID, parent: UUID, index: Int?)`, label "Move Companion",
   argv `session move --target <id> --parent <parent> [--index N]`; `ServerCommandPolicy`,
@@ -134,7 +134,7 @@
   `mirror.catalog` (which includes detached rows) at the GUI-to-catalog boundary only, so a control request's
   index, already in server terms, is never translated twice. An older server's argument refusal is a final
   outcome for this operation: it clears the pending entry and answers
-  `the hangar-server on HOST is too old for companion moves`; other operations keep today's handling.
+  `the elis-server on HOST is too old for companion moves`; other operations keep today's handling.
 - Attached row: `AttachedForward` gains a move case carrying both ORIGIN session ids. The route checks
   `canMoveCompanion` here first; a destination equal to the row's current parent is a local reorder with no
   origin call; otherwise the origin runs the move without `index`, then this Mac re-checks both rows and runs
@@ -147,21 +147,21 @@
 
 ## What Goes Where
 - **Implementation Steps** (`[ ]` checkboxes): code, tests and docs in this repository
-- **Post-Completion** (no checkboxes): manual checks with a real attached Mac and a real hangar-server host
+- **Post-Completion** (no checkboxes): manual checks with a real attached Mac and a real elis-server host
 
 ## Implementation Steps
 
 ### Task 1: Store operation, validators, protocol, dispatcher and CLI
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore+SessionMoves.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`, `ControlErrors.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`, `ControlDispatcher+Companions.swift`,
+- Modify: `ElisCore/Sources/ElisCore/AppStore+SessionMoves.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`, `ControlErrors.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`, `ControlDispatcher+Companions.swift`,
   `ControlDispatcher+Restore.swift` (`refusesArguments`)
-- Modify: `HangarCore/Sources/HangarCore/ControlActions.swift`, `ControlActionsDefaults.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`, `Session+Companions.swift`
-- Modify: `Hangar/Control/ControlServer.swift` (exhaustive `Command` switch, so the app target builds)
-- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`, `AppStoreCompanionsTests`,
+- Modify: `ElisCore/Sources/ElisCore/ControlActions.swift`, `ControlActionsDefaults.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift`, `Session+Companions.swift`
+- Modify: `Elis/Control/ControlServer.swift` (exhaustive `Command` switch, so the app target builds)
+- Modify: `ElisCore/Tests/ElisCoreTests/MockControlActions.swift`, `AppStoreCompanionsTests`,
   `ControlDispatcherCompanionsTests`, `SessionCompanionsCommandsTests`
 
 - [x] `CompanionMoveRefusal`, `AppStore.canMoveCompanion` and `AppStore.moveCompanion` as in Technical
@@ -169,24 +169,24 @@
 - [x] `session.companion.move` command case, `ControlArgs.parent`/`index`, `companionMoveArguments` used by
       the dispatcher and listed in `refusesArguments`, the `ControlActions` requirement with its refusing default
 - [x] CLI `session move --parent/--index` routed to the new command with `operation.stamp` and the too-old
-      mapping; the existing `companionMoveError` text gains the `--parent` hint (app and hangar-server)
+      mapping; the existing `companionMoveError` text gains the `--parent` hint (app and elis-server)
 - [x] store tests: same and other workspace, first/middle/end slot, past-the-end, current-parent reorder,
       each refusal leaves the tree unchanged, `canMoveCompanion` agrees with `moveCompanion` on every case,
       object and pane identity kept, selection kept, `tree.changed` only on a real change, page companion and
       page-root destination, save then reload keeps parent and order
 - [x] dispatcher and CLI tests: argument validation, `refusesArguments`, conflicting options, request shape
       and stamp, too-old text, the new `companionMoveError` text
-- [x] run the touched `HangarCore` tests - must pass before task 2
+- [x] run the touched `ElisCore` tests - must pass before task 2
 
 ### Task 2: Local app path: GUI seam, control handler, sidebar drop and row menu
 
 **Files:**
-- Modify: `Hangar/AppActions+Companions.swift`, `Hangar/Control/ControlServer+Companions.swift`
-- Modify: `HangarCore/Sources/HangarCore/SidebarDrop.swift`
-- Modify: `Hangar/Views/WorkspaceSidebar+DragDrop.swift`, `WorkspaceSidebar+ContextMenu.swift`, `WorkspaceSidebar.swift`
-- Modify: `HangarCore/Tests/.../SidebarDropTests.swift`, `HangarTests/AppActionsCompanionsTests.swift`,
-  `HangarTests/ControlServerCompanionsTests.swift`, `HangarTests/WorkspaceSidebarCompanionsTests.swift`,
-  `HangarUITests/ControlCompanionsUITests.swift`
+- Modify: `Elis/AppActions+Companions.swift`, `Elis/Control/ControlServer+Companions.swift`
+- Modify: `ElisCore/Sources/ElisCore/SidebarDrop.swift`
+- Modify: `Elis/Views/WorkspaceSidebar+DragDrop.swift`, `WorkspaceSidebar+ContextMenu.swift`, `WorkspaceSidebar.swift`
+- Modify: `ElisCore/Tests/.../SidebarDropTests.swift`, `ElisTests/AppActionsCompanionsTests.swift`,
+  `ElisTests/ControlServerCompanionsTests.swift`, `ElisTests/WorkspaceSidebarCompanionsTests.swift`,
+  `ElisUITests/ControlCompanionsUITests.swift`
 
 - [x] `AppActions.moveCompanion` as the drop/menu adapter (store path now, remote branches filled by tasks 3
       and 4); a separate `ControlServer` handler on `AppStore.moveCompanion`, replying `id`/`parent`
@@ -206,10 +206,10 @@
 ### Task 3: Server window rows
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/RemoteCatalogActions.swift` (operation, label, target, argv, too-old outcome),
+- Modify: `ElisCore/Sources/ElisCore/RemoteCatalogActions.swift` (operation, label, target, argv, too-old outcome),
   `RemoteOperation+Request.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/ServerActions+Companions.swift`, `ServerCommandPolicy.swift`, `ServerActions+Receipts.swift`
-- Modify: `Hangar/AppActions+Companions.swift` (server branch)
+- Modify: `ElisCore/Sources/ElisServerKit/ServerActions+Companions.swift`, `ServerCommandPolicy.swift`, `ServerActions+Receipts.swift`
+- Modify: `Elis/AppActions+Companions.swift` (server branch)
 - Modify: `RemoteCatalogActionsTests`, `RemoteOperationRequestTests`, `ServerActionsCompanionsTests`
 
 - [x] `RemoteOperation.moveCompanion` with its label, target and argv; the server runs the store operation and
@@ -227,9 +227,9 @@
 ### Task 4: Rows attached from another Mac
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AttachedForward.swift`
-- Modify: `Hangar/Control/ControlServer+AttachedForward.swift`, `Hangar/AppActions+Companions.swift` (attached branch)
-- Modify: `AttachedForwardTests`, `HangarTests/ControlServerAttachedForwardTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AttachedForward.swift`
+- Modify: `Elis/Control/ControlServer+AttachedForward.swift`, `Elis/AppActions+Companions.swift` (attached branch)
+- Modify: `AttachedForwardTests`, `ElisTests/ControlServerAttachedForwardTests.swift`
 
 - [x] forward case carrying both origin session ids, added to the forwarded set behind `refusesArguments`
 - [x] the route checks `canMoveCompanion` here before any network call: a row attached alone can be top-level
@@ -250,16 +250,16 @@
 - [x] `.claude/rules/control-api.md`: catalog list, a Companions bullet, and the `companionMoveError` line
 - [x] `.claude/rules/sidebar.md`: the companion-move rule ("moves only among its siblings"), the "Convert is
       the one path that changes a `parentID`" line, the row-menu list, and the owner-chain reveal exception
-- [x] bundled skill `plugins/hangar/skills/hangar/` reference entry and a SKILL.md trigger for moving a companion
+- [x] bundled skill `plugins/elis/skills/elis/` reference entry and a SKILL.md trigger for moving a companion
 - [x] verify every Overview requirement and each refusal end to end
-- [x] gates once: `cd HangarCore && swift test`, `make test-app`, `make lint`
+- [x] gates once: `cd ElisCore && swift test`, `make test-app`, `make lint`
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 **Manual verification:**
 - a real attached Mac: move an attached companion under another row from the same origin; check the origin's
   sidebar and this Mac's, and that a second attached Mac keeps the old grouping (documented limit)
-- a real hangar-server window: drag a companion into another session's group with a detached sibling there,
+- a real elis-server window: drag a companion into another session's group with a detached sibling there,
   and check the slot survives the next catalog update
 
 Smells pre-check: skipped — non-Go project

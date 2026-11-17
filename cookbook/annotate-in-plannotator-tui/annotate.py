@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Annotate a pane's output or Claude's newest reply in plannotator-tui, then hand the notes back.
 
-Bound to two chords in ~/.config/hangar/keymap.conf:
+Bound to two chords in ~/.config/elis/keymap.conf:
 
     annotate.py pane      the selection when there is one, else the pane's last LINES lines
     annotate.py replies   Claude's newest reply in this pane; `p` in the viewer picks an older one
@@ -11,14 +11,14 @@ scrollback gets annotated: the selection is reviewed exactly as made.
 
 Herdr does not need to be installed. plannotator-tui's only route from its Send key to an agent's
 prompt is the one it built for the Herdr multiplexer: it runs `$HERDR_BIN_PATH agent prompt ...`.
-So this starts the viewer's pane entrypoint (`plannotator-tui herdr pane`) in a blocking hangar
+So this starts the viewer's pane entrypoint (`plannotator-tui herdr pane`) in a blocking elis
 overlay with HERDR_BIN_PATH pointing at plannotator-host.py beside this file, which answers those
-calls for hangar. The viewer's Send (`E`, or `S` to send and close) lands in the host script's
+calls for elis. The viewer's Send (`E`, or `S` to send and close) lands in the host script's
 outbox, and once the overlay closes this script pastes the last send into the pane the chord came
 from. Pane notes arrive unsent, so they can be edited first; reply notes are submitted, but only
 while Claude still runs in that pane.
 
-Runs as an hangar custom command: the runner exports AGT_SESSION_ID, AGT_PANE, AGT_SELECTION and
+Runs as an elis custom command: the runner exports AGT_SESSION_ID, AGT_PANE, AGT_SELECTION and
 AGT_SOCKET, keeps stdout on /dev/null and starts it with the app's PATH, so progress goes to LOG
 and every binary is resolved to an absolute path. Needs Python 3.9 or later, standard library only.
 """
@@ -37,14 +37,14 @@ from pathlib import Path
 # Lines read from the pane when nothing is selected. The viewer opens a capture at its top and `G`
 # does not reach the end of it, so a long one puts the newest output out of sight; a selection is
 # the way to reach further back.
-LINES = int(os.environ.get("HANGAR_ANNOTATE_LINES") or 50)
+LINES = int(os.environ.get("ELIS_ANNOTATE_LINES") or 50)
 # Whether the notes are submitted after the paste, per chord.
 SUBMIT = {"pane": False, "replies": True}
 # A panel over the session rather than the full pane, so what it asks about stays visible behind
 # it, tinted dark enough for the viewer's colors to read.
 OVERLAY_PERCENT = 80
 OVERLAY_TINT = "#3a2c1e"
-# `session paste` returns once hangar has run the paste, while the agent is still reading the
+# `session paste` returns once elis has run the paste, while the agent is still reading the
 # bytes; a Return sent at once can submit half of a long paste.
 SETTLE_SECONDS = 0.4
 # Reply notes are submitted only when an argv element of the pane's foreground matches this, the
@@ -54,9 +54,9 @@ CLAUDE_FG_MATCH = re.compile(os.environ.get("CLAUDE_FG_MATCH") or r"(^|/)claude$
 
 HERE = Path(os.path.realpath(__file__)).parent
 HOST = HERE / "plannotator-host.py"
-CACHE = Path(os.environ.get("HANGAR_ANNOTATE_DIR") or Path.home() / ".cache" / "hangar-annotate")
+CACHE = Path(os.environ.get("ELIS_ANNOTATE_DIR") or Path.home() / ".cache" / "elis-annotate")
 TMP = Path(os.environ.get("TMPDIR") or "/tmp")
-LOG = Path(os.environ.get("HANGAR_ANNOTATE_LOG") or TMP / "hangar-annotate.log")
+LOG = Path(os.environ.get("ELIS_ANNOTATE_LOG") or TMP / "elis-annotate.log")
 
 
 def log(message):
@@ -74,13 +74,13 @@ def first_executable(*candidates):
     return ""
 
 
-HANGARCTL = first_executable(
-    os.environ.get("HANGARCTL") or "",
-    shutil.which("hangarctl") or "",
-    "/usr/local/bin/hangarctl",
-    "/opt/homebrew/bin/hangarctl",
-    "/Applications/Hangar.app/Contents/MacOS/hangarctl",
-) or "hangarctl"
+ELISCTL = first_executable(
+    os.environ.get("ELISCTL") or "",
+    shutil.which("elisctl") or "",
+    "/usr/local/bin/elisctl",
+    "/opt/homebrew/bin/elisctl",
+    "/Applications/Elis.app/Contents/MacOS/elisctl",
+) or "elisctl"
 
 PLANNOTATOR_TUI = first_executable(
     os.environ.get("PLANNOTATOR_TUI") or "",
@@ -92,7 +92,7 @@ PLANNOTATOR_TUI = first_executable(
 
 
 class Agt:
-    """hangarctl against the instance and session the chord came from."""
+    """elisctl against the instance and session the chord came from."""
 
     def __init__(self):
         self.socket = os.environ.get("AGT_SOCKET") or ""
@@ -100,13 +100,13 @@ class Agt:
         self.pane = os.environ.get("AGT_PANE") or "left"
 
     def run(self, *args, stdin=None):
-        cmd = [HANGARCTL, *args]
+        cmd = [ELISCTL, *args]
         if self.socket:
             cmd += ["--socket", self.socket]
         try:
             return subprocess.run(cmd, input=stdin, capture_output=True, text=True, check=False)
         except OSError as err:
-            return subprocess.CompletedProcess(cmd, 127, "", f"{HANGARCTL}: {err}")
+            return subprocess.CompletedProcess(cmd, 127, "", f"{ELISCTL}: {err}")
 
     def notify(self, message):
         self.run("notify", message, "--title", "Annotate", "--target", self.sid)
@@ -115,7 +115,7 @@ class Agt:
         """The argv running in this pane: a list, [] when a shell holds it, None when unknown.
 
         No read-back exposes a scratch pane's foreground, so it is unknown and treated as live, as
-        is a pane whose process macOS will not show (hangar then omits both fields).
+        is a pane whose process macOS will not show (elis then omits both fields).
         """
         key = {"left": "foreground", "right": "splitForeground"}.get(self.pane)
         res = self.run("tree", "--json")
@@ -174,7 +174,7 @@ def transcript_for(agt):
 
 
 def deliver(agt, text, submit):
-    """Paste through the clipboard, the one bracketed-paste route hangar has, and put it back."""
+    """Paste through the clipboard, the one bracketed-paste route elis has, and put it back."""
     held = subprocess.run(["pbpaste"], capture_output=True, text=True, check=False).stdout
     try:
         subprocess.run(["pbcopy"], input=text, text=True, check=True)
@@ -182,7 +182,7 @@ def deliver(agt, text, submit):
     finally:
         subprocess.run(["pbcopy"], input=held, text=True, check=False)
     if res.returncode != 0:
-        return (res.stderr or res.stdout).strip() or f"hangarctl exited {res.returncode}"
+        return (res.stderr or res.stdout).strip() or f"elisctl exited {res.returncode}"
     if submit:
         time.sleep(SETTLE_SECONDS)
         agt.run("session", "type", "--stdin", "--target", agt.sid, "--pane", agt.pane, stdin="\n")
@@ -196,11 +196,11 @@ def main(argv):
     if mode not in SUBMIT:
         return fail(agt, "usage: annotate.py pane|replies")
     if not agt.sid:
-        return fail(agt, "no AGT_SESSION_ID: run this as an hangar custom command")
+        return fail(agt, "no AGT_SESSION_ID: run this as an elis custom command")
     if not PLANNOTATOR_TUI:
         return fail(agt, "plannotator-tui is not installed: brew install plannotator/tap/plannotator-tui")
 
-    room = TMP / "hangar-annotate" / f"{agt.sid}.{agt.pane}"
+    room = TMP / "elis-annotate" / f"{agt.sid}.{agt.pane}"
     room.mkdir(parents=True, exist_ok=True)
     lock = room / "lock"
     try:

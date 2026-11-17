@@ -1,0 +1,26 @@
+{
+  "name": "elis",
+  "version": "0.42.3",
+  "description": "Drive Elis, a native macOS terminal, programmatically via its elisctl CLI and local control socket.",
+  "author": {
+    "name": "NaikSoftware"
+  },
+  "homepage": "https://naiksoftware.github.io/elis",
+  "repository": "https://github.com/NaikSoftware/elis",
+  "license": "MIT",
+  "keywords": [
+    "elis",
+    "terminal",
+    "macos",
+    "automation",
+    "control-socket"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Elis",
+    "shortDescription": "Drive the Elis macOS terminal from Codex",
+    "developerName": "NaikSoftware",
+    "category": "Productivity",
+    "websiteURL": "https://naiksoftware.github.io/elis"
+  }
+}

@@ -2,7 +2,7 @@
 
 ## Overview
 
-A session opened with `hangarctl zmx attach HOST SESSION` runs `ssh -tt` to a remote `zmx attach`. Its
+A session opened with `elisctl zmx attach HOST SESSION` runs `ssh -tt` to a remote `zmx attach`. Its
 pane reports the REMOTE working directory through OSC 7, and every local shell or command the app
 starts for that session inherits it as if it were local: a custom keymap command, the scratch
 terminal, the overlay default, the quick terminal, and a split opened after the attach-time split is
@@ -18,20 +18,20 @@ command is refused on a remote pane.
 
 ## Context (from discovery)
 
-- `Session.remoteHost` (`HangarCore/Sources/HangarCore/Session.swift:129`) is the SSH destination,
+- `Session.remoteHost` (`ElisCore/Sources/ElisCore/Session.swift:129`) is the SSH destination,
   set only by `ControlServer+Zmx.swift:173` through `store.addSession(... remoteHost:)`, never
   persisted. The attach seeds the session cwd with local HOME (`ControlServer+Zmx.swift:168`), and
   only the remote shell's cwd report replaces it.
 - `Session.cwd(for:)` (`Session.swift:544`) is the pane-aware cwd: the split's live `splitCwd`, then
   `initialSplitCwd`, then `effectiveCwd` for `.right`; `effectiveCwd` otherwise.
-- `CommandContext` (`HangarCore/Sources/HangarCore/CustomCommand.swift`) holds the `AGT_*` token table;
+- `CommandContext` (`ElisCore/Sources/ElisCore/CustomCommand.swift`) holds the `AGT_*` token table;
   `expand`, `environment()` and `tokenNames` all derive from it, and the Settings token reference lists
   `tokenNames`.
 - `CustomCommandRunner.context(for:in:selectionSurface:pane:)` builds the context with
   `sessionPWD: session.cwd(for: pane)`; `spawn` chdirs to `context.sessionPWD` when non-empty
-  (`Hangar/Commands/CustomCommandRunner.swift:316-364`). The sessionless context has an empty pwd and no
+  (`Elis/Commands/CustomCommandRunner.swift:316-364`). The sessionless context has an empty pwd and no
   chdir.
-- Consumers seeding a local shell from the primary cwd, all in `Hangar/hangarApp.swift`:
+- Consumers seeding a local shell from the primary cwd, all in `Elis/elisApp.swift`:
   `makeSplitSurface` (:525, `initialSplitCwd ?? effectiveCwd`), `makeOverlaySurface` (:588,
   `spec.cwd ?? effectiveCwd`), `makeScratchSurface` (:659, `effectiveCwd`), `wireQuickTerminal`
   (:723, `activeSession?.effectiveCwd`).
@@ -41,30 +41,30 @@ command is refused on a remote pane.
   on an unsplit remote session, is a local login shell. `swapPanes` (:125) writes the primary's
   reported cwd into `initialSplitCwd`, so that field can hold a remote path and is not a local override.
 - `GhosttySurfaceView.workingDirectory` is `private`; factory seed tests cannot read it today.
-- `HangarCore` already queries `FileManager` directly (`OpenPathResolver.swift`,
+- `ElisCore` already queries `FileManager` directly (`OpenPathResolver.swift`,
   `DirectoryPanelDefaults.swift`) with real temp directories in tests. `DirectoryPanelDefaults` also
   expands tilde and normalizes through URL, which this rule does not want.
-- Doc surfaces listing the tokens: `plugins/hangar/skills/hangar/reference.md:1275-1290`,
+- Doc surfaces listing the tokens: `plugins/elis/skills/elis/reference.md:1275-1290`,
   `site/docs.html:1700` (token grid) and `:1556` (example), `.claude/rules/keymap.md:105-112`. Remote
   attach behavior: `reference.md:1460-1485`, `site/docs.html:2476`, `.claude/rules/control-api.md:921`.
-- Test homes: `HangarCore/Tests/HangarCoreTests/SessionTests.swift`, `CustomCommandTests.swift`;
-  `HangarTests/CustomCommandRunnerTests.swift` (`fired(_:from:writing:)` runs a real command and reads
-  its output), `HangarTests/SurfaceFactorySeedTests.swift`.
+- Test homes: `ElisCore/Tests/ElisCoreTests/SessionTests.swift`, `CustomCommandTests.swift`;
+  `ElisTests/CustomCommandRunnerTests.swift` (`fired(_:from:writing:)` runs a real command and reads
+  its output), `ElisTests/SurfaceFactorySeedTests.swift`.
 
 ## Development Approach
 
 - Tests first: each task writes the failing test, runs it targeted, then the code.
 - One writer in `/Users/umputun/dev.umputun/agterm/.claude/worktrees/remote-cwd`; Codex reads only.
 - Run each gate once at the end (Task 8); everything before is targeted:
-  `cd HangarCore && swift test --filter <Class>` and
-  `scripts/test-app.sh -only-testing:HangarTests/<Class>/<test>`.
+  `cd ElisCore && swift test --filter <Class>` and
+  `scripts/test-app.sh -only-testing:ElisTests/<Class>/<test>`.
 - Every task ends with its tests passing before the next starts.
 - Update this plan when scope changes.
 
 ## Testing Strategy
 
-- Host-free unit tests in `HangarCore` for the helper and the token.
-- Hosted tests in `HangarTests` for the runner's actual `pwd` and environment, and for every factory
+- Host-free unit tests in `ElisCore` for the helper and the token.
+- Hosted tests in `ElisTests` for the runner's actual `pwd` and environment, and for every factory
   seed, since a correct helper with a missed call site is the likely failure.
 - No XCUITest: nothing here changes chrome or protocol.
 
@@ -138,8 +138,8 @@ inherited callback defect is out of scope here.
 ### Task 1: `Session.localWorkingDirectory`
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/SessionTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/SessionTests.swift`
 
 - [x] tests: local session returns the reported path untouched, a nonexistent one included
 - [x] tests: remote session with the reported path an existing temp directory returns that path;
@@ -150,8 +150,8 @@ inherited callback defect is out of scope here.
 ### Task 2: `AGT_SESSION_HOST` token
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/CustomCommand.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/CustomCommandTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/CustomCommand.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/CustomCommandTests.swift`
 
 - [x] tests: `expand("{AGT_SESSION_HOST}")` and `environment()["AGT_SESSION_HOST"]` carry the value;
       the default context expands it empty; `tokenNames` includes it right after `AGT_SESSION_PWD`
@@ -162,8 +162,8 @@ inherited callback defect is out of scope here.
 ### Task 3: runner wiring
 
 **Files:**
-- Modify: `Hangar/Commands/CustomCommandRunner.swift`
-- Modify: `HangarTests/CustomCommandRunnerTests.swift`
+- Modify: `Elis/Commands/CustomCommandRunner.swift`
+- Modify: `ElisTests/CustomCommandRunnerTests.swift`
 
 - [x] test: a remote-marked session (`addSession(... remoteHost: "user@alias")`) whose reported
       `currentCwd` is an existing temp directory; the fired command writes `$PWD`, `$AGT_SESSION_PWD`
@@ -176,14 +176,14 @@ inherited callback defect is out of scope here.
 - [x] test: local session writes an empty `$AGT_SESSION_HOST`
 - [x] `context(for:)` fills `sessionHost`; `spawn` takes `cwd: String?`; session path passes
       `localWorkingDirectory`, sessionless path passes nil
-- [x] run `scripts/test-app.sh -only-testing:HangarTests/CustomCommandRunnerTests`
+- [x] run `scripts/test-app.sh -only-testing:ElisTests/CustomCommandRunnerTests`
 
 ### Task 4: scratch, overlay and split factories
 
 **Files:**
-- Modify: `Hangar/hangarApp.swift`
-- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift` (`workingDirectory` internal)
-- Modify: `HangarTests/SurfaceFactorySeedTests.swift`
+- Modify: `Elis/elisApp.swift`
+- Modify: `Elis/Ghostty/GhosttySurfaceView.swift` (`workingDirectory` internal)
+- Modify: `ElisTests/SurfaceFactorySeedTests.swift`
 
 - [x] tests: for a remote session with a missing reported cwd, scratch, overlay-without-`cwd` and split
       factories seed HOME; with an existing temp directory they seed that path
@@ -193,15 +193,15 @@ inherited callback defect is out of scope here.
       survives hide/show; after `closeSplit`, a new split resolves a nil durable command (login shell)
 - [x] make `workingDirectory`, `makeScratchSurface`, `makeOverlaySurface` internal; call the helper at
       the three sites
-- [x] run `scripts/test-app.sh -only-testing:HangarTests/SurfaceFactorySeedTests`
+- [x] run `scripts/test-app.sh -only-testing:ElisTests/SurfaceFactorySeedTests`
 
 ### Task 5: quick terminal cwd provider
 
 **Files:**
-- Modify: `Hangar/hangarApp.swift` (`wireQuickTerminal`)
-- Modify: `HangarTests/SurfaceFactorySeedTests.swift` (the file that already tests `hangarApp`'s seeds)
+- Modify: `Elis/elisApp.swift` (`wireQuickTerminal`)
+- Modify: `ElisTests/SurfaceFactorySeedTests.swift` (the file that already tests `elisApp`'s seeds)
 
-- [x] test: `hangarApp.quickTerminalCwd(library:)` returns HOME for a remote active session with a
+- [x] test: `elisApp.quickTerminalCwd(library:)` returns HOME for a remote active session with a
       missing cwd, the reported path when it exists locally, `effectiveCwd` for a local session, and
       HOME with no active session
 - [x] extract the provider body into that static helper (the app struct's `init` restores state, so the
@@ -211,7 +211,7 @@ inherited callback defect is out of scope here.
 ### Task 6: documentation
 
 **Files:**
-- Modify: `plugins/hangar/skills/hangar/reference.md` (token list ~1275, remote attach ~1460)
+- Modify: `plugins/elis/skills/elis/reference.md` (token list ~1275, remote attach ~1460)
 - Modify: `site/docs.html` (token grid :1700, remote section :2476)
 - Modify: `.claude/rules/keymap.md` (token rule ~105)
 - Modify: `.claude/rules/control-api.md` (remote attach entry ~921, one sentence on local cwd)
@@ -226,8 +226,8 @@ inherited callback defect is out of scope here.
 - [x] no surface states a token count
 
 ### Task 7: verify acceptance criteria
-- [x] every consumer in Context calls the helper; grep `effectiveCwd` in `hangar/` for leftovers
-- [x] `cd HangarCore && swift test`
+- [x] every consumer in Context calls the helper; grep `effectiveCwd` in `elis/` for leftovers
+- [x] `cd ElisCore && swift test`
 - [x] `make test-app`
 - [x] `make lint` with zero findings
 
@@ -237,7 +237,7 @@ inherited callback defect is out of scope here.
 
 ## Post-Completion
 
-**Manual verification** (needs a second Mac running Hangar):
+**Manual verification** (needs a second Mac running Elis):
 - attach a remote session whose cwd exists on both machines; fire a keymap command writing `pwd`,
   `$AGT_SESSION_PWD` and `$AGT_SESSION_HOST` to a file; open scratch and a new split after closing the
   attach-time split; each starts in the local twin

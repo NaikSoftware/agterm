@@ -1,0 +1,980 @@
+import Foundation
+import Observation
+
+/// One shell, backed by a single libghostty surface.
+///
+/// `@MainActor`, so implicitly `Sendable` via isolation — never make it an `actor`. `surface` is
+/// `@ObservationIgnored` so assigning the lazy NSView never churns observation; `customName`/`currentCwd`
+/// are observed, so the sidebar refreshes on a rename or PWD report. "Ephemeral" below means absent from
+/// `SessionSnapshot`, so it never survives a relaunch.
+@Observable
+@MainActor
+public final class Session: Identifiable {
+    public let id: UUID
+    /// Stable process identity for the primary pane. It follows a promoted split survivor.
+    public var paneIdentity: UUID
+    /// Stable process identity for an existing split pane, including a hidden split.
+    public var splitPaneIdentity: UUID?
+    /// daemonBackedPanes holds the pane identities a headless origin runs as detached zmx daemons with no
+    /// surface. Backing and pane-token resolution fall back to it only for a slot without a surface; the Mac
+    /// leaves it empty. Not persisted: the server rebuilds it from the daemons it observes.
+    public var daemonBackedPanes: Set<UUID> = []
+    public var customName: String?
+    /// Live cwd from the latest OSC 7 / PWD report; the sidebar row refreshes. Persisted by `snapshot()` on
+    /// quit + structural mutations only (OSC 7 fires constantly), so a crash loses cwd since the last save.
+    public var currentCwd: String?
+    /// initialCwd is where the primary shell starts; a respawned parent restarts from its last cwd.
+    public internal(set) var initialCwd: String
+
+    /// Terminal title from the latest OSC 0/1/2 set-title report — shell `PROMPT_COMMAND`, ghostty shell
+    /// integration, or a remote host over SSH; the sidebar row refreshes on change. Ephemeral, no save.
+    public var oscTitle: String?
+
+    /// The split (right) pane's live cwd and title, reported by the surface flagged `isSplitPane`. Observed,
+    /// ephemeral, nil with no split pane; while it has focus the sidebar row and title bar derive from these.
+    public var splitCwd: String?
+    public var splitTitle: String?
+
+    /// Unseen notifications fired by this session's panes while unfocused; the sidebar badge reacts. Ephemeral.
+    public var unseenCount: Int = 0
+
+    /// Per-session agent status, driven over the control channel (`session.status`); the sidebar row's
+    /// status glyph reacts. Ephemeral, as is `paneActivity`: each working pane's last `active`, shown when another ends.
+    public var agentIndicator = AgentIndicator()
+    @ObservationIgnored var paneActivity: [StatusPane: AgentIndicator] = [:]
+
+    /// The coding agent the focused pane runs in the foreground, sampled by the app; the sidebar row shows its
+    /// logo. Ephemeral, and nil again once the agent exits.
+    public var runningAgent: SessionLauncher?
+    /// The line resuming the last Claude Code conversation seen in the focused pane. Kept after claude exits so a
+    /// later close still records it; never persisted.
+    @ObservationIgnored public var resumeLine: String?
+    /// Claude Code's conversation id seen in the focused pane, or mirrored from an origin; never persisted.
+    @ObservationIgnored public var agentSessionID: String?
+    /// A Recent Closed reopen's resume line, typed once into the main pane; see `takePendingResumeLine`.
+    @ObservationIgnored public var pendingResumeLine: String?
+
+    /// Last time the status was set, idle and repeated values included; nil before any set, never persisted.
+    /// Wall-clock: `controlTree` ships it as epoch seconds against `ControlEvent.ts`, where a monotonic instant means nothing.
+    @ObservationIgnored public var statusChangedAt: Date?
+    /// When the session last became or stopped being its window's selection, on the same clock; persisted.
+    @ObservationIgnored public var lastSelectedAt: Date?
+
+    /// Whether idle auto-follow already pulled the user to THIS blocked episode; ephemeral. Set on jumping
+    /// here by `AppStore.autoFollowFire`, so a later idle fire won't yank the user back to a block already
+    /// shown and left. Reset by `AppStore.setAgentIndicator` on a transition INTO blocked — keyed off the
+    /// transition, not `statusChangedAt`, so a hook re-asserting `blocked` over `blocked` stays muted.
+    @ObservationIgnored public var autoFollowConsumed = false
+
+    /// The host this session is teleported from, nil for a local one. NOT persisted, and excluded from
+    /// every snapshot: a persisted ssh command would reconnect on a `rerun` launch or come back as a
+    /// plain shell under a marker that lies.
+    ///
+    /// Immutable and set at construction, because the first save happens inside `addSession`: a marker
+    /// written afterwards would let one snapshot go to disk carrying the ssh command.
+    public let remoteHost: String?
+    /// remoteSessionID is the origin's id for the session this row shows, set at construction because
+    /// `addSession` emits `remote.opened` before `bindRemote` runs.
+    public let remoteSessionID: String?
+
+    /// What the session shows, fixed at construction for the same first-save reason as `remoteHost`.
+    public let content: SessionContent
+
+    /// isPersistable admits local terminals and page rows with a restorable source.
+    public var isPersistable: Bool { remoteHost == nil && (content == .terminal || pageSnapshot != nil) }
+
+    /// The pane identities this instance's zmx owns — none for a remote session, whose panes run ssh.
+    /// Every reader of local daemon ownership goes through this, or a remote pane reports as a claimed
+    /// local daemon that does not exist. Structural `paneIdentity` stays valid either way.
+    public var locallyManagedPaneIdentities: [UUID] {
+        guard remoteHost == nil, content == .terminal else { return [] }
+        return [paneIdentity] + [splitPaneIdentity, localScratchIdentity].compactMap { $0 }
+    }
+
+    /// localScratchIdentity is the daemon behind this instance's own scratch: a Live scratch on the Mac, the
+    /// server's scratch on elis-server. Nil for a remote row, whose scratch belongs to its host.
+    public var localScratchIdentity: UUID? {
+        remoteHost == nil && content == .terminal ? scratchDaemon?.identity : nil
+    }
+
+    /// ScratchDaemon is a scratch behind a zmx daemon: a Live scratch here, or elis-server's.
+    public struct ScratchDaemon: Equatable, Sendable {
+        public var identity: UUID
+        public var shown: Bool
+
+        public init(identity: UUID, shown: Bool) {
+            self.identity = identity
+            self.shown = shown
+        }
+    }
+
+    /// scratchDaemon is the daemon-backed scratch: a Live scratch on a Mac, saved hidden; on elis-server its own
+    /// state; in a remote window the catalog's. `shown` is read only for a server's scratch.
+    public var scratchDaemon: ScratchDaemon?
+
+    /// catalogPanes are a remote window row's panes and scratch as its server's catalog last listed them.
+    @ObservationIgnored var catalogPanes: [UUID: CatalogPane] = [:]
+
+    /// scratchStoppedGeneration is the `scratchGeneration` whose server scratch attach ended, waiting to reconnect.
+    @ObservationIgnored var scratchStoppedGeneration: Int?
+
+    /// originScratchClient keys this row's own attach of its origin's scratch, a daemon other rows may attach too.
+    @ObservationIgnored var originScratchClient: UUID?
+
+    /// catalogScratch is the server scratch a remote window's row attaches, nil for every other row.
+    public var catalogScratch: UUID? {
+        remotePresentation?.binding.catalogOwned == true ? scratchDaemon?.identity : nil
+    }
+
+    /// presentsCatalog is whether a remote window's row keeps its presentation stream: live, or ended with its
+    /// scratch still running.
+    var presentsCatalog: Bool { !ended || scratchDaemon != nil }
+
+    /// User-set flagged working-set membership: surfaces the session in the sidebar's cross-workspace
+    /// flagged view, and fills its row icon in the ordinary tree. Persisted, surviving a relaunch and a
+    /// workspace move.
+    public var flagged: Bool = false
+    /// ended marks a session its origin no longer has: a headless origin's session left with no live pane, kept until
+    /// `session.close` removes it, or a row attached here whose origin session is gone.
+    public var ended = false
+    /// The sidebar row's tint (`session.tint`); persisted, never copied by duplicate, local to this Mac.
+    public var tint: SidebarTint?
+    /// parentID names this session's top-level parent; conversion and reopen may update it.
+    public internal(set) var parentID: UUID?
+    /// isExpanded is whether a parent row shows its companions.
+    public var isExpanded = true
+
+    /// Local context, persisted for local sessions; clearing reveals any mirrored context.
+    public var context: String?
+    /// Ephemeral origin context, observed independently of the stream's bookkeeping.
+    public internal(set) var mirroredContext: String?
+    public var effectiveContext: String? { context ?? mirroredContext }
+
+    /// info is the local sidebar info line (`session.info`), runtime-only; clearing reveals any mirrored info.
+    public internal(set) var info: SessionInfo?
+    /// mirroredInfo is the origin's info line from an attached stream.
+    public internal(set) var mirroredInfo: SessionInfo?
+    /// effectiveInfo is the line the row shows: the local one, else the origin's.
+    public var effectiveInfo: SessionInfo? { info ?? mirroredInfo }
+    /// onInfoDiscarded cancels the app's expiry timer for the local line; `discardInfo` fires and clears it.
+    @ObservationIgnored public var onInfoDiscarded: (() -> Void)?
+
+    /// discardInfo drops the local info line and fires `onInfoDiscarded`. Session and window teardown call it,
+    /// never an overlay close, which leaves the session and its line in place.
+    public func discardInfo() {
+        info = nil
+        let cancelTimer = onInfoDiscarded
+        onInfoDiscarded = nil
+        cancelTimer?()
+    }
+
+    /// Changes only when one live primary-slot surface replaces another; SwiftUI hosts fold it into their
+    /// identity, so lazy nil→first creation stays at zero while split-survivor promotion remounts the view.
+    @ObservationIgnored public private(set) var primarySurfaceHostRevision = 0
+    // observed, unlike the revision above: a respawn leaves the slot empty and nothing else remounts its host
+    public internal(set) var primaryRespawns = 0
+    @ObservationIgnored var lastRespawnAt: Date?
+
+    /// The app-side surface (a `GhosttySurfaceView`), created lazily on first display and owned here so it
+    /// survives sidebar/detail view churn.
+    @ObservationIgnored public var surface: (any TerminalSurface)? {
+        didSet {
+            guard let oldValue, let surface, oldValue !== surface else { return }
+            primarySurfaceHostRevision &+= 1
+        }
+    }
+
+    /// Whether the session is SHOWN as a one-level split; the detail pane shows/hides the second pane.
+    public var isSplit: Bool = false
+
+    /// Whether the session HAS a split pane at all, shown or hidden/maximized, unlike `isSplit`. Stays true
+    /// across a hide, cleared only by `closeSplit`, so the sidebar + title-bar indicators persist while hidden.
+    public var hasSplit: Bool = false
+
+    /// The split's physical arrangement. A fresh or legacy session starts left/right; changing this while
+    /// both panes exist transposes their layout without replacing either terminal surface.
+    public var splitAxis: SplitAxis = .leftRight
+
+    /// While split, whether the second pane holds focus rather than the primary; the detail pane dims the
+    /// inactive one. Meaningless when not split.
+    public var splitFocused: Bool = false
+
+    /// The split divider's primary-pane fraction of the pane area below the titlebar band, captured from the
+    /// live `NSSplitView` on a divider drag and persisted, so it survives a hide/show and a relaunch. Within
+    /// `AppStore.splitRatioMin...splitRatioMax` (~0.05...0.95): capture skips degenerate extremes, restore
+    /// clamps and seeds. nil = even; never read by a SwiftUI view.
+    @ObservationIgnored public var splitRatio: Double?
+
+    /// The second pane's surface, created lazily on first split and, like `surface`, surviving view churn —
+    /// hiding the split keeps the shell alive. Freed only on `closeSplit`/`closeSession`.
+    @ObservationIgnored public var splitSurface: (any TerminalSurface)?
+
+    /// A pane hidden since launch has no surface yet, so its realized sibling answers for the shared launch disposition.
+    public func zmxBacking(for surface: TerminalZoomSurface) -> Bool? {
+        switch surface {
+        case .primary: (self.surface ?? splitSurface)?.backedByZmx ?? daemonBackedPanes.contains(paneIdentity)
+        case .split: (splitSurface ?? self.surface)?.backedByZmx ?? splitPaneIdentity.map(daemonBackedPanes.contains) ?? false
+        case .scratch: scratchSurface?.backedByZmx == true ? true : nil
+        default: nil
+        }
+    }
+
+    public var allPanesBackedByZmx: Bool {
+        zmxBacking(for: .primary) == true && (!hasSplit || zmxBacking(for: .split) == true)
+    }
+
+    /// Where the split (right) pane re-spawns on restore (the split factory reads it), from the persisted
+    /// `SessionSnapshot.splitCwd`, so each pane keeps its own cwd across a relaunch; nil for a fresh split,
+    /// which seeds from `effectiveCwd`.
+    @ObservationIgnored public var initialSplitCwd: String?
+
+    /// Terminal font size in points, nil for the ghostty config default. Set on the surface at creation,
+    /// written back on cmd +/-, persisted.
+    @ObservationIgnored public var fontSize: Double?
+
+    /// The session's background watermark — an image or rasterized text behind the terminal, nil for none.
+    /// Applied app-side as a per-surface ghostty config overlay (`WatermarkConfig`) at creation, on change, and
+    /// after a global config reload. Persisted, so it survives a relaunch (`.text` re-renders its PNG).
+    @ObservationIgnored public var backgroundWatermark: BackgroundWatermark?
+
+    /// paneBackgrounds overrides `backgroundWatermark` per pane.
+    @ObservationIgnored public var paneBackgrounds = PaneBackgrounds()
+
+    /// Whether a pane holds a `session.grid` grid apart from its view, which enables Restore Terminal Size.
+    public var hasForcedGrid = false
+
+    /// A command to run as the session's process instead of the login shell (kitty's `launch <cmd>`, ghostty's
+    /// `command`), set via `session.new --command`. The surface factory reads it once; the session closes when
+    /// the command exits. Persisted, so a command session — e.g. an `ssh …` shortcut, which escapes the
+    /// foreground-pid capture because that pane's group is led by unreadable setuid-root `login` — re-runs it
+    /// on restore in `rerun` launch mode (via `wasRestored`); a fresh session always runs it.
+    @ObservationIgnored public var initialCommand: String?
+
+    /// Whether a `--command` session HOLDS its surface after the command exits — libghostty's "press any key
+    /// to close" prompt, final output intact — instead of closing; set via `session.new --command … --wait`.
+    /// The same libghostty `wait_after_command` `overlayWait` uses, applied to the PRIMARY surface; meaningful
+    /// only with `initialCommand`. Persisted, so a restored session that re-runs its command holds again.
+    @ObservationIgnored public var commandWait: Bool = false
+
+    /// The split pane's creation command, the split analogue of `initialCommand`. Persisted so a pane moved
+    /// into the split role by a swap keeps its exec lifecycle across restore.
+    @ObservationIgnored public var splitInitialCommand: String?
+
+    /// The split pane's hold-after-exit policy, meaningful only with `splitInitialCommand`.
+    @ObservationIgnored public var splitCommandWait: Bool = false
+
+    /// True when the session was rebuilt by `AppStore.restore(from:)` rather than freshly created; gates the
+    /// `initialCommand` re-run on `rerun` launch mode (a fresh session always runs it, a restored one gets
+    /// a plain shell in any other mode). Never persisted.
+    @ObservationIgnored public var wasRestored = false
+
+    /// The main pane's foreground command (full argv) for restore-running-command, read once by the surface
+    /// factory on a launch restore, then cleared. Persisted; nil at a prompt. Capture sites and the
+    /// launch-only replay gate: `.claude/rules/settings.md`.
+    @ObservationIgnored public var foregroundCommand: [String]?
+    /// The split (right) pane's foreground command (full argv), the split analogue of `foregroundCommand`.
+    @ObservationIgnored public var splitForegroundCommand: [String]?
+
+    /// The main pane's PERSISTED restore-command override, set via `session.restore`. Tri-state: nil = no
+    /// override (auto-capture), `""` = pinned to a plain shell (suppressing both the capture and
+    /// `initialCommand`), `"cmd"` = run that shell line. STICKY, unlike the capture: never cleared on read, so
+    /// it fires after every restart until changed. Needs its OWN slot — sharing `foregroundCommand` would let
+    /// the quit-time capture clobber it with the live process's argv.
+    @ObservationIgnored public var restoreCommand: String?
+    /// The split (right) pane's persisted restore-command override, the split analogue of `restoreCommand`.
+    @ObservationIgnored public var splitRestoreCommand: String?
+
+    /// The main pane's TRANSIENT override for THIS launch, copied from `restoreCommand` by an app-bootstrap
+    /// restore, consumed by `takePendingRestoreOverride(pane:)`, never persisted. A session that was not
+    /// bootstrap-restored (fresh, Recent Closed, duplicated, rebuilt after a mid-process window reload) starts
+    /// nil, so nothing fires. The ONLY restore-override state a surface factory may read: it freezes what was
+    /// eligible at process start, so a command written over the socket during this run never executes in it.
+    @ObservationIgnored public var pendingRestoreCommand: String?
+    /// The split analogue of `pendingRestoreCommand`, seeded only when the restored split was SHOWN
+    /// (`isSplit`) — a hidden split builds no right surface at bootstrap, so a pending payload would instead
+    /// fire on a later manual ⌘D.
+    @ObservationIgnored public var pendingSplitRestoreCommand: String?
+
+    /// The main pane's TRANSIENT captured foreground command for THIS launch, copied from the persisted
+    /// `foregroundCommand` by an app-bootstrap restore and consumed by the surface factory. Never
+    /// serialized by `snapshot()`, which is what makes the launch-time strip durable: the persisted field
+    /// goes nil the moment the replay is armed, so no save landing before the surface spawns can write the
+    /// argv back over the file the strip just cleaned.
+    @ObservationIgnored public var pendingForegroundCommand: [String]?
+    /// The split analogue of `pendingForegroundCommand`, seeded for every surviving split (`hasSplit`),
+    /// hidden included: a hidden split builds no right surface at bootstrap, so it consumes this only if it
+    /// is later shown, and the exit capture writes it back untouched until then.
+    @ObservationIgnored public var pendingSplitForegroundCommand: [String]?
+
+    /// overlayActive says the session-wide slot is occupied, by a covering program or page or by a passive HUD.
+    /// Where focus, coverage or input is decided, ask `coverOverlayVisible`, `programOverlayVisible` or
+    /// `hudActive` instead. Ephemeral and control-channel only.
+    public var overlayActive: Bool = false
+    /// overlayHidden keeps the session-wide program or page running while it covers nothing.
+    public var overlayHidden: Bool = false
+
+    /// The overlay's surface, created on open and kept, hidden or not, until the overlay closes.
+    @ObservationIgnored public var overlaySurface: (any TerminalSurface)?
+
+    /// The command the overlay runs as its process (e.g. `revdiff`), read by the overlay factory at creation.
+    @ObservationIgnored public var overlayCommand: String?
+
+    /// The overlay's working directory, or nil to inherit `effectiveCwd`. Read by the factory at creation.
+    @ObservationIgnored public var overlayCwd: String?
+
+    /// The overlay's own solid background as `#rrggbb`, nil for the theme default; set via
+    /// `session.overlay.open --background-color`, read by the factory at creation, cleared on close, never
+    /// persisted. Independent of `backgroundWatermark`: the overlay surface is not wired to the session.
+    @ObservationIgnored public var overlayBackgroundColor: String?
+
+    /// Whether the overlay keeps its surface after the command exits, showing libghostty's "press any key to
+    /// close" prompt with the final output, instead of closing. Read by the factory at creation.
+    @ObservationIgnored public var overlayWait: Bool = false
+
+    /// The overlay program's exit status, from the wrapper's `echo $?` temp file at teardown, NOT libghostty's
+    /// child-exited status (always 0 — it reports the login-shell wrapper). Reset on the next open, read by
+    /// `session.overlay.result`; in-memory only.
+    @ObservationIgnored public var overlayExitCode: Int?
+
+    /// htmlOverlay is the page the session-wide slot shows instead of a program; see `HtmlOverlay`.
+    public var htmlOverlay: HtmlOverlay?
+
+    /// The percent of the pane an opaque framed panel occupies with the session still VISIBLE behind it; nil
+    /// is the full-pane program overlay, which hides it and draws translucent. 1...100 for a floating PROGRAM
+    /// overlay, which takes it on BOTH axes and is always centered; a HUD shares the field for its WIDTH
+    /// only, bounded by `HudLayout.clampSizePercent(_:for:)` and placed by its own `HudSpec.position`, and
+    /// sizes its height through `hudHeightPoints`. Cleared on close, never persisted.
+    public var overlaySizePercent: Int?
+
+    /// overlayPoints holds a floating program or page's per-axis point overrides of `overlaySizePercent`;
+    /// empty otherwise, a HUD included. Cleared on open and close, never persisted.
+    public var overlayPoints = OverlayPointSize()
+
+    /// The percent of the pane's HEIGHT a HUD panel occupies, measured from its message rather than set by
+    /// the caller (`HudLayout.heightPercent`); nil for an empty slot and for a program overlay, which takes
+    /// `overlaySizePercent` on both axes. A HUD is two or three lines of text, so sharing one percent across
+    /// both axes made every panel as tall as it was wide. The read-back, and what the deck frames with
+    /// when no points were measured. Cleared with the rest of the HUD state, never persisted.
+    public var hudHeightPercent: Int?
+
+    /// The height a HUD panel is laid out at, in points and already capped; nil over an unmeasured pane,
+    /// which falls back to `hudHeightPercent`. Cleared with the rest of the HUD state, never persisted.
+    public var hudHeightPoints: Double?
+
+    /// hudFontSize is the point size the live HUD's surface was created at: the caller's `HudSpec.fontSize`
+    /// or the session's size at open. Measuring reads it, so a session zoom after open cannot change the
+    /// cell a HUD is sized with. Cleared with the rest of the HUD state, never persisted.
+    @ObservationIgnored public var hudFontSize: Double?
+
+    /// Bumped on every overlay-slot OPEN so the deck can key the panel's view identity on it. A HUD is
+    /// REPLACED in place — `closeOverlay` then `openOverlay` inside one store call — so `overlayActive`
+    /// never dips to false where SwiftUI can see it. Without a changing identity `makeNSView` is therefore
+    /// never re-invoked and `updateNSView` runs against the torn-down view with `overlaySurface` nil.
+    /// Observed (the deck reads it while building the panel), ephemeral, never persisted.
+    public var overlaySlotGeneration: Int = 0
+
+    /// The HUD occupying the overlay slot, nil when the slot is empty or runs a caller's program. Observed:
+    /// the deck reads it to keep the session focusable and to place the panel. Ephemeral, never persisted —
+    /// a HUD is a message about work in flight and means nothing after a relaunch.
+    public var hudSpec: HudSpec?
+
+    /// Stable identity of the pane whose bounds scope the HUD, nil for the session detail bounds. The identity
+    /// follows its shell through pane swaps and split-survivor promotion.
+    public var hudPaneIdentity: UUID?
+
+    /// The session's pending terminal ask, independent of the HUD/program overlay slot.
+    public private(set) var askPending: PendingAsk?
+    /// The pending ask's unsubmitted text or selection, kept while its dialog is hidden.
+    public internal(set) var askDraft: AskDraft?
+    /// Stable identity of the covered pane; nil covers the whole session.
+    public private(set) var askPaneIdentity: UUID?
+    /// askRemoteOwner is the token of the viewer the pending ask was handed to, nil while this Mac draws it. A remotely
+    /// presented ask keeps the slot and its result here but is neither drawn nor answered on this Mac.
+    public internal(set) var askRemoteOwner: Int?
+    /// Tells the presenter a handed-over ask ended here. Set with the handover, run once when it resolves.
+    @ObservationIgnored var onRemoteAskEnded: (@MainActor (String) -> Void)?
+
+    public var askPresentedRemotely: Bool { askRemoteOwner != nil }
+    /// Overlay slots a viewer's presenter holds and the outcomes of remote jobs, on the origin.
+    public internal(set) var remoteOverlays = RemoteOverlays()
+    /// The origin's job the session-wide overlay shows, on a viewer.
+    @ObservationIgnored public internal(set) var overlayReplica: OverlayReplica?
+    /// Tells the origin a replica overlay's surface is gone here, whatever closed it.
+    @ObservationIgnored var onReplicaOverlayClosed: (@MainActor (String) -> Void)?
+    /// Set on a viewer while the pending ask is a replica of one its origin handed over: drawn and answered
+    /// here, but owned and resolved on the origin, which is what the answer is sent to.
+    public private(set) var askReplica = false
+    /// Sends a replica's outcome to its origin. Run once when it resolves; a dismissal skips it.
+    @ObservationIgnored var onReplicaResolved: (@MainActor (ControlAskResult) -> Void)?
+    @ObservationIgnored private var askRegistry: AskRegistry = .shared
+
+    /// openAsk reserves the session ask slot and its placement, refusing a second ask; `registry` keeps its result.
+    /// A page session takes only a GUI ask: a terminal one draws in a terminal it does not have.
+    @discardableResult
+    public func openAsk(_ ask: PendingAsk, paneIdentity: UUID? = nil, remoteOwner: Int? = nil, registry: AskRegistry = .shared) -> Bool {
+        guard askPending == nil, content == .terminal || ask.style == .gui else { return false }
+        askRegistry = registry
+        askPaneIdentity = paneIdentity
+        askRemoteOwner = remoteOwner
+        askPending = ask
+        askDraft = AskDraft(form: ask.form)
+        return true
+    }
+
+    /// Reserves the slot for a replica of an origin's ask, whose outcome goes to `resolved` instead of here.
+    func openReplicaAsk(_ ask: PendingAsk, paneIdentity: UUID?,
+                        resolved: @escaping @MainActor (ControlAskResult) -> Void) -> Bool {
+        guard openAsk(ask, paneIdentity: paneIdentity) else { return false }
+        askReplica = true
+        onReplicaResolved = resolved
+        return true
+    }
+
+    /// Takes a handed-over ask back to be drawn here, so an answer from its former presenter is stale.
+    public func takeAskBack() {
+        askRemoteOwner = nil
+        onRemoteAskEnded = nil
+    }
+
+    /// Empties the slot without an outcome, for an ask that moves to another owner rather than ending.
+    public func releaseAsk() {
+        askPending = nil
+        askDraft = nil
+        askPaneIdentity = nil
+        askReplica = false
+        onReplicaResolved = nil
+        takeAskBack()
+    }
+
+    /// Retains a registered ask's terminal outcome before clearing its slot; stale ids are ignored.
+    @discardableResult
+    public func resolveAsk(id: String, _ result: ControlAskResult) -> Bool {
+        guard let ask = askPending, ask.id == id, result.result != .pending else { return false }
+        let result = ask.expired(at: Date()) ? ControlAskResult(result: .cancelled) : result
+        if case let .session(sessionID, windowID) = askRegistry.owner(for: id), sessionID == self.id {
+            askRegistry.retain(id: id, result: result, window: windowID)
+        }
+        let ended = onRemoteAskEnded
+        let replicaResolved = onReplicaResolved
+        askPending = nil
+        askDraft = nil
+        askPaneIdentity = nil
+        askReplica = false
+        onReplicaResolved = nil
+        takeAskBack()
+        ended?(id)
+        replicaResolved?(result)
+        return true
+    }
+
+    /// Last live bounds emitted by each deck pane host. Ignored by observation because the drawing path takes
+    /// the current preference value directly; control commands use this cache only for message measurement.
+    @ObservationIgnored public var hudPaneFrames = HudPaneFrames()
+
+    /// The target identity's current role, nil for session-wide placement or a destroyed target.
+    public var hudTargetPane: OverlayPane? {
+        hudPaneIdentity.flatMap(paneRole(forIdentity:))
+    }
+
+    /// paneRole resolves a captured pane identity to its current role, following a promotion.
+    public func paneRole(forIdentity identity: UUID) -> OverlayPane? {
+        if paneIdentity == identity { return .left }
+        if splitPaneIdentity == identity { return .right }
+        return nil
+    }
+
+    /// Path to the rendered-message file the HUD helper re-reads each tick (`ELIS_HUD_FILE`); `discardHudBody`
+    /// deletes it. Per SESSION, so an update rewrites the path the running helper already opened.
+    /// `@ObservationIgnored`: the surface factory, the HUD commands and `overlay close` read it, and none of
+    /// them is a view that must re-render when it changes.
+    @ObservationIgnored public var hudFile: String?
+
+    /// Drops the HUD: deletes the body file and clears the state describing it. The single owner of that
+    /// deletion, so it happens wherever a HUD is discarded — `closeOverlay` and every teardown that discards
+    /// the whole session — and not only where a realized surface tears itself down. The file carries the
+    /// panel's TEXT under a world-readable `/tmp` path, so a HUD closed before its surface existed must not
+    /// leave it there. Deleting it also stops a helper still running against it.
+    public func discardHudBody() {
+        if let hudFile { try? FileManager.default.removeItem(atPath: hudFile) }
+        let cancelTimer = onHudDiscarded
+        let withdraw = onHudWithdrawn
+        onHudDiscarded = nil
+        onHudWithdrawn = nil
+        onHudGeometryChange = nil
+        hudSpec = nil
+        hudPaneIdentity = nil
+        hudFile = nil
+        hudHeightPercent = nil
+        hudHeightPoints = nil
+        hudFontSize = nil
+        hudExpiresAt = nil
+        hudResizedWidthPercent = nil
+        remotePresentation?.hudBridged = false
+        cancelTimer?()
+        withdraw?()
+    }
+
+    /// What this Mac keeps about a session attached from another one; nil for a local session.
+    @ObservationIgnored public internal(set) var remotePresentation: RemotePresentationState?
+    /// awaitsOriginCheck marks a row restored from the snapshot whose origin this Mac has not asked about yet.
+    @ObservationIgnored public var awaitsOriginCheck = false
+    /// remoteConnectionRevision changes with the connection, so an observer of `remoteConnection` is told.
+    var remoteConnectionRevision = 0
+
+    /// Tells attached viewers the panel is gone. Set when the HUD is published, so a panel whose body was
+    /// never written, and so never published, withdraws nothing.
+    @ObservationIgnored var onHudWithdrawn: (() -> Void)?
+
+    /// When the app hides the published panel, nil for a persistent one.
+    @ObservationIgnored var hudExpiresAt: Date?
+
+    /// The width an `overlay.resize` forced on the panel, until the next open or update resolves the size
+    /// from its own spec. A viewer sizes from its own pane, so only a forced width travels.
+    @ObservationIgnored public internal(set) var hudResizedWidthPercent: Int?
+
+    /// Counts publications of the panel. Frame order is what keeps a stale close off a later panel; a
+    /// viewer does not read this.
+    @ObservationIgnored var hudPublishGeneration = 0
+
+    /// Cancels the app's auto-hide timer for this panel; `discardHudBody` calls and clears it. Every teardown
+    /// that drops a HUD already routes through that one method, which is why the hook hangs there.
+    public var onHudDiscarded: (() -> Void)?
+
+    /// onHudGeometryChange tells the app the bounds the live HUD is laid out in, or its surface's grid,
+    /// changed, so it can measure the panel again; `discardHudBody` clears it with the rest of the HUD state.
+    @ObservationIgnored public var onHudGeometryChange: (() -> Void)?
+
+    /// hudActive says the slot holds a passive HUD; the one predicate separating it from the covers.
+    public var hudActive: Bool { overlayActive && hudSpec != nil }
+
+    /// programOverlayActive: the slot runs a CALLER'S PROGRAM, either coverage variant, the terminal-surface
+    /// question, hidden or not. Neither a HUD nor a page counts; "a cover owns input" is `coverOverlayVisible`.
+    public var programOverlayActive: Bool { overlayActive && !hudActive && htmlOverlay == nil }
+
+    /// fullOverlayActive says a program or page fills the whole session slot, with no size percent. Shown
+    /// (`fullOverlayVisible`), it hides the panes and a shown scratch, since under window translucency anything
+    /// left visible would bleed through. A HUD never counts, whatever its size.
+    public var fullOverlayActive: Bool { overlayActive && !hudActive && overlaySizePercent == nil }
+
+    /// The left pane's overlay, covering that pane only and leaving the sibling live; nil means none is up,
+    /// so the slot itself IS the "active" signal. Observed, ephemeral, control-channel only.
+    public var leftOverlay: PaneOverlay?
+
+    /// The left pane overlay's surface, created on open and torn down when its command exits or the slot is
+    /// closed. `@ObservationIgnored` because `TerminalView` assigns it during view update.
+    @ObservationIgnored public var leftOverlaySurface: (any TerminalSurface)?
+
+    /// The left pane overlay program's exit status, kept OUTSIDE `PaneOverlay` so `session.overlay.result`
+    /// can still read it after the slot goes nil. Reset on the next open; in-memory only.
+    @ObservationIgnored public var leftOverlayExitCode: Int?
+
+    /// The right pane's overlay, the split-pane analogue of `leftOverlay`.
+    public var rightOverlay: PaneOverlay?
+
+    /// The right pane overlay's surface (see `leftOverlaySurface`).
+    @ObservationIgnored public var rightOverlaySurface: (any TerminalSurface)?
+
+    /// The right pane overlay program's exit status (see `leftOverlayExitCode`).
+    @ObservationIgnored public var rightOverlayExitCode: Int?
+
+    /// Whether the scratch terminal covers this session (full single-pane size, like a full overlay); the
+    /// detail pane shows/hides it. A third per-session shell that, unlike the ephemeral overlay, behaves like
+    /// the split: hiding it keeps the shell alive, so a re-show reuses it. Not persisted.
+    public var scratchActive: Bool = false
+
+    /// The scratch terminal's surface: a login shell (or `scratchCommand`), created lazily on first show and
+    /// kept alive across hides — non-nil means "alive, maybe hidden". Freed only on `closeScratch` (explicit
+    /// close, the shell's own `exit`, or session/workspace/window teardown), after which a show spawns fresh.
+    @ObservationIgnored public var scratchSurface: (any TerminalSurface)?
+
+    /// The scratch shell's own cwd: where a local scratch started, then each PWD it reports. Separate from
+    /// `currentCwd` so a `cd` in the scratch never renames the row. Nil with no scratch; a departing scratch clears it.
+    @ObservationIgnored public var scratchCwd: String?
+
+    /// Bumped on every `closeScratch` so the deck keys the scratch view's identity on it. A `--command`
+    /// respawn closes and re-shows inside one store call, so `scratchActive` never dips where SwiftUI can
+    /// see it and the torn-down view would otherwise stay mounted. Observed, never persisted.
+    public var scratchGeneration: Int = 0
+
+    /// The scratch analogue of `initialCommand` (`session.scratch --command`). RUN-ONCE: the scratch factory
+    /// reads and clears it on spawn, so the next show is a plain shell. Never persisted.
+    @ObservationIgnored public var scratchCommand: String?
+
+    /// Whether the in-terminal search bar is shown over this session's focused pane (⌘F); the detail pane
+    /// shows/hides it. Written directly by surface-factory search callbacks and `AppActions`; ephemeral.
+    public var searchActive: Bool = false
+
+    /// The current search query, mirrored from the bar's text field and the control channel. Ephemeral.
+    public var searchNeedle: String = ""
+
+    /// Match count for `searchNeedle` from libghostty's `SEARCH_TOTAL`; nil before a query runs. Ephemeral.
+    public var searchTotal: Int?
+
+    /// 1-based index of the selected match, from libghostty's `SEARCH_SELECTED`; nil when none. Ephemeral.
+    public var searchSelected: Int?
+
+    /// The surface owning the open search bar — the focused searchable pane when search opened. Pinned so the
+    /// bar's needle/navigate/close drive the SAME surface even if split focus moves (re-resolving
+    /// `activeSurface` would strand the original pane in libghostty search mode). Set on open by the factory's
+    /// START callback, cleared on close; weak, since the session strongly owns its panes. Ephemeral.
+    @ObservationIgnored public weak var searchSurface: (any TerminalSurface)?
+
+    public init(id: UUID = UUID(), initialCwd: String, customName: String? = nil,
+                paneIdentity: UUID = UUID(), splitPaneIdentity: UUID? = nil,
+                remoteHost: String? = nil, remoteSessionID: String? = nil, content: SessionContent = .terminal) {
+        self.content = content
+        self.id = id
+        self.paneIdentity = paneIdentity
+        self.splitPaneIdentity = splitPaneIdentity
+        self.initialCwd = initialCwd
+        self.customName = customName
+        self.remoteHost = remoteHost
+        self.remoteSessionID = remoteSessionID
+    }
+
+    /// The sidebar label: a non-blank `customName` (a manual rename) wins; else the focused pane's non-blank
+    /// terminal title; else the basename of `focusedCwd`, falling back to `initialCwd`. Name and title are
+    /// both trimmed, so a whitespace-only value falls through — `AppStore.renameSession` clears a blank name
+    /// to nil, so one can only arrive via a hand-edited snapshot.
+    ///
+    /// Basename pins: root `/` → `/` (free from `lastPathComponent`); a trailing slash is ignored (`/a/b/` →
+    /// `b`); an empty path → `~`, the home shorthand, since no sensible component exists.
+    public var displayName: String {
+        if let trimmed = customName?.trimmedOrNil { return trimmed }
+        if content == .page, let identity = htmlOverlay?.identity.trimmedOrNil { return identity }
+        if let title = focusedOscTitle?.trimmedOrNil { return title }
+        let path = focusedCwd
+        if path.isEmpty { return "~" }
+        return (path as NSString).lastPathComponent
+    }
+
+    /// The cwd of the focused pane: the split (right) pane's while it has focus (shown or hidden-maximized),
+    /// else the primary's, falling back to `initialCwd`. The sidebar and title bar track the focused pane
+    /// through it, while `effectiveCwd` stays the primary's. The `splitSurface != nil` guard (the
+    /// `activeSurface` idiom) stops a promoted survivor that momentarily re-raised `splitFocused` from masking
+    /// the migrated main-pane cwd — the split fields describe the split pane only while it exists.
+    public var focusedCwd: String {
+        if splitFocused, splitSurface != nil, let cwd = splitCwd { return cwd }
+        return currentCwd ?? initialCwd
+    }
+
+    /// The focused pane's terminal title: the split pane's while it has focus AND exists, else the primary's
+    /// (see `focusedCwd` for the existence guard).
+    private var focusedOscTitle: String? {
+        (splitFocused && splitSurface != nil ? splitTitle : oscTitle).map(Self.strippingTitleSpinner)
+    }
+
+    /// The id a sidebar drag inserts: the agent's conversation, else the origin's session, else this row.
+    public var dropID: String {
+        agentSessionID.flatMap(SessionLauncher.plainSessionID) ?? remoteSessionID.flatMap(SessionLauncher.plainSessionID) ?? id.uuidString
+    }
+
+    /// The dragged sessions' ids joined by `,`; nil for none.
+    public static func dropText(_ sessions: [Session]) -> String? {
+        sessions.isEmpty ? nil : sessions.map(\.dropID).joined(separator: ",")
+    }
+
+    /// `text`'s comma-separated ids without `ownID` (the drop target); nil when none are left.
+    public nonisolated static func dropText(_ text: String, excluding ownID: String?) -> String? {
+        let ids = text.split(separator: ",").map(String.init).filter { $0 != ownID }
+        return ids.isEmpty ? nil : ids.joined(separator: ",")
+    }
+
+    /// Drops the leading status glyphs a coding agent animates in its title (Claude Code's `✳`, `◑`, braille
+    /// frames), which would otherwise make the row name flicker.
+    public nonisolated static func strippingTitleSpinner(_ title: String) -> String {
+        let spinner = { (scalar: Unicode.Scalar) in
+            switch scalar.value {
+            case 0x2800...0x28FF, 0x25CB...0x25D3, 0x2722...0x2725, 0x2731...0x273F, 0x00B7: true
+            default: false
+            }
+        }
+        let scalars = title.unicodeScalars.drop { spinner($0) || $0.properties.isWhitespace }
+        return scalars.isEmpty ? title : String(String.UnicodeScalarView(scalars))
+    }
+
+    /// The detail after the workspace name on line two of the session palette, the Ctrl-Tab switcher, and the
+    /// title bar: the focused pane's terminal title unless that is already the `displayName` (so it ADDS
+    /// context), else the focused cwd. Over SSH the remote sets the OSC title to `user@host:dir` while local
+    /// OSC 7 stops, freezing `currentCwd` at a stale local path — so preferring the title surfaces the remote
+    /// location. An unnamed session already shows the title as line 1, so this falls through to the cwd; a
+    /// plain local session has no title (local auto-title is suppressed), so this is the cwd too.
+    public var subtitleDetail: String {
+        if let title = focusedOscTitle?.trimmedOrNil, title != displayName { return title }
+        return focusedCwd
+    }
+
+    /// `subtitleDetail` led by `remoteHost` for a session attached from another Mac. An attached session
+    /// reports its cwd on that Mac, so without the host its row reads exactly like a local one.
+    public var switcherDetail: String {
+        guard let remoteHost else { return subtitleDetail }
+        return "\(remoteHost) · \(subtitleDetail)"
+    }
+
+    /// The live `currentCwd` once a PWD report arrived, else `initialCwd`. Always the PRIMARY pane's, never
+    /// focus-aware (cf. `focusedCwd`): it seeds new split, overlay, scratch and quick terminals. A custom
+    /// command's `AGT_SESSION_PWD` resolves through `cwd(for:)`, so the split's and scratch's values can differ.
+    public var effectiveCwd: String { currentCwd ?? initialCwd }
+
+    /// The stable token of the surface currently in `pane`'s slot (`TerminalSurface.paneToken`), the inverse
+    /// of `paneRole(forToken:)`; empty while the slot holds no surface.
+    public func paneToken(for pane: CommandContext.Pane) -> String {
+        switch pane {
+        case .left:
+            return surface?.paneToken ?? daemonToken(paneIdentity)
+        case .right:
+            return splitSurface?.paneToken ?? splitPaneIdentity.map(daemonToken) ?? ""
+        case .scratch:
+            return scratchSurface?.paneToken ?? (scratchClientIdentity ?? scratchDaemon?.identity)?.uuidString ?? ""
+        }
+    }
+
+    /// The focused pane's surface: the split (right) while it has focus and exists, else the primary. With the
+    /// split hidden the detail pane maximizes this one and focus helpers target it, so typing always reaches
+    /// the visible pane.
+    public var activeSurface: (any TerminalSurface)? {
+        splitFocused && splitSurface != nil ? splitSurface : surface
+    }
+
+    /// The one addressable pane for control arms acting on "the session" rather than a named `--pane`
+    /// (`session.copy`, `session.paste`, `session.selectall`, `font.*`): IDENTICAL to `surface` everywhere,
+    /// including a promoted split survivor, which `closePrimaryPane` moves into `surface` while nilling
+    /// `splitSurface`. `?? splitSurface` is a defensive fallback keeping the arms answering (not `session not
+    /// realized`) should `surface` ever be nil while a split shell lives. NOT focus-aware, unlike
+    /// `activeSurface`: a shown split still addresses the main pane, so `session.selectall` and its
+    /// `session.copy` read-back stay on one surface.
+    public var addressableSurface: (any TerminalSurface)? { surface ?? splitSurface }
+
+    /// The pane's overlay, nil when that pane has none.
+    public func paneOverlay(_ pane: OverlayPane) -> PaneOverlay? { self[keyPath: pane.overlaySlot] }
+
+    /// The pane overlay's surface, nil before the factory realizes it or after teardown.
+    public func paneOverlaySurface(_ pane: OverlayPane) -> (any TerminalSurface)? {
+        self[keyPath: pane.surfaceSlot]
+    }
+
+    /// The pane overlay program's exit status, surviving the overlay's close so
+    /// `session.overlay.result --pane` can report it; nil until one exits or after the next open on that pane.
+    public func paneOverlayExitCode(_ pane: OverlayPane) -> Int? { self[keyPath: pane.exitCodeSlot] }
+
+    /// The panes with an overlay up, ordered left then right — the `paneOverlays` tree read-back source.
+    public var openPaneOverlays: [OverlayPane] {
+        OverlayPane.allCases.filter { paneOverlay($0) != nil }
+    }
+
+    /// Which pane owns keyboard focus RIGHT NOW — the single predicate every pane-scoped cover, zoom and
+    /// focus decision derives from, so none of them can disagree about which pane the user is looking at.
+    /// `.right` needs `splitFocused` AND a right pane that exists: shown side-by-side (`isSplit`, whose
+    /// surface may still be unrealized) or hidden-maximized with a live `splitSurface`. Without the second
+    /// term a promoted survivor that momentarily re-raised `splitFocused` would resolve `.right` (the
+    /// `activeSurface` idiom); without `isSplit` a freshly shown split whose lazy surface has not realized
+    /// yet would resolve `.left` while the user's caret sits in the right pane.
+    public var focusedPane: OverlayPane {
+        splitFocused && (isSplit || splitSurface != nil) ? .right : .left
+    }
+
+    /// The focused pane's overlay pane, nil when that pane's slot is empty or its overlay hidden.
+    public var focusedOverlayPane: OverlayPane? {
+        let pane = focusedPane
+        return paneOverlayVisible(pane) ? pane : nil
+    }
+
+    /// Whether the detail pane LAYS THIS PANE OUT at all — the precondition for realizing a surface in it,
+    /// since surfaces defer creation until they get a nonzero backing size. Not `deckHostsSurface`, which
+    /// also yields a placeholder while zoom or the dashboard owns the slot.
+    public func rendersPane(_ pane: OverlayPane) -> Bool {
+        content == .terminal && (isSplit || pane == focusedPane)
+    }
+
+    /// The panes the detail pane lays out RIGHT NOW, ordered left then right. Derived from the observed
+    /// `isSplit`/`splitFocused`, so the deck can watch it for the moment a pane stops being laid out.
+    public var renderedPanes: [OverlayPane] {
+        OverlayPane.allCases.filter(rendersPane)
+    }
+
+    /// Whether ANY host is claiming this pane's overlay slot: the deck lays the pane out, or terminal zoom
+    /// targets that overlay surface. The deck is not the only host — while zoom owns a slot `deckHostsSurface`
+    /// deliberately returns false for it and the zoom layer mounts the surface instead — and the zoom target
+    /// is a claim from the moment it is set, before SwiftUI mounts that layer. `overlay-left`/`overlay-right`
+    /// are advertised zoomable as soon as the slot exists (`TerminalZoomSurface.isAvailable`), so a selected
+    /// zoom target with a pending host must count.
+    public func paneOverlayHosted(_ pane: OverlayPane) -> Bool {
+        rendersPane(pane) || TerminalZoomRegistry.shared.targets(sessionID: id, surface: pane.zoomSurface)
+    }
+
+    /// Drops a pane overlay that can never come to life: NO host claims its slot AND its terminal was never
+    /// realized, so no program was ever started and nothing would ever close the slot —
+    /// `session.overlay.result --pane` would answer "overlay still running" forever and `--block` would hang
+    /// on it. `openPaneOverlay` only proves the pane renders at REQUEST time; the surface is realized later
+    /// by whichever host mounts it, and the pane can stop rendering in between. A REALIZED overlay is left
+    /// alone: unmounting its surface keeps the program running and a re-show remounts it. Called wherever
+    /// `renderedPanes` or the zoom target can change, so the bad state is torn down instead of described.
+    ///
+    /// The test is `TerminalSurface.isRealized`, NOT an occupied surface slot: the deck parks the view in the
+    /// slot before its terminal is created, and creation defers until the view is sized, so a slot filled in
+    /// that gap holds a view with no libghostty surface and no process. `teardownPaneOverlay` frees that
+    /// stillborn view too, since a later open on the pane would otherwise reuse it — it is baked with the
+    /// RETIRED overlay's command, cwd, and colors.
+    @discardableResult public func dropUnrealizedPaneOverlays() -> Bool {
+        let stranded = OverlayPane.allCases.filter {
+            paneOverlay($0) != nil && !paneOverlayIsHtml($0) && paneOverlaySurface($0)?.isRealized != true
+                && !paneOverlayHosted($0)
+        }
+        stranded.forEach { teardownPaneOverlay($0) }
+        return !stranded.isEmpty
+    }
+
+    /// The pane whose overlay slot CURRENTLY holds `surface`, nil when neither does. Derived LIVE from slot
+    /// occupancy, like `paneRole(forToken:)`: `promotePaneOverlay` moves the right pane's overlay surface
+    /// into the LEFT slot without rebuilding it, so its own exit/status/focus callbacks must ask which slot
+    /// they now sit in rather than trust the pane captured when the factory built them — a captured `.right`
+    /// would close nothing, record the status on a dead slot, and leave the promoted pane covered forever.
+    public func paneOverlayRole(of surface: any TerminalSurface) -> OverlayPane? {
+        OverlayPane.allCases.first { paneOverlaySurface($0) === surface }
+    }
+
+    /// Frees the pane's overlay outright: tears the surface down and clears the slot, the surface, AND the
+    /// exit code. Used where the PANE ITSELF goes away, unlike `AppStore.closePaneOverlay`, which keeps the
+    /// exit code readable by `session.overlay.result`; here no pane survives to be asked. `teardown()` nils
+    /// the surface's store-capturing callbacks, breaking the store/session/surface/closure cycle.
+    public func teardownPaneOverlay(_ pane: OverlayPane) {
+        let replica = paneOverlay(pane)?.replica
+        HtmlOverlayReleases.shared.release(paneOverlay(pane)?.html)
+        paneOverlaySurface(pane)?.teardown()
+        setPaneOverlay(nil, pane: pane)
+        setPaneOverlaySurface(nil, pane: pane)
+        setPaneOverlayExitCode(nil, pane: pane)
+        if let replica { onReplicaOverlayClosed?(replica.job) }
+    }
+
+    /// The pane-slot writers, paired with the `paneOverlay*` readers through `OverlayPane`'s key paths.
+    public func setPaneOverlay(_ overlay: PaneOverlay?, pane: OverlayPane) {
+        self[keyPath: pane.overlaySlot] = overlay
+    }
+
+    public func setPaneOverlaySurface(_ surface: (any TerminalSurface)?, pane: OverlayPane) {
+        self[keyPath: pane.surfaceSlot] = surface
+    }
+
+    public func setPaneOverlayExitCode(_ code: Int?, pane: OverlayPane) {
+        self[keyPath: pane.exitCodeSlot] = code
+    }
+
+    /// Frees BOTH pane overlays; the whole-session form of `teardownPaneOverlay(_:)`, called wherever the
+    /// session is discarded alongside `teardownOverlaySlot()` for the session-wide slot.
+    public func teardownPaneOverlays() {
+        OverlayPane.allCases.forEach { teardownPaneOverlay($0) }
+    }
+
+    /// Moves the right pane's overlay — slot, surface, and exit code together — into the left slot, following
+    /// the split survivor `closePrimaryPane` promotes into the primary pane, so the overlay keeps covering the
+    /// same shell. The left slot must already be freed. The surface MOVES rather than being rebuilt, so its
+    /// callbacks re-resolve their pane through `paneOverlayRole(of:)` instead of a captured one.
+    public func promotePaneOverlay() {
+        setPaneOverlay(rightOverlay, pane: .left)
+        setPaneOverlaySurface(rightOverlaySurface, pane: .left)
+        setPaneOverlayExitCode(rightOverlayExitCode, pane: .left)
+        setPaneOverlay(nil, pane: .right)
+        setPaneOverlaySurface(nil, pane: .right)
+        setPaneOverlayExitCode(nil, pane: .right)
+    }
+
+    /// Resolves a surface's stable spawn token (`TerminalSurface.paneToken`, baked as `ELIS_PANE_ID` and
+    /// forwarded by the agent-status hook as `session.status --pane-id`) to the slot it CURRENTLY occupies.
+    /// Derived LIVE from slot occupancy, so a promoted split survivor resolves `.left` and a fresh re-split
+    /// helper `.right` even though both shells were baked with the same stale `right` role — the #199 fix.
+    /// nil for an empty or unknown token (torn-down surface, or a shell spawned before the token existed), so
+    /// the caller falls back to the baked `--pane`; mirrors the live-role read `GhosttySurfaceView.isSplitPane`
+    /// gives the pane-scoped keystroke-clear (see the Notifications rule).
+    public func paneRole(forToken token: String) -> StatusPane? {
+        guard !token.isEmpty else { return nil }
+        if surface?.paneToken == token { return .left }
+        if splitSurface?.paneToken == token { return .right }
+        if scratchSurface?.paneToken == token { return .scratch }
+        if surface == nil, daemonToken(paneIdentity) == token { return .left }
+        if splitSurface == nil, let split = splitPaneIdentity, daemonToken(split) == token { return .right }
+        if scratchSurface == nil, (scratchClientIdentity ?? scratchDaemon?.identity)?.uuidString == token { return .scratch }
+        return nil
+    }
+
+    /// daemonToken is the `ELIS_PANE_ID` of a surfaceless daemon-backed pane, empty otherwise.
+    private func daemonToken(_ identity: UUID) -> String {
+        daemonBackedPanes.contains(identity) ? identity.uuidString : ""
+    }
+
+    /// PaneAddress is the outcome of resolving a command's `--pane-id` and `--pane` pair.
+    public enum PaneAddress: Equatable, Sendable {
+        /// pane is nil when neither selector was given and the command's own default applies.
+        case pane(StatusPane?)
+        case unknownToken(String)
+    }
+
+    /// paneAddress resolves `token` against the live slots, then falls back to `pane`. An empty token
+    /// counts as absent; an unknown one with no `pane` beside it is refused.
+    public func paneAddress(token: String?, pane: StatusPane?) -> PaneAddress {
+        guard let token, !token.isEmpty else { return .pane(pane) }
+        guard let resolved = paneRole(forToken: token) ?? pane else { return .unknownToken(token) }
+        return .pane(resolved)
+    }
+
+    /// The surface on top and owning keyboard focus: an active PROGRAM overlay (full OR floating), else the
+    /// scratch, else the focused pane's own overlay, else the active pane. The overlay renders above the
+    /// scratch, and a full overlay or the scratch covers the panes (INCLUDING their pane overlays), so
+    /// session-focus helpers route through this to keep first responder off a covered surface — except
+    /// `TerminalSurfaceHost.focusIfNeeded`, which targets its own deck slot, already gated by `isActive`. nil while a
+    /// pane overlay's slot is open but its surface has not realized yet; the bounded focus retries re-resolve
+    /// a beat later.
+    ///
+    /// A HUD in the slot is SKIPPED, which is what keeps it passive: roughly eight app focus-routing sites
+    /// read this (sidebar click, session selection, overlay-close refocus), and handing any of them the HUD
+    /// helper would take first responder off the session the message is about — the deck's exemptions one
+    /// layer down.
+    public var topmostSurface: (any TerminalSurface)? {
+        if htmlOverlayVisible { return nil }
+        if programOverlayVisible { return overlaySurface }
+        if scratchActive { return scratchSurface }
+        if let pane = focusedOverlayPane { return paneOverlaySurface(pane) }
+        return activeSurface
+    }
+
+    /// Where pane-focus moves first responder when asked for `wantSplit`: under a session-wide cover the
+    /// requested pane is hidden, so stay on `topmostSurface`; else the pane's OWN overlay when one covers it,
+    /// so `session.focus right` cannot make a covered pane first responder; else the pane itself. Returns nil
+    /// for a covering pane overlay whose surface has not realized yet, leaving the retry to re-resolve.
+    /// A HUD is no cover, so the requested pane stays reachable while one is up.
+    public func focusTarget(wantSplit: Bool) -> (any TerminalSurface)? {
+        if coverOverlayVisible || scratchActive { return topmostSurface }
+        let pane: OverlayPane = wantSplit ? .right : .left
+        if paneOverlayVisible(pane) { return paneOverlaySurface(pane) }
+        return wantSplit ? splitSurface : surface
+    }
+
+    /// The pane-or-scratch surface actually ON SCREEN: the scratch when it covers the panes with no program
+    /// overlay up, else the focused pane — so `session.text` (no `--pane`) and `session.search` hit the
+    /// scratch, not the pane beneath. A program overlay routes via `topmostSurface`; this stays
+    /// pane-vs-scratch, like `searchTarget`, and a HUD leaves the scratch on screen underneath it.
+    public var onScreenSurface: (any TerminalSurface)? {
+        scratchActive && !coverOverlayVisible ? topmostSurface : activeSurface
+    }
+
+    /// The match counter for the search bar and `session.search`: empty before a query runs, `"no matches"` at
+    /// zero, `"N matches"` while none is selected, `"S of N"` once one is. `selected` is clamped to `total` so
+    /// a stale index (the count shrank before the next SEARCH_SELECTED lands) never reads "3 of 2".
+    public var searchDisplayText: String {
+        guard let total = searchTotal else { return "" }
+        guard total > 0 else { return "no matches" }
+        guard let selected = searchSelected else { return "\(total) matches" }
+        return "\(min(selected, total)) of \(total)"
+    }
+
+    /// Resets all search state. Called from the pane-teardown/promote paths (`closeSplit`, `closePrimaryPane`,
+    /// `closeSplitPane`) so a session whose searched pane was destroyed or promoted keeps no stuck, no-op bar:
+    /// the weak `searchSurface` zeroes but `searchActive` would otherwise stay true.
+    public func clearSearch() {
+        searchActive = false
+        searchNeedle = ""
+        searchTotal = nil
+        searchSelected = nil
+        searchSurface = nil
+    }
+}

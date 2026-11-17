@@ -3,27 +3,27 @@
 ## Overview
 - Add keyboard navigation BETWEEN sessions: step to previous/next session (⌥⌘↑ previous, ⌥⌘↓ next) and jump to the first/last session (menu + palette + control only, no hotkey). The bare-⌘ arrow cluster was rejected — it shadows text-field navigation — so previous/next use ⌥⌘ and first/last get no key.
 - Distinct from the two existing session-switching affordances: the ⌃Tab MRU switcher (recency order) and the ⌃P fuzzy "Go to Session" palette (search). What's missing is *predictable spatial stepping* in the sidebar's visual order — this fills that gap.
-- Exposed on all three surfaces per the project's HARD keep-in-sync rule: menu bar + action palette + control channel (`session.go`) / `hangarctl session go`.
+- Exposed on all three surfaces per the project's HARD keep-in-sync rule: menu bar + action palette + control channel (`session.go`) / `elisctl session go`.
 
 ## Context (from discovery)
-- Selection + tree live in `HangarCore.AppStore` (host-free). `selectSession(_:)` (AppStore.swift:77) already pushes recency, clears the unseen badge, derives the workspace, and persists — navigation routes through it so all of that comes for free.
+- Selection + tree live in `ElisCore.AppStore` (host-free). `selectSession(_:)` (AppStore.swift:77) already pushes recency, clears the unseen badge, derives the workspace, and persists — navigation routes through it so all of that comes for free.
 - The flattened tree order is `workspaces.flatMap(\.sessions)` (already the idiom used by the switcher's `begin()` and `paletteSessions()`).
 - GUI seam is `AppActions` (app target, `@MainActor`); `focusActiveSession()` (AppActions.swift:298) moves first responder into the active session's focused pane after a selection change.
-- Menu bar is `hangarApp.swift` `.commands`; the pane-focus items (⌘⌥←/→) sit in `CommandGroup(after: .toolbar)` (~lines 165-172) — the new session-nav items belong alongside them. Action palette entries come from `AppActions.paletteActions()` (~line 191).
-- Control: `ControlProtocol.swift` holds the `Command` enum + `ControlArgs`; `ControlServer.swift` dispatches. `resolvePlacementStore(_ window:)` (ControlServer.swift:627) resolves the frontmost-or-`--window` store WITHOUT resolving a specific session — exactly what relative navigation needs (it acts on that store's current selection). `hangarctl` subcommands live in `hangarctlKit/Commands.swift`; `Session.Focus` is the closest template (sends `.sessionFocus` with `args.pane`, uses `ClientOptions` for `--window`).
+- Menu bar is `elisApp.swift` `.commands`; the pane-focus items (⌘⌥←/→) sit in `CommandGroup(after: .toolbar)` (~lines 165-172) — the new session-nav items belong alongside them. Action palette entries come from `AppActions.paletteActions()` (~line 191).
+- Control: `ControlProtocol.swift` holds the `Command` enum + `ControlArgs`; `ControlServer.swift` dispatches. `resolvePlacementStore(_ window:)` (ControlServer.swift:627) resolves the frontmost-or-`--window` store WITHOUT resolving a specific session — exactly what relative navigation needs (it acts on that store's current selection). `elisctl` subcommands live in `elisctlKit/Commands.swift`; `Session.Focus` is the closest template (sends `.sessionFocus` with `args.pane`, uses `ClientOptions` for `--window`).
 
 ## Development Approach
 - **testing approach**: Regular (code first, then tests per task).
 - complete each task fully before moving to the next.
 - make small, focused changes; match existing file style.
 - **CRITICAL: every task MUST include new/updated tests** for the code in that task.
-- **CRITICAL: all tests must pass before starting next task** — `cd HangarCore && swift test` must stay green.
-- keep `HangarCore` host-free (no AppKit / GhosttyKit / Metal imports).
+- **CRITICAL: all tests must pass before starting next task** — `cd ElisCore && swift test` must stay green.
+- keep `ElisCore` host-free (no AppKit / GhosttyKit / Metal imports).
 - update this plan file's checkboxes as work completes.
 
 ## Testing Strategy
-- **unit tests (HangarCore, fast ~0.2s)**: `navigateSession` (all four directions, wrap, edges), the `SessionNavigation(wire:)` mapping, the `.sessionGo`/`args.to` protocol round-trip, and the `hangarctl session go` request-building — all host-free, required every task that touches core/protocol/CLI.
-- **XCUITest (slow, run FOCUSED only)**: one tty-oracle test in `HangarUITests` verifying focus follows selection when navigating. Per the project UI-test cadence convention, run ONLY the new test (`-only-testing:HangarUITests/SessionNavUITests`), never the full suite as a gate.
+- **unit tests (ElisCore, fast ~0.2s)**: `navigateSession` (all four directions, wrap, edges), the `SessionNavigation(wire:)` mapping, the `.sessionGo`/`args.to` protocol round-trip, and the `elisctl session go` request-building — all host-free, required every task that touches core/protocol/CLI.
+- **XCUITest (slow, run FOCUSED only)**: one tty-oracle test in `ElisUITests` verifying focus follows selection when navigating. Per the project UI-test cadence convention, run ONLY the new test (`-only-testing:ElisUITests/SessionNavUITests`), never the full suite as a gate.
 
 ## Progress Tracking
 - mark completed items with `[x]` immediately when done.
@@ -37,7 +37,7 @@
 
 ## Technical Details
 
-### Core method (HangarCore/Sources/HangarCore/AppStore.swift)
+### Core method (ElisCore/Sources/ElisCore/AppStore.swift)
 ```swift
 public enum SessionNavigation: Sendable { case next, previous, first, last }
 
@@ -61,7 +61,7 @@ public func navigateSession(_ direction: SessionNavigation) {
 }
 ```
 
-### Wire mapping (HangarCore, alongside the enum)
+### Wire mapping (ElisCore, alongside the enum)
 ```swift
 extension SessionNavigation {
     init?(wire: String) {                              // CLI uses "prev"; the enum case is .previous
@@ -76,11 +76,11 @@ extension SessionNavigation {
 }
 ```
 
-### Control protocol (HangarCore/Sources/HangarCore/ControlProtocol.swift)
+### Control protocol (ElisCore/Sources/ElisCore/ControlProtocol.swift)
 - `Command`: add `case sessionGo = "session.go"`.
 - `ControlArgs`: add `public var to: String?` and add `to` (defaulting nil) to the existing public `init` (ControlProtocol.swift:77).
 
-### ControlServer arm (Hangar/Control/ControlServer.swift)
+### ControlServer arm (Elis/Control/ControlServer.swift)
 ```swift
 case .sessionGo:
     guard let dir = (request.args?.to).flatMap(SessionNavigation.init(wire:)) else {
@@ -95,7 +95,7 @@ case .sessionGo:
     }
 ```
 
-### hangarctl (HangarCore/Sources/hangarctlKit/Commands.swift)
+### elisctl (ElisCore/Sources/elisctlKit/Commands.swift)
 - Add a `Go` subcommand to `Session.subcommands`, mirroring `Session.Focus` but with `ClientOptions` only (NO `TargetOptions` — navigation is relative to the current selection, so `--target` is meaningless; `--window` still applies):
 ```swift
 struct Go: RequestCommand {
@@ -118,54 +118,54 @@ struct Go: RequestCommand {
 ### Task 1: Core navigation method in AppStore
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreTests.swift`
 
 - [x] add `public enum SessionNavigation { case next, previous, first, last }` to `AppStore.swift`
 - [x] add `public func navigateSession(_ direction:)` per Technical Details (flatten tree, wrap next/prev, ends for first/last, no-selection→first, empty→no-op, route through `selectSession`)
 - [x] write tests: `.next`/`.previous` step through a multi-workspace tree in flattened order (crossing workspace boundaries)
 - [x] write tests: wrap — `.next` from the last selects the first; `.previous` from the first selects the last
 - [x] write tests: `.first`/`.last` select the tree ends; no-selection→first; single-session is a stable no-op-ish; 0-session is a no-op (selection unchanged)
-- [x] run `cd HangarCore && swift test` — must pass before next task
+- [x] run `cd ElisCore && swift test` — must pass before next task
 
 ### Task 2: GUI surfaces — AppActions, menu, palette, sidebar reveal
 
 **Files:**
-- Modify: `Hangar/AppActions.swift`
-- Modify: `Hangar/hangarApp.swift`
-- Modify: `Hangar/Views/WorkspaceSidebar.swift`
-- Create: `HangarUITests/SessionNavUITests.swift`
+- Modify: `Elis/AppActions.swift`
+- Modify: `Elis/elisApp.swift`
+- Modify: `Elis/Views/WorkspaceSidebar.swift`
+- Create: `ElisUITests/SessionNavUITests.swift`
 
 - [x] add `selectNextSession()/selectPreviousSession()/selectFirstSession()/selectLastSession()` to `AppActions`, each calling `store?.navigateSession(…)` then `focusActiveSession()`
 - [x] add four `paletteActions()` entries: "Previous Session" ⌥⌘↑, "Next Session" ⌥⌘↓, "First Session" (no glyph), "Last Session" (no glyph) (keep the glyphs byte-consistent with the menu shortcuts below — `paletteActions()` carries a hand-sync comment)
-- [x] add four menu Buttons in `hangarApp.swift` `.commands` (near the pane-focus items): Previous/Next with `.keyboardShortcut(.upArrow/.downArrow, modifiers: [.command, .option])`, First/Last with no shortcut
+- [x] add four menu Buttons in `elisApp.swift` `.commands` (near the pane-focus items): Previous/Next with `.keyboardShortcut(.upArrow/.downArrow, modifiers: [.command, .option])`, First/Last with no shortcut
 - [x] in `WorkspaceSidebar.syncSelection()` (WorkspaceSidebar.swift:394), expand the owning workspace if collapsed BEFORE the `row(forItem:)` lookup (which currently bails on `row < 0`), then `scrollRowToVisible` so an off-screen target row is brought into view
 - [x] write `SessionNavUITests` tty-oracle test: two sessions, navigate between them via the shortcuts, type `tty > <file>` into the focused pane, assert which shell received the keystrokes (focus follows selection)
-- [x] build the app; run ONLY `-only-testing:HangarUITests/SessionNavUITests` — must pass before next task
+- [x] build the app; run ONLY `-only-testing:ElisUITests/SessionNavUITests` — must pass before next task
 
-### Task 3: Control channel — protocol, server, hangarctl
+### Task 3: Control channel — protocol, server, elisctl
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `Hangar/Control/ControlServer.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/Commands.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `Elis/Control/ControlServer.swift`
+- Modify: `ElisCore/Sources/elisctlKit/Commands.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/CommandsTests.swift`
 
 - [x] add `Command.sessionGo = "session.go"`, `ControlArgs.to`, and `to` to the `ControlArgs` public init
-- [x] add the `SessionNavigation(wire:)` mapping (Technical Details) alongside the enum in `HangarCore`
+- [x] add the `SessionNavigation(wire:)` mapping (Technical Details) alongside the enum in `ElisCore`
 - [x] add the `.sessionGo` dispatch arm in `ControlServer` via `resolvePlacementStore` (unknown/missing `to` → structured error; returns the newly-selected id in `result.id`)
-- [x] add the `Session.Go` hangarctl subcommand and register it in `Session.subcommands`
+- [x] add the `Session.Go` elisctl subcommand and register it in `Session.subcommands`
 - [x] write protocol round-trip test (`ControlProtocolTests`): encode/decode a `.sessionGo` request with `args.to`
 - [x] write wire-mapping test: `SessionNavigation(wire:)` for next/prev/previous/first/last + an unknown string → nil
-- [x] write CLI request test (`CommandsTests`): `hangarctl session go --to next` (and `--to prev`, `--window …`) build the expected `ControlRequest`
-- [x] run `cd HangarCore && swift test` — must pass before next task
+- [x] write CLI request test (`CommandsTests`): `elisctl session go --to next` (and `--to prev`, `--window …`) build the expected `ControlRequest`
+- [x] run `cd ElisCore && swift test` — must pass before next task
 
 ### Task 4: Verify acceptance criteria
-- [x] verify navigation works in a running build (prev/next wrap via ⌥⌘↑/⌥⌘↓; first/last jump via menu/palette; focus lands in the moved-to terminal) — verified via `SessionNavUITests.testSessionNavigationFollowsFocus` tty-oracle (asserts focus follows selection) + HangarCore `navigateNextWrapsFromLastToFirst`/`navigatePreviousWrapsFromFirstToLast`/`navigateFirstAndLastJumpToEnds` for wrap/first/last
-- [x] verify cross-workspace stepping and the collapsed-workspace reveal — cross-workspace stepping covered by HangarCore `navigateNextStepsForwardCrossingWorkspaces`/`navigatePreviousStepsBackwardCrossingWorkspaces`; collapsed reveal wired in `WorkspaceSidebar.syncSelection` (`expandItem(owner)` + `scrollRowToVisible`), compile-checked (visual reveal is a manual GUI check, not headless-automatable)
-- [x] verify `hangarctl session go --to next|prev|first|last` drives the frontmost window, and `--window <id>` targets a specific window — CLI request-building asserted by `CommandsTests.sessionGoNext`/`sessionGoPrev`/`sessionGoWithWindow`; protocol round-trip by `ControlProtocolTests.sessionGoRoundTripsWithDirection`; `ControlServer.sessionGo` arm (`resolvePlacementStore` + `navigateSession`) is compile-checked. Live socket round-trip is a manual GUI check — not automatable headless
-- [x] run `cd HangarCore && swift test` (full host-free suite) green — 315 tests in 15 suites passed
+- [x] verify navigation works in a running build (prev/next wrap via ⌥⌘↑/⌥⌘↓; first/last jump via menu/palette; focus lands in the moved-to terminal) — verified via `SessionNavUITests.testSessionNavigationFollowsFocus` tty-oracle (asserts focus follows selection) + ElisCore `navigateNextWrapsFromLastToFirst`/`navigatePreviousWrapsFromFirstToLast`/`navigateFirstAndLastJumpToEnds` for wrap/first/last
+- [x] verify cross-workspace stepping and the collapsed-workspace reveal — cross-workspace stepping covered by ElisCore `navigateNextStepsForwardCrossingWorkspaces`/`navigatePreviousStepsBackwardCrossingWorkspaces`; collapsed reveal wired in `WorkspaceSidebar.syncSelection` (`expandItem(owner)` + `scrollRowToVisible`), compile-checked (visual reveal is a manual GUI check, not headless-automatable)
+- [x] verify `elisctl session go --to next|prev|first|last` drives the frontmost window, and `--window <id>` targets a specific window — CLI request-building asserted by `CommandsTests.sessionGoNext`/`sessionGoPrev`/`sessionGoWithWindow`; protocol round-trip by `ControlProtocolTests.sessionGoRoundTripsWithDirection`; `ControlServer.sessionGo` arm (`resolvePlacementStore` + `navigateSession`) is compile-checked. Live socket round-trip is a manual GUI check — not automatable headless
+- [x] run `cd ElisCore && swift test` (full host-free suite) green — 315 tests in 15 suites passed
 - [x] run the focused `SessionNavUITests` green — 1 test passed (29.1s)
 
 ### Task 5: Documentation

@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: HangarTests/SessionHostClientTests.swift:testTwoRacingClientsUseOneRoot
+where: ElisTests/SessionHostClientTests.swift:testTwoRacingClientsUseOneRoot
 added: 2026-09-20
 ---
 # a racing session-host client sometimes creates an app-rooted daemon
@@ -21,11 +21,11 @@ Two source-confirmed routes can create a daemon under the app without a timeout;
 as the route taken in this failure:
 
 - An initial inventory launch, exit or parse failure in
-  `HangarCore/Sources/SessionHostRuntime/HostBackend.swift:149` makes
-  `Host.swift:82` return a `before` failure. `HangarCore/Sources/HangarCore/SessionHost.swift:190`
-  selects `fullAttach`, and `HangarCore/Sources/SessionHostRuntime/Client.swift:45` executes the
+  `ElisCore/Sources/SessionHostRuntime/HostBackend.swift:149` makes
+  `Host.swift:82` return a `before` failure. `ElisCore/Sources/ElisCore/SessionHost.swift:190`
+  selects `fullAttach`, and `ElisCore/Sources/SessionHostRuntime/Client.swift:45` executes the
   original attach from the app's child. If the daemon is absent, that client creates it.
-- A temporary attach spawn failure at `HangarCore/Sources/SessionHostRuntime/Host.swift:87`, or an
+- A temporary attach spawn failure at `ElisCore/Sources/SessionHostRuntime/Host.swift:87`, or an
   early child exit at `Host.swift:117`, returns a `started` failure. The client selects `uncertain`.
   A `session new --command` request (`--ends-pane`) then attaches with a "session is gone" guard
   (`Client.attachArgv`), which never replays the payload and ends the pane when the daemon is absent, so
@@ -37,7 +37,7 @@ On recurrence, read unified logging for the client PID and failure time:
 
 ```sh
 /usr/bin/log show --last 1h --style compact \
-  --predicate 'subsystem == "ua.naiksoftware.hangar" AND category == "session-host"'
+  --predicate 'subsystem == "ua.naiksoftware.elis" AND category == "session-host"'
 ```
 
 `client NAME phase=... error=...` records a thrown error. `beforeDispatch` includes finding/starting
@@ -48,25 +48,25 @@ message still appears when a command may have run.
 
 The hosted fixture retains `client-INDEX-NAME_SUFFIX.stderr` for non-terminal clients only; terminal
 clients keep stderr on their PTY. Every run retains these files and, when present, `host.log` under
-`/tmp/hangar-session-host-evidence/shc-UUID/`, outside the removed fixture directory.
+`/tmp/elis-session-host-evidence/shc-UUID/`, outside the removed fixture directory.
 The host log includes the underlying initial inventory error and connection rejection errors.
 Preserve those files and the test result before investigating a recurrence.
 Do not change deadlines or fallback policy without identifying the failing path.
 
-Second sighting, 2026-09-26, in `HangarTests/SessionHostAcceptanceTests.swift`
+Second sighting, 2026-09-26, in `ElisTests/SessionHostAcceptanceTests.swift`
 `testPrimaryDaemonLostAfterInventoryIsRecreatedByHost`: the recreated daemon's leader reported
 responsible process 88892 instead of the session host 90216. It failed once in a full hosted run
 (977 tests) and passed in the full run before it and in an isolated rerun of the class. The session-host
-log for that run holds `hangar-session-host[90241] ... host stage=started message=attach client exited or
+log for that run holds `elis-session-host[90241] ... host stage=started message=attach client exited or
 failed before readiness` at 01:43:48, inside the failing test's window, which matches the second route
 above (`started` failure, bare attach from the app's child). The correlation is by time only; the pid in
 that line is not the host pid the test recorded, and the retained `shc-FF830277-...` files from that minute
 are empty.
 
-Third sighting, 2026-10-01, in `HangarTests/ControlServerZmxTests.swift`
+Third sighting, 2026-10-01, in `ElisTests/ControlServerZmxTests.swift`
 `testRealClientPaneChangesFromSupervisorToOrphanedWhileBarePaneReadsApp`: the supervised pane read `app`
 instead of `supervisor`. It failed once in a full hosted run (1086 tests) and passed in the full run
-before it. The session-host log holds `client hangar-aaaa... host stage=started message=attach client
+before it. The session-host log holds `client elis-aaaa... host stage=started message=attach client
 exited or failed before readiness` at 11:48:27, inside the failing test, the second route again. The
 retained `shc-7B86B412-...` `host.log` is empty. Afterwards the test passed 83 times alone, its class 60
 times, and 7 further full hosted runs showed no early stop.
@@ -77,9 +77,9 @@ in 5 isolated iterations of the method, where the 2026-10-01 count was 83 passes
 stop reason:
 
 ```
-attach client PID for hangar-aaaa... stopped before readiness: exited with wait status 256;
-output: session "hangar-aaaa..." created
-error: cannot connect to session "hangar-aaaa...": FileNotFound
+attach client PID for elis-aaaa... stopped before readiness: exited with wait status 256;
+output: session "elis-aaaa..." created
+error: cannot connect to session "elis-aaaa...": FileNotFound
 ```
 
 So the second route is confirmed, and the attach client's own exit is now on record: `zmx attach`
@@ -97,7 +97,7 @@ Sixth sighting, 2026-10-05, the same test, once in a full hosted run (1190 tests
 symptom: the test stopped after 10.2 seconds, the length of the fixture's `waitForLeaders` and `hostPID`
 deadlines. XCTest reported `No such process` at `SessionHostClientTests.swift:345`, which is the throw
 `cleanup()` swallows with `try?` and not the error that ended the test. The retained `zmx.log` in
-`shc-A35A9015-...` shows the UNMEDIATED client (`hangar-bbbb...`) logging `creating session` and
+`shc-A35A9015-...` shows the UNMEDIATED client (`elis-bbbb...`) logging `creating session` and
 `pty spawned` but never `attached`; its daemon log has no `client connected` and no `kill received`,
 while `zmx kill` was sent, so that daemon was unreachable through its socket. `host.log` is empty and
 unified logging has no `session-host` record in the window, so the host and the mediated client saw no
@@ -128,7 +128,7 @@ one set from another session, and 0 of 20 alone.
 create window, 0 of 40 untraced on the same build that failed, and 0 failures in two and a half full hosted
 runs with a failure-only trace (each final-name delete recorded after it ran, plus failed connects). Every
 retained trace held only the teardown removals. Each fixture keeps its own `ZMX_DIR` and zmx's kill and
-cleanup touch only that directory, so the shared `hangar-aaaa...` name in core and hosted tests is not a
+cleanup touch only that directory, so the shared `elis-aaaa...` name in core and hosted tests is not a
 cross-suite remover.
 
 With 0003 the staged socket is published under its final name before `created` is printed, which
@@ -153,5 +153,5 @@ path never reproduced.
 Eighth sighting, 2026-11-08, in the host-free suite: `SessionHostServerTests`
 `readinessTransitionMeasuresWrittenQuerySeparatelyFromReceivedReply` failed once in 8 loop runs of the suite
 beside a full `make test-app`, with `attach client exited or failed before readiness` and the child
-`exited with wait status 256; output: session "hangar-…" created`. So the route is reachable from
+`exited with wait status 256; output: session "elis-…" created`. So the route is reachable from
 core `swift test` as well as from hosted tests. No zmx trace was running.

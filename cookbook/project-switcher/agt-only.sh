@@ -5,7 +5,7 @@
 # then applies the filter. Nothing is closed.
 set -e
 
-HANGARCTL=${HANGARCTL:-hangarctl}
+ELISCTL=${ELISCTL:-elisctl}
 
 p=$1
 if [ -z "$p" ]; then
@@ -14,13 +14,13 @@ if [ -z "$p" ]; then
 fi
 
 # suspend the filter first, so the whole tree is on screen while the set is rebuilt
-"$HANGARCTL" workspace filter off
+"$ELISCTL" workspace filter off
 
-"$HANGARCTL" tree --json |
+"$ELISCTL" tree --json |
 	jq -r --arg p "$p" '.result.tree.workspaces[]
 		| "\(if (.name|startswith($p)) then "add" else "off" end) \(.id)"' |
 	while read -r mode w; do
-		"$HANGARCTL" workspace focus "$mode" --target "$w"
+		"$ELISCTL" workspace focus "$mode" --target "$w"
 	done
 
-"$HANGARCTL" workspace filter on
+"$ELISCTL" workspace filter on

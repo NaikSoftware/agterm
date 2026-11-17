@@ -1,0 +1,483 @@
+import ElisCore
+import AppKit
+
+/// `WorkspaceSidebar.Coordinator`'s per-row context menu and actions — the double-click rename trigger, the
+/// menu builder, and the `@objc` handlers driving the store/`AppActions`. Split from `WorkspaceSidebar.swift`
+/// for the swiftlint size limit; selector dispatch from an extension works, so the handlers stay private.
+extension WorkspaceSidebar.Coordinator {
+    // MARK: - Context menu
+
+    /// handleSingleClick folds a workspace row: the icon at once, the rest of the row after the double-click
+    /// interval so a rename double-click never folds it. `action` never fires during a drag.
+    @objc func handleSingleClick(_ sender: NSOutlineView) {
+        let row = sender.clickedRow
+        guard row >= 0, let node = sender.item(atRow: row) as? SidebarNode, node.kind == .workspace else { return }
+        if clickHitsWorkspaceIcon(sender, row: row) {
+            pendingRowToggle?.cancel()
+            pendingRowToggle = nil
+            toggleExpansion(of: node, in: sender)
+            return
+        }
+        guard GhosttyApp.shared.workspaceRowClickExpands else { return }
+        if let event = NSApp.currentEvent {
+            let point = sender.convert(event.locationInWindow, from: nil)
+            // clicking the disclosure triangle already toggles natively — ignore that region so we don't double-toggle.
+            if point.x < sender.frameOfOutlineCell(atRow: row).maxX { return }
+            // clicking the inline "+" button is handled by the button itself — don't schedule the toggle.
+            if let cell = sender.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarCellView,
+               [cell.addButton, cell.repeatButton].contains(where: { btn in
+                   btn.map { $0.convert($0.bounds, to: sender).contains(point) } ?? false
+               }) { return }
+        }
+        pendingRowToggle?.cancel()
+        // re-read the mirror when the deferred item fires: the setting can be turned off inside the
+        // deferral window, and nothing else cancels an already-scheduled toggle.
+        let toggle = DispatchWorkItem { [weak self, weak node] in
+            guard let self, let node, let outline = self.outlineView,
+                  GhosttyApp.shared.workspaceRowClickExpands else { return }
+            self.pendingRowToggle = nil
+            self.toggleExpansion(of: node, in: outline)
+        }
+        pendingRowToggle = toggle
+        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: toggle)
+    }
+
+    @objc func handleDoubleClick(_ sender: NSOutlineView) {
+        // a double-click outside the icon is a rename: cancel the pending single-click toggle.
+        pendingRowToggle?.cancel()
+        pendingRowToggle = nil
+        let row = sender.clickedRow
+        guard row >= 0, let node = sender.item(atRow: row) as? SidebarNode else { return }
+        // the second click of an icon double-click arrives only here, so it toggles back as the triangle does.
+        if node.kind == .workspace, clickHitsWorkspaceIcon(sender, row: row) {
+            toggleExpansion(of: node, in: sender)
+            return
+        }
+        renameController.beginEditing(node: node)
+    }
+
+    private func clickHitsWorkspaceIcon(_ outline: NSOutlineView, row: Int) -> Bool {
+        guard let event = NSApp.currentEvent,
+              let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarCellView,
+              let icon = cell.imageView, !icon.isHidden else { return false }
+        let point = outline.convert(event.locationInWindow, from: nil)
+        return icon.convert(icon.bounds, to: outline).contains(point)
+    }
+
+    /// Animated to match the disclosure triangle; `.claude/rules/sidebar.md` owns why, why it is not gated on
+    /// Reduce Motion, and which sites stay unanimated. The proxy fires didExpand/didCollapse synchronously, so
+    /// the persist write-back still runs and the other sites' `suppressExpansionPersist` brackets still hold.
+    private func toggleExpansion(of node: SidebarNode, in outline: NSOutlineView) {
+        let proxy = outline.animator()
+        if outline.isItemExpanded(node) { proxy.collapseItem(node) } else { proxy.expandItem(node) }
+    }
+
+    /// Builds the per-row context menu, resolving the clicked row lazily so one menu serves every row.
+    func menu(forRow row: Int) -> NSMenu? {
+        guard let outline = outlineView, row >= 0, let node = outline.item(atRow: row) as? SidebarNode else { return nil }
+        let menu = NSMenu()
+        // explicit enabled state (Delete is disabled at the last workspace), not responder-chain auto-enabling.
+        menu.autoenablesItems = false
+        let sessionTargets = node.kind == .session ? store.sidebarSelectionTargets(forContextSession: node.id) : []
+        let sessionCount = sessionTargets.count
+        // a remote window's rows change only on its server, which cannot be asked while the window is not connected
+        let serverBlocked = store.serverActionsBlocked
+
+        // "Clear Status" sits first for a session row with a status, the `elisctl session status idle` effect;
+        // "Mark for Attention" is its idle-row counterpart, `session status completed` on the idle targets.
+        if node.kind == .session {
+            let statuses = sessionTargets.compactMap { store.session(withID: $0)?.agentIndicator.status }
+            if statuses.contains(where: { $0 != .idle }) {
+                let clearStatus = NSMenuItem(title: sessionCount == 1 ? "Clear Status" : "Clear Statuses",
+                                             action: #selector(menuClearStatus(_:)), keyEquivalent: "")
+                clearStatus.target = self
+                clearStatus.representedObject = SessionBatchRequest(sessionIDs: sessionTargets)
+                menu.addItem(clearStatus)
+            }
+            if statuses.contains(.idle) {
+                let mark = NSMenuItem(title: "Mark for Attention", action: #selector(menuMarkForAttention(_:)),
+                                      keyEquivalent: "")
+                mark.target = self
+                mark.representedObject = SessionBatchRequest(sessionIDs: sessionTargets)
+                menu.addItem(mark)
+            }
+            if !statuses.isEmpty { menu.addItem(.separator()) }
+        }
+
+        if node.kind == .workspace || sessionCount <= 1 {
+            let rename = NSMenuItem(title: "Rename", action: #selector(menuRename(_:)), keyEquivalent: "")
+            rename.target = self
+            rename.representedObject = node
+            rename.isEnabled = !serverBlocked
+            menu.addItem(rename)
+        }
+
+        if node.kind == .workspace || sessionCount == 1 {
+            let copyName = NSMenuItem(title: "Copy Name", action: #selector(menuCopyName(_:)), keyEquivalent: "")
+            copyName.target = self
+            copyName.representedObject = node
+            menu.addItem(copyName)
+        }
+
+        switch node.kind {
+        case .session:
+            // "Duplicate Session" opens a fresh shell in this session's directory, right after it.
+            // Single-selection only and next to Rename, mirroring Finder; the title matches the New
+            // Session / Close Session naming on this menu.
+            if sessionCount == 1 {
+                let duplicate = NSMenuItem(title: "Duplicate Session", action: #selector(menuDuplicate(_:)), keyEquivalent: "")
+                duplicate.target = self
+                duplicate.representedObject = node
+                duplicate.isEnabled = !serverBlocked
+                menu.addItem(duplicate)
+                let restore = NSMenuItem(title: "Restore Terminal Size", action: #selector(menuRestoreTerminalSize(_:)),
+                                         keyEquivalent: "")
+                restore.target = self
+                restore.representedObject = node
+                restore.isEnabled = store.session(withID: node.id)?.hasForcedGrid == true
+                menu.addItem(restore)
+            }
+            if sessionCount == 1 {
+                menu.addItem(.separator())
+                let companion = NSMenuItem(title: "New Companion", action: #selector(menuNewCompanion(_:)), keyEquivalent: "")
+                companion.target = self
+                companion.representedObject = node
+                companion.isEnabled = !serverBlocked
+                menu.addItem(companion)
+                if store.session(withID: node.id)?.content == .terminal {
+                    let copy = NSMenuItem(title: "Duplicate as Companion", action: #selector(menuDuplicateCompanion(_:)),
+                                          keyEquivalent: "")
+                    copy.target = self
+                    copy.representedObject = node
+                    copy.isEnabled = !serverBlocked
+                    menu.addItem(copy)
+                }
+                if let session = store.session(withID: node.id), session.parentID == nil {
+                    let convert = NSMenuItem(title: "Convert to Companion", action: #selector(menuConvertCompanion(_:)),
+                                             keyEquivalent: "")
+                    convert.target = self
+                    convert.representedObject = node
+                    // a server window's row is converted by its server, a row attached from another host by its origin
+                    convert.isEnabled = !store.isRemoteWindow || !serverBlocked
+                    menu.addItem(convert)
+                }
+                menu.addItem(.separator())
+            }
+            let targets = store.workspaces.filter { workspace in
+                sessionTargets.contains { ownerWorkspaceID(ofSession: $0) != workspace.id }
+                    && store.canMoveSessions(sessionTargets, toWorkspace: workspace.id)
+            }
+            if sessionCount == 1, let id = sessionTargets.first, let submenu = companionMoveMenu(for: id) {
+                let moveTo = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
+                moveTo.submenu = submenu
+                moveTo.isEnabled = !serverBlocked
+                menu.addItem(moveTo)
+            } else if !targets.isEmpty {
+                let moveTo = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
+                let submenu = NSMenu()
+                for target in targets {
+                    let item = NSMenuItem(title: target.name, action: #selector(menuMove(_:)), keyEquivalent: "")
+                    item.target = self
+                    item.representedObject = SessionBatchRequest(sessionIDs: sessionTargets, targetID: target.id)
+                    submenu.addItem(item)
+                }
+                moveTo.submenu = submenu
+                moveTo.isEnabled = !serverBlocked
+                menu.addItem(moveTo)
+            }
+            // "Flag"/"Unflag" toggles flagged working-set membership; the label reflects the current state.
+            let allFlagged = !sessionTargets.isEmpty && sessionTargets.allSatisfy { store.session(withID: $0)?.flagged == true }
+            let flagTitle: String
+            if sessionCount == 1 {
+                flagTitle = allFlagged ? "Unflag" : "Flag"
+            } else {
+                flagTitle = allFlagged ? "Unflag Sessions" : "Flag Sessions"
+            }
+            let flag = NSMenuItem(title: flagTitle, action: #selector(menuToggleFlag(_:)), keyEquivalent: "")
+            flag.target = self
+            flag.representedObject = SessionBatchRequest(sessionIDs: sessionTargets)
+            flag.isEnabled = !store.marksBlocked
+            menu.addItem(flag)
+            let tint = tintMenuItem(forSessions: sessionTargets)
+            tint.isEnabled = !store.marksBlocked
+            menu.addItem(tint)
+            if sessionCount == 1 {
+                let reveal = NSMenuItem(title: "Reveal in Finder", action: #selector(menuRevealInFinder(_:)), keyEquivalent: "")
+                reveal.target = self
+                reveal.representedObject = node
+                reveal.isEnabled = actions.canRevealSessionInFinder(node.id, in: store)
+                menu.addItem(reveal)
+            }
+            let closeTitle = sessionCount == 1 ? "Close Session" : "Close \(sessionCount) Sessions"
+            let close = NSMenuItem(title: closeTitle, action: #selector(menuClose(_:)), keyEquivalent: "")
+            close.target = self
+            close.representedObject = SessionBatchRequest(sessionIDs: sessionTargets)
+            menu.addItem(close)
+        case .workspace:
+            let newSession = NSMenuItem(title: "New Session", action: #selector(menuNewSession(_:)), keyEquivalent: "")
+            newSession.target = self
+            newSession.representedObject = node
+            newSession.isEnabled = !serverBlocked
+            menu.addItem(newSession)
+            let openSession = NSMenuItem(title: "Open Directory…", action: #selector(menuOpenSession(_:)), keyEquivalent: "")
+            openSession.target = self
+            openSession.representedObject = node
+            openSession.isEnabled = !store.isRemoteWindow
+            menu.addItem(openSession)
+            // the one per-row fold that survives a hidden chevron with row click turned off.
+            let fold = NSMenuItem(title: outline.isItemExpanded(node) ? "Collapse Workspace" : "Expand Workspace",
+                                  action: #selector(menuToggleWorkspaceExpansion(_:)), keyEquivalent: "")
+            fold.target = self
+            fold.representedObject = node
+            menu.addItem(fold)
+            // the focus items are their own group: they filter what the tree shows, unlike the create items
+            // above and the destructive one below.
+            menu.addItem(.separator())
+            // "Focus"/"Unfocus" REPLACES the marked set with this workspace (or clears it when this is
+            // already the only marked one, with the filter on); the label reflects the current state.
+            let focused = store.isSoleFocus(node.id) // the same predicate the item's action toggles on
+            let focus = NSMenuItem(title: focused ? "Unfocus" : "Focus", action: #selector(menuFocusWorkspace(_:)), keyEquivalent: "")
+            focus.target = self
+            focus.representedObject = node
+            menu.addItem(focus)
+            // "Add to Focus"/"Remove from Focus" toggles THIS workspace's membership, leaving the other
+            // marked workspaces alone — how a multi-workspace working set is built up row by row.
+            let member = store.focusedWorkspaceIDs.contains(node.id)
+            let membership = NSMenuItem(title: member ? "Remove from Focus" : "Add to Focus",
+                                        action: #selector(menuToggleFocusMembership(_:)), keyEquivalent: "")
+            membership.target = self
+            membership.representedObject = node
+            menu.addItem(membership)
+            menu.addItem(.separator())
+            // targets every session of the workspace, including the ones the flagged tree layout hides.
+            let flagAll = NSMenuItem(title: store.workspaceAllFlagged(node.id) ? "Unflag All Sessions" : "Flag All Sessions",
+                                     action: #selector(menuToggleWorkspaceFlag(_:)), keyEquivalent: "")
+            flagAll.target = self
+            flagAll.representedObject = node
+            flagAll.isEnabled = store.workspaceHasSessions(node.id) && !store.marksBlocked
+            menu.addItem(flagAll)
+            let workspaceTint = tintMenuItem(forWorkspace: node.id)
+            workspaceTint.isEnabled = !store.marksBlocked
+            menu.addItem(workspaceTint)
+            menu.addItem(.separator())
+            let delete = NSMenuItem(title: "Delete Workspace", action: #selector(menuDeleteWorkspace(_:)), keyEquivalent: "")
+            delete.target = self
+            delete.representedObject = node
+            delete.isEnabled = store.canCloseWorkspace
+            menu.addItem(delete)
+        }
+        return menu
+    }
+
+    private func ownerWorkspaceID(ofSession id: UUID) -> UUID? {
+        store.workspaces.first(where: { ws in ws.sessions.contains(where: { $0.id == id }) })?.id
+    }
+
+    /// Wraps session batch commands so menu items can carry both the selected ids and a target workspace.
+    private final class SessionBatchRequest {
+        let sessionIDs: [UUID]
+        let targetID: UUID?
+        init(sessionIDs: [UUID], targetID: UUID? = nil) {
+            self.sessionIDs = sessionIDs
+            self.targetID = targetID
+        }
+    }
+
+    @objc private func menuToggleWorkspaceExpansion(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode, let outline = outlineView,
+              outline.row(forItem: node) >= 0 else { return }
+        toggleExpansion(of: node, in: outline)
+    }
+
+    @objc private func menuRename(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        renameController.beginEditing(node: node)
+    }
+
+    /// Copies the clicked row's name — `Session.displayName`, or the workspace's — to the general
+    /// pasteboard.
+    @objc private func menuCopyName(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        let name = switch node.kind {
+        case .session: store.session(withID: node.id)?.displayName
+        case .workspace: store.workspaceName(node.id)
+        }
+        // a row gone between the right-click and the choice, or a blank workspace name: leave the
+        // pasteboard as the user had it rather than clearing it to write nothing.
+        guard let name else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(name, forType: .string)
+    }
+
+    @objc private func menuMove(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? SessionBatchRequest, let targetID = request.targetID else { return }
+        if store.remoteActions != nil {
+            for id in request.sessionIDs { actions.performRemote(.moveSession(id, to: .workspace(targetID)), in: store) }
+            return
+        }
+        store.moveSessions(request.sessionIDs, toWorkspace: targetID)
+    }
+
+    private func companionMoveMenu(for id: UUID) -> NSMenu? {
+        guard let parentID = store.session(withID: id)?.parentID else { return nil }
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        for workspace in store.workspaces {
+            let parents = workspace.sessions.filter { candidate in
+                guard candidate.parentID == nil, candidate.id != parentID else { return false }
+                if case .success = store.canMoveCompanion(id, under: candidate.id) { return true }
+                return false
+            }
+            guard !parents.isEmpty else { continue }
+            submenu.addItem(.sectionHeader(title: workspace.name))
+            for parent in parents {
+                let item = NSMenuItem(title: parent.displayName, action: #selector(menuMoveCompanion(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = SessionBatchRequest(sessionIDs: [id], targetID: parent.id)
+                submenu.addItem(item)
+            }
+        }
+        return submenu.items.isEmpty ? nil : submenu
+    }
+
+    @objc private func menuMoveCompanion(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? SessionBatchRequest, let id = request.sessionIDs.first,
+              let parentID = request.targetID else { return }
+        actions.moveCompanion(id, under: parentID, at: nil, in: store)
+    }
+
+    @objc private func menuClose(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? SessionBatchRequest else { return }
+        // pass THIS sidebar's window-local store — a background window's Close must target its own
+        // session, not the frontmost window's (which `AppActions.store` would resolve to).
+        actions.closeSessions(request.sessionIDs, in: store)
+    }
+
+    @objc func closeSessionButtonClicked(_ sender: NSButton) {
+        guard let outline = outlineView else { return }
+        let row = outline.row(for: sender)
+        guard row >= 0, let node = outline.item(atRow: row) as? SidebarNode, node.kind == .session else { return }
+        actions.closeSessions([node.id], in: store)
+    }
+
+    @objc private func menuClearStatus(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? SessionBatchRequest else { return }
+        for id in request.sessionIDs { store.clearStatus(id) }
+    }
+
+    @objc private func menuMarkForAttention(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? SessionBatchRequest else { return }
+        store.markForAttention(request.sessionIDs)
+    }
+
+    @objc private func menuToggleFlag(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? SessionBatchRequest else { return }
+        actions.toggleFlags(request.sessionIDs, in: store)
+    }
+
+    @objc private func menuToggleWorkspaceFlag(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        if actions.sendWorkspaceFlag(!store.workspaceAllFlagged(node.id), to: node.id, in: store) { return }
+        store.applyWorkspaceFlag(.toggle, to: node.id)
+    }
+
+    @objc private func menuDuplicate(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        // this sidebar's window-local store, like Close/Flag — a background window acts on its own row.
+        actions.duplicateSession(node.id, in: store)
+    }
+
+    @objc private func menuRestoreTerminalSize(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        actions.restoreTerminalSize(node.id, in: store)
+    }
+
+    @objc private func menuDuplicateCompanion(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        actions.duplicateAsCompanion(node.id, in: store)
+    }
+
+    @objc private func menuConvertCompanion(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        actions.convertToCompanion(node.id, in: store)
+    }
+
+    @objc private func menuNewCompanion(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        actions.newCompanion(node.id, in: store)
+    }
+
+    @objc private func menuRevealInFinder(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        actions.revealSessionInFinder(node.id, in: store)
+    }
+
+    @objc private func menuNewSession(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        addNewSession(toWorkspace: node.id)
+    }
+
+    @objc private func menuDeleteWorkspace(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        // this sidebar's window-local store, like Close/Flag/Duplicate/Focus: the enabled state came from
+        // `store.canRemoveWorkspace`, and the frontmost store would not find the id — a silent no-op.
+        actions.deleteWorkspace(node.id, in: store)
+    }
+
+    @objc private func menuFocusWorkspace(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        // this sidebar's window-local store, like Close/Flag/Duplicate: the "Focus"/"Unfocus" label was
+        // computed from it, and the frontmost store would read one window and write another.
+        actions.focusWorkspace(node.id, in: store)
+    }
+
+    /// Direction is derived from the same store the item's label was built from — and applied to that
+    /// store — so the action always matches what the row's menu reads, in a background window too.
+    @objc private func menuToggleFocusMembership(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        actions.setFocusMembership(node.id, member: !store.focusedWorkspaceIDs.contains(node.id), in: store)
+    }
+
+    /// "Open Directory…": pick a folder and add a session rooted there.
+    @objc private func menuOpenSession(_ sender: NSMenuItem) {
+        guard let node = sender.representedObject as? SidebarNode else { return }
+        openDirectoryAndAddSession(toWorkspace: node.id)
+    }
+
+    /// addNewSession shares the directory and placement settings of `AppActions.newSession()`
+    /// with the workspace row's New Session and "+".
+    @discardableResult
+    func addNewSession(toWorkspace workspaceID: UUID) -> Session? {
+        if store.remoteActions != nil {
+            actions.newRemoteSession(inWorkspace: workspaceID, of: store)
+            return nil
+        }
+        return addSession(toWorkspace: workspaceID, cwd: actions.resolvedNewSessionCwd(in: workspaceID, store: store),
+                   at: actions.resolvedNewSessionIndex(in: workspaceID, store: store))
+    }
+
+    /// Adds a session to `workspaceID` at `cwd` and selects it; a nil `index` appends.
+    @discardableResult
+    private func addSession(toWorkspace workspaceID: UUID, cwd: String, at index: Int? = nil) -> Session? {
+        guard let session = store.addSession(toWorkspace: workspaceID, cwd: cwd, at: index) else { return nil }
+        // creating + selecting from the sidebar context menu is a user-initiated selection on THIS
+        // window's store: note activity so it buys the full idle grace before auto-follow pulls away.
+        store.noteUserActivity()
+        store.selectSession(session.id)
+        actions.focusActiveSession()
+        return session
+    }
+
+    private func openDirectoryAndAddSession(toWorkspace workspaceID: UUID) {
+        guard !store.isRemoteWindow else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = DirectoryPanelDefaults.url(paths: store.activeSession?.focusedCwd)
+        panel.prompt = "Open"
+        panel.message = "Choose a directory for the new session"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        addSession(toWorkspace: workspaceID, cwd: url.path)
+    }
+}

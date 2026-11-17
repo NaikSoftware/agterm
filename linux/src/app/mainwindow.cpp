@@ -108,7 +108,7 @@ static int shellPid(KParts::ReadOnlyPart *part)
     auto *t = qobject_cast<TerminalInterface *>(part);
     if (!t)
         return -1;
-    const QString live = part->property("hangarLive").toString();
+    const QString live = part->property("elisLive").toString();
     return live.isEmpty() ? t->terminalProcessId() : Live::shellPid(live);
 }
 
@@ -121,7 +121,7 @@ static int freshForegroundPid(KParts::ReadOnlyPart *part)
 // a foreground job ignoring SIGHUP (nohup, a trap) must not outlive its closed pane; a live pane's host ends its own
 static void endForegroundJob(KParts::ReadOnlyPart *part)
 {
-    if (!part || !part->property("hangarLive").toString().isEmpty())
+    if (!part || !part->property("elisLive").toString().isEmpty())
         return;
     const int shell = shellPid(part), job = Live::foregroundPid(shell);
     if (job > 0 && job != shell)
@@ -133,7 +133,7 @@ static int foregroundPid(KParts::ReadOnlyPart *part)
     auto *t = qobject_cast<TerminalInterface *>(part);
     if (!t)
         return -1;
-    const QString live = part->property("hangarLive").toString();
+    const QString live = part->property("elisLive").toString();
     return live.isEmpty() ? t->foregroundProcessId() : Live::foregroundPid(Live::shellPid(live));
 }
 
@@ -196,7 +196,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
 {
     m_tree = new Sidebar(store);
 
-    // footer: new session, new workspace, and the flagged view toggle, as hangar's sidebar bar
+    // footer: new session, new workspace, and the flagged view toggle, as elis's sidebar bar
     auto footerButton = [](const QString &icon, const QString &tip) {
         auto *b = new QToolButton;
         b->setIcon(QIcon::fromTheme(icon));
@@ -259,7 +259,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
             m_store.select(m_store.addCompanion(m_store.selected, {}, dir));
     });
     m_split->addWidget(m_sidebarPanel);
-    m_split->addWidget(m_filePanel); // hangar's file panel sits right of the sidebar
+    m_split->addWidget(m_filePanel); // elis's file panel sits right of the sidebar
     m_split->addWidget(m_stack);
     m_split->setStretchFactor(2, 1);
     m_split->setSizes({230, 240, 970});
@@ -274,20 +274,20 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
     // an alpha surface from the start, so Settings can make the backgrounds see-through without recreating the window
     setAttribute(Qt::WA_TranslucentBackground);
     resize(1200, 760);
-    // messages only: an idle status bar would be chrome hangar doesn't have
+    // messages only: an idle status bar would be chrome elis doesn't have
     statusBar()->hide();
     connect(statusBar(), &QStatusBar::messageChanged, statusBar(), [this](const QString &m) { statusBar()->setVisible(!m.isEmpty()); });
 
     createMenus();
 
-    // title strip: sidebar toggle and the session name, as hangar's title bar
+    // title strip: sidebar toggle and the session name, as elis's title bar
     auto *strip = new QToolBar;
     strip->setObjectName(QStringLiteral("titleStrip"));
     strip->setMovable(false);
     strip->setFloatable(false);
     strip->setIconSize(QSize(16, 16));
     strip->toggleViewAction()->setVisible(false);
-    // a plain button, not the checkable menu action: hangar's toggle never renders pressed
+    // a plain button, not the checkable menu action: elis's toggle never renders pressed
     const QColor ink = palette().color(QPalette::WindowText);
     m_chrome.insert(QStringLiteral("filePanel"), strip->addAction(chromeIcon(QStringLiteral("filepanel"), ink), tr("Toggle File Panel"),
                                                                   m_actions.value(QStringLiteral("toggle_file_panel")), &QAction::trigger));
@@ -376,7 +376,7 @@ MainWindow::MainWindow(Store &store, const QString &statePath)
         n->setComponentName(QStringLiteral("plasma_workspace")); // KNotification::event's standard notification, without a notifyrc of our own
         n->setTitle(title.isEmpty() ? s->displayName() : title);
         n->setText(body);
-        n->setIconName(QStringLiteral("hangar"));
+        n->setIconName(QStringLiteral("elis"));
         connect(n->addDefaultAction(tr("Show")), &KNotificationAction::activated, this, [this, id] {
             m_store.select(id); // the banner brings the window forward on the session that raised it
             show();
@@ -444,7 +444,7 @@ QAction *MainWindow::action(const QString &name, const QString &text, const QStr
 
 void MainWindow::createMenus()
 {
-    // hangar's ⌘ is Ctrl+Shift here (Konsole's convention), ⌘⇧ and ⌘⌃ are Ctrl+Alt+Shift, ⌥ is Alt, ⌃ is Ctrl
+    // elis's ⌘ is Ctrl+Shift here (Konsole's convention), ⌘⇧ and ⌘⌃ are Ctrl+Alt+Shift, ⌥ is Alt, ⌃ is Ctrl
     auto *file = menuBar()->addMenu(tr("&File"));
     file->addAction(action(QStringLiteral("new_session"), tr("New Session"), QStringLiteral("tab-new"), QKeySequence(QStringLiteral("Ctrl+Shift+N")),
                            [this] { newSession(currentWorkspace()); }));
@@ -533,7 +533,7 @@ void MainWindow::createMenus()
         if (const Session *s = m_store.session(m_store.selected))
             m_store.setFlag(s->id, !s->flagged);
     }));
-    // palette-only, as in hangar: "Tint Session: Red" … "Tint Session: None" for the active session
+    // palette-only, as in elis: "Tint Session: Red" … "Tint Session: None" for the active session
     for (const QString &c : Store::tintColors + QStringList{QString()})
         action(QStringLiteral("tint_session_") + (c.isEmpty() ? QStringLiteral("none") : c),
                tr("Tint Session: %1").arg(c.isEmpty() ? tr("None") : c.left(1).toUpper() + c.mid(1)), {}, {},
@@ -636,7 +636,7 @@ void MainWindow::createMenus()
         for (QAction *a : actions())
             if (!a->text().isEmpty() && a != m_actions.value(QStringLiteral("command_palette")))
                 items.append({a->text().remove(QLatin1Char('&')).remove(QStringLiteral("…")),
-                              (a->property("hangarCustom").toBool() ? tr("custom") + QStringLiteral("  ") : QString()) + a->shortcut().toString(QKeySequence::NativeText),
+                              (a->property("elisCustom").toBool() ? tr("custom") + QStringLiteral("  ") : QString()) + a->shortcut().toString(QKeySequence::NativeText),
                               [a] { a->trigger(); }, a->isEnabled()});
         m_palette->open(tr("Run an action…"), items);
     }));
@@ -677,7 +677,7 @@ void MainWindow::createMenus()
     nav->addAction(action(QStringLiteral("last_session"), tr("Last Session"), QStringLiteral("go-bottom"), {}, [this] { go(QStringLiteral("last")); }));
 
     auto *settings = menuBar()->addMenu(tr("Se&ttings"));
-    settings->addAction(action(QStringLiteral("settings"), tr("Configure Hangar…"), QStringLiteral("configure"), QKeySequence(QStringLiteral("Ctrl+Shift+,")),
+    settings->addAction(action(QStringLiteral("settings"), tr("Configure Elis…"), QStringLiteral("configure"), QKeySequence(QStringLiteral("Ctrl+Shift+,")),
                                [this] { showSettings(); }));
     settings->addAction(action(QStringLiteral("edit_profile"), tr("Edit Current Profile…"), QStringLiteral("document-edit"), {},
                                [this] { profileDialog("showEditCurrentProfileDialog"); }));
@@ -776,18 +776,18 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
     QStringList argv{QStringLiteral("/usr/bin/env"),
                      QStringLiteral("-C"),
                      dir,
-                     QStringLiteral("HANGAR_SESSION_ID=") + id,
-                     QStringLiteral("HANGAR_WORKSPACE_ID=") + m_store.workspaceOf(id)->id,
-                     QStringLiteral("HANGAR_PANE=") + pane,
-                     QStringLiteral("HANGAR_SOCKET=") + socketPath(),
-                     QStringLiteral("HANGARCTL=") + appDir + QStringLiteral("/hangarctl"),
+                     QStringLiteral("ELIS_SESSION_ID=") + id,
+                     QStringLiteral("ELIS_WORKSPACE_ID=") + m_store.workspaceOf(id)->id,
+                     QStringLiteral("ELIS_PANE=") + pane,
+                     QStringLiteral("ELIS_SOCKET=") + socketPath(),
+                     QStringLiteral("ELISCTL=") + appDir + QStringLiteral("/elisctl"),
                      QStringLiteral("PATH=") + appDir + QLatin1Char(':') + qEnvironmentVariable("PATH")};
     if (!windowId.isEmpty())
-        argv << QStringLiteral("HANGAR_WINDOW_ID=") + windowId;
+        argv << QStringLiteral("ELIS_WINDOW_ID=") + windowId;
     QString live;
     // without the host binary the pane would exit at once and take its session with it, so it gets a plain shell
     if ((pane == QLatin1String("main") || pane == QLatin1String("right")) && m_store.restoreModeAtLaunch == QLatin1String("live")
-        && QFile::exists(appDir + QStringLiteral("/hangar-session-host")))
+        && QFile::exists(appDir + QStringLiteral("/elis-session-host")))
         live = Live::socket(stateDir(), id, pane), Live::makeDir(stateDir());
     const bool reattach = !live.isEmpty() && Live::alive(live);
     if (pane == QLatin1String("main") || pane == QLatin1String("right")) { // msg.* addresses a pane by it; a respawn gets a new one
@@ -795,22 +795,22 @@ KParts::ReadOnlyPart *MainWindow::spawnPart(const QString &id, const QString &pa
         const QString paneId = reattach && !Live::paneId(live).isEmpty() ? Live::paneId(live) : QUuid::createUuid().toString(QUuid::WithoutBraces);
         if (!live.isEmpty() && !reattach)
             Live::setPaneId(live, paneId);
-        part->setProperty("hangarPaneId", paneId);
-        argv << QStringLiteral("HANGAR_PANE_ID=") + paneId;
+        part->setProperty("elisPaneId", paneId);
+        argv << QStringLiteral("ELIS_PANE_ID=") + paneId;
     }
     argv << env;
     if (!live.isEmpty()) { // a surviving daemon ignores the rest of argv: its shell already runs
-        argv << appDir + QStringLiteral("/hangar-session-host") << live << QStringLiteral("--");
-        part->setProperty("hangarLive", live);
-        part->setProperty("hangarReattached", reattach);
+        argv << appDir + QStringLiteral("/elis-session-host") << live << QStringLiteral("--");
+        part->setProperty("elisLive", live);
+        part->setProperty("elisReattached", reattach);
     }
     argv << shell;
     if (!command.isEmpty())
         argv << QStringLiteral("-c") << command;
     qobject_cast<TerminalInterface *>(part)->startProgram(argv.first(), argv);
     if (QWidget *display = terminalDisplay(part)) { // the profile's font, what Settings and reset return to
-        display->setProperty("hangarProfileFont", display->font());
-        display->setProperty("hangarBaseFont", display->font().pointSizeF());
+        display->setProperty("elisProfileFont", display->font());
+        display->setProperty("elisBaseFont", display->font().pointSizeF());
     }
     applyAppearance(part);
     watchTerminalNotifications(part, bridge);
@@ -887,10 +887,10 @@ void MainWindow::applyLayout(const QString &id)
             replay(id, p.right, true);
         }
         p.split->handle(1)->installEventFilter(this); // double-click resets an even split
-        p.split->handle(1)->setProperty("hangarSession", id);
+        p.split->handle(1)->setProperty("elisSession", id);
     } else if (!s->hasSplit && p.right) {
         auto *right = std::exchange(p.right, nullptr);
-        const QString live = right->property("hangarLive").toString();
+        const QString live = right->property("elisLive").toString();
         endForegroundJob(right);
         delete right; // closes the split shell whatever it runs
         if (!live.isEmpty())
@@ -927,10 +927,10 @@ void MainWindow::paneExited(const QString &id, KParts::ReadOnlyPart *part)
         if (p.right) { // the split survivor becomes the session's only shell
             p.main = std::exchange(p.right, nullptr);
             p.main->widget()->show();
-            if (const QString live = p.main->property("hangarLive").toString(); !live.isEmpty()) {
+            if (const QString live = p.main->property("elisLive").toString(); !live.isEmpty()) {
                 const QString main = Live::socket(stateDir(), id, QStringLiteral("main"));
                 Live::move(live, main);
-                p.main->setProperty("hangarLive", main);
+                p.main->setProperty("elisLive", main);
             }
             m_store.setSplit(id, false, false, m_store.session(id)->splitAxis);
         } else if (!m_store.companionsOf(id).isEmpty() && m_respawned.value(id).msecsTo(QDateTime::currentDateTime()) > 2000) {
@@ -966,7 +966,7 @@ bool MainWindow::font(const QString &sessionId, const QString &pane, const QStri
         return false;
     }
     const double now = display->font().pointSizeF();
-    zoomFontTo(display, op == QLatin1String("inc") ? now + 1 : op == QLatin1String("dec") ? now - 1 : display->property("hangarBaseFont").toDouble());
+    zoomFontTo(display, op == QLatin1String("inc") ? now + 1 : op == QLatin1String("dec") ? now - 1 : display->property("elisBaseFont").toDouble());
     recordFontSizes(s);
     m_saveTimer.start();
     return true;
@@ -976,7 +976,7 @@ void MainWindow::recordFontSizes(Session *s) const
 {
     // 0 while a pane is at its profile's size, so a profile change still reaches it after a relaunch
     auto size = [](QWidget *d) {
-        return !d || d->font().pointSizeF() == d->property("hangarBaseFont").toDouble() ? 0.0 : d->font().pointSizeF();
+        return !d || d->font().pointSizeF() == d->property("elisBaseFont").toDouble() ? 0.0 : d->font().pointSizeF();
     };
     const Panes p = m_panes.value(s->id);
     if (p.main)
@@ -1027,7 +1027,7 @@ void MainWindow::replay(const QString &id, KParts::ReadOnlyPart *part, bool spli
 {
     // typed into the login shell rather than exec'd, so the shell remains when the program ends
     // a reattached live pane still runs it, so the capture is only the fallback for a daemon that is gone
-    if (const QString line = m_store.takeReplay(id, split, m_denylist); !line.isEmpty() && part && !part->property("hangarReattached").toBool())
+    if (const QString line = m_store.takeReplay(id, split, m_denylist); !line.isEmpty() && part && !part->property("elisReattached").toBool())
         qobject_cast<TerminalInterface *>(part)->sendInput(line + QLatin1Char('\n'));
 }
 
@@ -1056,11 +1056,11 @@ void MainWindow::swapPanes(const QString &id)
         return;
     p.split->insertWidget(0, p.right->widget()); // physical positions and the primary role move together
     std::swap(p.main, p.right);
-    const QString a = p.main->property("hangarLive").toString(), b = p.right->property("hangarLive").toString();
+    const QString a = p.main->property("elisLive").toString(), b = p.right->property("elisLive").toString();
     if (!a.isEmpty() && !b.isEmpty()) { // each daemon is named by its role
         Live::swap(a, b);
-        p.main->setProperty("hangarLive", b);
-        p.right->setProperty("hangarLive", a);
+        p.main->setProperty("elisLive", b);
+        p.right->setProperty("elisLive", a);
     }
     m_sessions.remove(id);
 }
@@ -1104,7 +1104,7 @@ bool MainWindow::filePanel(const QString &mode, int width, QString *)
     if (!mode.isEmpty())
         m_filePanel->setVisible(mode == QLatin1String("toggle") ? m_filePanel->isHidden() : mode == QLatin1String("show"));
     if (width > 0)
-        m_filePanelWidth = qBound(160, width, 560); // hangar's clamp
+        m_filePanelWidth = qBound(160, width, 560); // elis's clamp
     applyFilePanelWidth();
     m_filePanel->setRoot(liveCwd(m_store.selected));
     m_saveTimer.start();
@@ -1227,7 +1227,7 @@ QJsonObject MainWindow::info(const QString &sessionId)
         return {};
     KParts::ReadOnlyPart *part = m_panes.value(sessionId).main;
     QFile comm(QStringLiteral("/proc/%1/comm").arg(foregroundPid(part)));
-    const bool live = !part->property("hangarLive").toString().isEmpty();
+    const bool live = !part->property("elisLive").toString().isEmpty();
     return {{"pid", shellPid(part)},
             {"foreground", live && comm.open(QIODevice::ReadOnly) ? QString::fromUtf8(comm.readAll()).trimmed() : t->foregroundProcessName()},
             {"foregroundPid", foregroundPid(part)},
@@ -1314,9 +1314,9 @@ void MainWindow::detectLaunchers()
         return;
     m_launchersAt = QDateTime::currentDateTime();
     auto *proc = new QProcess(this);
-    const QString marker = QStringLiteral("hangar-launcher-path");
+    const QString marker = QStringLiteral("elis-launcher-path");
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    env.remove(QStringLiteral("HANGAR_SESSION_ID"));
+    env.remove(QStringLiteral("ELIS_SESSION_ID"));
     proc->setProcessEnvironment(env);
     proc->setStandardInputFile(QProcess::nullDevice());
     connect(proc, &QProcess::finished, this, [this, proc, marker] {
@@ -1354,7 +1354,7 @@ void MainWindow::sampleAgents()
     for (auto *s : m_store.allSessions()) {
         KParts::ReadOnlyPart *part = m_panes.value(s->id).main;
         const int fg = foregroundPid(part);
-        if (part && !part->property("hangarLive").toString().isEmpty())
+        if (part && !part->property("elisLive").toString().isEmpty())
             m_store.setCwd(s->id, liveCwd(s->id)); // Konsole tracks only its own child, the attach client
         QList<QStringList> argvs;
         for (int pid : groups.value(fg)) {
@@ -1779,8 +1779,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
-    if (event->type() == QEvent::MouseButtonDblClick && watched->property("hangarSession").isValid()) {
-        const QString id = watched->property("hangarSession").toString();
+    if (event->type() == QEvent::MouseButtonDblClick && watched->property("elisSession").isValid()) {
+        const QString id = watched->property("elisSession").toString();
         if (Session *s = m_store.session(id)) {
             s->splitRatio = 0.5; // a double-click on the divider returns to an even split
             applyLayout(id);
@@ -1808,8 +1808,8 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
                 else if (it->main->widget()->isAncestorOf(static_cast<QWidget *>(watched)))
                     m_splitFocused.insert(it.key(), false);
             }
-    if (event->type() == QEvent::Resize && watched->property("hangarOverlayHost").isValid())
-        layoutOverlays(watched->property("hangarOverlayHost").toString());
+    if (event->type() == QEvent::Resize && watched->property("elisOverlayHost").isValid())
+        layoutOverlays(watched->property("elisOverlayHost").toString());
     if ((event->type() == QEvent::KeyPress || event->type() == QEvent::MouseButtonPress || event->type() == QEvent::Wheel) && watched->isWidgetType()
         && static_cast<QWidget *>(watched)->window() == this)
         m_idle.restart(); // auto-follow waits for input idleness in this window

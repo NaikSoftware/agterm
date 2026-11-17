@@ -1,6 +1,6 @@
 ---
 name: mailbox-chat
-description: 'Hold a back-and-forth conversation with the agent (Codex or another Claude Code) running in the other pane of this Hangar split, as peers, through Hangar''s pane mailboxes. Use when the user says "chat with codex", "talk to codex", "work with codex", "discuss this with codex", "ask codex what it thinks", "chat with claude", "work with the other pane", "ask the other agent", or when a prompt or hook message arrives starting with "[peer chat]". Not for a one-shot task handed to another agent, and not for a read-only second opinion.'
+description: 'Hold a back-and-forth conversation with the agent (Codex or another Claude Code) running in the other pane of this Elis split, as peers, through Elis''s pane mailboxes. Use when the user says "chat with codex", "talk to codex", "work with codex", "discuss this with codex", "ask codex what it thinks", "chat with claude", "work with the other pane", "ask the other agent", or when a prompt or hook message arrives starting with "[peer chat]". Not for a one-shot task handed to another agent, and not for a read-only second opinion.'
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -24,7 +24,7 @@ Pass the message on stdin through a quoted heredoc, never as an argument. The sc
 a file under `/tmp` and name its path in a short message that still states the point.
 
 The reply is JSON. `receiver` says who serves the other pane: `claude` (a peer waiting for mail,
-`peerBusy` true while it is mid-turn), `codex` (Hangar hands the mail to it), or `none`
+`peerBusy` true while it is mid-turn), `codex` (Elis hands the mail to it), or `none`
 (the mail waits in the mailbox; tell the user nothing is listening there, and that a Codex there
 starts listening only after the user gives it a first prompt). An `error` means the mailbox
 refused the message; report it and never resend blind.
@@ -44,7 +44,7 @@ Answer with `say` in the same turn when it asks something, hands over work or re
 needs a response. Never reply only to acknowledge or to thank, or the two agents answer each other
 forever. Text written only in this pane does not reach the peer.
 
-A message starting with `[hangar mailbox, not a peer chat message]` is ordinary mailbox mail from
+A message starting with `[elis mailbox, not a peer chat message]` is ordinary mailbox mail from
 the named sender. Read it, but do not answer it with `say`: the sender is not the other pane.
 
 ## Never wait for a reply

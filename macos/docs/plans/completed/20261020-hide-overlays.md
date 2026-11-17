@@ -11,7 +11,7 @@
 - Shared design brief: https://share.umputun.dev/0ux2QbjZWb1h-RTKLbAo6Q/ (live until 2026-10-27).
 
 ## Context (from discovery)
-- Overlay state lives on `Session` (`HangarCore/Sources/HangarCore/Session.swift`, `Session+HtmlOverlay.swift`):
+- Overlay state lives on `Session` (`ElisCore/Sources/ElisCore/Session.swift`, `Session+HtmlOverlay.swift`):
   one session-wide slot (`overlayActive`, `htmlOverlay`, HUD) and two pane slots (`leftOverlay`, `rightOverlay`).
 - Occupancy predicates today: `overlayActive`, `hudActive`, `programOverlayActive`, `htmlOverlayActive`,
   `coverOverlayActive`, `fullOverlayActive`, `paneOverlay(_:) != nil`, `focusedOverlayPane`.
@@ -19,19 +19,19 @@
   reservation in `AppStore+RemoteOverlay.swift` `localOverlayHolds`) and "does it cover the session now" (focus,
   zoom, deck gates, scratch focus gate, click catcher, pane hiding). `.claude/rules/control-api.md` lists the
   cover sites.
-- Rendering: one always-mounted `overlayPanel` in `Hangar/Views/WindowContentView+Detail.swift`; its content is
+- Rendering: one always-mounted `overlayPanel` in `Elis/Views/WindowContentView+Detail.swift`; its content is
   built under `if session.overlayActive`, and it picks the HTML host from `htmlOverlayActive`.
 - Control: `ControlProtocol.swift` command catalog, `ControlDispatcher+Overlay.swift`, `ControlActions` in
-  `ControlDispatcher.swift`, app adapter `Hangar/Control/ControlServer+SessionActions.swift`, CLI in
-  `HangarCore/Sources/hangarctlKit/SessionCommands.swift`, tree node `ControlSessionNode` in
+  `ControlDispatcher.swift`, app adapter `Elis/Control/ControlServer+SessionActions.swift`, CLI in
+  `ElisCore/Sources/elisctlKit/SessionCommands.swift`, tree node `ControlSessionNode` in
   `ControlProjection.swift` (built in `AppStore.swift`), `scheduleTreeChanged` in `AppStore+Events.swift`.
-- Keymap/menu/palette: `BuiltinAction.swift`, `PaletteCatalog.swift`, `Hangar/hangarApp+Menus.swift`,
-  `Hangar/AppActions+Palette.swift`; a focused HTML page swallows menu chords, so `close_session` is intercepted in
-  `Hangar/Commands/CustomCommandRunner.swift`.
-- ⌘W ladder: `Hangar/AppActions.swift` (session slot, scratch, focused pane slot, then close session with the
+- Keymap/menu/palette: `BuiltinAction.swift`, `PaletteCatalog.swift`, `Elis/elisApp+Menus.swift`,
+  `Elis/AppActions+Palette.swift`; a focused HTML page swallows menu chords, so `close_session` is intercepted in
+  `Elis/Commands/CustomCommandRunner.swift`.
+- ⌘W ladder: `Elis/AppActions.swift` (session slot, scratch, focused pane slot, then close session with the
   opt-in `confirmCloseSession`).
-- Title bar: `InterfaceElement` in `AppSettings.swift`, buttons in `Hangar/Views/WindowContentView+Titlebar.swift`.
-- `HangarCore` is a library consumed by the `agterm-linux` fork: add public API, never narrow or reshape existing
+- Title bar: `InterfaceElement` in `AppSettings.swift`, buttons in `Elis/Views/WindowContentView+Titlebar.swift`.
+- `ElisCore` is a library consumed by the `agterm-linux` fork: add public API, never narrow or reshape existing
   public fields (`paneOverlays` stays `[String]?`).
 
 ## Development Approach
@@ -45,9 +45,9 @@
 - Swift work starts with the `swiftui-expert`, `swift-testing-expert` and `swift-concurrency` skills as relevant
 
 ## Testing Strategy
-- **unit tests** (`HangarCore`, Swift Testing): model, store, projection, dispatcher, CLI parsing and help
-- **hosted app tests** (`HangarTests`): cover-site predicates, ⌘W ladder, palette and menu enablement, title bar
-- **UI tests** (`HangarUITests`): one targeted end-to-end per overlay kind (program, HTML, pane) driven over the
+- **unit tests** (`ElisCore`, Swift Testing): model, store, projection, dispatcher, CLI parsing and help
+- **hosted app tests** (`ElisTests`): cover-site predicates, ⌘W ladder, palette and menu enablement, title bar
+- **UI tests** (`ElisUITests`): one targeted end-to-end per overlay kind (program, HTML, pane) driven over the
   control socket, run with `-only-testing:`
 
 ## Progress Tracking
@@ -95,7 +95,7 @@
   (`ControlServer+OverlayJobs.swift`) and HUD open (`ControlServer+Hud.swift`) over a hidden occupant; a HUD over
   a hidden program stays refused, with the clearer message.
 - Several touched files sit near the 1000-line limit (`Session.swift` 991, `AppActions.swift` 983, `AppStore.swift`
-  978, `ControlDispatcher.swift` 974, `SettingsView.swift` 972, `hangarApp.swift` 952,
+  978, `ControlDispatcher.swift` 974, `SettingsView.swift` 972, `elisApp.swift` 952,
   `ControlServer+SessionActions.swift` 935). New code goes to new extension files:
   `Session+OverlayVisibility.swift`, `AppStore+OverlayVisibility.swift`, `ControlServer+OverlayVisibility.swift`,
   `AppActions+Overlay.swift`; edits to the listed files stay a few lines, protocol godoc one line.
@@ -132,11 +132,11 @@
 ### Task 1: Core model, store operations and read-back
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Session.swift` (stored state only), `Session+HtmlOverlay.swift`
-- Create: `HangarCore/Sources/HangarCore/Session+OverlayVisibility.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`, `AppStore+HtmlOverlay.swift`,
+- Modify: `ElisCore/Sources/ElisCore/Session.swift` (stored state only), `Session+HtmlOverlay.swift`
+- Create: `ElisCore/Sources/ElisCore/Session+OverlayVisibility.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Panes.swift`, `AppStore+HtmlOverlay.swift`,
   `AppStore+RemoteOverlay.swift`, `AppStore.swift`, `ControlProjection.swift`, `ControlProtocolCompatibility.swift`
-- Create: `HangarCore/Sources/HangarCore/AppStore+OverlayVisibility.swift`
+- Create: `ElisCore/Sources/ElisCore/AppStore+OverlayVisibility.swift`
 - Modify tests: `SessionTests.swift`, `AppStorePaneTests.swift`, `AppStorePaneSwapTests.swift`,
   `HtmlOverlayTests.swift`, `AppStoreTreeProjectionTests.swift`, `AppStoreRemoteOverlayTests.swift`,
   `SnapshotRoundTripTests.swift`; new tests for the store operations in `AppStoreOverlayVisibilityTests.swift`
@@ -154,24 +154,24 @@
 - [x] tests: visible-predicate truth table per occupant and slot, transitions, idempotent hide/show, mixed-state toggle, eligibility (HUD, ask, remote, mixed local and
       remote panes), clearing on replace/close, survival across metadata update, promotion, swap and `--wait`
       exit, occupied-slot open refusal, projection, old-payload decode and round trip, tree.changed count
-- [x] `cd HangarCore && swift test --filter` for the touched suites passes
+- [x] `cd ElisCore && swift test --filter` for the touched suites passes
 
 ### Task 2: Control API and CLI
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`, `ControlDispatcher.swift`,
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`, `ControlDispatcher.swift`,
   `ControlDispatcher+Overlay.swift`, `ControlActionsDefaults.swift`
-- Create: `Hangar/Control/ControlServer+OverlayVisibility.swift` (hide/show/toggle adapter)
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`, `ControlServer+OverlayJobs.swift`,
+- Create: `Elis/Control/ControlServer+OverlayVisibility.swift` (hide/show/toggle adapter)
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`, `ControlServer+OverlayJobs.swift`,
   `ControlServer+Hud.swift` (open refusals answer `overlay hidden`; a few lines each)
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`, `SocketClient.swift` (`(overlay hidden)` tag)
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift`, `SocketClient.swift` (`(overlay hidden)` tag)
 - Modify tests: `ControlDispatcherOverlayTests.swift`, `ControlProtocolTests.swift`, `MockControlActions.swift`,
   `OverlayCommandsTests.swift`, `CommandsTests.swift`, `SocketClientTests.swift`,
-  `HangarTests/ControlServerSessionActionsTests.swift`, `ControlServerOverlayJobsTests.swift`
+  `ElisTests/ControlServerSessionActionsTests.swift`, `ControlServerOverlayJobsTests.swift`
 
 - [x] `session.overlay.hide|show|toggle` in the catalog with optional `pane`, dispatched through `ControlActions`
       to the store; app adapter returns the store result
-- [x] `hangarctl session overlay hide|show|toggle [--pane left|right]` with help stating session scope and, for
+- [x] `elisctl session overlay hide|show|toggle [--pane left|right]` with help stating session scope and, for
       toggle, the hide-first rule
 - [x] responses report the resulting scoped state (`hidden` or `shown`); refusals use stable error strings; opening into a hidden slot
       (session and pane, local and remote-open paths) answers `overlay hidden`
@@ -183,18 +183,18 @@
 ### Task 3: Rendering, focus and cover-site migration
 
 **Files:**
-- Modify: `Hangar/Views/WindowContentView+Detail.swift`, `Hangar/Views/WindowContentView.swift` (keep
-  `openOverlaySessionIDs` on occupancy: hiding is not closing), `Hangar/AppActions.swift`,
-  `Hangar/AppActions+Focus.swift`, `Hangar/hangarApp.swift`, `HangarCore/Sources/HangarCore/DashboardCover.swift`,
+- Modify: `Elis/Views/WindowContentView+Detail.swift`, `Elis/Views/WindowContentView.swift` (keep
+  `openOverlaySessionIDs` on occupancy: hiding is not closing), `Elis/AppActions.swift`,
+  `Elis/AppActions+Focus.swift`, `Elis/elisApp.swift`, `ElisCore/Sources/ElisCore/DashboardCover.swift`,
   `TerminalZoom.swift`, `PaneBackgrounds.swift`, `Session.swift` (existing `topmostSurface`, `onScreenSurface`
   and focus-target callers), `Session+OverlayVisibility.swift` / `Session+HtmlOverlay.swift` focus and font
   helpers, deck gate and scratch focus sites named in `control-api.md`
-- Create: `Hangar/AppActions+Overlay.swift` (shared close-confirm text, later the toggle action; `AppActions.swift` is at 983 lines)
-- Modify: `Hangar/AppActions+Batch.swift` (batch close prompt mentions hidden overlays)
-- Modify tests: `HangarTests/SplitToggleCoverTests.swift`, `HudDeckGatesTests.swift`,
-  `GhosttySurfaceViewInputTests.swift`, `HangarCore/Tests/HangarCoreTests/TerminalZoomTests.swift`,
+- Create: `Elis/AppActions+Overlay.swift` (shared close-confirm text, later the toggle action; `AppActions.swift` is at 983 lines)
+- Modify: `Elis/AppActions+Batch.swift` (batch close prompt mentions hidden overlays)
+- Modify tests: `ElisTests/SplitToggleCoverTests.swift`, `HudDeckGatesTests.swift`,
+  `GhosttySurfaceViewInputTests.swift`, `ElisCore/Tests/ElisCoreTests/TerminalZoomTests.swift`,
   `DashboardCoverTests.swift`, `PaneBackgroundsTests.swift`
-- Modify UI tests: `HangarUITests/ControlHtmlOverlayUITests.swift`, `ControlOverlaySplitUITests.swift`
+- Modify UI tests: `ElisUITests/ControlHtmlOverlayUITests.swift`, `ControlOverlaySplitUITests.swift`
 
 - [x] hidden panel: same host, ids and geometry; opacity 0, no hit testing, no first responder, off-screen for
       drops; HTML vs terminal host choice still by occupant type
@@ -213,19 +213,19 @@
       proves nothing here), and check the same surface/page identity; unrealized-then-hidden case (model
       side; creation needs only a backing size, which a hidden host keeps). Drop routing rides the existing
       `visible`/`deckVisible` gates, now false for a hidden host; no new UI check
-- [x] `cd HangarCore && swift test --filter` for the touched core suites, targeted hosted and UI tests pass
+- [x] `cd ElisCore && swift test --filter` for the touched core suites, targeted hosted and UI tests pass
 
 ### Task 4: Keymap action, menu, palette and title-bar icon
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/BuiltinAction.swift`, `PaletteCatalog.swift`, `AppSettings.swift`
-- Modify: `Hangar/hangarApp+Menus.swift` (View menu), `Hangar/AppActions+Palette.swift`,
-  `Hangar/Commands/CustomCommandRunner.swift`, `Hangar/Views/WindowContentView+Titlebar.swift`,
-  `Hangar/Views/SettingsView.swift` (Interface tab layout)
-- Modify: `Hangar/Views/HtmlOverlayView.swift`, `HangarCore/Sources/HangarCore/AppStore+OverlayVisibility.swift`
+- Modify: `ElisCore/Sources/ElisCore/BuiltinAction.swift`, `PaletteCatalog.swift`, `AppSettings.swift`
+- Modify: `Elis/elisApp+Menus.swift` (View menu), `Elis/AppActions+Palette.swift`,
+  `Elis/Commands/CustomCommandRunner.swift`, `Elis/Views/WindowContentView+Titlebar.swift`,
+  `Elis/Views/SettingsView.swift` (Interface tab layout)
+- Modify: `Elis/Views/HtmlOverlayView.swift`, `ElisCore/Sources/ElisCore/AppStore+OverlayVisibility.swift`
 - Modify tests: `BuiltinActionTests`, `PaletteCatalogTests`, `AppSettingsTests`, `TitlebarCompositionTests` in
-  `HangarCoreTests`; `HangarTests/PaletteTests.swift`, `AppActionsPaletteTests.swift`,
-  `CustomCommandRunnerTests.swift`, `WindowContentView+TitlebarTests.swift`; `HangarUITests/KeymapUITests.swift`,
+  `ElisCoreTests`; `ElisTests/PaletteTests.swift`, `AppActionsPaletteTests.swift`,
+  `CustomCommandRunnerTests.swift`, `WindowContentView+TitlebarTests.swift`; `ElisUITests/KeymapUITests.swift`,
   `SettingsUITests.swift`
 
 - [x] built-in `toggle_overlay` with default ⌘⇧J (checked against Ghostty defaults and `keymap.md`), View menu
@@ -247,7 +247,7 @@
 **Files:**
 - Modify: `.claude/rules/control-api.md`, `.claude/rules/keymap.md`, `.claude/rules/settings.md`
 - Modify: `site/docs.html`, `site/commands.html`, `site/index.html` if the feature list warrants it
-- Modify: `plugins/hangar/skills/hangar/SKILL.md`, `reference.md`
+- Modify: `plugins/elis/skills/elis/SKILL.md`, `reference.md`
 - Modify: `README.md` only if it lists overlay controls
 
 - [x] `control-api.md` owns the hidden-state contract once: occupancy vs visible predicates and which sites read
@@ -265,9 +265,9 @@
 - [x] every Overview and Solution Overview item implemented
 - [x] `make build` (Release) succeeds
 - [x] `make lint` clean
-- [x] `cd HangarCore && swift test` passes
+- [x] `cd ElisCore && swift test` passes
 - [x] `make test-app` passes
-- [x] `lsappinfo list | grep -A4 hangar.debug` shows no leaked test instance
+- [x] `lsappinfo list | grep -A4 elis.debug` shows no leaked test instance
 
 ### Task 7: [Final] Update documentation
 - [x] CLAUDE.md interface-control line committed with this branch

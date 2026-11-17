@@ -1,11 +1,11 @@
 # Linux remote server
 
 ## Overview
-- Run sessions and the agents in them on a headless Linux server and use them from the Mac's Hangar as if they were
+- Run sessions and the agents in them on a headless Linux server and use them from the Mac's Elis as if they were
   local: create a session, split it, swap, rename, close, and see status, context, HUD, asks, pick, program overlays
   and HTML/image/markdown/text pages drawn on the Mac. Sessions keep running while the Mac sleeps or disconnects.
 - Two pieces:
-  - **`hangar-server`**, a headless Swift executable in the `HangarCore` package, built for Linux. It runs the same
+  - **`elis-server`**, a headless Swift executable in the `ElisCore` package, built for Linux. It runs the same
     `AppStore`, `ControlDispatcher`, `PresentationHub`, `OverlayJobs` and page channel as the Mac app, with no GTK,
     no libghostty and no windows. Every pane is a detached zmx daemon; nothing is drawn on the server.
   - **A remote window on the Mac**, bound to one server host. Its sidebar mirrors the server's catalog, and every
@@ -18,16 +18,16 @@
   that landed since (#793, #849, #891) already carries what that relay was for, and a Swift server applies the
   same core rules itself, so no second store or relay is needed.
 - Design argued out with codex in the session that produced this plan; its review notes were
-  `/tmp/agterm-linux-origin-review.md`, `/tmp/hangar-headless-origin-review.md` and
-  `/tmp/hangar-remote-window-review.md` (scratch files, not kept). The decisions below are the agreed result.
+  `/tmp/agterm-linux-origin-review.md`, `/tmp/elis-headless-origin-review.md` and
+  `/tmp/elis-remote-window-review.md` (scratch files, not kept). The decisions below are the agreed result.
 
 ## Decisions carried from the draft
 Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
 
 | Draft decision | Here | Why |
 |---|---|---|
-| Hangar behavior stays in Hangar's Swift handlers | changed | the server runs the same Swift core rules itself |
-| server tool in Go with SQLite | dropped | Swift on `HangarCore`; one catalog store, no second authority |
+| Elis behavior stays in Elis's Swift handlers | changed | the server runs the same Swift core rules itself |
+| server tool in Go with SQLite | dropped | Swift on `ElisCore`; one catalog store, no second authority |
 | one owner per session, last attach wins | dropped | several Macs per catalog is out of this release |
 | remote rows mixed into local windows | changed | a remote window per host decides where actions go |
 | close asks: keep running or end | kept | Detach (default) / Terminate sheet, per-Mac detach |
@@ -39,11 +39,11 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
 
 ## Context (from discovery)
 - Shared core, already Linux-built by the agterm-linux fork's CI (`swift test` on ubuntu-24.04, Swift 6.3.2):
-  `HangarCore/Package.swift` (products `HangarCore`, `hangarctl`, `hangar-session-host`), `AppStore*.swift`,
+  `ElisCore/Package.swift` (products `ElisCore`, `elisctl`, `elis-session-host`), `AppStore*.swift`,
   `ControlDispatcher*.swift`, `PresentationHub.swift`, `PresentationFrames.swift`, `OverlayJobs.swift`,
   `PageServeFrames.swift`, `RemotePageResources.swift`, `ZmxSupport.swift`, `ZmxLead.swift`, `RemoteTree.swift`,
   `RemoteSession.swift`, `RemotePresentationClient.swift`, `RemotePresentationState.swift`, `WindowLibrary*.swift`.
-- Mac host adapters (AppKit, not portable as-is, about 7,000 lines): `Hangar/Control/ControlServer*.swift`,
+- Mac host adapters (AppKit, not portable as-is, about 7,000 lines): `Elis/Control/ControlServer*.swift`,
   `ControlStreamOwner.swift` (Darwin `shutdown`, `SO_NOSIGPIPE`, `os`), `ControlServer+PageServe.swift`
   (`OSAllocatedUnfairLock`, UTType, `HtmlOverlayRegistry`), `ControlTargetResolver.swift` (resolves through
   `WindowLibrary.activeStore`, else a throwaway empty store), `RemotePresentationProcess.swift`.
@@ -53,7 +53,7 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
   - `Session.paneRole(forToken:)` (`Session.swift:805`) resolves `--pane-id` through surface tokens.
   - `swapPanes` requires realized surfaces (`AppStore+Panes.swift:108`).
   - `Session.followsRemotely` (`ZmxLead.swift:176`) requires a local zmx client's follower report.
-  - `pick` has no session target (`ControlDispatcher+Pick.swift`, `Hangar/Control/ControlServer+Pick.swift`).
+  - `pick` has no session target (`ControlDispatcher+Pick.swift`, `Elis/Control/ControlServer+Pick.swift`).
 - Remote-attach limits the remote window must not inherit: remote rows are never persisted
   (`Session.isPersistable`, `Session.swift:67`); `RemoteBinding`'s pane maps are immutable; `applyRemoteLayout`
   only swaps an existing realized pair (`AppStore+RemoteLayout.swift:6`); the viewer never creates a pane from a
@@ -63,7 +63,7 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
   sessions, and wires local save, finalization and Recent Closed.
 - Portability gaps: `OverlayRunJob.swift:177` uses Darwin `POSIX_SPAWN_START_SUSPENDED`; `setup.sh` hardcodes
   `ZMX_TARGET="aarch64-macos.14.0"`; `CommandPath.standardDirectories` adds only the CLI install directory and
-  `/opt/homebrew/bin` to the far side's PATH, not `~/.local/bin`; `hangar-codex-status.sh` calls `/usr/bin/plutil`.
+  `/opt/homebrew/bin` to the far side's PATH, not `~/.local/bin`; `elis-codex-status.sh` calls `/usr/bin/plutil`.
 - agterm-linux (melonamin's fork) is a GTK app that already acts as a presentation origin over the same protocol
   (its `ControlServer+Presentation.swift`, `ControlServer+PageServe.swift`, `ControlServer+OverlayJobs.swift`). It is
   reference for Linux branches (Glibc spawn, socket options), not code this plan copies.
@@ -76,22 +76,22 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
   - write unit tests for new and modified functions/methods, success and error scenarios
 - **CRITICAL: all tests must pass before starting next task** - no exceptions
 - **CRITICAL: update this plan file when scope changes during implementation**
-- per task, run only what changed: `cd HangarCore && swift test --filter <Suite>` and
+- per task, run only what changed: `cd ElisCore && swift test --filter <Suite>` and
   `-only-testing:<Target>/<Class>/<test>` for hosted or UI tests; the full gates run once, in the acceptance task
-- every task that changes `HangarCore` also builds it on Linux (the CI job from Task 2, or a local Linux container)
-- keep `public` symbols stable: `HangarCore` is consumed by the agterm-linux fork; a new requirement on
+- every task that changes `ElisCore` also builds it on Linux (the CI job from Task 2, or a local Linux container)
+- keep `public` symbols stable: `ElisCore` is consumed by the agterm-linux fork; a new requirement on
   `ControlActions` gets a default in `ControlActionsDefaults.swift`
 - read the matching `.claude/rules/*.md` before each subsystem (`control-api.md`, `windows.md`, `sidebar.md`,
   `menu-actions.md`, `ui-tests.md`)
 
 ## Testing Strategy
-- **unit tests**: `HangarCore/Tests/HangarCoreTests` (Swift Testing) for every core change; a new
-  `HangarCore/Tests/HangarServerTests` target for the server; `hangarctlKitTests` for CLI portability. All run on
+- **unit tests**: `ElisCore/Tests/ElisCoreTests` (Swift Testing) for every core change; a new
+  `ElisCore/Tests/ElisServerTests` target for the server; `elisctlKitTests` for CLI portability. All run on
   macOS and on the Linux CI job.
-- **hosted tests**: `HangarTests` for the Mac remote window store source, reconciliation and action routing.
-- **UI tests**: `HangarUITests` for opening a remote window, new session, split, rename and close against a server
+- **hosted tests**: `ElisTests` for the Mac remote window store source, reconciliation and action routing.
+- **UI tests**: `ElisUITests` for opening a remote window, new session, split, rename and close against a server
   running in a local Linux container.
-- **end-to-end**: a scripted harness that starts `hangar-server` in a local Linux container with sshd and drives an
+- **end-to-end**: a scripted harness that starts `elis-server` in a local Linux container with sshd and drives an
   isolated Debug instance against it over real ssh; never the live terminal's socket.
 
 ## Progress Tracking
@@ -107,10 +107,10 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
   opening the same server sees the same sidebar.
 - **One catalog per host, one remote window per catalog per Mac app.** Opening it again raises the existing window.
 - **Two channels, both over ssh.**
-  - Structural writes go as `RemoteSession.controlCommand` (ssh running the server's `hangarctl`), so they work with
+  - Structural writes go as `RemoteSession.controlCommand` (ssh running the server's `elisctl`), so they work with
     zero sessions and survive the target's deletion. The server's dispatcher applies them with the same rules as a
     local window.
-  - A new catalog subscription (`hangarctl catalog subscribe` over `ssh -T`, the same bridging as `zmx present`)
+  - A new catalog subscription (`elisctl catalog subscribe` over `ssh -T`, the same bridging as `zmx present`)
     streams an epoch/revision-numbered snapshot and deltas of the whole catalog. It is the single source the
     remote window reconciles from; a reply never mutates the mirror directly.
   - Session effects keep using today's per-session presentation stream unchanged.
@@ -123,7 +123,7 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
 - **No Mac connected.** Status, context and HUD keep riding the existing snapshot. Asks, pick, pages and program
   overlays opened with no presenter wait with a deadline and are offered to the next Mac that connects; a claimed
   or unknown program job is never launched again. Pending interactions live in memory: a server restart cancels
-  them and the waiting `hangarctl` call fails with an error. Notify stays dropped, as today.
+  them and the waiting `elisctl` call fails with an error. Notify stays dropped, as today.
 - **Disconnected window.** Keeps the last sidebar and screens in memory, marked Disconnected; local navigation and
   window actions work; server mutations are disabled and never queued; there is no local fallback. A cold-reopened
   remote window shows Connecting until it has authoritative state and never seeds a local shell.
@@ -143,7 +143,7 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
   closing an Ended row never silently ends running work. An unreachable server or an incomplete answer is
   `Disconnected`, never `Ended`.
 - **Stays local in a remote window:** settings, theme, keymap, the quick terminal, app-global maintenance, and custom
-  commands. A custom command's session operations route to the server through `hangarctl`; its shell body runs on
+  commands. A custom command's session operations route to the server through `elisctl`; its shell body runs on
   the Mac.
 - **Out of this release:** server-owned undo/Reopen Closed, defined behavior for several Macs viewing one catalog
   at once beyond today's first-stream-wins presenter rule, and a macOS server target. Server code keeps its
@@ -152,7 +152,7 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
   Post-Completion).
 
 ## Technical Details
-- **Catalog wire types** (`HangarCore`, `CatalogFrames.swift`): `CatalogSnapshot {epoch, rev, catalogID, workspaces:
+- **Catalog wire types** (`ElisCore`, `CatalogFrames.swift`): `CatalogSnapshot {epoch, rev, catalogID, workspaces:
   [CatalogWorkspace]}`, `CatalogWorkspace {id, name, sessions: [CatalogSession]}`, `CatalogSession {id, name,
   parent?, cwd, panes: [CatalogPane], primary, axis?, shown, lifecycle}`, `CatalogPane {identity, daemon,
   endpoint}`, `CatalogDelta {epoch, rev, body}` with workspace/session/pane added, changed, removed. A new epoch
@@ -168,7 +168,7 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
   refused(error)}`. The server keeps an op table, `opID → outcome` plus `fenced`, bounded to the most recent
   operations and written in the same save that commits each change to the persisted catalog, so an operation that
   committed before a restart is still answerable after it.
-  The same `opID` sent again returns the recorded outcome and never runs twice. `hangarctl catalog op OPID` answers
+  The same `opID` sent again returns the recorded outcome and never runs twice. `elisctl catalog op OPID` answers
   from the table; asking about an `opID` the server has not seen records it as `fenced`, so a delayed arrival of
   that command is refused. The mirror's per-target `pending(opID)` clears on its own receipt, for `applied` once the
   mirror has reached `(epoch, rev)`; revisions compare only within one epoch, and a receipt from an epoch the mirror
@@ -187,11 +187,11 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
   the server never signals a pane; without systemd (tests) daemons spawn directly. The server never runs the
   zero-client reap (`ZmxReapPolicy.namesToKill`): with no Mac connected every pane has zero clients.
 - **Shells.** Server panes accept zsh, fish and bash login shells, each with ghostty's shell integration (OSC 7 cwd,
-  prompt marks, `HANGAR_*` environment); any other shell is refused with a message naming the supported ones. The
+  prompt marks, `ELIS_*` environment); any other shell is refused with a message naming the supported ones. The
   Mac's Live-mode shell rule is unchanged.
 - **cwd without a terminal.** The server reads each pane's cwd from `/proc/<pid>/cwd` of the pane's foreground
   process on every observation tick, so split and new session inherit it and `tree` reports it.
-- **zmx sockets on Linux** live under `$XDG_RUNTIME_DIR/hangar-zmx-<hash>` (kept by linger), never `/tmp`, which
+- **zmx sockets on Linux** live under `$XDG_RUNTIME_DIR/elis-zmx-<hash>` (kept by linger), never `/tmp`, which
   distribution tmp cleanup can empty under a live daemon; the Mac attaches through the advertised endpoint as today.
 - **Only a headless server serves the catalog.** The Mac app's `ControlActions` default refuses `catalog subscribe`
   and the receipt-bearing structural commands, and a remote window refuses an origin whose version advertisement
@@ -205,17 +205,17 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
   panes and program overlays whose `TERM` names it; `TerminfoInstall` gains the Linux lookup.
 - **Oversized snapshots.** A catalog or pending-interaction snapshot larger than the 256 KiB frame cap is sent as
   numbered chunk frames ending in a commit frame; the client applies nothing until the commit arrives.
-- **Linux rendezvous.** On Linux, `hangarctl` with no `--socket` and no `HANGAR_STATE_DIR` resolves
-  `$XDG_STATE_HOME/hangar` (default `~/.local/state/hangar`), the same default `hangar-server` uses, so a fresh
+- **Linux rendezvous.** On Linux, `elisctl` with no `--socket` and no `ELIS_STATE_DIR` resolves
+  `$XDG_STATE_HOME/elis` (default `~/.local/state/elis`), the same default `elis-server` uses, so a fresh
   ssh command with a bare environment reaches the server. The installed server always uses that default; a custom
   server state dir is not supported, so `remotes.conf` keeps its `destination [label...]` format unchanged and the
   remote window picks hosts from the same list as Attach Remote. The Mac CLI's precedence is unchanged.
-- **Pending interaction states** (`HangarCore`): `unpresented`, `offered(generation)`, `claimed`, `terminal(outcome)`,
+- **Pending interaction states** (`ElisCore`): `unpresented`, `offered(generation)`, `claimed`, `terminal(outcome)`,
   negotiated through a new hello kind; a job's claim window starts at handoff, not at enqueue.
-- **Server state dir**: `$HANGAR_STATE_DIR` or the Linux default above; holds the persisted catalog, the catalog id
+- **Server state dir**: `$ELIS_STATE_DIR` or the Linux default above; holds the persisted catalog, the catalog id
   and the control socket; one server per state dir under the existing `flock` rule. The persisted catalog excludes
   scratch panes; the live catalog subscription includes them so a Mac can attach and read back. Scratch daemons
-  carry their own name shape (`hangar-scratch-<uuid>`), so a restarted server ends only those and adopts the rest.
+  carry their own name shape (`elis-scratch-<uuid>`), so a restarted server ends only those and adopts the rest.
 
 ## What Goes Where
 - **Implementation Steps** (`[ ]` checkboxes): code, tests, scripts, CI and docs in this repository.
@@ -226,13 +226,13 @@ Each decision of `docs/remote-agent-server.md`, and what this plan does with it.
 ### Task 1: Mac-to-Linux attach gate script
 
 ⚠️ Scope change (Eugene, 2026-11-06): no agterm-linux container. The GTK app is not the server, and Task 5 runs this
-gate against `hangar-server`, the origin that ships. Task 1 writes the script and the doc; the run moves to Task 5.
+gate against `elis-server`, the origin that ships. Task 1 writes the script and the doc; the run moves to Task 5.
 
 **Files:**
 - Create: `scripts/linux-origin-gate.sh`
 - Create: `docs/remote-linux-gate.md`
 
-- [x] the script launches the Debug instance with a short `/tmp` `HANGAR_STATE_DIR` it creates itself, including
+- [x] the script launches the Debug instance with a short `/tmp` `ELIS_STATE_DIR` it creates itself, including
       the `windows` marker, and refuses to run when that variable is unset or names the live state dir
 - [x] the script takes the ssh host of a Linux origin and drives the gate scenario against it: attach to one of its
       sessions over real ssh (`zmx attach HOST ID --companions`), presentation `connected`, status, context, HUD,
@@ -246,26 +246,26 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
 ### Task 2: Linux build foundation
 
 **Files:**
-- Modify: `HangarCore/Package.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/OverlayRunJob.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/SocketClient.swift` (only if the Linux build needs it)
-- Modify: `HangarCore/Sources/hangarctlKit/Commands.swift` (`BasicOptions.socketPath`)
+- Modify: `ElisCore/Package.swift`
+- Modify: `ElisCore/Sources/elisctlKit/OverlayRunJob.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SocketClient.swift` (only if the Linux build needs it)
+- Modify: `ElisCore/Sources/elisctlKit/Commands.swift` (`BasicOptions.socketPath`)
 - Modify: `.github/workflows/ci.yml`
 - Modify: `.claude/rules/ci.md`
 - Create: `scripts/setup-zmx-linux.sh`
 - Modify: `scripts/zmx-patches/README.md`
-- Modify: `HangarCore/Tests/hangarctlKitTests/OverlayRunJobTests.swift`
-- Modify: `Hangar/Resources/agent-status/hangar-codex-status.sh` (portable replacement for `/usr/bin/plutil`)
+- Modify: `ElisCore/Tests/elisctlKitTests/OverlayRunJobTests.swift`
+- Modify: `Elis/Resources/agent-status/elis-codex-status.sh` (portable replacement for `/usr/bin/plutil`)
 - Modify: test sources with unconditional Darwin use (`SessionWaitCommandsTests.swift`, `StreamBridgeTests.swift`,
   `CodexStatusHookTests.swift` and any other the Linux build reports)
-- ➕ Create: `HangarCore/Sources/HangarCore/PortableMarkdown.swift` (the Linux session-info, HUD-visibility and
+- ➕ Create: `ElisCore/Sources/ElisCore/PortableMarkdown.swift` (the Linux session-info, HUD-visibility and
   image-reference paths, behind `#if canImport(Markdown)`)
 - ➕ Modify: `scripts/setup.sh` (zmx target, stage dir and stamp overridable for the Linux build)
-- ➕ Modify: `HangarCore/Package.swift` (swift-markdown 0.8.0, Linux only; Eugene approved the dependency)
+- ➕ Modify: `ElisCore/Package.swift` (swift-markdown 0.8.0, Linux only; Eugene approved the dependency)
 
-- [x] make `HangarCore` and `hangarctlKit` build and test on Linux: a Glibc branch for the suspended-spawn
+- [x] make `ElisCore` and `elisctlKit` build and test on Linux: a Glibc branch for the suspended-spawn
       handoff in `OverlayRunJob`, and any other Darwin-only call the build reports
-- [x] ➕ (moved from Task 12) portable JSON extraction in `hangar-codex-status.sh` replacing `/usr/bin/plutil`, since
+- [x] ➕ (moved from Task 12) portable JSON extraction in `elis-codex-status.sh` replacing `/usr/bin/plutil`, since
       `CodexStatusHookTests` runs in the core suite the Linux job must pass
 - [x] ➕ test sources build on Linux: unconditional `import Darwin` and `SO_NOSIGPIPE` in tests get platform branches
 - [x] add a Linux CI job (ubuntu-24.04, pinned Swift 6.3.x, its own `timeout-minutes`) running `swift build` and
@@ -274,34 +274,34 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
       with its own stamp
 - [x] stage ghostty's shell-integration directory (zsh, fish, bash) and its `xterm-ghostty` terminfo entry at
       `GHOSTTY_REV` as Linux artifacts, with the same stamp rule
-- [x] probe the static Linux SDK (musl) with the existing package (`hangarctl`); record whether Foundation use builds
+- [x] probe the static Linux SDK (musl) with the existing package (`elisctl`); record whether Foundation use builds
       there, which decides packaging in Task 12
 - [x] Linux CLI rendezvous: `BasicOptions.socketPath` resolves the Linux default when neither `--socket` nor
-      `HANGAR_STATE_DIR` is set; Mac resolution unchanged
+      `ELIS_STATE_DIR` is set; Mac resolution unchanged
 - [x] tests: `OverlayRunJob` spawn handoff on both platforms; socket path resolution per platform and precedence;
       Linux CI green on the unchanged suite
 
 ### Task 3: Windowless core contracts
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`, `AppStore+Panes.swift`
-- Modify: `HangarCore/Sources/HangarCore/ZmxLead.swift`, `RemoteTree.swift`, `AppStore+Presentation.swift`,
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift`, `AppStore+Panes.swift`
+- Modify: `ElisCore/Sources/ElisCore/ZmxLead.swift`, `RemoteTree.swift`, `AppStore+Presentation.swift`,
   `AppStore+RemoteAsk.swift`, `AppStore+RemotePage.swift`, `AppStore+RemoteOverlay.swift` (every `followsRemotely`
   caller)
-- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift` (pending pick on the session node)
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Pick.swift`, `ControlActionsDefaults.swift`,
+- Modify: `ElisCore/Sources/ElisCore/ControlProjection.swift` (pending pick on the session node)
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Pick.swift`, `ControlActionsDefaults.swift`,
   `PresentationFrames.swift`, `PresentationHub.swift`, `RemotePresentationClient.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/` (pick `--session`)
-- Modify: `Hangar/Control/ControlServer+Pick.swift`, `ControlServer+RemotePresentation.swift`
-- Modify: matching tests in `HangarCore/Tests/HangarCoreTests/`
+- Modify: `ElisCore/Sources/elisctlKit/` (pick `--session`)
+- Modify: `Elis/Control/ControlServer+Pick.swift`, `ControlServer+RemotePresentation.swift`
+- Modify: matching tests in `ElisCore/Tests/ElisCoreTests/`
 
 - [x] model daemon backing as session state keyed by stable pane identity, so attachability (`zmxBacking`,
       `RemoteTreeMerger`) and `paneRole(forToken:)` work with no surface; the Mac keeps deriving it from surfaces
 - [x] decouple `swapPanes` and split on/off/close from realized surfaces for a store marked headless
 - [x] add a headless-origin presentation rule: with no local client, asks, pick, pages and jobs route to the elected
       presenter; the Mac origin's follower gate is unchanged
-- [x] session-bound pick, end to end: `hangarctl pick --session`/env, wire arguments, a session-targeted
+- [x] session-bound pick, end to end: `elisctl pick --session`/env, wire arguments, a session-targeted
       `ControlActions.openPick` overload with a default (the existing window/follow witness stays), presentation
       frames for pick request, result and cancel, the Mac presenter's receiver, and the origin's routing; today's
       window-scoped pick stays for untargeted calls; a session-bound pick in flight is reported on that session's
@@ -310,28 +310,28 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
       refusal of physical window commands
 - [x] tests: backing and token resolution without surfaces, swap/split on a headless store, presenter routing for
       both origin kinds, pick request/result/cancel across the stream, old witness still compiles and behaves, Mac
-      behavior unchanged; hosted `HangarTests` for the Mac pick receiver (`-only-testing`)
+      behavior unchanged; hosted `ElisTests` for the Mac pick receiver (`-only-testing`)
 
 ### Task 4: Server runtime and session lifecycle
 
 **Files:**
-- Modify: `HangarCore/Package.swift`
-- Create: `HangarCore/Sources/hangar-server/` (executable target)
-- Create: `HangarCore/Sources/HangarServerKit/` (server library: socket server, provisioning, actions)
-- Create: `HangarCore/Sources/HangarCore/ControlStreamFraming.swift` (portable framing extracted from
-  `Hangar/Control/ControlStreamOwner.swift`)
-- Modify: `Hangar/Control/ControlStreamOwner.swift`
-- Modify: `HangarCore/Sources/HangarCore/ZmxSupport.swift` (Linux socket directory, server shell configuration)
+- Modify: `ElisCore/Package.swift`
+- Create: `ElisCore/Sources/elis-server/` (executable target)
+- Create: `ElisCore/Sources/ElisServerKit/` (server library: socket server, provisioning, actions)
+- Create: `ElisCore/Sources/ElisCore/ControlStreamFraming.swift` (portable framing extracted from
+  `Elis/Control/ControlStreamOwner.swift`)
+- Modify: `Elis/Control/ControlStreamOwner.swift`
+- Modify: `ElisCore/Sources/ElisCore/ZmxSupport.swift` (Linux socket directory, server shell configuration)
 - Modify: `.github/workflows/ci.yml` (real-zmx lifecycle run on the Linux job)
-- Create: `HangarCore/Tests/HangarServerTests/`
-- ➕ Create: `HangarCore/Sources/HangarCore/ControlAcceptLoop.swift`, `UnixSocket.swift` (moved from the app with their tests)
-- ➕ Modify: `HangarCore/Sources/HangarCore/Session.swift`, `Snapshot.swift`, `ControlProjection.swift`, `AppStore+Snapshot.swift`, `AppStore+Panes.swift` (`ended`)
-- ➕ Modify: `HangarCore/Sources/HangarCore/TerminfoInstall.swift` (Linux lookup)
-- ➕ Create: `scripts/zmx-patches/0005-detached-create.patch`; modify `scripts/zmx-patches/README.md`, `check.py`, `scripts/setup.sh` (`HANGAR_ZMX_ZIG`)
+- Create: `ElisCore/Tests/ElisServerTests/`
+- ➕ Create: `ElisCore/Sources/ElisCore/ControlAcceptLoop.swift`, `UnixSocket.swift` (moved from the app with their tests)
+- ➕ Modify: `ElisCore/Sources/ElisCore/Session.swift`, `Snapshot.swift`, `ControlProjection.swift`, `AppStore+Snapshot.swift`, `AppStore+Panes.swift` (`ended`)
+- ➕ Modify: `ElisCore/Sources/ElisCore/TerminfoInstall.swift` (Linux lookup)
+- ➕ Create: `scripts/zmx-patches/0005-detached-create.patch`; modify `scripts/zmx-patches/README.md`, `check.py`, `scripts/setup.sh` (`ELIS_ZMX_ZIG`)
 - ➕ Create: `scripts/server-container.sh`; modify `scripts/setup-zmx-linux.sh` (`--shell-integration` from ghostty's source at the pin), `.claude/rules/ci.md`
-- ➕ Create: `HangarCore/Tests/HangarCoreTests/TestExecutable.swift`, `HangarCore/Tests/hangarctlKitTests/TestExecutable.swift` (scripts written from a child process)
+- ➕ Create: `ElisCore/Tests/ElisCoreTests/TestExecutable.swift`, `ElisCore/Tests/elisctlKitTests/TestExecutable.swift` (scripts written from a child process)
 
-- [x] `hangar-server` executable: main-actor run loop, state dir lock, durable catalog id, `AppStore` restored from
+- [x] `elis-server` executable: main-actor run loop, state dir lock, durable catalog id, `AppStore` restored from
       and saved to the server state dir
 - [x] Linux control socket server on the shared framing (stream ownership, backpressure), with the Mac's
       `ControlStreamOwner` moved onto the same framing; only server-supported commands accepted, the rest refused
@@ -352,11 +352,11 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
       pane's cwd is read from `/proc/<pid>/cwd` of its foreground process so split and new session inherit it
 - [x] restart reconciliation: a restarted server adopts surviving daemons from the catalog, marks missing ones
       ended, and never reaps a live pane
-- [x] `scripts/server-container.sh`: builds the Linux `hangar-server`, `hangarctl`, zmx and shell integration from
+- [x] `scripts/server-container.sh`: builds the Linux `elis-server`, `elisctl`, zmx and shell integration from
       this tree into a local container with sshd, key auth and a systemd user manager with linger, starts or stops
       it, and prints the ssh host; every later task's container checks use it
-- [x] Linux CI: the Linux job builds the musl zmx and runs the `HangarServerTests` lifecycle suite against a real
-      daemon (`HANGAR_REQUIRE_ZMX=1`), mirroring the macOS job
+- [x] Linux CI: the Linux job builds the musl zmx and runs the `ElisServerTests` lifecycle suite against a real
+      daemon (`ELIS_REQUIRE_ZMX=1`), mirroring the macOS job
 - [x] ➕ `session.move` served before Task 6, which needs a receipt for every structural command
 - [x] ➕ Linux `ServerProcess` children get only stdin, stdout and stderr (a daemon inherited every other open descriptor for life)
 - [x] ➕ test scripts are written from a child process: a write descriptor held by the test process reached a concurrent spawn and Linux refused the exec (ETXTBSY), which the server suite's spawns made frequent
@@ -370,13 +370,13 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
 ### Task 5: Server presentation, jobs and pages
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarServerKit/`
-- Create: `HangarCore/Sources/HangarCore/PageServeStream.swift` (portable part of
-  `Hangar/Control/ControlServer+PageServe.swift`)
-- Modify: `Hangar/Control/ControlServer+PageServe.swift`, `ControlServer+Presentation.swift`,
+- Modify: `ElisCore/Sources/ElisServerKit/`
+- Create: `ElisCore/Sources/ElisCore/PageServeStream.swift` (portable part of
+  `Elis/Control/ControlServer+PageServe.swift`)
+- Modify: `Elis/Control/ControlServer+PageServe.swift`, `ControlServer+Presentation.swift`,
   `ControlServer+OverlayJobs.swift`
-- Modify: `HangarCore/Sources/HangarCore/CommandPath.swift`
-- Create/modify: tests in `HangarServerTests` and `HangarCoreTests`
+- Modify: `ElisCore/Sources/ElisCore/CommandPath.swift`
+- Create/modify: tests in `ElisServerTests` and `ElisCoreTests`
 
 - [x] server `ControlActions` producing session effects: status, context, HUD, notify, ask, pick, overlay open
       (program and every page kind) and their follow-ups (close, resize, reload, cancel, result), feeding the hub
@@ -384,54 +384,54 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
       engines the Mac uses; page bridge requests dispatch through the control dispatcher, not the GUI registry
 - [x] image, markdown and text pages and HTML/URL pages from a headless origin reach the presenter
 - [x] add `~/.local/bin` to the far-side PATH the Mac's ssh commands prepend, after the existing entries
-- [x] today's per-session `zmx attach` from the Mac to an `hangar-server` session works unchanged: the Task 1 gate
+- [x] today's per-session `zmx attach` from the Mac to an `elis-server` session works unchanged: the Task 1 gate
       run against `scripts/server-container.sh`, results, failures and unsupported kinds (image/markdown/text pages,
       pick, loopback URLs) recorded in `docs/remote-linux-gate.md`; a protocol incompatibility found here is fixed
       in core in this task
 - [x] tests: presentation snapshot and deltas from a headless store, job claim once, page fetch and bridge, PATH
       composition; ➕ (moved from Task 4) a program overlay with `TERMINFO` unset and no system `xterm-ghostty`
-      entry still resolves it; hosted `HangarTests` for the changed `ControlServer+PageServe`, `+Presentation` and
+      entry still resolves it; hosted `ElisTests` for the changed `ControlServer+PageServe`, `+Presentation` and
       `+OverlayJobs` paths (`-only-testing`)
 
 ### Task 6: Catalog subscription
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/CatalogFrames.swift`, `CatalogHub.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`, `ControlDispatcher.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/` (new `catalog subscribe` bridge command)
-- Modify: `HangarCore/Sources/HangarServerKit/`
-- Create: `HangarCore/Tests/HangarCoreTests/CatalogHubTests.swift`
+- Create: `ElisCore/Sources/ElisCore/CatalogFrames.swift`, `CatalogHub.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`, `ControlDispatcher.swift`
+- Modify: `ElisCore/Sources/elisctlKit/` (new `catalog subscribe` bridge command)
+- Modify: `ElisCore/Sources/ElisServerKit/`
+- Create: `ElisCore/Tests/ElisCoreTests/CatalogHubTests.swift`
 
 - [x] catalog snapshot and deltas with epoch and revision, covering workspaces, sessions, panes, names, order,
       companions and lifecycle; subscriber registered before the snapshot so nothing falls between
-- [x] `hangarctl catalog subscribe` bridging stdio to the server's catalog stream, the same way `zmx present` does
+- [x] `elisctl catalog subscribe` bridging stdio to the server's catalog stream, the same way `zmx present` does
 - [x] resnapshot on reconnect and on a new epoch; unknown kinds skipped without ending the stream; a snapshot over
       the frame cap goes as chunks plus a commit frame
 - [x] operation receipts: every structural command accepts an `opID` and the expected epoch, refuses a stale epoch,
       and replies `applied(rev)`, `noop` or `refused`; the bounded op table, saved with the catalog, answers a
-      repeated `opID` with its recorded outcome, and `hangarctl catalog op OPID` answers lookups, fencing an unseen
+      repeated `opID` with its recorded outcome, and `elisctl catalog op OPID` answers lookups, fencing an unseen
       `opID`
 - [x] the Mac app's `ControlActions` default refuses `catalog subscribe` and receipt-bearing structural commands
-- [x] version advertisement: the catalog snapshot and `hangarctl version` against the server report server,
+- [x] version advertisement: the catalog snapshot and `elisctl version` against the server report server,
       protocol and catalog versions
 - [x] tests: snapshot/delta ordering, restart epoch, every structural command producing the right delta and
       receipt, refusal and no-op receipts, a repeated `opID` never running twice, a lookup fencing an `opID` that
       arrives later, a stale-epoch command refused, an operation that committed and lost its reply still answered
       by lookup after a server restart, chunked snapshot applied only at commit, version fields in the
-      snapshot and in `hangarctl version`, the Mac app refusing `catalog subscribe`
+      snapshot and in `elisctl version`, the Mac app refusing `catalog subscribe`
 
 ### Task 7: Mac remote window store source
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/WindowLibrary.swift`, `WindowLibrary+RecentClosed.swift`
-- Create: `HangarCore/Sources/HangarCore/RemoteCatalogMirror.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemotePresentationState.swift` (mutable bindings for catalog panes)
-- Create: `Hangar/Control/RemoteCatalogProcess.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemoteSession.swift` (ssh `ControlMaster` per host),
-  `RemotePresentationClient.swift`, `AppStore+RemoteLayout.swift`, `Hangar/hangarApp+RemoteLayout.swift` (layout
+- Modify: `ElisCore/Sources/ElisCore/WindowLibrary.swift`, `WindowLibrary+RecentClosed.swift`
+- Create: `ElisCore/Sources/ElisCore/RemoteCatalogMirror.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemotePresentationState.swift` (mutable bindings for catalog panes)
+- Create: `Elis/Control/RemoteCatalogProcess.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemoteSession.swift` (ssh `ControlMaster` per host),
+  `RemotePresentationClient.swift`, `AppStore+RemoteLayout.swift`, `Elis/elisApp+RemoteLayout.swift` (layout
   frames ignored for catalog rows)
-- Modify: `Hangar/hangarApp+Menus.swift`, `Hangar/AppActions.swift`, `Hangar/ContentView.swift`
-- Create: tests in `HangarCoreTests` and `HangarTests`
+- Modify: `Elis/elisApp+Menus.swift`, `Elis/AppActions.swift`, `Elis/ContentView.swift`
+- Create: tests in `ElisCoreTests` and `ElisTests`
 
 - [x] window entries carry a source, local or remote(host, catalogID); a remote entry persists host, catalog id and
       local view state (selection, focus, font, ratio, frame), never sessions, and is skipped by seed, save,
@@ -453,7 +453,7 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
 - [x] protocol check at connect: the Mac reads the server's protocol and catalog versions and refuses an
       unsupported server, or an origin with no catalog version (a Mac app), with a message naming both
 - [x] open from File ▸ Open Remote Window (hosts from `remotes.conf`) and from the control API: protocol command
-      `window.remote.open {host}`, dispatcher, `ControlActions` with a default, `hangarctl window remote open HOST`;
+      `window.remote.open {host}`, dispatcher, `ControlActions` with a default, `elisctl window remote open HOST`;
       opening a host or catalog already open raises that window and returns its id; closing the window detaches;
       `tree` reports the window's `remote {host, catalogID, state}`
 - [ ] checkpoint: build and launch an isolated Debug instance against `scripts/server-container.sh` and show Eugene the
@@ -470,12 +470,12 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
 ### Task 8: Structural actions routed to the server
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/RemoteCatalogActions.swift`
-- Modify: `Hangar/AppActions*.swift`, `Hangar/Views/SidebarRenameController.swift`,
-  `Hangar/Views/WorkspaceSidebar+DragDrop.swift`, `WorkspaceSidebar+ContextMenu.swift`,
+- Create: `ElisCore/Sources/ElisCore/RemoteCatalogActions.swift`
+- Modify: `Elis/AppActions*.swift`, `Elis/Views/SidebarRenameController.swift`,
+  `Elis/Views/WorkspaceSidebar+DragDrop.swift`, `WorkspaceSidebar+ContextMenu.swift`,
   `WorkspaceSidebar+Companions.swift`
-- Modify: `Hangar/Control/ControlTargetResolver.swift`, `Hangar/Control/ControlServer+SessionActions.swift`
-- Create: tests in `HangarCoreTests`, `HangarTests`, `HangarUITests`
+- Modify: `Elis/Control/ControlTargetResolver.swift`, `Elis/Control/ControlServer+SessionActions.swift`
+- Create: tests in `ElisCoreTests`, `ElisTests`, `ElisUITests`
 
 - [x] one action seam scoped by window source: new session, split on/off/close, swap, rename (inline too), reorder,
       move between workspaces, companions, workspace create/rename/delete and session/workspace close go to the
@@ -502,7 +502,7 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
       ended one only for record cleanup under the Ended close rule
 - [x] control coverage: new commands `session.detach` and `session.reattach` (and `workspace.detach`/
       `workspace.reattach`) for remote-window rows only, refused elsewhere, with dispatcher, `ControlActions` defaults
-      and `hangarctl session detach|reattach`; `session.close` keeps its terminating meaning everywhere, so recipes
+      and `elisctl session detach|reattach`; `session.close` keeps its terminating meaning everywhere, so recipes
       such as `close-tab-when-done` and agents on the server are unchanged; `tree` lists the remote window's detached
       ids
 - [x] the local control API targets a remote window's sessions through the same seam, and `tree` reports
@@ -517,7 +517,7 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
       when its record is removed; Terminate reaching detached children; ➕ (moved from Task 7) an ended parent
       with live companions getting the sheet on close and closing an inert Ended row removing the record;
       `session.detach` refused on a
-      local session and `session.close` still terminating; control API read-back; UI tests in `HangarUITests` for
+      local session and `session.close` still terminating; control API read-back; UI tests in `ElisUITests` for
       new session, split, rename, detach, reattach and terminate against `scripts/server-container.sh`, run with
       `-only-testing` and skipped when no server host is configured
       ➕ done to the scope Eugene chose (missing cases plus key routing) in a0e4d818, cdb5e09d and 915b16bb, not every
@@ -525,7 +525,7 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
       empty workspace; GUI New Session, split, move and inline rename; control close, split on/off/close, rename,
       move and new through a real `ControlServer`, background windows included; detach through respawn, promotion,
       daemon loss, companion exit and a saved relaunch; detach/reattach and pending read-back; the six UI flows,
-      run 6/6 against hangar-server on an Ubuntu VM. ⚠️ Partly covered, listed as PR gaps: duplicate, swap, companion
+      run 6/6 against elis-server on an Ubuntu VM. ⚠️ Partly covered, listed as PR gaps: duplicate, swap, companion
       creation, workspace create/rename/reorder and session reorder are pinned by the core route tests but have no
       app-route test of their own; `aCommandDelayedAcrossARestartIsRefusedAndClears` answers with an immediate canned
       refusal, with no delay or epoch change, and `aCreateThatCommittedAndLostItsReplyIsAppliedByALookupAfterARestart`
@@ -534,19 +534,19 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
 ### Task 9: Server scratch and custom commands in a remote window
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarServerKit/`, `HangarCore/Sources/HangarCore/` (scratch pane in the catalog)
-- Modify: `Hangar/AppActions*.swift` (scratch toggle), `Hangar/Commands/CustomCommandRunner.swift`
-- Create: tests in `HangarServerTests`, `HangarTests`
+- Modify: `ElisCore/Sources/ElisServerKit/`, `ElisCore/Sources/ElisCore/` (scratch pane in the catalog)
+- Modify: `Elis/AppActions*.swift` (scratch toggle), `Elis/Commands/CustomCommandRunner.swift`
+- Create: tests in `ElisServerTests`, `ElisTests`
 
 - [x] scratch in a remote window opens an ephemeral server-side zmx daemon attached like any pane; hiding it keeps
       the same shell, as `toggleScratch` does locally; closing the remote window detaches it like every pane; only
       its shell exiting, closing its session, or a server restart ends it; the live catalog shows it, the
-      persisted catalog excludes it; scratch daemons use the `hangar-scratch-<uuid>` name shape, so a restarted
+      persisted catalog excludes it; scratch daemons use the `elis-scratch-<uuid>` name shape, so a restarted
       server ends only those and adopts every other daemon
 - [x] control coverage: `session.scratch` against a remote window's session routes through the seam (protocol,
-      dispatcher, `hangarctl`), and the session's `tree` node reports the server scratch's shown and backed state
+      dispatcher, `elisctl`), and the session's `tree` node reports the server scratch's shown and backed state
 - [x] custom commands keep running on the Mac; `AGT_*` tokens in a remote window name the server session and host,
-      and their `hangarctl` session operations reach the server through the seam
+      and their `elisctl` session operations reach the server through the seam
 - [x] tests: scratch survives hide and window detach, ends on shell exit, session close and server restart, and a
       restart leaves non-scratch daemons running; ➕ (moved from Task 8) `session.detach` stops the scratch's attach
       client and the scratch daemon keeps running;
@@ -555,13 +555,13 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
 ### Task 10: Pending interactions with no Mac connected
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`, `PresentationHub.swift`,
+- Modify: `ElisCore/Sources/ElisCore/PresentationFrames.swift`, `PresentationHub.swift`,
   `OverlayJobs.swift`, `AppStore+RemoteOverlay.swift`, `AppStore+RemotePage.swift`, `RemotePresentationClient.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/` (ask/pick `--timeout`)
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`, `ControlDispatcher+Ask.swift`,
+- Modify: `ElisCore/Sources/elisctlKit/` (ask/pick `--timeout`)
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`, `ControlDispatcher+Ask.swift`,
   `ControlDispatcher+Pick.swift` (deadline argument and validation), `ControlProjection.swift` (read-back)
-- Modify: `Hangar/Control/ControlServer+RemotePresentation.swift`
-- Create: tests in `HangarCoreTests` and `HangarServerTests`
+- Modify: `Elis/Control/ControlServer+RemotePresentation.swift`
+- Create: tests in `ElisCoreTests` and `ElisServerTests`
 
 - [x] ask/pick `--timeout` end to end: CLI flag, `ControlArgs` deadline, dispatcher validation, server expiry
 - [x] a new negotiated hello kind for pending interactions; the snapshot carries unpresented asks, picks, pages and
@@ -576,23 +576,23 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
 - [x] presenter loss mid-interaction returns it to pending instead of handing it back locally; a claimed or unknown
       job reports an honest outcome and is never launched again
 - [x] deadlines and cancellation withdraw pending work before any replay; server restart cancels all of them and the
-      waiting `hangarctl` call fails with an error
+      waiting `elisctl` call fails with an error
 - [x] a presenter without the kind is never offered pending work: interactions stay pending on a headless origin
       until a capable presenter or their deadline, and a Mac origin keeps today's behavior
 - [x] tests: each state transition, generation rejection, deadline expiry and `--timeout` validation, restart
       cancellation, an old presenter's helper claiming while unpresented and after a re-offer (both refused),
       presenter loss racing a successful claim, an old presenter left without pending offers, a chunked pending snapshot applied only at
       commit, `tree` read-back; ➕ (moved from Task 8) an ask open when its session is detached returns to pending
-      and is offered to the next presenter; hosted `HangarTests` for the changed `ControlServer+RemotePresentation` path
+      and is offered to the next presenter; hosted `ElisTests` for the changed `ControlServer+RemotePresentation` path
       (`-only-testing`)
 
 ### Task 11: Localhost URL pages through an ssh forward
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePage.swift`, `PresentationFrames.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+ReplicaPage.swift`
-- Create: `Hangar/Control/RemotePortForward.swift`
-- Create: tests in `HangarCoreTests` and `HangarTests`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RemotePage.swift`, `PresentationFrames.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+ReplicaPage.swift`
+- Create: `Elis/Control/RemotePortForward.swift`
+- Create: tests in `ElisCoreTests` and `ElisTests`
 
 - [x] a new presenter capability for forwarded loopback pages; a headless origin sends a loopback URL page only to a
       presenter that advertises it, as a forward request rather than a plain `.url` source, and refuses it for an
@@ -607,36 +607,36 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
 
 **Files:**
 - Create: `scripts/install-server.sh`
-- Modify: `HangarCore/Sources/HangarServerKit/` (`hangar-server install-hooks`)
-- Modify: `HangarCore/Sources/HangarCore/` (portable part of the app's `AgentHooksInstaller` hoisted here)
-- Modify: `HangarCore/Package.swift` (hook scripts and the agent skill as resources of the server product)
+- Modify: `ElisCore/Sources/ElisServerKit/` (`elis-server install-hooks`)
+- Modify: `ElisCore/Sources/ElisCore/` (portable part of the app's `AgentHooksInstaller` hoisted here)
+- Modify: `ElisCore/Package.swift` (hook scripts and the agent skill as resources of the server product)
 - Create: tests for the hook change and the server-side install
 
-- ➕ Task 2 probe result (swift 6.3.2 static-linux-0.1.0 SDK, aarch64 musl): Foundation, `HangarCore` and the
-  swift-markdown/cmark dependency build; `hangarctlKit` fails only where its Linux branches name `Glibc`
+- ➕ Task 2 probe result (swift 6.3.2 static-linux-0.1.0 SDK, aarch64 musl): Foundation, `ElisCore` and the
+  swift-markdown/cmark dependency build; `elisctlKit` fails only where its Linux branches name `Glibc`
   (`Glibc.send`, `Glibc.accept`/`connect`) or use Glibc's enum-typed `SOCK_STREAM`, which musl's `Musl` module
   spells as a plain `Int32`. A static build is viable once those take a `Musl` branch.
 - ➕ Done as: static musl binaries from `scripts/server-build.sh`, installed by `scripts/install-server.sh` into
-  `~/.local/lib/hangar-server` with `~/.local/bin` links (a rename swaps the whole directory on upgrade); the hook
+  `~/.local/lib/elis-server` with `~/.local/bin` links (a rename swaps the whole directory on upgrade); the hook
   scripts and the skill ship as files in its `resources/`, not as SwiftPM resources. Under musl every spawn goes
   through `CleanExec`, the server re-exec'd to close inherited descriptors, since musl has no closefrom action.
-- [x] packaging from the Task 2 probe: a static musl build of `hangar-server` and `hangarctl`, or a bundled Swift
+- [x] packaging from the Task 2 probe: a static musl build of `elis-server` and `elisctl`, or a bundled Swift
       runtime when the probe failed
-- [x] install `hangar-server`, the Linux `hangarctl`, zmx, ghostty's shell integration and terminfo entry, the hook
+- [x] install `elis-server`, the Linux `elisctl`, zmx, ghostty's shell integration and terminfo entry, the hook
       scripts and the agent skill on a host over ssh (binaries into `~/.local/bin`), and start the server as a systemd user service
       with lingering enabled (`loginctl enable-linger`), refusing with the reason when linger cannot be enabled,
       since without it the user manager ends the server and every zmx daemon at the last ssh logout; upgrade
       replaces binaries and restarts the server without ending panes
 - [x] check under the real systemd user manager that the same pane processes survive the last ssh logout,
       `systemctl --user restart`, a crash with `Restart=`, and an upgrade
-- [x] clean-environment check: a bare `ssh HOST hangarctl tree --json` reaches the server through the Linux
+- [x] clean-environment check: a bare `ssh HOST elisctl tree --json` reaches the server through the Linux
       default
-- [x] agent hooks and the agent skill installed on the server by `hangar-server install-hooks` from its own
+- [x] agent hooks and the agent skill installed on the server by `elis-server install-hooks` from its own
       resources, never from the Mac
-- [x] the installed service reports its versions through `hangarctl version` (produced in Task 6, refused on
+- [x] the installed service reports its versions through `elisctl version` (produced in Task 6, refused on
       connect in Task 7)
 - [x] tests: hook script on Linux; `install-hooks` writes the expected files and points them at the server's
-      `hangarctl`; the hoisted installer leaves the Mac's install unchanged
+      `elisctl`; the hoisted installer leaves the Mac's install unchanged
 
 ### Task 13: Update documentation
 - [x] `site/docs.html`: a Remote server section (install, open a remote window, what runs where, disconnect, close)
@@ -647,7 +647,7 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
 - [x] `site/index.html`: the remote server as a major feature
 - [x] `.claude/rules/control-api.md` (catalog protocol, receipts, pending interactions, headless presenter rule,
       Linux rendezvous), `windows.md` (window sources), `ci.md` (Linux job); `ARCHITECTURE.md` module map
-- [x] `plugins/hangar/skills/hangar/` SKILL.md trigger and reference for remote windows and the server
+- [x] `plugins/elis/skills/elis/` SKILL.md trigger and reference for remote windows and the server
 - [x] `README.md` synopsis line and `site/llms.txt` index entry; delete `docs/remote-agent-server.md`
 
 ### Task 14: [Final] Verify acceptance criteria
@@ -658,16 +658,16 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
       External)
       ⚠️ Eugene hand-tested this Mac attaching sessions from his other Macs on the final Debug build (2026-11-09) and
       found it as before. This Mac as the origin was not exercised on branch code: the other Mac's ssh runs the
-      default-socket `hangarctl`, which is the deployed Release app
-- [ ] on the final tree, once each: `make build`, `cd HangarCore && swift test`, `make test-app`, `make lint`, the
-      Linux build and test, and the new `HangarUITests` classes with `-only-testing` against
+      default-socket `elisctl`, which is the deployed Release app
+- [ ] on the final tree, once each: `make build`, `cd ElisCore && swift test`, `make test-app`, `make lint`, the
+      Linux build and test, and the new `ElisUITests` classes with `-only-testing` against
       `scripts/server-container.sh`
       ⚠️ the non-UI gates ran on 89089014 with one `swift test` failure, the zmx race the shipping plan's gate item
       names. `RemoteWindowUITests` ran 6/6 on 915b16bb, before af23c692's sidebar merge resolution and ba02f880's New
-      Session folder fix, against hangar-server on an Ubuntu VM (`umputun@192.168.1.156`) that this Mac's ssh reaches
+      Session folder fix, against elis-server on an Ubuntu VM (`umputun@192.168.1.156`) that this Mac's ssh reaches
       without a prompt; the container keeps its host key in its own known_hosts file, which the app's plain ssh does
       not read
-- [x] `lsappinfo list | grep -A4 hangar.debug` shows no leaked test process; container stopped
+- [x] `lsappinfo list | grep -A4 elis.debug` shows no leaked test process; container stopped
 - [ ] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
@@ -680,16 +680,16 @@ gate against `hangar-server`, the origin that ships. Task 1 writes the script an
   replace per-command ssh later with the same command semantics
 
 **Decisions for Eugene:**
-- executable name (`hangar-server` is the working name) and whether its release ships with the Mac release or
+- executable name (`elis-server` is the working name) and whether its release ships with the Mac release or
   separately
 - whether several Macs viewing one catalog, and server-owned undo/Reopen Closed, become the next plan
 - once merged, file `docs/backlog/headless-server-macos.md` for the macOS server target: a launchd LaunchAgent
   instead of the systemd unit and linger; panes surviving agent stop, restart, crash and upgrade, verified by test;
-  TCC attribution for agents the server starts, through `hangar-session-host`/`HangarResponsibility`, checked per
+  TCC attribution for agents the server starts, through `elis-session-host`/`ElisResponsibility`, checked per
   service; cwd through `proc_pidinfo`; macOS state and socket paths; a Mac test host for the container checks
 
 **External:**
-- the agterm-linux fork compiles against changed `HangarCore` public API (backing state, pick binding, framing,
+- the agterm-linux fork compiles against changed `ElisCore` public API (backing state, pick binding, framing,
   new `Command` cases, the window-entry source field); tell its maintainer when the release lands
 
 Smells pre-check: skipped — non-Go project

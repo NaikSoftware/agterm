@@ -1,11 +1,11 @@
 ---
 worth: no
-where: HangarUITests/ZmxLiveUITests.swift:tearDown
+where: ElisUITests/ZmxLiveUITests.swift:tearDown
 added: 2026-11-01
 ---
 # ZmxLiveUITests leave their session host running
 
-Every `ZmxLiveUITests` method starts an `hangar-session-host host /tmp/hangar-zmx-<hash>` for its throwaway
+Every `ZmxLiveUITests` method starts an `elis-session-host host /tmp/elis-zmx-<hash>` for its throwaway
 state directory, and the host is still alive after teardown, reparented to launchd and holding a
 `exited-with-subordinates` `lsappinfo` entry for the Debug app. Three were stopped by pid in one session
 (#857). `reapTestDaemons` ends the daemons through `zmx.kill`, but nothing stops the host: outliving the
@@ -17,7 +17,7 @@ host accepts `stop` only from a peer in its own bundle (`HostIdentity.peer`, `ha
 Killing the pidfile's pid would also skip `handleStop`'s rooted-daemon and pending-child checks and
 `HostEndpoint.close()`.
 
-`hangar-session-host stop SOCKET_DIR` exists, but it retires hosts of other builds: `HostRetirement.run`
+`elis-session-host stop SOCKET_DIR` exists, but it retires hosts of other builds: `HostRetirement.run`
 skips the endpoint this build and login session create through, which is exactly the test's host. A fix
 needs a form that includes that endpoint, plus a way for the app to run it at tearDown, such as a custom
 command seeded in the test's keymap. `handleStop` refuses a row without a live leader, so if daemons are

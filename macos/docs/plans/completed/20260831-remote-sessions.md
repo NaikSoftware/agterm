@@ -2,13 +2,13 @@
 
 ## Overview
 
-Attach a local Hangar to a session running on another Mac that also runs Hangar, so it appears in the
+Attach a local Elis to a session running on another Mac that also runs Elis, so it appears in the
 local sidebar as an ordinary session marked remote. One session at a time, including its split.
 Whole-workspace teleport is out of scope.
 
 Two new control commands:
 
-- `zmx tree <host>` — ssh to the host, ask its Hangar what sessions exist in its frontmost window, and
+- `zmx tree <host>` — ssh to the host, ask its Elis what sessions exist in its frontmost window, and
   return each pane's daemon plus the endpoint metadata needed to attach.
 - `zmx attach <host> <session>` — create one local session whose panes run ssh into that remote
   session's daemons.
@@ -19,16 +19,16 @@ Everything runs on the current pinned zmx (`ZMX_REV fb1b6b6`). No upstream chang
 
 ## Context (from discovery)
 
-- `HangarCore/Sources/HangarCore/ControlProtocol.swift` — `ControlCommand`, `zmxList/zmxPrune/zmxKill`.
-- `HangarCore/Sources/HangarCore/ControlPayloads.swift` — `ControlZmxInventory`, `ControlZmxEntry`.
-- `HangarCore/Sources/HangarCore/ControlProjection.swift` — `ControlSessionNode` (no daemon name today).
-- `HangarCore/Sources/HangarCore/ControlDispatcher.swift` — `ControlActions`, the effect seam.
-- `HangarCore/Sources/hangarctlKit/ZmxCommands.swift` — the `zmx` CLI group.
-- `Hangar/Ghostty/ZmxClient.swift` — holds the executable path and socket directory, both private.
-- `Hangar/Ghostty/GhosttySurfaceView.swift:550` — `shouldCloseOnChildExitAction`.
-- `Hangar/Ghostty/GhosttyCallbacks.swift:64` — `GHOSTTY_ACTION_SHOW_CHILD_EXITED`.
-- `HangarCore/Sources/HangarCore/AppStore+Snapshot.swift:41,78` — `initialCommand` persistence.
-- `HangarCore/Sources/HangarCore/AppStore+RecentClosed.swift` — the second persistence producer.
+- `ElisCore/Sources/ElisCore/ControlProtocol.swift` — `ControlCommand`, `zmxList/zmxPrune/zmxKill`.
+- `ElisCore/Sources/ElisCore/ControlPayloads.swift` — `ControlZmxInventory`, `ControlZmxEntry`.
+- `ElisCore/Sources/ElisCore/ControlProjection.swift` — `ControlSessionNode` (no daemon name today).
+- `ElisCore/Sources/ElisCore/ControlDispatcher.swift` — `ControlActions`, the effect seam.
+- `ElisCore/Sources/elisctlKit/ZmxCommands.swift` — the `zmx` CLI group.
+- `Elis/Ghostty/ZmxClient.swift` — holds the executable path and socket directory, both private.
+- `Elis/Ghostty/GhosttySurfaceView.swift:550` — `shouldCloseOnChildExitAction`.
+- `Elis/Ghostty/GhosttyCallbacks.swift:64` — `GHOSTTY_ACTION_SHOW_CHILD_EXITED`.
+- `ElisCore/Sources/ElisCore/AppStore+Snapshot.swift:41,78` — `initialCommand` persistence.
+- `ElisCore/Sources/ElisCore/AppStore+RecentClosed.swift` — the second persistence producer.
 
 ## Development Approach
 
@@ -40,10 +40,10 @@ Everything runs on the current pinned zmx (`ZMX_REV fb1b6b6`). No upstream chang
 ## Testing Strategy
 
 - Host-free logic — ssh argv construction, the tree merge, endpoint payloads, dispatcher
-  parsing/validation — is unit tested in `HangarCore` against fixtures and a fake ssh runner.
+  parsing/validation — is unit tested in `ElisCore` against fixtures and a fake ssh runner.
 - App-side lifecycle — surface routing, persistence exclusion, ownership claims — uses hosted tests in
-  `HangarTests`.
-- End-to-end coverage goes in `HangarUITests/ControlAPIUITests`, scoped with `-only-testing:`, driven by
+  `ElisTests`.
+- End-to-end coverage goes in `ElisUITests/ControlAPIUITests`, scoped with `-only-testing:`, driven by
   the injected fake runner so no second Mac is needed.
 - Anything that genuinely needs a second Mac lives in Post-Completion, never as a completion gate.
 
@@ -86,7 +86,7 @@ entry written to disk, not from the pending-close record that Reopen reads.
 
 ### Why local ownership needs its own projection
 
-`WindowLibrary.liveClaims` converts every live session's pane UUIDs into local `hangar-<uuid>` claims
+`WindowLibrary.liveClaims` converts every live session's pane UUIDs into local `elis-<uuid>` claims
 unconditionally. Unfiltered, each remote pane shows up in `zmx list` as a fabricated claimed-but-absent
 local daemon, and the zmx ownership commands resolve a session they do not manage. Finalization derives
 names the same way, and `closeSplit` calls `paneFinalizer` directly rather than through
@@ -113,7 +113,7 @@ socket directory are private, and recomputing from the process environment insid
 would duplicate runtime selection and break hosted tests that inject a client. Expose them from
 `ZmxClient` and thread them through the restored runtime.
 
-Teleport therefore requires the remote Hangar to be new enough to report endpoints. An older remote
+Teleport therefore requires the remote Elis to be new enough to report endpoints. An older remote
 returns a clear error rather than a partial attach.
 
 ### Scope: the remote's frontmost window
@@ -170,7 +170,7 @@ returns false without dispatching anything, Ghostty shows its own "press any key
 `close_surface_cb` runs today's `closePrimaryPane`/`closeSplitPane` after the key.
 
 The ssh wrapper prints one sanitized line before exiting: host, remote session, pane, exit status. It
-says nothing about reconnecting — the picker is a keymap custom command the user supplies, so Hangar
+says nothing about reconnecting — the picker is a keymap custom command the user supplies, so Elis
 cannot name a path it does not own.
 
 **There is no timer, notification or session-wide coalescing.** An earlier draft had them, and they
@@ -228,15 +228,15 @@ displaced leader — would remove all three. It is **not** part of this work.
 ### Task 1: Endpoint metadata and the ssh invocations
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlPayloads.swift`
-- Create: `HangarCore/Sources/HangarCore/RemoteSession.swift`
-- Modify: `Hangar/Ghostty/ZmxClient.swift`
-- Modify: `Hangar/hangarApp.swift`
-- Modify: `Hangar/Control/ControlServer.swift`
-- Modify: `Hangar/Control/ControlServer+Zmx.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/RemoteSessionTests.swift`
-- Modify: `HangarTests/ControlServerZmxTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlPayloads.swift`
+- Create: `ElisCore/Sources/ElisCore/RemoteSession.swift`
+- Modify: `Elis/Ghostty/ZmxClient.swift`
+- Modify: `Elis/elisApp.swift`
+- Modify: `Elis/Control/ControlServer.swift`
+- Modify: `Elis/Control/ControlServer+Zmx.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/RemoteSessionTests.swift`
+- Modify: `ElisTests/ControlServerZmxTests.swift`
 
 - [x] add the zmx executable path and `ZMX_DIR` to `ControlZmxInventory` as header fields, both optional
       on the wire so an older server still decodes
@@ -255,18 +255,18 @@ displaced leader — would remove all three. It is **not** part of this work.
 ### Task 2: Remote session model
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Snapshot.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RecentClosed.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`
-- Modify: `HangarCore/Sources/HangarCore/WindowLibrary.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
-- Modify: `Hangar/Views/WorkspaceSidebar.swift`
-- Modify: `Hangar/Views/WorkspaceSidebar+RowRendering.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/SnapshotRoundTripTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/RecentClosedTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/WindowLibraryClaimsTests.swift`
-- Modify: `HangarTests/SidebarRowViewsTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Snapshot.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RecentClosed.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Panes.swift`
+- Modify: `ElisCore/Sources/ElisCore/WindowLibrary.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProjection.swift`
+- Modify: `Elis/Views/WorkspaceSidebar.swift`
+- Modify: `Elis/Views/WorkspaceSidebar+RowRendering.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/SnapshotRoundTripTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/RecentClosedTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/WindowLibraryClaimsTests.swift`
+- Modify: `ElisTests/SidebarRowViewsTests.swift`
 
 - [x] add ephemeral `remoteHost: String?` to `Session`, not persisted
 - [x] add `locallyManagedPaneIdentities` — empty when `remoteHost != nil`, else primary plus existing split
@@ -286,18 +286,18 @@ displaced leader — would remove all three. It is **not** part of this work.
 ### Task 3: `zmx tree <host>`
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Zmx.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemoteSession.swift`
-- Modify: `Hangar/Control/ControlServer+Zmx.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/ZmxCommands.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/SocketClient.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherZmxTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/CommandsTests.swift`
-- Modify: `HangarUITests/ControlAPIUITests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Zmx.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlActionsDefaults.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemoteSession.swift`
+- Modify: `Elis/Control/ControlServer+Zmx.swift`
+- Modify: `ElisCore/Sources/elisctlKit/ZmxCommands.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SocketClient.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherZmxTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/MockControlActions.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/CommandsTests.swift`
+- Modify: `ElisUITests/ControlAPIUITests.swift`
 
 - [x] add the `zmxTree` command and its response: sessions with pane roles, split axis, per-pane daemon,
       remote executable and `ZMX_DIR`
@@ -317,18 +317,18 @@ displaced leader — would remove all three. It is **not** part of this work.
 ### Task 4: `zmx attach <host> <session>`
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Zmx.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
-- Modify: `Hangar/Control/ControlServer+Zmx.swift`
-- Modify: `Hangar/hangarApp.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/ZmxCommands.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherZmxTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/CommandsTests.swift`
-- Modify: `HangarTests/ControlServerZmxTests.swift`
-- Modify: `HangarUITests/ControlAPIUITests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Zmx.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlActionsDefaults.swift`
+- Modify: `Elis/Control/ControlServer+Zmx.swift`
+- Modify: `Elis/elisApp.swift`
+- Modify: `ElisCore/Sources/elisctlKit/ZmxCommands.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherZmxTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/MockControlActions.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/CommandsTests.swift`
+- Modify: `ElisTests/ControlServerZmxTests.swift`
+- Modify: `ElisUITests/ControlAPIUITests.swift`
 
 - [x] add the `zmxAttach` command taking host and remote session
 - [x] re-run the remote resolution before inserting anything; an unresolvable session is a pre-model
@@ -353,7 +353,7 @@ displaced leader — would remove all three. It is **not** part of this work.
 ### Task 5: Update documentation
 
 - [x] update `site/docs.html` and `site/commands.html` with both commands and their read-back
-- [x] update `plugins/hangar/skills/hangar/` — the source for installed Claude/Codex copies
+- [x] update `plugins/elis/skills/elis/` — the source for installed Claude/Codex copies
 - [x] update `.claude/rules/control-api.md` with the remote-session contract, the endpoint-metadata
       requirement, the frontmost-window scope, and the create-only guard
 - [x] record the accepted v1 limitations where the contract lives, not scattered across surfaces
@@ -366,14 +366,14 @@ displaced leader — would remove all three. It is **not** part of this work.
 - [x] verify a vanished daemon fails visibly instead of creating a fresh remote shell
 - [x] verify an older remote without endpoint metadata fails with a clear message
 - [x] run `make build`
-- [x] run `cd HangarCore && swift test`
+- [x] run `cd ElisCore && swift test`
 - [x] run `make test-app`
 - [x] run `make lint` — zero findings required
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
-**Manual verification** (needs a second Mac running Hangar):
+**Manual verification** (needs a second Mac running Elis):
 
 - attach to a live remote session and confirm the first keystroke reflows it
 - confirm the far side keeps working after a local close

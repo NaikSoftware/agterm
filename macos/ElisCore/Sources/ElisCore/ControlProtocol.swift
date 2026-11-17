@@ -1,0 +1,909 @@
+/// A control command name, the `cmd` field of a `ControlRequest`. Raw values are the wire strings the CLI
+/// and the socket server share; an unknown one fails to decode into an "unknown command" error, not a crash.
+public enum Command: String, Codable, Sendable, CaseIterable {
+    case tree
+    case eventsRead = "events.read"
+    case workspaceNew = "workspace.new"
+    case workspaceRename = "workspace.rename"
+    case workspaceDelete = "workspace.delete"
+    case workspaceSelect = "workspace.select"
+    case workspaceGo = "workspace.go"
+    case sessionNew = "session.new"
+    case sessionDuplicate = "session.duplicate"
+    case sessionClose = "session.close"
+    case sessionTerminate = "session.terminate"
+    case sessionUndo = "session.undo"
+    case sessionSelect = "session.select"
+    case sessionGo = "session.go"
+    case sessionRename = "session.rename"
+    case sessionReveal = "session.reveal"
+    case sessionMove = "session.move"
+    case workspaceMove = "workspace.move"
+    case workspaceFocus = "workspace.focus"
+    case workspaceFilter = "workspace.filter"
+    case workspaceCollapse = "workspace.collapse"
+    case workspaceExpand = "workspace.expand"
+    case workspaceFlag = "workspace.flag"
+    case workspaceTint = "workspace.tint"
+    case workspaceFolder = "workspace.folder"
+    case sessionType = "session.type"
+    case sessionStatus = "session.status"
+    case sessionFlag = "session.flag"
+    case sessionContext = "session.context"
+    case sessionInfo = "session.info"
+    case sessionTint = "session.tint"
+    case sessionSeen = "session.seen"
+    case sessionRestore = "session.restore"
+    case sessionCollapse = "session.collapse"
+    case sessionCompanionNew = "session.companion.new"
+    case sessionCompanionPage = "session.companion.page"
+    /// sessionPage creates a top-level page session; its own command so an older app refuses it.
+    case sessionPage = "session.page"
+    case sessionCompanionDuplicate = "session.companion.duplicate"
+    case sessionCompanionConvert = "session.companion.convert"
+    case sessionCompanionMove = "session.companion.move"
+    /// A viewer asking for one attachment of a page companion: a single-use token for `session.overlay.page.serve`
+    /// plus what the page shows.
+    case sessionCompanionPageAttach = "session.companion.page.attach"
+    case sessionExpand = "session.expand"
+    case sessionRestart = "session.restart"
+    case sessionBackground = "session.background"
+    case sessionSplit = "session.split"
+    case sessionSplitClose = "session.split.close"
+    case sessionSwap = "session.swap"
+    case sessionLead = "session.lead"
+    case sessionScratch = "session.scratch"
+    case sessionFocus = "session.focus"
+    case sessionResize = "session.resize"
+    case surfaceZoom = "surface.zoom"
+    case surfaceCursor = "surface.cursor"
+    case dashboard
+    case sessionCopy = "session.copy"
+    case sessionPaste = "session.paste"
+    case sessionSelectAll = "session.selectall"
+    case sessionText = "session.text"
+    case sessionGrid = "session.grid"
+    case sessionScroll = "session.scroll"
+    case sessionSearch = "session.search"
+    case sessionOverlayOpen = "session.overlay.open"
+    case sessionOverlayClose = "session.overlay.close"
+    case sessionOverlayResize = "session.overlay.resize"
+    case sessionOverlayReload = "session.overlay.reload"
+    case sessionOverlayNavigate = "session.overlay.navigate"
+    case sessionOverlayResult = "session.overlay.result"
+    case sessionOverlaySubmit = "session.overlay.submit"
+    case sessionOverlayCopy = "session.overlay.copy"
+    case sessionOverlayText = "session.overlay.text"
+    case sessionOverlayHide = "session.overlay.hide"
+    case sessionOverlayShow = "session.overlay.show"
+    case sessionOverlayToggle = "session.overlay.toggle"
+    case sessionOverlayFollow = "session.overlay.follow"
+    case sessionOverlaySearch = "session.overlay.search"
+    case sessionOverlayChanges = "session.overlay.changes"
+    case sessionOverlayFiles = "session.overlay.files"
+    case sessionOverlayWrap = "session.overlay.wrap"
+    case sessionHudOpen = "session.hud.open"
+    case sessionHudUpdate = "session.hud.update"
+    case sessionHudClose = "session.hud.close"
+    case quick
+    case quickType = "quick.type"
+    case quickText = "quick.text"
+    case sidebar
+    case sidebarMode = "sidebar.mode"
+    case sidebarFlaggedLayout = "sidebar.flagged-layout"
+    case sidebarDensity = "sidebar.density"
+    case sidebarExpand = "sidebar.expand"
+    case sidebarCollapse = "sidebar.collapse"
+    case sidebarWidth = "sidebar.width"
+    case filePanel = "filepanel"
+    case filePanelWidth = "filepanel.width"
+    case notify
+    case fontInc = "font.inc"
+    case fontDec = "font.dec"
+    case fontReset = "font.reset"
+    case windowNew = "window.new"
+    case windowList = "window.list"
+    case windowSelect = "window.select"
+    case windowGo = "window.go"
+    case windowClose = "window.close"
+    case windowRename = "window.rename"
+    case windowDelete = "window.delete"
+    case windowResize = "window.resize"
+    case windowMove = "window.move"
+    case windowZoom = "window.zoom"
+    case windowFullscreen = "window.fullscreen"
+    case windowMinimize = "window.minimize"
+    /// windowRemoteOpen opens a window mirroring the elis-server on `host`, or raises the one already showing it.
+    case windowRemoteOpen = "window.remote.open"
+    /// windowRemoteDismiss drops a remote window's marks for actions whose outcome it could not learn.
+    case windowRemoteDismiss = "window.remote.dismiss"
+    /// sessionDetach hides a remote window's sessions on this Mac and leaves them running on its server; a parent
+    /// takes its companions with it. sessionReattach shows a detached one again.
+    case sessionDetach = "session.detach"
+    case sessionReattach = "session.reattach"
+    /// workspaceDetach and workspaceReattach do the same for a remote window's workspace and everything in it.
+    case workspaceDetach = "workspace.detach"
+    case workspaceReattach = "workspace.reattach"
+    case keymapReload = "keymap.reload"
+    case keymapList = "keymap.list"
+    case keymapRun = "keymap.run"
+    case hooksReload = "hooks.reload"
+    case hooksList = "hooks.list"
+    case phoneStatus = "phone.status"
+    case phoneEnable = "phone.enable"
+    case phonePort = "phone.port"
+    case phoneHost = "phone.host"
+    case phoneRevoke = "phone.revoke"
+    case browserClear = "browser.clear"
+    case browserLinks = "browser.links"
+    case configReload = "config.reload"
+    case themeSet = "theme.set"
+    case themeList = "theme.list"
+    case pickOpen = "pick.open"
+    case pickResult = "pick.result"
+    case pickCancel = "pick.cancel"
+    case askOpen = "ask.open"
+    case askResult = "ask.result"
+    case askCancel = "ask.cancel"
+    case msgSend = "msg.send"
+    case msgRead = "msg.read"
+    case msgAck = "msg.ack"
+    case restoreClear = "restore.clear"
+    case version = "version"
+    case restoreCapture = "restore.capture"
+    case restoreMode = "restore.mode"
+    case zmxList = "zmx.list"
+    case zmxPrune = "zmx.prune"
+    case zmxKill = "zmx.kill"
+    /// zmxKillPane is `zmx.kill` pinned to a pane token, its own verb so an app predating the pin refuses it unknown.
+    case zmxKillPane = "zmx.kill.pane"
+    case zmxReset = "zmx.reset"
+    case zmxTree = "zmx.tree"
+    case zmxAttach = "zmx.attach"
+    /// zmxAttachGroup is its own command, not a flag on `zmx.attach`, so an app that predates it fails to
+    /// decode the request and creates nothing instead of attaching one row.
+    case zmxAttachGroup = "zmx.attach.group"
+    case zmxPresent = "zmx.present"
+    case zmxScreen = "zmx.screen"
+    /// catalogSubscribe opens elis-server's catalog stream; after an ok reply the connection carries catalog frames.
+    case catalogSubscribe = "catalog.subscribe"
+    /// catalogOp answers what became of an operation id, fencing one elis-server has not seen.
+    case catalogOp = "catalog.op"
+    case recentList = "recent.list"
+    case recentOpen = "recent.open"
+    case recentClear = "recent.clear"
+    /// A viewer's helper claiming a remote overlay job; after an ok reply the connection carries job frames.
+    case sessionOverlayJobRun = "session.overlay.job.run"
+    /// sessionOverlayPageServe is a viewer's helper claiming a handed-over page by its single-use token; after an
+    /// ok reply the connection carries page channel frames.
+    case sessionOverlayPageServe = "session.overlay.page.serve"
+    /// UI-TEST-ONLY: forces the app-level appearance (`light`|`dark` via `args.name`) so an XCUITest can
+    /// simulate a macOS light/dark flip; with NO name it READS the side the last config feed applied, so a
+    /// test can assert the flip drove the reload. Refused outside an XCUITest launch, and EXEMPT from the
+    /// four-point keep-in-sync: no CLI subcommand, absent from the catalog/skill.
+    case debugAppearance = "debug.appearance"
+}
+
+/// A bag of optional command parameters. Each command reads only the fields it needs; the rest stay nil and
+/// are omitted from the JSON.
+public struct ControlArgs: Codable, Sendable, Equatable {
+    /// opID names a structural command for elis-server's receipts; only elis-server takes one.
+    public var opID: String?
+    /// epoch is the catalog epoch the caller last saw, sent with `opID`; another epoch refuses the command.
+    public var epoch: String?
+    /// rev is the catalog revision the caller had when it sent an operation, given to `catalog.op` with `epoch`.
+    public var rev: Int?
+    /// panes are the target session's pane identities when the operation was decided; other panes refuse it.
+    public var panes: [String]?
+    /// scratch is the target session's scratch identity, or `none`, when a scratch operation was decided.
+    public var scratch: String?
+    /// timeout is how many seconds an `ask.open` or `pick.open` waits for an answer before its origin cancels it.
+    public var timeout: Double?
+    /// token is the offer token a `session.overlay.job.run` helper claims its job with.
+    public var token: String?
+    /// New name for `workspace.new`/`workspace.rename`/`session.rename`; the initial `session.new` name
+    /// (blank/omitted leaves the auto basename); the `theme.set` theme (omitted/empty = ghostty's built-in
+    /// colors / "default ghostty", NOT the seeded `elis` app default).
+    public var name: String?
+    /// Working directory for `session.new`.
+    public var cwd: String?
+    /// Additional session targets for batch-capable commands (`session.close`, `session.move`). When set,
+    /// the command uses this ordered list instead of the top-level single `target`.
+    public var targets: [String]?
+    /// For `session.close`: ask for the undo grace and a `result.undoable` answer.
+    public var undoable: Bool?
+    /// Target workspace for `session.new` (the workspace to add to) and `session.move` (the destination).
+    /// Resolved by id / unique prefix / `active`, never by name — use `workspaceName` for name targeting.
+    public var workspace: String?
+    /// Target workspace BY NAME for `session.new` (mutually exclusive with `workspace`). Reuses the first
+    /// workspace with this exact name; an absent name is an error unless `createWorkspace` is set.
+    public var workspaceName: String?
+    /// For `session.new` with `workspaceName`: create the named workspace when none exists (idempotent
+    /// reuse-or-create). An error without `workspaceName` — there is nothing to create by id.
+    public var createWorkspace: Bool?
+    /// For `workspace.new`: create the workspace already COLLAPSED (the CLI's `--collapsed`), so a script can
+    /// fill it with `session.new --no-select` without it opening. Omitted/`false` = expanded; read back as
+    /// the `tree` workspace node's `collapsed`.
+    public var collapsed: Bool?
+    /// The tint color for `session.tint`/`workspace.tint` mode `set`, and the creation tint on `session.new`
+    /// and `workspace.new`; a `TintColor` name or a `#rrggbb` hex (`TintValue`).
+    public var tint: String?
+    /// The row parts the tint colors (`icon`, `name`); omitted on a set keeps the stored parts, else icon.
+    public var tintOn: [String]?
+    /// For `window.new`: create the window already MINIMIZED to the Dock (the CLI's `--minimized`), so a
+    /// script can build project windows without each flashing on screen and stealing focus; omitted/`false`
+    /// presents it. Read back as the `window.list` node's `minimized`. The new window also hands frontmost
+    /// to a still-visible one, so untargeted commands do not route into the Dock.
+    public var minimized: Bool?
+    /// `zmx kill`'s explicit confirmation. The command destroys a backend process that can reach detached
+    /// claims and every client attached to it, so it has no useful default for who is affected.
+    public var force: Bool?
+    /// The machine `zmx tree` reaches, spelled as ssh would take it; the address `phone.host` puts in the link.
+    public var host: String?
+    /// `phone.host`: let the link follow the relay's best address instead of a fixed `host`.
+    public var auto: Bool?
+    /// `phone.port`: the port the phone relay listens on.
+    public var port: Int?
+    /// For `window.remote.open`: the Mac host's window to show, an id or unique prefix there. Distinct from `window`,
+    /// which names a window on this Mac and which a page's bridge fills in.
+    public var originWindow: String?
+    /// For `session.new`: create in the background without selecting or focusing (the CLI's `--no-select`);
+    /// omitted/`false` keeps select-and-focus. Read back via the `tree` `active` flag — the new node is not it.
+    public var noSelect: Bool?
+    /// Text to inject for `session.type` / `quick.type`; the search needle for `session.search`; the value
+    /// for `session.context` mode `set`.
+    public var text: String?
+    /// Whether `session.type` may select the session first when its surface is not ready (main pane only).
+    /// Realization itself no longer depends on it: the main pane polls with or without `select`.
+    public var select: Bool?
+    /// Mode for `session.split` (`on|off|toggle`), `quick`/`surface.zoom` (`show|hide|toggle`),
+    /// `session.flag` (`on|off|toggle|clear`), `sidebar.mode` (`tree|flagged|toggle`),
+    /// `sidebar.flagged-layout` (`flat|plain|tree|toggle`), `sidebar.density` (`default|compact|toggle`),
+    /// `workspace.focus` (`on|off|toggle|add`), `workspace.filter`/`workspace.flag`/`window.minimize` (`on|off|toggle`),
+    /// `session.background` (`image|text|color|clear`), `session.restore` (`set|none|clear` — pin
+    /// `command`, pin nothing, or drop the pin), and `session.context` (`set|clear`).
+    public var mode: String?
+    /// Optional divider direction for `session.split`: `vertical` (left/right) or `horizontal` (top/bottom).
+    /// Omitted preserves the original axis-agnostic show/hide behavior.
+    public var axis: String?
+    /// The image file path for `session.background` mode `image` (PNG or JPEG).
+    public var path: String?
+    /// The `#rrggbb` color for `session.background`: the mode-`text` tint (nil = terminal foreground) or the
+    /// mode-`color` solid background (required, no opacity — it honors the Settings window translucency).
+    /// Also `session.overlay.open`'s own background, independent of the session's (nil = the default theme
+    /// background, same translucency), `session.hud.open`'s panel background (same rules; `session.hud.update`
+    /// cannot change it — the surface reads it once at creation, so an update IGNORES this field and the live
+    /// panel's color survives into the read-back), and `session.status`'s per-call glyph tint,
+    /// riding the ephemeral indicator so it lasts only to the next `session.status` without a color
+    /// (nil = the Settings color).
+    public var color: String?
+    /// The `#rrggbb` color of the HUD panel's TEXT for `session.hud.open`/`.update`; nil = the terminal
+    /// foreground. Separate from `color` because a HUD sets both halves independently, and unlike `color` an
+    /// UPDATE honors it: it rides the body file's header the helper re-reads, so the live panel recolors in
+    /// place.
+    public var textColor: String?
+    /// The per-call glyph-SILHOUETTE override for `session.status`: a `StatusShape` raw value
+    /// (`StatusShape.validNamesList`), dispatcher-validated. Rides the ephemeral indicator,
+    /// lasting until the next `session.status` without a shape; nil = the Settings shape, else a circle.
+    public var shape: String?
+    /// The `background-image-opacity` for `session.background` (image + text), 0...1; nil = ghostty's 1.0.
+    public var opacity: Double?
+    /// The `background-image-fit` for `session.background` (`contain|cover|stretch|none`); nil = `contain`.
+    public var fit: String?
+    /// The `background-image-position` for `session.background` (`center` + 8 anchors); nil = `center`. Also
+    /// the HUD panel's placement in the pane for `session.hud.open`/`.update` — a `HudPosition` raw value
+    /// over the same nine anchors, nil = `center`. `HudPosition` additionally accepts the bare `top`/`bottom`
+    /// it shipped with, normalizing them to the middle column; the read-back reports the canonical name
+    /// either way.
+    public var position: String?
+    /// The `background-image-repeat` flag for `session.background`; nil = false.
+    public var repeats: Bool?
+    /// Which split pane to focus for `session.focus` (`left`|`right`|`other`, `other` toggles); to read for
+    /// `session.text` (`left`|`right`, omitted = the focused pane, no `other`); `session.type` injects into
+    /// (`left`|`right`, omitted = left/main); set `session.status` (`left`|`right`|`scratch`, omitted =
+    /// `left`/main, parsed to `StatusPane`); `session.restore` pins (same `StatusPane` spelling, omitted
+    /// = `left`/main, `scratch` rejected app-side); and `session.hud.open`/`.update` use as optional placement
+    /// bounds (`left`/`right` only, omitted = the whole session detail area).
+    ///
+    /// The `session.overlay.*` family (`.open`/`.close`/`.result`/`.copy`/`.text`) scopes to ONE pane with
+    /// it, parsed to `OverlayPane`, which
+    /// takes the `TerminalZoomSurface` spellings minus `scratch` (`left`/`primary`, `right`/`split`);
+    /// `scratch` is rejected, there being no scratch pane to cover, and the rejection names only
+    /// `left or right` as guidance. Omitted keeps the session-wide overlay, so every existing caller is
+    /// unaffected. A pane overlay is always full-pane, so
+    /// `--pane` conflicts with `session.overlay.open --size-percent` and `session.overlay.resize` refuses it.
+    public var pane: String?
+    /// paneID is the stable `ELIS_PANE_ID` token; a known id overrides `pane` and an empty one counts as
+    /// absent. An unknown id needs an explicit `pane` to fall back on, except for `session.status`, which
+    /// always falls back, and `surface.cursor`, which never does.
+    public var paneID: String?
+    /// Absolute primary-pane split fraction (0...1) of the pane area below the titlebar band, for
+    /// `session.resize`, clamped server-side to `AppStore.splitRatioMin...splitRatioMax`. Mutually exclusive
+    /// with `ratioDelta`.
+    public var ratio: Double?
+    /// Signed relative split-divider nudge for `session.resize`: a positive fraction grows the PRIMARY
+    /// pane, negative grows the split pane. Applied to the session's
+    /// current fraction (0.5 when never moved). Mutually exclusive with `ratio`.
+    public var ratioDelta: Double?
+    /// For `session.text` / `quick.text`: read the full screen + scrollback instead of just the visible screen.
+    public var all: Bool?
+    /// For `session.text` / `quick.text`: keep only the last N lines of the full buffer. For `session.scroll`:
+    /// wheel lines, negative toward older output.
+    public var lines: Int?
+    /// columns and rows are the grid `session.grid` gives a pane apart from its view; reset hands it back to the view.
+    public var columns: Int?
+    public var rows: Int?
+    public var reset: Bool?
+    /// Direction for `session.go` (`next`|`prev`|`previous`|`first`|`last`), for `workspace.go`
+    /// (`next`|`prev`|`previous` — a workspace has no attention state and no ends to jump to), for the
+    /// reorder form of `session.move` / `workspace.move` (`up`|`down`|`top`|`bottom`), and for
+    /// `session.search` (`next`|`prev`|`close`), and `session.overlay.navigate` (`back`|`forward`|`browser`|`finder`).
+    public var to: String?
+    /// Anchor session (id / unique prefix / `active`) to place a session right AFTER, for the placement form
+    /// of `session.new`/`session.move`. The anchor carries its own workspace (resolved across the whole
+    /// store), so it names the destination — mutually exclusive with `to`, `before`, and the workspace param.
+    public var after: String?
+    /// Anchor session to place a session right BEFORE, the mirror of `after` (mutually exclusive with it).
+    public var before: String?
+    /// App-run UUID paired with `after` for `events.read`. Both fields are omitted for a bootstrap read.
+    public var run: String?
+    /// Raw event-kind filters for `events.read`. Validation happens in the dispatcher so unknown future
+    /// kinds produce a normal control error rather than making the request undecodable.
+    public var kinds: [String]?
+    /// Maximum matching events returned by `events.read`; omitted uses the dispatcher default.
+    public var limit: Int?
+    /// The desktop-notification title for `notify` (optional; defaults to the target session's name).
+    public var title: String?
+    /// The desktop-notification body for `notify` (required).
+    public var body: String?
+    /// The program the overlay terminal runs for `session.overlay.open` (e.g. `revdiff`); also the shell
+    /// line `session.restore` pins for the next launch (mode `set` only, typed verbatim — never re-quoted).
+    public var command: String?
+    /// Whether a command surface keeps its "press any key to close" prompt after the command exits instead of
+    /// closing: `session.overlay.open --wait`, and `session.new --command … --wait` (the primary session
+    /// surface, held via `Session.commandWait`).
+    public var wait: Bool?
+    /// For `session.overlay.open`, the percent of the pane (1...100) a *floating* overlay panel occupies in
+    /// both dimensions; omitted gives the default full-pane overlay. Also the new size for
+    /// `session.overlay.resize` (mutually exclusive with `full`), and the caller's OVERRIDE of the HUD panel's
+    /// app-measured WIDTH for `session.hud.open`/`.update` — a HUD is always floating, so omitting it sizes the
+    /// panel from the message rather than covering its session or pane bounds, and its height is measured either way.
+    public var sizePercent: Int?
+    /// For `session.overlay.resize`, requests the full-pane (translucent, session-hidden) overlay — the way
+    /// to switch a floating overlay back to full. Mutually exclusive with `sizePercent`.
+    public var full: Bool?
+    /// Whether `session.overlay.open` and a showing `session.scratch` select their target; omitted/false
+    /// leaves the active session alone. For `pick.open` and `ask.open` it raises the owning window instead.
+    public var follow: Bool?
+    /// The HUD panel's headline for `session.hud.open`/`.update` — required and non-empty on both, since an
+    /// update with nothing to say is a close. Wrapped app-side; control characters are rejected.
+    ///
+    /// Separate from `title`/`body`, which `notify` owns: those two are a desktop notification's fields,
+    /// where the title is OPTIONAL and defaults to the session name and the body is the required one.
+    /// A HUD inverts that, so sharing them would make each field's contract read "required here, optional
+    /// there" — unlike `color`, `position` and `sizePercent`, whose contracts a HUD takes unchanged.
+    public var message: String?
+    /// The HUD panel's dim second line, wrapped below the message; nil/omitted leaves the panel one block.
+    public var detail: String?
+    /// The HUD panel's spinner STYLE, a `HudSpinner` raw value; nil/omitted = static, no glyph. The CLI's
+    /// bare `--spinner` resolves to `HudSpinner.defaultStyle` before it gets here, so this always names a
+    /// style or nothing and the dispatcher has one thing to validate.
+    /// The box reserves the glyph's cells either way, so toggling it cannot rewrap the message.
+    public var spinner: String?
+    /// Seconds after which a HUD takes itself down, for `session.hud.open`/`.update`; nil/omitted or 0 leaves
+    /// it up until something closes it. Each successful open or update restarts the interval, so an update
+    /// that omits it cancels the previous one, exactly as omitting `detail` drops the second line.
+    public var hideAfter: Double?
+    /// markdown renders the HUD message as markdown for `session.hud.open`/`.update`; nil/omitted is plain.
+    /// An update omitting it returns the panel to plain text, the whole spec being replaced.
+    public var markdown: Bool?
+    /// sticky puts a HUD flush against the edge or corner its `position` names, for `session.hud.open`/
+    /// `.update`; nil/omitted keeps the edge margin.
+    public var sticky: Bool?
+    /// frame false drops a HUD's border, rounding and blank rows, for `session.hud.open`/`.update`;
+    /// nil/omitted is framed.
+    public var frame: Bool?
+    /// The finished caller-provided choices for `pick.open`.
+    public var items: [ControlPickItem]?
+    /// Optional placeholder text for `pick.open`'s query field.
+    public var prompt: String?
+    /// Initial text in `pick.open`'s query field; a non-empty value opens the picker already filtered.
+    public var query: String?
+    /// Whether `pick.open` accepts the current query as a custom result.
+    public var allowCustom: Bool?
+    /// The item id `pick.open` highlights on open; distinct from `select`, the Bool behind
+    /// `session.type --select`.
+    public var selection: String?
+    /// buttons are the caller-ordered choices for ask.open.
+    public var buttons: [ControlAskButton]?
+    /// defaultButton identifies the initially highlighted ask button.
+    public var defaultButton: String?
+    /// style selects terminal or gui ask decoration.
+    public var style: String?
+    /// align positions the ask button block within its panel.
+    public var align: String?
+    /// destructiveButton identifies the ask button styled as destructive.
+    public var destructiveButton: String?
+    /// cancelButton identifies the ask button that resolves `escaped`, as Esc does.
+    public var cancelButton: String?
+    /// input is `line` or `multiline`, giving `ask.open` a text field.
+    public var input: String?
+    /// placeholder is the hint an empty `ask.open` text field shows.
+    public var placeholder: String?
+    /// choices gives `ask.open` a radio or checkbox list, in caller order.
+    public var choices: [ControlAskChoice]?
+    /// multiple makes an `ask.open` choice list checkboxes instead of radio buttons.
+    public var multiple: Bool?
+    /// checked lists the `ask.open` choice ids selected at open.
+    public var checked: [String]?
+    /// other adds a free-form row after an `ask.open` choice list; the value is its placeholder.
+    public var other: String?
+    /// Target window whose tree a session/workspace/tree/font command operates on: id / prefix / `active`
+    /// (= frontmost).
+    public var window: String?
+    /// width is window.resize width in points, ask.open width as an integer percent (10...100), or a floating
+    /// overlay's content width in points for session.overlay.open/resize.
+    public var width: Int?
+    /// height is window.resize height in points, or a floating overlay's content height in points for
+    /// session.overlay.open/resize.
+    public var height: Int?
+    /// The sidebar divider position in points for `sidebar.width`, clamped server-side to
+    /// `AppStore.sidebarWidthMin...sidebarWidthMax`. `Double`, not `width`'s `Int`: the divider drag writes a
+    /// fractional cursor x, so an Int could not express every width the GUI can reach.
+    public var sidebarWidth: Double?
+    /// The file panel width in points for `filepanel.width`, clamped server-side like `sidebarWidth`.
+    public var filePanelWidth: Double?
+    /// New window top-left x/y in points for `window.move`, relative to the top-left of the target
+    /// display (see `display`); y measured down from the display's top edge.
+    public var x: Int?
+    public var y: Int?
+    /// Target display index (into the screen list) for `window.move`; nil = the window's current display.
+    public var display: Int?
+    /// Agent state for `session.status` (`idle|active|completed|blocked`).
+    public var status: String?
+    /// Whether the `session.status` indicator pulses for attention.
+    public var blink: Bool?
+    /// Whether the `session.status` indicator resets to idle once the session is visited (selected).
+    public var autoReset: Bool?
+    /// `ifIdle` applies the `session.status` write only while the session's status is idle; otherwise it is an
+    /// ok no-op.
+    public var ifIdle: Bool?
+    /// One-shot sound for `session.status` (caller-driven, not stored on the indicator): `default`/`beep`
+    /// = the system alert, anything else a named `NSSound(named:)` sound (e.g. `Glass`, also resolving
+    /// custom `~/Library/Sounds`). nil/empty = none; the Settings "Blocked sound" may still play on `blocked`.
+    public var sound: String?
+    /// Per-slot theme names for `theme.set`: `light` is the light/single slot (an alias for the positional
+    /// `name`, so passing both errors); `dark` sets the dark slot, whose presence makes the app track the
+    /// macOS appearance (stored as ghostty's dual `light:,dark:` form); `none` clears it. Bundled names only.
+    public var light: String?
+    public var dark: String?
+    /// Whether `dashboard` CLOSES the open dashboard instead of opening one (the CLI's `--close`). Mutually
+    /// exclusive with targets (the ids to open) and with the font flags — closing takes no other argument.
+    public var close: Bool?
+    /// The absolute cell font size in points for `dashboard` (the CLI's `--font-size`); must be positive.
+    /// Mutually exclusive with `autoSize`. Also the HUD panel's point size for `session.hud.open`, nil to
+    /// inherit the session's, within `HudSpec.fontSizeRange`; `session.hud.update` rejects it because the
+    /// surface reads it once at creation.
+    public var fontSize: Double?
+    /// For `dashboard`, size the cells RELATIVE to the Settings default font size, shrinking as the grid
+    /// grows so dense grids stay readable (the CLI's `--auto-size`). Mutually exclusive with `fontSize`.
+    public var autoSize: Bool?
+    /// For `dashboard`, populate the grid from the target window's most-recently-used sessions (up to 9,
+    /// fewer if the window has fewer) instead of explicit ids (the CLI's `--mru`). Mutually exclusive with
+    /// `targets`/`close`, composes with the font flags; resolved app-side, which needs the store's recency.
+    public var mru: Bool?
+    /// html is the absolute path of the page `session.overlay.open --html` shows instead of running `command`; `cwd`
+    /// is then WebKit's read grant.
+    public var html: String?
+    /// current makes `session.overlay.reload` reload the page the user navigated to, not the original file.
+    public var current: Bool?
+    /// navigation gives an `--html` or `--url` overlay its toolbar.
+    public var navigation: Bool?
+    /// url is the web page `session.overlay.open --url` shows instead of running `command`.
+    public var url: String?
+    /// javascript lets an `--html` or `--url` page run its own scripts (`--js`); off by default.
+    public var javascript: Bool?
+    /// chromeless opens an `--html` page, or a `--url` page on a loopback host, with no identity strip (`--chromeless`).
+    public var chromeless: Bool?
+    /// persistent opens a `--url` page on the saved browser store (`--persistent`) instead of an in-memory one.
+    public var persistent: Bool?
+    /// browse lets a `--url` page's main frame leave its first origin for any HTTP(S) site (`--browse`).
+    public var browse: Bool?
+    /// image is the absolute path of the picture `session.overlay.open --image` shows instead of running `command`.
+    public var image: String?
+    /// markdownFile is the absolute path of the markdown file `session.overlay.open --markdown` renders; its
+    /// own field because `markdown` is the HUD's flag.
+    public var markdownFile: String?
+    /// textFile is the absolute path of the file `session.overlay.open --text` shows read-only, taken literally.
+    public var textFile: String?
+    /// line is the line, from 1, a `textFile` page opens scrolled to and marks.
+    public var line: Int?
+    /// tail makes a `textFile` page a log page showing its last N lines; followFile makes it follow the file's
+    /// end, with `TextPage.defaultTail` lines when no tail is given.
+    public var tail: Int?
+    public var followFile: Bool?
+    /// value is the answer `session.overlay.submit` hands back from a page, empty being a real answer, or
+    /// the initial text of an `ask.open` input field.
+    public var value: String?
+    /// page is the page id `session.overlay.result` reads the outcome of, instead of a program's exit status.
+    public var page: String?
+    /// recipients are the `SESSION:PANE` addresses `msg.send --to` names; the scalar `to` keeps its navigation meaning.
+    public var recipients: [String]?
+    /// identity is the `SESSION:PANE-ID` the caller acts as on `msg.*`.
+    public var identity: String?
+    /// ack makes `msg.read` remove the batch it returns.
+    public var ack: Bool?
+    /// ids are the message ids `msg.ack` removes.
+    public var ids: [String]?
+    /// The project folder for `workspace.new` and `workspace.folder` mode `set`.
+    public var folder: String?
+    /// parent is the top-level session `session.companion.move` puts the target companion under.
+    public var parent: String?
+    /// index is the companion's slot among the new parent's companions for `session.companion.move`; nil appends.
+    public var index: Int?
+
+    public init(name: String? = nil, cwd: String? = nil, targets: [String]? = nil,
+                workspace: String? = nil, workspaceName: String? = nil,
+                createWorkspace: Bool? = nil, collapsed: Bool? = nil, minimized: Bool? = nil,
+                force: Bool? = nil, host: String? = nil,
+                noSelect: Bool? = nil,
+                text: String? = nil, select: Bool? = nil, mode: String? = nil, axis: String? = nil,
+                command: String? = nil, wait: Bool? = nil, sizePercent: Int? = nil, full: Bool? = nil,
+                follow: Bool? = nil, message: String? = nil, detail: String? = nil, spinner: String? = nil,
+                hideAfter: Double? = nil, markdown: Bool? = nil, sticky: Bool? = nil, frame: Bool? = nil,
+                items: [ControlPickItem]? = nil, prompt: String? = nil,
+                query: String? = nil, allowCustom: Bool? = nil, selection: String? = nil,
+                buttons: [ControlAskButton]? = nil, defaultButton: String? = nil,
+                destructiveButton: String? = nil, style: String? = nil, align: String? = nil, window: String? = nil,
+                pane: String? = nil, paneID: String? = nil, to: String? = nil,
+                after: String? = nil, before: String? = nil, run: String? = nil,
+                kinds: [String]? = nil, limit: Int? = nil,
+                title: String? = nil, body: String? = nil,
+                width: Int? = nil, height: Int? = nil, sidebarWidth: Double? = nil,
+                filePanelWidth: Double? = nil, x: Int? = nil, y: Int? = nil, display: Int? = nil,
+                status: String? = nil, blink: Bool? = nil, autoReset: Bool? = nil, ifIdle: Bool? = nil, sound: String? = nil,
+                ratio: Double? = nil, ratioDelta: Double? = nil,
+                path: String? = nil, color: String? = nil, textColor: String? = nil, shape: String? = nil,
+                opacity: Double? = nil, fit: String? = nil,
+                position: String? = nil, repeats: Bool? = nil, all: Bool? = nil, lines: Int? = nil,
+                light: String? = nil, dark: String? = nil,
+                close: Bool? = nil, fontSize: Double? = nil, autoSize: Bool? = nil, mru: Bool? = nil,
+                html: String? = nil, current: Bool? = nil, navigation: Bool? = nil, url: String? = nil,
+                javascript: Bool? = nil, value: String? = nil, page: String? = nil, chromeless: Bool? = nil,
+                persistent: Bool? = nil, browse: Bool? = nil, image: String? = nil, markdownFile: String? = nil, textFile: String? = nil, line: Int? = nil,
+                tail: Int? = nil, followFile: Bool? = nil,
+                cancelButton: String? = nil, input: String? = nil,
+                placeholder: String? = nil, choices: [ControlAskChoice]? = nil, multiple: Bool? = nil,
+                checked: [String]? = nil, other: String? = nil, undoable: Bool? = nil,
+                tint: String? = nil, tintOn: [String]? = nil, recipients: [String]? = nil,
+                identity: String? = nil, ack: Bool? = nil, ids: [String]? = nil, folder: String? = nil) {
+        self.name = name
+        self.cwd = cwd
+        self.targets = targets
+        self.workspace = workspace
+        self.workspaceName = workspaceName
+        self.createWorkspace = createWorkspace
+        self.collapsed = collapsed
+        self.tint = tint
+        self.tintOn = tintOn
+        self.minimized = minimized
+        self.force = force
+        self.host = host
+        self.noSelect = noSelect
+        self.text = text
+        self.select = select
+        self.mode = mode
+        self.axis = axis
+        self.command = command
+        self.wait = wait
+        self.sizePercent = sizePercent
+        self.full = full
+        self.follow = follow
+        self.message = message
+        self.detail = detail
+        self.spinner = spinner
+        self.hideAfter = hideAfter
+        self.markdown = markdown
+        self.sticky = sticky
+        self.frame = frame
+        self.items = items
+        self.prompt = prompt
+        self.query = query
+        self.allowCustom = allowCustom
+        self.selection = selection
+        self.buttons = buttons
+        self.defaultButton = defaultButton
+        self.style = style
+        self.align = align
+        self.destructiveButton = destructiveButton
+        self.window = window
+        self.pane = pane
+        self.paneID = paneID
+        self.to = to
+        self.after = after
+        self.before = before
+        self.run = run
+        self.kinds = kinds
+        self.limit = limit
+        self.title = title
+        self.body = body
+        self.width = width
+        self.height = height
+        self.sidebarWidth = sidebarWidth
+        self.filePanelWidth = filePanelWidth
+        self.x = x
+        self.y = y
+        self.display = display
+        self.status = status
+        self.blink = blink
+        self.autoReset = autoReset
+        self.ifIdle = ifIdle
+        self.sound = sound
+        self.ratio = ratio
+        self.ratioDelta = ratioDelta
+        self.path = path
+        self.color = color
+        self.textColor = textColor
+        self.shape = shape
+        self.opacity = opacity
+        self.fit = fit
+        self.position = position
+        self.repeats = repeats
+        self.all = all
+        self.lines = lines
+        self.light = light
+        self.dark = dark
+        self.close = close
+        self.fontSize = fontSize
+        self.autoSize = autoSize
+        self.mru = mru
+        self.html = html
+        self.current = current
+        self.navigation = navigation
+        self.url = url
+        self.javascript = javascript
+        self.value = value
+        self.page = page
+        self.chromeless = chromeless
+        self.persistent = persistent
+        self.browse = browse
+        self.image = image
+        self.markdownFile = markdownFile
+        self.textFile = textFile
+        self.line = line
+        self.tail = tail
+        self.followFile = followFile
+        self.cancelButton = cancelButton
+        self.input = input
+        self.placeholder = placeholder
+        self.choices = choices
+        self.multiple = multiple
+        self.checked = checked
+        self.other = other
+        self.undoable = undoable
+        self.recipients = recipients
+        self.identity = identity
+        self.ack = ack
+        self.ids = ids
+        self.folder = folder
+    }
+}
+
+/// 1 MiB cap on a request line (newline excluded), far above any realistic `session.type` payload. Over it
+/// the server rejects the line and closes the connection, so a bad client can't grow the buffer unbounded;
+/// the client checks the same cap before writing, so an oversized request fails with a readable error
+/// instead of a write to a closing peer. Shared so the two sides cannot drift.
+public enum ControlWire {
+    public static let maxRequestLineBytes = 1 << 20
+}
+
+/// One control request: a command, an optional target (session or workspace id / `active` / prefix),
+/// and an optional args bag. One request per connection, newline-delimited JSON.
+public struct ControlRequest: Codable, Sendable, Equatable {
+    public let cmd: Command
+    public var target: String?
+    public var args: ControlArgs?
+
+    public init(cmd: Command, target: String? = nil, args: ControlArgs? = nil) {
+        self.cmd = cmd
+        self.target = target
+        self.args = args
+    }
+}
+
+/// The successful payload: a new/affected id for mutating commands, a tree for `tree`, the selected text
+/// for `session.copy`. All optional.
+public struct ControlResult: Codable, Sendable, Equatable {
+    public var id: String?
+    /// Applied window frame dimensions in integer points, echoed by `window.resize`.
+    public var width: Int?
+    public var height: Int?
+    public var tree: ControlTree?
+    public var text: String?
+    public var windows: [ControlWindowNode]?
+    /// The overlay program's exit status for `session.overlay.result` (nil until the program exits).
+    public var exitCode: Int?
+    /// A count payload for commands whose result is a number: the keymap-diagnostic count for
+    /// `keymap.reload`; the ghostty config-diagnostic count for `config.reload` (across ALL config sources,
+    /// not just the elis-scoped `ghostty.conf` — libghostty diagnostics carry no source-file attribution);
+    /// and `session.search`'s total match count (whose "N of M" display string rides in `text`).
+    public var count: Int?
+    /// Number of things actually changed: sessions for a batch mutation (`session.close`/`session.move`),
+    /// daemons killed for `zmx.prune`. Separate from `count`, whose CLI rendering is specific to
+    /// diagnostics/search results.
+    public var affected: Int?
+    /// The current/affected theme name for `theme.set` (echo) and `theme.list` (current); nil =
+    /// ghostty's built-in colors ("default ghostty"), distinct from the seeded `elis` app default.
+    public var theme: String?
+    /// The available bundled theme names for `theme.list`.
+    public var themes: [String]?
+    /// The applied primary-pane split fraction echoed by `session.resize`, after clamping / a relative nudge.
+    public var ratio: Double?
+    /// The STORED sidebar divider position echoed by `sidebar.width`, after clamping - not a measured
+    /// realized width, which a host laying the divider out under its own rounding and minimum can differ
+    /// from. Without the echo a caller cannot tell an out-of-range request from an honored one, both
+    /// answering ok.
+    public var sidebarWidth: Double?
+    /// The STORED file panel width echoed by `filepanel.width`, after clamping.
+    public var filePanelWidth: Double?
+    /// pane is the pane session.restore wrote, session.text read or session.type typed into, or the anchor
+    /// ask.open resolved. The first three report it on every success, the default-pane paths included.
+    public var pane: String?
+    /// columns and rows are a pane's real grid, from `session.grid` and `session.text`; lines echoes `session.scroll`.
+    public var columns: Int?
+    public var rows: Int?
+    public var lines: Int?
+    /// The light/dark syncing state for `theme.set`/`theme.list`, from the stored theme: `sync` = whether it
+    /// is ghostty's dual `light:,dark:` form (the terminal tracks the macOS appearance), `light`/`dark` its
+    /// sides. While syncing `theme` is absent; otherwise `theme` is the plain single theme, these absent.
+    public var sync: Bool?
+    public var light: String?
+    public var dark: String?
+    /// A page from the app-run event ring, present for `events.read` success and cursor errors.
+    public var events: ControlEventBatch?
+    /// The resolved keymap plus the live menu key equivalents, for `keymap.list`.
+    public var keymap: ControlKeymap?
+    /// The hook definitions and their live state, for `hooks.list`.
+    public var hooks: ControlHooks?
+    /// The current or terminal picker outcome for `pick.result`.
+    public var pick: ControlPickResult?
+    /// ask is the current or terminal dialog outcome for ask.result.
+    public var ask: ControlAskResult?
+    /// The addressed surface's cursor position for `surface.cursor`.
+    public var cursor: ControlCursor?
+    /// The app serving this socket, for `version`. The same value `tree` carries.
+    public var app: AppIdentity?
+    /// The build metadata of the bundle on disk, for `version`. Omitted when it cannot be read, which
+    /// means unknown, never "same as `app`".
+    public var installed: AppIdentity?
+    /// headless is true on `version` from elis-server, where a pane's own untargeted pick belongs to its
+    /// session rather than to a window; a Mac app omits it.
+    public var headless: Bool?
+    /// versions is what elis-server advertises on `version`; a Mac app omits it.
+    public var versions: CatalogVersions?
+    /// macCatalog is what a Mac app serving remote windows advertises on `version`, apart from `versions`, so a viewer
+    /// predating Mac origins still reads a Mac as one it cannot open.
+    public var macCatalog: CatalogVersions?
+    /// receipt answers a command sent with an operation id, and `catalog.op`.
+    public var receipt: CatalogReceipt?
+    /// The restore-mode policy for `restore.mode`, and the header `zmx list` repeats so its rows can be
+    /// read without a second call.
+    public var restore: ControlRestoreStatus?
+    /// The daemon inventory for `zmx list`.
+    public var zmx: ControlZmxInventory?
+    /// Another machine's attachable sessions, for `zmx tree`.
+    public var remote: ControlRemoteTree?
+    /// What `zmx.reset` confirmed: the sessions and panes it will reset at the next launch.
+    public var liveReset: ControlLiveResetStatus?
+    /// The phone relay, from every `phone.*` command; only `phone.status` carries `link`.
+    public var phone: ControlPhoneStatus?
+    /// The page `session.overlay.open --html` opened, which `session.overlay.result --page` reads back.
+    public var pageID: String?
+    /// A page's selector outcome for `session.overlay.result --page`.
+    public var pageOutcome: ControlHtmlPageOutcome?
+    /// restart is what `session.restart` replaced: the pane's stable id and its shell before and after.
+    public var restart: ControlRestartReceipt?
+    /// The Recent Closed entries for `recent.list`, newest first.
+    public var recent: [ControlRecentItem]?
+    /// What `recent.open` reopened and where.
+    public var recentOpen: ControlRecentOpen?
+    /// Whether `session.close --undoable` left the close undoable; absent for a plain close.
+    public var undoable: Bool?
+    /// The new companion's parent id, the receipt a companion creation answers with.
+    public var parent: String?
+    /// Every session id `session.close` closed, a parent's companions included.
+    public var closed: [String]?
+    /// recentID is the Recent Closed entry a single-target `session.close` wrote, which `recent.open` takes.
+    public var recentID: String?
+    /// undoID names an undoable close's pending record, which `session.undo` takes while the grace lasts.
+    public var undoID: String?
+    /// The page a `session.companion.page.attach` handed out, token included.
+    public var companionPage: PresentationPage?
+    /// messageID is the id every copy of a `msg.send` shares.
+    public var messageID: String?
+    /// delivered and rejected are `msg.send`'s per-recipient results.
+    public var delivered: [String]?
+    public var rejected: [MessageRejection]?
+    /// messages are the oldest of the reader's mailbox; remaining counts the pending ones left out.
+    public var messages: [BusMessage]?
+    public var remaining: Int?
+    /// acked names the messages removed, present on every `msg.ack` and `msg.read --ack` reply, empty included.
+    public var acked: [String]?
+    public var remoteGroup: ControlRemoteGroup?
+
+    public init(id: String? = nil, tree: ControlTree? = nil, text: String? = nil,
+                windows: [ControlWindowNode]? = nil, exitCode: Int? = nil, count: Int? = nil,
+                affected: Int? = nil,
+                theme: String? = nil, themes: [String]? = nil, ratio: Double? = nil,
+                sidebarWidth: Double? = nil, filePanelWidth: Double? = nil, pane: String? = nil,
+                sync: Bool? = nil, light: String? = nil, dark: String? = nil,
+                events: ControlEventBatch? = nil, keymap: ControlKeymap? = nil, hooks: ControlHooks? = nil,
+                pick: ControlPickResult? = nil, ask: ControlAskResult? = nil, cursor: ControlCursor? = nil,
+                app: AppIdentity? = nil, restore: ControlRestoreStatus? = nil,
+                zmx: ControlZmxInventory? = nil, remote: ControlRemoteTree? = nil,
+                liveReset: ControlLiveResetStatus? = nil,
+                width: Int? = nil, height: Int? = nil,
+                pageID: String? = nil, pageOutcome: ControlHtmlPageOutcome? = nil,
+                restart: ControlRestartReceipt? = nil, installed: AppIdentity? = nil,
+                recent: [ControlRecentItem]? = nil, recentOpen: ControlRecentOpen? = nil, undoable: Bool? = nil,
+                parent: String? = nil, closed: [String]? = nil, recentID: String? = nil, undoID: String? = nil,
+                companionPage: PresentationPage? = nil,
+                messageID: String? = nil, delivered: [String]? = nil, rejected: [MessageRejection]? = nil,
+                messages: [BusMessage]? = nil, remaining: Int? = nil, acked: [String]? = nil,
+                remoteGroup: ControlRemoteGroup? = nil, macCatalog: CatalogVersions? = nil, columns: Int? = nil, rows: Int? = nil,
+                lines: Int? = nil, phone: ControlPhoneStatus? = nil) {
+        self.macCatalog = macCatalog
+        self.phone = phone
+        self.columns = columns
+        self.rows = rows
+        self.lines = lines
+        self.messageID = messageID
+        self.delivered = delivered
+        self.rejected = rejected
+        self.messages = messages
+        self.remaining = remaining
+        self.acked = acked
+        self.companionPage = companionPage
+        self.remoteGroup = remoteGroup
+        self.parent = parent
+        self.closed = closed
+        self.recentID = recentID
+        self.undoID = undoID
+        self.undoable = undoable
+        self.recent = recent
+        self.recentOpen = recentOpen
+        self.restart = restart
+        self.installed = installed
+        self.width = width
+        self.height = height
+        self.restore = restore
+        self.zmx = zmx
+        self.remote = remote
+        self.liveReset = liveReset
+        self.pageID = pageID
+        self.pageOutcome = pageOutcome
+        self.id = id
+        self.tree = tree
+        self.text = text
+        self.windows = windows
+        self.exitCode = exitCode
+        self.count = count
+        self.affected = affected
+        self.theme = theme
+        self.themes = themes
+        self.ratio = ratio
+        self.sidebarWidth = sidebarWidth
+        self.filePanelWidth = filePanelWidth
+        self.pane = pane
+        self.sync = sync
+        self.light = light
+        self.dark = dark
+        self.events = events
+        self.keymap = keymap
+        self.hooks = hooks
+        self.pick = pick
+        self.ask = ask
+        self.cursor = cursor
+        self.app = app
+    }
+}

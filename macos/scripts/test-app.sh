@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 ./scripts/setup.sh
 xcodegen generate
 xcodebuild test \
-  -project Hangar.xcodeproj \
-  -scheme HangarTests \
+  -project Elis.xcodeproj \
+  -scheme ElisTests \
   -destination 'platform=macOS' \
   -derivedDataPath build/DerivedData

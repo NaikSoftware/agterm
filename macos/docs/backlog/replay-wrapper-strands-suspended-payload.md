@@ -1,6 +1,6 @@
 ---
 worth: later
-where: HangarCore/Sources/HangarCore/ZmxReplayScript.swift:render
+where: ElisCore/Sources/ElisCore/ZmxReplayScript.swift:render
 added: 2026-10-18
 ---
 # replay wrapper strands a payload suspended with Ctrl-Z

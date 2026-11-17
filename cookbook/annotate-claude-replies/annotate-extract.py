@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write out every answer Claude gave in an hangar pane since the last thing the person typed.
+"""Write out every answer Claude gave in an elis pane since the last thing the person typed.
 
 The Stop hook records where the transcript is; this reads it at the moment the chord fires. That is the
 whole point of the split. The hook only runs when a turn ends, so anything it copies out goes stale the

@@ -1,10 +1,10 @@
 #!/bin/bash
-# Snapshot every open hangar window into $AGT_SNAP_DIR/<stamp>.{json,html} and point latest.html at it.
+# Snapshot every open elis window into $AGT_SNAP_DIR/<stamp>.{json,html} and point latest.html at it.
 # Usage: snapshot.sh [--open]
 set -eu
-HANGARCTL=${HANGARCTL:-hangarctl}
+ELISCTL=${ELISCTL:-elisctl}
 here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
-dir=${AGT_SNAP_DIR:-$HOME/hangar-snapshots}
+dir=${AGT_SNAP_DIR:-$HOME/elis-snapshots}
 
 umask 077
 mkdir -p "$dir" && chmod 700 "$dir"
@@ -12,17 +12,17 @@ stamp=$(date +%Y-%m-%d-%H%M%S)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-"$HANGARCTL" window list --json > "$work/windows.json"
+"$ELISCTL" window list --json > "$work/windows.json"
 jq -r '.result.windows[] | select(.open) | .id' "$work/windows.json" | while read -r w; do
-  "$HANGARCTL" tree --window "$w" --json > "$work/tree-$w.json"
+  "$ELISCTL" tree --window "$w" --json > "$work/tree-$w.json"
   jq -r '.result.tree.workspaces[].sessions[].id' "$work/tree-$w.json" | while read -r s; do
-    "$HANGARCTL" session text --target "$s" --window "$w" --pane left --lines 60 > "$work/screen-$s.txt" 2>/dev/null || true
+    "$ELISCTL" session text --target "$s" --window "$w" --pane left --lines 60 > "$work/screen-$s.txt" 2>/dev/null || true
   done
 done
 
-# live Claude Code sessions -> the hangar session and pane they run in, from Claude's own registry rather
+# live Claude Code sessions -> the elis session and pane they run in, from Claude's own registry rather
 # than by process name: an npm install runs as `node`, an SDK host under its own path.
-# Every surface of a session shares HANGAR_SESSION_ID; HANGAR_PANE and HANGAR_PANE_ID tell them apart.
+# Every surface of a session shares ELIS_SESSION_ID; ELIS_PANE and ELIS_PANE_ID tell them apart.
 # A headless `claude -p` or SDK child started by a Claude inherits its pane's environment and registers too,
 # so an entry with another registered Claude among its ancestors is not the pane's own conversation.
 : > "$work/claude.tsv"
@@ -42,9 +42,9 @@ for j in "$HOME"/.claude/sessions/*.json; do
   done
   [ -z "$nested" ] || continue
   env=$(ps eww -p "$p" -o command= | tr ' ' '\n')
-  asid=$(sed -n 's/^HANGAR_SESSION_ID=//p' <<< "$env")
-  pane=$(sed -n 's/^HANGAR_PANE=//p' <<< "$env")
-  pane_id=$(sed -n 's/^HANGAR_PANE_ID=//p' <<< "$env")
+  asid=$(sed -n 's/^ELIS_SESSION_ID=//p' <<< "$env")
+  pane=$(sed -n 's/^ELIS_PANE=//p' <<< "$env")
+  pane_id=$(sed -n 's/^ELIS_PANE_ID=//p' <<< "$env")
   if [ -n "$asid" ]; then
     printf '%s\t%s\t%s\t%s\n' "$asid" "$pane" "$pane_id" "$(jq -r .sessionId "$j")" >> "$work/claude.tsv"
   fi

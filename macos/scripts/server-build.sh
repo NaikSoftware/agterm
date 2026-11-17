@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# static musl builds of hangar-server and hangarctl from this tree, for an install on any Linux of the architecture.
-# usage: scripts/server-build.sh aarch64|x86_64 [VERSION]   -> build/server/ARCH/{hangar-server,hangarctl}
+# static musl builds of elis-server and elisctl from this tree, for an install on any Linux of the architecture.
+# usage: scripts/server-build.sh aarch64|x86_64 [VERSION]   -> build/server/ARCH/{elis-server,elisctl}
 # VERSION (default 0.0.0) is stamped into ServerVersion.current in the build's own copy of the tree.
 set -euo pipefail
 
@@ -34,30 +34,30 @@ mkdir -p "$out"
 # the source tree is recreated each run so a removed file cannot reach the build; the named volume keeps the
 # installed SDK and SwiftPM's scratch path, at the same tree path so its incremental state stays valid; the tree and
 # the scratch path are per architecture, so two builds can run at once
-docker run --rm --cpus 8 -v "$ROOT:/src:ro" -v "$bundle:/sdk.tar.gz:ro" -v hangar-server-build:/build -v "$out:/out" \
+docker run --rm --cpus 8 -v "$ROOT:/src:ro" -v "$bundle:/sdk.tar.gz:ro" -v elis-server-build:/build -v "$out:/out" \
   -e SDK="$SDK" -e ARCH="$arch" -e VERSION="$version" "$SWIFT_IMAGE" bash -euo pipefail -c '
     swift sdk list --swift-sdks-path /build/sdks | grep -qx "$SDK" \
       || swift sdk install --swift-sdks-path /build/sdks /sdk.tar.gz >/dev/null
     rm -rf "/build/tree-$ARCH"
     mkdir -p "/build/tree-$ARCH"
-    tar -C /src --exclude=./build --exclude=./HangarCore/.build --exclude=./.git --exclude=./Hangar/Resources -cf - . \
+    tar -C /src --exclude=./build --exclude=./ElisCore/.build --exclude=./.git --exclude=./Elis/Resources -cf - . \
       | tar -C "/build/tree-$ARCH" -xf -
-    cd "/build/tree-$ARCH/HangarCore"
-    stamp=Sources/HangarServerKit/ServerVersion.swift
+    cd "/build/tree-$ARCH/ElisCore"
+    stamp=Sources/ElisServerKit/ServerVersion.swift
     sed -i "s/public static let current = \"0.0.0\"/public static let current = \"$VERSION\"/" "$stamp"
     grep -q "public static let current = \"$VERSION\"" "$stamp" || { echo "server-build: could not stamp $VERSION" >&2; exit 2; }
     build=(swift build -c release --swift-sdks-path /build/sdks --swift-sdk "$ARCH-swift-linux-musl"
       --scratch-path "/build/scratch-musl-$ARCH"
       -Xlinker --strip-all)
-    "${build[@]}" --product hangar-server
-    "${build[@]}" --product hangarctl
-    cp "$("${build[@]}" --show-bin-path)/hangar-server" "$("${build[@]}" --show-bin-path)/hangarctl" /out/
+    "${build[@]}" --product elis-server
+    "${build[@]}" --product elisctl
+    cp "$("${build[@]}" --show-bin-path)/elis-server" "$("${build[@]}" --show-bin-path)/elisctl" /out/
   '
-[[ -x "$out/hangar-server" && -x "$out/hangarctl" ]] || die "the $arch build left no binaries in $out"
+[[ -x "$out/elis-server" && -x "$out/elisctl" ]] || die "the $arch build left no binaries in $out"
 # only the architecture Docker runs natively can be executed here; the other keeps the source stamp checked above
 if [[ "$(docker info --format '{{.Architecture}}')" == "$arch" ]]; then
-  reported="$(docker run --rm -v "$out:/out:ro" "$CHECK_IMAGE" /out/hangar-server --version)"
-  [[ "$reported" == "$version" ]] || die "the $arch hangar-server reports version $reported, not $version"
+  reported="$(docker run --rm -v "$out:/out:ro" "$CHECK_IMAGE" /out/elis-server --version)"
+  [[ "$reported" == "$version" ]] || die "the $arch elis-server reports version $reported, not $version"
 else
   echo "server-build: $arch is not this Docker's native architecture; its version is checked by the source stamp only"
 fi

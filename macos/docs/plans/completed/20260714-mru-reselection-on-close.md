@@ -15,7 +15,7 @@ needs (`AppStore.sessionRecency`) is already tracked and persisted.
 
 Source: GitHub Discussion [#147](https://github.com/umputun/agterm/discussions/147), raised by olomix,
 approved by umputun on 2026-07-13 with the exact shape below. The PR was invited; it targets
-`NaikSoftware/hangar` `master`.
+`NaikSoftware/elis` `master`.
 
 ### The agreed algorithm (from umputun's comment)
 
@@ -29,7 +29,7 @@ approved by umputun on 2026-07-13 with the exact shape below. The PR was invited
    only recent entry was the one just closed. Nothing regresses: the worst case is exactly today's neighbor
    behavior, never an empty selection.
 4. Shape it as `RecencyStack.top(1, in:)` over the surviving in-scope ids, else `reselectionTarget` — a
-   small change in `HangarCore` with the logic unit-testable.
+   small change in `ElisCore` with the logic unit-testable.
 
 ## Context (from discovery)
 
@@ -37,7 +37,7 @@ Everything the change needs already exists; this is a new ~10-line helper plus t
 
 **Files involved**
 
-- `HangarCore/Sources/HangarCore/AppStore.swift`
+- `ElisCore/Sources/ElisCore/AppStore.swift`
   - `closeSession(_:)` (~line 401) — hard close. Already calls `sessionRecency.remove(sessionID)` **before**
     reselecting, then `selectedSessionID = reselectionTarget(after: location)`.
   - `reselectionTarget(after:)` (~line 948) — the existing positional pick. **Keep it, unchanged**; it
@@ -49,12 +49,12 @@ Everything the change needs already exists; this is a new ~10-line helper plus t
   - `autoUnfocusIfOutsideFocus(_:)` (~line 328) — the safety net that clears the focus filter when the new
     selection lands outside it. With a workspace-scoped MRU it should never need to fire on close, but it
     stays where it is.
-- `HangarCore/Sources/HangarCore/AppStore+PendingClose.swift`
+- `ElisCore/Sources/ElisCore/AppStore+PendingClose.swift`
   - `softCloseSession(_:grace:)` (line 77) — the undoable single close.
   - `softCloseSessions(_:grace:)` (line 134) — the undoable multi close; it passes an index **adjusted** by
     the count of sessions removed before the active one (`removedBeforeActive`). That adjustment feeds the
     positional fallback and must be preserved verbatim.
-- `HangarCore/Sources/HangarCore/RecencyStack.swift`
+- `ElisCore/Sources/ElisCore/RecencyStack.swift`
   - `top(_ n: Int, in valid: Set<ID>)` (line 32) — already skips ids not in `valid`, so a session absent
     from the tree can never be returned even if it is still in the stack.
 
@@ -74,12 +74,12 @@ and the discussion only agreed to the session-close case. Do not touch them.
 
 **Control API / keep-in-sync audit** (per CLAUDE.md — stated explicitly, not silently skipped)
 
-- No new user action, so the four-point audit (`Command` case / `ControlServer` arm / `hangarctl` subcommand
+- No new user action, so the four-point audit (`Command` case / `ControlServer` arm / `elisctl` subcommand
   / round-trip tests) is **already satisfied**: `session.close` exists and drives the same `AppStore` seam,
   so it picks up the new behavior for free.
 - No new per-session state is introduced, so **no `tree` read-back field is owed**. The resulting selection
   is already readable — `selectedSessionID` surfaces on the tree as the selected session.
-- The bundled agent skill (`Hangar/Resources/agent-skill/`) documents commands/args/returns and the
+- The bundled agent skill (`Elis/Resources/agent-skill/`) documents commands/args/returns and the
   window/workspace/session model, none of which change. No update needed.
 - `site/docs.html` / `site/commands.html` / `README.md` do not document close-reselection behavior (verified:
   no mention of the positional neighbor rule anywhere user-facing), so no website change was planned. The
@@ -97,12 +97,12 @@ and the discussion only agreed to the session-close case. Do not touch them.
 - **CRITICAL: every task MUST include new/updated tests** for code changes in that task
 - **CRITICAL: all tests must pass before starting the next task** — no exceptions
 - **CRITICAL: update this plan file when scope changes during implementation**
-- Run `cd HangarCore && swift test` after each change
+- Run `cd ElisCore && swift test` after each change
 - Maintain backward compatibility: the positional fallback guarantees the worst case is today's behavior
 
 ## Testing Strategy
 
-- **Unit tests** (`HangarCore`, host-free, the primary safety net): all new selection logic is exercised
+- **Unit tests** (`ElisCore`, host-free, the primary safety net): all new selection logic is exercised
   here via `swift test`. Extend `AppStoreTests.swift` (which already covers `closeSession` and the
   soft-close paths) rather than adding a new file, and reuse `AppStoreTestFixtures.swift`.
 - **XCUITest e2e**: NOT required. The behavior is pure model logic with no new UI surface, and the existing
@@ -127,9 +127,9 @@ and the discussion only agreed to the session-close case. Do not touch them.
       checkout, already on that branch), and the ralphex loop drives that working directory. Moving to a
       separate worktree mid-loop would strand the loop's cwd. No worktree created.
 - [x] symlink the three gitignored build artifacts — **not needed** for the same reason: `GhosttyKit.xcframework`,
-      `Hangar/Resources/ghostty`, and `Hangar/Resources/terminfo` are all present in this checkout.
+      `Elis/Resources/ghostty`, and `Elis/Resources/terminfo` are all present in this checkout.
       `scripts/setup.sh` was not run.
-- [x] confirm the baseline is green: `cd HangarCore && swift test` → **1528 tests in 62 suites passed**
+- [x] confirm the baseline is green: `cd ElisCore && swift test` → **1528 tests in 62 suites passed**
 - [x] read `AppStore.closeSession`, `reselectionTarget(after:)`, `navigableSessions`, `RecencyStack.top(_:in:)`,
       and both soft-close paths — **all four Context claims confirmed verbatim, nothing differs** (findings below)
 - [x] run `make lint` to confirm a clean starting tree → **swiftlint --strict clean, zero findings**
@@ -165,7 +165,7 @@ and the discussion only agreed to the session-close case. Do not touch them.
 
 ➕ **Plan deviation — the tests went into a NEW file, `AppStoreCloseReselectionTests.swift`, not
 `AppStoreTests.swift`.** The plan called for extending `AppStoreTests.swift`, but that file is already
-1979 lines against the HARD 2000-line test budget (`HangarCore/Tests/.swiftlint.yml`), so the ~140 new lines
+1979 lines against the HARD 2000-line test budget (`ElisCore/Tests/.swiftlint.yml`), so the ~140 new lines
 would have pushed it over and failed `make lint --strict`. Per CLAUDE.md the limit is not to be bumped to
 fit new code, so the new suite (`AppStoreCloseReselectionTests`, `@MainActor struct`) lives in its own file
 and reuses `AppStoreTestFixtures.swift` (`makeStore()`) exactly as the plan intended. Task 4's soft-close
@@ -305,7 +305,7 @@ stale index would pick the last session instead. The `removedBeforeActive` code 
 
 ## Technical Details
 
-**The helper — AS SHIPPED** (`HangarCore/Sources/HangarCore/AppStore+CloseReselection.swift`; this block
+**The helper — AS SHIPPED** (`ElisCore/Sources/ElisCore/AppStore+CloseReselection.swift`; this block
 was revised during implementation, see "Deviations from the planned shape" below):
 
 ```
@@ -361,7 +361,7 @@ comment and `.claude/rules/menu-actions.md` are the authority):
 
 *Items requiring manual intervention or external systems — informational only*
 
-**Manual verification** (in an isolated dev instance, per CLAUDE.md — `open -n --env HANGAR_STATE_DIR=/tmp/…`
+**Manual verification** (in an isolated dev instance, per CLAUDE.md — `open -n --env ELIS_STATE_DIR=/tmp/…`
 so the deployed daily-driver app and its real `workspaces.json` are never touched; never kill or relaunch
 the deployed app):
 
@@ -379,7 +379,7 @@ the deployed app):
 
 **PR**
 
-- Target `NaikSoftware/hangar` `master`; reference Discussion #147 in the PR body, note that the shape follows
+- Target `NaikSoftware/elis` `master`; reference Discussion #147 in the PR body, note that the shape follows
   umputun's comment (scoped MRU with a positional fallback, no setting), and state that no control-API or
   agent-skill change is owed. The user-facing behavior note DOES land in `README.md` and its `site/docs.html`
   mirror.

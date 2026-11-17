@@ -88,7 +88,7 @@ Future<String?> pickTint(BuildContext context, String title) => showModalBottomS
       ),
     );
 
-Future<void> showSessionActions(BuildContext context, HangarModel m, Session s, {VoidCallback? onClosed}) {
+Future<void> showSessionActions(BuildContext context, ElisModel m, Session s, {VoidCallback? onClosed}) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -165,7 +165,7 @@ Future<void> showSessionActions(BuildContext context, HangarModel m, Session s, 
   );
 }
 
-Future<void> showWorkspaceActions(BuildContext context, HangarModel m, Workspace w) {
+Future<void> showWorkspaceActions(BuildContext context, ElisModel m, Workspace w) {
   return showModalBottomSheet(
     context: context,
     builder: (sheet) {

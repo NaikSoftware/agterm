@@ -1,0 +1,64 @@
+import AppKit
+import SwiftUI
+
+/// A SwiftUI layer behind the custom titlebar's decorative regions (the title text and the empty
+/// spacers, which opt out of SwiftUI hit-testing) so the header behaves like a real title bar: a
+/// single-click drag moves the window (`performDrag`), a double-click runs the user's configured
+/// title-bar action. The custom titlebar is SwiftUI, not AppKit's native title bar, so the OS
+/// double-click handling never reaches it; the interactive header buttons render in front and keep their
+/// own clicks. It wraps an AppKit view whose `mouseDown` must see every click to tell a double-click from
+/// a drag, so nothing else may start a move first: `mouseDownCanMoveWindow` is off, and a hit-testable
+/// shape keeps the header out of the window server's title-bar drag region, where that flag is ignored.
+struct WindowControlArea: View {
+    var body: some View {
+        ControlLayer()
+            // SwiftUI leaves non-hit-testable content in the title-bar drag region and ignores
+            // `mouseDownCanMoveWindow` here, so without this shape the window server drags the window from the
+            // header itself, before our `mouseDown`. AppKit then never registers the start once `performDrag`
+            // follows, and every step re-fits the frame: the window jumps off the pointer at a display edge.
+            .background { Color.clear.contentShape(Rectangle()) }
+    }
+
+    private struct ControlLayer: NSViewRepresentable {
+        func makeNSView(context _: Context) -> TitlebarControlView { TitlebarControlView() }
+        func updateNSView(_: TitlebarControlView, context _: Context) {}
+    }
+
+    final class TitlebarControlView: NSView {
+        override var mouseDownCanMoveWindow: Bool { false }
+
+        override func mouseDown(with event: NSEvent) {
+            if event.clickCount == 2 {
+                performTitlebarDoubleClickAction()
+                return
+            }
+            // a single click that turns into a drag moves the window; a plain click returns at once.
+            window?.performDrag(with: event)
+        }
+
+        /// Mirror AppKit's native title-bar double-click by honoring Desktop & Dock ▸ "Double-click a
+        /// window's title bar to" (`AppleActionOnDoubleClick` in `NSGlobalDomain`): Zoom/Fill → zoom,
+        /// Minimize → miniaturize, "Do Nothing" → no-op. The key is absent until the user changes it from
+        /// the macOS default (Zoom), so an untouched system reads `nil` here and still zooms. Read live on
+        /// each double-click, so a setting change needs no relaunch. "Fill" maps to `zoom`, the closest
+        /// standard NSWindow action (true Fill uses the newer window-tiling APIs); zoom matches the
+        /// `window.zoom` control command, while the plain green button does native full screen. The UITest
+        /// env override `ELIS_UITEST_DOUBLECLICK_ACTION` takes precedence so the gesture tests are
+        /// hermetic regardless of the host's setting; it rides the environment because launch arguments
+        /// trip the macOS 15+ no-window-at-launch bug (FB11763863, see `ui-tests.md`). Production never
+        /// sets it and falls through to the live system default.
+        private func performTitlebarDoubleClickAction() {
+            guard let window else { return }
+            let action = ProcessInfo.processInfo.environment["ELIS_UITEST_DOUBLECLICK_ACTION"]
+                ?? UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick")
+            switch action {
+            case "Minimize":
+                window.performMiniaturize(nil)
+            case "None":
+                break
+            default: // "Maximize", "Fill", or unset (macOS default) → zoom
+                window.zoom(nil)
+            }
+        }
+    }
+}

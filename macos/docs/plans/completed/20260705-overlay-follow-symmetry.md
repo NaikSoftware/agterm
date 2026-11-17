@@ -18,7 +18,7 @@ special case and gives the caller explicit control via `--follow`.
 ## Context (from discovery + brainstorm)
 
 - **Render risk already retired via a spike** on this `overlay-follow-spike` worktree (uncommitted in
-  `Hangar/Views/WindowContentView.swift`): the floating overlay was moved in-deck into `sessionDetail` as
+  `Elis/Views/WindowContentView.swift`): the floating overlay was moved in-deck into `sessionDetail` as
   an ALWAYS-PRESENT, constant-shape sibling (`floatingOverlayPanel(session:isActive:)`), and the
   `detailPane` `.overlay { floatingOverlayLayer }` was removed. This makes the floating surface mount
   per-session in the eager deck (so it runs regardless of which session is active) WITHOUT re-hosting the
@@ -33,22 +33,22 @@ special case and gives the caller explicit control via `--follow`.
   `--follow` model.
 
 **Files involved:**
-- `Hangar/Views/WindowContentView.swift` — render (spike done; productionize)
-- `Hangar/Control/ControlServer+SessionActions.swift` — the select gate (+ a stale scratch-arm comment)
-- `HangarCore/Sources/HangarCore/ControlDispatcher.swift` — `ControlSessionOverlayOpenOptions.follow`
+- `Elis/Views/WindowContentView.swift` — render (spike done; productionize)
+- `Elis/Control/ControlServer+SessionActions.swift` — the select gate (+ a stale scratch-arm comment)
+- `ElisCore/Sources/ElisCore/ControlDispatcher.swift` — `ControlSessionOverlayOpenOptions.follow`
   (struct at ~line 65) AND the `.sessionOverlayOpen` construction site (~lines 294-308) that must populate it
-- `HangarCore/Sources/HangarCore/ControlProtocol.swift` — the `follow` wire arg
-- `HangarCore/Sources/hangarctlKit/SessionCommands.swift` — the `--follow` CLI flag
-- `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift` (round-trip),
-  `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift` (arg→options routing — the feature crux),
-  `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift` (CLI parse)
-- `HangarUITests/ControlOverlaySplitUITests.swift` — e2e
-- `Hangar/Resources/agent-skill/{SKILL,reference,examples}.md`, `.claude/rules/control-api.md`,
+- `ElisCore/Sources/ElisCore/ControlProtocol.swift` — the `follow` wire arg
+- `ElisCore/Sources/elisctlKit/SessionCommands.swift` — the `--follow` CLI flag
+- `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift` (round-trip),
+  `ElisCore/Tests/ElisCoreTests/ControlDispatcherTests.swift` (arg→options routing — the feature crux),
+  `ElisCore/Tests/elisctlKitTests/CommandsTests.swift` (CLI parse)
+- `ElisUITests/ControlOverlaySplitUITests.swift` — e2e
+- `Elis/Resources/agent-skill/{SKILL,reference,examples}.md`, `.claude/rules/control-api.md`,
   `README.md`, `site/docs.html` — docs (keep-in-sync)
 
 ## Development Approach
 
-- **testing approach:** regular (code then tests, in the same task). HangarCore logic is unit-tested with
+- **testing approach:** regular (code then tests, in the same task). ElisCore logic is unit-tested with
   `swift test`; app-target behavior is verified by XCUITest e2e.
 - complete each task fully before the next; run tests after each change.
 - **every task includes its tests.** App-target-only tasks (render, ControlServer gate) have no host-free
@@ -58,7 +58,7 @@ special case and gives the caller explicit control via `--follow`.
   `Command` case — `follow` is a new optional ARG. `overlay.open` is DISPATCHER-FIRST: the wire arg is
   threaded through `ControlDispatcher`'s `.sessionOverlayOpen` arm into `ControlSessionOverlayOpenOptions`,
   which the app-side `ControlServer` reads. Parity requires all of: the arg in `ControlProtocol` +
-  `ControlDispatcher` (Task 2), the `ControlServer` arm reading it (Task 3), the `hangarctl` flag (Task 4),
+  `ControlDispatcher` (Task 2), the `ControlServer` arm reading it (Task 3), the `elisctl` flag (Task 4),
   and dispatcher-routing + round-trip + e2e tests (Tasks 2/4/5). Also the 4th surface (agent skill) +
   rule/README/site docs (Task 6).
 - **Behavior change:** flips floating's default from always-switch to never-switch. `CHANGELOG.md` is
@@ -68,7 +68,7 @@ special case and gives the caller explicit control via `--follow`.
 
 ## Testing Strategy
 
-- **unit (`cd HangarCore && swift test`):** protocol round-trip for `follow` (Task 2), CLI `--follow`
+- **unit (`cd ElisCore && swift test`):** protocol round-trip for `follow` (Task 2), CLI `--follow`
   parse/mapping (Task 4).
 - **e2e (XCUITest, `ControlOverlaySplitUITests`):** Task 5 — the coverage gap. Assert both full and
   floating open on a BACKGROUND target default to NO switch (active session unchanged) and the floating
@@ -96,7 +96,7 @@ in the panel geometry (`--size-percent`).
   `follow: request.args?.follow ?? false`; `ControlArgs`/wire gains `follow: Bool?` (omitted = false,
   back-compatible with existing clients).
 - `openSessionOverlay`: `if options.follow { store.selectSession(id) }` (was `if options.sizePercent != nil`).
-- `hangarctl overlay open` gains `@Flag var follow: Bool` → `args.follow`.
+- `elisctl overlay open` gains `@Flag var follow: Bool` → `args.follow`.
 - Render: `floatingOverlayPanel(session:isActive:)` is an always-present `sessionDetail` ZStack sibling;
   the panel content (surface + frame + click-catcher) is gated INSIDE it so the ZStack child count is
   constant across open/close (no `NSSplitView` re-host). `isActive` gates the overlay surface's focus, so a
@@ -113,7 +113,7 @@ in the panel geometry (`--size-percent`).
 ### Task 1: Productionize the in-deck floating render
 
 **Files:**
-- Modify: `Hangar/Views/WindowContentView.swift`
+- Modify: `Elis/Views/WindowContentView.swift`
 
 - [x] remove the `SPIKE:` prefixes/notes from the three edited regions (`detailColumn`, `sessionDetail`
       floating sibling, `floatingOverlayPanel`); keep the explanatory comments about the constant-shape
@@ -128,13 +128,13 @@ in the panel geometry (`--size-percent`).
 - [x] run `ControlOverlaySplitUITests` — all pass (render behavior regression; locked further by Task 5)
 - [x] (no host-free unit test — app-target render; behavior verified by Task 5 e2e)
 
-### Task 2: Add `follow` to the control protocol + dispatcher overlay-open options (HangarCore)
+### Task 2: Add `follow` to the control protocol + dispatcher overlay-open options (ElisCore)
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherTests.swift`
 
 - [x] add `follow: Bool?` to the overlay-open wire args in `ControlProtocol.swift` (`ControlArgs`),
       omitted-when-nil for back-compat
@@ -148,13 +148,13 @@ in the panel geometry (`--size-percent`).
       (→ nil) encode/decode stably
 - [x] routing tests (`ControlDispatcherTests`, extend `sessionOverlayOpenRoutesOptionsAndEchoesActionResponse`
       or add a sibling): `args.follow == true` → routed `options.follow == true`; omitted → `options.follow == false`
-- [x] `cd HangarCore && swift test` — passes
+- [x] `cd ElisCore && swift test` — passes
 - [x] run tests — must pass before next task
 
 ### Task 3: Regate the auto-select on `follow` (behavior change)
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`
 
 - [x] in `openSessionOverlay`, change `if options.sizePercent != nil { store.selectSession(id) }` to
       `if options.follow { store.selectSession(id) }`
@@ -166,25 +166,25 @@ in the panel geometry (`--size-percent`).
 - [x] (no host-free unit test — app-target side effect; behavior verified by Task 5 e2e — `[x]` this
       after Task 5 is green)
 
-### Task 4: Add `--follow` to the `hangarctl overlay open` subcommand
+### Task 4: Add `--follow` to the `elisctl overlay open` subcommand
 
 **Files:**
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/CommandsTests.swift`
 
 - [x] add `@Flag var follow: Bool` to the overlay-open command and thread it into the request's
       `follow` arg
 - [x] write CLI-parse tests: `overlay open <cmd> --follow` maps to `follow: true`; without it maps to
       `false`/nil; combines cleanly with `--block`, `--size-percent`, `--target`
-- [x] `cd HangarCore && swift test` — passes
+- [x] `cd ElisCore && swift test` — passes
 - [x] run tests — must pass before next task
 
 ### Task 5: e2e — background-run, no-switch by default, switch on `--follow`
 
 **Files:**
-- Modify: `HangarUITests/ControlOverlaySplitUITests.swift`
+- Modify: `ElisUITests/ControlOverlaySplitUITests.swift`
 
-- [x] harness note: the tests send raw socket JSON via `sendCommand` (not the `hangarctl --block` CLI), so
+- [x] harness note: the tests send raw socket JSON via `sendCommand` (not the `elisctl --block` CLI), so
       "the program runs in the background" is asserted by polling `session.overlay.result` for an exit code
       (the pattern in `testOverlayResultReportsExitCode`), NOT by `--block`. Set up a BACKGROUND target by
       creating a SECOND session (which becomes active) before opening the overlay on the first
@@ -201,7 +201,7 @@ in the panel geometry (`--size-percent`).
 ### Task 6: Keep-in-sync docs (agent skill, rule, README, site)
 
 **Files:**
-- Modify: `Hangar/Resources/agent-skill/SKILL.md`, `reference.md`, `examples.md`
+- Modify: `Elis/Resources/agent-skill/SKILL.md`, `reference.md`, `examples.md`
 - Modify: `.claude/rules/control-api.md`
 - Modify: `README.md`, `site/docs.html`
 
@@ -224,7 +224,7 @@ in the panel geometry (`--size-percent`).
 - [x] full and floating both: `--follow` = switch to target; no-op when target already active
 - [x] `--block` works on a background floating overlay (does not hang)
 - [x] existing valid overlay forms unaffected; existing clients omitting `follow` get the new no-switch default
-- [x] run full suites: `cd HangarCore && swift test`; `ControlOverlaySplitUITests` (+ any sibling overlay
+- [x] run full suites: `cd ElisCore && swift test`; `ControlOverlaySplitUITests` (+ any sibling overlay
       tests); `make lint`
 - [x] manual sanity (skipped - not automatable; covered by Task 5 e2e)
 

@@ -1,8 +1,8 @@
 ---
 paths:
-  - "macos/HangarCore/Tests/**"
-  - "macos/HangarTests/**"
-  - "macos/HangarUITests/**"
+  - "macos/ElisCore/Tests/**"
+  - "macos/ElisTests/**"
+  - "macos/ElisUITests/**"
 ---
 
 ## Tests that do not flake

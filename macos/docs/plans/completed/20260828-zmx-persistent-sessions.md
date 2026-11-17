@@ -19,12 +19,12 @@ shell in v1; every other shell starts as an ordinary unwrapped shell and Setting
 
 | Old assumption | Verified fact |
 |---|---|
-| libghostty forbids `command` with `initial_input` | `embedded.zig` applies them independently. Hangar owns the old exclusion. |
+| libghostty forbids `command` with `initial_input` | `embedded.zig` applies them independently. Elis owns the old exclusion. |
 | zmx needs Zig 0.15 | The repository and zmx build with the pinned Zig 0.16 toolchain. |
 | persistence should be enabled per session | Eugene chose one global mode. |
 | primary and split daemon names can follow pane role | Promotion changes roles, so live mode needs a stable persisted pane identity. |
 | shell integration requires a Ghostty fork | Zsh integration is environment-only and survives through the wrapper. |
-| an attach client must detach cleanly | SIGTERM to Hangar drops the client to zero while the daemon and shell remain alive. |
+| an attach client must detach cleanly | SIGTERM to Elis drops the client to zero while the daemon and shell remain alive. |
 | a missing daemon needs recovery code | `zmx attach` creates a fresh daemon under the persisted name. |
 
 The committed spike at `495accd7` also proves OSC 7 cwd updates, one-time `initial_input`, Claude Code input
@@ -76,13 +76,13 @@ Daemon action follows semantic deletion, never `TerminalSurface.teardown()`.
 | Requested-live launch | Reap zero-client app daemons absent from a complete persisted-name set. Preserve claimed daemons even when eligibility falls back. Skip reap if inventory is incomplete. |
 | Deliberate non-live launch | Reap every zero-client app daemon in this instance namespace. |
 
-The zmx directory is a short hash-derived path under `/tmp`, scoped by the canonical Hangar state directory.
+The zmx directory is a short hash-derived path under `/tmp`, scoped by the canonical Elis state directory.
 A stale control socket pathname can remain after SIGTERM, so tests wait for a successful request rather than
 checking only that the socket exists.
 
 ## Build and test rules
 
-- `HangarCore` stays free of AppKit and GhosttyKit.
+- `ElisCore` stays free of AppKit and GhosttyKit.
 - Codex is the sole writer. Claude reads each task diff and runs its targeted checks before the next task.
 - Each code task adds or updates focused tests. Full `swift test`, app tests, lint and build run in Task 9.
 - Debug experiments use a short isolated state directory and an explicit socket. Capture the exact Debug PID
@@ -95,14 +95,14 @@ checking only that the socket exists.
 ### Task 1: Add restore mode and persisted pane identity
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/RestoreMode.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppSettings.swift`
+- Create: `ElisCore/Sources/ElisCore/RestoreMode.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppSettings.swift`
 - Modify: `Session.swift`, `Snapshot.swift`, `AppStore+Snapshot.swift`, `AppStore+Panes.swift`
-- Modify: matching `HangarCore` tests
+- Modify: matching `ElisCore` tests
 
 - [x] migrate legacy `restoreRunningCommand`: true becomes `rerun`; false or absent becomes `none`
 - [x] decode unknown mode strings as `none` and write only the new key
-- [x] persist primary and split pane identity and use it as `HANGAR_PANE_ID`; promotion moves the survivor
+- [x] persist primary and split pane identity and use it as `ELIS_PANE_ID`; promotion moves the survivor
       identity to primary and a new split mints another
 - [x] persist `hasSplit` for a hidden split without adding `splitFocused` to the snapshot
 - [x] test migration, identity minting on a legacy snapshot, duplicate sessions, promotion then re-split, and
@@ -112,14 +112,14 @@ checking only that the socket exists.
 ### Task 2: Add zsh wrapping inputs and daemon naming
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/ZmxSupport.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/ZmxSupportTests.swift`
-- Modify/Delete: `Hangar/Ghostty/ZmxSpike.swift` when its logic moves
+- Create: `ElisCore/Sources/ElisCore/ZmxSupport.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/ZmxSupportTests.swift`
+- Modify/Delete: `Elis/Ghostty/ZmxSpike.swift` when its logic moves
 
 - [x] accept only a password-database login shell whose basename is `zsh`
 - [x] reproduce zsh integration with `ZDOTDIR`, preserved `GHOSTTY_ZSH_ZDOTDIR`, explicit `SHELL`, `ZMX_DIR`
       and `ZMX_NO_DETACH_KEY=1`; require the bundled zsh loader
-- [x] name daemons from the full compact pane UUID and use it as `HANGAR_PANE_ID`
+- [x] name daemons from the full compact pane UUID and use it as `ELIS_PANE_ID`
 - [x] derive a fixed-length namespace from a canonical state path; its full UUID daemon name stays within the Unix socket budget
 - [x] test supported, unsupported and missing-resource decisions plus stable names and namespace derivation
 
@@ -127,11 +127,11 @@ checking only that the socket exists.
 
 **Files:**
 - Modify: `scripts/setup.sh`, `project.yml`, `scripts/release.sh`, `.github/workflows/ci.yml`, `.gitignore`
-- Stage: `Hangar/Resources/zmx/zmx`, `Hangar/Resources/zmx/LICENSE`
+- Stage: `Elis/Resources/zmx/zmx`, `Elis/Resources/zmx/LICENSE`
 
 - [x] pin `ZMX_REV` and track zmx with its own stamp so zmx changes do not rebuild Ghostty
 - [x] stage the binary and MIT notice with the existing Zig 0.16 toolchain
-- [x] extend the existing helper phase so zmx and `hangarctl` are signed before one app seal
+- [x] extend the existing helper phase so zmx and `elisctl` are signed before one app seal
 - [x] sign both helpers before Developer ID release signing and check zmx signature/entitlements in CI
 - [x] run setup twice, then build and inspect the bundled binary
 
@@ -139,7 +139,7 @@ checking only that the socket exists.
 
 **Files:**
 - Modify: `GhosttyApp.swift`, `SettingsModel.swift`, `SettingsView.swift`, `AppDelegate.swift`
-- Modify: `ControlServer.swift`, `ControlServer+SessionActions.swift`, `hangarctlKit/MiscCommands.swift`
+- Modify: `ControlServer.swift`, `ControlServer+SessionActions.swift`, `elisctlKit/MiscCommands.swift`
 - Modify with the command code: `.claude/rules/{settings,control-api}.md`, `site/commands.html`,
   `site/docs.html`, and agent-skill command pages
 - Modify: focused app, control and Settings tests
@@ -154,10 +154,10 @@ checking only that the socket exists.
 ### Task 5: Wrap primary and split panes and report actual backing
 
 **Files:**
-- Modify: `Hangar/hangarApp.swift`, `GhosttySurfaceView.swift`, control-tree shaping and logging
+- Modify: `Elis/elisApp.swift`, `GhosttySurfaceView.swift`, control-tree shaping and logging
 - Create: focused app and UI tests
 
-- [x] use the bundled binary and launch mode; keep `HANGAR_ZMX_PATH` as a Debug-only override
+- [x] use the bundled binary and launch mode; keep `ELIS_ZMX_PATH` as a Debug-only override
 - [x] wrap primary and split panes and leave scratch, overlay and quick terminals unchanged
 - [x] set wrapped state before surface creation and use native `command` plus `initial_input`
 - [x] on fallback, a restored pane starts a plain shell without consuming capture or restore-override state;
@@ -169,7 +169,7 @@ checking only that the socket exists.
 ### Task 6: Add zmx lifecycle control and launch cleanup
 
 **Files:**
-- Create: `Hangar/Ghostty/ZmxClient.swift`
+- Create: `Elis/Ghostty/ZmxClient.swift`
 - Create: host-free zmx list/reap parsing and tests
 - Modify: `AppStore`, pending-close and pane lifecycle files, `WindowLibrary`, launch persistence wiring
 
@@ -184,7 +184,7 @@ checking only that the socket exists.
 ### Task 7: Resolve real foreground processes
 
 **Files:**
-- Create: `Hangar/Ghostty/ZmxForegroundResolver.swift`
+- Create: `Elis/Ghostty/ZmxForegroundResolver.swift`
 - Modify: `ForegroundProcess.swift`, `ControlServer.swift`, zmx parser tests
 
 - [x] map each wrapped pane name through the zmx leader to the daemon pty foreground group

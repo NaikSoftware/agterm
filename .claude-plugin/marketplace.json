@@ -1,27 +1,27 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "hangar",
+  "name": "elis",
   "owner": {
     "name": "NaikSoftware"
   },
   "metadata": {
-    "description": "The Hangar agent skill: drive the Hangar macOS terminal over its control socket."
+    "description": "The Elis agent skill: drive the Elis macOS terminal over its control socket."
   },
   "plugins": [
     {
-      "name": "hangar",
-      "source": "./plugins/hangar",
-      "description": "Drive Hangar, a native macOS terminal, programmatically via its hangarctl CLI and local control socket.",
+      "name": "elis",
+      "source": "./plugins/elis",
+      "description": "Drive Elis, a native macOS terminal, programmatically via its elisctl CLI and local control socket.",
       "version": "0.42.3",
       "author": {
         "name": "NaikSoftware"
       },
-      "homepage": "https://naiksoftware.github.io/hangar",
-      "repository": "https://github.com/NaikSoftware/hangar",
+      "homepage": "https://naiksoftware.github.io/elis",
+      "repository": "https://github.com/NaikSoftware/elis",
       "license": "MIT",
       "category": "productivity",
       "keywords": [
-        "hangar",
+        "elis",
         "terminal",
         "macos",
         "automation",

@@ -12,13 +12,13 @@
 
 namespace Install {
 
-static const char *const shellMarker = "# >>> hangar agent-status >>>";
-static const char *const shellEnd = "# <<< hangar agent-status <<<";
-static const char *const bakeMarker = "# >>> hangar hangarctl path (installer-baked) >>>";
+static const char *const shellMarker = "# >>> elis agent-status >>>";
+static const char *const shellEnd = "# <<< elis agent-status <<<";
+static const char *const bakeMarker = "# >>> elis elisctl path (installer-baked) >>>";
 
 QString packageDir(const QString &home)
 {
-    return home + QStringLiteral("/.config/hangar/agent-status");
+    return home + QStringLiteral("/.config/elis/agent-status");
 }
 
 QString shellQuote(const QString &s)
@@ -88,7 +88,7 @@ static bool copyTree(const QString &from, const QString &to)
     return true;
 }
 
-static bool bake(const QString &script, const QString &hangarctl)
+static bool bake(const QString &script, const QString &elisctl)
 {
     QString text;
     if (readText(script, &text) != Read::Ok)
@@ -96,8 +96,8 @@ static bool bake(const QString &script, const QString &hangarctl)
     QStringList lines = text.split(QLatin1Char('\n'));
     if (const qsizetype at = lines.indexOf(QLatin1String(bakeMarker)); at >= 0)
         lines.remove(at, qMin(qsizetype(5), lines.size() - at));
-    lines.insert(1, QStringLiteral("%1\nif [ -z \"${HANGARCTL:-}\" ]; then\n  HANGARCTL=%2\n  [ -x \"$HANGARCTL\" ] || HANGARCTL=\"$(command -v hangarctl || true)\"\nfi")
-                        .arg(QLatin1String(bakeMarker), shellQuote(hangarctl)));
+    lines.insert(1, QStringLiteral("%1\nif [ -z \"${ELISCTL:-}\" ]; then\n  ELISCTL=%2\n  [ -x \"$ELISCTL\" ] || ELISCTL=\"$(command -v elisctl || true)\"\nfi")
+                        .arg(QLatin1String(bakeMarker), shellQuote(elisctl)));
     return writeText(script, lines.join(QLatin1Char('\n')), false);
 }
 
@@ -133,10 +133,10 @@ static bool mergeClaude(const QString &home, const QString &pkg, QString *error)
     }
     if (root.contains("env") && (!root.value("env").isObject() || (root.value("env").toObject().contains("CLAUDE_CODE_PLUGIN_DIRS") && !root.value("env").toObject().value("CLAUDE_CODE_PLUGIN_DIRS").isString())))
         return false;
-    const QString adapter = pkg + QStringLiteral("/hangar-claude-status.sh"), wrapper = pkg + QStringLiteral("/hangar-agent-status.sh");
+    const QString adapter = pkg + QStringLiteral("/elis-claude-status.sh"), wrapper = pkg + QStringLiteral("/elis-agent-status.sh");
     const QString cmd = shellQuote(adapter) + QLatin1Char(' ');
-    // an older hangar install (scripts/install-claude-hooks.sh) or a raw wrapper hook: same state, our adapter now
-    static const QRegularExpression older(QStringLiteral("^'?[^ ']*agent-status/hangar-(claude|agent)-status\\.sh'? (.+)$"));
+    // an older elis install (scripts/install-claude-hooks.sh) or a raw wrapper hook: same state, our adapter now
+    static const QRegularExpression older(QStringLiteral("^'?[^ ']*agent-status/elis-(claude|agent)-status\\.sh'? (.+)$"));
     for (const auto &[event, matcher, state] : wanted) {
         QJsonArray entries = hooks.value(QLatin1String(event)).toArray();
         bool present = false;
@@ -207,7 +207,7 @@ static QString codexBlock(const QString &pkg)
     static const QList<std::pair<const char *, const char *>> events{{"SessionStart", "session-start"}, {"UserPromptSubmit", "user-prompt-submit"},
                                                                      {"PreToolUse", "pre-tool-use"},    {"PostToolUse", "post-tool-use"},
                                                                      {"PermissionRequest", "permission-request"}, {"Stop", "stop"}};
-    const QString w = shellQuote(pkg + QStringLiteral("/hangar-codex-status.sh"));
+    const QString w = shellQuote(pkg + QStringLiteral("/elis-codex-status.sh"));
     QStringList stanzas;
     for (const auto &[event, action] : events) {
         QString command = w + QLatin1Char(' ') + QLatin1String(action);
@@ -231,7 +231,7 @@ static Codex mergeCodex(const QString &home, const QString &pkg, QString *error)
     QString out;
     if (const qsizetype begin = text.indexOf(QLatin1String(shellMarker)); begin >= 0) {
         const qsizetype end = text.indexOf(QLatin1String(shellEnd), begin);
-        if (end < 0 || !text.mid(begin, end - begin).contains(QLatin1String("hangar-codex-status.sh")))
+        if (end < 0 || !text.mid(begin, end - begin).contains(QLatin1String("elis-codex-status.sh")))
             return Codex::HooksExist; // a foreign block under our marker
         // tables Codex appended inside the block (its trust state) stay byte for byte
         const QString inner = text.mid(begin, end - begin);
@@ -287,19 +287,19 @@ static Plugin installOwned(const QString &source, const QString &dest, const QSt
     return writeText(dest, want, false) ? Plugin::Installed : Plugin::WriteFailed;
 }
 
-Report agentHooks(const QString &home, const QString &bundle, const QString &hangarctl, const OpenCode &openCode)
+Report agentHooks(const QString &home, const QString &bundle, const QString &elisctl, const OpenCode &openCode)
 {
     Report r;
     const QString pkg = packageDir(home);
-    if (!QFileInfo(bundle + QStringLiteral("/hangar-agent-status.sh")).isFile())
+    if (!QFileInfo(bundle + QStringLiteral("/elis-agent-status.sh")).isFile())
         return r.error = QStringLiteral("The agent-status scripts are not bundled in this build."), r;
     QString text;
-    if (readText(bundle + QStringLiteral("/pi/hangar-status.ts"), &text) != Read::Ok)
+    if (readText(bundle + QStringLiteral("/pi/elis-status.ts"), &text) != Read::Ok)
         return r.error = QStringLiteral("The Pi status extension is not bundled in this build."), r;
-    if (!text.contains(QLatin1String("// hangar-pi-status-extension")))
+    if (!text.contains(QLatin1String("// elis-pi-status-extension")))
         return r.error = QStringLiteral("The bundled Pi status extension is missing its ownership marker."), r;
-    for (const auto &[file, marker, v] : {std::tuple{"opencode/hangar-status.js", "// hangar-opencode-status-plugin", 1},
-                                          std::tuple{"opencode/hangar-v2/tui.js", "// hangar-opencode-v2-status-plugin", 2}}) {
+    for (const auto &[file, marker, v] : {std::tuple{"opencode/elis-status.js", "// elis-opencode-status-plugin", 1},
+                                          std::tuple{"opencode/elis-v2/tui.js", "// elis-opencode-v2-status-plugin", 2}}) {
         if (readText(bundle + QLatin1Char('/') + QLatin1String(file), &text) != Read::Ok)
             return r.error = QStringLiteral("The OpenCode v%1 status plugin is not bundled in this build.").arg(v), r;
         if (!text.contains(QLatin1String(marker)))
@@ -307,9 +307,9 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &han
     }
     if (!copyTree(bundle, pkg))
         return r.error = QStringLiteral("Could not copy the agent-status scripts to %1.").arg(pkg), r;
-    if (QFileInfo(hangarctl).isExecutable())
-        for (const char *script : {"hangar-agent-status.sh", "hangar-codex-status.sh"})
-            bake(pkg + QLatin1Char('/') + QLatin1String(script), hangarctl);
+    if (QFileInfo(elisctl).isExecutable())
+        for (const char *script : {"elis-agent-status.sh", "elis-codex-status.sh"})
+            bake(pkg + QLatin1Char('/') + QLatin1String(script), elisctl);
 
     QString error;
     const bool claude = mergeClaude(home, pkg, &error);
@@ -322,15 +322,15 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &han
     QString piLine;
     bool warn = !claude || codex == Codex::HooksExist || codex == Codex::Unreadable;
     if (!QFileInfo(home + QStringLiteral("/.pi/agent")).isDir()) {
-        piLine = QStringLiteral("No ~/.pi/agent found, so Pi's lifecycle extension was skipped. Start Pi once, then run hangar --install agent-hooks.");
+        piLine = QStringLiteral("No ~/.pi/agent found, so Pi's lifecycle extension was skipped. Start Pi once, then run elis --install agent-hooks.");
     } else {
-        const Plugin pi = installOwned(bundle + QStringLiteral("/pi/hangar-status.ts"), home + QStringLiteral("/.pi/agent/extensions/hangar-status.ts"),
-                                       QStringLiteral("// hangar-pi-status-extension"));
+        const Plugin pi = installOwned(bundle + QStringLiteral("/pi/elis-status.ts"), home + QStringLiteral("/.pi/agent/extensions/elis-status.ts"),
+                                       QStringLiteral("// elis-pi-status-extension"));
         static const QHash<Plugin, QString> lines{
-            {Plugin::Installed, "Pi lifecycle extension installed to ~/.pi/agent/extensions/hangar-status.ts. Restart Pi or run /reload."},
-            {Plugin::AlreadyConfigured, "Pi lifecycle extension is already current at ~/.pi/agent/extensions/hangar-status.ts."},
-            {Plugin::UserOwned, "~/.pi/agent/extensions/hangar-status.ts is user-owned, so Hangar left it untouched."},
-            {Plugin::Unreadable, "~/.pi/agent/extensions/hangar-status.ts exists but could not be read, so Hangar left it untouched."},
+            {Plugin::Installed, "Pi lifecycle extension installed to ~/.pi/agent/extensions/elis-status.ts. Restart Pi or run /reload."},
+            {Plugin::AlreadyConfigured, "Pi lifecycle extension is already current at ~/.pi/agent/extensions/elis-status.ts."},
+            {Plugin::UserOwned, "~/.pi/agent/extensions/elis-status.ts is user-owned, so Elis left it untouched."},
+            {Plugin::Unreadable, "~/.pi/agent/extensions/elis-status.ts exists but could not be read, so Elis left it untouched."},
             {Plugin::WriteFailed, "Pi's lifecycle extension couldn't be written to ~/.pi/agent/extensions/ (check that directory's permissions), so it was skipped."}};
         piLine = lines.value(pi);
         warn |= pi == Plugin::UserOwned || pi == Plugin::Unreadable || pi == Plugin::WriteFailed;
@@ -342,18 +342,18 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &han
         openCodeLine = QStringLiteral("OpenCode status plugin installation was skipped.");
     } else if (openCode.version == 2 && openCode.v2Dir.isEmpty()) {
         openCodeLine = QStringLiteral("OpenCode v2 installation was skipped because its configuration directory could not be determined from your login shell. "
-                                      "Check shell startup and OPENCODE_CONFIG_DIR, then run hangar --install agent-hooks.");
+                                      "Check shell startup and OPENCODE_CONFIG_DIR, then run elis --install agent-hooks.");
         warn = true;
     } else {
         const QString cfg = openCode.version == 2 ? openCode.v2Dir : legacy;
         if (openCode.version < 1 || !QFileInfo(cfg).isDir()) {
-            openCodeLine = QStringLiteral("No %1 found, so the OpenCode plugin was skipped. Start OpenCode once, then run hangar --install agent-hooks. "
+            openCodeLine = QStringLiteral("No %1 found, so the OpenCode plugin was skipped. Start OpenCode once, then run elis --install agent-hooks. "
                                           "Coarse shell detection for opencode is off by default.").arg(tilde(home, cfg));
         } else {
             const bool v2 = openCode.version == 2;
-            const QString dest = cfg + (v2 ? QStringLiteral("/plugins/hangar-v2/tui.js") : QStringLiteral("/plugins/hangar-status.js"));
-            const Plugin p = installOwned(bundle + (v2 ? QStringLiteral("/opencode/hangar-v2/tui.js") : QStringLiteral("/opencode/hangar-status.js")), dest,
-                                          v2 ? QStringLiteral("// hangar-opencode-v2-status-plugin") : QStringLiteral("// hangar-opencode-status-plugin"));
+            const QString dest = cfg + (v2 ? QStringLiteral("/plugins/elis-v2/tui.js") : QStringLiteral("/plugins/elis-status.js"));
+            const Plugin p = installOwned(bundle + (v2 ? QStringLiteral("/opencode/elis-v2/tui.js") : QStringLiteral("/opencode/elis-status.js")), dest,
+                                          v2 ? QStringLiteral("// elis-opencode-v2-status-plugin") : QStringLiteral("// elis-opencode-status-plugin"));
             const QString v = v2 ? QStringLiteral("v2") : QStringLiteral("v1");
             static const QHash<Plugin, QString> lines{{Plugin::Installed, "OpenCode %1 status plugin installed to %2. Restart OpenCode."},
                                                       {Plugin::AlreadyConfigured, "OpenCode %1 status plugin is already current at %2."},
@@ -362,16 +362,16 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &han
                                                       {Plugin::WriteFailed, "OpenCode %1 plugin couldn't be written to %2 (check permissions), so it was skipped."}};
             openCodeLine = lines.value(p).arg(v, dest);
             warn |= p == Plugin::UserOwned || p == Plugin::Unreadable || p == Plugin::WriteFailed;
-            const QString old = cfg + QStringLiteral("/plugins/hangar-status.js");
+            const QString old = cfg + QStringLiteral("/plugins/elis-status.js");
             QString oldText;
             if (v2 && (p == Plugin::Installed || p == Plugin::AlreadyConfigured) && QFileInfo::exists(old)) { // v2 replaces the v1 plugin
                 warn = true;
                 if (readText(old, &oldText) != Read::Ok)
                     openCodeLine = QStringLiteral("OpenCode v2 status plugin is installed, but %1 could not be read and was left untouched.").arg(old);
-                else if (!oldText.contains(QLatin1String("// hangar-opencode-status-plugin")))
+                else if (!oldText.contains(QLatin1String("// elis-opencode-status-plugin")))
                     openCodeLine = QStringLiteral("OpenCode v2 status plugin is installed, but %1 is user-owned and was left untouched.").arg(old);
                 else if (!QFile::remove(old))
-                    openCodeLine = QStringLiteral("OpenCode v2 status plugin is installed, but the v1 plugin at %1 could not be safely removed. Check permissions and run hangar --install agent-hooks.").arg(old);
+                    openCodeLine = QStringLiteral("OpenCode v2 status plugin is installed, but the v1 plugin at %1 could not be safely removed. Check permissions and run elis --install agent-hooks.").arg(old);
                 else
                     warn = false;
             }
@@ -379,13 +379,13 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &han
     }
 
     const QString approve = QStringLiteral("Run /hooks in Codex to review and approve them before they take effect.");
-    const QString manual = QStringLiteral("See the Add Codex hooks by hand section of the Hangar docs for the block to add, then run /hooks in Codex.");
+    const QString manual = QStringLiteral("See the Add Codex hooks by hand section of the Elis docs for the block to add, then run /hooks in Codex.");
     static const QHash<Codex, QString> codexLines{
         {Codex::Merged, "Codex lifecycle hooks merged into ~/.codex/config.toml (any old codex-notify.sh notify line was removed). "},
         {Codex::AlreadyConfigured, "Codex lifecycle hooks are already present in ~/.codex/config.toml. "},
-        {Codex::HooksExist, "Your ~/.codex/config.toml already defines its own hooks, so Hangar left it untouched. "},
-        {Codex::Unreadable, "Your ~/.codex/config.toml exists but couldn't be read, so Hangar left it untouched."},
-        {Codex::NoCodex, "No ~/.codex found, so Codex hooks were skipped. Install Codex, then run hangar --install agent-hooks."}};
+        {Codex::HooksExist, "Your ~/.codex/config.toml already defines its own hooks, so Elis left it untouched. "},
+        {Codex::Unreadable, "Your ~/.codex/config.toml exists but couldn't be read, so Elis left it untouched."},
+        {Codex::NoCodex, "No ~/.codex found, so Codex hooks were skipped. Install Codex, then run elis --install agent-hooks."}};
     QString codexLine = codexLines.value(codex);
     if (codex == Codex::Merged || codex == Codex::AlreadyConfigured)
         codexLine += approve;
@@ -408,29 +408,29 @@ Report agentHooks(const QString &home, const QString &bundle, const QString &han
     return r;
 }
 
-Report commandLineTool(const QString &home, const QString &hangarctl)
+Report commandLineTool(const QString &home, const QString &elisctl)
 {
     Report r;
-    if (!QFileInfo(hangarctl).isExecutable())
-        return r.error = QStringLiteral("hangarctl is not bundled in this build."), r;
-    const QString bin = home + QStringLiteral("/.local/bin"), link = bin + QStringLiteral("/hangarctl");
+    if (!QFileInfo(elisctl).isExecutable())
+        return r.error = QStringLiteral("elisctl is not bundled in this build."), r;
+    const QString bin = home + QStringLiteral("/.local/bin"), link = bin + QStringLiteral("/elisctl");
     const QFileInfo existing(link);
     const bool onPath = qEnvironmentVariable("PATH").split(QLatin1Char(':')).contains(bin);
     const QString pathNote = onPath ? QString() : QStringLiteral("~/.local/bin is not on your PATH; add it in your shell profile.");
     if (existing.exists() || existing.isSymLink()) {
-        if (existing.canonicalFilePath() == QFileInfo(hangarctl).canonicalFilePath()) {
+        if (existing.canonicalFilePath() == QFileInfo(elisctl).canonicalFilePath()) {
             r.title = QStringLiteral("Command Line Tool Installed");
-            r.lines = {QStringLiteral("hangarctl is already at ~/.local/bin/hangarctl.")};
+            r.lines = {QStringLiteral("elisctl is already at ~/.local/bin/elisctl.")};
         } else {
             r.title = QStringLiteral("Command Line Tool Not Installed");
             r.warning = true;
-            r.lines = {QStringLiteral("~/.local/bin/hangarctl already exists and is not this build's hangarctl, so it was left untouched.")};
+            r.lines = {QStringLiteral("~/.local/bin/elisctl already exists and is not this build's elisctl, so it was left untouched.")};
         }
     } else {
-        if (!QDir().mkpath(bin) || !QFile::link(hangarctl, link))
-            return r.error = QStringLiteral("Could not link %1 to %2.").arg(link, hangarctl), r;
+        if (!QDir().mkpath(bin) || !QFile::link(elisctl, link))
+            return r.error = QStringLiteral("Could not link %1 to %2.").arg(link, elisctl), r;
         r.title = QStringLiteral("Command Line Tool Installed");
-        r.lines = {QStringLiteral("hangarctl was linked into ~/.local/bin/hangarctl. Open a new terminal and run “hangarctl --help”.")};
+        r.lines = {QStringLiteral("elisctl was linked into ~/.local/bin/elisctl. Open a new terminal and run “elisctl --help”.")};
     }
     if (!pathNote.isEmpty())
         r.lines << pathNote;
@@ -452,12 +452,12 @@ Report skill(const QString &home, const QString &bundle)
     QStringList installed, skipped;
     bool fresh = false;
     for (const auto &[agent, dir] : targets) {
-        const QString dest = dir + QStringLiteral("/hangar");
+        const QString dest = dir + QStringLiteral("/elis");
         const QFileInfo present(dest);
         if (present.exists() || present.isSymLink()) {
             QString text;
-            if (readText(dest + QStringLiteral("/SKILL.md"), &text) != Read::Ok || !text.contains(QLatin1String("<!-- hangar-skill -->"))) {
-                skipped << QStringLiteral("  • %1: a different 'hangar' skill is already there — left untouched").arg(agent);
+            if (readText(dest + QStringLiteral("/SKILL.md"), &text) != Read::Ok || !text.contains(QLatin1String("<!-- elis-skill -->"))) {
+                skipped << QStringLiteral("  • %1: a different 'elis' skill is already there — left untouched").arg(agent);
                 continue;
             }
         }
@@ -474,7 +474,7 @@ Report skill(const QString &home, const QString &bundle)
         r.lines << QStringLiteral("The skill was not installed.");
     else
         r.lines << QStringLiteral("Installed for:") << installed << QString()
-                << QStringLiteral("The agent uses it automatically when you ask it to control Hangar. It drives the app via the hangarctl CLI.");
+                << QStringLiteral("The agent uses it automatically when you ask it to control Elis. It drives the app via the elisctl CLI.");
     if (!skipped.isEmpty())
         r.lines << QString() << QStringLiteral("Skipped:") << skipped;
     if (fresh && !installed.isEmpty())

@@ -2,7 +2,7 @@
 # Sourced, not executed: source this file from ~/.zshrc.
 # See README.md.
 
-# Antigravity CLI (agy) wrapper for per-pane session resume in hangar.
+# Antigravity CLI (agy) wrapper for per-pane session resume in elis.
 # Runs the real `agy` binary unchanged, then clears the pane's sticky restore
 # pin when an interactive session returns to the shell so a closed session is
 # not relaunched on the next terminal restart.
@@ -11,7 +11,7 @@ function agy {
   local rc
   command agy "$@" && rc=0 || rc=$?
 
-  [[ -n ${HANGAR_SESSION_ID:-} && -n ${HANGAR_PANE_ID:-} && -n ${HANGAR_SOCKET:-} ]] || return $rc
+  [[ -n ${ELIS_SESSION_ID:-} && -n ${ELIS_PANE_ID:-} && -n ${ELIS_SOCKET:-} ]] || return $rc
   [[ -z ${CLAUDECODE:-} && -z ${CLAUDE_CODE_SESSION_ID:-} ]] || return $rc
   (( rc == 129 || rc == 143 )) && return $rc
 
@@ -25,21 +25,21 @@ function agy {
     esac
   done
 
-  local ctl=${HANGARCTL:-hangarctl}
+  local ctl=${ELISCTL:-elisctl}
   if ! command -v "$ctl" >/dev/null 2>&1; then
-    if [[ -z ${HANGARCTL:-} && -x $HOME/Applications/Hangar.app/Contents/MacOS/hangarctl ]]; then
-      ctl=$HOME/Applications/Hangar.app/Contents/MacOS/hangarctl
-    elif [[ -z ${HANGARCTL:-} && -x /Applications/Hangar.app/Contents/MacOS/hangarctl ]]; then
-      ctl=/Applications/Hangar.app/Contents/MacOS/hangarctl
+    if [[ -z ${ELISCTL:-} && -x $HOME/Applications/Elis.app/Contents/MacOS/elisctl ]]; then
+      ctl=$HOME/Applications/Elis.app/Contents/MacOS/elisctl
+    elif [[ -z ${ELISCTL:-} && -x /Applications/Elis.app/Contents/MacOS/elisctl ]]; then
+      ctl=/Applications/Elis.app/Contents/MacOS/elisctl
     else
       return $rc
     fi
   fi
 
   "$ctl" session restore --clear \
-    --target "$HANGAR_SESSION_ID" \
-    --pane-id "$HANGAR_PANE_ID" \
-    --socket "$HANGAR_SOCKET" >/dev/null 2>&1 || true
+    --target "$ELIS_SESSION_ID" \
+    --pane-id "$ELIS_PANE_ID" \
+    --socket "$ELIS_SOCKET" >/dev/null 2>&1 || true
 
   return $rc
 }

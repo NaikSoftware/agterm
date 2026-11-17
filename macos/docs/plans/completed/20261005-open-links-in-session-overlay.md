@@ -11,17 +11,17 @@
   panel header names the site of the document shown.
 - Whenever the overlay cannot open or would not be visible, an eligible link is handed to the browser
   instead. Ignored schemes stay ignored.
-- Control: `hangarctl browser links [browser|overlay]` sets or reads the setting and `tree` reports it.
-  `hangarctl session overlay open --url URL --browse --js --navigation --persistent` opens the page a
+- Control: `elisctl browser links [browser|overlay]` sets or reads the setting and `tree` reports it.
+  `elisctl session overlay open --url URL --browse --js --navigation --persistent` opens the page a
   click opens; `--browse` alone only widens navigation.
 
 ## Context (from discovery)
-- Every clicked link ends in `GhosttySurfaceView.openLink` (`Hangar/Ghostty/GhosttySurfaceView+Input.swift:583`),
-  queued from `GHOSTTY_ACTION_OPEN_URL` in `Hangar/Ghostty/GhosttyCallbacks.swift:129`. The callback carries
+- Every clicked link ends in `GhosttySurfaceView.openLink` (`Elis/Ghostty/GhosttySurfaceView+Input.swift:583`),
+  queued from `GHOSTTY_ACTION_OPEN_URL` in `Elis/Ghostty/GhosttyCallbacks.swift:129`. The callback carries
   the URL only and runs after the click, so the click's modifiers are not available: no per-click override.
-- `LinkPolicy.disposition` (`HangarCore/Sources/HangarCore/LinkPolicy.swift`) returns `.open` for
+- `LinkPolicy.disposition` (`ElisCore/Sources/ElisCore/LinkPolicy.swift`) returns `.open` for
   `http`, `https`, `mailto`, `ftp`; `.reveal` for local `file://`; `.ignore` otherwise.
-- HUD links reach the same `openLink` on the HUD's surface (`Hangar/Ghostty/HudLinkClick.swift`, #707).
+- HUD links reach the same `openLink` on the HUD's surface (`Elis/Ghostty/HudLinkClick.swift`, #707).
 - Surface ownership, enough to tell where a click came from with no new field: `hudBodyFile` is set on a
   HUD surface; `session` on primary and split panes; a sessionless surface whose `focusSession` owns it as
   its scratch surface is the scratch; other sessionless surfaces with a `focusSession` are program
@@ -29,28 +29,28 @@
 - Zoom: while `terminalZoom.target` is set, `WindowContentView.swift:320` hides the split layer and
   `WindowContentView+Zoom.swift:142` hosts the zoomed terminal surface only. Opening a page does not clear
   zoom (`TerminalZoom.swift:217`), so a page opened from a zoomed window is accepted and invisible.
-- Slot: `AppStore.openHtmlOverlay` (`HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift:40`) closes a
+- Slot: `AppStore.openHtmlOverlay` (`ElisCore/Sources/ElisCore/AppStore+HtmlOverlay.swift:40`) closes a
   HUD, then refuses with `.alreadyOpen` for a program or page, and `.presenter` while a presenter owns the
-  session. The host adapter `openHtmlOverlay` in `Hangar/Control/ControlServer+SessionActions.swift:70`
+  session. The host adapter `openHtmlOverlay` in `Elis/Control/ControlServer+SessionActions.swift:70`
   also refuses a remotely reserved slot and a failing saved store, then builds a persistent page eagerly
   so `browser.clear` counts it. It is `private`; the `openSessionOverlay` action is its public entry, and
   `GhosttySurfaceView` holds no reference to the server or to settings.
 - `openLink` calls `NSWorkspace` directly, so a test of it today opens the real browser or Finder.
-- Navigation: `HtmlNavigationPolicy.decide` (`HangarCore/Sources/HangarCore/HtmlOverlay.swift:238`) keeps a
+- Navigation: `HtmlNavigationPolicy.decide` (`ElisCore/Sources/ElisCore/HtmlOverlay.swift:238`) keeps a
   URL page's main frame on its original origin; anything else goes to a confirm sheet and the browser.
   New-window requests are confirmed-external; `createWebViewWith` returns nil.
 - Header: `HtmlOverlay.identity` (`HtmlOverlay.swift:130`) shows the ORIGINAL origin for a URL page;
-  `Hangar/Views/HtmlOverlayView.swift:81` draws it. Live page facts arrive through `setHtmlPage`
+  `Elis/Views/HtmlOverlayView.swift:81` draws it. Live page facts arrive through `setHtmlPage`
   (`HtmlPageInfo.page` is the current URL).
 - Control bridge: installed for file pages only (`HtmlOverlayRegistry.swift:332`), so a URL page with
-  JavaScript cannot reach `hangar.request`. This stays.
+  JavaScript cannot reach `elis.request`. This stays.
 - Pattern for an app-global browser command: `browser.clear` in `ControlDispatcher+Browser.swift`,
-  `ControlActions.clearBrowser`, `ControlServer+AppCommands.swift:134`, `hangarctlKit/MiscCommands.swift`.
+  `ControlActions.clearBrowser`, `ControlServer+AppCommands.swift:134`, `elisctlKit/MiscCommands.swift`.
 - Pattern for a page flag: `--persistent`, see `docs/plans/completed/20261001-html-overlay-persistent-storage.md`
   (`ControlArgs`, `OverlayHtmlError`, `ControlDispatcher+Overlay.swift:39,131`, `ControlHtmlOverlayNode` in
   `ControlProjection.swift:402`).
-- Settings: `HangarCore/Sources/HangarCore/AppSettings.swift`, `Hangar/SettingsModel.swift`,
-  `Hangar/Views/SettingsView.swift`; enum-like settings are stored as raw strings and unknown values
+- Settings: `ElisCore/Sources/ElisCore/AppSettings.swift`, `Elis/SettingsModel.swift`,
+  `Elis/Views/SettingsView.swift`; enum-like settings are stored as raw strings and unknown values
   resolve to the default (`.claude/rules/settings.md`).
 - `tree` top level: `ControlTree` in `ControlProjection.swift:562`, filled by `ControlServer.buildTree`
   (`ControlServer.swift:803`) and `AppStore.controlTree` (`AppStore.swift:280`); page nodes come from
@@ -61,7 +61,7 @@
 - `scripts/test-app.sh` passes no arguments to `xcodebuild`, so it always runs the whole hosted suite.
 
 ## Development Approach
-- **testing approach**: tests first for everything host-free in `HangarCore` (setting, routing decision,
+- **testing approach**: tests first for everything host-free in `ElisCore` (setting, routing decision,
   navigation policy, identity, protocol, dispatcher, projection, CLI); hosted tests on the in-process
   listener for WebKit navigation and for the click path.
 - Complete each task before the next; all tests for a task pass before moving on.
@@ -69,13 +69,13 @@
 - Existing pages keep their behavior: without `--browse` nothing about a page changes.
 
 ## Testing Strategy
-- **core tests** (`cd HangarCore && swift test`): each task below.
+- **core tests** (`cd ElisCore && swift test`): each task below.
 - **hosted tests**: navigation across origins on the in-process listener, the header label after a
   navigation, the click path with its fallbacks. During a task run them with a direct `xcodebuild test`
-  call carrying `-only-testing:HangarTests/<Class>/<test>` and the options `scripts/test-app.sh` uses.
+  call carrying `-only-testing:ElisTests/<Class>/<test>` and the options `scripts/test-app.sh` uses.
 - **gates**, once at the end: `swift test`, `make test-app`, `make lint`, and the Release build
   `scripts/build.sh`.
-- One new XCUITest, for the picker, beside its siblings in `HangarUITests/SettingsUITests.swift`; it carries
+- One new XCUITest, for the picker, beside its siblings in `ElisUITests/SettingsUITests.swift`; it carries
   the General tab fit assertion. Run it alone with `-only-testing:`. The click path needs none: hosted
   tests cover it through `openLink`.
 
@@ -84,7 +84,7 @@
 - Add newly discovered tasks with ➕ prefix, blockers with ⚠️ prefix.
 
 ## Solution Overview
-- **Setting.** `LinkOpenMode` (`browser`, `overlay`) in `HangarCore`, stored on `AppSettings` as a raw
+- **Setting.** `LinkOpenMode` (`browser`, `overlay`) in `ElisCore`, stored on `AppSettings` as a raw
   string, default `browser`. One persistence path serves the Settings picker and the control command.
 - **Routing decision in core.** A host-free function decides, from the link disposition, the setting and
   where the click came from, between `browser`, `overlay(sessionID)`, `reveal` and `ignore`. The click
@@ -146,10 +146,10 @@
 ### Task 1: Setting and link routing in core
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppSettings.swift`
-- Modify: `HangarCore/Sources/HangarCore/LinkPolicy.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/LinkPolicyTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppSettingsTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppSettings.swift`
+- Modify: `ElisCore/Sources/ElisCore/LinkPolicy.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/LinkPolicyTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppSettingsTests.swift`
 
 - [x] write tests for `effectiveLinkOpenMode`: nil, `browser`, `overlay`, unknown value, round trip through encode/decode
 - [x] write tests for `LinkPolicy.route`: every origin × both modes for `https`; `mailto`/`ftp` always browser; `file://` always reveal; ignored schemes stay ignored
@@ -161,12 +161,12 @@
 ### Task 2: Browsing pages: navigation scope and current-origin header
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`
-- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`
-- `Hangar/Views/HtmlOverlayView.swift` needs no change: it already draws `overlay.identity` and redraws on every page report
-- Modify: `HangarCore/Tests/HangarCoreTests/HtmlOverlayTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/DashboardCoverTests.swift`
-- Modify: `HangarTests/HtmlOverlayRegistryTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/HtmlOverlay.swift`
+- Modify: `Elis/Views/HtmlOverlayRegistry.swift`
+- `Elis/Views/HtmlOverlayView.swift` needs no change: it already draws `overlay.identity` and redraws on every page report
+- Modify: `ElisCore/Tests/ElisCoreTests/HtmlOverlayTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/DashboardCoverTests.swift`
+- Modify: `ElisTests/HtmlOverlayRegistryTests.swift`
 
 - [x] write policy tests: a browsing page allows cross-origin main-frame `http`/`https` navigation with and without user activation; denies `file`, custom schemes and `about` stays allowed; new-window stays external only when user-activated; a non-browsing page decides exactly as before
 - [x] write identity tests: a browsing page shows the reported page's origin, the source origin before the first report, and never the title; a non-browsing URL page and a file page are unchanged; the dashboard cover (`DashboardCover.swift:17,21`) reads the same identity and follows it
@@ -179,30 +179,30 @@
 ### Task 3: Control API and CLI
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Browser.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Overlay.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcherOptions.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
-- Modify: `HangarCore/Sources/HangarCore/HtmlBridge.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/MiscCommands.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (`controlTree`)
-- Modify: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift` (`htmlOverlayNodes`)
-- Modify: `Hangar/Control/ControlServer.swift` (`buildTree`, and the exhaustive command switch at `:574`)
-- Modify: `Hangar/Control/ControlServer+AppCommands.swift`
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
-- Modify: `Hangar/SettingsModel.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/` `ControlDispatcherBrowserTests.swift`, `ControlDispatcherOverlayTests.swift`, `AppStoreTreeProjectionTests.swift`, `HtmlBridgeTests.swift`, `MockControlActions.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/MiscCommandsTests.swift` (`browser links`), `OverlayCommandsTests.swift` (`--browse`)
-- Modify: `HangarTests/ControlServerTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Browser.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Overlay.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcherOptions.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlActionsDefaults.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProjection.swift`
+- Modify: `ElisCore/Sources/ElisCore/HtmlBridge.swift`
+- Modify: `ElisCore/Sources/elisctlKit/MiscCommands.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift` (`controlTree`)
+- Modify: `ElisCore/Sources/ElisCore/AppStore+HtmlOverlay.swift` (`htmlOverlayNodes`)
+- Modify: `Elis/Control/ControlServer.swift` (`buildTree`, and the exhaustive command switch at `:574`)
+- Modify: `Elis/Control/ControlServer+AppCommands.swift`
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`
+- Modify: `Elis/SettingsModel.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/` `ControlDispatcherBrowserTests.swift`, `ControlDispatcherOverlayTests.swift`, `AppStoreTreeProjectionTests.swift`, `HtmlBridgeTests.swift`, `MockControlActions.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/MiscCommandsTests.swift` (`browser links`), `OverlayCommandsTests.swift` (`--browse`)
+- Modify: `ElisTests/ControlServerTests.swift`
 
 - [x] write dispatcher tests for `browser.links`: set each mode, bare read, invalid mode, target and `--window` refused
 - [x] write dispatcher tests for `--browse`: accepted with `--url`; rejected with `--html` and without a page; `--url --browse --chromeless` still fails on the existing chromeless rule
 - [x] write projection tests: `tree.linkOpenMode` reports the effective value including the default; `htmlOverlays[].browse` round-trips and decodes as false when absent
-- [x] write CLI tests for `hangarctl browser links` and `session overlay open --browse`
+- [x] write CLI tests for `elisctl browser links` and `session overlay open --browse`
 - [x] add the protocol command, argument, action, dispatch and CLI; add `browser.links` to `HtmlBridge.windowless` with its test, and to the app's command switch
 - [x] implement the app adapter: read and write the setting through the same `SettingsModel` path the picker uses; pass `browse` into `HtmlOverlay`
 - [x] fill `linkOpenMode` in `buildTree`/`controlTree` and `browse` in `htmlOverlayNodes`
@@ -212,18 +212,18 @@
 ### Task 4: Click path, fallbacks and the Settings picker
 
 **Files:**
-- Modify: `Hangar/Ghostty/GhosttySurfaceView+Input.swift`
-- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift`
-- Create: `Hangar/Ghostty/LinkOpener.swift`
-- Modify: `Hangar/hangarApp.swift` (one shared opener, set where the app is composed; a surface before that keeps the default, which opens the browser)
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
-- Modify: `Hangar/Views/SettingsView.swift`
-- Modify: `HangarTests/GhosttySurfaceViewInputTests.swift`, `HangarTests/SettingsModelTests.swift`
-- Create: `HangarTests/ControlServerLinkOverlayTests.swift`
-- Modify: `HangarUITests/SettingsUITests.swift`
+- Modify: `Elis/Ghostty/GhosttySurfaceView+Input.swift`
+- Modify: `Elis/Ghostty/GhosttySurfaceView.swift`
+- Create: `Elis/Ghostty/LinkOpener.swift`
+- Modify: `Elis/elisApp.swift` (one shared opener, set where the app is composed; a surface before that keeps the default, which opens the browser)
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`
+- Modify: `Elis/Views/SettingsView.swift`
+- Modify: `ElisTests/GhosttySurfaceViewInputTests.swift`, `ElisTests/SettingsModelTests.swift`
+- Create: `ElisTests/ControlServerLinkOverlayTests.swift`
+- Modify: `ElisUITests/SettingsUITests.swift`
 
 - [x] derive `LinkClickOrigin` from the surface's ownership fields, HUD first; no new identity field
-- [x] add the shared `LinkOpener` and set it once in `hangarApp.init`; its open and reveal effects are replaceable on their own, so a test swaps them on a factory-built surface and keeps the factory's overlay wiring
+- [x] add the shared `LinkOpener` and set it once in `elisApp.init`; its open and reveal effects are replaceable on their own, so a test swaps them on a factory-built surface and keeps the factory's overlay wiring
 - [x] route `openLink` through `LinkPolicy.route`; for `.overlay`, run `openSessionOverlay` for the owner session id with a browsing page (JavaScript, navigation bar, saved store, full size), without selecting another session
 - [x] fall back to the browser on every refusal (occupied slot, remotely reserved slot, presenter, saved store unavailable, unknown session) when the owner session's HUD is active, and when the owning window's terminal zoom is active
 - [x] add the "Open links in" picker to the General tab, bound to the same setting
@@ -233,16 +233,16 @@
 
 ### Task 5: Verify acceptance criteria
 - [x] verify each Overview bullet against the built app's tests
-- [x] run `cd HangarCore && swift test`
+- [x] run `cd ElisCore && swift test`
 - [x] run `make test-app`
 - [x] run `make lint`
 - [x] run `scripts/build.sh` (Release)
-- [x] run `lsappinfo list | grep -A4 hangar.debug` and clear leaked test processes
+- [x] run `lsappinfo list | grep -A4 elis.debug` and clear leaked test processes
 
 ### Task 6: [Final] Update documentation
-- [x] `site/docs.html`: the setting, what it covers, the fallbacks, HUD links, that logins are Hangar's own
+- [x] `site/docs.html`: the setting, what it covers, the fallbacks, HUD links, that logins are Elis's own
 - [x] `site/commands.html`: `browser links`, `--browse`, `tree.linkOpenMode`, `htmlOverlays[].browse`
-- [x] `plugins/hangar/skills/hangar/SKILL.md` and `reference.md`: the command, the flag, both read-backs
+- [x] `plugins/elis/skills/elis/SKILL.md` and `reference.md`: the command, the flag, both read-backs
 - [x] `.claude/rules/control-api.md`: `browser.links` in the public catalog and in the bridge sentence beside `browser.clear`; record that the setting has no event and pages no restore
 - [x] `.claude/rules/settings.md`: the setting as a control-backed one, like `flaggedViewLayout`
 - [x] `.claude/rules/libghostty.md`: no change, it does not cover link clicks; the routing seam is recorded in `control-api.md`
@@ -258,4 +258,4 @@
 - click a HUD link: the browser opens and the HUD stays
 - click a pane link while a HUD is up: the browser opens and the HUD stays
 - click a link in a zoomed pane: the browser opens and zoom stays
-- change the picker in Settings and confirm `hangarctl browser links` reads the new value
+- change the picker in Settings and confirm `elisctl browser links` reads the new value

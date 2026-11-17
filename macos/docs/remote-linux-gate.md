@@ -8,24 +8,24 @@ terminal.
 
 ```bash
 make build                                    # the Debug bundle the script launches
-export HANGAR_STATE_DIR=/tmp/agg              # short, under /tmp; the script refuses anything else
+export ELIS_STATE_DIR=/tmp/agg              # short, under /tmp; the script refuses anything else
 scripts/linux-origin-gate.sh HOST [SESSION]
 ```
 
 - `HOST` is any destination the user's own ssh reaches with key auth, `ssh://user@127.0.0.1:2222` included.
-  The origin's `hangarctl` and zmx must be on its PATH or in `~/.local/bin`.
+  The origin's `elisctl` and zmx must be on its PATH or in `~/.local/bin`.
 - `SESSION` is an origin session id as `zmx tree HOST` lists it; the first listed is used when omitted. A fresh
-  hangar-server lists none: make one with `hangarctl session new` there first.
-- `HANGAR_GATE_APP` points at another Debug bundle.
+  elis-server lists none: make one with `elisctl session new` there first.
+- `ELIS_GATE_APP` points at another Debug bundle.
 
-The script refuses an unset state dir, the live or `hangar-debug` one, a directory outside `/tmp`, and one too
-long for a control socket. It stops its Debug instance by pid on exit and reports any `hangar.debug` entry
-`lsappinfo` still lists. Results go to `$HANGAR_STATE_DIR/gate-results.txt`; the exit status is 1 when an
+The script refuses an unset state dir, the live or `elis-debug` one, a directory outside `/tmp`, and one too
+long for a control socket. It stops its Debug instance by pid on exit and reports any `elis.debug` entry
+`lsappinfo` still lists. Results go to `$ELIS_STATE_DIR/gate-results.txt`; the exit status is 1 when an
 asserted step fails.
 
 ## Steps
 
-Origin commands run as `ssh HOST hangarctl ... --target SESSION`; Mac checks poll `tree --json` for up to 15 s.
+Origin commands run as `ssh HOST elisctl ... --target SESSION`; Mac checks poll `tree --json` for up to 15 s.
 
 | step | origin | asserted on the Mac's attached row |
 |---|---|---|
@@ -44,7 +44,7 @@ ssh ended. Every other origin call gives up after 20 s. The companion and the pa
 
 ## Results
 
-2026-11-06, `scripts/server-container.sh` (ubuntu 24.04, hangar-server from this branch) and a Debug build of the
+2026-11-06, `scripts/server-container.sh` (ubuntu 24.04, elis-server from this branch) and a Debug build of the
 same tree: every asserted step passed, exit 0. Every ssh the Mac ran went through the user's ssh, the `-tt`
 attach panes included.
 
@@ -62,7 +62,7 @@ Kinds the gate does not assert, checked by hand over the same attach:
 |---|---|
 | `overlay open --image`, `--markdown`, `--text`, `--url https://…` | a loaded replica page |
 | `overlay open --text FILE --follow-file` | refused: a log page is not shown on another Mac (2026-11-06); a Mac with `page.text` is expected to show a following replica, not rechecked by hand |
-| `overlay open --url http://127.0.0.1:…` | refused: a loopback url names hangar-server's host |
+| `overlay open --url http://127.0.0.1:…` | refused: a loopback url names elis-server's host |
 | `pick open --no-block --session ID` | a replica picker with the origin's id |
 
 # Remote window gate
@@ -74,11 +74,11 @@ instance, never the live terminal.
 ```bash
 make build
 scripts/server-container.sh build && scripts/server-container.sh start
-export HANGAR_STATE_DIR=/tmp/agw
+export ELIS_STATE_DIR=/tmp/agw
 scripts/remote-window-gate.sh [COUNT]        # COUNT server sessions, default 20
 ```
 
-The Debug instance's ssh goes through a wrapper in `$HANGAR_STATE_DIR/bin` that adds the container's key and host
+The Debug instance's ssh goes through a wrapper in `$ELIS_STATE_DIR/bin` that adds the container's key and host
 key and logs every call, so the master starts can be counted.
 
 | step | done | asserted |
@@ -99,7 +99,7 @@ window of the user.
 
 ## Results
 
-2026-11-06, `scripts/server-container.sh` with hangar-server from this branch and a Debug build of the same tree, 20
+2026-11-06, `scripts/server-container.sh` with elis-server from this branch and a Debug build of the same tree, 20
 sessions: every asserted step passed, exit 0. Masters left by the stopped instance exited on their own within
 `ControlPersist`'s 60 s.
 

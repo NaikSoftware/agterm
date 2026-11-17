@@ -45,7 +45,7 @@ public:
         *error = QStringLiteral("no terminals");
         return false;
     }
-    // the live panes' ids (HANGAR_PANE_ID) by role, left first; a respawned pane gets a new one
+    // the live panes' ids (ELIS_PANE_ID) by role, left first; a respawned pane gets a new one
     virtual QStringList paneIds(const QString &sessionId) const
     {
         Q_UNUSED(sessionId);
@@ -134,7 +134,7 @@ double dashboardFontFactor(int cols, int rows);
 
 // commands.cpp: the commands added for master's catalog; *handled false when cmd is not one of them
 QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd, const QString &target, const QJsonObject &args, bool *handled);
-// master's "<cmd> is not supported on this platform" with why, for a feature hangar lacks; "" for any other command
+// master's "<cmd> is not supported on this platform" with why, for a feature elis lacks; "" for any other command
 QString unsupportedReason(const QString &cmd);
 QString pickArgsError(const QJsonObject &args); // "" when valid
 QString askArgsError(QJsonObject *args);       // "" when valid; adds the default OK/Cancel of an input or choice form

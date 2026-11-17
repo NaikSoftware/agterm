@@ -3,7 +3,7 @@
 ## Overview
 
 Panes created before v0.28.0, or without the session host, lose their macOS responsible-process
-attribution when the Hangar that created them exits. Every process inside such a pane becomes its own
+attribution when the Elis that created them exits. Every process inside such a pane becomes its own
 responsible process, so a TCC-gated request is charged to that process: each new Claude Code version asks
 for the microphone again and adds a per-path row to the Microphone list. Responsibility is decided at
 spawn and cannot be reassigned (`responsibility_set_pid_responsible_for_pid` is EPERM; a re-exec keeps the
@@ -12,7 +12,7 @@ host. Today that means recreating each pane by hand, or a Fresh shells relaunch 
 to Live and a second relaunch.
 
 This plan adds one user-facing action, Help ▸ Reset Live Sessions…, and its control command `zmx.reset`.
-The action shows how many live sessions it resets and that Hangar quits and reopens itself; on confirm the
+The action shows how many live sessions it resets and that Elis quits and reopens itself; on confirm the
 app quits cleanly, ends only the confirmed daemons at the next launch, and the existing Live restore
 recreates those panes through the session host with their quit-captured commands started again. Nothing
 is automatic: no upgrade notice, no launch-time detection, only this dialog or an explicit `--force`
@@ -24,15 +24,15 @@ covers about 93 panes.
 
 ## Context (from discovery)
 
-- `Hangar/hangarApp+Menus.swift:400` Help group holds the installers; the new item joins it.
-- `Hangar/AppDelegate.swift:303` quit confirmation alert; `:317` `applicationWillTerminate` runs
+- `Elis/elisApp+Menus.swift:400` Help group holds the installers; the new item joins it.
+- `Elis/AppDelegate.swift:303` quit confirmation alert; `:317` `applicationWillTerminate` runs
   `captureOnExit`, `finalizeAllPendingCloses`, unchecked `saveAllOpen`, `saveIndex`.
   `WindowLibrary.saveAllOpenChecked()` (`WindowLibrary.swift:556`) reports snapshot write success.
   `ExitCapture` is `([Session]) -> Int` (`AppDelegate.swift:6`): a count of slots written, best effort
   under a 500 ms budget; zero is not failure.
 - `GhosttyApp.capturesForegroundOnExit` includes Live; `AppDelegate.makeExitCapture` reads the CONFIGURED
   mode, not the launch latch (`GhosttyApp.swift:65-73`).
-- `Hangar/hangarApp.swift:272-300` `restoredRuntime` runs from `hangarApp.init()` on the main thread
+- `Elis/elisApp.swift:272-300` `restoredRuntime` runs from `elisApp.init()` on the main thread
   before any scene body, is skipped entirely under `isHostedUnitTest`, builds `ZmxClient` (`@MainActor`,
   synchronous invocations, 3 s default timeout, `captureInvocationTimeout = 0.1`) and passes a
   `launchInventorySink` that `WindowLibrary.init` invokes INSIDE the initializer
@@ -45,7 +45,7 @@ covers about 93 panes.
   `ZmxClient.sessionLeaderPIDs` returns nil on a failed listing and `ZmxLeaderMap.leaders` drops rows
   without a leader pid, so a name-to-pid map cannot tell absent from unreadable; `ZmxListParser.parse`
   records keep that distinction.
-- `SessionHost.classify(leader:responsible:hostPid:appPid:)` in HangarCore is the attribution classifier.
+- `SessionHost.classify(leader:responsible:hostPid:appPid:)` in ElisCore is the attribution classifier.
   `LiveAttributionProbe` (`ControlServer+Zmx.swift:359`, internal, visible across the app target)
   supplies responsible/host/app pids. The tree wrapper enumerates only realized `backedByZmx` surfaces
   and cannot serve pre-restore discovery or closed windows.
@@ -55,22 +55,22 @@ covers about 93 panes.
   `ControlDispatcher+Zmx.swift`; actions in `ControlDispatcher.swift:150-155` (file at 978 lines against
   the 1000-line lint limit), defaults in `ControlActionsDefaults.swift`, app implementation in
   `ControlServer+Zmx.swift`; `ControlTree` in `ControlProjection.swift:351`. CLI in
-  `hangarctlKit/ZmxCommands.swift`. `restoreStatus()` carries configured/requestedAtLaunch/active.
+  `elisctlKit/ZmxCommands.swift`. `restoreStatus()` carries configured/requestedAtLaunch/active.
   `ControlServer.swift:417-419`: `handleConnection` runs the dispatch on the main actor through
   `runBlocking`, then the static `writeResponse` writes the reply on the accept thread with no
   per-request state, so a termination scheduled during dispatch can run before the reply is written.
-- Notifications: `NotificationManager.start()` runs in the window task (`hangarApp.swift:210`), after
+- Notifications: `NotificationManager.start()` runs in the window task (`elisApp.swift:210`), after
   `restoredRuntime`; keymap and config diagnostics recorded at boot are posted there behind the
-  `hasReopened` gate (`hangarApp.swift:214-224`).
+  `hasReopened` gate (`elisApp.swift:214-224`).
 - Live replay: `ZmxLaunch.surfaceSeed` (`ZmxLaunch.swift:100-115`) takes the pending replay and, when
   nil, falls back to `initialCommand`/`splitInitialCommand`; a missing daemon runs the payload, a
   surviving one ignores it and reattaches. Replay is consumed only at `provider.resolve` during the real
   spawn. `ZmxReplayScript.render` adds no resume flags and the denylist still applies.
 - `/usr/bin/open` on this Mac documents `--env VAR=value`.
-- Test frameworks: `HangarCoreTests` and `hangarctlKitTests` are swift-testing (`@Test func
-  descriptiveName()`, `#expect`); `HangarTests` is XCTest (`testXxx`). Zmx CLI coverage lives in
+- Test frameworks: `ElisCoreTests` and `elisctlKitTests` are swift-testing (`@Test func
+  descriptiveName()`, `#expect`); `ElisTests` is XCTest (`testXxx`). Zmx CLI coverage lives in
   `ZmxCommandsTests.swift`.
-- Docs listing zmx commands: `plugins/hangar/skills/hangar/{SKILL,reference,examples,troubleshooting}.md`,
+- Docs listing zmx commands: `plugins/elis/skills/elis/{SKILL,reference,examples,troubleshooting}.md`,
   `site/commands.html`, `docs/troubleshooting.md:270-289`, `.claude/rules/control-api.md` zmx section,
   `.claude/rules/windows.md` quit section.
 - Chat review with codex and a plan-review pass settled: marker armed only after capture ran and the
@@ -90,12 +90,12 @@ covers about 93 panes.
   - cover success and error scenarios
 - **CRITICAL: all tests must pass before starting next task**
 - **CRITICAL: update this plan file when scope changes during implementation**
-- gates run ONCE at the end (task 7): build, `cd HangarCore && swift test`, `make test-app`, `make lint`;
+- gates run ONCE at the end (task 7): build, `cd ElisCore && swift test`, `make test-app`, `make lint`;
   every intermediate run names the tests that task created, with `--filter` or
   `-only-testing:<Target>/<Class>/<test>` per method
 - host-free logic (marker codec and store, selection, narrowing, outcome shaping, protocol, CLI, text)
-  lives in `HangarCore`; the app target holds the alert, quit path, waiter spawn and zmx invocations
-- no `public` symbol without a caller outside its module; `HangarCore` is consumed by `agterm-linux`, so
+  lives in `ElisCore`; the app target holds the alert, quit path, waiter spawn and zmx invocations
+- no `public` symbol without a caller outside its module; `ElisCore` is consumed by `agterm-linux`, so
   new public surface is minimal and Darwin-free
 - no sleeps in unit tests: the consumer is generic over its clock and takes an injected liveness check;
   real waits use disposable child processes
@@ -103,10 +103,10 @@ covers about 93 panes.
 
 ## Testing Strategy
 
-- **unit tests**: `HangarCoreTests` for `LiveReset` (selection, narrowing, marker store, text, menu
+- **unit tests**: `ElisCoreTests` for `LiveReset` (selection, narrowing, marker store, text, menu
   predicate), `ControlDispatcherZmxTests` for `zmx.reset`, `ControlProtocolTests` for payload round trips,
-  `hangarctlKitTests/ZmxCommandsTests` for the CLI
-- **hosted tests** (`make test-app`, `HangarTests`): the control action gating and acknowledgement written
+  `elisctlKitTests/ZmxCommandsTests` for the CLI
+- **hosted tests** (`make test-app`, `ElisTests`): the control action gating and acknowledgement written
   before termination, the quit ordering, the relauncher with a disposable child, the launch orchestration
   through an injected seam, and the seed suppression
 - **no XCUITest**: the alert is chrome, the command quits the app, and the Help item's visibility predicate
@@ -126,7 +126,7 @@ Three moments, one selection that only narrows:
 1. **Confirm (running app).** The action builds the reset set: every pane claim from
    `WindowLibrary.paneClaims()` whose daemon leader classifies as `orphaned` or `app`. `unknown` and
    `supervisor` are excluded. `app` is included because this quit turns it into `orphaned`. The dialog
-   counts SESSIONS (distinct `sessionID` among the targets) and says Hangar quits and reopens. On confirm
+   counts SESSIONS (distinct `sessionID` among the targets) and says Elis quits and reopens. On confirm
    the pane targets are held in memory, the quit alert is bypassed, and the app terminates normally.
 2. **Quit (`applicationWillTerminate`).** The existing best-effort capture runs, then the CHECKED snapshot
    save. Capture is invoked, not judged: its count is not a success signal. Only when the checked save
@@ -180,7 +180,7 @@ Design decisions:
   process, and opening before exit reaches the running instance. The waiter gets pid, bundle path and
   the state directory as positional arguments, never interpolated into shell text, streams to
   `/dev/null`, polls `kill -0` in 0.2 s steps for at most 60 s, then runs
-  `/usr/bin/open -n <bundle> --env HANGAR_STATE_DIR=<state>` (the `--env` only when the variable is set).
+  `/usr/bin/open -n <bundle> --env ELIS_STATE_DIR=<state>` (the `--env` only when the variable is set).
   It exits without launching when the old pid never goes away.
 - **Reply before quit.** The action sets a main-actor flag on `ControlServer`; `handleConnection` checks
   it only after `writeResponse` reports the full frame written, then hops to the main actor without
@@ -191,7 +191,7 @@ Design decisions:
 
 ## Technical Details
 
-`HangarCore/Sources/HangarCore/LiveReset.swift` (new, host-free):
+`ElisCore/Sources/ElisCore/LiveReset.swift` (new, host-free):
 
 ```swift
 public enum LiveReset {
@@ -255,7 +255,7 @@ The version field guards a hand-edited or interrupted-upgrade marker at the cost
 Dialog text, one source for the alert and the control acknowledgement:
 
 - title: `Reset Live Sessions?`
-- body: `N live sessions will be reset. Hangar quits and reopens itself right away with your sessions
+- body: `N live sessions will be reset. Elis quits and reopens itself right away with your sessions
   and layout. Commands that were running in those sessions are started again where possible; other work
   running in them stops, and agent conversations may need to be resumed by hand.`
 - buttons: `Cancel` (default), `Reset`
@@ -310,8 +310,8 @@ App target:
   and a fake `open`. Returns `false` when the process cannot be launched.
 - Launch orchestration, app side only (the `WindowLibrary` callback contract is unchanged):
   `LaunchOrchestration.run(library:client:probe:clock:isAlive:budget:context:)` in
-  `Hangar/Ghostty/LiveResetConsumer.swift`, called by `restoredRuntime` right after `WindowLibrary`
-  returns and testable from `HangarTests` with injected parts. The sink closure only stores
+  `Elis/Ghostty/LiveResetConsumer.swift`, called by `restoredRuntime` right after `WindowLibrary`
+  returns and testable from `ElisTests` with injected parts. The sink closure only stores
   `prepareLaunchPaneInventory()` on `LaunchSpawnContext`. `run` then: consumes the marker; narrows against
   `library.paneClaims()` and `client.sessionRecords()`; sends the batched kill; polls leaders; records the
   unconfirmed pane identities on `LaunchSpawnContext.suppressedLaunchPayloads`; records the outcome on
@@ -337,8 +337,8 @@ App target:
 ### Task 1: LiveReset selection, narrowing, marker store, text and menu predicate
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/LiveReset.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/LiveResetTests.swift` (swift-testing)
+- Create: `ElisCore/Sources/ElisCore/LiveReset.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/LiveResetTests.swift` (swift-testing)
 
 - [x] write failing tests for `select`: orphaned and app claims selected, supervisor and unknown
       excluded, a claim whose record has no leader pid excluded, a claim with no record excluded, split
@@ -364,16 +364,16 @@ App target:
 ### Task 2: Protocol, payloads, dispatcher and CLI for `zmx.reset`
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlPayloads.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Zmx.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/ZmxCommands.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherZmxTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/ZmxCommandsTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlPayloads.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProjection.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Zmx.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlActionsDefaults.swift`
+- Modify: `ElisCore/Sources/elisctlKit/ZmxCommands.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherZmxTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/ZmxCommandsTests.swift`
 
 - [x] write failing dispatcher tests `resetRefusesWithoutForce` (refused by name, action never called)
       and `resetWithForceReachesAction`; the unsupported default answers the standard message
@@ -392,10 +392,10 @@ App target:
 ### Task 3: Session records, batched kill and group liveness polling
 
 **Files:**
-- Modify: `Hangar/Ghostty/ZmxClient.swift`
-- Modify: `Hangar/Control/ControlServer+Zmx.swift`
-- Create: `HangarTests/ZmxClientLiveResetTests.swift`
-- Create: `HangarTests/ControlServerLiveResetTests.swift`
+- Modify: `Elis/Ghostty/ZmxClient.swift`
+- Modify: `Elis/Control/ControlServer+Zmx.swift`
+- Create: `ElisTests/ZmxClientLiveResetTests.swift`
+- Create: `ElisTests/ControlServerLiveResetTests.swift`
 
 - [x] write failing hosted tests `testSessionRecordsKeepUnreadableRows` and
       `testSessionRecordsNilOnFailedListing` with the fake runner
@@ -407,27 +407,27 @@ App target:
 - [x] write a failing hosted test `testLiveResetSelectionJoinsClaimsAndRecords` in
       `ControlServerLiveResetTests` for `ControlServer.liveResetSelection()` with injected records and probe
 - [x] add `sessionRecords`, `killBatch`, the synchronous `leadersExited` and `liveResetSelection()`
-- [x] run `-only-testing:HangarTests/ZmxClientLiveResetTests -only-testing:HangarTests/ControlServerLiveResetTests/testLiveResetSelectionJoinsClaimsAndRecords`
+- [x] run `-only-testing:ElisTests/ZmxClientLiveResetTests -only-testing:ElisTests/ControlServerLiveResetTests/testLiveResetSelectionJoinsClaimsAndRecords`
       - must pass before task 4
 
 ### Task 4: Confirm path, reply-before-quit, quit ordering and relauncher
 
 **Files:**
-- Create: `hangar/AppActions+LiveReset.swift`
-- Modify: `Hangar/AppDelegate.swift`
-- Modify: `Hangar/Control/ControlServer.swift`
-- Modify: `Hangar/Control/ControlServer+Zmx.swift`
-- Create: `Hangar/LiveResetRelauncher.swift`
-- Create: `HangarTests/LiveResetQuitTests.swift`
-- Create: `HangarTests/LiveResetRelauncherTests.swift`
-- Modify: `HangarTests/ControlServerLiveResetTests.swift`
+- Create: `elis/AppActions+LiveReset.swift`
+- Modify: `Elis/AppDelegate.swift`
+- Modify: `Elis/Control/ControlServer.swift`
+- Modify: `Elis/Control/ControlServer+Zmx.swift`
+- Create: `Elis/LiveResetRelauncher.swift`
+- Create: `ElisTests/LiveResetQuitTests.swift`
+- Create: `ElisTests/LiveResetRelauncherTests.swift`
+- Modify: `ElisTests/ControlServerLiveResetTests.swift`
 
 - [x] write failing hosted tests in `LiveResetQuitTests` with an injected capture, checked save and
       spawner: `testCaptureRunsBeforeCheckedSave`, `testMarkerWrittenOnlyAfterCheckedSave`,
       `testNoMarkerWhenSaveFails`, `testMarkerRemovedWhenSpawnerFails`, `testOrdinaryQuitWritesNothing`
 - [x] write failing hosted tests in `LiveResetRelauncherTests` using a disposable `/bin/sleep` child as
       the old app and a fake `open` script that records its argv to a temp file:
-      `testLaunchWaitsForChildExit` (argv carries `-n`, the bundle and `--env HANGAR_STATE_DIR=…`),
+      `testLaunchWaitsForChildExit` (argv carries `-n`, the bundle and `--env ELIS_STATE_DIR=…`),
       `testLaunchWithoutAStateDirectoryPassesNoEnv`, `testNoLaunchOnTimeout`, `testSpawnFailureIsReported`.
       Survival of the waiter past its spawner cannot be shown while the spawner is the test host; task 7's
       isolated relaunch records the old pid exiting, a different new pid and the same state directory.
@@ -437,26 +437,26 @@ App target:
       `testResetReplyCarriesCountsAndText`, `testTerminationWaitsForReplyWrite` with a held write,
       `testUnrelatedReplyDuringHeldWriteDoesNotTerminate` (a `zmx.tree` worker completes while the reset
       reply is held), `testFailedReplyWriteDoesNotTerminate` leaving `pendingLiveReset` set
-- [x] implement `LiveResetCoordinator` (`Hangar/LiveResetCoordinator.swift`: refusal order, dialog,
+- [x] implement `LiveResetCoordinator` (`Elis/LiveResetCoordinator.swift`: refusal order, dialog,
       `pending`, injectable active mode and terminate) held by `AppDelegate` and `ControlServer` and
       built by the app with the server's selection, the quit-alert bypass and checked-save branch on
       `AppDelegate` with the marker store wired from the app, `writeResponse` reporting the write, the
       request-specific post-write `terminateIfPending` hop, and the relauncher. The action hub file is
       untouched: its stored properties would have crossed the 1000-line lint limit.
-- [x] run `-only-testing:HangarTests/LiveResetQuitTests -only-testing:HangarTests/LiveResetRelauncherTests -only-testing:HangarTests/ControlServerLiveResetTests`
+- [x] run `-only-testing:ElisTests/LiveResetQuitTests -only-testing:ElisTests/LiveResetRelauncherTests -only-testing:ElisTests/ControlServerLiveResetTests`
       - must pass before task 5
 
 ### Task 5: Launch orchestration, consumer and seed suppression
 
 **Files:**
-- Create: `Hangar/Ghostty/LiveResetConsumer.swift`
-- Modify: `Hangar/hangarApp.swift`
-- Modify: `Hangar/Ghostty/GhosttyApp.swift`
-- Modify: `Hangar/Ghostty/ZmxLaunch.swift`
-- Modify: `Hangar/Notifications/NotificationManager.swift` (`notifyLiveResetOutcome(_:)` beside
+- Create: `Elis/Ghostty/LiveResetConsumer.swift`
+- Modify: `Elis/elisApp.swift`
+- Modify: `Elis/Ghostty/GhosttyApp.swift`
+- Modify: `Elis/Ghostty/ZmxLaunch.swift`
+- Modify: `Elis/Notifications/NotificationManager.swift` (`notifyLiveResetOutcome(_:)` beside
   `notifyKeymapDiagnostics`)
-- Create: `HangarTests/LiveResetConsumerTests.swift`
-- Modify: `HangarTests/LaunchSeedTests.swift`
+- Create: `ElisTests/LiveResetConsumerTests.swift`
+- Modify: `ElisTests/LaunchSeedTests.swift`
 
 - [x] write failing hosted tests in `LiveResetConsumerTests` against `LiveResetConsumer.run` and
       `LaunchOrchestration.run` with a fake `ZmxClient` runner, injected probe, fake clock and `isAlive`:
@@ -477,23 +477,23 @@ App target:
       `surfaceSeed` change, `LiveAttributionProbe.classifier` shared with `liveResetSelection`, the
       outcome on `GhosttyApp.shared`, and the deferred notification in the window task behind the
       `hasReopened` gate; `RestoreLaunchDecision` gains a public initializer for the ordering test
-- [x] run `-only-testing:HangarTests/LiveResetConsumerTests -only-testing:HangarTests/LaunchSeedTests/testSuppressedPrimaryAttachesWithoutReplayOrCommand -only-testing:HangarTests/LaunchSeedTests/testSuppressedSplitAttachesWithoutReplayOrCommand -only-testing:HangarTests/LaunchSeedTests/testSuppressionConsumesReplayAndKeepsDurableCommand -only-testing:HangarTests/LaunchSeedTests/testConfirmedPaneKeepsReplayInSameRun`
+- [x] run `-only-testing:ElisTests/LiveResetConsumerTests -only-testing:ElisTests/LaunchSeedTests/testSuppressedPrimaryAttachesWithoutReplayOrCommand -only-testing:ElisTests/LaunchSeedTests/testSuppressedSplitAttachesWithoutReplayOrCommand -only-testing:ElisTests/LaunchSeedTests/testSuppressionConsumesReplayAndKeepsDurableCommand -only-testing:ElisTests/LaunchSeedTests/testConfirmedPaneKeepsReplayInSameRun`
       - must pass before task 6
 
 ### Task 6: Help menu item and read-back population
 
 **Files:**
-- Modify: `Hangar/hangarApp+Menus.swift`
-- Modify: `Hangar/Control/ControlServer.swift` (tree top level)
-- Modify: `Hangar/Control/ControlServer+Zmx.swift` (`zmx list` header)
-- Modify: `HangarTests/ControlServerLiveResetTests.swift`
+- Modify: `Elis/elisApp+Menus.swift`
+- Modify: `Elis/Control/ControlServer.swift` (tree top level)
+- Modify: `Elis/Control/ControlServer+Zmx.swift` (`zmx list` header)
+- Modify: `ElisTests/ControlServerLiveResetTests.swift`
 
 - [x] write failing hosted tests `testTreeLiveResetReadback` (pending after a confirmed reset, last after
       a recorded outcome, omitted with neither) and `testZmxListLiveResetReadback`
 - [x] add the item after a divider in the Help group behind the coordinator's `menuVisible`, and wire the
       read-back through `AppStore.controlTree` and both `zmx list` header sites, with the last outcome
       read through an injectable source on `ControlServer`
-- [x] run `-only-testing:HangarTests/ControlServerLiveResetTests/testTreeLiveResetReadback -only-testing:HangarTests/ControlServerLiveResetTests/testZmxListLiveResetReadback`
+- [x] run `-only-testing:ElisTests/ControlServerLiveResetTests/testTreeLiveResetReadback -only-testing:ElisTests/ControlServerLiveResetTests/testZmxListLiveResetReadback`
       - must pass before task 7
 
 ### Task 7: Verify acceptance criteria
@@ -507,10 +507,10 @@ App target:
       target removed from the layout, host dead between confirm and relaunch, relauncher failure, listing
       failure at launch, a kill invocation that fails midway (every leader still polled, survivors
       suppressed), the budget expiring before the kill; all in the hosted suites
-- [x] build the app, run `cd HangarCore && swift test` (3196 tests), `make test-app` (678 tests),
+- [x] build the app, run `cd ElisCore && swift test` (3196 tests), `make test-app` (678 tests),
       `make lint` (zero findings) once each
-- [x] isolated Debug run on 2026-09-10 (`HANGAR_STATE_DIR=/tmp/agt-rl-26014`, the Debug bundle's own
-      `hangarctl`): three sessions created through the host read `supervisor`; after SIGTERM to the app and
+- [x] isolated Debug run on 2026-09-10 (`ELIS_STATE_DIR=/tmp/agt-rl-26014`, the Debug bundle's own
+      `elisctl`): three sessions created through the host read `supervisor`; after SIGTERM to the app and
       its session host and a relaunch they read `orphaned`; `zmx reset --force` answered
       `{"pending":true,"panes":3,"sessions":3}` with the dialog text, the app quit and reopened itself
       under a new pid (64905 to 65020) into the same state directory, all three read `supervisor`, and
@@ -520,7 +520,7 @@ App target:
       `LaunchSeedTests` split suppression; no fourth host-created pane was staged since every pane in
       the run was host-created before the host was killed. Cleanup verified by pid: no app, host or
       daemon left, both temp directories removed.
-- [x] `hangarctl zmx reset --force` from outside the app returned its acknowledgement before the socket
+- [x] `elisctl zmx reset --force` from outside the app returned its acknowledgement before the socket
       closed and the relaunch followed (same run)
 - [x] the surviving-leader case cannot be staged against the real kill path, because zmx follows SIGHUP
       with SIGKILL after 500 ms; it stays in the injected consumer and seed tests
@@ -531,8 +531,8 @@ App target:
       the reply-before-quit rule, the launch-narrowing rule, and the XCUITest exemption
 - [x] `.claude/rules/windows.md`: the quit-confirmation bypass, the marker ordering and the launch
       orchestration seam; `CLAUDE.md` names the consumer as the one path that ends claimed daemons
-- [x] `site/commands.html` and `plugins/hangar/skills/hangar/{SKILL,reference,examples}.md`: the command
-- [x] `docs/troubleshooting.md` and `plugins/hangar/skills/hangar/troubleshooting.md`: replace "create a
+- [x] `site/commands.html` and `plugins/elis/skills/elis/{SKILL,reference,examples}.md`: the command
+- [x] `docs/troubleshooting.md` and `plugins/elis/skills/elis/troubleshooting.md`: replace "create a
       new Live pane to replace it" with Help ▸ Reset Live Sessions… and what it does, including that a
       session which could not be reset gets no command restarted and its old process may still run, and
       that a partial reset says so and can be run again

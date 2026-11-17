@@ -6,7 +6,7 @@ Author: [@umputun](https://github.com/umputun)
 
 ## What it does
 
-Lists what another Mac has to offer, shows it in Hangar's native picker, and attaches whatever you
+Lists what another Mac has to offer, shows it in Elis's native picker, and attaches whatever you
 choose. The row is the session's name; underneath it sits the far side's window and workspace, the
 session's own note of what it is for when its owner set one, its working directory, and what its panes
 are running.
@@ -17,30 +17,30 @@ running, and nothing this recipe does can kill them.
 
 ## Requirements
 
-Hangar 0.26.0 or later, which added `zmx tree` and `zmx attach`, plus `jq`.
+Elis 0.26.0 or later, which added `zmx tree` and `zmx attach`, plus `jq`.
 
 The far side needs more than the near side does:
 
-- it is running Hangar 0.26.0 or later too, since the discovery call runs `zmx tree` over there and an
+- it is running Elis 0.26.0 or later too, since the discovery call runs `zmx tree` over there and an
   older build does not have it;
 - its restore mode is **Live sessions**, which is what puts a daemon behind each pane. Without it there
   is nothing to attach to. The empty list does not say so, though: it reads the same as a machine that is
-  in Live sessions mode with nothing eligible. Run `hangarctl zmx list` on that machine to tell them apart;
-- it has `hangarctl` installed, from the cask or Help ▸ Install, because a machine merely running Hangar
+  in Live sessions mode with nothing eligible. Run `elisctl zmx list` on that machine to tell them apart;
+- it has `elisctl` installed, from the cask or Help ▸ Install, because a machine merely running Elis
   has no CLI an ssh command can find;
 - ssh key auth to it already works from this Mac. The connection is non-interactive, so a password or
   host-key prompt is a failure rather than a question.
 
-Check that last one before binding the chord, using the same non-interactive form Hangar uses:
+Check that last one before binding the chord, using the same non-interactive form Elis uses:
 
 ```sh
 ssh -o BatchMode=yes <remote-host> true
 ```
 
-Exiting silently means Hangar can reach the host. A password or host-key prompt means it cannot, and
-Hangar will fail the same way.
+Exiting silently means Elis can reach the host. A password or host-key prompt means it cannot, and
+Elis will fail the same way.
 
-One difference the check cannot show: Hangar runs ssh from the app, which inherits the launch environment
+One difference the check cannot show: Elis runs ssh from the app, which inherits the launch environment
 rather than your shell's. An agent exported in `.zshrc` passes the check above and still fails here, so
 put `IdentityAgent` and key settings in `~/.ssh/config`, which both paths read.
 
@@ -53,7 +53,7 @@ mkdir -p ~/bin
 install -m 755 attach-remote.sh ~/bin/attach-remote
 ```
 
-Then bind it in `~/.config/hangar/keymap.conf`, one line per machine you want to reach. Replace
+Then bind it in `~/.config/elis/keymap.conf`, one line per machine you want to reach. Replace
 `<remote-host>` with the machine as ssh would take it:
 
 ```
@@ -74,12 +74,12 @@ Esc to cancel. Cancelling does nothing at all.
 Run it from a shell to see the same list without the picker's filtering:
 
 ```sh
-hangarctl zmx tree <remote-host>
+elisctl zmx tree <remote-host>
 ```
 
 ## How it works
 
-`zmx tree HOST` is the discovery half. The local Hangar runs one ssh to the far side, which runs its own
+`zmx tree HOST` is the discovery half. The local Elis runs one ssh to the far side, which runs its own
 bare `zmx tree` there and answers with a single document: every open window's sessions, filtered to the
 ones whose every pane still has a live daemon. A session with a missing daemon is omitted rather than
 offered, because attaching to a name that no longer exists would create a fresh shell wearing it.
@@ -89,7 +89,7 @@ names are editable and repeat across workspaces, so only the id addresses one se
 the window and workspace *names*; the rows also carry `windowID` and `workspaceID`, which is what to group
 by if you extend this, since neither name is unique.
 
-Running `hangarctl zmx tree` with no host asks the same question of your own Hangar. That is the exact
+Running `elisctl zmx tree` with no host asks the same question of your own Elis. That is the exact
 form the remote call runs on the far side, so it is the quickest way to see what another machine would
 answer before you point the recipe at it.
 
@@ -97,7 +97,7 @@ answer before you point the recipe at it.
 session that disappeared between the listing and your keypress fails cleanly instead of handing back a
 fresh shell.
 
-Both halves report through `hangarctl notify` rather than stdout, because a keymap command runs with its
+Both halves report through `elisctl notify` rather than stdout, because a keymap command runs with its
 output on `/dev/null` and an error printed there is an error nobody sees.
 
 ## Limits

@@ -1,0 +1,955 @@
+import ArgumentParser
+import Foundation
+import ElisCore
+
+// MARK: - keymap
+
+struct Keymap: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Keymap commands.",
+        subcommands: [Reload.self, List.self, Run.self]
+    )
+
+    struct Run: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Run one of your custom commands by name against a session.",
+            discussion: """
+            NAME is a custom command's name exactly as `keymap list` prints it. The command runs as it \
+            does from the palette, with the target session's focused pane, primary or split and never \
+            its scratch or an overlay, supplying the working directory, the selection and the context \
+            tokens. A name no command carries is refused.
+
+            The reply says the command started. It runs detached, so its exit status and output are not \
+            reported here; a command set to show a failure panel still shows it.
+            """
+        )
+        @Argument(help: "Custom command name, from `keymap list`.") var name: String
+        @OptionGroup var target: TargetOptions
+        @OptionGroup var options: ClientOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .keymapRun, target: target.target, args: options.withWindow(ControlArgs(name: name)))
+        }
+    }
+
+    struct Reload: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Re-read and apply keymap.conf (prints the diagnostic count).")
+        // the keymap commands are app-global (the frontmost window's settings model), so no `--window`.
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .keymapReload) }
+    }
+
+    struct List: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Show the resolved keymap and the live menu key equivalents.",
+            discussion: """
+            Prints every built-in with the binds the keymap resolved for it — the menu shortcut first, then \
+            any monitor-bound alternatives, joined with `|` — plus the custom commands, any \
+            parse diagnostics, and the key equivalents the menu bar is actually carrying. The last \
+            section is what makes a stale or hijacked chord visible: SwiftUI rebuilds the menu only on \
+            the next app activation, so a chord can be right in the keymap and wrong in the menu.
+            """
+        )
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .keymapList) }
+    }
+}
+
+// MARK: - hooks
+
+struct Hooks: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Event hook commands.",
+        subcommands: [Reload.self, List.self]
+    )
+
+    struct Reload: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Re-read and apply hooks.conf (prints the diagnostic count).")
+        // app-global like the keymap commands, so no `--window`.
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .hooksReload) }
+    }
+
+    struct List: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Show every hook with its running child, queue depth, dropped count and last failure.",
+            discussion: "One row per `on <kind> <shell...>` line in file order, then any hook removed from the file "
+                + "whose child is still running, marked retired. `running` is the child's pid and elapsed seconds "
+                + "while a hook is busy; `pending` is how many events wait behind it and `dropped` how many the "
+                + "bounded queue discarded; `last failure` stays until the hook's next clean run (a reload keeps it)."
+        )
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .hooksList) }
+    }
+}
+
+// MARK: - browser
+
+struct Browser: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Saved browser storage of --persistent URL overlays, and where clicked links open.",
+        subcommands: [Clear.self, Links.self]
+    )
+
+    /// `elisctl browser links [MODE]`: no mode reads the setting. App-wide, so no `--window`.
+    struct Links: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Set or read where a clicked web link in a terminal opens (browser|overlay|overlay95|overlay75|overlay50).",
+            discussion: "overlay opens http and https links in a full session web overlay with JavaScript, navigation "
+                + "buttons and the saved browser store; overlay95, overlay75 and overlay50 open it at that percent of "
+                + "the session. With no MODE the current one is printed. A link in a HUD, a link "
+                + "clicked while a HUD is up or the terminal is zoomed, and a link the overlay cannot show open in the browser."
+        )
+        @Argument(help: "Mode: browser, overlay, overlay95, overlay75 or overlay50. Omit to read the current mode.") var mode: String?
+        @OptionGroup var options: BasicOptions
+
+        func validate() throws {
+            guard let mode else { return }
+            guard LinkOpenMode(rawValue: mode) != nil else { throw ValidationError("mode must be browser, overlay, overlay95, overlay75 or overlay50") }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .browserLinks, args: mode.map { ControlArgs(mode: $0) })
+        }
+    }
+
+    struct Clear: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Remove every cookie and all site data the saved browser store holds.",
+            discussion: "Refused while a --persistent page is open, one in a just-closed session that can still be restored included: "
+                + "an open page writes its login back. Removing the local data does not sign you out on the server."
+        )
+        // one store serves every window, so no `--window`.
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .browserClear) }
+    }
+}
+
+// MARK: - config
+
+struct Config: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Config commands.",
+        subcommands: [Reload.self]
+    )
+
+    struct Reload: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Re-read and apply the elis-scoped ghostty.conf (prints the diagnostic count).")
+        // config.reload is app-global (one settings model + GhosttyApp), so no `--window` selector.
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .configReload) }
+    }
+}
+
+// MARK: - restore
+
+struct Restore: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Restore-running-command commands.",
+        subcommands: [Capture.self, Clear.self, Mode.self]
+    )
+
+    struct Capture: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Capture every pane's running command now, so a forced exit restores it.",
+            discussion: """
+            elis captures the running commands when it quits, so an exit that never gets there leaves \
+            every pane restoring a plain shell: a force quit, a crash, a hard reset, a power loss. This \
+            runs the same capture on demand, app-global across every open window, and prints how many \
+            panes had a command to capture. Consumption is unchanged: the next launch arms each captured \
+            command once and clears it.
+
+            A capture is only as fresh as its last run, so a pager or a build that has finished since still \
+            re-runs after a crash. "restore clear" drops every captured command, and restore-denylist.conf \
+            in the config directory keeps a named program from re-running at all.
+
+            Typed at a prompt it records ITSELF: while it runs it is that pane's foreground process, so that \
+            pane comes back running the capture command. Bind it or run it from a scheduled job rather than \
+            by hand; "restore clear" is app-global, so it is no per-pane undo.
+
+            This command is available only when this launch is in rerun mode. In fresh-shell or live mode \
+            it fails and names the active mode.
+            """)
+        // app-global, like `restore clear`: every open window, so no `--window` selector.
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .restoreCapture) }
+    }
+
+    struct Mode: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Read or set what a restart does with your sessions.",
+            discussion: """
+            With no argument this reports the policy: what settings hold for the next launch, what THIS \
+            launch asked for, and what it actually got. The two requested values differ once the mode has \
+            been changed since this instance started, which is exactly when a caller is confused about why \
+            nothing happened.
+
+            Setting one writes it for the NEXT launch. This process keeps the mode it started with, and \
+            that is not a shortcut: a pane is wrapped in a zmx daemon or not at the moment it is created, \
+            so no setting can retrofit a shell that is already running.
+
+            fresh shells (none) re-spawns each pane in its saved directory. re-run (rerun) starts the \
+            command each pane had at the last clean quit. live keeps the actual processes alive.
+
+            Switching away from live and restarting ends every detached live process in this state \
+            directory. If live was requested but could not be used, the reason is reported here.
+            """)
+        @Argument(help: "none|rerun|live. Omit to read the current policy.")
+        var mode: String?
+
+        @OptionGroup var options: BasicOptions
+
+        func validate() throws {
+            guard let mode else { return }
+            guard RestoreMode(rawValue: mode) != nil else {
+                throw ValidationError("mode must be none, rerun, or live")
+            }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .restoreMode, args: mode.map { ControlArgs(mode: $0) })
+        }
+    }
+
+    struct Clear: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Clear every session's saved foreground command so the next restart restores plain shells.",
+            discussion: """
+            This is app-global and CAPTURE-scoped: it drops the foreground commands elis captured at \
+            quit, across every open window, and leaves per-session restore-command overrides alone.
+
+            Not to be confused with `elisctl session restore --clear`, which is per-session and \
+            OVERRIDE-scoped: it drops one pane's pinned command so that pane goes back to auto-capture.
+            """)
+        // restore.clear is app-global (clears every open window), so no `--window` selector.
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .restoreClear) }
+    }
+}
+
+// MARK: - theme
+
+struct Theme: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Theme commands.",
+        subcommands: [Set.self, List.self]
+    )
+
+    struct Set: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Set + persist the terminal theme, per slot.",
+            discussion: """
+            theme set NAME            set the light/single theme (a dark theme, if set, is kept)
+            theme set --dark NAME     set the dark theme — the terminal then tracks the macOS \
+            Light/Dark appearance (the light side seeds from the current theme)
+            theme set --dark none     clear the dark theme (stop tracking the appearance)
+            theme set                 ghostty's built-in default (clears everything)
+            """)
+        @Argument(help: "Light/single theme name (a bundled theme); omit for ghostty's built-in default.") var name: String?
+        @Option(help: "Light-appearance theme (same slot as NAME).") var light: String?
+        @Option(help: "Dark-appearance theme, or 'none' to clear it.") var dark: String?
+        // theme is app-global (one settings model), so no `--window` selector.
+        @OptionGroup var options: BasicOptions
+
+        func validate() throws {
+            if name != nil && light != nil {
+                throw ValidationError("Pass either a NAME or --light, not both.")
+            }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .themeSet, args: ControlArgs(name: name, light: light, dark: dark))
+        }
+    }
+
+    struct List: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "List bundled themes (the current one marked).")
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .themeList) }
+    }
+}
+
+// MARK: - quick
+
+struct Quick: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Quick terminal: visibility, type into it, read its text.",
+        subcommands: [Visibility.self, TypeText.self, Text.self],
+        defaultSubcommand: Visibility.self
+    )
+
+    /// `elisctl quick [show|hide|toggle]` — the default subcommand, so the bare verb keeps working.
+    struct Visibility: RequestCommand {
+        static let configuration = CommandConfiguration(commandName: "visibility", abstract: "Quick terminal visibility (show|hide|toggle).")
+        @Argument(help: "Mode: show, hide, or toggle (default).") var mode: String = "toggle"
+        // the quick terminal is always the frontmost window's, so this carries no `--window` selector.
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .quick, args: ControlArgs(mode: mode))
+        }
+    }
+
+    /// `elisctl quick type TEXT` — inject literal keystrokes into the quick terminal, the twin of
+    /// `session type`. No `--target`/`--window`: always the frontmost window's.
+    struct TypeText: RequestCommand {
+        static let configuration = CommandConfiguration(commandName: "type", abstract: "Inject text into the quick terminal.")
+        @Argument(help: "Text to inject (omit with --stdin).") var text: String?
+        @Flag(name: .long, help: "Read the text from stdin instead of an argument.") var stdin = false
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest {
+            if stdin {
+                return try makeRequest(input: FileHandle.standardInput.readDataToEndOfFile())
+            }
+            guard let text else { throw ValidationError("provide TEXT or --stdin") }
+            return makeRequest(payload: text)
+        }
+
+        func makeRequest(input: Data) throws -> ControlRequest { makeRequest(payload: try decodeTypedStdin(input)) }
+
+        private func makeRequest(payload: String) -> ControlRequest {
+            return ControlRequest(cmd: .quickType, args: ControlArgs(text: payload))
+        }
+    }
+
+    /// `elisctl quick text` — print the frontmost window's quick-terminal buffer as plain text, the
+    /// read-back for `quick type`; does not touch the system clipboard. No `--pane`: one surface only.
+    struct Text: RequestCommand {
+        static let configuration = CommandConfiguration(commandName: "text", abstract: "Print the quick terminal's buffer as plain text.")
+        @Flag(name: .long, help: "Read the full screen + scrollback instead of just the visible screen.") var all = false
+        @Option(name: .long, help: "Keep only the last N lines of the full buffer.") var lines: Int?
+        @OptionGroup var options: BasicOptions
+
+        func validate() throws {
+            if all, lines != nil {
+                throw ValidationError("use either --all or --lines, not both")
+            }
+            if let lines, lines <= 0 {
+                throw ValidationError("--lines must be greater than 0")
+            }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .quickText, args: ControlArgs(all: all ? true : nil, lines: lines))
+        }
+    }
+}
+
+// MARK: - surface
+
+struct Surface: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Terminal surface commands.",
+        subcommands: [Zoom.self, Cursor.self]
+    )
+
+    struct Cursor: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Report a terminal surface's zero-based cursor column.",
+            discussion: """
+            Prints the column alone, so it drops straight into a command substitution. Row is not \
+            reported: the pinned libghostty exposes no cursor accessor and the vertical metrics it does \
+            export cannot recover a row that survives a custom `adjust-font-baseline`.
+
+            A column is a signal, not proof about the line's content. Past the prompt it establishes the \
+            line is not empty; AT the prompt it establishes nothing, since the caret may have been moved \
+            back over text that is still there.
+            """)
+        @Option(name: .customLong("pane-id"), help: "Stable pane token ($ELIS_PANE_ID). With it --target names the session ('active' or a session id), not a surface.")
+        var paneID: String?
+        @OptionGroup var target: SurfaceTargetOptions
+        @OptionGroup var options: ClientOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .surfaceCursor, target: target.target,
+                           args: options.withWindow(ControlArgs(paneID: paneID)))
+        }
+    }
+
+    struct Zoom: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Zoom a terminal surface (show|hide|toggle).")
+        @Argument(help: "Mode: show, hide, or toggle (default).") var mode: String = "toggle"
+        @OptionGroup var target: SurfaceTargetOptions
+        @OptionGroup var options: ClientOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .surfaceZoom, target: target.target,
+                           args: options.withWindow(ControlArgs(mode: mode)))
+        }
+    }
+}
+
+// MARK: - dashboard
+
+/// Opens a view-only grid of the named sessions (max 9), or of the window's most-recently-used sessions
+/// with `--mru`; `--close` closes the open one. An id may carry a `:left`/`:right` pane suffix to place one
+/// pane of a split session (#331). The dispatcher validates flags and pane grammar; the 9-cell cap, the
+/// session+pane dedup, and the drop report are app-side, since expanding an id into cells needs the store.
+struct Dashboard: RequestCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Open a view-only grid of live sessions, or --close the open one.",
+        discussion: """
+        dashboard S1 S2 S3                 open a grid of the named sessions (ids or unique prefixes, max 9)
+        dashboard S1:left                  place only the main pane of a split session
+        dashboard S1:left S2:right         mix panes across sessions; a bare id still takes all of its panes
+        dashboard S1 S2 --font-size 12     open with an absolute cell font size (points)
+        dashboard S1 S2 --auto-size        open sizing cells relative to the Settings default font
+        dashboard --mru                    open a grid of the window's most-recently-used sessions (up to 9)
+        dashboard --mru --auto-size        the same, sizing cells relative to the Settings default font
+        dashboard S1 --window W            open in a specific window (defaults to the frontmost)
+        dashboard --close                  close the open dashboard
+
+        The 9-cell cap counts PANES, so a split session normally takes two of them. A pane suffix keeps the
+        pane you want and frees the other cell; `:right` on a session with no split is reported as
+        unresolved. The suffix is the same form `tree --json` reports in `dashboardMembers`.
+        """)
+    @Argument(help: """
+        Session ids (or unique prefixes) to show, max 9. Each may carry a :left/:right pane suffix; a bare \
+        id takes every pane of the session. Omit only with --mru or --close.
+        """) var ids: [String] = []
+    @Option(name: .customLong("font-size"), help: "Absolute cell font size in points (mutually exclusive with --auto-size).") var fontSize: Double?
+    @Flag(name: .long, help: "Size cells relative to the Settings default font, shrinking as the grid grows.") var autoSize = false
+    @Flag(name: .long, help: "Populate the grid from the window's most-recently-used sessions (up to 9).") var mru = false
+    @Flag(name: .long, help: "Close the open dashboard (takes no ids, --mru, or font options).") var close = false
+    @OptionGroup var options: ClientOptions
+
+    // reject invalid flag combinations at parse time — clean usage errors, no socket; re-checked server-side.
+    func validate() throws {
+        if close {
+            guard ids.isEmpty, !mru, fontSize == nil, !autoSize else {
+                throw ValidationError("--close takes no ids, --mru, or font options")
+            }
+            return
+        }
+        if mru, !ids.isEmpty {
+            throw ValidationError("--mru cannot be combined with session ids")
+        }
+        guard !ids.isEmpty || mru else {
+            throw ValidationError("dashboard requires at least one session id (or --mru, or --close)")
+        }
+        if fontSize != nil, autoSize {
+            throw ValidationError("--font-size is mutually exclusive with --auto-size")
+        }
+        // nan/inf parse as Double but aren't valid sizes; reject non-finite/non-positive with a clean error.
+        if let fontSize, !fontSize.isFinite || fontSize <= 0 {
+            throw ValidationError("--font-size must be a positive number")
+        }
+    }
+
+    func makeRequest() throws -> ControlRequest {
+        let args = ControlArgs(targets: ids.isEmpty ? nil : ids,
+                               close: close ? true : nil,
+                               fontSize: fontSize,
+                               autoSize: autoSize ? true : nil,
+                               mru: mru ? true : nil)
+        return ControlRequest(cmd: .dashboard, args: options.withWindow(args))
+    }
+}
+
+// MARK: - pick
+
+/// Native fuzzy-picker commands. `Open` is the default, so the shell-friendly common case is simply
+/// `printf 'one\ntwo\n' | elisctl pick`; `result`/`cancel` make `--no-block` usable without the protocol.
+struct Pick: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Open, poll, or cancel a native fuzzy picker.",
+        subcommands: [Open.self, Result.self, Cancel.self],
+        defaultSubcommand: Open.self
+    )
+
+    struct Open: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Read choices from stdin and open a native fuzzy picker."
+        )
+
+        @Option(name: .long, help: "Placeholder text shown in the picker query field.") var prompt: String?
+        @Option(name: .long, help: "Initial text for the picker query field; it opens already filtered.")
+        var query: String?
+        @Flag(name: .long, help: "Accept the current query as a custom result.") var allowCustom = false
+        @Option(name: .long, help: "Item id to open highlighted; a --query that hides it falls back to the first row.")
+        var select: String?
+        @Flag(name: .long, help: "Raise the target window when the picker opens.") var follow = false
+        @Option(name: .long, help: "Cancel the picker unanswered after this many seconds (at most 86400).") var timeout: Double?
+        @Flag(name: .long, help: "Print the picker id and return without waiting for a result.") var noBlock = false
+        @Option(name: .long, help: "Bind the picker to a session: it shows wherever that session is presented.")
+        var session: String?
+        @OptionGroup var options: ClientOptions
+
+        func validate() throws {
+            if let timeout, !ControlInteraction.isValidTimeout(timeout) { throw ValidationError(ControlInteraction.timeoutError) }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            try makeRequest(input: FileHandle.standardInput.readDataToEndOfFile())
+        }
+
+        /// Build the open request from injected stdin bytes, so tests never block on the process's real stdin.
+        func makeRequest(input: Data, session bound: String? = nil) throws -> ControlRequest {
+            var args = ControlArgs(
+                follow: follow ? true : nil,
+                items: try Self.parseItems(input),
+                prompt: prompt,
+                query: query,
+                allowCustom: allowCustom ? true : nil,
+                selection: select
+            )
+            args.timeout = timeout
+            return ControlRequest(cmd: .pickOpen, target: bound ?? session, args: options.withWindow(args))
+        }
+
+        /// boundSession is the session the pick is bound to: `--session`, else the pane's own session when the
+        /// server is elis-server, which has no window of its own to show a pick in. A Mac keeps the window pick.
+        func boundSession(environment: [String: String], send: (ControlRequest) throws -> SocketReply) throws -> String? {
+            if let session { return session }
+            guard let own = environment["ELIS_SESSION_ID"], !own.isEmpty else { return nil }
+            return try send(ControlRequest(cmd: .version)).response.result?.headless == true ? own : nil
+        }
+
+        /// Sniff stdin's first non-whitespace byte. JSON arrays preserve caller-supplied ids/subtitles;
+        /// bare lines use the label itself as the id and discard empty or whitespace-only lines.
+        static func parseItems(_ input: Data) throws -> [ControlPickItem] {
+            let whitespace = Set([UInt8(ascii: " "), UInt8(ascii: "\t"),
+                                  UInt8(ascii: "\n"), UInt8(ascii: "\r")])
+            if input.first(where: { !whitespace.contains($0) }) == UInt8(ascii: "[") {
+                return try JSONDecoder().decode([ControlPickItem].self, from: input)
+            }
+            guard let text = String(data: input, encoding: .utf8) else {
+                throw ValidationError("stdin must be UTF-8 text or a JSON item array")
+            }
+            return text.components(separatedBy: .newlines)
+                .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                .map { ControlPickItem(id: $0, label: $0) }
+        }
+
+        func run() throws {
+            let client = SocketClient(path: options.socketPath())
+            try execute(
+                input: FileHandle.standardInput.readDataToEndOfFile(),
+                send: client.send,
+                sleep: Thread.sleep(forTimeInterval:),
+                output: { print($0) },
+                errorOutput: ModalCommandRunner.writeStandardError,
+                environment: ProcessInfo.processInfo.environment
+            )
+        }
+
+        /// Execute open → poll with injectable I/O, so tests exercise the unbounded blocking flow without
+        /// real delays or process fds.
+        func execute(
+            input: Data,
+            send: @escaping (ControlRequest) throws -> SocketReply,
+            sleep: @escaping (TimeInterval) -> Void,
+            output: @escaping (String) -> Void,
+            errorOutput: @escaping (String) -> Void = ModalCommandRunner.writeStandardError,
+            environment: [String: String] = [:]
+        ) throws {
+            let runner = ModalCommandRunner(family: .pick, json: options.json, send: send, sleep: sleep,
+                                            output: output, errorOutput: errorOutput)
+            let bound = try boundSession(environment: environment, send: send)
+            try runner.open(makeRequest(input: input, session: bound), noBlock: noBlock)
+        }
+    }
+
+    struct Result: RequestCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Print a picker's current or terminal result as JSON."
+        )
+        @Argument(help: "Exact picker id returned by pick open.") var id: String
+        @OptionGroup var options: ClientOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .pickResult, target: id, args: options.withWindow())
+        }
+
+        func run() throws {
+            try execute(
+                send: SocketClient(path: options.socketPath()).send,
+                output: { print($0) },
+                errorOutput: ModalCommandRunner.writeStandardError
+            )
+        }
+
+        /// One-shot read with injectable transport/stdout/stderr, so every wire outcome and exit mapping is
+        /// covered without replacing process file descriptors.
+        func execute(
+            send: @escaping (ControlRequest) throws -> SocketReply,
+            output: @escaping (String) -> Void,
+            errorOutput: @escaping (String) -> Void = ModalCommandRunner.writeStandardError
+        ) throws {
+            let runner = ModalCommandRunner(family: .pick, json: options.json, send: send, sleep: { _ in },
+                                            output: output, errorOutput: errorOutput)
+            try runner.read(makeRequest())
+        }
+    }
+
+    struct Cancel: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Cancel a pending picker.")
+        @Argument(help: "Exact picker id returned by pick open.") var id: String
+        @OptionGroup var options: ClientOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .pickCancel, target: id, args: options.withWindow())
+        }
+    }
+}
+
+struct ModalCommandRunner {
+    enum Family: String {
+        case pick, ask
+
+        var resultCommand: Command { self == .pick ? .pickResult : .askResult }
+        var cancelCommand: Command { self == .pick ? .pickCancel : .askCancel }
+    }
+
+    let family: Family
+    let json: Bool
+    let send: (ControlRequest) throws -> SocketReply
+    let sleep: (TimeInterval) -> Void
+    let output: (String) -> Void
+    let errorOutput: (String) -> Void
+
+    func open(_ request: ControlRequest, noBlock: Bool) throws {
+        let opened = try send(request)
+        try requireSuccess(opened)
+        guard let id = opened.response.result?.id else {
+            errorOutput("error: \(family.rawValue).open result missing id")
+            throw ExitCode.failure
+        }
+        if noBlock {
+            output(try SocketClient.formatPickID(id))
+            return
+        }
+        var pendingPolls = 0
+        while true {
+            let polled: SocketReply
+            do {
+                polled = try send(ControlRequest(cmd: family.resultCommand, target: id))
+            } catch {
+                // each request opens its own connection, so cancellation can still reach the host after a failed poll.
+                abandon(id)
+                throw error
+            }
+            // the id-only poll cannot resolve to another window; failure means the host no longer holds the dialog.
+            try requireSuccess(polled)
+            guard let result = try reply(from: polled.response) else {
+                errorOutput("error: \(family.rawValue).result missing result")
+                abandon(id)
+                throw ExitCode.failure
+            }
+            if result.pending {
+                pendingPolls += 1
+                sleep(SocketClient.pickPollDelay(afterPendingPoll: pendingPolls))
+                continue
+            }
+            output(result.line)
+            if result.code.rawValue != 0 { throw result.code }
+            return
+        }
+    }
+
+    func read(_ request: ControlRequest) throws {
+        let polled = try send(request)
+        try requireSuccess(polled)
+        guard let result = try reply(from: polled.response) else {
+            errorOutput("error: \(family.rawValue).result missing result")
+            throw ExitCode.failure
+        }
+        output(result.line)
+        if result.code.rawValue != 0 { throw result.code }
+    }
+
+    private struct Reply {
+        let pending: Bool
+        let line: String
+        let code: ExitCode
+    }
+
+    private func reply(from response: ControlResponse) throws -> Reply? {
+        switch family {
+        case .pick:
+            guard let result = response.result?.pick else { return nil }
+            return Reply(pending: result.result == .pending, line: try SocketClient.formatPickResult(result),
+                         code: SocketClient.pickExitCode(for: result.result))
+        case .ask:
+            guard let result = response.result?.ask else { return nil }
+            return Reply(pending: result.result == .pending, line: try SocketClient.formatAskResult(result),
+                         code: SocketClient.askExitCode(for: result.result))
+        }
+    }
+
+    private func requireSuccess(_ reply: SocketReply) throws {
+        guard !reply.response.ok else { return }
+        if json { output(reply.line) } else { errorOutput(SocketClient.formatResponse(reply.response)) }
+        throw ExitCode.failure
+    }
+
+    // otherwise an abandoned caller leaves the shared modal slot occupied; cancellation stays best effort.
+    private func abandon(_ id: String) {
+        _ = try? send(ControlRequest(cmd: family.cancelCommand, target: id))
+    }
+
+    static func writeStandardError(_ line: String) {
+        FileHandle.standardError.write(Data("\(line)\n".utf8))
+    }
+}
+
+// MARK: - sidebar
+
+struct Sidebar: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Sidebar visibility and view mode.",
+        subcommands: [Visibility.self, Mode.self, FlaggedLayout.self, Density.self, Expand.self, Collapse.self, Width.self],
+        defaultSubcommand: Visibility.self
+    )
+
+    /// `elisctl sidebar [show|hide|toggle]` — the default subcommand, so the bare verb keeps working.
+    struct Visibility: RequestCommand {
+        static let configuration = CommandConfiguration(commandName: "visibility", abstract: "Sidebar visibility (show|hide|toggle).")
+        @Argument(help: "Mode: show, hide, or toggle (default).") var mode: String = "toggle"
+        // the sidebar is always the frontmost window's, so this carries no `--window` selector.
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .sidebar, args: ControlArgs(mode: mode))
+        }
+    }
+
+    /// Flips the frontmost window's sidebar between the workspace tree and the flagged working-set view.
+    struct Mode: RequestCommand {
+        static let configuration = CommandConfiguration(commandName: "mode", abstract: "Sidebar view mode (tree|flagged|toggle).")
+        @Argument(help: "Mode: tree, flagged, or toggle (default).") var mode: String = "toggle"
+        @OptionGroup var options: BasicOptions
+
+        func validate() throws {
+            guard ["tree", "flagged", "toggle"].contains(mode) else {
+                throw ValidationError("mode must be tree, flagged, or toggle")
+            }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .sidebarMode, args: ControlArgs(mode: mode))
+        }
+    }
+
+    /// Sets how every window's flagged sidebar view arranges its sessions; app-wide, so no `--window`.
+    struct FlaggedLayout: RequestCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "flagged-layout", abstract: "Flagged view layout (flat|plain|tree|toggle).")
+        @Argument(help: "Layout: flat, plain (flat without workspace names), tree, or toggle (default).") var layout: String = "toggle"
+        @OptionGroup var options: BasicOptions
+
+        func validate() throws {
+            guard ["flat", "plain", "tree", "toggle"].contains(layout) else {
+                throw ValidationError("layout must be flat, plain, tree, or toggle")
+            }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .sidebarFlaggedLayout, args: ControlArgs(mode: layout))
+        }
+    }
+
+    /// Sets every window's sidebar row spacing; app-wide, so no `--window`.
+    struct Density: RequestCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "density", abstract: "Sidebar density (default|compact|toggle).")
+        @Argument(help: "Density: default, compact, or toggle (default).") var density: String = "toggle"
+        @OptionGroup var options: BasicOptions
+
+        func validate() throws {
+            guard ControlSidebarDensityMode.parse(density) != nil else {
+                throw ValidationError("density must be default, compact, or toggle")
+            }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .sidebarDensity, args: ControlArgs(mode: density))
+        }
+    }
+
+    /// `elisctl sidebar expand [--window W]` — expand every workspace in a window's sidebar tree (default
+    /// frontmost). Unlike `visibility`/`mode` it carries `--window`, so a script can reach a background one.
+    struct Expand: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Expand every workspace in the sidebar.")
+        @OptionGroup var options: ClientOptions
+
+        func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .sidebarExpand, args: options.withWindow()) }
+    }
+
+    /// Collapse every workspace except the active one in a window's sidebar (frontmost by default).
+    struct Collapse: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Collapse all workspaces except the active one.")
+        @OptionGroup var options: ClientOptions
+
+        func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .sidebarCollapse, args: options.withWindow()) }
+    }
+
+    /// `elisctl sidebar width <points> [--window W]` — move the divider a drag would move. Prints the
+    /// APPLIED width, so a value outside the bounds reads back as the clamped one rather than as what was
+    /// asked for. Range validation stays server-side, against the same bounds the drag clamps to.
+    struct Width: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Set the sidebar width in points.")
+        @Argument(help: "Sidebar width in points, clamped to the drag range.") var points: Double
+        @OptionGroup var options: ClientOptions
+
+        func validate() throws {
+            guard points.isFinite else { throw ValidationError("points must be a number") }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .sidebarWidth, args: options.withWindow(ControlArgs(sidebarWidth: points)))
+        }
+    }
+}
+
+// MARK: - filepanel
+
+struct FilePanel: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "filepanel",
+        abstract: "File panel visibility and width.",
+        subcommands: [Visibility.self, Width.self],
+        defaultSubcommand: Visibility.self
+    )
+
+    struct Visibility: RequestCommand {
+        static let configuration = CommandConfiguration(commandName: "visibility", abstract: "File panel visibility (show|hide|toggle).")
+        @Argument(help: "Mode: show, hide, or toggle (default).") var mode: String = "toggle"
+        // frontmost window only, like `sidebar`.
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .filePanel, args: ControlArgs(mode: mode))
+        }
+    }
+
+    /// Prints the applied width, so a clamped request reads back as the clamped value.
+    struct Width: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Set the file panel width in points.")
+        @Argument(help: "File panel width in points, clamped to the drag range.") var points: Double
+        @OptionGroup var options: ClientOptions
+
+        func validate() throws {
+            guard points.isFinite else { throw ValidationError("points must be a number") }
+        }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .filePanelWidth, args: options.withWindow(ControlArgs(filePanelWidth: points)))
+        }
+    }
+}
+
+// MARK: - notify
+
+struct Notify: RequestCommand {
+    static let configuration = CommandConfiguration(abstract: "Post a desktop notification (default: the active session of the frontmost window).")
+    @Argument(help: "Notification body.") var body: String
+    @Option(name: .long, help: "Notification title (defaults to the session name).") var title: String?
+    @OptionGroup var target: TargetOptions
+    @OptionGroup var options: ClientOptions
+
+    func makeRequest() throws -> ControlRequest {
+        ControlRequest(cmd: .notify, target: target.target, args: options.withWindow(ControlArgs(title: title, body: body)))
+    }
+}
+
+// MARK: - font
+
+struct Font: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Font size commands.",
+        subcommands: [Inc.self, Dec.self, Reset.self]
+    )
+
+    /// Help for the shared `--pane` option; role and axis-position aliases resolve to the same stable slots.
+    static let paneHelp = "Which pane's font to change: left (main), right (split), or scratch (the "
+        + "session's scratch terminal, even when hidden). primary/left/top and split/right/bottom are aliases. Defaults to the left pane."
+
+    struct Inc: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Increase font size.")
+        @OptionGroup var target: TargetOptions
+        @OptionGroup var options: ClientOptions
+        @Option(name: .long, help: ArgumentHelp(Font.paneHelp)) var pane: String?
+
+        func validate() throws { try validatePaneArgument(pane) }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .fontInc, target: target.target, args: options.withWindow(pane.map { ControlArgs(pane: $0) }))
+        }
+    }
+
+    struct Dec: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Decrease font size.")
+        @OptionGroup var target: TargetOptions
+        @OptionGroup var options: ClientOptions
+        @Option(name: .long, help: ArgumentHelp(Font.paneHelp)) var pane: String?
+
+        func validate() throws { try validatePaneArgument(pane) }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .fontDec, target: target.target, args: options.withWindow(pane.map { ControlArgs(pane: $0) }))
+        }
+    }
+
+    struct Reset: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Reset font size.")
+        @OptionGroup var target: TargetOptions
+        @OptionGroup var options: ClientOptions
+        @Option(name: .long, help: ArgumentHelp(Font.paneHelp)) var pane: String?
+
+        func validate() throws { try validatePaneArgument(pane) }
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .fontReset, target: target.target, args: options.withWindow(pane.map { ControlArgs(pane: $0) }))
+        }
+    }
+}
+
+// MARK: - version
+
+/// Which elis is serving the socket this client reached. The app answers from its own bundle, so a
+/// stale `elisctl` earlier on `PATH` than the bundled helper cannot misreport it. The resolved client
+/// path prints beside it as a diagnostic for exactly that case, and stays OUT of `--json`, which keeps its
+/// promise of being the raw server response: a JSON consumer ran the binary and can resolve its own path.
+struct Version: RequestCommand {
+    static let configuration = CommandConfiguration(abstract: "Print the version of the app serving the socket.")
+    @OptionGroup var options: BasicOptions
+
+    func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .version) }
+
+    func run() throws {
+        try defaultRun()
+        if !options.json, let path = Version.clientPath() {
+            print("client: \(path)")
+        }
+    }
+
+    /// The running executable's real path. `_NSGetExecutablePath` (`/proc/self/exe` on Linux) rather than
+    /// `argv[0]`, which is whatever the caller chose to exec with, and `realpath` because the installed CLI
+    /// is a symlink into the bundle.
+    static func clientPath() -> String? {
+        #if !canImport(Darwin)
+        guard let resolved = realpath("/proc/self/exe", nil) else { return nil }
+        defer { free(resolved) }
+        return String(cString: resolved)
+        #else
+        var size = UInt32(0)
+        _ = _NSGetExecutablePath(nil, &size)
+        var buffer = [CChar](repeating: 0, count: Int(size))
+        guard _NSGetExecutablePath(&buffer, &size) == 0 else { return nil }
+        guard let resolved = realpath(buffer, nil) else { return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) }
+        defer { free(resolved) }
+        return String(cString: resolved)
+        #endif
+    }
+}

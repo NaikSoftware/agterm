@@ -1,12 +1,12 @@
-# Hangar
+# Elis
 
 ## What it is
 
 A native macOS terminal, SwiftUI over libghostty, with a workspace-to-session sidebar and a full
-control API driven by the bundled `hangarctl` over a local unix socket. Shipped as a signed and
-notarized `.app` on Homebrew, plus a static site at naiksoftware.github.io/hangar. One maintainer, no on-call.
+control API driven by the bundled `elisctl` over a local unix socket. Shipped as a signed and
+notarized `.app` on Homebrew, plus a static site at naiksoftware.github.io/elis. One maintainer, no on-call.
 
-Two modules. `HangarCore` is a host-free SwiftPM package under Swift 6 complete concurrency checking
+Two modules. `ElisCore` is a host-free SwiftPM package under Swift 6 complete concurrency checking
 with no Xcode, GhosttyKit, AppKit, Metal or CoreGraphics dependency, holding the model, persistence,
 parsing, validation, routing, response shaping and static catalogs. The app target is the side-effect
 adapter: the SwiftUI shell, the AppKit sidebar, and the C boundary to libghostty.
@@ -46,16 +46,16 @@ on a shipped script is a lint gate rather than a runtime defect.
 - Interfaces are defined on the consumer side; the app target accepts them and returns concrete types.
 - SwiftLint runs strict with zero findings required: 200-column lines, 1000-line files, 800-line types,
   raised to 2000 for tests. Disabled and tuned rules are deliberate.
-- `Hangar/Resources/ghostty`, `Hangar/Resources/terminfo` and `GhosttyKit.xcframework` are gitignored
+- `Elis/Resources/ghostty`, `Elis/Resources/terminfo` and `GhosttyKit.xcframework` are gitignored
   build artifacts staged from upstream ghostty at a pinned revision, not project source.
 - `cookbook/` recipes are third-party work the project publishes but does not own.
 
 ## What the project keeps in sync
 
-A new user action is incomplete until the control protocol, the dispatcher, `hangarctl` and the
+A new user action is incomplete until the control protocol, the dispatcher, `elisctl` and the
 protocol tests all carry it, and a state-setting command must expose its result on the control tree.
 `site/docs.html` is the canonical user guide, `site/commands.html` the canonical command reference,
-and the bundled agent skill under `plugins/hangar/skills/hangar/` is the source for installed copies.
+and the bundled agent skill under `plugins/elis/skills/elis/` is the source for installed copies.
 A change to the control API, the keymap or the model that updates only some of those is a real finding.
 
 For contributor PRs, `site/index.html` and `CHANGELOG.md` are maintainer-owned exceptions. The home

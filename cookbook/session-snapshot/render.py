@@ -35,9 +35,9 @@ def mtime(path):
 
 LIVE = "running claude process"
 CMDLINE = "claude command line"
-WRAPPER = "transcript named after the hangar session (per-tab wrapper)"
+WRAPPER = "transcript named after the elis session (per-tab wrapper)"
 
-# (hangar session id, HANGAR_PANE, HANGAR_PANE_ID, conversation id) per live Claude process
+# (elis session id, ELIS_PANE, ELIS_PANE_ID, conversation id) per live Claude process
 live = []
 with open(f"{work}/claude.tsv") as f:
     for line in f:
@@ -46,7 +46,7 @@ with open(f"{work}/claude.tsv") as f:
 
 
 def live_conversation(sess, role):
-    """The conversation a live Claude runs in this session's `role` pane, left or right. HANGAR_PANE is baked at
+    """The conversation a live Claude runs in this session's `role` pane, left or right. ELIS_PANE is baked at
     spawn and goes stale when a split is promoted, so the pane id read back from `surfaces` wins when present."""
     kinds = {x["paneID"].upper(): x.get("kind") for x in sess.get("surfaces") or [] if x.get("paneID")}
     for a, pane, pane_id, sid in live:

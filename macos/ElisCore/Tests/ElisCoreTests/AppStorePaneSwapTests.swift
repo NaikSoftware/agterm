@@ -1,0 +1,554 @@
+import Foundation
+import Testing
+@testable import ElisCore
+
+@MainActor
+struct AppStorePaneSwapTests {
+    @Test(arguments: OverlayPane.allCases)
+    func closingTheAskPaneAfterSwapCancelsByIdentity(originalPane: OverlayPane) throws {
+        let fixture = makeSeededSession()
+        let session = fixture.session
+        let identity = try #require(originalPane == .left ? session.paneIdentity : session.splitPaneIdentity)
+        let ask = PendingAsk(id: UUID().uuidString, title: "Continue?", buttons: [ControlAskButton(id: "yes", label: "Yes")])
+        let windowID = UUID()
+        #expect(session.openAsk(ask, paneIdentity: identity))
+        #expect(AskRegistry.shared.register(id: ask.id, owner: .session(session.id, window: windowID)))
+        defer { session.cancelAsk(id: ask.id) }
+
+        #expect(fixture.store.swapPanes(session.id) == nil)
+
+        let currentPane: OverlayPane = originalPane == .left ? .right : .left
+        #expect(session.askTargetPane == currentPane)
+        #expect(session.askPaneIdentity == identity)
+        #expect(session.askPending == ask)
+        if currentPane == .left { fixture.store.closePrimaryPane(session.id) } else { fixture.store.closeSplit(session.id) }
+        #expect(session.askPending == nil)
+        #expect(AskRegistry.shared.result(for: ask.id)?.result == ControlAskResult(result: .cancelled))
+        #expect(AskRegistry.shared.result(for: ask.id)?.windowID == windowID)
+    }
+
+    private final class RigidSurface: TerminalSurface {
+        var isRealized = true
+        var paneToken = "rigid"
+        func teardown() {}
+        func promoteToPrimaryPane() {}
+    }
+
+    private struct Fixture {
+        let store: AppStore
+        let session: Session
+        let primary: SpySurface
+        let split: SpySurface
+        let leftOverlay: SpySurface
+        let rightOverlay: SpySurface
+    }
+
+    private struct State: Equatable {
+        let surface: ObjectIdentifier?
+        let splitSurface: ObjectIdentifier?
+        let paneIdentity: UUID
+        let splitPaneIdentity: UUID?
+        let currentCwd: String?
+        let splitCwd: String?
+        let initialSplitCwd: String?
+        let oscTitle: String?
+        let splitTitle: String?
+        let foregroundCommand: [String]?
+        let splitForegroundCommand: [String]?
+        let restoreCommand: String?
+        let splitRestoreCommand: String?
+        let pendingRestoreCommand: String?
+        let pendingSplitRestoreCommand: String?
+        let pendingForegroundCommand: [String]?
+        let pendingSplitForegroundCommand: [String]?
+        let initialCommand: String?
+        let splitInitialCommand: String?
+        let commandWait: Bool
+        let splitCommandWait: Bool
+        let leftOverlay: PaneOverlay?
+        let rightOverlay: PaneOverlay?
+        let leftOverlaySurface: ObjectIdentifier?
+        let rightOverlaySurface: ObjectIdentifier?
+        let leftOverlayExitCode: Int?
+        let rightOverlayExitCode: Int?
+        let indicator: AgentIndicator
+        let statusChangedAt: Date?
+        let isSplit: Bool
+        let hasSplit: Bool
+        let splitAxis: SplitAxis
+        let splitRatio: Double?
+        let splitFocused: Bool
+        let paneBackgrounds: PaneBackgrounds
+
+        @MainActor init(_ session: Session) {
+            surface = session.surface.map { ObjectIdentifier($0) }
+            splitSurface = session.splitSurface.map { ObjectIdentifier($0) }
+            paneIdentity = session.paneIdentity
+            splitPaneIdentity = session.splitPaneIdentity
+            currentCwd = session.currentCwd
+            splitCwd = session.splitCwd
+            initialSplitCwd = session.initialSplitCwd
+            oscTitle = session.oscTitle
+            splitTitle = session.splitTitle
+            foregroundCommand = session.foregroundCommand
+            splitForegroundCommand = session.splitForegroundCommand
+            restoreCommand = session.restoreCommand
+            splitRestoreCommand = session.splitRestoreCommand
+            pendingRestoreCommand = session.pendingRestoreCommand
+            pendingSplitRestoreCommand = session.pendingSplitRestoreCommand
+            pendingForegroundCommand = session.pendingForegroundCommand
+            pendingSplitForegroundCommand = session.pendingSplitForegroundCommand
+            initialCommand = session.initialCommand
+            splitInitialCommand = session.splitInitialCommand
+            commandWait = session.commandWait
+            splitCommandWait = session.splitCommandWait
+            leftOverlay = session.leftOverlay
+            rightOverlay = session.rightOverlay
+            leftOverlaySurface = session.leftOverlaySurface.map { ObjectIdentifier($0) }
+            rightOverlaySurface = session.rightOverlaySurface.map { ObjectIdentifier($0) }
+            leftOverlayExitCode = session.leftOverlayExitCode
+            rightOverlayExitCode = session.rightOverlayExitCode
+            indicator = session.agentIndicator
+            statusChangedAt = session.statusChangedAt
+            isSplit = session.isSplit
+            hasSplit = session.hasSplit
+            splitAxis = session.splitAxis
+            splitRatio = session.splitRatio
+            splitFocused = session.splitFocused
+            paneBackgrounds = session.paneBackgrounds
+        }
+    }
+
+    private func makeSeededSession() -> Fixture {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = store.addSession(toWorkspace: workspace.id, cwd: "/initial-left")!
+        let primary = SpySurface(paneToken: "primary")
+        let split = SpySurface(paneToken: "split")
+        let leftOverlay = SpySurface(paneToken: "overlay-left")
+        let rightOverlay = SpySurface(paneToken: "overlay-right")
+        session.surface = primary
+        session.splitSurface = split
+        session.paneIdentity = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        session.splitPaneIdentity = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        session.isSplit = false
+        session.hasSplit = true
+        session.splitAxis = .topBottom
+        session.splitRatio = 0.3
+        session.splitFocused = false
+        session.currentCwd = "/live-left"
+        session.splitCwd = "/live-right"
+        session.initialSplitCwd = "/live-right"
+        session.oscTitle = "left-title"
+        session.splitTitle = "right-title"
+        session.foregroundCommand = ["left", "foreground"]
+        session.splitForegroundCommand = ["right", "foreground"]
+        session.restoreCommand = nil
+        session.splitRestoreCommand = "right restore"
+        session.pendingRestoreCommand = "left pending restore"
+        session.pendingSplitRestoreCommand = nil
+        session.pendingForegroundCommand = ["left", "pending"]
+        session.pendingSplitForegroundCommand = ["right", "pending"]
+        session.initialCommand = "left command"
+        session.splitInitialCommand = "right command"
+        session.commandWait = false
+        session.splitCommandWait = true
+        session.setPaneOverlay(PaneOverlay(command: "left overlay", cwd: "/left"), pane: .left)
+        session.setPaneOverlay(PaneOverlay(command: "right overlay", cwd: "/right"), pane: .right)
+        session.setPaneOverlaySurface(leftOverlay, pane: .left)
+        session.setPaneOverlaySurface(rightOverlay, pane: .right)
+        session.setPaneOverlayExitCode(7, pane: .left)
+        session.setPaneOverlayExitCode(9, pane: .right)
+        session.agentIndicator = AgentIndicator(status: .blocked, statusPane: .left)
+        session.statusChangedAt = Date(timeIntervalSince1970: 123)
+        session.paneBackgrounds = PaneBackgrounds(left: BackgroundWatermark(kind: .text, text: "DRIVER"),
+                                                  right: BackgroundWatermark(kind: .color, colorHex: "#201414"),
+                                                  scratch: BackgroundWatermark(kind: .text, text: "SCRATCH"))
+        return Fixture(store: store, session: session, primary: primary, split: split,
+                       leftOverlay: leftOverlay, rightOverlay: rightOverlay)
+    }
+
+    @Test func swapExchangesEveryPaneFieldAndKeepsLayout() {
+        let fixture = makeSeededSession()
+        let session = fixture.session
+
+        #expect(fixture.store.swapPanes(session.id) == nil)
+
+        #expect(session.surface === fixture.split)
+        #expect(session.splitSurface === fixture.primary)
+        #expect(session.paneIdentity == UUID(uuidString: "22222222-2222-2222-2222-222222222222"))
+        #expect(session.splitPaneIdentity == UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
+        #expect(session.currentCwd == "/live-right")
+        #expect(session.splitCwd == "/live-left")
+        #expect(session.initialSplitCwd == "/live-left")
+        #expect(session.oscTitle == "right-title")
+        #expect(session.splitTitle == "left-title")
+        #expect(session.foregroundCommand == ["right", "foreground"])
+        #expect(session.splitForegroundCommand == ["left", "foreground"])
+        #expect(session.restoreCommand == "right restore")
+        #expect(session.splitRestoreCommand == nil)
+        #expect(session.pendingRestoreCommand == nil)
+        #expect(session.pendingSplitRestoreCommand == "left pending restore")
+        #expect(session.pendingForegroundCommand == ["right", "pending"])
+        #expect(session.pendingSplitForegroundCommand == ["left", "pending"])
+        #expect(session.initialCommand == "right command")
+        #expect(session.splitInitialCommand == "left command")
+        #expect(session.commandWait)
+        #expect(!session.splitCommandWait)
+        #expect(session.leftOverlay?.command == "right overlay")
+        #expect(session.rightOverlay?.command == "left overlay")
+        #expect(session.leftOverlaySurface === fixture.rightOverlay)
+        #expect(session.rightOverlaySurface === fixture.leftOverlay)
+        #expect(session.leftOverlayExitCode == 9)
+        #expect(session.rightOverlayExitCode == 7)
+        #expect(session.agentIndicator.statusPane == .right)
+        #expect(session.statusChangedAt == Date(timeIntervalSince1970: 123))
+        #expect(!session.isSplit)
+        #expect(session.hasSplit)
+        #expect(session.splitAxis == .topBottom)
+        #expect(session.splitRatio == 0.3)
+        #expect(session.splitFocused)
+        #expect(session.paneBackgrounds == PaneBackgrounds(left: BackgroundWatermark(kind: .color, colorHex: "#201414"),
+                                                           right: BackgroundWatermark(kind: .text, text: "DRIVER"),
+                                                           scratch: BackgroundWatermark(kind: .text, text: "SCRATCH")))
+    }
+
+    @Test func swappedPaneIdentitiesStayPairedThroughHiddenSplitRestore() throws {
+        let fixture = makeSeededSession()
+
+        #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+        let persisted = fixture.store.snapshot().workspaces[0].sessions[0]
+        let restoredStore = makeStore()
+        restoredStore.restore(from: Snapshot(workspaces: [
+            WorkspaceSnapshot(id: UUID(), name: "work", sessions: [persisted]),
+        ]))
+        let restored = try #require(restoredStore.workspaces[0].sessions.first)
+
+        #expect(!restored.isSplit)
+        #expect(restored.hasSplit)
+        #expect(restored.paneIdentity == UUID(uuidString: "22222222-2222-2222-2222-222222222222"))
+        #expect(restored.splitPaneIdentity == UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
+        #expect(restored.initialCommand == "right command")
+        #expect(restored.commandWait)
+        #expect(restored.splitInitialCommand == "left command")
+        #expect(!restored.splitCommandWait)
+    }
+
+    @Test func aHiddenPaneOverlayStaysHiddenOnItsNewPane() {
+        let fixture = makeSeededSession()
+        let session = fixture.session
+        #expect(fixture.store.setOverlaysHidden(session.id, pane: .left, hidden: true) == nil)
+
+        #expect(fixture.store.swapPanes(session.id) == nil)
+
+        #expect(session.paneOverlay(.right)?.command == "left overlay")
+        #expect(session.overlayHidden(.right))
+        #expect(!session.overlayHidden(.left))
+    }
+
+    @Test func swapAssignsEachSurfaceItsNewRole() {
+        let fixture = makeSeededSession()
+
+        #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+        #expect(fixture.primary.assignedRoles == [.split])
+        #expect(fixture.split.assignedRoles == [.primary])
+    }
+
+    @Test func paneScopedHudFollowsItsStableIdentityThroughSwap() {
+        let fixture = makeSeededSession()
+        let target = fixture.session.paneIdentity
+        fixture.store.openHud(fixture.session.id, command: "hud.sh", spec: HudSpec(message: "working"),
+                              file: "/tmp/hud", size: HudPanelSize(widthPercent: 30, heightPercent: 8),
+                              paneIdentity: target)
+
+        #expect(fixture.session.hudTargetPane == .left)
+        #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+        #expect(fixture.session.hudPaneIdentity == target)
+        #expect(fixture.session.hudTargetPane == .right)
+    }
+
+    @Test func swapUsesCwdFallbacks() {
+        let fixture = makeSeededSession()
+        fixture.session.currentCwd = nil
+        fixture.session.splitCwd = nil
+        fixture.session.initialSplitCwd = "/seed-right"
+
+        #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+        #expect(fixture.session.currentCwd == "/seed-right")
+        #expect(fixture.session.splitCwd == "/initial-left")
+        #expect(fixture.session.initialSplitCwd == "/initial-left")
+    }
+
+    @Test func swappingTwiceRestoresPaneStateIncludingNilPin() {
+        let fixture = makeSeededSession()
+        let before = State(fixture.session)
+        let snapshotBefore = fixture.store.snapshot()
+
+        #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+        #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+        #expect(State(fixture.session) == before)
+        #expect(fixture.store.snapshot() == snapshotBefore)
+    }
+
+    @Test func closeSplitAfterSwapDropsOnlyTheDepartedCreationIdentity() {
+        let fixture = makeSeededSession()
+
+        #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+        fixture.store.closeSplit(fixture.session.id)
+
+        #expect(fixture.session.initialCommand == "right command")
+        #expect(fixture.session.commandWait)
+        #expect(fixture.session.splitInitialCommand == nil)
+        #expect(!fixture.session.splitCommandWait)
+        #expect(!fixture.session.hasSplit)
+    }
+
+    @Test func primaryExitAfterSwapPromotesTheSurvivingCreationIdentity() {
+        let fixture = makeSeededSession()
+
+        #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+        fixture.store.closePrimaryPane(fixture.session.id)
+
+        #expect(fixture.session.surface === fixture.primary)
+        #expect(fixture.session.initialCommand == "left command")
+        #expect(!fixture.session.commandWait)
+        #expect(fixture.session.splitInitialCommand == nil)
+        #expect(!fixture.session.splitCommandWait)
+        #expect(!fixture.session.hasSplit)
+    }
+
+    @Test func swapRetagsEveryStatusOwnerWithoutChangingStatusTime() {
+        let cases: [(AgentStatus, StatusPane?, StatusPane?)] = [
+            (.blocked, nil, .right), (.completed, .left, .right), (.active, .right, .left),
+            (.blocked, .scratch, .scratch), (.idle, nil, nil),
+        ]
+        for (status, before, expected) in cases {
+            let fixture = makeSeededSession()
+            fixture.session.agentIndicator = AgentIndicator(status: status, statusPane: before)
+            let changedAt = Date(timeIntervalSince1970: 456)
+            fixture.session.statusChangedAt = changedAt
+
+            #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+            #expect(fixture.session.agentIndicator.status == status)
+            #expect(fixture.session.agentIndicator.statusPane == expected)
+            #expect(fixture.session.statusChangedAt == changedAt)
+        }
+    }
+
+    @Test func swapMovesEachPanesWorkWithItsTerminal() {
+        let fixture = makeSeededSession()
+        fixture.store.applyControlStatus(AgentIndicator(status: .active, statusPane: .left), forSession: fixture.session.id)
+
+        #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+        fixture.store.applyControlStatus(AgentIndicator(status: .completed, statusPane: .left), forSession: fixture.session.id)
+
+        #expect(Array(fixture.session.paneActivity.keys) == [.right])
+        #expect(fixture.session.agentIndicator.status == .active)
+        #expect(fixture.session.agentIndicator.statusPane == .right)
+    }
+
+    private func workingSplitSession(shown: StatusPane) -> (AppStore, Session) {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = store.addSession(toWorkspace: ws.id, cwd: "/a")!
+        store.toggleSplit(session.id)
+        let other: StatusPane = shown == .left ? .right : .left
+        store.applyControlStatus(AgentIndicator(status: .active, statusPane: other), forSession: session.id)
+        store.applyControlStatus(AgentIndicator(status: .active, statusPane: shown), forSession: session.id)
+        return (store, session)
+    }
+
+    @Test func closingTheSplitLeavesTheLeftPanesWorkOnTheRow() {
+        let (store, session) = workingSplitSession(shown: .right)
+
+        store.closeSplit(session.id)
+
+        #expect(session.agentIndicator == AgentIndicator(status: .active, statusPane: .left))
+        #expect(Array(session.paneActivity.keys) == [.left])
+    }
+
+    @Test func aPrimaryExitPromotesTheSplitsWorkWithIt() {
+        let (store, session) = workingSplitSession(shown: .left)
+        session.surface = SpySurface()
+        session.splitSurface = SpySurface()
+
+        #expect(store.closePrimaryPane(session.id) == .promoted)
+
+        #expect(session.agentIndicator == AgentIndicator(status: .active, statusPane: .left))
+        #expect(Array(session.paneActivity.keys) == [.left])
+    }
+
+    @Test(arguments: [true, false])
+    func swapRefusesMissingSlotWithoutMutation(missingPrimary: Bool) {
+        let fixture = makeSeededSession()
+        if missingPrimary { fixture.session.surface = nil } else { fixture.session.splitSurface = nil }
+        let before = State(fixture.session)
+
+        #expect(fixture.store.swapPanes(fixture.session.id) == .slotNotRealized)
+        #expect(State(fixture.session) == before)
+    }
+
+    @Test func aHeadlessSwapExchangesThePanesWithNoSurfaces() {
+        let (store, session) = makeHeadlessSession(split: true)
+        let primary = session.paneIdentity
+        let split = session.splitPaneIdentity!
+        session.currentCwd = "/left"
+        session.splitCwd = "/right"
+
+        #expect(store.swapPanes(session.id) == nil)
+        #expect(session.paneIdentity == split)
+        #expect(session.splitPaneIdentity == primary)
+        #expect(session.currentCwd == "/right")
+        #expect(session.splitCwd == "/left")
+        #expect(session.paneRole(forToken: split.uuidString) == .left)
+        #expect(store.swapPanes(session.id) == nil)
+        #expect(session.paneIdentity == primary)
+    }
+
+    @Test func swapRefusesUnknownOrSplitlessSessionWithoutMutation() {
+        let store = makeStore()
+        let before = store.snapshot()
+        #expect(store.swapPanes(UUID()) == .noSession)
+        #expect(store.snapshot() == before)
+
+        let workspace = store.addWorkspace(name: "work")
+        let session = store.addSession(toWorkspace: workspace.id, cwd: "/a")!
+        session.surface = SpySurface()
+        session.splitSurface = SpySurface()
+        let sessionBefore = State(session)
+        #expect(store.swapPanes(session.id) == .noSplit)
+        #expect(State(session) == sessionBefore)
+    }
+
+    @Test(arguments: [true, false])
+    func swapRefusesRigidSurfaceWithoutMutation(rigidPrimary: Bool) {
+        let fixture = makeSeededSession()
+        if rigidPrimary {
+            fixture.session.surface = RigidSurface()
+        } else {
+            fixture.session.splitSurface = RigidSurface()
+        }
+        let before = State(fixture.session)
+
+        #expect(fixture.store.swapPanes(fixture.session.id) == .roleNotMutable)
+        #expect(State(fixture.session) == before)
+    }
+
+    @Test func aSwapKeepsTheStatusOwnersIdentityForAViewer() throws {
+        let fixture = makeSeededSession()
+        let split = try #require(fixture.session.splitPaneIdentity)
+        fixture.store.applyControlStatus(AgentIndicator(status: .blocked, statusPane: .right),
+                                         forSession: fixture.session.id)
+
+        #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+
+        #expect(fixture.session.agentIndicator.statusPane == .left)
+        #expect(fixture.store.presentationSnapshot(forSession: fixture.session.id).status?.pane
+                == .identity(split))
+    }
+
+    @Test func anUnspecifiedStatusOwnerKeepsThePrimaryIdentityThroughASwap() throws {
+        let fixture = makeSeededSession()
+        let primary = fixture.session.paneIdentity
+        fixture.store.applyControlStatus(AgentIndicator(status: .blocked), forSession: fixture.session.id)
+        #expect(fixture.store.presentationSnapshot(forSession: fixture.session.id).status?.pane
+                == .identity(primary))
+
+        #expect(fixture.store.swapPanes(fixture.session.id) == nil)
+
+        #expect(fixture.session.agentIndicator.statusPane == .right)
+        #expect(fixture.store.presentationSnapshot(forSession: fixture.session.id).status?.pane
+                == .identity(primary))
+    }
+
+    @Test func aMirroredStatusFollowsItsPaneThroughASwapOnTheViewer() throws {
+        let fixture = makeSeededSession()
+        let session = fixture.session
+        let remoteRight = UUID()
+        let split = try #require(session.splitPaneIdentity)
+        fixture.store.bindRemote(RemoteBinding(remoteSessionID: "s1",
+                                               daemonsByLocalPane: [split: ZmxSupport.daemonName(for: remoteRight)],
+                                               presentationVersion: 1), forSession: session.id)
+        let status = PresentationStatus(status: .blocked, blink: false, color: nil, shape: nil,
+                                        pane: .identity(remoteRight), changedAt: nil)
+        fixture.store.applyRemoteStatus(status, forSession: session.id)
+        #expect(session.agentIndicator.statusPane == .right)
+
+        #expect(fixture.store.swapPanes(session.id) == nil)
+        fixture.store.applyRemoteStatus(status, forSession: session.id)
+
+        #expect(session.agentIndicator.statusPane == .left, "the shell moved to the primary slot and the glyph with it")
+    }
+
+    // ownership was once a value comparison, which a swap's rewrite of the pane tag defeated
+    @Test func aSwapOnTheViewerDoesNotStrandAMirroredStatusAtDisconnect() throws {
+        let fixture = makeSeededSession()
+        let session = fixture.session
+        let remoteRight = UUID()
+        let split = try #require(session.splitPaneIdentity)
+        fixture.store.bindRemote(RemoteBinding(remoteSessionID: "s1",
+                                               daemonsByLocalPane: [split: ZmxSupport.daemonName(for: remoteRight)],
+                                               presentationVersion: 1), forSession: session.id)
+        fixture.store.setRemoteConnection(.connected, forSession: session.id)
+        fixture.store.applyRemoteStatus(PresentationStatus(status: .blocked, blink: false, color: nil, shape: nil,
+                                                           pane: .identity(remoteRight), changedAt: nil),
+                                        forSession: session.id)
+
+        #expect(fixture.store.swapPanes(session.id) == nil)
+        fixture.store.setRemoteConnection(.connecting, forSession: session.id)
+
+        #expect(session.agentIndicator.status == .idle)
+    }
+
+    private func attach(_ fixture: Fixture, remoteRight: UUID) throws {
+        let split = try #require(fixture.session.splitPaneIdentity)
+        fixture.store.bindRemote(RemoteBinding(remoteSessionID: "s1",
+                                               daemonsByLocalPane: [split: ZmxSupport.daemonName(for: remoteRight)],
+                                               presentationVersion: 1), forSession: fixture.session.id)
+        fixture.store.setRemoteConnection(.connected, forSession: fixture.session.id)
+    }
+
+    // the promotion re-tags the glyph through the local status setter, which took it away from the bridge
+    @Test func aMirroredStatusThatFollowsItsPaneThroughAPromotionStillLeavesWithTheStream() throws {
+        let fixture = makeSeededSession()
+        let session = fixture.session
+        let remoteRight = UUID()
+        try attach(fixture, remoteRight: remoteRight)
+        fixture.store.applyRemoteStatus(PresentationStatus(status: .blocked, blink: false, color: nil, shape: nil,
+                                                           pane: .identity(remoteRight), changedAt: nil),
+                                        forSession: session.id)
+
+        fixture.store.closePrimaryPane(session.id)
+        #expect(session.agentIndicator.status == .blocked)
+        #expect(session.agentIndicator.statusPane == .left)
+        fixture.store.setRemoteConnection(.connecting, forSession: session.id)
+
+        #expect(session.agentIndicator.status == .idle)
+    }
+
+    @Test func aStatusWithNoLocalOwnerGainsNoneFromASwap() throws {
+        let fixture = makeSeededSession()
+        let session = fixture.session
+        try attach(fixture, remoteRight: UUID())
+        fixture.store.applyRemoteStatus(PresentationStatus(status: .blocked, blink: false, color: nil, shape: nil,
+                                                           pane: .scratch, changedAt: nil), forSession: session.id)
+
+        #expect(fixture.store.swapPanes(session.id) == nil)
+
+        #expect(session.agentIndicator.statusPane == nil)
+    }
+
+    @Test func aStatusWithNoLocalOwnerSurvivesThePrimaryClosing() throws {
+        let fixture = makeSeededSession()
+        let session = fixture.session
+        try attach(fixture, remoteRight: UUID())
+        fixture.store.applyRemoteStatus(PresentationStatus(status: .blocked, blink: false, color: nil, shape: nil,
+                                                           pane: .scratch, changedAt: nil), forSession: session.id)
+
+        fixture.store.closePrimaryPane(session.id)
+
+        #expect(session.agentIndicator.status == .blocked)
+        #expect(session.agentIndicator.statusPane == nil)
+        #expect(session.remotePresentation?.statusOwnerUnknown == true)
+    }
+}

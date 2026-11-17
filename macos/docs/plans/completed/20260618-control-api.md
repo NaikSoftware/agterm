@@ -2,13 +2,13 @@
 
 ## Overview
 
-Add a kitty-style programmatic control channel to `hangar`: an external script can manage
+Add a kitty-style programmatic control channel to `elis`: an external script can manage
 workspaces and sessions, inject text into a session, and invoke control actions (split,
 quick terminal, font, status bar) — all over a local unix domain socket, driven by a
-companion `hangarctl` CLI.
+companion `elisctl` CLI.
 
 - **Problem it solves:** today every action is GUI-only (sidebar, menu bar, palettes).
-  There is no way to drive `hangar` from a script.
+  There is no way to drive `elis` from a script.
 - **Scope (locked in brainstorm):** personal scripting. Fire-and-forget commands. **No**
   terminal-output/scrollback streaming, **no** event subscription — explicitly out of scope.
 - **Integration:** the server is a thin dispatcher onto the *existing* `AppActions` /
@@ -18,11 +18,11 @@ companion `hangarctl` CLI.
 ## Context (from discovery)
 
 - **Project:** native macOS SwiftUI terminal on libghostty. Two modules: host-free
-  `HangarCore` (Foundation/Observation only, `swift test`) + an app target (SwiftUI + the
+  `ElisCore` (Foundation/Observation only, `swift test`) + an app target (SwiftUI + the
   libghostty/AppKit bridge). Pattern to mirror: the git layer — *pure decisions in
-  `HangarCore`, all I/O in the app target*.
-- **The seam already exists:** `AppActions` (`Hangar/AppActions.swift`) + `AppStore`
-  (`HangarCore/Sources/HangarCore/AppStore.swift`) own every mutation. Confirmed signatures (read
+  `ElisCore`, all I/O in the app target*.
+- **The seam already exists:** `AppActions` (`Elis/AppActions.swift`) + `AppStore`
+  (`ElisCore/Sources/ElisCore/AppStore.swift`) own every mutation. Confirmed signatures (read
   from source):
   - `AppStore`: `addWorkspace(name:) -> Workspace`, `addSession(toWorkspace:cwd:) -> Session?`,
     `selectSession(_:)`, `renameSession(_:to:)`, `renameWorkspace(_:to:)`, `closeSession(_:)`,
@@ -38,8 +38,8 @@ companion `hangarctl` CLI.
     `GhosttySurfaceView.performBindingAction(_:)` (not `AppStore.setFontSize`, which is the
     persistence sink for the CELL_SIZE path).
 - **Socket path rendezvous:** `PersistenceStore.directory` is private, but
-  `PersistenceStore.defaultDirectory` is a public static (`~/Library/Application Support/hangar`).
-  Both the app and the CLI derive the socket directory from it (or from `HANGAR_STATE_DIR`), so
+  `PersistenceStore.defaultDirectory` is a public static (`~/Library/Application Support/elis`).
+  Both the app and the CLI derive the socket directory from it (or from `ELIS_STATE_DIR`), so
   they agree without exposing the instance directory.
 - **Text injection primitive exists:** `ghostty_surface_text(surface, const char*, len)`
   (GhosttyKit header line 1128). `ghostty_surface_key` also exists (future `session.key`,
@@ -50,22 +50,22 @@ companion `hangarctl` CLI.
   `id: UUID`. A script can stash an id and it still resolves after a relaunch.
 - **Quick terminal:** `QuickTerminalController.shared` has `toggle()`, `hide()`, `isVisible`,
   `currentSurface()` — but **no `show()`** (one-line glue needed).
-- **Test isolation:** the app honors `HANGAR_STATE_DIR` for persistence; XCUITests use it for a
+- **Test isolation:** the app honors `ELIS_STATE_DIR` for persistence; XCUITests use it for a
   hermetic temp dir and assert via polling `workspaces.json`. The socket reuses the same dir.
-- **`HangarCore` has zero external dependencies today** (a stated value). The CLI will add
-  `swift-argument-parser`, but only on the CLI targets — the `HangarCore` *library* target stays
+- **`ElisCore` has zero external dependencies today** (a stated value). The CLI will add
+  `swift-argument-parser`, but only on the CLI targets — the `ElisCore` *library* target stays
   Foundation-only.
 
 ## Development Approach
 
-- **testing approach:** TDD where practical — the pure `HangarCore` pieces (protocol codecs,
+- **testing approach:** TDD where practical — the pure `ElisCore` pieces (protocol codecs,
   target resolver, socket-path resolver) get tests first; the socket server and CLI are
   covered by end-to-end socket tests and arg-parsing tests.
 - complete each task fully before moving to the next; make small, focused changes.
 - **CRITICAL: every task MUST include new/updated tests** (success + error scenarios).
 - **CRITICAL: all tests must pass before starting the next task.** Gate per task:
-  `cd HangarCore && swift test` (host-free) and, for app-target tasks, the relevant
-  `xcodebuild test … -only-testing:HangarUITests/ControlAPIUITests` case(s). The app must build.
+  `cd ElisCore && swift test` (host-free) and, for app-target tasks, the relevant
+  `xcodebuild test … -only-testing:ElisUITests/ControlAPIUITests` case(s). The app must build.
 - **CRITICAL: update this plan file when scope changes during implementation.**
 - maintain backward compatibility: the control channel is additive and best-effort; if the
   socket fails to bind, the app still launches normally.
@@ -75,9 +75,9 @@ companion `hangarctl` CLI.
 **Any new user action added to `AppActions`/`AppStore` is not "done" until it is drivable
 from the socket.** Shipping a new action requires all four of:
 
-1. a `Command` case (+ any args) in `HangarCore`'s control protocol,
+1. a `Command` case (+ any args) in `ElisCore`'s control protocol,
 2. a dispatch arm in `ControlServer`,
-3. an `hangarctl` subcommand,
+3. an `elisctl` subcommand,
 4. protocol round-trip + end-to-end tests for it.
 
 This extends the existing "`AppActions` is shared by the toolbar and menu bar so the two
@@ -86,13 +86,13 @@ never drift" rule to a **third surface** (the control channel). It is written in
 
 ## Testing Strategy
 
-- **unit tests (`HangarCore`, host-free, `swift test`):** round-trip encode/decode for every
+- **unit tests (`ElisCore`, host-free, `swift test`):** round-trip encode/decode for every
   `ControlRequest`/`ControlResponse` shape; the pure target resolver across all cases
   (`active` present/nil, exact UUID, unique prefix, ambiguous, not-found, empty); the pure
-  socket-path resolver (with/without `HANGAR_STATE_DIR`).
-- **arg-parsing tests (`hangarctlKit`, host-free):** each CLI subcommand builds the correct
+  socket-path resolver (with/without `ELIS_STATE_DIR`).
+- **arg-parsing tests (`elisctlKit`, host-free):** each CLI subcommand builds the correct
   `ControlRequest`; round-trip against an in-process stub socket server (no app host).
-- **end-to-end (XCUITest `ControlAPIUITests`):** launch the real app with `HANGAR_STATE_DIR` +
+- **end-to-end (XCUITest `ControlAPIUITests`):** launch the real app with `ELIS_STATE_DIR` +
   isolated socket, speak the socket directly (POSIX) from the test process, and assert via
   the `workspaces.json` file-polling oracle the existing sidebar tests use. `session.type` is
   verified the same way the split test verifies focus — type a command that writes to a file,
@@ -109,7 +109,7 @@ never drift" rule to a **third surface** (the control channel). It is written in
 
 Three layers, placed to match the core/app split:
 
-1. **Protocol + pure logic in `HangarCore`** (Foundation-only, `Codable`, `Sendable`):
+1. **Protocol + pure logic in `ElisCore`** (Foundation-only, `Codable`, `Sendable`):
    `Command` enum, `ControlArgs`, `ControlRequest`, `ControlResult`, `ControlResponse`, the
    tree-projection node types, the pure **target resolver**, and the pure **socket-path
    resolver**. Shared by the app and the CLI so the wire contract cannot drift.
@@ -118,9 +118,9 @@ Three layers, placed to match the core/app split:
    `ControlRequest` decoded, hopped to `@MainActor`, executed by calling the existing
    `AppActions`/`AppStore` methods (and a new thin `GhosttySurfaceView.inject(text:)` for
    input), response encoded and written back, connection closed.
-3. **`hangarctl` CLI** (`swift-argument-parser`): subcommands mirror the catalog 1:1; opens the
+3. **`elisctl` CLI** (`swift-argument-parser`): subcommands mirror the catalog 1:1; opens the
    socket, sends one request, prints the response (`--json` for raw), exit code follows `ok`.
-   Lives in the `HangarCore` SwiftPM package as `hangarctlKit` (testable lib) + a thin `hangarctl`
+   Lives in the `ElisCore` SwiftPM package as `elisctlKit` (testable lib) + a thin `elisctl`
    executable, so it builds with `swift build` and needs no Xcode/GhosttyKit.
 
 Key design decisions:
@@ -146,7 +146,7 @@ response: {"ok":true,"result":{"id":"9f3c…"}}
 Mutating commands return the new id in `result.id` so a script can create-then-use without a
 second round-trip. `tree` returns `result.tree`.
 
-### `HangarCore` type sketches (Foundation-only, `Codable`, `Sendable`)
+### `ElisCore` type sketches (Foundation-only, `Codable`, `Sendable`)
 
 ```
 enum Command: String, Codable, Sendable {
@@ -183,7 +183,7 @@ struct ControlResponse: Codable, Sendable { let ok: Bool; var result: ControlRes
 - An unknown `cmd` fails to decode (enum has no matching raw value) → the server catches the
   decode error and replies `{"ok":false,"error":"unknown command: …"}`.
 
-### Target resolver (pure, `HangarCore`)
+### Target resolver (pure, `ElisCore`)
 
 ```
 enum TargetResolution: Equatable, Sendable { case resolved(UUID); case notFound; case ambiguous([UUID]) }
@@ -199,18 +199,18 @@ enum ControlResolve {
 - otherwise prefix match on `uuidString.lowercased()`: 1 hit → `.resolved`, 0 → `.notFound`,
   ≥2 → `.ambiguous(hits)`.
 
-### Socket path resolver (pure, `HangarCore`)
+### Socket path resolver (pure, `ElisCore`)
 
 ```
 enum ControlResolve { static func socketPath(stateDir: String?, appSupport: String) -> String }
 ```
 
-- `stateDir` (the `HANGAR_STATE_DIR` value, if set) → `<stateDir>/hangar.sock`; else
-  `<appSupport>/hangar.sock`. Callers pass `appSupport = PersistenceStore.defaultDirectory.path`
-  (the public static, `~/Library/Application Support/hangar` — same directory
+- `stateDir` (the `ELIS_STATE_DIR` value, if set) → `<stateDir>/elis.sock`; else
+  `<appSupport>/elis.sock`. Callers pass `appSupport = PersistenceStore.defaultDirectory.path`
+  (the public static, `~/Library/Application Support/elis` — same directory
   `PersistenceStore` writes `workspaces.json`). The app and the CLI both call this with the
   same inputs, so they always rendezvous. (Note: a unix socket path has a ~104-byte length
-  limit; the default and `HANGAR_STATE_DIR` temp paths are well under it.)
+  limit; the default and `ELIS_STATE_DIR` temp paths are well under it.)
 
 ### `ControlServer` (app target, `@MainActor`)
 
@@ -242,7 +242,7 @@ enum ControlResolve { static func socketPath(stateDir: String?, appSupport: Stri
     `{"ok":false,"error":"session not realized"}` — **never a false `ok`**.
   - `surface == nil` without `select` → immediate `{"ok":false,"error":"session not realized; use select"}`.
   - Headless realization is out of scope. (Decision: the readiness check stays app-side — it
-    reads live `GhosttySurfaceView` state; no `HangarCore` predicate, a 1-condition check is not
+    reads live `GhosttySurfaceView` state; no `ElisCore` predicate, a 1-condition check is not
     worth abstracting.)
 - `session.split`: resolve the **target** session and drive `AppStore.toggleSplit(target)` /
   `AppStore.closeSplit(target)` directly (NOT `AppActions.toggleSplit()`, which only acts on
@@ -254,12 +254,12 @@ enum ControlResolve { static func socketPath(stateDir: String?, appSupport: Stri
 - `font.*`: resolve the target surface and call `performBindingAction` on it (targets a
   specific surface, unlike the menu path which only hits the focused one).
 
-### CLI (`hangarctlKit` lib + `hangarctl` exe, `swift-argument-parser`)
+### CLI (`elisctlKit` lib + `elisctl` exe, `swift-argument-parser`)
 
-- `HangarCore` `Package.swift` gains: the `swift-argument-parser` package dependency; an
-  `hangarctlKit` library target (deps: `HangarCore`, `ArgumentParser`) holding the `ParsableCommand`
-  tree + the socket client (connect/write/read); an `hangarctl` executable target (thin `main`
-  → `hangarctlKit`); an `hangarctlKitTests` test target. **The `HangarCore` library target adds no new
+- `ElisCore` `Package.swift` gains: the `swift-argument-parser` package dependency; an
+  `elisctlKit` library target (deps: `ElisCore`, `ArgumentParser`) holding the `ParsableCommand`
+  tree + the socket client (connect/write/read); an `elisctl` executable target (thin `main`
+  → `elisctlKit`); an `elisctlKitTests` test target. **The `ElisCore` library target adds no new
   dependency** — only the CLI targets link `ArgumentParser`.
 - `--target` defaults to `active`; `--socket PATH` overrides the resolved path; `--json` emits
   the raw response; `--stdin` (on `session type`) reads the text from stdin. Exit code = 0 on
@@ -273,11 +273,11 @@ enum ControlResolve { static func socketPath(stateDir: String?, appSupport: Stri
 
 ## Implementation Steps
 
-### Task 1: HangarCore control protocol types + codecs
+### Task 1: ElisCore control protocol types + codecs
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Create: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
 
 - [x] define `Command` enum, `ControlArgs`, `ControlRequest`, the tree node types
       (`ControlSessionNode`, `ControlWorkspaceNode`, `ControlTree`), `ControlResult`,
@@ -289,13 +289,13 @@ enum ControlResolve { static func socketPath(stateDir: String?, appSupport: Stri
 - [x] write round-trip tests for responses: ok+id, ok+tree, error
 - [x] write a decode test: an unknown `cmd` string fails to decode (drives the server's
       "unknown command" error path)
-- [x] run `cd HangarCore && swift test` — must pass before Task 2
+- [x] run `cd ElisCore && swift test` — must pass before Task 2
 
-### Task 2: HangarCore pure target + socket-path resolvers
+### Task 2: ElisCore pure target + socket-path resolvers
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/ControlResolve.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/ControlResolveTests.swift`
+- Create: `ElisCore/Sources/ElisCore/ControlResolve.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/ControlResolveTests.swift`
 
 - [x] implement `ControlResolve.resolve(_:candidates:active:) -> TargetResolution` (active /
       exact uuid / unique prefix / ambiguous / not-found)
@@ -303,15 +303,15 @@ enum ControlResolve { static func socketPath(stateDir: String?, appSupport: Stri
 - [x] write resolver tests: `active` resolves, `active` with nil → notFound, exact uuid
       (case-insensitive), unique prefix, ambiguous prefix → `.ambiguous` listing hits,
       no-match → notFound, empty candidates
-- [x] write path tests: with `stateDir` → `<stateDir>/hangar.sock`; without → `<appSupport>/hangar.sock`
-- [x] run `cd HangarCore && swift test` — must pass before Task 3
+- [x] write path tests: with `stateDir` → `<stateDir>/elis.sock`; without → `<appSupport>/elis.sock`
+- [x] run `cd ElisCore && swift test` — must pass before Task 3
 
 ### Task 3: ControlServer socket skeleton, lifecycle, `tree`, and app wiring
 
 **Files:**
-- Create: `Hangar/Control/ControlServer.swift`
-- Modify: `Hangar/hangarApp.swift`
-- Create: `HangarUITests/ControlAPIUITests.swift`
+- Create: `Elis/Control/ControlServer.swift`
+- Modify: `Elis/elisApp.swift`
+- Create: `ElisUITests/ControlAPIUITests.swift`
 
 - [x] implement `ControlServer` (`@MainActor`): bind a POSIX unix socket at the resolved path
       (unlink stale first, `chmod 0600`), accept loop on a background `DispatchQueue`, read a
@@ -323,30 +323,30 @@ enum ControlResolve { static func socketPath(stateDir: String?, appSupport: Stri
       structured `error`, never crash
 - [x] implement the first dispatch arms: `tree` (project `AppStore.workspaces` →
       `ControlTree` with active flags), `session.select`, `workspace.select`
-- [x] wire into `hangarApp`: construct `ControlServer(store:actions:)` in `hangarApp.init` (alongside
+- [x] wire into `elisApp`: construct `ControlServer(store:actions:)` in `elisApp.init` (alongside
       `actions`, where `store` already exists — not via the delegate's late-assigned `store`),
       `start()` it in the scene `.task`, `stop()` it from `AppDelegate.applicationWillTerminate`
 - [x] add `ControlAPIUITests` with a socket helper (connect, send one line, read one line) and
-      a **success** test: launch with `HANGAR_STATE_DIR` + isolated socket, send `tree`, assert
+      a **success** test: launch with `ELIS_STATE_DIR` + isolated socket, send `tree`, assert
       the seeded workspace/session appear with ids
 - [x] add an **error-path** test: a malformed JSON line → `{"ok":false}` with an `error`, and
       the server stays alive (a subsequent `tree` still succeeds)
-- [x] run `cd HangarCore && swift test` + `xcodebuild test … -only-testing:HangarUITests/ControlAPIUITests` (Task 3 cases) — must pass before Task 4
+- [x] run `cd ElisCore && swift test` + `xcodebuild test … -only-testing:ElisUITests/ControlAPIUITests` (Task 3 cases) — must pass before Task 4
 
-➕ **Scope discovered (Task 3):** added an `HANGAR_CONTROL_SOCKET` env override to
-`ControlServer.defaultSocketPath()` (takes precedence over the `HANGAR_STATE_DIR`-derived path). The
-XCUITest runner is sandboxed: its per-test `HANGAR_STATE_DIR` container path is ~135 bytes (over the
+➕ **Scope discovered (Task 3):** added an `ELIS_CONTROL_SOCKET` env override to
+`ControlServer.defaultSocketPath()` (takes precedence over the `ELIS_STATE_DIR`-derived path). The
+XCUITest runner is sandboxed: its per-test `ELIS_STATE_DIR` container path is ~135 bytes (over the
 unix-socket `sun_path` ~104-byte limit) and `/tmp` is outside its sandbox grant (connect → EPERM).
 The override lets the test bind/connect a short socket inside the runner's own temp dir
 (`NSTemporaryDirectory()`, ~81 bytes). The CLI's `--socket` flag (Task 7) is the user-facing
-equivalent; the resolver in `HangarCore` is unchanged.
+equivalent; the resolver in `ElisCore` is unchanged.
 
 ### Task 4: input injection + structural commands
 
 **Files:**
-- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift`
-- Modify: `Hangar/Control/ControlServer.swift`
-- Modify: `HangarUITests/ControlAPIUITests.swift`
+- Modify: `Elis/Ghostty/GhosttySurfaceView.swift`
+- Modify: `Elis/Control/ControlServer.swift`
+- Modify: `ElisUITests/ControlAPIUITests.swift`
 
 - [x] add `GhosttySurfaceView.inject(text:)` wrapping `ghostty_surface_text(surface, ptr,
       len)` (copy the UTF-8 bytes; no-op when `surface == nil`)
@@ -359,13 +359,13 @@ equivalent; the resolver in `HangarCore` is unchanged.
       in json
 - [x] e2e **error**: `workspace.delete` of the last workspace returns the keep-one error
       (workspace still present); a command with an unknown `target` returns `no such …`
-- [x] run `cd HangarCore && swift test` + the relevant `ControlAPIUITests` cases — must pass before Task 5
+- [x] run `cd ElisCore && swift test` + the relevant `ControlAPIUITests` cases — must pass before Task 5
 
 ### Task 5: `session.type` with surface-realization handling
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer.swift`
-- Modify: `HangarUITests/ControlAPIUITests.swift`
+- Modify: `Elis/Control/ControlServer.swift`
+- Modify: `ElisUITests/ControlAPIUITests.swift`
 
 - [x] add the `session.type` dispatch arm: `surface != nil` → `inject(text:)`, return `ok`
 - [x] `surface == nil` with `select:true` → `selectSession`, then bounded poll for
@@ -379,15 +379,15 @@ equivalent; the resolver in `HangarCore` is unchanged.
       realizes it and the text lands (assert via the FILE oracle)
 - [x] e2e **error**: `session.type` without `select` into a never-shown session returns
       `session not realized`
-- [x] run `cd HangarCore && swift test` + the relevant `ControlAPIUITests` cases — must pass before Task 6
+- [x] run `cd ElisCore && swift test` + the relevant `ControlAPIUITests` cases — must pass before Task 6
 
 ### Task 6: control actions — split, quick terminal, font, status bar
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer.swift`
-- Modify: `Hangar/Views/QuickTerminal.swift`
-- Modify: `Hangar/ContentView.swift` (➕ accessibility-id move, see note below)
-- Modify: `HangarUITests/ControlAPIUITests.swift`
+- Modify: `Elis/Control/ControlServer.swift`
+- Modify: `Elis/Views/QuickTerminal.swift`
+- Modify: `Elis/ContentView.swift` (➕ accessibility-id move, see note below)
+- Modify: `ElisUITests/ControlAPIUITests.swift`
 
 - [x] add `QuickTerminalController.show()` (set `isVisible = true`) for the `quick show` mode
 - [x] add `session.split` dispatch: resolve the **target** id and drive
@@ -401,27 +401,27 @@ equivalent; the resolver in `HangarCore` is unchanged.
       `quick-terminal` accessibility element appear; `font.inc` returns `ok`
 - [x] e2e **error**: an invalid `mode` (e.g. `statusbar bogus`) returns an error and does NOT
       flip state
-- [x] run `cd HangarCore && swift test` + the relevant `ControlAPIUITests` cases — must pass before Task 7
+- [x] run `cd ElisCore && swift test` + the relevant `ControlAPIUITests` cases — must pass before Task 7
 
 ➕ **Scope discovered (Task 6):** the `quick-terminal` accessibility identifier sat on the
 Metal-backed `QuickTerminalPane` (an `NSViewRepresentable`), which is NOT exposed in the XCUI
 accessibility tree — the `quick toggle` e2e assertion could never find it. Moved the identifier to
 the overlay's transparent tap-catcher (`Color.clear`, a real SwiftUI view) with an explicit
-`.accessibilityElement()`, in `Hangar/ContentView.swift`. Same overlay, queryable element.
+`.accessibilityElement()`, in `Elis/ContentView.swift`. Same overlay, queryable element.
 
-### Task 7: hangarctl CLI (hangarctlKit lib + hangarctl executable)
+### Task 7: elisctl CLI (elisctlKit lib + elisctl executable)
 
 **Files:**
-- Modify: `HangarCore/Package.swift`
-- Create: `HangarCore/Sources/hangarctlKit/Commands.swift`
-- Create: `HangarCore/Sources/hangarctlKit/SocketClient.swift`
-- Create: `HangarCore/Sources/hangarctl/main.swift`
-- Create: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
-- Create: `HangarCore/Tests/hangarctlKitTests/SocketClientTests.swift`
+- Modify: `ElisCore/Package.swift`
+- Create: `ElisCore/Sources/elisctlKit/Commands.swift`
+- Create: `ElisCore/Sources/elisctlKit/SocketClient.swift`
+- Create: `ElisCore/Sources/elisctl/main.swift`
+- Create: `ElisCore/Tests/elisctlKitTests/CommandsTests.swift`
+- Create: `ElisCore/Tests/elisctlKitTests/SocketClientTests.swift`
 
-- [x] add the `swift-argument-parser` dependency; add `hangarctlKit` library (deps `HangarCore` +
-      `ArgumentParser`), `hangarctl` executable (dep `hangarctlKit`), and `hangarctlKitTests` targets —
-      leaving the `HangarCore` **library** target dependency-free
+- [x] add the `swift-argument-parser` dependency; add `elisctlKit` library (deps `ElisCore` +
+      `ArgumentParser`), `elisctl` executable (dep `elisctlKit`), and `elisctlKitTests` targets —
+      leaving the `ElisCore` **library** target dependency-free
 - [x] implement the `ParsableCommand` tree (`Commands.swift`) mirroring the catalog 1:1
       (`tree`, `workspace new|rename|delete|select`, `session new|close|select|rename|move|type|
       split`, `quick`, `font inc|dec|reset`, `statusbar`); each maps args to a `ControlRequest`
@@ -433,21 +433,21 @@ the overlay's transparent tap-catcher (`Color.clear`, a real SwiftUI view) with 
       (cmd/target/args), incl. an invalid-args error case
 - [x] write `SocketClientTests.swift`: round-trip against an in-process stub unix-socket server
       that echoes a canned `ControlResponse`; assert decode + exit-code mapping (ok and error)
-- [x] run `cd HangarCore && swift test` (now includes `hangarctlKitTests`) — must pass before Task 8
+- [x] run `cd ElisCore && swift test` (now includes `elisctlKitTests`) — must pass before Task 8
 
 ### Task 8: Verify acceptance criteria
 
 **Files:**
-- Modify: `HangarUITests/ControlAPIUITests.swift`
+- Modify: `ElisUITests/ControlAPIUITests.swift`
 
 - [x] add the integration coverage NOT already gated per-task: `session.select` by **unique
       prefix** of an id resolves; an **ambiguous-prefix** request returns the `ambiguous` error
       listing candidates; `active` targeting with no explicit id works end-to-end
 - [x] verify every catalog command has (1) a `Command` case, (2) a dispatch arm, (3) an
-      `hangarctl` subcommand, (4) a test — the keep-in-sync four-point check (all 17 commands pass;
-      no gap found — every command has a Command case, a ControlServer dispatch arm, an hangarctl
+      `elisctl` subcommand, (4) a test — the keep-in-sync four-point check (all 17 commands pass;
+      no gap found — every command has a Command case, a ControlServer dispatch arm, an elisctl
       subcommand, and a CLI parse test in CommandsTests + protocol/resolver unit coverage)
-- [x] run the full gate: `cd HangarCore && swift test` + all `HangarUITests` — must pass before Task 9
+- [x] run the full gate: `cd ElisCore && swift test` + all `ElisUITests` — must pass before Task 9
 
 ### Task 9: Documentation + the keep-in-sync rule
 
@@ -458,13 +458,13 @@ the overlay's transparent tap-catcher (`Color.clear`, a real SwiftUI view) with 
 
 - [x] add a `CLAUDE.md` "Control API" section: socket path/lifecycle, protocol shape,
       addressing (`active`/UUID/prefix), the command catalog, and the three-layer split
-      (`hangarctl` ↔ `ControlServer` ↔ `HangarCore` protocol)
+      (`elisctl` ↔ `ControlServer` ↔ `ElisCore` protocol)
 - [x] write the **keep-in-sync convention** into `CLAUDE.md` next to the existing "`AppActions`
       shared by toolbar and menu bar so they never drift" note — extended to the third
       surface, with the four-point definition-of-done
-- [x] add a `README.md` "Scripting Hangar" subsection (user-facing: build `hangarctl`, examples,
+- [x] add a `README.md` "Scripting Elis" subsection (user-facing: build `elisctl`, examples,
       the never-shown-session `session.type` caveat)
-- [x] add an `ARCHITECTURE.md` note for the new module boundary (`hangarctlKit`/`hangarctl` in the
+- [x] add an `ARCHITECTURE.md` note for the new module boundary (`elisctlKit`/`elisctl` in the
       package; `ControlServer` in the app)
 - [x] move this plan to `docs/plans/completed/`
 
@@ -475,7 +475,7 @@ the overlay's transparent tap-catcher (`Color.clear`, a real SwiftUI view) with 
 **Manual verification:**
 - run a real scripted workflow (e.g. spin up a workspace, open three sessions in given
   directories, type a build command into each) and confirm ergonomics.
-- confirm `--stdin` piping (`echo 'make test' | hangarctl session type --target work/…  --stdin`)
+- confirm `--stdin` piping (`echo 'make test' | elisctl session type --target work/…  --stdin`)
   and `--json | jq` filtering feel right in practice.
 - sanity-check socket permissions (`0600`, owner-only) and that a second app instance failing
   to bind doesn't disrupt the first.

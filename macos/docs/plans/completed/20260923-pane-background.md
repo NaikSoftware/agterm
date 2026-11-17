@@ -40,10 +40,10 @@
 - update this plan when scope changes
 
 ## Testing Strategy
-- host-free: `cd HangarCore && swift test --filter <Suite>` per task
+- host-free: `cd ElisCore && swift test --filter <Suite>` per task
 - hosted app tests: `scripts/test-app.sh` forwards no arguments, so scope with the direct call
-  `xcodebuild test -project Hangar.xcodeproj -scheme HangarTests -destination 'platform=macOS'
-  -derivedDataPath build/DerivedData -only-testing:HangarTests/<Class>`
+  `xcodebuild test -project Elis.xcodeproj -scheme ElisTests -destination 'platform=macOS'
+  -derivedDataPath build/DerivedData -only-testing:ElisTests/<Class>`
 - XCUITest: extend `ControlAPIUITests.testSessionBackgroundSetClearAndValidation` and run only that method
 - full gates once at the end: `swift test`, `make test-app`, `make lint`
 
@@ -66,7 +66,7 @@
   and `reattachPane` while Live agents keep running.
 
 ## Technical Details
-- New host-free value type in HangarCore, `PaneBackgrounds` (`left`, `right`, `scratch`:
+- New host-free value type in ElisCore, `PaneBackgrounds` (`left`, `right`, `scratch`:
   `BackgroundWatermark?`, `Codable`, `Equatable`), stored as `Session.paneBackgrounds` (`@ObservationIgnored`,
   same as `backgroundWatermark`). Accessors take `StatusPane`. `Session.effectiveBackground(for: StatusPane)`
   returns `override ?? backgroundWatermark`.
@@ -108,11 +108,11 @@
 
 ## Implementation Steps
 
-### Task 1: Override layer in HangarCore: model, lifecycle, persistence, text files
+### Task 1: Override layer in ElisCore: model, lifecycle, persistence, text files
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/PaneBackgrounds.swift`
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`, `AppStore+SessionState.swift`, `AppStore+Panes.swift`,
+- Create: `ElisCore/Sources/ElisCore/PaneBackgrounds.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`, `AppStore+SessionState.swift`, `AppStore+Panes.swift`,
   `Snapshot.swift`, `AppStore+Snapshot.swift`, `WatermarkStorage.swift`
 - Tests: `PaneBackgroundsTests.swift` (new; also holds the store lifecycle cases, `AppStorePaneTests.swift`
   being at 1980 of 2000 lines), `AppStorePaneSwapTests.swift`, `WatermarkStorageTests.swift`
@@ -129,15 +129,15 @@
 - [x] tests for every rule above: resolution, symmetric default, pane clear to inherit, swap, promotion,
   split close, scratch close, hide/show keeps it, round trip, restore without split, distinct PNG files,
   sweep. The lifecycle file-removal test moved to Task 3: `AppStore` removes files under the default state
-  dir, which only the hosted scheme isolates (`HANGAR_STATE_DIR` in project.yml)
-- [x] `cd HangarCore && swift test` for the touched suites
+  dir, which only the hosted scheme isolates (`ELIS_STATE_DIR` in project.yml)
+- [x] `cd ElisCore && swift test` for the touched suites
 
 ### Task 2: Control surface: dispatcher, CLI, read-back
 
 **Files:**
 - Modify: `ControlDispatcherOptions.swift`, `ControlDispatcher.swift`, `ControlProtocol.swift` (pane doc),
-  `ControlProjection.swift`, `AppStore.swift`, `hangarctlKit/SessionCommands.swift`
-- Tests: `ControlDispatcherTests.swift`, `hangarctlKitTests/CommandsTests.swift`,
+  `ControlProjection.swift`, `AppStore.swift`, `elisctlKit/SessionCommands.swift`
+- Tests: `ControlDispatcherTests.swift`, `elisctlKitTests/CommandsTests.swift`,
   `AppStoreTreeProjectionTests.swift`, `ControlProtocolTests.swift`
 
 - [x] `ControlSessionBackgroundOptions.pane` parsed with `parsePane`; `--pane` on the four CLI subcommands
@@ -145,16 +145,16 @@
   compatibility initializer unchanged
 - [x] tests: each pane and alias, unknown pane rejected, omitted stays nil, CLI encoding for all four modes,
   projection with default/overrides/both, JSON omits empty, decode round trip
-- [x] `cd HangarCore && swift test` for the touched suites
+- [x] `cd ElisCore && swift test` for the touched suites
 
 ### Task 3: App side: apply, surface resolution, washes, end-to-end
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer+SurfaceIO.swift`, `Hangar/Ghostty/GhosttySurfaceView+Config.swift`,
-  `Hangar/Ghostty/GhosttySurfaceView.swift` (in-place expression, no net lines), `Hangar/Ghostty/WatermarkRenderer.swift`,
-  `Hangar/Views/WindowContentView.swift`, `Hangar/Views/WindowContentView+Detail.swift`
-- Tests: `HangarTests/GhosttySurfaceViewConfigTests.swift`, `HangarTests/ControlServerSurfaceIOTests.swift` (new),
-  `HangarCore/Tests/HangarCoreTests/PaneBackgroundsTests.swift`, `HangarUITests/ControlAPIUITests.swift`
+- Modify: `Elis/Control/ControlServer+SurfaceIO.swift`, `Elis/Ghostty/GhosttySurfaceView+Config.swift`,
+  `Elis/Ghostty/GhosttySurfaceView.swift` (in-place expression, no net lines), `Elis/Ghostty/WatermarkRenderer.swift`,
+  `Elis/Views/WindowContentView.swift`, `Elis/Views/WindowContentView+Detail.swift`
+- Tests: `ElisTests/GhosttySurfaceViewConfigTests.swift`, `ElisTests/ControlServerSurfaceIOTests.swift` (new),
+  `ElisCore/Tests/ElisCoreTests/PaneBackgroundsTests.swift`, `ElisUITests/ControlAPIUITests.swift`
 
 - [x] `setSessionBackground` passes the pane, refuses a missing right/scratch pane, applies to the targeted
   surface; a default change applies only to inheriting surfaces, leaving overridden panes' config and
@@ -176,10 +176,10 @@
 
 ### Task 4: Verify and document
 - [x] every Solution Overview rule has a test
-- [x] gates once: `cd HangarCore && swift test`, `make test-app`, `make lint` with zero findings
+- [x] gates once: `cd ElisCore && swift test`, `make test-app`, `make lint` with zero findings
 - [x] `.claude/rules/control-api.md` Session backgrounds: override layer, precedence, lifecycle, read-back
 - [x] `site/commands.html` session background entry: `--pane` and `paneBackgrounds`
-- [x] `plugins/hangar/skills/hangar/` SKILL.md, reference and examples: `--pane` and a two-agent label example
+- [x] `plugins/elis/skills/elis/` SKILL.md, reference and examples: `--pane` and a two-agent label example
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion

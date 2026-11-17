@@ -1,12 +1,12 @@
 ---
 name: agdoc
-description: Generate a context-aware HTML document and show it in a Hangar overlay, end to end. With no arguments it works out the subject from the session - the issue, PR, branch, plan, diff or topic being discussed - and asks with the likely variants when that is unclear; with arguments it takes them as the brief, including subject and audience ("show me details about X from a business point of view"). It asks which design to use - editorial, a one-screen brief, classic, a custom view the model designs for the task and its content, or one the user describes. This skill should be used when the user says "agdoc", "/agdoc", "show this as a doc", "make an html doc of this and show it", or asks to see an issue, PR, plan, change or topic explained as a page in Hangar. Also share a page on a private expiring link on request ("share it"), list or stop shares ("list shares", "stop sharing"), and turn a page into a copyable markdown version ("markdown version of this", "text only version").
+description: Generate a context-aware HTML document and show it in an Elis overlay, end to end. With no arguments it works out the subject from the session - the issue, PR, branch, plan, diff or topic being discussed - and asks with the likely variants when that is unclear; with arguments it takes them as the brief, including subject and audience ("show me details about X from a business point of view"). It asks which design to use - editorial, a one-screen brief, classic, a custom view the model designs for the task and its content, or one the user describes. This skill should be used when the user says "agdoc", "/agdoc", "show this as a doc", "make an html doc of this and show it", or asks to see an issue, PR, plan, change or topic explained as a page in Elis. Also share a page on a private expiring link on request ("share it"), list or stop shares ("list shares", "stop sharing"), and turn a page into a copyable markdown version ("markdown version of this", "text only version").
 allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/show.sh *), Bash(${CLAUDE_SKILL_DIR}/scripts/embed-md.py *), Bash(${CLAUDE_SKILL_DIR}/scripts/share.py *)
 ---
 
 # agdoc
 
-Build one static HTML page about a subject from the current work and show it in this session's Hangar
+Build one static HTML page about a subject from the current work and show it in this session's Elis
 overlay. `scripts/show.sh FILE` does the showing; `assets/<design>.html` carries the look.
 
 Every page already carries its markdown (step 6); a follow-up asking for it puts the `.md` on the clipboard
@@ -127,7 +127,7 @@ Use inline SVG for a diagram only when a flow or structure is easier to see than
   - custom: no skeleton. Write the page's own component rules at the `PAGE COMPONENTS` marker and its
     body inside `main.doc`, keeping the `<footer>` last: step 6 places the markdown box before it.
 - Colors come only from the stylesheet's variables; set `--c` on a component for its color. Never
-  declare `--hangar-*`. No JavaScript, no external scripts or fonts; the page must be self-contained.
+  declare `--elis-*`. No JavaScript, no external scripts or fonts; the page must be self-contained.
 - Close with a footer naming the sources and the generation time.
 - End every page with its markdown translation (step 6), embedded after the page is written and again
   after every edit to it.
@@ -165,7 +165,7 @@ ${CLAUDE_SKILL_DIR}/scripts/show.sh <file>
 
 It opens the page as a 95% panel with the navigation bar (back, forward, reload, open in browser) on
 this session without switching the user to it, reloads it when the same file is already shown, and
-replaces a different page. It refuses when a program overlay is running, and outside Hangar opens the default
+replaces a different page. It refuses when a program overlay is running, and outside Elis opens the default
 browser. A `failed` load exits non-zero with the page's error: fix the page and run it again.
 
 Leave the page up. Reply with one line naming what the page covers and its path. A follow-up asking for

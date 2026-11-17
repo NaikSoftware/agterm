@@ -56,8 +56,8 @@ QStringList MainWindow::paneIds(const QString &sessionId) const
     QStringList out;
     const Panes p = m_panes.value(sessionId);
     for (KParts::ReadOnlyPart *part : {p.main, p.right})
-        if (part && !part->property("hangarPaneId").toString().isEmpty())
-            out << part->property("hangarPaneId").toString();
+        if (part && !part->property("elisPaneId").toString().isEmpty())
+            out << part->property("elisPaneId").toString();
     return out;
 }
 

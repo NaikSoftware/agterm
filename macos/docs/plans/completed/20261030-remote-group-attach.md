@@ -16,19 +16,19 @@ standalone top-level row, and a page companion can be attached only by CLI after
 
 ## Context (from discovery)
 
-- Far-side listing: `HangarCore/Sources/HangarCore/RemoteTree.swift` (`RemoteTreeMerger.candidates`,
+- Far-side listing: `ElisCore/Sources/ElisCore/RemoteTree.swift` (`RemoteTreeMerger.candidates`,
   `remoteSession`) builds terminal rows, then page rows (`terminals + pages`), and drops a session whose
   panes are not all backed by a running claimed daemon.
 - Wire types: `ControlRemoteSession`, `ControlRemoteTree`, `ControlResult` in
-  `HangarCore/Sources/HangarCore/ControlPayloads.swift` / `ControlProtocol.swift`; synthesized Codable, so a
+  `ElisCore/Sources/ElisCore/ControlPayloads.swift` / `ControlProtocol.swift`; synthesized Codable, so a
   new optional field is additive and ignored by an older reader.
 - Dispatch: `ControlDispatcher+Zmx.swift` validates `zmx.attach` (host, plain remote id, window) and calls
   `ControlActions.attachRemoteSession`.
-- App: `Hangar/Control/ControlServer+Zmx.swift` (`attachRemoteSession`, `RemotePlacement`, `attach(_:from:host:placement:)`),
-  `Hangar/Control/ControlServer+RemoteCompanions.swift` (`attachRemotePage`, `attachRemotePageRow`,
+- App: `Elis/Control/ControlServer+Zmx.swift` (`attachRemoteSession`, `RemotePlacement`, `attach(_:from:host:placement:)`),
+  `Elis/Control/ControlServer+RemoteCompanions.swift` (`attachRemotePage`, `attachRemotePageRow`,
   `attachCreatedCompanion`, which already re-resolves the parent's store and workspace after each wait).
-- Picker: `Hangar/AppActions+RemoteAttach.swift` (`attachRemote`, `RemoteAttachHud`, `RemoteAttaching`).
-- CLI: `HangarCore/Sources/hangarctlKit/ZmxCommands.swift` (`Attach`); the older-app mapping precedent is
+- Picker: `Elis/AppActions+RemoteAttach.swift` (`attachRemote`, `RemoteAttachHud`, `RemoteAttaching`).
+- CLI: `ElisCore/Sources/elisctlKit/ZmxCommands.swift` (`Attach`); the older-app mapping precedent is
   `companionSend` / `runCompanionRequest` in `Session+Companions.swift` (`refusesUnknown`).
 - Command lists that name `.zmxAttach` and need the new case beside it: `ControlDispatcher.swift` category
   switch, `HtmlBridge.placedLocally`, `ControlServer.swift` network-waiting set and the
@@ -60,7 +60,7 @@ standalone top-level row, and a page companion can be attached only by CLI after
 
 ## Testing Strategy
 
-- **package tests** (`HangarCore`, `swift test`): payload round-trips, `RemoteTreeMerger` membership,
+- **package tests** (`ElisCore`, `swift test`): payload round-trips, `RemoteTreeMerger` membership,
   dispatcher validation, CLI request building and output formatting
 - **hosted tests** (`make test-app`): `ControlServer` group attach and companion nesting against the
   existing fake `RemoteCommandRunner`; `AppActions` picker flow against the existing picker/HUD fakes. These
@@ -162,9 +162,9 @@ level, as today. Page rows keep `attachRemotePageRow` and its refusal.
 ### Task 1: Far-side group membership in `zmx tree`
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlPayloads.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemoteTree.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/RemoteTreeTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlPayloads.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemoteTree.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/RemoteTreeTests.swift`
 
 - [x] add `ControlRemoteMember` and optional `companions` on `ControlRemoteSession`
 - [x] fill it in `RemoteTreeMerger.candidates` for top-level terminal rows from the unfiltered workspace
@@ -177,22 +177,22 @@ level, as today. Page rows keep `attachRemotePageRow` and its refusal.
 ### Task 2: `zmx.attach.group` wire command, dispatcher and CLI
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlPayloads.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Create: `HangarCore/Sources/HangarCore/ControlActions.swift` (the protocol, moved unchanged)
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Zmx.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
-- Modify: `HangarCore/Sources/HangarCore/HtmlBridge.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/ZmxCommands.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/SocketClient.swift` (pure `formatRemoteGroup` beside `formatRemoteTree`)
-- Modify: `HangarCore/Sources/hangarctlKit/Session+Companions.swift` (`companionSend` takes the too-old message)
-- Modify: `Hangar/Control/ControlServer.swift` (`waitsOnNetwork`, dispatcher-handled list)
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherZmxTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/HtmlBridgeTests.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/ZmxCommandsTests.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/SocketClientTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlPayloads.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Create: `ElisCore/Sources/ElisCore/ControlActions.swift` (the protocol, moved unchanged)
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Zmx.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlActionsDefaults.swift`
+- Modify: `ElisCore/Sources/ElisCore/HtmlBridge.swift`
+- Modify: `ElisCore/Sources/elisctlKit/ZmxCommands.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SocketClient.swift` (pure `formatRemoteGroup` beside `formatRemoteTree`)
+- Modify: `ElisCore/Sources/elisctlKit/Session+Companions.swift` (`companionSend` takes the too-old message)
+- Modify: `Elis/Control/ControlServer.swift` (`waitsOnNetwork`, dispatcher-handled list)
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherZmxTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/MockControlActions.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/HtmlBridgeTests.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/ZmxCommandsTests.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/SocketClientTests.swift`
 
 - [x] first, as its own step, move the `ControlActions` protocol unchanged from `ControlDispatcher.swift`
   (exactly 1000 lines, the strict lint limit) into a new `ControlActions.swift`; a pure move, approved by Eugene
@@ -222,11 +222,11 @@ level, as today. Page rows keep `attachRemotePageRow` and its refusal.
 ### Task 3: Group attach in the app
 
 **Files:**
-- Create: `Hangar/Control/ControlServer+RemoteGroup.swift`
-- Create: `HangarTests/ControlServerRemoteGroupTests.swift`
-- Modify: `HangarTests/ControlServerRemoteCompanionsTests.swift` (move `ScriptedRunner` out)
-- Modify: `HangarTests/RemotePageFakes.swift` (shared, non-private `ScriptedRunner` with its `beforeCall` hook)
-- Modify: `HangarTests/ControlServerTests.swift` (accept-loop case)
+- Create: `Elis/Control/ControlServer+RemoteGroup.swift`
+- Create: `ElisTests/ControlServerRemoteGroupTests.swift`
+- Modify: `ElisTests/ControlServerRemoteCompanionsTests.swift` (move `ScriptedRunner` out)
+- Modify: `ElisTests/RemotePageFakes.swift` (shared, non-private `ScriptedRunner` with its `beforeCall` hook)
+- Modify: `ElisTests/ControlServerTests.swift` (accept-loop case)
 
 - [x] move `ScriptedRunner` into `RemotePageFakes.swift` and make `beforeCall` async and awaited before the
   scripted reply, so a test's main-actor mutation (move or close the parent) has finished when the page wait
@@ -249,14 +249,14 @@ level, as today. Page rows keep `attachRemotePageRow` and its refusal.
   terminal member, leaves both later children with the parent and no row in the old workspace
 - [x] write tests: exactly one tree read per group attach, counted apart from the page-attach calls
 - [x] write tests: older origin without `companions` attaches listed children and reports membership unknown
-- [x] run `-only-testing:HangarTests/ControlServerRemoteGroupTests` - must pass before task 4
+- [x] run `-only-testing:ElisTests/ControlServerRemoteGroupTests` - must pass before task 4
 
 ### Task 4: Single attach of a companion nests under its parent
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer+Zmx.swift`
-- Modify: `HangarTests/ControlServerZmxTests.swift`
-- Modify: `Hangar/Control/ControlServer+RemoteCompanions.swift` (`attachRemotePageRow` uses the shared match)
+- Modify: `Elis/Control/ControlServer+Zmx.swift`
+- Modify: `ElisTests/ControlServerZmxTests.swift`
+- Modify: `Elis/Control/ControlServer+RemoteCompanions.swift` (`attachRemotePageRow` uses the shared match)
 
 - [x] extract the parent-row match (top-level row, same host, binding's origin session id and endpoint) from
   `attachRemotePageRow` into one helper both paths use
@@ -266,14 +266,14 @@ level, as today. Page rows keep `attachRemotePageRow` and its refusal.
 - [x] write tests: nests under a matching parent that sits outside the current workspace, landing in the
   parent's workspace with `result.parent` set; stays top level with no match, with two matches, and for a
   parent attached from another host or endpoint
-- [x] run `-only-testing:HangarTests/ControlServerZmxTests` - must pass before task 5
+- [x] run `-only-testing:ElisTests/ControlServerZmxTests` - must pass before task 5
 
 ### Task 5: Attach Remote picker attaches the group
 
 **Files:**
-- Modify: `Hangar/AppActions+RemoteAttach.swift`
-- Modify: `HangarTests/RemoteAttachTests.swift`
-- Modify: `HangarTests/AppActionsCompanionsTests.swift` (`HudRecorder` conforms to `RemoteAttaching`)
+- Modify: `Elis/AppActions+RemoteAttach.swift`
+- Modify: `ElisTests/RemoteAttachTests.swift`
+- Modify: `ElisTests/AppActionsCompanionsTests.swift` (`HudRecorder` conforms to `RemoteAttaching`)
 
 - [x] add `attachRemoteGroup` to `RemoteAttaching` and to both test conformers (`FakeAttacher`,
   `HudRecorder`); route a picked top-level row through it and a picked companion through
@@ -284,15 +284,15 @@ level, as today. Page rows keep `attachRemotePageRow` and its refusal.
 - [x] write tests: picking a parent attaches the group, including a parent whose listing shows `companions: []`;
   picking a companion attaches one row; a partial
   failure posts its timed report on the new parent and leaves the starting row without a HUD
-- [x] run `-only-testing:HangarTests/RemoteAttachTests` - must pass before task 6
+- [x] run `-only-testing:ElisTests/RemoteAttachTests` - must pass before task 6
 
 ### Task 6: Documentation and agent skill
 
 **Files:**
 - Modify: `site/commands.html`
 - Modify: `site/docs.html`
-- Modify: `plugins/hangar/skills/hangar/SKILL.md`
-- Modify: `plugins/hangar/skills/hangar/reference.md`
+- Modify: `plugins/elis/skills/elis/SKILL.md`
+- Modify: `plugins/elis/skills/elis/reference.md`
 - Modify: `.claude/rules/control-api.md`
 - Modify: `.claude/rules/menu-actions.md`
 
@@ -311,10 +311,10 @@ level, as today. Page rows keep `attachRemotePageRow` and its refusal.
 
 - [x] verify every Overview item is implemented and the backlog item matches what shipped
 - [x] run `make build` (Release; `make test-app` builds Debug only)
-- [x] run `cd HangarCore && swift test`
+- [x] run `cd ElisCore && swift test`
 - [x] run `make test-app`
 - [x] run `make lint` with zero findings
-- [x] run `lsappinfo list | grep -A4 hangar.debug` after the hosted run and clear leaked test processes
+- [x] run `lsappinfo list | grep -A4 elis.debug` after the hosted run and clear leaked test processes
 
 ### Task 8: [Final] Update documentation
 

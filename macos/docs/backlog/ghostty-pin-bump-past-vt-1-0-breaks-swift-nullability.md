@@ -1,6 +1,6 @@
 ---
 worth: later
-where: Hangar/Ghostty/GhosttyCallbacks.swift
+where: Elis/Ghostty/GhosttyCallbacks.swift
 added: 2026-11-06
 ---
 # ghostty pin bump past vt-1.0.0 breaks the Swift bridge on nullability
@@ -12,7 +12,7 @@ bump has a known Swift cost.
 **What v1 covers.** `dist/doxygen/pages/stability.md` promises a stable C ABI for libghostty-vt only, the
 `include/ghostty/vt*.h` headers: a 1.x minor release only adds functions, types, enum values and trailing
 fields of sized structs, and snapshot bytes are excluded. `include/ghostty.h`, the app/surface/config API
-Hangar links through GhosttyKit, now heads itself "libghostty-internal", meant only for the macOS app, so it
+Elis links through GhosttyKit, now heads itself "libghostty-internal", meant only for the macOS app, so it
 keeps changing without notice. zmx imports ghostty as a Zig module, which the C ABI promise does not cover
 either.
 

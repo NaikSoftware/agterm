@@ -1,22 +1,22 @@
 # Free-form "other" row for ask choice lists
 
 ## Overview
-- `hangarctl ask --choice ... --other PLACEHOLDER` adds one optional single-line text row after the caller's
+- `elisctl ask --choice ... --other PLACEHOLDER` adds one optional single-line text row after the caller's
   items, in radio and checkbox lists alike. The placeholder is the row's label while it is empty.
 - Typing a non-blank value enables and selects the row; clearing it (or leaving only spaces) disables and
   unselects it. Once enabled, the row navigates and toggles like any other item.
 - The typed text comes back in the answer's existing `text` field; `selected` keeps only caller ids.
 
 ## Context (from discovery)
-- Model and validation: `HangarCore/Sources/HangarCore/Ask.swift` (`AskChoiceForm`, `AskDraft`,
+- Model and validation: `ElisCore/Sources/ElisCore/Ask.swift` (`AskChoiceForm`, `AskDraft`,
   `PendingAsk.answer`, `validatedAnswer`), `ControlDispatcher+Ask.swift` (`parseAskChoices`),
-  `ControlProtocol.swift` (`ControlArgs`), `hangarctlKit/AskCommands.swift`.
+  `ControlProtocol.swift` (`ControlArgs`), `elisctlKit/AskCommands.swift`.
 - Remote: `PresentationFrames.swift` (`PresentationAsk.fitsFrames`, `needsFormSupport`),
   `PresentationHub.swift` (supported kinds), `AppStore+RemoteAsk.swift`, `AppStore+RemotePresentation.swift`.
-- View and focus: `Hangar/Views/AskFormViews.swift` (`AskChoiceList`, `AskTextEditor`, `AskEditorBox`),
-  `Hangar/Views/AskDialogView.swift` (`KeyCatcherView.grabFocus`, `onAttach`, choice keys).
+- View and focus: `Elis/Views/AskFormViews.swift` (`AskChoiceList`, `AskTextEditor`, `AskEditorBox`),
+  `Elis/Views/AskDialogView.swift` (`KeyCatcherView.grabFocus`, `onAttach`, choice keys).
 - Contract and docs: `.claude/rules/control-api.md`, `site/commands.html`, `site/docs.html`,
-  `plugins/hangar/skills/hangar/{SKILL.md,reference.md}`.
+  `plugins/elis/skills/elis/{SKILL.md,reference.md}`.
 
 ## Development Approach
 - **testing approach**: TDD for model, validation, CLI and remote rules; hosted tests for editor, focus and
@@ -27,8 +27,8 @@
 
 ## Testing Strategy
 - host-free `swift test` suites for draft transitions, answers, validation, CLI, remote gating and frame budgets
-- hosted `HangarTests` for the row's editor focus, marker toggling, navigation and scrolling
-- final gates once: `make release`, `cd HangarCore && swift test`, `make test-app`, `make lint`
+- hosted `ElisTests` for the row's editor focus, marker toggling, navigation and scrolling
+- final gates once: `make release`, `cd ElisCore && swift test`, `make test-app`, `make lint`
 
 ## Progress Tracking
 - mark completed items with `[x]` immediately when done
@@ -83,11 +83,11 @@
 ### Task 1: Model, draft transitions, answers and validation (host-free)
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Ask.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Ask.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AskTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherAskTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/Ask.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Ask.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AskTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherAskTests.swift`
 
 - [x] write failing tests for draft transitions: typing non-blank selects, blank unselects and disables,
       leading space stays unselected, radio B -> row -> more typing -> clear restores B, B -> row -> pick C ->
@@ -105,8 +105,8 @@
 ### Task 2: CLI flag
 
 **Files:**
-- Modify: `HangarCore/Sources/hangarctlKit/AskCommands.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/AskCommandsTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/AskCommands.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/AskCommandsTests.swift`
 
 - [x] write failing tests for `--other` mapping, the without-`--choice` error, and output with `text`
 - [x] add `--other PLACEHOLDER` and help text
@@ -115,14 +115,14 @@
 ### Task 3: Remote gating and frame budget
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`
-- Modify: `HangarCore/Sources/HangarCore/PresentationHub.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RemoteAsk.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePresentation.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreRemoteAskTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/PresentationHubTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/RemotePresentationStateTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/PresentationFramesTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/PresentationFrames.swift`
+- Modify: `ElisCore/Sources/ElisCore/PresentationHub.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RemoteAsk.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RemotePresentation.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreRemoteAskTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/PresentationHubTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/RemotePresentationStateTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/PresentationFramesTests.swift`
 
 - [x] write failing tests: an `ask.form`-only presenter keeps an `other` ask local, a presenter advertising
       `ask.form` and `ask.other` receives it, remote answers with text are applied and refused per Task 1 rules,
@@ -136,10 +136,10 @@
 ### Task 4: Row rendering, focus and keys
 
 **Files:**
-- Modify: `Hangar/Views/AskFormViews.swift`
-- Modify: `Hangar/Views/AskDialogView.swift`
-- Modify: `Hangar/AppActions+Focus.swift` (only if the composition guard needs the row editor)
-- Modify: `HangarTests/AskDialogViewTests.swift`
+- Modify: `Elis/Views/AskFormViews.swift`
+- Modify: `Elis/Views/AskDialogView.swift`
+- Modify: `Elis/AppActions+Focus.swift` (only if the composition guard needs the row editor)
+- Modify: `ElisTests/AskDialogViewTests.swift`
 
 - [x] write failing hosted tests: initial focus on an ordinary row stays on the catcher although the field
       exists, cursor crossings move focus both ways, Up/Down from the field return to the list, Space and
@@ -160,8 +160,8 @@
 - Modify: `.claude/rules/control-api.md`
 - Modify: `site/commands.html`
 - Modify: `site/docs.html`
-- Modify: `plugins/hangar/skills/hangar/reference.md`
-- Modify: `plugins/hangar/skills/hangar/SKILL.md` (only if the trigger wording needs it)
+- Modify: `plugins/elis/skills/elis/reference.md`
+- Modify: `plugins/elis/skills/elis/SKILL.md` (only if the trigger wording needs it)
 
 - [x] state the `other` row contract once in `control-api.md`, including `ask.other`
 - [x] mirror `--other`/`other` and the `text` result for choices in `commands.html`; extend the docs example
@@ -169,8 +169,8 @@
 
 ### Task 6: Verify acceptance criteria
 - [x] radio and checkbox lists with `--other` behave as described, in both styles, verified in an isolated Debug instance
-- [x] run full gates once: `make release`, `cd HangarCore && swift test`, `make test-app`, `make lint`
-- [x] run `lsappinfo list | grep -A4 hangar.debug` after the hosted runs
+- [x] run full gates once: `make release`, `cd ElisCore && swift test`, `make test-app`, `make lint`
+- [x] run `lsappinfo list | grep -A4 elis.debug` after the hosted runs
 
 ### Task 7: [Final] Update documentation
 - [x] update README.md only if the demo should show the row

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code Stop hook: record where an hangar pane's Claude transcript lives.
+"""Claude Code Stop hook: record where an elis pane's Claude transcript lives.
 
 The transcript path is the valuable part. A hook only runs when a turn ends, so a copy of the message
 is stale the moment one is missed, while the transcript keeps whatever Claude actually wrote —
@@ -20,15 +20,15 @@ from pathlib import Path
 
 
 def cache_dir() -> Path:
-    override = os.environ.get("HANGAR_ANNOTATE_DIR")
-    return Path(override) if override else Path.home() / ".cache" / "hangar-annotate"
+    override = os.environ.get("ELIS_ANNOTATE_DIR")
+    return Path(override) if override else Path.home() / ".cache" / "elis-annotate"
 
 
 def main() -> int:
-    session = os.environ.get("HANGAR_SESSION_ID")
+    session = os.environ.get("ELIS_SESSION_ID")
     if not session:
         return 0
-    pane = os.environ.get("HANGAR_PANE") or "left"
+    pane = os.environ.get("ELIS_PANE") or "left"
 
     try:
         payload = json.load(sys.stdin)

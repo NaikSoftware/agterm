@@ -1,0 +1,120 @@
+import Testing
+@testable import ElisCore
+
+struct FuzzyTests {
+    @Test func emptyQueryMatchesEverythingAtZero() {
+        #expect(fuzzyScore(query: "", target: "anything") == 0)
+    }
+
+    @Test func exactPrefixScoresZero() {
+        #expect(fuzzyScore(query: "new", target: "New Session") == 0)
+    }
+
+    @Test func caseInsensitive() {
+        #expect(fuzzyScore(query: "NEW", target: "new session") == 0)
+    }
+
+    @Test func substringScoresByOffset() {
+        // "session" starts at offset 4 in "New Session".
+        #expect(fuzzyScore(query: "session", target: "New Session") == 5 + 4)
+    }
+
+    @Test func subsequenceScoresAboveSubstring() {
+        // "nsn" is a scattered subsequence of "New Session", not a substring.
+        let score = fuzzyScore(query: "nsn", target: "New Session")
+        #expect(score != nil)
+        #expect(score! >= 40)
+    }
+
+    @Test func noMatchReturnsNil() {
+        #expect(fuzzyScore(query: "xyz", target: "New Session") == nil)
+    }
+
+    @Test func substringInOneTargetRanksAboveSubsequenceInAnother() {
+        // Regression for #371: unclamped, the literal "stem" at offset 43 scored 48 and ranked
+        // below /opt/steam's scattered subsequence at 46 — a real match lost to a non-match.
+        let stems = "~/Music/Ableton/Exports/2026/album/bounces/stems"
+
+        #expect(fuzzyRank(query: "stem", items: ["/opt/steam", stems], keys: { [$0] })
+            == [stems, "/opt/steam"])
+    }
+
+    @Test func substringBandCapsAtThirtyNine() {
+        // Substrings starting at or past offset 34 tie at 39, under the subsequence floor of 40.
+        #expect(fuzzyScore(query: "z", target: String(repeating: "a", count: 40) + "z") == 39)
+        #expect(fuzzyScore(query: "z", target: String(repeating: "a", count: 80) + "z") == 39)
+    }
+
+    @Test func prefixBeatsSubstringBeatsSubsequence() {
+        let prefix = fuzzyScore(query: "ne", target: "New Session")!
+        let substring = fuzzyScore(query: "ew", target: "New Session")!
+        let subsequence = fuzzyScore(query: "nss", target: "New Session")!
+        #expect(prefix < substring)
+        #expect(substring < subsequence)
+    }
+
+    @Test func multiTermMatchesAcrossWordBoundaries() {
+        // "cap" is a prefix and "dev" a later substring, though the literal "cap dev" is neither.
+        #expect(fuzzyScore(query: "cap dev", target: "caprica-dev") != nil)
+    }
+
+    @Test func multiTermIsOrderIndependent() {
+        #expect(fuzzyScore(query: "cap dev", target: "caprica-dev")
+            == fuzzyScore(query: "dev cap", target: "caprica-dev"))
+    }
+
+    @Test func multiTermRequiresEveryTerm() {
+        #expect(fuzzyScore(query: "cap xyz", target: "caprica-dev") == nil)
+    }
+
+    @Test func collapsesRepeatedWhitespaceBetweenTerms() {
+        #expect(fuzzyScore(query: "cap   dev", target: "caprica-dev") != nil)
+    }
+
+    @Test func whitespaceOnlyQueryMatchesEverything() {
+        #expect(fuzzyScore(query: "  \t ", target: "anything") == 0)
+    }
+
+    @Test func fuzzyRankSortsBestMatchFirstAndDropsNonMatches() {
+        let items = ["New Workspace", "New Session", "Close Session"]
+        let ranked = fuzzyRank(query: "new", items: items, keys: { [$0] })
+
+        #expect(ranked == ["New Session", "New Workspace"])
+    }
+
+    @Test func fuzzyRankPrefersLowerScore() {
+        let items = ["New Session", "Session List"]
+
+        #expect(fuzzyRank(query: "sess", items: items, keys: { [$0] }) == ["Session List", "New Session"])
+    }
+
+    @Test func fuzzyRankMatchesAnyKeyUsingTheBestScore() {
+        struct Command: Equatable {
+            let title: String
+            let subtitle: String
+        }
+        let items = [
+            Command(title: "Toggle Split", subtitle: "panes"),
+            Command(title: "Reload", subtitle: "split config")
+        ]
+
+        let ranked = fuzzyRank(query: "split", items: items, keys: { [$0.title, $0.subtitle] })
+
+        #expect(ranked == [
+            Command(title: "Reload", subtitle: "split config"),
+            Command(title: "Toggle Split", subtitle: "panes")
+        ])
+    }
+
+    @Test func fuzzyRankEmptyQueryAlphabetizesByFirstKey() {
+        let items = ["beta", "Alpha", "gamma"]
+
+        #expect(fuzzyRank(query: "", items: items, keys: { [$0] }) == ["Alpha", "beta", "gamma"])
+    }
+
+    @Test func fuzzyRankTermCharactersMustMatchInOrder() {
+        let items = ["Split Pane", "Panel Split"]
+
+        #expect(fuzzyRank(query: "ps", items: items, keys: { [$0] }) == ["Panel Split"])
+    }
+}

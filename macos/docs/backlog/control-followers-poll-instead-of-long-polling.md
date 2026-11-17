@@ -1,11 +1,11 @@
 ---
 worth: maybe
-where: HangarCore/Sources/hangarctlKit/EventCommands.swift:Events
+where: ElisCore/Sources/elisctlKit/EventCommands.swift:Events
 added: 2026-11-10
 ---
 # idle event and message followers still cost CPU by polling every 250 ms
 
-`hangarctl events` and `hangarctl msg read --wait` sleep 250 ms after an empty reply and ask again (`Events.poll`,
+`elisctl events` and `elisctl msg read --wait` sleep 250 ms after an empty reply and ask again (`Events.poll`,
 `Msg.Read.pollDelay`), so each idle follower sends up to four `events.read` / `msg.read` requests a second.
 #955 removed the two per-request costs the profiles found: the event ring scan from its start and the window cache
 rebuild after every read.

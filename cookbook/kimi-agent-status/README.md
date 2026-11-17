@@ -6,11 +6,11 @@ Author: [@x9x9x9x9x9x91](https://github.com/x9x9x9x9x9x91)
 
 ## What it does
 
-Wires Kimi Code's own lifecycle hooks to Hangar's per-session status glyph, the same signal the installer sets up for Claude Code, Codex, Pi, and OpenCode: the row shows active (pulsing) while kimi works, amber blocked when it is waiting on a real approval, and a one-shot completed when the turn ends. Kimi needs none of the installer's app-side machinery — the stock `hangar-agent-status.sh` works unmodified, so the whole recipe is a config snippet.
+Wires Kimi Code's own lifecycle hooks to Elis's per-session status glyph, the same signal the installer sets up for Claude Code, Codex, Pi, and OpenCode: the row shows active (pulsing) while kimi works, amber blocked when it is waiting on a real approval, and a one-shot completed when the turn ends. Kimi needs none of the installer's app-side machinery — the stock `elis-agent-status.sh` works unmodified, so the whole recipe is a config snippet.
 
 ## Requirements
 
-- Hangar 0.3.1 or later, with the hooks package installed via Help ▸ Install Agent Status Hooks… (that provides `~/.config/hangar/agent-status/hangar-agent-status.sh`, which this recipe points kimi at). The status script, `--blink`, and `--auto-reset` all predate the repository's earliest tagged release, so 0.3.1 is the first version that can be named, not the version they arrived in.
+- Elis 0.3.1 or later, with the hooks package installed via Help ▸ Install Agent Status Hooks… (that provides `~/.config/elis/agent-status/elis-agent-status.sh`, which this recipe points kimi at). The status script, `--blink`, and `--auto-reset` all predate the repository's earliest tagged release, so 0.3.1 is the first version that can be named, not the version they arrived in.
 - Kimi Code with `[[hooks]]` support in `~/.kimi-code/config.toml` (tested on kimi-code 0.31.0).
 
 ## Setup
@@ -22,19 +22,19 @@ Add to `~/.kimi-code/config.toml`:
 ```toml
 [[hooks]]
 event = "UserPromptSubmit"
-command = "$HOME/.config/hangar/agent-status/hangar-agent-status.sh active --blink"
+command = "$HOME/.config/elis/agent-status/elis-agent-status.sh active --blink"
 
 [[hooks]]
 event = "PostToolUse"
-command = "$HOME/.config/hangar/agent-status/hangar-agent-status.sh active --blink"
+command = "$HOME/.config/elis/agent-status/elis-agent-status.sh active --blink"
 
 [[hooks]]
 event = "PermissionRequest"
-command = "$HOME/.config/hangar/agent-status/hangar-agent-status.sh blocked"
+command = "$HOME/.config/elis/agent-status/elis-agent-status.sh blocked"
 
 [[hooks]]
 event = "Stop"
-command = "$HOME/.config/hangar/agent-status/hangar-agent-status.sh completed --auto-reset"
+command = "$HOME/.config/elis/agent-status/elis-agent-status.sh completed --auto-reset"
 ```
 
 `kimi doctor` validates the file. Hooks load at kimi startup, so restart any running kimi sessions.
@@ -43,11 +43,11 @@ To remove, delete the four blocks.
 
 ## Usage
 
-Run `kimi` inside Hangar as usual. The glyph turns active on your prompt, re-asserts on every tool call (so it returns to active after you answer an approval), goes blocked when an approval dialog is up, and flashes completed when the turn ends, clearing when you visit the session.
+Run `kimi` inside Elis as usual. The glyph turns active on your prompt, re-asserts on every tool call (so it returns to active after you answer an approval), goes blocked when an approval dialog is up, and flashes completed when the turn ends, clearing when you visit the session.
 
 ## How it works
 
-Kimi Code fires each hook with a JSON payload on stdin inside the session's shell, where `HANGAR_SESSION_ID` is already exported — the stock status script reads that and posts over the control socket, and is a silent no-op outside Hangar.
+Kimi Code fires each hook with a JSON payload on stdin inside the session's shell, where `ELIS_SESSION_ID` is already exported — the stock status script reads that and posts over the control socket, and is a silent no-op outside Elis.
 
 Two kimi hook behaviors matter when adapting this:
 
@@ -62,4 +62,4 @@ Nothing destructive: the hooks only post status for their own session.
 
 - When kimi does not show the dialog, no event fires and the session never reports blocked; it goes active → completed. That covers prompt (`-p`) runs and everything the auto and yolo modes auto-approve — all three checked on 0.31.0 (file writes and a network shell command under yolo ran with no event).
 - A question the agent asks arrives as plain chat, not through a permission dialog, so it does not set blocked: the turn ends and the row reports completed. A completed row can therefore really be a question waiting for you. Verified in an auto session; the only dialog observed in manual mode is tool approval.
-- The hook set is per-user config, so kimi runs outside Hangar carry the hooks too; the script is a silent no-op there.
+- The hook set is per-user config, so kimi runs outside Elis carry the hooks too; the script is a silent no-op there.

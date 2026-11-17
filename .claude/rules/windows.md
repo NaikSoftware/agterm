@@ -1,18 +1,18 @@
 ---
 paths:
-  - "macos/HangarCore/Sources/HangarCore/WindowLibrary.swift"
-  - "macos/HangarCore/Sources/HangarCore/WindowGeometry.swift"
-  - "macos/HangarCore/Sources/HangarCore/QuitPrompt.swift"
-  - "macos/HangarCore/Sources/HangarCore/QuitReason.swift"
-  - "macos/Hangar/WindowRegistry.swift"
-  - "macos/Hangar/AppDelegate.swift"
-  - "macos/Hangar/AppDelegate+DockMenu.swift"
-  - "macos/Hangar/Views/WindowAccessor.swift"
-  - "macos/Hangar/Views/WindowControlArea.swift"
-  - "macos/Hangar/Views/QuickTerminal.swift"
-  - "macos/HangarUITests/MultiWindowUITests.swift"
-  - "macos/HangarUITests/QuickTerminalUITests.swift"
-  - "macos/HangarTests/DockMenuTests.swift"
+  - "macos/ElisCore/Sources/ElisCore/WindowLibrary.swift"
+  - "macos/ElisCore/Sources/ElisCore/WindowGeometry.swift"
+  - "macos/ElisCore/Sources/ElisCore/QuitPrompt.swift"
+  - "macos/ElisCore/Sources/ElisCore/QuitReason.swift"
+  - "macos/Elis/WindowRegistry.swift"
+  - "macos/Elis/AppDelegate.swift"
+  - "macos/Elis/AppDelegate+DockMenu.swift"
+  - "macos/Elis/Views/WindowAccessor.swift"
+  - "macos/Elis/Views/WindowControlArea.swift"
+  - "macos/Elis/Views/QuickTerminal.swift"
+  - "macos/ElisUITests/MultiWindowUITests.swift"
+  - "macos/ElisUITests/QuickTerminalUITests.swift"
+  - "macos/ElisTests/DockMenuTests.swift"
 ---
 
 ## Windows
@@ -30,7 +30,7 @@ session drag are out of scope.
 
 ## Model and persistence
 
-- A window's `WindowInfo.source` names the hangar-server or the Mac window (`originWindow`) it mirrors
+- A window's `WindowInfo.source` names the elis-server or the Mac window (`originWindow`) it mirrors
   (`WindowSource`); nil is this Mac's own tree. One is raised by host plus origin window, never opened twice.
   A remote window is never seeded and saves no rows: its store loads empty with its saved
   `RemoteWindowViewState` and is filled from the catalog (`WindowLibrary+Remote`, `control-api.md`).
@@ -44,7 +44,7 @@ session drag are out of scope.
   The persisted index then has no open entries, so the next launch takes reopen's never-windowless
   fallback — the pin makes it reopen the exit window (whose captured commands were just persisted),
   not `windows.first`.
-- State lives under `HANGAR_STATE_DIR` or Application Support: `windows.json` plus
+- State lives under `ELIS_STATE_DIR` or Application Support: `windows.json` plus
   `windows/<uuid>.json`. Legacy `workspaces.json` remains dormant after migration. `PersistenceStore.fileName`
   defaults to `workspaces.json`; index and window mutations save only their own files.
 - A failed `windows.json` write sets `WindowLibrary.indexUnsaved`, which the tree reports and which
@@ -55,7 +55,7 @@ session drag are out of scope.
   because scanning after a clean load can resurrect a window whose snapshot removal failed.
 - A failed `windows/<id>.json` write sets that store's `AppStore.snapshotUnsaved`, reported by its
   window's tree and cleared by the next snapshot write that lands. The failure logs through `NSLog`:
-  `HangarCore` imports no `os`, since the agterm-linux fork builds it on Linux.
+  `ElisCore` imports no `os`, since the agterm-linux fork builds it on Linux.
 - Bootstrap never throws. Load a valid index; otherwise recover every UUID-named per-window file before
   considering legacy migration or an empty seed. Recovered files are appended before `loadStore`, named
   `window N`, all opened, and the first made frontmost. Missing/corrupt window snapshots open as an
@@ -106,9 +106,9 @@ session drag are out of scope.
 
 - `QuickTerminalController` is an app-level singleton hosting one `QuickTerminalPanel`, a borderless
   non-activating `NSPanel` on `.canJoinAllSpaces` that lands on the POINTER's screen — it is summoned from
-  another application, where Hangar's own key window is no guide to where the user is looking. Providers
-  resolve through `activeStore` at call time rather than capturing a window, `hangarApp.wireQuickTerminal`
-  binding them once after the socket binds. `canShow` refuses with no open window, Hangar terminating on an
+  another application, where Elis's own key window is no guide to where the user is looking. Providers
+  resolve through `activeStore` at call time rather than capturing a window, `elisApp.wireQuickTerminal`
+  binding them once after the socket binds. `canShow` refuses with no open window, Elis terminating on an
   empty open set; the panel is not a library window, so it neither keeps the app alive nor appears in
   `openIDs`.
 - Losing key hides a HUMAN-summoned panel (hotkey, ⌃`, toolbar, Dock), which is what makes it
@@ -117,9 +117,9 @@ session drag are out of scope.
   still settling and a blur-dismissing panel is already gone by the time `quick.type` or
   `surface.zoom --target quick` arrives — measured, not theorised. `show` applies that pin even when the
   panel is ALREADY visible, which is the case a script hits over a hotkey-summoned panel; `hide` and a shell
-  exit clear it. `NSApp.activate` is never called: activating raises Hangar's own windows over the
+  exit clear it. `NSApp.activate` is never called: activating raises Elis's own windows over the
   application the panel was summoned from, so `.nonactivatingPanel` plus `orderFrontRegardless` is what lets
-  it take the keyboard while Hangar stays inactive. A resign-driven hide records its time, and a show within
+  it take the keyboard while Elis stays inactive. A resign-driven hide records its time, and a show within
   `reshowSuppression` is dropped — AppKit makes a clicked window key BEFORE delivering its button action, so
   the toolbar and Dock toggles would otherwise re-show the panel the same click dismissed. This is AppKit
   key-window behavior, so it is manually verified, not unit-tested.
@@ -133,7 +133,7 @@ session drag are out of scope.
 - While the quick terminal OWNS THE KEYBOARD, no deck surface may be active. Gate main, split, maximized
   split, scratch, and overlay with `deckInteractive && isActive && !quickTerminal.holdsKey`. Read `holdsKey`,
   never `isVisible`: the predicate is app-level, so it inerts EVERY window, and a PINNED panel (a control
-  `quick show`) stays on screen after Hangar loses key. Gating on visibility there makes
+  `quick show`) stays on screen after Elis loses key. Gating on visibility there makes
   `TerminalSurfaceHost.updateNSView` revoke first responder in every window on the next SwiftUI update, so the user
   clicks into a terminal, types, and loses the keyboard again at the next title or status change. The same
   distinction governs `focusActiveSession`, `focusSplitPane`, the scratch's `suppressAutoFocus`,
@@ -145,16 +145,16 @@ session drag are out of scope.
   clears. `zoomedSurface` reports `quick` from the app-level flag ahead of the window's own target.
 - `GlobalHotkey` registers the `keymap.conf` `global-hotkey` chord through Carbon `RegisterEventHotKey`,
   which needs no Accessibility grant and CONSUMES the key, unlike an `NSEvent` global monitor. It is
-  re-registered on `.hangarKeymapChanged`. See [[keymap]] for the verb's grammar.
+  re-registered on `.elisKeymapChanged`. See [[keymap]] for the verb's grammar.
 - Notification identity is `"<windowID>:<sessionID>:<paneRole>"`. Capture resolves the owning window.
   Reveal reopens a closed window through raise or enqueue/open, polls until its store loads, then selects
   and focuses the pane. Unknown window/session only activates. This internal route is keep-in-sync exempt.
 - `GhosttySurfaceView` accepts an environment dictionary. `strdup` keys/values, retain a
   `[ghostty_env_var_s]` beside `configCStrings`, call `ghostty_surface_new` inside its mutable-buffer
   lifetime, and clear it with the strdup storage on destroy/deinit.
-- Tree surfaces inject `HANGAR_ENABLED`, window/workspace/session IDs, and `HANGAR_SOCKET`; split/overlay
+- Tree surfaces inject `ELIS_ENABLED`, window/workspace/session IDs, and `ELIS_SOCKET`; split/overlay
   inherit the session IDs. Quick terminal gets enabled and socket only — it belongs to no window, so it
-  carries no window id and an untargeted `hangarctl` run from it resolves the active window. Use
+  carries no window id and an untargeted `elisctl` run from it resolves the active window. Use
   `ControlServer.boundSocketPath`, omitting the variable before bind, so overridden sockets match children.
 
 ## Window state controls
@@ -166,18 +166,18 @@ session drag are out of scope.
   the flag alone does not exclude the header from the window server's title-bar drag region (#856).
   Double-click reads live `AppleActionOnDoubleClick`: Zoom/Fill zooms, Minimize miniaturizes,
   Do Nothing does nothing, and an absent key defaults to Zoom.
-  `HANGAR_UITEST_DOUBLECLICK_ACTION` overrides via environment because launch arguments hit FB11763863.
+  `ELIS_UITEST_DOUBLECLICK_ACTION` overrides via environment because launch arguments hit FB11763863.
   Decorative titlebar regions disable hit testing; buttons remain above them.
 - `window.fullscreen` uses `toggleFullScreen`, a distinct native Space. GUI surfaces are the palette,
   `BuiltinAction.toggleFullscreen` with Ctrl-Command-F through the key monitor, AppKit's own injected
   View menu item, and the green button. Control resolves an open ID; read back the `.fullScreen` style mask.
-- Hangar ships NO full screen menu item. AppKit appends its own "Enter Full Screen" (`toggleFullScreen:`,
-  Globe+F) to the View menu as it is prepared for display, so any item of Hangar's own is a visible
+- Elis ships NO full screen menu item. AppKit appends its own "Enter Full Screen" (`toggleFullScreen:`,
+  Globe+F) to the View menu as it is prepared for display, so any item of Elis's own is a visible
   duplicate. All of these were measured and none suppresses it: removing the injected item on
   `NSMenu.didBeginTrackingNotification` (posted once per ROOT tracking session, before the injection);
   removing it deferred one runloop turn (too late — the displayed menu is already snapshotted, so the model
   loses the item while the duplicate stays on screen); registering `NSFullScreenMenuItemEverywhere` false,
-  which macOS 26 ignores; and giving Hangar's own item the `toggleFullScreen:` selector, which AppKit
+  which macOS 26 ignores; and giving Elis's own item the `toggleFullScreen:` selector, which AppKit
   injects past anyway. Do not install a menu delegate, which would replace SwiftUI updates.
 - `toggle_fullscreen` therefore has no menu item to carry its equivalent, and is matched in
   `CustomCommandRunner`'s key monitor instead — the one built-in that does not ride a SwiftUI shortcut.
@@ -206,21 +206,21 @@ session drag are out of scope.
 - Control changes to frontmost state must call `takeFrontmost`, which records, persists, and reconciles
   auto-hidden sidebars. Inactive apps do not receive `didBecomeKey`, so relying on AppKit makes following
   untargeted commands hit the previous window. This requires manual isolated verification: background
-  Hangar, select the non-active window, confirm list marks it active and untargeted session creation lands
+  Elis, select the non-active window, confirm list marks it active and untargeted session creation lands
   there. XCUITest cannot deactivate without disturbing the user's Space.
 
 ## Live session host
 
-- `hangar-session-host` is a persistent responsibility root for Live daemons in one state directory.
+- `elis-session-host` is a persistent responsibility root for Live daemons in one state directory.
   Reuse it across app restarts; host death leaves its panes orphaned and later panes can start a
   replacement host.
 - Each helper build and login session has its own host endpoint, `session-host-<key>` under the zmx socket
   directory: the key is the first 12 hex digits of the helper image's `LC_UUID` plus the audit session id
-  (`hangar-session-host key`). An update or a forced logout therefore starts a new host for new panes
+  (`elis-session-host key`). An update or a forced logout therefore starts a new host for new panes
   (#971), and the old one stays the root of its existing daemons, since responsibility cannot be moved.
   The fixed `session-host` directory is a build predating keys; it is never served again.
 - On macOS 27 and later the client starts the host as a launchd job in `gui/<uid>` (`HostJob`), so the host
-  and its daemons get a coalition of their own. A spawned host stays in the coalition of the Hangar that
+  and its daemons get a coalition of their own. A spawned host stays in the coalition of the Elis that
   started it, and loginwindow force-quitting a program BTM disallows in the background ends that whole
   coalition, live panes included (#985). Responsibility disclaim does not change the coalition.
   Each attempt has a unique label, `<bundleID>.session-host.<key>.<nonce>`, and a 0600 plist removed once
@@ -230,7 +230,7 @@ session drag are out of scope.
   A definite bootstrap failure falls back to the disclaimed spawn, which keeps the shared coalition;
   a timed-out one never starts a second host. Older macOS keeps the spawn.
 - A host whose panes are gone is retired, never killed: after every launch's reap `HostRetirer` runs
-  `hangar-session-host stop <dir>` off the main thread, which asks every other endpoint to stop and a host
+  `elis-session-host stop <dir>` off the main thread, which asks every other endpoint to stop and a host
   refuses while it roots a live daemon. Reset Live Sessions… moves panes off an earlier host (`staleHost`),
   and the relaunch's retirement then ends it. The stop client (`ClientConnector.stopExisting`) checks the
   host's socket credentials, pid, hello and self-responsibility but never its image; pane creation keeps
@@ -241,7 +241,7 @@ session drag are out of scope.
   when the old bundle is moved aside, and fails when nothing is left at the path.
   The current key comes from running the bundled helper's `key`, cached by file identity
   (`HelperEndpointKey`); when it cannot be read, no pane is called stale.
-- Keep all `responsibility_*` SPI lookups in the `HangarResponsibility` target.
+- Keep all `responsibility_*` SPI lookups in the `ElisResponsibility` target.
   If the SPI is unavailable, panes fall back to bare attach.
 - `SessionHostTrampoline` owns the `forkpty` child path through `execve`; no Swift runs there.
 - The host answers one client at a time.
@@ -266,12 +266,12 @@ session drag are out of scope.
   resolution, a second render, and `viewDidMoveToWindow`. Poll `WindowRegistry.isRegistered`; selection
   waits for both open and registered. Never gate NSWindow work on `isOpen` alone.
 - `window.list` is served from `cachedWindowNodes`. Registration and unregistration post
-  `.hangarWindowAttachmentChanged`. A `.main` observer runs inline for a main-thread post, so the close
-  handler's unregister refresh captures `open: true` without geometry; its `.hangarWindowCatalogChanged`
+  `.elisWindowAttachmentChanged`. A `.main` observer runs inline for a main-thread post, so the close
+  handler's unregister refresh captures `open: true` without geometry; its `.elisWindowCatalogChanged`
   post after `closeWindow` replaces that node.
 - Refresh after main-actor dispatch except `events.read` and `msg.read`, frontmost change, sidebar
   visibility change, attachment, NSWindow move/resize/fullscreen/minimize transitions, and
-  `.hangarWindowCatalogChanged`, which the GUI window close, rename and delete and the Settings
+  `.elisWindowCatalogChanged`, which the GUI window close, rename and delete and the Settings
   auto-follow fan-out post. A change to a `window.list` field outside dispatch owes one of these signals
   or a direct `refreshWindowCache` (the remote-catalog dedupe, `ControlServer.takeFrontmost`), since an
   idle follower's poll does not rebuild the cache. Ignore notification payloads: carrying non-Sendable
@@ -309,7 +309,7 @@ session drag are out of scope.
 
 ## Finder open
 
-- Warm `open -a Hangar /path` (Discussion #230) resolves folders to themselves and files to parents,
+- Warm `open -a Elis /path` (Discussion #230) resolves folders to themselves and files to parents,
   queues them, and drains into the active store through `openSession(atDirectory:)`. Gate on a current
   workspace and retry every 0.1 seconds for at most 50 ticks. After insertion, raise the active window so
   a minimized target becomes visible.

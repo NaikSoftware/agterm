@@ -4,15 +4,15 @@ Resolves #331.
 
 ## Overview
 
-`hangarctl dashboard` takes session ids, and a split session always contributes both of its panes as grid
+`elisctl dashboard` takes session ids, and a split session always contributes both of its panes as grid
 cells. There is no way to put one pane of a split session on the grid.
 
 This accepts a per-id pane ref in the positional `ids` argument:
 
 ```
-hangarctl dashboard A1B2C3D4                      # unchanged: every pane of the session
-hangarctl dashboard A1B2C3D4:left                 # main pane only
-hangarctl dashboard A1B2C3D4:left E5F6A7B8:right  # mixed, per id
+elisctl dashboard A1B2C3D4                      # unchanged: every pane of the session
+elisctl dashboard A1B2C3D4:left                 # main pane only
+elisctl dashboard A1B2C3D4:left E5F6A7B8:right  # mixed, per id
 ```
 
 A bare id keeps its current meaning, so nothing breaks.
@@ -51,11 +51,11 @@ pane's own shell exiting clears it, which destroys a layout the user built.
 
 ## Testing Strategy
 
-- Unit tests in `HangarCore/Tests/HangarCoreTests/` per changed source file, one test file per source file.
-- CLI tests in `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`.
-- One XCUITest in `HangarUITests/DashboardUITests.swift`, near-cloned from
+- Unit tests in `ElisCore/Tests/ElisCoreTests/` per changed source file, one test file per source file.
+- CLI tests in `ElisCore/Tests/elisctlKitTests/CommandsTests.swift`.
+- One XCUITest in `ElisUITests/DashboardUITests.swift`, near-cloned from
   `testSplitSessionOpensTwoCellsAndEnterFocusesSplitPane`.
-- Gates: `cd HangarCore && swift test`, `make test-app`, `make lint`. Zero lint findings required.
+- Gates: `cd ElisCore && swift test`, `make test-app`, `make lint`. Zero lint findings required.
 
 ## Solution Overview
 
@@ -113,7 +113,7 @@ promoted into primary; the cell should follow). It must be driven from the promo
 
 ## Technical Details
 
-New host-free type in `HangarCore`, used by both the dispatcher (validation) and `ControlServer`
+New host-free type in `ElisCore`, used by both the dispatcher (validation) and `ControlServer`
 (resolution), so the grammar has exactly one implementation:
 
 ```swift
@@ -142,8 +142,8 @@ yields `unresolved: A:left`, which is today's behavior.
 ### Task 1: Host-free `DashboardTarget` parser
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/DashboardTarget.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/DashboardTargetTests.swift`
+- Create: `ElisCore/Sources/ElisCore/DashboardTarget.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/DashboardTargetTests.swift`
 
 - [x] add `DashboardTarget` with a failable parse from a raw target string
 - [x] no colon → bare target, `pane == nil`, always valid
@@ -153,13 +153,13 @@ yields `unresolved: A:left`, which is today's behavior.
 - [x] write tests: bare id, `active:left`, prefix+suffix (`A1B2:right`), uppercase `:LEFT`, full-UUID forms
 - [x] write tests for rejects: `:left`, `A:`, `A:lft`, `A:scratch`, `A:overlay`, `A:primary`, `A:split`,
       and `surface:<uuid>:left` (head `surface`, suffix `<uuid>:left` — a hard reject, not a half-resolve)
-- [x] run `cd HangarCore && swift test` — 16 tests pass
+- [x] run `cd ElisCore && swift test` — 16 tests pass
 
 ### Task 2: Dispatcher-side grammar validation
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherDashboardTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherDashboardTests.swift`
 
 - [x] in `dispatchDashboard`, parse every target through `DashboardTarget` and reject an invalid suffix
       with a clear error naming the offending token
@@ -167,13 +167,13 @@ yields `unresolved: A:left`, which is today's behavior.
 - [x] confirm the fallback switch gains no validation (`.claude/rules/control-api.md`)
 - [x] write tests: valid suffixed targets pass through; each reject form produces the error
 - [x] write tests: bare-id requests are byte-identical to today
-- [x] run `cd HangarCore && swift test` — 22 tests pass across both suites
+- [x] run `cd ElisCore && swift test` — 22 tests pass across both suites
 
-### Task 3: Pane-aware expansion in `HangarCore`
+### Task 3: Pane-aware expansion in `ElisCore`
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Dashboard.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStore+DashboardTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Dashboard.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStore+DashboardTests.swift`
 
 - [x] add a `DashboardMember`-yielding expansion that takes resolved `(UUID, TerminalZoomSurface?)` pairs
       — modelled as `ResolvedDashboardTarget` beside `DashboardTarget`, so the pair is named and Equatable
@@ -186,12 +186,12 @@ yields `unresolved: A:left`, which is today's behavior.
       expansion drops silently and `ControlServer` has to re-derive which token vanished)
 - [x] write tests: mixed bare/suffixed input, `A A:left` dedup, explicit-pane expansion, cap and
       dropped-pane count still correct
-- [x] run `cd HangarCore && swift test` — full suite green, 2088 tests
+- [x] run `cd ElisCore && swift test` — full suite green, 2088 tests
 
 ### Task 4: Resolution in `ControlServer.setDashboard`
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `Elis/Control/ControlServer.swift`
 
 - [x] parse each target into `DashboardTarget`, resolve the head via `ControlResolve.resolve`
 - [x] check the requested pane exists; a resolved head whose pane does not exist joins `unresolved` with
@@ -215,14 +215,14 @@ yields `unresolved: A:left`, which is today's behavior.
 ### Task 5: Keep a promoted pane on the grid
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/DashboardController.swift`
-- Modify: `Hangar/hangarApp.swift`
-- Modify: `Hangar/Views/DashboardView.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/DashboardControllerTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/DashboardController.swift`
+- Modify: `Elis/elisApp.swift`
+- Modify: `Elis/Views/DashboardView.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/DashboardControllerTests.swift`
 
 - [x] add a controller method that rewrites a session's `.split` member to `.primary`, deduping if the
       session already has a `.primary` member, and moves the highlight with it
-- [x] drive it from `handlePaneExit` in `Hangar/hangarApp.swift`, immediately after the
+- [x] drive it from `handlePaneExit` in `Elis/elisApp.swift`, immediately after the
       `store.closePrimaryPane(sessionID)` call, reusing the "session still exists ⇒ it promoted" test the
       adjacent line already performs. This is the only place that knows a promotion happened:
       `closeSplit` and `closePrimaryPane` both end with `hasSplit == false`, so `dashboardValidMembers`
@@ -236,26 +236,26 @@ yields `unresolved: A:left`, which is today's behavior.
 - [x] update the `DashboardView.swift:155-165` comment, whose premise this changes
 - [x] write tests: `A:split`-only member survives promotion as `A:primary`; both-member case dedups;
       highlight follows; `closeSplit` still prunes
-- [x] ⚠️ unit tests reach the controller method only, not the `hangarApp.swift` wiring — the end-to-end
+- [x] ⚠️ unit tests reach the controller method only, not the `elisApp.swift` wiring — the end-to-end
       assertion for that lives in task 7 and must not be skipped
-- [x] run `cd HangarCore && swift test` and `make test-app` — must pass before task 6
+- [x] run `cd ElisCore && swift test` and `make test-app` — must pass before task 6
 
 ### Task 6: CLI surface
 
 **Files:**
-- Modify: `HangarCore/Sources/hangarctlKit/MiscCommands.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/MiscCommands.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/CommandsTests.swift`
 
 - [x] extend the `ids` argument help and the discussion block with the pane-ref forms
 - [x] add a discussion line for the mixed example `dashboard A:left B:right`
 - [x] keep parse-time `validate()` rejecting the same flag combinations as today
 - [x] write tests: suffixed ids reach `ControlArgs.targets` verbatim; `--mru` with suffixed ids still rejected
-- [x] run `cd HangarCore && swift test` — must pass before task 7
+- [x] run `cd ElisCore && swift test` — must pass before task 7
 
 ### Task 7: End-to-end coverage
 
 **Files:**
-- Modify: `HangarUITests/DashboardUITests.swift`
+- Modify: `ElisUITests/DashboardUITests.swift`
 
 `openDashboard(members: [String])` (`DashboardUITests.swift:456`) already takes raw strings, so every
 assertion below is a string change rather than new harness.
@@ -270,7 +270,7 @@ assertion below is a string change rather than new harness.
 - [x] assert the task 5 wiring end to end: hold a session on the grid by `:right`, exit its primary
       shell, and confirm `dashboardMembers` becomes `["<id>:left"]` rather than dropping the cell
 - [x] run the five tests — **all pass**, 34.6s (`Executed 5 tests, with 0 failures`).
-      `testPromotedSplitKeepsItsCellOnTheGrid` is the executed coverage for task 5's `hangarApp` wiring,
+      `testPromotedSplitKeepsItsCellOnTheGrid` is the executed coverage for task 5's `elisApp` wiring,
       which the controller unit tests cannot reach.
 - ➕ The first two attempts died before any test body ran: `Failed to initialize for UI testing: Timed out
       while enabling automation mode`, reproduced on the untouched
@@ -282,8 +282,8 @@ assertion below is a string change rather than new harness.
 
 **Files:**
 - Modify: `README.md`, `site/docs.html`, `site/commands.html`
-- Modify: `plugins/hangar/skills/hangar/SKILL.md`, `plugins/hangar/skills/hangar/reference.md`,
-  `plugins/hangar/skills/hangar/examples.md`
+- Modify: `plugins/elis/skills/elis/SKILL.md`, `plugins/elis/skills/elis/reference.md`,
+  `plugins/elis/skills/elis/examples.md`
 - Modify: `.claude/rules/control-api.md`
 
 - [x] README dashboard section and cheat sheet: document the pane-ref form
@@ -300,7 +300,7 @@ assertion below is a string change rather than new harness.
 - [x] a bare id still yields every pane of the session
 - [x] `A A:left` dedups; `A:right` on a non-split session lands in the `unresolved` note, or errors when it is the sole target
 - [x] promoting a split survivor keeps the cell on the grid
-- [x] full suite: `cd HangarCore && swift test`, `make test-app`, `make lint`
+- [x] full suite: `cd ElisCore && swift test`, `make test-app`, `make lint`
 
 ### Task 10: [Final] Close out
 

@@ -1,11 +1,11 @@
 ---
 worth: later
-where: HangarCore/Sources/HangarCore/TerminalClipboard.swift:copy
+where: ElisCore/Sources/ElisCore/TerminalClipboard.swift:copy
 added: 2026-10-08
 ---
 # zmx print exits 0 without proof the daemon took the write
 
-`hangarctl clipboard set` runs `zmx print`, and its exit status is all the command knows. zmx's client
+`elisctl clipboard set` runs `zmx print`, and its exit status is all the command knows. zmx's client
 `send` (main.zig, pinned `8bab1f0`) writes the message and returns without reading a reply, and maps
 `BrokenPipe` and `ConnectionResetByPeer` during the write to success. So a copy can be lost with exit 0.
 

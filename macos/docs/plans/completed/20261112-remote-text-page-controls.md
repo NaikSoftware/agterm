@@ -3,13 +3,13 @@
 ## Overview
 
 A text page shown for a remote session is a static copy today. A session attached from another Mac or served by
-an hangar-server Linux host gets no log page (`--tail`, `--follow-file`, a clicked log); `session.overlay.search`,
+an elis-server Linux host gets no log page (`--tail`, `--follow-file`, a clicked log); `session.overlay.search`,
 `.wrap` and `.changes` are refused with `remote page`, and `.follow` finds no log page. On the presenting Mac the
 replica page's own bar searches and wraps, but nothing is recorded or read back.
 
 This plan makes a remote text page behave like a local one: it follows a log's end, searches, wraps and steps a
 diff's changes, from its own bar and from the control API on the origin and on the presenting Mac, for a Mac origin
-and a Linux origin. hangar-server also gets page sessions: the HTML file and URL page rows a Mac has, shown in a
+and a Linux origin. elis-server also gets page sessions: the HTML file and URL page rows a Mac has, shown in a
 Mac's remote window and attachable from another Mac. Page rows hold only HTML file and URL pages on both hosts;
 markdown, text and document page rows are a separate local feature, not part of this plan.
 
@@ -25,9 +25,9 @@ Smells pre-check: skipped — non-Go project
 - `RemotePageResources.swift`: `.text` serves `ContentResource(maxBytes: TextPage.maxBytes)`.
 - `TextProbe.loadLog` and `BoundedFile.readTail` return "unchanged" or a bounded tail snapshot with stamp;
   `FileStamp` is not `Codable`, `TextProbe.LogRead` has no public init.
-- `Hangar/Views/LogFollower.swift`: synchronous `Reader`; reads already run detached with a read sequence and pause
+- `Elis/Views/LogFollower.swift`: synchronous `Reader`; reads already run detached with a read sequence and pause
   epoch, and an overtaken read is dropped.
-- `Hangar/Views/TextPageBridge.swift`: `make` guards `case .text`; owns follower, search, wrap, changes.
+- `Elis/Views/TextPageBridge.swift`: `make` guards `case .text`; owns follower, search, wrap, changes.
 - `HtmlOverlayRegistry.swift:600-609`: a replica text page is built once from `fetchReplica` with no bridge;
   `HtmlReplicaLink` holds `fetch`, `bridge` and `ownPageCommandsLocal`.
 - A replica's source is `.replica(path:, content: .text(line:))` (`AppStore+ReplicaPage.swift:37`), also for page rows
@@ -42,7 +42,7 @@ Smells pre-check: skipped — non-Go project
   from `ControlDispatcher.swift:447-451`); search and changes are async. Both hosts run a command inline on the accept
   thread (`ControlServer.handleConnection`, `ControlServer.swift:454`; `ServerControlSocket.swift:87`); only the Mac's `waitsOnNetwork` list leaves it.
 - `ControlServer+TextPage.swift:16` `textLogRefusal`; `:27` a clicked log on a remote pane opens plain.
-- hangar-server: `ServerActions+Overlay.swift:41` refuses every log page; `checkedPage` reads text whole;
+- elis-server: `ServerActions+Overlay.swift:41` refuses every log page; `checkedPage` reads text whole;
   `ServerStreams.clickedPage` maps the route alone; `ServerCommandPolicy` does not admit follow/search/wrap/changes,
   which fall to `ControlActionsDefaults`' unsupported replies. The server uses the shared `AppStore` remote-page path.
 - `ControlErrors.swift:84` `logRemote` names "another Mac", wrong for a Linux origin.
@@ -60,8 +60,8 @@ Smells pre-check: skipped — non-Go project
 
 ## Testing Strategy
 
-- host-free `HangarCore` tests for frames, channel frames, store state, refusals, emission and server actions
-- hosted `HangarTests` for the bridge, replica pages and control-server routing, with `RemotePageFakes`
+- host-free `ElisCore` tests for frames, channel frames, store state, refusals, emission and server actions
+- hosted `ElisTests` for the bridge, replica pages and control-server routing, with `RemotePageFakes`
 - no UI tests: the page bar is the local one, and every remote path is covered host-side
 
 ## Decisions carried
@@ -78,7 +78,7 @@ Smells pre-check: skipped — non-Go project
 | A replica's wrap stays unrecorded, unreported, dropped by a rebuild | control-api.md | changed: recorded, reported, kept across rebuilds, same rule |
 | Wrap and diff change-stepping on remote pages | Eugene, 2026-11-12 | included |
 | Page rows hold only HTML file and URL pages | `ControlDispatcher+Companions.pageRowOptions` | kept; content page rows are a local feature outside this plan |
-| hangar-server has no page sessions | Linux server plan | changed: Eugene, 2026-11-12 |
+| elis-server has no page sessions | Linux server plan | changed: Eugene, 2026-11-12 |
 
 ## Solution Overview
 
@@ -159,16 +159,16 @@ The presenting Mac renders and owns the live page state, as it already owns the 
 ### Task 1: Frames, wire types and capability
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`
-- Modify: `HangarCore/Sources/HangarCore/PresentationHub.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemotePresentationClient.swift`
-- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlModes.swift`
-- Modify: `Hangar/Control/ControlServer+Ask.swift`
-- Modify: `Hangar/Control/ControlServer+RemotePage.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/ServerStreams.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/PresentationFramesTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/PresentationHubTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/PresentationFrames.swift`
+- Modify: `ElisCore/Sources/ElisCore/PresentationHub.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemotePresentationClient.swift`
+- Modify: `ElisCore/Sources/ElisCore/HtmlOverlay.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlModes.swift`
+- Modify: `Elis/Control/ControlServer+Ask.swift`
+- Modify: `Elis/Control/ControlServer+RemotePage.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerStreams.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/PresentationFramesTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/PresentationHubTests.swift`
 
 - [x] check the agterm-linux fork (`gh` code search with `fork:true`, or a shallow clone in `/tmp`) for exhaustive
       switches over `PresentationPageAction` or `PresentationFrame.Body`; report any to Eugene before adding cases
@@ -187,18 +187,18 @@ The presenting Mac renders and owns the live page state, as it already owns the 
 ### Task 2: Log tail frames on the page channel
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/PageServeFrames.swift`
-- Modify: `HangarCore/Sources/HangarCore/PageServeStream.swift`
-- Modify: `HangarCore/Sources/HangarCore/BoundedFile.swift`
-- Modify: `HangarCore/Sources/HangarCore/TextProbe.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/ServerStreams.swift`
-- Modify: `Hangar/Control/ControlServer+PageServe.swift`
-- Modify: `Hangar/Control/RemotePageChannel.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/PageServeFramesTests.swift`
-- Modify: `HangarCore/Tests/HangarServerTests/ServerStreamsTests.swift`
-- Modify: `HangarTests/ControlServerPageServeTests.swift`
-- Modify: `HangarTests/RemotePageChannelTests.swift`
-- Modify: `HangarTests/RemotePageFakes.swift`
+- Modify: `ElisCore/Sources/ElisCore/PageServeFrames.swift`
+- Modify: `ElisCore/Sources/ElisCore/PageServeStream.swift`
+- Modify: `ElisCore/Sources/ElisCore/BoundedFile.swift`
+- Modify: `ElisCore/Sources/ElisCore/TextProbe.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerStreams.swift`
+- Modify: `Elis/Control/ControlServer+PageServe.swift`
+- Modify: `Elis/Control/RemotePageChannel.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/PageServeFramesTests.swift`
+- Modify: `ElisCore/Tests/ElisServerTests/ServerStreamsTests.swift`
+- Modify: `ElisTests/ControlServerPageServeTests.swift`
+- Modify: `ElisTests/RemotePageChannelTests.swift`
+- Modify: `ElisTests/RemotePageFakes.swift`
 
 - [x] make `FileStamp` `Codable`; give `TailRead` and `TextProbe.LogRead` public inits, `LogRead(_:tail:)` building
       the snapshot `loadLog` returns
@@ -218,9 +218,9 @@ The presenting Mac renders and owns the live page state, as it already owns the 
 ### Task 3: Async reader for LogFollower
 
 **Files:**
-- Modify: `Hangar/Views/LogFollower.swift`
-- Modify: `Hangar/Views/TextPageBridge.swift`
-- Modify: `HangarTests/LogFollowerTests.swift`
+- Modify: `Elis/Views/LogFollower.swift`
+- Modify: `Elis/Views/TextPageBridge.swift`
+- Modify: `ElisTests/LogFollowerTests.swift`
 
 - [x] make `Reader` async; the default reader detaches `TextProbe.loadLog` itself and `readLog` awaits `read`
 - [x] write a test where pause, and separately stop, happen while an async reader is suspended mid-read
@@ -229,18 +229,18 @@ The presenting Mac renders and owns the live page state, as it already owns the 
 ### Task 4: Replica text pages on the presenter
 
 **Files:**
-- Modify: `Hangar/Views/TextPageBridge.swift`
-- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`
-- Modify: `Hangar/Views/HtmlReplicaLink.swift`
-- Modify: `Hangar/Control/ControlServer+RemotePage.swift`
-- Modify: `Hangar/Control/ControlServer+TextPage.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+ReplicaPage.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/HtmlOverlayTests.swift`
-- Modify: `HangarTests/TextPageRenderingTests.swift`
-- Modify: `HangarTests/HtmlOverlayRegistryTests.swift`
-- Modify: `HangarTests/ControlServerTextPageTests.swift`
-- Modify: `HangarTests/RemotePageFakes.swift`
+- Modify: `Elis/Views/TextPageBridge.swift`
+- Modify: `Elis/Views/HtmlOverlayRegistry.swift`
+- Modify: `Elis/Views/HtmlReplicaLink.swift`
+- Modify: `Elis/Control/ControlServer+RemotePage.swift`
+- Modify: `Elis/Control/ControlServer+TextPage.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+HtmlOverlay.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+ReplicaPage.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/HtmlOverlayTests.swift`
+- Modify: `ElisTests/TextPageRenderingTests.swift`
+- Modify: `ElisTests/HtmlOverlayRegistryTests.swift`
+- Modify: `ElisTests/ControlServerTextPageTests.swift`
+- Modify: `ElisTests/RemotePageFakes.swift`
 
 - [x] widen the store's text-page paths to `.replica(_, .text)` (through `HtmlSource.kind == .text`):
       `textSearchPage`, `setTextSearch`, `textChangesPage`, `setTextChangesReport`, `setTextWrap`; follow answers
@@ -266,22 +266,22 @@ The presenting Mac renders and owns the live page state, as it already owns the 
 ### Task 5: Origin control of remote text pages
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePage.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemoteOverlays.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlErrors.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlActions.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Overlay.swift`
-- Modify: `Hangar/Control/ControlServer+TextPage.swift`
-- Modify: `Hangar/Control/ControlServer+RemotePage.swift`
-- Modify: `Hangar/Control/ControlServer+Ask.swift`
-- Modify: `Hangar/Views/TextPageBridge.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreRemotePageTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherOverlayTests.swift`
-- Modify: `HangarTests/ControlServerTextPageTests.swift`
-- Modify: `HangarTests/ControlServerRemotePageTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RemotePage.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+HtmlOverlay.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemoteOverlays.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlErrors.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlActions.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlActionsDefaults.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Overlay.swift`
+- Modify: `Elis/Control/ControlServer+TextPage.swift`
+- Modify: `Elis/Control/ControlServer+RemotePage.swift`
+- Modify: `Elis/Control/ControlServer+Ask.swift`
+- Modify: `Elis/Views/TextPageBridge.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreRemotePageTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherOverlayTests.swift`
+- Modify: `ElisTests/ControlServerTextPageTests.swift`
+- Modify: `ElisTests/ControlServerRemotePageTests.swift`
 
 - [x] make `setSessionOverlayFollow` and `setSessionOverlayWrap` async in the protocol, defaults and callers; move
       their dispatcher arms to async helpers routed with `.sessionOverlaySearch`; local replies unchanged
@@ -312,26 +312,26 @@ The presenting Mac renders and owns the live page state, as it already owns the 
 ### Task 6: Clicked logs on remote panes
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer+TextPage.swift`
-- Modify: `Hangar/Control/ControlServer+ForwardedClick.swift`
-- Modify: `HangarTests/ControlServerRemoteLinkClickTests.swift`
+- Modify: `Elis/Control/ControlServer+TextPage.swift`
+- Modify: `Elis/Control/ControlServer+ForwardedClick.swift`
+- Modify: `ElisTests/ControlServerRemoteLinkClickTests.swift`
 
 - [x] a forwarded click on a log opens a log page when both ends list `page.text`, the plain page otherwise
 - [x] write tests for both capability cases and for a hidden clicked log page being replaced
 - [x] run tests - must pass before next task
 
-### Task 7: hangar-server origin
+### Task 7: elis-server origin
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarServerKit/ServerActions+Overlay.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/ServerStreams.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/ServerCommandPolicy.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/ServerActions.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePage.swift`
-- Modify: `HangarCore/Tests/HangarServerTests/ServerActionsOverlayTests.swift`
-- Modify: `HangarCore/Tests/HangarServerTests/ServerStreamsTests.swift`
-- Modify: `HangarCore/Tests/HangarServerTests/ServerCommandPolicyTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreRemotePageTests.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerActions+Overlay.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerStreams.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerCommandPolicy.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerActions.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RemotePage.swift`
+- Modify: `ElisCore/Tests/ElisServerTests/ServerActionsOverlayTests.swift`
+- Modify: `ElisCore/Tests/ElisServerTests/ServerStreamsTests.swift`
+- Modify: `ElisCore/Tests/ElisServerTests/ServerCommandPolicyTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreRemotePageTests.swift`
 
 - [x] remove the unconditional log refusal; probe a log through the tail path in `checkedPage`
 - [x] carry the log request into the serving claim; a clicked log becomes a log page only when the connected
@@ -345,20 +345,20 @@ The presenting Mac renders and owns the live page state, as it already owns the 
       report, a held log page not offered to an older presenter, an open refused while only an older one is connected
 - [x] run tests - must pass before next task
 
-### Task 8: Page sessions on hangar-server
+### Task 8: Page sessions on elis-server
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarServerKit/ServerCommandPolicy.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/ServerActions+Sessions.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/ServerActions+Unserved.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/ServerStreams.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/HangarServer.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/PaneObserver.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/ServerCatalog.swift`
-- Modify: `HangarCore/Tests/HangarServerTests/ServerActionsSessionsTests.swift`
-- Modify: `HangarCore/Tests/HangarServerTests/PaneObserverTests.swift`
-- Modify: `HangarCore/Tests/HangarServerTests/ServerCommandPolicyTests.swift`
-- Modify: `HangarCore/Tests/HangarServerTests/ServerStreamsTests.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerCommandPolicy.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerActions+Sessions.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerActions+Unserved.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerStreams.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ElisServer.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/PaneObserver.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerCatalog.swift`
+- Modify: `ElisCore/Tests/ElisServerTests/ServerActionsSessionsTests.swift`
+- Modify: `ElisCore/Tests/ElisServerTests/PaneObserverTests.swift`
+- Modify: `ElisCore/Tests/ElisServerTests/ServerCommandPolicyTests.swift`
+- Modify: `ElisCore/Tests/ElisServerTests/ServerStreamsTests.swift`
 
 - [x] admit `session.page`, `session.companion.page` and `session.companion.page.attach`; create HTML file and URL
       rows through the shared `AppStore.addPageSession`/`addPageCompanion` and the dispatcher's existing
@@ -369,12 +369,12 @@ The presenting Mac renders and owns the live page state, as it already owns the 
       server's `PageServeHost`; the page's final release ends every view; a file page's bridge requests run through the
       server's own dispatcher
 - [x] save and restore page rows through the shared `PageSnapshot` path (`openRestoredPages`) when the server restarts
-- [x] hoist `ControlServer.pageCompanionRefusal` into HangarCore and call it from `ServerActions.serve`, so split,
+- [x] hoist `ControlServer.pageCompanionRefusal` into ElisCore and call it from `ServerActions.serve`, so split,
       type, scratch, HUD, ask and the other terminal commands on a server page row are refused as on the Mac;
       `session.overlay.follow|search|wrap|changes` on a page row answer `no text page`, as a Mac page row does, since
       rows hold only HTML file and URL pages
-- [x] hoist the companion attach token and claim book (`companionPageTokens`, `companionPageStreams`) into HangarCore,
-      shared by both hosts, never duplicated in HangarServerKit
+- [x] hoist the companion attach token and claim book (`companionPageTokens`, `companionPageStreams`) into ElisCore,
+      shared by both hosts, never duplicated in ElisServerKit
 - [x] skip page rows in the server's pane-identity readers (`ServerActions+Receipts.swift:98`,
       `ServerActions+Remote.swift:17`) as `locallyManagedPaneIdentities` does on the Mac
 - [x] refuse a loopback URL page row at creation on the server: it names the server's host, and a page row has no
@@ -387,22 +387,22 @@ The presenting Mac renders and owns the live page state, as it already owns the 
 ### Task 9: Server page rows in Mac remote windows, docs and gates
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/CatalogFrames.swift`
-- Modify: `HangarCore/Sources/HangarCore/CatalogHub.swift`
-- Modify: `HangarCore/Sources/HangarServerKit/ServerCatalog.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemoteCatalogMirror.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemoteCatalogClient.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Catalog.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+ReplicaPage.swift`
-- Modify: `Hangar/Control/ControlServer+RemoteCatalog.swift`
-- Modify: `Hangar/Control/ControlServer+RemoteCompanions.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/CatalogFramesTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/CatalogHubTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/RemoteCatalogMirrorTests.swift`
-- Modify: `HangarCore/Tests/HangarServerTests/ServerCatalogTests.swift`
-- Modify: `HangarTests/AppActions+RemoteCatalogTests.swift`
-- Modify: `plugins/hangar/skills/hangar/SKILL.md`
-- Modify: `plugins/hangar/skills/hangar/reference.md`
+- Modify: `ElisCore/Sources/ElisCore/CatalogFrames.swift`
+- Modify: `ElisCore/Sources/ElisCore/CatalogHub.swift`
+- Modify: `ElisCore/Sources/ElisServerKit/ServerCatalog.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemoteCatalogMirror.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemoteCatalogClient.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Catalog.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+ReplicaPage.swift`
+- Modify: `Elis/Control/ControlServer+RemoteCatalog.swift`
+- Modify: `Elis/Control/ControlServer+RemoteCompanions.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/CatalogFramesTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/CatalogHubTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/RemoteCatalogMirrorTests.swift`
+- Modify: `ElisCore/Tests/ElisServerTests/ServerCatalogTests.swift`
+- Modify: `ElisTests/AppActions+RemoteCatalogTests.swift`
+- Modify: `plugins/elis/skills/elis/SKILL.md`
+- Modify: `plugins/elis/skills/elis/reference.md`
 - Modify: `site/docs.html`
 - Modify: `site/commands.html`
 - Modify: `.claude/rules/control-api.md`
@@ -430,15 +430,15 @@ The presenting Mac renders and owns the live page state, as it already owns the 
       duplicate; detach and reattach; re-claim after channel loss and after restart; rename, move and close of a page
       row; `session.page` forwarded from a server window
 - [x] update the skill, docs, command reference and control-api rules: remove the remote refusals, state the
-      `page.text` gate, the older-peer messages, the presenter-side control and page sessions on hangar-server
-- [x] run `cd HangarCore && swift test`, `make test-app`, `make lint`
+      `page.text` gate, the older-peer messages, the presenter-side control and page sessions on elis-server
+- [x] run `cd ElisCore && swift test`, `make test-app`, `make lint`
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
 **Manual verification**
-- a Mac attached to another Mac and to an hangar-server host: `overlay open --tail 200` on a growing log, then
-  follow, pause by scrolling, search, wrap, step a `.diff` page, from the page bar and from `hangarctl` on both sides
+- a Mac attached to another Mac and to an elis-server host: `overlay open --tail 200` on a growing log, then
+  follow, pause by scrolling, search, wrap, step a `.diff` page, from the page bar and from `elisctl` on both sides
 - an older presenter and an older origin: log open and the four commands answer the remote refusal
-- `hangarctl session overlay open --page --html <file>` on an hangar-server host: the row shows in a Mac's remote
+- `elisctl session overlay open --page --html <file>` on an elis-server host: the row shows in a Mac's remote
   window, survives a server restart, and attaches from a second Mac

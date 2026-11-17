@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-time move from Agterm2 to Hangar. Run it once after you install Hangar and before Hangar first starts.
+# One-time move from Agterm2 to Elis. Run it once after you install Elis and before Elis first starts.
 # It copies your sessions and config, removes what Agterm2 installed for agents, and leaves the old dirs as a backup.
 # Safe to run twice.
 #
@@ -30,11 +30,11 @@ note_left() { left="$left  - $1"$'\n'; }
 say() { [ $dry -eq 1 ] && echo "would $1" || echo "$1"; }
 
 if [ $isolated -eq 0 ]; then
-    for id in ua.naiksoftware.agterm2 ua.naiksoftware.hangar; do
-        name=$([ $id = ua.naiksoftware.hangar ] && echo Hangar || echo agterm)
+    for id in ua.naiksoftware.agterm2 ua.naiksoftware.elis; do
+        name=$([ $id = ua.naiksoftware.elis ] && echo Elis || echo agterm)
         # pgrep also covers a session where lsappinfo cannot reach the window server (ssh)
         if [ -n "$(lsappinfo find "bundleid=$id" 2>/dev/null)" ] || pgrep -x "$name" >/dev/null 2>&1; then
-            echo "Quit $([ $name = Hangar ] && echo Hangar || echo Agterm2) first, then run this again." >&2
+            echo "Quit $([ $name = Elis ] && echo Elis || echo Agterm2) first, then run this again." >&2
             exit 1
         fi
     done
@@ -64,8 +64,8 @@ print("/tmp/agterm-zmx-%016x" % h)' "$home/Library/Application Support/agterm")"
     fi
 fi
 
-hangar_ran=0
-[ -d "$home/Library/Application Support/hangar" ] && hangar_ran=1
+elis_ran=0
+[ -d "$home/Library/Application Support/elis" ] && elis_ran=1
 
 # read first: bash 3.2 misparses a quoted heredoc inside $(...)
 IFS= read -r -d '' migrate_py <<'PY' || true
@@ -86,7 +86,7 @@ def read(p):
 def write(p, text):
     # in place: keeps the mode and writes through a dotfiles symlink; the first edit keeps a backup
     if dry: return
-    bak = p + ".pre-hangar"
+    bak = p + ".pre-elis"
     if not os.path.lexists(bak): shutil.copy2(os.path.realpath(p), bak)
     with open(p, "w", encoding="utf-8", errors="surrogateescape") as f: f.write(text)
 
@@ -96,38 +96,38 @@ def step(path, fn, *args):
     except OSError as e: left(f"could not edit {short(path)} ({e.strerror}): remove the agterm entries from it yourself.")
 
 RENAMES = [
-    (re.compile(r"agtermctl"), "hangarctl"),
-    (re.compile(r"AGTERM_"), "HANGAR_"),
-    (re.compile(r"(?<=\.config/)agterm(?![\w.])"), "hangar"),
-    (re.compile(r"(?<=Application Support/)agterm(?![\w.])"), "hangar"),
-    (re.compile(r"(?<=Application\\ Support/)agterm(?![\w.])"), "hangar"),
-    (re.compile(r"(?<![\w.-])agterm\.app(?![\w])"), "Hangar.app"),
-    (re.compile(r"(?<=Contents/MacOS/)agterm(?![\w.-])"), "Hangar"),
-    (re.compile(r"(?<![\w.-])agterm(?=\.(?:sock|lock)\b)"), "hangar"),
-    (re.compile(r"(?<![\w.-])agterm(?=://)"), "hangar"),
+    (re.compile(r"agtermctl"), "elisctl"),
+    (re.compile(r"AGTERM_"), "ELIS_"),
+    (re.compile(r"(?<=\.config/)agterm(?![\w.])"), "elis"),
+    (re.compile(r"(?<=Application Support/)agterm(?![\w.])"), "elis"),
+    (re.compile(r"(?<=Application\\ Support/)agterm(?![\w.])"), "elis"),
+    (re.compile(r"(?<![\w.-])agterm\.app(?![\w])"), "Elis.app"),
+    (re.compile(r"(?<=Contents/MacOS/)agterm(?![\w.-])"), "Elis"),
+    (re.compile(r"(?<![\w.-])agterm(?=\.(?:sock|lock)\b)"), "elis"),
+    (re.compile(r"(?<![\w.-])agterm(?=://)"), "elis"),
 ]
 THEME_LINE = re.compile(r"^(\s*theme\s*=.*)$", re.M)
 THEME_WORD = re.compile(r"(?<![\w./-])agterm(?![\w./-])")
 
 def rename_config_text(text):
     for pattern, new in RENAMES: text = pattern.sub(new, text)
-    return THEME_LINE.sub(lambda m: THEME_WORD.sub("hangar", m.group(1)), text)
+    return THEME_LINE.sub(lambda m: THEME_WORD.sub("elis", m.group(1)), text)
 
 OLD_CONFIG = {"~/.config/agterm", home + "/.config/agterm"}
 
 def rename_settings(text):
     # only the theme values and a config dir set to the old default: other strings belong to the user
     text = re.sub(r'("(?:theme|darkTheme)"\s*:\s*")([^"]*)(")',
-                  lambda m: m.group(1) + THEME_WORD.sub("hangar", m.group(2)) + m.group(3), text)
+                  lambda m: m.group(1) + THEME_WORD.sub("elis", m.group(2)) + m.group(3), text)
     return re.sub(r'("configDirectory"\s*:\s*")([^"]*)(")',
-                  lambda m: m.group(1) + (m.group(2)[:-6] + "hangar" if m.group(2).replace("\\/", "/") in OLD_CONFIG
+                  lambda m: m.group(1) + (m.group(2)[:-6] + "elis" if m.group(2).replace("\\/", "/") in OLD_CONFIG
                                           else m.group(2)) + m.group(3), text)
 
 def copy_dir(src, dst, skip_top, rewrite):
     if not os.path.isdir(src): return
     if os.path.lexists(dst):
         left(f"{short(dst)} already exists, so nothing was copied from {short(src)}. "
-             "If Hangar started before this script, quit it, move that folder away and run this again.")
+             "If Elis started before this script, quit it, move that folder away and run this again.")
         return
     did(f"copy {short(src)} to {short(dst)}")
     if dry: return
@@ -159,12 +159,12 @@ def copy_dir(src, dst, skip_top, rewrite):
     os.rename(tmp, dst)
 
 state_src = home + "/Library/Application Support/agterm"
-copy_dir(state_src, home + "/Library/Application Support/hangar", {"agterm.lock", "agterm.sock", "agterm.sock.lock"},
+copy_dir(state_src, home + "/Library/Application Support/elis", {"agterm.lock", "agterm.sock", "agterm.sock.lock"},
          lambda rel, t: rename_settings(t) if rel == "settings.json" else t)
-copy_dir(home + "/.config/agterm", home + "/.config/hangar", {"agent-status"}, lambda rel, t: rename_config_text(t))
+copy_dir(home + "/.config/agterm", home + "/.config/elis", {"agent-status"}, lambda rel, t: rename_config_text(t))
 try:
     custom = json.loads(read(state_src + "/settings.json")).get("configDirectory")
-    if custom and custom.rstrip("/") not in OLD_CONFIG: left(f"Settings name a custom config folder ({custom}). Hangar keeps using it: rename agtermctl and AGTERM_ in it yourself.")
+    if custom and custom.rstrip("/") not in OLD_CONFIG: left(f"Settings name a custom config folder ({custom}). Elis keeps using it: rename agtermctl and AGTERM_ in it yourself.")
 except (OSError, ValueError, AttributeError): pass
 
 # Claude Code: the seven hooks and the swarm-companion mod dir, matched by the old script path.
@@ -242,7 +242,7 @@ BEGIN, END = "# >>> agterm agent-status >>>", "# <<< agterm agent-status <<<"
 for rc in (".zshrc", ".bashrc", ".config/fish/config.fish"):
     step(f"{home}/{rc}", strip_block, BEGIN, END, lambda body: old_status + "shell/integration" in body)
 codex = env_codex if env_codex.startswith("/") else home + "/.codex"
-# the whole block goes, Codex's [hooks.state] trust records with it: a leftover `hooks` key stops Hangar adding its own
+# the whole block goes, Codex's [hooks.state] trust records with it: a leftover `hooks` key stops Elis adding its own
 step(codex + "/config.toml", strip_block, BEGIN, END,
      lambda body: "agterm-codex-status.sh" in body or "agterm-agent-status.sh" in body)
 
@@ -281,15 +281,15 @@ while IFS= read -r line; do
     esac
 done <<< "$python_out"
 
-# Hangar that started before this script installed its extras beside the old ones, and Codex then skipped its hooks
-reset="defaults delete ua.naiksoftware.hangar extrasInstalledBuild"
-why="so the next Hangar start installs the hooks, the skill and hangarctl again"
+# Elis that started before this script installed its extras beside the old ones, and Codex then skipped its hooks
+reset="defaults delete ua.naiksoftware.elis extrasInstalledBuild"
+why="so the next Elis start installs the hooks, the skill and elisctl again"
 if [ $isolated -eq 1 ]; then
-    [ $hangar_ran -eq 1 ] && note_did "would run $reset $why (skipped under --home)"
-elif defaults read ua.naiksoftware.hangar extrasInstalledBuild >/dev/null 2>&1; then
+    [ $elis_ran -eq 1 ] && note_did "would run $reset $why (skipped under --home)"
+elif defaults read ua.naiksoftware.elis extrasInstalledBuild >/dev/null 2>&1; then
     if [ $dry -eq 1 ]; then note_did "would run $reset $why"
     elif out="$($reset 2>&1)" || [[ "$out" == *"does not exist"* ]]; then note_did "ran $reset $why"
-    else note_left "run $reset yourself before you start Hangar ($out)"; fi
+    else note_left "run $reset yourself before you start Elis ($out)"; fi
 fi
 
 if [ $isolated -eq 0 ]; then
@@ -305,7 +305,7 @@ if [ $isolated -eq 0 ]; then
     fi
 fi
 
-echo "Agterm2 to Hangar migration$([ $dry -eq 1 ] && echo ' (dry run, nothing changed)')"
+echo "Agterm2 to Elis migration$([ $dry -eq 1 ] && echo ' (dry run, nothing changed)')"
 echo
 echo "Done:"
 printf '%s' "${did:-  - nothing to do; it already ran}"
@@ -315,12 +315,12 @@ echo "Left for you:"
 printf '%s' "$left"
 cat <<'EOF'
   - Remove agterm.app (Agterm2) from Applications. The old folders ~/Library/Application Support/agterm
-    and ~/.config/agterm stay as a backup; delete them when Hangar works.
-  - Start Hangar. It installs hangarctl, the agent skill and the agent hooks itself.
+    and ~/.config/agterm stay as a backup; delete them when Elis works.
+  - Start Elis. It installs elisctl, the agent skill and the agent hooks itself.
   - Grant Accessibility and other macOS permissions again (System Settings > Privacy & Security).
-  - Install the Hangar phone app and pair it again.
+  - Install the Elis phone app and pair it again.
   - Sign in again to web pages you open in overlays.
-  - Two Macs that attach to each other must both run Hangar.
+  - Two Macs that attach to each other must both run Elis.
   - Window positions start fresh: macOS keeps them under the old app id.
   - Your own scripts outside ~/.config/agterm that call agtermctl or read AGTERM_ variables: update them by hand.
 EOF

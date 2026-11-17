@@ -1,11 +1,11 @@
 ---
 worth: maybe
-where: HangarCore/Tests/SessionHostRuntimeTests/SessionHostServerTests.swift:Fixture.start
+where: ElisCore/Tests/SessionHostRuntimeTests/SessionHostServerTests.swift:Fixture.start
 added: 2026-11-08
 ---
 # session-host test fixture sometimes sees no pidfile within 5 s
 
-`Fixture.start()` spawns a copied `hangar-session-host` and waits 5 s for its pidfile. In one core
+`Fixture.start()` spawns a copied `elis-session-host` and waits 5 s for its pidfile. In one core
 `swift test` run on 2026-11-08, started while a full `make test-app` was building, 7 consecutive
 `SessionHostServerTests` tests failed there with `ETIMEDOUT`, about 5.01 s each.
 

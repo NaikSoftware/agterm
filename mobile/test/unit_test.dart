@@ -1,8 +1,8 @@
-import 'package:hangar_mobile/client.dart';
-import 'package:hangar_mobile/model.dart';
-import 'package:hangar_mobile/screens/prompt.dart';
-import 'package:hangar_mobile/theme.dart';
-import 'package:hangar_mobile/watch.dart';
+import 'package:elis_mobile/client.dart';
+import 'package:elis_mobile/model.dart';
+import 'package:elis_mobile/screens/prompt.dart';
+import 'package:elis_mobile/theme.dart';
+import 'package:elis_mobile/watch.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,30 +65,30 @@ void main() {
     const fp = 'd6804234939ad32471883bb5743cf3e435d24d0e1a02085f0adf7a51634cb443';
     const token = 'B9nEPMC4LDwT26URUTdmlho5YnA9mIq2gvBL86UnvVo';
 
-    test('reads the link hangarctl mobile serve prints', () {
-      final p = Pairing.parse('hangar://pair?h=192.168.1.20&p=8765&t=$token&f=$fp&n=naik-station')!;
+    test('reads the link elisctl mobile serve prints', () {
+      final p = Pairing.parse('elis://pair?h=192.168.1.20&p=8765&t=$token&f=$fp&n=naik-station')!;
       expect((p.host, p.port, p.token, p.fingerprint, p.name), ('192.168.1.20', 8765, token, fp, 'naik-station'));
     });
 
     test('names the computer by its address without n', () {
-      expect(Pairing.parse('hangar://pair?h=10.0.2.2&p=1&t=$token&f=${fp.toUpperCase()}')!.name, '10.0.2.2');
+      expect(Pairing.parse('elis://pair?h=10.0.2.2&p=1&t=$token&f=${fp.toUpperCase()}')!.name, '10.0.2.2');
     });
 
     test('refuses anything else', () {
       for (final bad in [
         '',
         'https://pair?h=a&p=1&t=$token&f=$fp',
-        'hangar://pair?h=a&p=0&t=$token&f=$fp',
-        'hangar://pair?h=a&p=8765&t=short&f=$fp',
-        'hangar://pair?h=a&p=8765&t=$token&f=abc',
-        'hangar://pair?p=8765&t=$token&f=$fp',
+        'elis://pair?h=a&p=0&t=$token&f=$fp',
+        'elis://pair?h=a&p=8765&t=short&f=$fp',
+        'elis://pair?h=a&p=8765&t=$token&f=abc',
+        'elis://pair?p=8765&t=$token&f=$fp',
       ]) {
         expect(Pairing.parse(bad), isNull, reason: bad);
       }
     });
 
     test('round-trips through JSON', () {
-      final p = Pairing.parse('hangar://pair?h=h&p=2&t=$token&f=$fp')!;
+      final p = Pairing.parse('elis://pair?h=h&p=2&t=$token&f=$fp')!;
       expect(Pairing.fromJson(p.toJson()).toJson(), p.toJson());
     });
   });
@@ -146,10 +146,10 @@ void main() {
   });
 
   test('alert notifications stack under their workspace, and only the session alerts', () {
-    final [n, sum] = alertNotifications(Alert('s1', 'claude', 'finished', 'completed'), 'hangar');
+    final [n, sum] = alertNotifications(Alert('s1', 'claude', 'finished', 'completed'), 'elis');
     final other = alertNotifications(Alert('s2', 'codex', 'finished', 'completed'), 'site').last;
-    expect((n.payload, n.details.groupKey, n.details.setAsGroupSummary), ('s1', 'ws:hangar', false));
-    expect((sum.title, sum.payload, sum.details.groupKey, sum.details.setAsGroupSummary), ('hangar', '', 'ws:hangar', true));
+    expect((n.payload, n.details.groupKey, n.details.setAsGroupSummary), ('s1', 'ws:elis', false));
+    expect((sum.title, sum.payload, sum.details.groupKey, sum.details.setAsGroupSummary), ('elis', '', 'ws:elis', true));
     expect(n.details.groupAlertBehavior, GroupAlertBehavior.children);
     expect(other.id, isNot(sum.id));
     expect(alertNotifications(Alert('s3', 'x', 'y', 'notify'), '').last.title, 'Sessions');

@@ -1,5 +1,5 @@
-// The wire to `hangarctl mobile serve`: TLS pinned to the pairing's certificate fingerprint, or the Bluetooth link
-// (ble_transport.dart), then hangarctl's own {cmd, target, args} JSON lines, each tagged with an id the relay echoes.
+// The wire to `elisctl mobile serve`: TLS pinned to the pairing's certificate fingerprint, or the Bluetooth link
+// (ble_transport.dart), then elisctl's own {cmd, target, args} JSON lines, each tagged with an id the relay echoes.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -20,11 +20,11 @@ class Pairing {
   String get key => fingerprint;
   String get address => host == null ? 'Bluetooth' : '$host:$port';
 
-  // hangar://pair?h=HOST&p=PORT&t=TOKEN&f=SHA256HEX&n=NAME[&b=1], as `hangarctl mobile serve` prints it;
+  // elis://pair?h=HOST&p=PORT&t=TOKEN&f=SHA256HEX&n=NAME[&b=1], as `elisctl mobile serve` prints it;
   // h and p are optional with b=1
   static Pairing? parse(String link) {
     final uri = Uri.tryParse(link.trim());
-    if (uri == null || uri.scheme != 'hangar' || uri.host != 'pair') return null;
+    if (uri == null || uri.scheme != 'elis' || uri.host != 'pair') return null;
     final q = uri.queryParameters;
     final port = int.tryParse(q['p'] ?? '');
     // with b=1 an unusable address leaves the pairing Bluetooth only
@@ -50,8 +50,8 @@ class Pairing {
       Pairing(name: j['name'], host: j['host'], port: j['port'], token: j['token'], fingerprint: j['fingerprint'], bluetooth: j['bluetooth'] == true);
 }
 
-class HangarError implements Exception {
-  HangarError(this.message);
+class ElisError implements Exception {
+  ElisError(this.message);
   final String message;
   @override
   String toString() => message;
@@ -60,7 +60,7 @@ class HangarError implements Exception {
 const revokedMessage = 'The pairing was revoked. Pair this computer again.';
 
 /// The token is no longer valid: no transport can succeed, so nothing retries.
-class Revoked extends HangarError {
+class Revoked extends ElisError {
   Revoked() : super(revokedMessage);
 }
 
@@ -91,7 +91,7 @@ Future<Link> openTls(Pairing p, Duration timeout) async {
     // connect's own timeout covers TCP only, not the TLS handshake
     socket = await pending.timeout(timeout);
   } on HandshakeException {
-    throw HangarError('The computer presented a different certificate. Pair it again.');
+    throw ElisError('The computer presented a different certificate. Pair it again.');
   } on TimeoutException {
     unawaited(pending.then((s) => s.destroy(), onError: (_) {}));
     rethrow;
@@ -99,7 +99,7 @@ Future<Link> openTls(Pairing p, Duration timeout) async {
   final peer = socket.peerCertificate;
   if (peer == null || certificateFingerprint(peer) != p.fingerprint) {
     socket.destroy();
-    throw HangarError('The computer presented a different certificate. Pair it again.');
+    throw ElisError('The computer presented a different certificate. Pair it again.');
   }
   return Link(socket, socket.add, socket.destroy, via: 'Wi-Fi');
 }
@@ -107,7 +107,7 @@ Future<Link> openTls(Pairing p, Duration timeout) async {
 // a definite answer (revoked, certificate, busy) beats "not found", which beats "cannot reach"
 int _rank(Object? e) => switch (e) {
   null => -1,
-  HangarError() => 2,
+  ElisError() => 2,
   BleNotFound() => 1,
   _ => 0,
 };
@@ -143,14 +143,14 @@ class Connection {
         if (_rank(e) > _rank(error)) error = e;
       }
     }
-    throw error ?? HangarError('This pairing has neither an address nor Bluetooth. Pair the computer again.');
+    throw error ?? ElisError('This pairing has neither an address nor Bluetooth. Pair the computer again.');
   }
 
   static Future<Connection> _authenticate(Link link, Pairing p) async {
     final c = Connection._(link);
     try {
       final hello = await c._send({'auth': p.token}).timeout(const Duration(seconds: 8));
-      if (hello['ok'] != true) throw hello['error'] == 'unauthorized' ? Revoked() : HangarError('${hello['error']}');
+      if (hello['ok'] != true) throw hello['error'] == 'unauthorized' ? Revoked() : ElisError('${hello['error']}');
       return c;
     } catch (_) {
       c.close();
@@ -159,7 +159,7 @@ class Connection {
   }
 
   Future<Map<String, dynamic>> _send(Map<String, dynamic> request) {
-    if (_closed.isCompleted) return Future.error(HangarError('Disconnected'));
+    if (_closed.isCompleted) return Future.error(ElisError('Disconnected'));
     final id = _next++;
     final done = Completer<Map<String, dynamic>>();
     _pending[id] = done;
@@ -167,7 +167,7 @@ class Connection {
     return done.future;
   }
 
-  /// One control command; the result object, or HangarError with the app's message.
+  /// One control command; the result object, or ElisError with the app's message.
   Future<Map<String, dynamic>> call(String cmd, {String? target, Map<String, dynamic>? args, String? window}) async {
     final a = {...?args, 'window': ?window};
     final id = _next;
@@ -178,7 +178,7 @@ class Connection {
         throw TimeoutException('no answer to $cmd');
       },
     );
-    if (r['ok'] != true) throw HangarError('${r['error'] ?? 'request failed'}');
+    if (r['ok'] != true) throw ElisError('${r['error'] ?? 'request failed'}');
     return (r['result'] as Map?)?.cast<String, dynamic>() ?? {};
   }
 
@@ -197,7 +197,7 @@ class Connection {
     if (_closed.isCompleted) return;
     _closed.complete();
     for (final p in _pending.values) {
-      p.completeError(HangarError('Disconnected'));
+      p.completeError(ElisError('Disconnected'));
     }
     _pending.clear();
   }

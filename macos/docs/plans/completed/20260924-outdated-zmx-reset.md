@@ -4,7 +4,7 @@
 - Live sessions keep their zmx processes through app upgrades, so a session keeps running the zmx it was
   created with. After a zmx change (a new `ZMX_REV` or an edited patch) those sessions miss the new
   behavior; after 0.32.0 they ignore the attach-time lead claim, so an attached pane still needs a key press.
-- Hangar ▸ Reset Live Sessions… and `zmx.reset` today select only panes whose leader is not supervised
+- Elis ▸ Reset Live Sessions… and `zmx.reset` today select only panes whose leader is not supervised
   (`orphaned`/`app`). They skip every supervised pane, which is every pane affected here.
 - This extends the selection with a second reason, `outdated`: the pane's zmx session was created before this
   state directory first launched the installed zmx build. No zmx patch; detection uses `created=` from
@@ -13,14 +13,14 @@
 ## Context (from discovery)
 - `scripts/setup.sh` writes `.zmx-build-stamp` = `$ZMX_REV $ZMX_TARGET $ZMX_PATCH_DIGEST`; `project.yml`'s
   build phase copies the staged zmx into `Contents/MacOS/zmx` and its license into `Resources/zmx/`.
-- `zmx list` prints `created=<epoch>` per session; `ZmxListParser` (`HangarCore/.../ZmxLifecycle.swift`)
+- `zmx list` prints `created=<epoch>` per session; `ZmxListParser` (`ElisCore/.../ZmxLifecycle.swift`)
   reads only `name`, `clients`, `pid`, `err`.
-- `LiveReset.select` / `LiveReset.narrow` (`HangarCore/.../LiveReset.swift`): select keeps `orphaned`/`app`,
+- `LiveReset.select` / `LiveReset.narrow` (`ElisCore/.../LiveReset.swift`): select keeps `orphaned`/`app`,
   narrow kills only a target still `orphaned`. `Marker` is version 1 with `Target(paneIdentity, sessionID,
   daemon, leaderPID)`.
 - App side: `ControlServer+Zmx.liveResetSelection`, `LiveResetCoordinator` (dialog, refusals),
   `LiveResetConsumer` (next-launch narrowing and kill), `ControlLiveResetStatus` read-back.
-- Tests: HangarCore `LiveResetTests`, `ZmxLifecycleTests`; hosted `LiveResetConsumerTests`,
+- Tests: ElisCore `LiveResetTests`, `ZmxLifecycleTests`; hosted `LiveResetConsumerTests`,
   `LiveResetCoordinatorTests`, `ControlServerLiveResetTests`, `ControlServerZmxTests`.
 
 ## Development Approach
@@ -31,8 +31,8 @@
 - a v1 marker written by an older build must still decode and behave as before
 
 ## Testing Strategy
-- host-free: `cd HangarCore && swift test --filter <suite>` while working, full `swift test` once at the end
-- hosted: targeted `-only-testing:HangarTests/<Class>` runs while working, `make test-app` once at the end
+- host-free: `cd ElisCore && swift test --filter <suite>` while working, full `swift test` once at the end
+- hosted: targeted `-only-testing:ElisTests/<Class>` runs while working, `make test-app` once at the end
 - no XCUITest: the reset quits the app, and control-api.md already exempts it (hosted, package and the
   isolated acceptance run)
 
@@ -99,9 +99,9 @@
 
 **Files:**
 - Modify: `project.yml`
-- Create: `HangarCore/Sources/HangarCore/ZmxBuildRecord.swift`
-- Modify: `Hangar/Ghostty/LiveResetConsumer.swift` (`Dependencies.outdatedBefore`), `Hangar/hangarApp.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/ZmxBuildRecordTests.swift`
+- Create: `ElisCore/Sources/ElisCore/ZmxBuildRecord.swift`
+- Modify: `Elis/Ghostty/LiveResetConsumer.swift` (`Dependencies.outdatedBefore`), `Elis/elisApp.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/ZmxBuildRecordTests.swift`
 
 - [x] copy `.zmx-build-stamp` to `Contents/Resources/zmx/BUILD` in the zmx build phase, failing the build when
       it is missing, as the zmx copy does
@@ -117,13 +117,13 @@
 ### Task 2: Select and narrow outdated panes
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ZmxLifecycle.swift`
-- Modify: `HangarCore/Sources/HangarCore/LiveReset.swift`
-- Modify: `Hangar/Control/ControlServer+Zmx.swift`
-- Modify: `Hangar/Ghostty/LiveResetConsumer.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ZmxLifecycleTests.swift`, `LiveResetTests.swift`
-- Modify: `HangarTests/LiveResetConsumerTests.swift`, `HangarTests/ControlServerLiveResetTests.swift`
-- Modify: `Hangar/Control/ControlServer.swift` (injected `outdatedBefore`)
+- Modify: `ElisCore/Sources/ElisCore/ZmxLifecycle.swift`
+- Modify: `ElisCore/Sources/ElisCore/LiveReset.swift`
+- Modify: `Elis/Control/ControlServer+Zmx.swift`
+- Modify: `Elis/Ghostty/LiveResetConsumer.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ZmxLifecycleTests.swift`, `LiveResetTests.swift`
+- Modify: `ElisTests/LiveResetConsumerTests.swift`, `ElisTests/ControlServerLiveResetTests.swift`
+- Modify: `Elis/Control/ControlServer.swift` (injected `outdatedBefore`)
 
 - [x] parse `created=` into `ZmxSessionRecord.createdAt`, nil for zero or malformed values
 - [x] add `Target.reason`, bump the marker to version 2, let `consume()` accept versions 1 and 2, and select
@@ -136,25 +136,25 @@
 - [x] write paired tests: a pane with both reasons at confirmation is killed as outdated when its leader reads
       `unknown` or `supervisor` at consumption, while an unsupervised-only or v1 target with that attribution
       is still skipped; an outdated target is skipped when the launch has no cutoff
-- [x] run the touched HangarCore suites and the two hosted classes - must pass before task 3
+- [x] run the touched ElisCore suites and the two hosted classes - must pass before task 3
 
 ### Task 3: Say why in the dialog, the reply and the read-back
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/LiveReset.swift` (dialog text)
-- Modify: `HangarCore/Sources/HangarCore/ControlPayloads.swift`
-- Modify: `Hangar/LiveResetCoordinator.swift`, `Hangar/Control/ControlServer+Zmx.swift` (all four
+- Modify: `ElisCore/Sources/ElisCore/LiveReset.swift` (dialog text)
+- Modify: `ElisCore/Sources/ElisCore/ControlPayloads.swift`
+- Modify: `Elis/LiveResetCoordinator.swift`, `Elis/Control/ControlServer+Zmx.swift` (all four
   `ZmxInventory.join` call sites)
-- Modify: `HangarCore/Sources/HangarCore/ZmxInventory.swift` (`DaemonFacts`, `ZmxInventoryRow`, `join`)
-- Modify: `ControlZmxEntry.init(row:)`, `HangarCore/Sources/hangarctlKit/SocketClient.swift` (`formatZmx`)
-- Modify: matching tests (`LiveResetTests`, `ZmxInventoryTests`, hangarctlKit tests, `LiveResetCoordinatorTests`,
+- Modify: `ElisCore/Sources/ElisCore/ZmxInventory.swift` (`DaemonFacts`, `ZmxInventoryRow`, `join`)
+- Modify: `ControlZmxEntry.init(row:)`, `ElisCore/Sources/elisctlKit/SocketClient.swift` (`formatZmx`)
+- Modify: matching tests (`LiveResetTests`, `ZmxInventoryTests`, elisctlKit tests, `LiveResetCoordinatorTests`,
   `ControlServerZmxTests`)
 
 - [x] dialog body counts sessions and names how many predate the last zmx update; `zmx.reset`'s `text`
       carries the same body
 - [x] `ControlLiveResetStatus.outdated` in sessions, and an `outdated` flag carried from the observed record
       through the inventory join to `zmx list` daemon rows, omitted when false
-- [x] `hangarctl zmx list` human output marks outdated rows
+- [x] `elisctl zmx list` human output marks outdated rows
 - [x] ➕ the join carries only `createdAt` on `ZmxInventoryRow`; the cutoff is applied in
       `ControlZmxEntry.init(row:outdatedBefore:)` via `ControlZmxInventory`, so the four `join` call sites stay
       unchanged and only the two `ControlZmxInventory` builders pass `zmxOutdatedBefore`
@@ -176,12 +176,12 @@
 - [x] `.claude/rules/control-api.md`: the reset section gains the outdated reason, the build record and the
       narrowing rule
 - [x] `site/docs.html` Reset Live Sessions text and `site/commands.html` for `zmx.reset` / `zmx list` fields
-- [x] bundled `plugins/hangar/skills/hangar/` wherever the reset is described
-- [x] ➕ `hangarctl zmx reset` help text in `hangarctlKit/ZmxCommands.swift`
+- [x] bundled `plugins/elis/skills/elis/` wherever the reset is described
+- [x] ➕ `elisctl zmx reset` help text in `elisctlKit/ZmxCommands.swift`
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
-- After deploying, run Hangar ▸ Reset Live Sessions… once on each Mac to move the sessions created before
+- After deploying, run Elis ▸ Reset Live Sessions… once on each Mac to move the sessions created before
   0.32.0 onto the current zmx. Running Claude Code and Codex conversations need to be resumed by hand.
 - A Debug build pointed at the default state directory with a different zmx build id records its own
   change; isolated state dirs avoid that, as for every other manual run.

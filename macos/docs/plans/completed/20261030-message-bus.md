@@ -4,20 +4,20 @@
 - Agents in different panes need to exchange messages without typing into each other's terminal: typing has
   no safe moment to insert, and a stale session id can deliver into the wrong agent's prompt.
 - Add an app-run, in-memory mailbox per pane with three control commands: `msg.send`, `msg.read`, `msg.ack`
-  (CLI `hangarctl msg send|read|ack`). How agents use it is out of scope; this is the transport.
+  (CLI `elisctl msg send|read|ack`). How agents use it is out of scope; this is the transport.
 - Delivery is retained and repeat-readable until acked, while the same program runs in the recipient pane
   in this app run. `msg read --ack` is the opt-in at-most-once mode.
 - No UI. Read-back is a pending count on the tree's pane node plus a metadata-only `message` event.
 
 ## Context (from discovery)
-- `ZmxLeadBook.shared` and `AskRegistry.shared` are the existing app-wide in-memory books in `HangarCore`;
+- `ZmxLeadBook.shared` and `AskRegistry.shared` are the existing app-wide in-memory books in `ElisCore`;
   `AppStore.controlTree` already reads `ZmxLeadBook.shared` per pane, and `ZmxLeadBook.shared.forget(pane:)`
   is called at most pane-removal sites. The bus follows that shape.
-- Dispatcher-first commands: `ControlDispatcher+<Area>.swift` in `HangarCore`, app effects through
-  `ControlActions`, CLI in `hangarctlKit/<Area>Commands.swift`, registered in `Commands.swift`.
-- Pane identity: a pane's `$HANGAR_PANE_ID` is its surface `paneToken`, which tree `paneID` also reports.
+- Dispatcher-first commands: `ControlDispatcher+<Area>.swift` in `ElisCore`, app effects through
+  `ControlActions`, CLI in `elisctlKit/<Area>Commands.swift`, registered in `Commands.swift`.
+- Pane identity: a pane's `$ELIS_PANE_ID` is its surface `paneToken`, which tree `paneID` also reports.
   Primary and split slots store it as `paneIdentity`/`splitPaneIdentity`; swap exchanges them between slots
-  (`AppStore+Panes.swift:125`). Scratch has no stored identity: `hangarApp.swift` mints one per scratch
+  (`AppStore+Panes.swift:125`). Scratch has no stored identity: `elisApp.swift` mints one per scratch
   surface and only the surface's `paneToken` carries it.
 - Existing hooks do not match the bus lifetime: `paneFinalizer` fires only on hard removal (a soft close
   reaches it after the grace period), and `launchPaneDrop` also fires when a split is merely hidden.
@@ -48,12 +48,12 @@
   `make test-app`, `make lint`) run once at the end
 
 ## Testing Strategy
-- **unit tests** (host-free, `HangarCore`): mailbox model, address parser, store disposal, dispatcher
+- **unit tests** (host-free, `ElisCore`): mailbox model, address parser, store disposal, dispatcher
   validation and response shapes, protocol round trips, CLI parsing and output.
-- **hosted tests** (`HangarTests`): the real `ControlServer` adapter for address resolution, broadcast,
+- **hosted tests** (`ElisTests`): the real `ControlServer` adapter for address resolution, broadcast,
   identity agreement, restart and window close/reopen disposal.
-- **e2e** (`HangarUITests/ControlMessageUITests.swift`, a new class on `ControlAPITestCase`): two panes
-  exchange messages through the real socket and through the bundled `hangarctl`, run with
+- **e2e** (`ElisUITests/ControlMessageUITests.swift`, a new class on `ControlAPITestCase`): two panes
+  exchange messages through the real socket and through the bundled `elisctl`, run with
   `-only-testing:` for that class only.
 
 ## Progress Tracking
@@ -63,7 +63,7 @@
 - keep the plan in sync with the work actually done
 
 ## Solution Overview
-- **`MessageBus`** (host-free, `HangarCore`, `@MainActor`, one `shared` instance for the app run like
+- **`MessageBus`** (host-free, `ElisCore`, `@MainActor`, one `shared` instance for the app run like
   `ZmxLeadBook`; model tests create their own instances, integration fixtures dispose only their own pane
   ids): mailboxes keyed by pane token (UUID). It owns limits, FIFO order, batch reads, ack, read-and-ack, pending
   counts and `dispose(pane:)`. It knows nothing about sessions, windows or roles.
@@ -74,11 +74,11 @@
 - **Live pane**: a realized surface with a non-empty `paneToken`. Recipients, identities and `--all` all
   use this one definition; a split hidden since launch has no surface and is not a live pane.
 - **Identity** (reader for `read`/`ack`, sender for `send`): always `SESSION:PANE-ID`, never a role,
-  because a swap re-points roles. The CLI builds it from `HANGAR_SESSION_ID` + `HANGAR_PANE_ID` or takes
+  because a swap re-points roles. The CLI builds it from `ELIS_SESSION_ID` + `ELIS_PANE_ID` or takes
   `--as SESSION:PANE-ID`. The server refuses an identity whose pane id is not a live pane of that session,
   naming both ids. No fallback to the active pane or to a role.
 - **Anonymous send**: `send` without an identity is allowed only when both env fields are absent and no
-  `--as` is given (a script outside Hangar); `from` is then nil and `--all` excludes nobody. An incomplete,
+  `--as` is given (a script outside Elis); `from` is then nil and `--all` excludes nobody. An incomplete,
   invalid or stale identity fails and never downgrades to anonymous. `read` and `ack` always require one.
 - **Mailbox lifetime**: a mailbox lives while the same program runs in its pane in this app run. It is
   disposed whenever the pane leaves or its program is replaced: session close (hard and soft, companions
@@ -97,7 +97,7 @@
 ## Technical Details
 - Limits (fixed constants): body ≤ 64 KiB UTF-8; per mailbox ≤ 256 messages and ≤ 1 MiB of bodies; read
   batch ≤ 32. A send that would exceed a recipient's limits is rejected for that recipient only.
-- Message: `id` (UUID), `from` (`SESSION:PANE-ID` or nil for a sender outside Hangar), `to`
+- Message: `id` (UUID), `from` (`SESSION:PANE-ID` or nil for a sender outside Elis), `to`
   (`SESSION:PANE-ID`), `ts` (epoch seconds, `ControlEvent.ts` clock), `body`.
 - `msg.read` returns the oldest unacked messages up to the batch limit plus `remaining` = pending messages
   not in this batch. Re-reading before ack returns the same prefix.
@@ -119,10 +119,10 @@
   `all`, `body` and `workspace`. `ControlResult`: `messageID`, `delivered`, `rejected`, `messages`,
   `remaining`, `acked`.
 - CLI:
-  - `hangarctl msg send (--to SESSION:PANE ... | --all [--workspace W]) [--as SESSION:PANE-ID]`,
+  - `elisctl msg send (--to SESSION:PANE ... | --all [--workspace W]) [--as SESSION:PANE-ID]`,
     body from `TEXT` or `--stdin`
-  - `hangarctl msg read [--as SESSION:PANE-ID] [--ack] [--wait] [--timeout N] [--json]`
-  - `hangarctl msg ack ID... [--as SESSION:PANE-ID]`
+  - `elisctl msg read [--as SESSION:PANE-ID] [--ack] [--wait] [--timeout N] [--json]`
+  - `elisctl msg ack ID... [--as SESSION:PANE-ID]`
   - `--wait` polls `msg.read` client-side until a message is pending or `--timeout`, using a watchdog
     like `SessionWaitWatchdog`.
 
@@ -135,10 +135,10 @@
 ### Task 1: Host-free mailbox model and address parser
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/MessageBus.swift`
-- Create: `HangarCore/Sources/HangarCore/MessageAddress.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/MessageBusTests.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/MessageAddressTests.swift`
+- Create: `ElisCore/Sources/ElisCore/MessageBus.swift`
+- Create: `ElisCore/Sources/ElisCore/MessageAddress.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/MessageBusTests.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/MessageAddressTests.swift`
 
 - [x] tests first: FIFO order, batch limit and `remaining`, repeat read returns the same prefix, ack
       removes and is idempotent, read-and-ack removes exactly the batch, per-recipient rejection on count
@@ -148,24 +148,24 @@
 - [x] `MessageBus` with a `shared` instance, the limit constants, `send` (per-recipient result),
       `read(limit:)`, `readAndAck`, `ack(ids:)`, `pending(for:)`, `dispose(pane:)`
 - [x] `MessageAddress`: role aliases for recipients only, identity form requires a pane id
-- [x] run `cd HangarCore && swift test --filter 'MessageBusTests|MessageAddressTests'` - must pass before
+- [x] run `cd ElisCore && swift test --filter 'MessageBusTests|MessageAddressTests'` - must pass before
       task 2
 
 ### Task 2: Protocol, dispatcher and events
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/ControlDispatcher+<Area>.swift` (the chunk moved out unchanged)
-- Create: `HangarCore/Sources/HangarCore/ControlDispatcher+Messages.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlEvents.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/EventCommands.swift` (`EventFormatter.human`, its switch is
+- Create: `ElisCore/Sources/ElisCore/ControlDispatcher+<Area>.swift` (the chunk moved out unchanged)
+- Create: `ElisCore/Sources/ElisCore/ControlDispatcher+Messages.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlEvents.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProjection.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlActionsDefaults.swift`
+- Modify: `ElisCore/Sources/elisctlKit/EventCommands.swift` (`EventFormatter.human`, its switch is
   exhaustive over `ControlEventKind`)
-- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/ControlDispatcherMessagesTests.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/EventCommandsTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/MockControlActions.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/ControlDispatcherMessagesTests.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/EventCommandsTests.swift`
 
 - [x] first, before any new code: move one self-contained group of `ControlActions` requirements or
       routing out of `ControlDispatcher.swift` into a new `ControlDispatcher+<Area>.swift`, unchanged
@@ -175,8 +175,8 @@
       identity, body over the limit, missing identity for read/ack), per-recipient results, `acked` always
       present, `pendingMessages` omitted at 0, `message` event kind and payload, and a regression that the
       scalar `to` still round-trips for navigation commands
-- [x] the human formatter line for `message` in the existing `hangarctlKitTests/EventCommandsTests.swift`
-      (293 lines; `EventFormatter` is internal to `hangarctlKit`, which `HangarCoreTests` cannot import)
+- [x] the human formatter line for `message` in the existing `elisctlKitTests/EventCommandsTests.swift`
+      (293 lines; `EventFormatter` is internal to `elisctlKit`, which `ElisCoreTests` cannot import)
 - [x] add `msg.send`, `msg.read`, `msg.ack` commands, the `ControlArgs`/`ControlResult` fields, and the
       `message` event kind with `from`/`messageID` payload fields, with its `EventFormatter.human` case
 - [x] dispatcher validates and shapes responses; `ControlActions` supplies address resolution, the live
@@ -187,24 +187,24 @@
 ### Task 3: Store disposal, app-side actions and e2e
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/AppStore+Messages.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (session and workspace close sites, `controlTree`)
-- Modify: `HangarCore/Sources/HangarCore/AppStore+PendingClose.swift` (soft close, soft workspace delete)
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift` (split close, `closePrimaryPane`)
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Companions.swift` (`respawnPrimaryPane`)
+- Create: `ElisCore/Sources/ElisCore/AppStore+Messages.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift` (session and workspace close sites, `controlTree`)
+- Modify: `ElisCore/Sources/ElisCore/AppStore+PendingClose.swift` (soft close, soft workspace delete)
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Panes.swift` (split close, `closePrimaryPane`)
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Companions.swift` (`respawnPrimaryPane`)
 - Modify: the scratch close path and the store method called on window close or delete
-- Create: `Hangar/Control/ControlServer+Messages.swift`
-- Modify: `Hangar/Control/ControlServer+Restart.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/AppStoreMessagesTests.swift`
-- Create: `HangarTests/ControlServerMessagesTests.swift`
-- Create: `HangarUITests/ControlMessageUITests.swift`
+- Create: `Elis/Control/ControlServer+Messages.swift`
+- Modify: `Elis/Control/ControlServer+Restart.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/AppStoreMessagesTests.swift`
+- Create: `ElisTests/ControlServerMessagesTests.swift`
+- Create: `ElisUITests/ControlMessageUITests.swift`
 
 - [x] host-free store tests first: disposal on session close (hard and soft), companions closed with their
       parent, workspace delete (hard and soft), split close, scratch close and `respawnPrimaryPane`;
       `closePrimaryPane` disposes only the departing primary identity while the promoted survivor keeps
       its mail; hiding a split keeps the mailbox; mail sent before a soft close is gone after undo with no
       bus operation between (regression); `pendingMessages` in `controlTree`
-- [x] hosted `HangarTests` first, against the real adapter rather than `MockControlActions`: broadcast
+- [x] hosted `ElisTests` first, against the real adapter rather than `MockControlActions`: broadcast
       across two windows, `--workspace` narrowing, sender exclusion, anonymous broadcast, remote rows
       excluded; recipient aliases resolving to one pane are delivered once; a scratch pane as recipient and
       as identity; a split hidden since launch is not a live pane; identity mismatch refused on send, read
@@ -223,31 +223,31 @@
 ### Task 4: CLI
 
 **Files:**
-- Create: `HangarCore/Sources/hangarctlKit/MessageCommands.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/Commands.swift` (`subcommands:` registration)
-- Create: `HangarCore/Tests/hangarctlKitTests/MessageCommandsTests.swift`
-- Modify: `HangarUITests/ControlMessageUITests.swift`
+- Create: `ElisCore/Sources/elisctlKit/MessageCommands.swift`
+- Modify: `ElisCore/Sources/elisctlKit/Commands.swift` (`subcommands:` registration)
+- Create: `ElisCore/Tests/elisctlKitTests/MessageCommandsTests.swift`
+- Modify: `ElisUITests/ControlMessageUITests.swift`
 
 - [x] tests first: identity from env pair, `--as` overrides the pair, incomplete pair errors, no pair and
       no `--as` sends anonymously but fails `read`/`ack`, `--ack` fails on missing or mismatched `acked`,
       `--wait` returns on pending and exits 124 on timeout, human and JSON output
 - [x] `msg send|read|ack` subcommands with the options in Technical Details
 - [x] `--wait` as a client-side poll with a watchdog timeout
-- [x] e2e: the bundled `hangarctl msg send` / `msg read` against the running app, with `--as` built from
+- [x] e2e: the bundled `elisctl msg send` / `msg read` against the running app, with `--as` built from
       the tree's `paneID`, following the `openAskCLI` pattern in `ControlAPITestCase.swift`
 - [x] run the CLI test target and the e2e class - must pass before task 5
 
 ### Task 5: Documentation and skill
 - [x] `site/commands.html`: the three commands, arguments, read-back fields and the `message` event
 - [x] `site/docs.html`: a short section on the bus, its lifetime and delivery guarantee
-- [x] `plugins/hangar/skills/hangar/SKILL.md` trigger and pointer, `reference.md` entries
+- [x] `plugins/elis/skills/elis/SKILL.md` trigger and pointer, `reference.md` entries
 - [x] `.claude/rules/control-api.md`: catalog entry and the bus's implementation constraints (disposal
       sites, identity agreement, no role fallback)
 
 ### Task 6: Verify acceptance criteria
 - [x] every Overview requirement implemented; edge cases from Technical Details covered by tests
 - [x] `make build`
-- [x] `cd HangarCore && swift test`
+- [x] `cd ElisCore && swift test`
 - [x] `make test-app`
 - [x] `make lint`
 
@@ -257,7 +257,7 @@
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
-*Manual checks in an isolated Debug instance (`HANGAR_STATE_DIR` under `/tmp`)*
+*Manual checks in an isolated Debug instance (`ELIS_STATE_DIR` under `/tmp`)*
 - two agents in a split exchange messages with `msg send` / `msg read --wait` / `msg ack`
 - a companion created with leader-h reads its own mailbox, not its parent's
 

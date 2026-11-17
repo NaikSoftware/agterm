@@ -1,7 +1,7 @@
 # HTML overlay
 
 ## Overview
-- `hangarctl session overlay open --html FILE` renders a local HTML/JS file (typically an artifact an AI
+- `elisctl session overlay open --html FILE` renders a local HTML/JS file (typically an artifact an AI
   agent just wrote) in a WKWebView inside the existing overlay slots: session-wide (full or
   `--size-percent`) or one split pane (`--pane left|right`).
 - It must feel like a regular overlay that renders HTML instead of running a program: same addressing,
@@ -14,7 +14,7 @@
 - Overlay model: `Session` session-wide fields (`overlayActive`, `overlaySurface`, `overlayCommand`,
   `overlayCwd`, `overlayBackgroundColor`, `overlayWait`, `overlayExitCode`, `overlaySizePercent`,
   `overlaySlotGeneration`, `hudSpec`) and `PaneOverlay` (`command`, `cwd`, `backgroundColor`, `wait`,
-  `replica`) in `HangarCore/Sources/HangarCore/Session.swift`.
+  `replica`) in `ElisCore/Sources/ElisCore/Session.swift`.
 - Predicates: `overlayActive` (occupied), `hudActive`, `programOverlayActive` (`overlayActive && !hudActive`),
   `fullOverlayActive`. `programOverlayActive` has 19 code reads across 8 files and today conflates three
   contracts: "something covers the session and owns input", "a TerminalSurface is the topmost surface"
@@ -26,38 +26,38 @@
   presenter check `PresentationHub.hasPresenter(session:)`.
 - Control: `ControlProtocol.swift` (`session.overlay.*` cases, `ControlArgs`), validation in
   `ControlDispatcher+Overlay.swift`, read-back in `ControlProjection.swift` (`overlay`,
-  `overlaySizePercent`, `paneOverlays`), CLI in `hangarctlKit/SessionCommands.swift:550-625`
+  `overlaySizePercent`, `paneOverlays`), CLI in `elisctlKit/SessionCommands.swift:550-625`
   (`--wait`, `--block`, `--cwd`, `--size-percent`, `--background-color`, `--pane`, `--follow`).
-- App: session-wide panel `overlayPanel` in `Hangar/Views/WindowContentView+Detail.swift:290`
+- App: session-wide panel `overlayPanel` in `Elis/Views/WindowContentView+Detail.swift:290`
   (`OverlayPanelStyle` resolves geometry/chrome), pane covers in `deckPane` (same file, ~:243), zoom
-  hosts in `WindowContentView+Zoom.swift`, overlay factory in `hangarApp.swift:~690-760`, Command-W
+  hosts in `WindowContentView+Zoom.swift`, overlay factory in `elisApp.swift:~690-760`, Command-W
   ladder in `AppActions.swift:~240`, refocus `onChange(of: session.programOverlayActive)` at
   WindowContentView+Detail.swift:178.
 - No WebKit in the app today. Deployment target macOS 14 (`project.yml`), so WKWebView, not the newer
-  SwiftUI `WebView`. Hangar is not App Sandboxed; no entitlement change is expected.
-- Tests: `HangarCore/Tests/HangarCoreTests` (`ControlDispatcherOverlayTests`, `SessionTests`,
+  SwiftUI `WebView`. Elis is not App Sandboxed; no entitlement change is expected.
+- Tests: `ElisCore/Tests/ElisCoreTests` (`ControlDispatcherOverlayTests`, `SessionTests`,
   `TerminalZoomTests`, `AppStoreRemoteOverlayTests`, `AppStoreTreeProjectionTests`),
-  `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`, hosted `HangarTests`, XCUITest
-  `HangarUITests/ControlOverlaySplitUITests.swift`.
+  `ElisCore/Tests/elisctlKitTests/CommandsTests.swift`, hosted `ElisTests`, XCUITest
+  `ElisUITests/ControlOverlaySplitUITests.swift`.
 
 ## Development Approach
-- **testing approach**: TDD for everything host-free in `HangarCore` (model, predicates, store slot rules,
+- **testing approach**: TDD for everything host-free in `ElisCore` (model, predicates, store slot rules,
   dispatcher, projection, CLI, navigation policy): write the failing test, run it, implement. The
   WKWebView adapter in the app target gets hosted/XCUITest coverage after its code.
 - complete each task fully before moving to the next; every task ships its own tests.
 - run only the tests a task touches (`swift test --filter ...`, `-only-testing:` for app tests); the full
   gates (`swift test`, `make test-app`, `make lint`) run once, in the verification task.
-- `HangarCore` stays free of WebKit/AppKit; the web view, its delegate glue and its lifetime registry live
+- `ElisCore` stays free of WebKit/AppKit; the web view, its delegate glue and its lifetime registry live
   in the app target as a side-effect adapter.
-- `HangarCore` is a library consumed by `agterm-linux`: add public API, do not narrow or rename existing
+- `ElisCore` is a library consumed by `agterm-linux`: add public API, do not narrow or rename existing
   public symbols.
 - **CRITICAL: update this plan file when scope changes during implementation**
 
 ## Testing Strategy
-- **unit tests** (`swift test` in `HangarCore`): content variant, predicate split, slot replacement rules,
+- **unit tests** (`swift test` in `ElisCore`): content variant, predicate split, slot replacement rules,
   reload revision, load state, soft-close lifetime, presenter refusal, dispatcher validation and
   refusals, projection read-back, CLI path normalization and flag conflicts, navigation policy.
-- **hosted tests** (`HangarTests`): registry keeps one WKWebView per slot across remounts and releases it
+- **hosted tests** (`ElisTests`): registry keeps one WKWebView per slot across remounts and releases it
   on close/finalization; delegate maps navigation actions through the core policy.
 - **XCUITest** (`ControlOverlaySplitUITests`, targeted `-only-testing:`): open `--html` session-wide and
   `--pane right`, page content visible, Command-W closes, close button closes, `overlay.reload` keeps the
@@ -75,7 +75,7 @@
   gains `html` with a default, and the session-wide slot gets one stored `htmlOverlay` property, so
   `agterm-linux` keeps compiling and `Session` grows by a single stored line (it is at 975 of 1000). No
   dummy command string is ever read for an HTML occupant: every program path checks `html == nil` first.
-- **Slot-state refusals live in HangarCore.** New store methods return failure enums (the
+- **Slot-state refusals live in ElisCore.** New store methods return failure enums (the
   `PaneOverlayOpenFailure` pattern): open (occupied by program/page, presenter), reload (empty slot,
   program), and the HTML checks for result/copy/text. The app's control server only maps those enums to
   responses, so every refusal is tested host-free.
@@ -127,12 +127,12 @@
 - **Focus resolution.** Under an HTML cover `topmostSurface` and `focusTarget` return nil instead of falling
   through to `activeSurface`, which would hand keys to the hidden pane. One app helper resolves the focus
   target as either the registry's web view or the terminal surface, and every site that casts
-  `topmostSurface` to `GhosttySurfaceView` uses it: hangarApp.swift:540 (split collapse, session close),
+  `topmostSurface` to `GhosttySurfaceView` uses it: elisApp.swift:540 (split collapse, session close),
   :605 (search end), WorkspaceSidebar.swift:756 (sidebar click), AskDialogView.swift:534 (ask dismissal),
   WindowContentView+Detail.swift:187/199, AppActions+Focus.swift:194 and `focusSplitPane`. The Command-W
   ladder (AppActions.swift:235/239) already keys on `overlayActive`/`focusedOverlayPane` and stays
   unedited.
-- **Focus.** A pane page reports focus like a pane program overlay does (`hangarApp.swift` `onFocusChange`):
+- **Focus.** A pane page reports focus like a pane program overlay does (`elisApp.swift` `onFocusChange`):
   clicking it sets `splitFocused`, so Command-W, search and `focusedOverlayPane` act on the pane the user
   sees. A page opened on an unfocused pane or in a background session does not take keys. The focus
   restore paths (`AppActions+Focus.swift` after a palette, quick terminal or session switch, and
@@ -162,7 +162,7 @@
   forwarding.
 
 ## Technical Details
-- `HangarCore`:
+- `ElisCore`:
   - `public struct HtmlOverlaySpec: Equatable, Sendable { file: String; grantRoot: String? }` — absolute,
     standardized paths; `grantRoot == nil` means the file alone. `readAccessPath` returns `grantRoot ?? file`.
   - `public enum HtmlLoadState: String, Codable, Sendable { case loading, loaded, failed }` plus
@@ -187,9 +187,9 @@
   `overlaySizePercent`. `overlay` (tree) reports any covering overlay, program or HTML; `paneOverlays`
   keeps listing covered panes of either kind. Terminal surface nodes and surface zoom availability stay
   terminal-only; `htmlOverlays` carries the content distinction.
-- CLI: `hangarctl session overlay open [COMMAND] [--html FILE] [--cwd DIR] ...`; client-side
+- CLI: `elisctl session overlay open [COMMAND] [--html FILE] [--cwd DIR] ...`; client-side
   `validate()` enforces exactly one of COMMAND/`--html` and refuses `--wait`/`--block` with `--html`;
-  new `hangarctl session overlay reload [--pane left|right]`.
+  new `elisctl session overlay reload [--pane left|right]`.
 - App target: `HtmlOverlayRegistry` (owns WKWebView per slot, `@MainActor`), `HtmlOverlayView`
   (`NSViewRepresentable` hosting the registry's view, close button in a SwiftUI overlay),
   `HtmlOverlayNavigator` (`WKNavigationDelegate` + `WKUIDelegate`, delegating decisions to
@@ -199,7 +199,7 @@
   file-upload panel.
 - File placement against the lint limits: new store ops in `AppStore+HtmlOverlay.swift` (AppStore.swift
   is at 988), Session behavior in `Session+HtmlOverlay.swift` (only the stored property goes in the class
-  body), the CLI reload subcommand in its own `hangarctlKit` file (SessionCommands.swift is at 971), and
+  body), the CLI reload subcommand in its own `elisctlKit` file (SessionCommands.swift is at 971), and
   the new CLI tests in `OverlayCommandsTests.swift` (CommandsTests.swift is at 1996 of 2000). No existing
   file is split.
 
@@ -209,21 +209,21 @@
 
 ## Implementation Steps
 
-### Task 1: HTML overlay model, slot rules, predicate split and navigation policy in HangarCore
+### Task 1: HTML overlay model, slot rules, predicate split and navigation policy in ElisCore
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`
-- Create: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+PendingClose.swift`
-- Modify: `HangarCore/Sources/HangarCore/TerminalZoom.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RemoteOverlay.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (teardown call sites only)
-- Create: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift`
-- Create: `HangarCore/Sources/HangarCore/Session+HtmlOverlay.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/SessionTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/TerminalZoomTests.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/HtmlOverlayTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`
+- Create: `ElisCore/Sources/ElisCore/HtmlOverlay.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Panes.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+PendingClose.swift`
+- Modify: `ElisCore/Sources/ElisCore/TerminalZoom.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RemoteOverlay.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift` (teardown call sites only)
+- Create: `ElisCore/Sources/ElisCore/AppStore+HtmlOverlay.swift`
+- Create: `ElisCore/Sources/ElisCore/Session+HtmlOverlay.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/SessionTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/TerminalZoomTests.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/HtmlOverlayTests.swift`
 
 - [x] slot rules, test first: HTML open replaces a HUD, is refused over a program or another page
       (session-wide and per pane) and while a presenter owns the session, clears the prior exit code and
@@ -255,22 +255,22 @@
       (cancel)
 - [x] `swift test --filter` for the touched suites passes
 
-### Task 2: Control surface: protocol, dispatcher, read-back and hangarctl
+### Task 2: Control surface: protocol, dispatcher, read-back and elisctl
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Overlay.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift` (`ControlActions` overlay methods)
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcherOptions.swift` (`ControlSessionOverlayOpenOptions`)
-- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift` (default reload returning
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Overlay.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift` (`ControlActions` overlay methods)
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcherOptions.swift` (`ControlSessionOverlayOpenOptions`)
+- Modify: `ElisCore/Sources/ElisCore/ControlActionsDefaults.swift` (default reload returning
   `ControlActionsUnsupported`)
-- Create: `HangarCore/Sources/hangarctlKit/OverlayReloadCommand.swift`
-- Create: `HangarCore/Tests/hangarctlKitTests/OverlayCommandsTests.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherOverlayTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTreeProjectionTests.swift`
+- Create: `ElisCore/Sources/elisctlKit/OverlayReloadCommand.swift`
+- Create: `ElisCore/Tests/elisctlKitTests/OverlayCommandsTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProjection.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherOverlayTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreTreeProjectionTests.swift`
 
 - [x] dispatcher, test first (argument validation only): exactly one of command/html; `--wait` with html
       refused; file outside grant refused; `--pane` + `--size-percent` still refused; reload argument
@@ -280,32 +280,32 @@
       default in `ControlActionsDefaults.swift`
 - [x] read-back, test first: `htmlOverlays` for session-wide and both panes with state and error, and
       `overlay`/`paneOverlays` under an HTML cover
-- [x] hangarctl, test first: COMMAND optional only with `--html`; both or neither rejected; `--wait` and
+- [x] elisctl, test first: COMMAND optional only with `--html`; both or neither rejected; `--wait` and
       `--block` rejected with `--html`; relative FILE and `--cwd` resolved against the caller's cwd and
       standardized; `session overlay reload --pane` request shape; `--cwd` help states its HTML meaning
 - [x] ➕ `session.overlay.reload --current` and `session.overlay.navigate back|forward|browser` (toolbar twins):
       dispatcher, defaults, CLI (`OverlayPageCommands.swift`) and read-back of page/title/history, tested
-- [x] `swift test` for `HangarCoreTests` and `hangarctlKitTests` touched suites passes
+- [x] `swift test` for `ElisCoreTests` and `elisctlKitTests` touched suites passes
 
 ### Task 3: WKWebView adapter, deck wiring, focus and Command-W
 
 **Files:**
-- Create: `Hangar/Views/HtmlOverlayView.swift`
-- Create: `Hangar/Views/HtmlOverlayRegistry.swift`
-- Modify: `Hangar/Views/WindowContentView+Detail.swift`
-- Modify: `Hangar/Views/WindowContentView+Zoom.swift`
-- Modify: `Hangar/hangarApp.swift`
-- Modify: `Hangar/AppActions+Focus.swift`
-- Modify: `Hangar/Views/WorkspaceSidebar.swift`
-- Modify: `Hangar/Views/AskDialogView.swift`
-- Modify: `Hangar/Views/WindowAccessor.swift`
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
-- Modify: `Hangar/Control/ControlServer+SurfaceIO.swift`
+- Create: `Elis/Views/HtmlOverlayView.swift`
+- Create: `Elis/Views/HtmlOverlayRegistry.swift`
+- Modify: `Elis/Views/WindowContentView+Detail.swift`
+- Modify: `Elis/Views/WindowContentView+Zoom.swift`
+- Modify: `Elis/elisApp.swift`
+- Modify: `Elis/AppActions+Focus.swift`
+- Modify: `Elis/Views/WorkspaceSidebar.swift`
+- Modify: `Elis/Views/AskDialogView.swift`
+- Modify: `Elis/Views/WindowAccessor.swift`
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`
+- Modify: `Elis/Control/ControlServer+SurfaceIO.swift`
 - Modify: `project.yml` (link WebKit if not implicit)
-- Modify: `Hangar/Control/ControlServer.swift`
-- Modify: `Hangar/AppDelegate.swift`
-- Create: `HangarTests/HtmlOverlayRegistryTests.swift`
-- Create: `HangarUITests/ControlHtmlOverlayUITests.swift`
+- Modify: `Elis/Control/ControlServer.swift`
+- Modify: `Elis/AppDelegate.swift`
+- Create: `ElisTests/HtmlOverlayRegistryTests.swift`
+- Create: `ElisUITests/ControlHtmlOverlayUITests.swift`
 
 - [x] `HtmlOverlayRegistry`: one WKWebView per `occupantID`, created on first mount, reused across remounts,
       session switches, pane swap/promotion and hide/show, released when the store closes or finalizes the
@@ -327,7 +327,7 @@
 - [x] hosted tests for the registry lifetime (remount reuse, swap and promotion keep the right view, release
       on close and on soft-close finalization), navigator-to-policy mapping, a local subresource inside the
       grant loading, and reload after an in-grant navigation from a.html to b.html returning to a.html;
-      run with `-only-testing:HangarTests/HtmlOverlayRegistryTests`
+      run with `-only-testing:ElisTests/HtmlOverlayRegistryTests`
 - [x] ➕ theme default (Eugene): unstyled pages take the terminal theme; the web view draws no canvas and the
       panel paints the theme or `--background-color`, so authored `html`/`body` backgrounds still fill it
 - [x] ➕ toolbar opt-in via `--navigation` (Eugene); without it a fixed dark close disc
@@ -344,7 +344,7 @@
 - [x] every Overview/Solution Overview item implemented, including presenter refusal and grant containment
 - [x] edge cases: missing file (failed state with error), file outside grant, reload after the file changed,
       session close with undo then restore
-- [x] full gates once: `make build`, `cd HangarCore && swift test`, `make test-app`, `make lint`
+- [x] full gates once: `make build`, `cd ElisCore && swift test`, `make test-app`, `make lint`
 - [x] ➕ fixed the `SplitRatioAccessorTests` fixture race the full hosted run exposed (a layout pass between async
       setUp and the body let the attached probe seed ratio 0.5)
 - [x] ➕ revmux round 1 minors (Eugene): refuse a `--cwd` naming the page file itself, open clicked http(s)
@@ -356,14 +356,14 @@
 ### Task 5: [Final] Update documentation
 - [x] `.claude/rules/control-api.md`: `.overlay.reload` in the public catalog (line ~157), HTML variant,
       predicate classification, teardown funnel, refusals, read-back, remote rule
-- [x] `plugins/hangar/skills/hangar/`: `overlay open --html`, `overlay reload`, read-back fields
+- [x] `plugins/elis/skills/elis/`: `overlay open --html`, `overlay reload`, read-back fields
 - [x] `site/commands.html` (arguments, read-back), `site/docs.html` (user guide section) and `site/llms.txt`;
       `site/index.html` unchanged (Eugene declined a feature line)
 - [x] `ARCHITECTURE.md` if the app adapter/registry split needs a line
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
-*Manual verification in an isolated Debug instance (short `/tmp` `HANGAR_STATE_DIR`, never the live socket)*
+*Manual verification in an isolated Debug instance (short `/tmp` `ELIS_STATE_DIR`, never the live socket)*
 - an agent-style artifact with CDN scripts renders and runs; links open in the browser only on click
 - floating `--size-percent 70`, full, and `--pane right` all look like the program overlay equivalents
 - switching sessions and back keeps page state; closing the session and undoing keeps it too

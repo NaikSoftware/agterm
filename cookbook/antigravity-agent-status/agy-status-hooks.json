@@ -1,9 +1,9 @@
 {
-  "hangar-status": {
+  "elis-status": {
     "PreInvocation": [
       {
         "type": "command",
-        "command": "\"$HOME/.config/hangar/hooks/agy/agy-status-hook.sh\" invocation",
+        "command": "\"$HOME/.config/elis/hooks/agy/agy-status-hook.sh\" invocation",
         "timeout": 5
       }
     ],
@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.config/hangar/hooks/agy/agy-status-hook.sh\" ask",
+            "command": "\"$HOME/.config/elis/hooks/agy/agy-status-hook.sh\" ask",
             "timeout": 5
           }
         ]
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.config/hangar/hooks/agy/agy-status-hook.sh\" tool-done",
+            "command": "\"$HOME/.config/elis/hooks/agy/agy-status-hook.sh\" tool-done",
             "timeout": 5
           }
         ]
@@ -34,7 +34,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "\"$HOME/.config/hangar/hooks/agy/agy-status-hook.sh\" stop",
+        "command": "\"$HOME/.config/elis/hooks/agy/agy-status-hook.sh\" stop",
         "timeout": 5
       }
     ]

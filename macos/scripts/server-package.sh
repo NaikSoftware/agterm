@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# hangar-server's tarball for one architecture, as a release ships it: hangar-server, hangarctl, zmx, the shell
+# elis-server's tarball for one architecture, as a release ships it: elis-server, elisctl, zmx, the shell
 # integration, terminfo, the agent hooks, the skill, zmx's license and install.sh, at the archive root.
 # usage: scripts/server-package.sh aarch64|x86_64 [VERSION]
-#   -> build/server/hangar-server-VERSION-linux-ARCH.tar.gz and its .sha256
+#   -> build/server/elis-server-VERSION-linux-ARCH.tar.gz and its .sha256
 # needs scripts/setup-zmx-linux.sh's artifacts under build/linux; builds with scripts/server-build.sh.
 set -euo pipefail
 
@@ -23,17 +23,17 @@ zmx="$ROOT/build/linux/$arch/zmx/zmx"
 
 "$ROOT/scripts/server-build.sh" "$arch" "$version"
 
-stage="$(mktemp -d "${TMPDIR:-/tmp}/hangar-server-stage.XXXXXX")"
+stage="$(mktemp -d "${TMPDIR:-/tmp}/elis-server-stage.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/resources/skill" "$stage/licenses/zmx"
-cp "$ROOT/build/server/$arch/hangar-server" "$ROOT/build/server/$arch/hangarctl" "$zmx" "$stage/"
-cp -R "$ROOT/build/linux/ghostty/shell-integration" "$ROOT/build/linux/terminfo" "$ROOT/Hangar/Resources/agent-status" \
+cp "$ROOT/build/server/$arch/elis-server" "$ROOT/build/server/$arch/elisctl" "$zmx" "$stage/"
+cp -R "$ROOT/build/linux/ghostty/shell-integration" "$ROOT/build/linux/terminfo" "$ROOT/Elis/Resources/agent-status" \
   "$stage/resources/"
-cp -R "$ROOT/../plugins/hangar/skills/hangar" "$stage/resources/skill/"
+cp -R "$ROOT/../plugins/elis/skills/elis" "$stage/resources/skill/"
 cp "$ROOT/build/linux/$arch/zmx/LICENSE" "$stage/licenses/zmx/"
 cp "$ROOT/scripts/server-host-install.sh" "$stage/install.sh"
 
-name="hangar-server-$version-linux-$arch.tar.gz"
+name="elis-server-$version-linux-$arch.tar.gz"
 COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -C "$stage" -czf "$ROOT/build/server/$name" .
 (cd "$ROOT/build/server" && shasum -a 256 "$name" >"$name.sha256")
 echo "packaged build/server/$name"

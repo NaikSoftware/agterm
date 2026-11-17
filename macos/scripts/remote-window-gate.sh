@@ -4,17 +4,17 @@
 # exit, and an unreachable server.
 # docs/remote-linux-gate.md says what each step checks.
 #
-# usage: HANGAR_STATE_DIR=/tmp/agw scripts/remote-window-gate.sh [COUNT]
+# usage: ELIS_STATE_DIR=/tmp/agw scripts/remote-window-gate.sh [COUNT]
 #   COUNT            sessions created on the server, default 20
-#   HANGAR_GATE_APP  the Debug bundle, default build/DerivedData/Build/Products/Debug/Hangar.app
+#   ELIS_GATE_APP  the Debug bundle, default build/DerivedData/Build/Products/Debug/Elis.app
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP="${HANGAR_GATE_APP:-$ROOT/build/DerivedData/Build/Products/Debug/Hangar.app}"
+APP="${ELIS_GATE_APP:-$ROOT/build/DerivedData/Build/Products/Debug/Elis.app}"
 COUNT="${1:-20}"
-CONTAINER=hangar-server-test
+CONTAINER=elis-server-test
 KEYS="$ROOT/build/server-container"
-HOST="ssh://hangar@127.0.0.1:${HANGAR_SERVER_CONTAINER_PORT:-2222}"
+HOST="ssh://elis@127.0.0.1:${ELIS_SERVER_CONTAINER_PORT:-2222}"
 DEADLINE=60
 FAILED=0
 APP_PID=""
@@ -22,19 +22,19 @@ PAUSED=""
 
 die() { echo "remote-window-gate: $*" >&2; exit 2; }
 
-dir="${HANGAR_STATE_DIR:-}"
-[[ -n "$dir" ]] || die "HANGAR_STATE_DIR is unset; export a short /tmp directory"
+dir="${ELIS_STATE_DIR:-}"
+[[ -n "$dir" ]] || die "ELIS_STATE_DIR is unset; export a short /tmp directory"
 dir="${dir%/}"
 case "$dir" in
   /tmp/* | /private/tmp/*) ;;
-  *) die "HANGAR_STATE_DIR must be under /tmp, got $dir" ;;
+  *) die "ELIS_STATE_DIR must be under /tmp, got $dir" ;;
 esac
-(( ${#dir} + 12 <= 100 )) || die "HANGAR_STATE_DIR is too long for a control socket: $dir"
+(( ${#dir} + 12 <= 100 )) || die "ELIS_STATE_DIR is too long for a control socket: $dir"
 STATE="$dir"
-SOCK="$STATE/hangar.sock"
+SOCK="$STATE/elis.sock"
 RESULTS="$STATE/gate-results.txt"
-[[ -x "$APP/Contents/MacOS/hangarctl" ]] || die "no Debug build at $APP; run make build or set HANGAR_GATE_APP"
-CTL="$APP/Contents/MacOS/hangarctl"
+[[ -x "$APP/Contents/MacOS/elisctl" ]] || die "no Debug build at $APP; run make build or set ELIS_GATE_APP"
+CTL="$APP/Contents/MacOS/elisctl"
 [[ -f "$KEYS/id_ed25519" ]] || die "no container keys under $KEYS; run scripts/server-container.sh build"
 docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null | grep -q true \
   || die "the $CONTAINER container is not running; run scripts/server-container.sh start"
@@ -66,7 +66,7 @@ record() {
 
 ctl() { "$CTL" "$@" --socket "$SOCK"; }
 remote() { "$STATE/bin/ssh" -T -o BatchMode=yes -o ConnectTimeout=5 "$HOST" "export PATH=\$PATH:\$HOME/.local/bin; $1"; }
-zmx_list() { remote "ZMX_DIR=\$(hangarctl zmx tree --json | jq -r .result.remote.endpoint.socketDirectory) ~/.local/lib/hangar-server/zmx list"; }
+zmx_list() { remote "ZMX_DIR=\$(elisctl zmx tree --json | jq -r .result.remote.endpoint.socketDirectory) ~/.local/lib/elis-server/zmx list"; }
 starts() { grep -c -- '-f -N -M' "$STATE/ssh-calls.log" || true; }
 # the pool directory is shared by every remote window of this user, so only the paths this run's ssh used are its own
 own_paths() { grep -o 'ControlPath=[^ ]*' "$STATE/ssh-calls.log" | sed 's/^ControlPath=//' | sort -u; }
@@ -97,12 +97,12 @@ all_up="(.remote.state == \"connected\") and ($rows | length) == \$n and ($rows 
 launch() {
   [[ ! -S "$SOCK" ]] || ! ctl tree --json >/dev/null 2>&1 || die "another instance already serves $SOCK"
   local vars pid activated="" end=$((SECONDS + 10))
-  vars="$(env | sed -n 's/^\(\(CLAUDE\|HANGAR_\|GHOSTTY_\)[A-Za-z0-9_]*\)=.*/\1/p' | sed 's/^/-u /' | tr '\n' ' ')"
+  vars="$(env | sed -n 's/^\(\(CLAUDE\|ELIS_\|GHOSTTY_\)[A-Za-z0-9_]*\)=.*/\1/p' | sed 's/^/-u /' | tr '\n' ' ')"
   # shellcheck disable=SC2086 # vars is a list of `-u NAME` words
-  env $vars open -n --env "HANGAR_STATE_DIR=$STATE" --env "PATH=$STATE/bin:$PATH" "$APP"
+  env $vars open -n --env "ELIS_STATE_DIR=$STATE" --env "PATH=$STATE/bin:$PATH" "$APP"
   for _ in $(seq 10); do
-    for pid in $(ps -axo pid=,command= | awk -v bin="$APP/Contents/MacOS/Hangar" '$2 == bin {print $1}'); do
-      ps eww -o command= -p "$pid" | grep -qE "(^| )HANGAR_STATE_DIR=$STATE( |$)" && APP_PID="$pid"
+    for pid in $(ps -axo pid=,command= | awk -v bin="$APP/Contents/MacOS/Elis" '$2 == bin {print $1}'); do
+      ps eww -o command= -p "$pid" | grep -qE "(^| )ELIS_STATE_DIR=$STATE( |$)" && APP_PID="$pid"
     done
     [[ -z "$APP_PID" ]] || break
     sleep 1
@@ -112,7 +112,7 @@ launch() {
   until ctl tree --json >/dev/null 2>&1; do
     if (( SECONDS >= end )) && [[ -z "$activated" ]]; then
       # shellcheck disable=SC2086
-      env $vars open --env "HANGAR_STATE_DIR=$STATE" --env "PATH=$STATE/bin:$PATH" "$APP" 2>/dev/null
+      env $vars open --env "ELIS_STATE_DIR=$STATE" --env "PATH=$STATE/bin:$PATH" "$APP" 2>/dev/null
       activated=1
       end=$((SECONDS + 10))
     fi
@@ -134,12 +134,12 @@ cleanup() {
 trap cleanup EXIT
 
 # --- server: COUNT sessions, one of them split, plus one to end and one to exit
-existing="$(remote 'hangarctl tree --json' | jq '[.result.tree.workspaces[].sessions[]] | length')"
-for _ in $(seq $((COUNT - existing))); do remote 'hangarctl session new --json' >/dev/null; done
+existing="$(remote 'elisctl tree --json' | jq '[.result.tree.workspaces[].sessions[]] | length')"
+for _ in $(seq $((COUNT - existing))); do remote 'elisctl session new --json' >/dev/null; done
 ids=()
-while IFS= read -r id; do ids+=("$id"); done < <(remote 'hangarctl tree --json' | jq -r '.result.tree.workspaces[].sessions[].id')
+while IFS= read -r id; do ids+=("$id"); done < <(remote 'elisctl tree --json' | jq -r '.result.tree.workspaces[].sessions[].id')
 SPLIT="${ids[0]}" ENDS="${ids[1]}" EXITS="${ids[2]}"
-remote "hangarctl session split on --target $SPLIT" >/dev/null
+remote "elisctl session split on --target $SPLIT" >/dev/null
 record RECORDED server "$COUNT sessions; split $SPLIT, ends $ENDS, exits $EXITS"
 
 # --- open
@@ -174,8 +174,8 @@ if (( attached == COUNT + 1 )); then record PASS reattached "every pane has its 
 # --- a page on the server's loopback reaches this Mac through a forward on the pooled master; closing one page cancels
 # its forward alone
 FWD_A="${ids[3]}" FWD_B="${ids[4]}"
-remote "mkdir -p /tmp/gate-www && echo hangar-forward-gate > /tmp/gate-www/index.html && (busybox httpd -p 127.0.0.1:8099 -h /tmp/gate-www || true)" >/dev/null
-for target in "$FWD_A" "$FWD_B"; do remote "hangarctl session overlay open --target $target --url http://localhost:8099/" >/dev/null; done
+remote "mkdir -p /tmp/gate-www && echo elis-forward-gate > /tmp/gate-www/index.html && (busybox httpd -p 127.0.0.1:8099 -h /tmp/gate-www || true)" >/dev/null
+for target in "$FWD_A" "$FWD_B"; do remote "elisctl session overlay open --target $target --url http://localhost:8099/" >/dev/null; done
 pages="$rows | map(select(.id == \"$FWD_A\" or .id == \"$FWD_B\")) | map(.htmlOverlays[0].url // \"\")"
 check forward-pages "$pages | length == 2 and all(test(\"^http://localhost:[0-9]+/$\")) and .[0] != .[1]"
 local_port() {
@@ -202,7 +202,7 @@ within() {
   done
 }
 # shellcheck disable=SC2329 # runs through within
-both_answer() { [[ "$(fetch "$port_a")" == hangar-forward-gate && "$(fetch "$port_b")" == hangar-forward-gate ]]; }
+both_answer() { [[ "$(fetch "$port_a")" == elis-forward-gate && "$(fetch "$port_b")" == elis-forward-gate ]]; }
 port_a="$(local_port "$FWD_A")" port_b="$(local_port "$FWD_B")"
 if within 30 both_answer; then
   record PASS forward-reaches "both local ports return the server's page"
@@ -210,29 +210,29 @@ else
   record FAIL forward-reaches "ports $port_a $port_b"
 fi
 masters_before="$(for path in $(own_paths); do master_pid "$path"; done | sort | tr '\n' ' ')"
-remote "hangarctl session overlay close --target $FWD_A" >/dev/null
+remote "elisctl session overlay close --target $FWD_A" >/dev/null
 if within 15 refused "$port_a"; then closed=yes; else closed=no; fi
 masters_after="$(for path in $(own_paths); do master_pid "$path"; done | sort | tr '\n' ' ')"
-if [[ "$closed" == yes && "$(fetch "$port_b")" == hangar-forward-gate && "$masters_before" == "$masters_after" ]]; then
+if [[ "$closed" == yes && "$(fetch "$port_b")" == elis-forward-gate && "$masters_before" == "$masters_after" ]]; then
   record PASS forward-cancel "the closed page's port refuses connections, the other answers, the masters are the same"
 else
   record FAIL forward-cancel "refused $closed on $port_a, $port_b answer, masters $masters_before / $masters_after"
 fi
-remote "hangarctl session overlay close --target $FWD_B" >/dev/null
+remote "elisctl session overlay close --target $FWD_B" >/dev/null
 
 # --- a killed daemon ends its row, which keeps its screen
-daemon="$(remote 'hangarctl zmx tree --json' | jq -r --arg s "$ENDS" '.result.remote.sessions[] | select(.id == $s) | .panes[0].daemon')"
-remote "ZMX_DIR=\$(hangarctl zmx tree --json | jq -r .result.remote.endpoint.socketDirectory) ~/.local/lib/hangar-server/zmx kill $daemon" >/dev/null
+daemon="$(remote 'elisctl zmx tree --json' | jq -r --arg s "$ENDS" '.result.remote.sessions[] | select(.id == $s) | .panes[0].daemon')"
+remote "ZMX_DIR=\$(elisctl zmx tree --json | jq -r .result.remote.endpoint.socketDirectory) ~/.local/lib/elis-server/zmx kill $daemon" >/dev/null
 check ended "$rows | map(select(.id == \"$ENDS\")) | .[0] | (.ended == true and .realized == true)"
 
 # --- a killed primary with a live split promotes the split
-primary="$(remote 'hangarctl zmx tree --json' | jq -r --arg s "$SPLIT" '.result.remote.sessions[] | select(.id == $s) | .panes[] | select(.pane == "left") | .daemon')"
-remote "ZMX_DIR=\$(hangarctl zmx tree --json | jq -r .result.remote.endpoint.socketDirectory) ~/.local/lib/hangar-server/zmx kill $primary" >/dev/null
+primary="$(remote 'elisctl zmx tree --json' | jq -r --arg s "$SPLIT" '.result.remote.sessions[] | select(.id == $s) | .panes[] | select(.pane == "left") | .daemon')"
+remote "ZMX_DIR=\$(elisctl zmx tree --json | jq -r .result.remote.endpoint.socketDirectory) ~/.local/lib/elis-server/zmx kill $primary" >/dev/null
 check promoted "$rows | map(select(.id == \"$SPLIT\")) | .[0] | (. != null and (.hasSplit // false) == false and (.ended // false) == false)"
 
 # --- a shell that exits removes its row
 check exit-row-shown "$rows | map(select(.id == \"$EXITS\")) | length == 1"
-remote "hangarctl session type --target $EXITS 'exit
+remote "elisctl session type --target $EXITS 'exit
 '" >/dev/null
 check shell-exit "$rows | map(select(.id == \"$EXITS\")) | length == 0"
 

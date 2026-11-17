@@ -2,26 +2,26 @@
 # Sourced by subagent-hook.sh and subagent-pick.sh, never run.
 #
 # State, one small file per fact, so two subagents finishing at once never rewrite the same file. A
-# conversation is kept apart from the hangar session, because --resume can bring it back in another one:
-#   $AGT_SUBAGENT_STATE/<hangar session>/current                   the conversation the session shows
-#   $AGT_SUBAGENT_STATE/<hangar session>/agent.pid                 the claude process, the refresher's stop condition
+# conversation is kept apart from the elis session, because --resume can bring it back in another one:
+#   $AGT_SUBAGENT_STATE/<elis session>/current                   the conversation the session shows
+#   $AGT_SUBAGENT_STATE/<elis session>/agent.pid                 the claude process, the refresher's stop condition
 #   $AGT_SUBAGENT_STATE/conversations/<conversation>/<id>.status   running | completed
 #   ...                                             /<id>.pid      the claude process that started it
 #   ...                                             /<id>.activity the tool call it ran last
 #   ...                                             /<id>.transcript its JSONL
 #   ...                                             /turn-ended    the parent's turn ended with subagents still running
 
-HANGARCTL=${HANGARCTL:-hangarctl}
-AGT_SUBAGENT_STATE=${AGT_SUBAGENT_STATE:-$HOME/.local/state/hangar-subagents}
+ELISCTL=${ELISCTL:-elisctl}
+AGT_SUBAGENT_STATE=${AGT_SUBAGENT_STATE:-$HOME/.local/state/elis-subagents}
 AGT_SUBAGENT_REFRESH=${AGT_SUBAGENT_REFRESH:-10}
 AGT_SUBAGENT_HIDE_AFTER=${AGT_SUBAGENT_HIDE_AFTER:-30}
 AGT_SUBAGENT_LINGER=${AGT_SUBAGENT_LINGER:-60}
 if [ -z "${AGT_STATUS_SCRIPT:-}" ]; then
-  AGT_STATUS_SCRIPT=$HOME/.config/hangar/agent-status/hangar-claude-status.sh
-  [ -x "$AGT_STATUS_SCRIPT" ] || AGT_STATUS_SCRIPT=$HOME/.config/hangar/agent-status/hangar-agent-status.sh
+  AGT_STATUS_SCRIPT=$HOME/.config/elis/agent-status/elis-claude-status.sh
+  [ -x "$AGT_STATUS_SCRIPT" ] || AGT_STATUS_SCRIPT=$HOME/.config/elis/agent-status/elis-agent-status.sh
 fi
 
-session_dir=$AGT_SUBAGENT_STATE/${HANGAR_SESSION_ID:-none}
+session_dir=$AGT_SUBAGENT_STATE/${ELIS_SESSION_ID:-none}
 
 write_file() { printf '%s\n' "$2" > "$1.$$" && mv -f "$1.$$" "$1"; }
 read_file() { [ -r "$1" ] && head -n 1 "$1"; }
@@ -29,12 +29,12 @@ read_file() { [ -r "$1" ] && head -n 1 "$1"; }
 current_conversation() { read_file "$session_dir/current"; }
 conversation_dir() { printf '%s/conversations/%s' "$AGT_SUBAGENT_STATE" "$1"; }
 
-# post a status through the hooks package, or straight to hangarctl without it
+# post a status through the hooks package, or straight to elisctl without it
 post_status() {
   if [ -x "$AGT_STATUS_SCRIPT" ]; then
     "$AGT_STATUS_SCRIPT" "$@" </dev/null >/dev/null 2>&1
   else
-    "$HANGARCTL" session status "$@" --target "$HANGAR_SESSION_ID" >/dev/null 2>&1
+    "$ELISCTL" session status "$@" --target "$ELIS_SESSION_ID" >/dev/null 2>&1
   fi
 }
 
@@ -94,9 +94,9 @@ set_line() {
   running=$(count_status "$1" running)
   finished=$(count_status "$1" completed)
   if [ "$running" -eq 0 ] && [ "$finished" -eq 0 ]; then
-    "$HANGARCTL" session info --clear --target "$HANGAR_SESSION_ID" >/dev/null 2>&1
+    "$ELISCTL" session info --clear --target "$ELIS_SESSION_ID" >/dev/null 2>&1
     return
   fi
-  "$HANGARCTL" session info --markdown --hide-after "$2" --target "$HANGAR_SESSION_ID" \
+  "$ELISCTL" session info --markdown --hide-after "$2" --target "$ELIS_SESSION_ID" \
     "$(summary_line "$running" "$finished" "$(latest_activity "$1")")" >/dev/null 2>&1
 }

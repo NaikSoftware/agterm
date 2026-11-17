@@ -1,18 +1,18 @@
-import 'package:hangar_mobile/client.dart';
-import 'package:hangar_mobile/main.dart';
-import 'package:hangar_mobile/model.dart';
-import 'package:hangar_mobile/screens/home.dart';
-import 'package:hangar_mobile/theme.dart';
+import 'package:elis_mobile/client.dart';
+import 'package:elis_mobile/main.dart';
+import 'package:elis_mobile/model.dart';
+import 'package:elis_mobile/screens/home.dart';
+import 'package:elis_mobile/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-HangarModel model() {
-  final m = HangarModel(Pairing(name: 'MacBook', host: '10.0.0.2', port: 1, token: 't', fingerprint: 'f'))
+ElisModel model() {
+  final m = ElisModel(Pairing(name: 'MacBook', host: '10.0.0.2', port: 1, token: 't', fingerprint: 'f'))
     ..state = LinkState.connected
     ..loaded = true
     ..workspaces = [
       Workspace({
-        'id': 'w1', 'name': 'hangar', 'tint': 'purple', 'active': true,
+        'id': 'w1', 'name': 'elis', 'tint': 'purple', 'active': true,
         'sessions': [
           {'id': 's1', 'name': 'phone-bluetooth', 'agent': 'claude', 'status': 'active', 'active': true, 'flagged': true, 'context': 'Running tests'},
           {'id': 'c1', 'name': 'gradle watch', 'parent': 's1', 'status': 'idle'},
@@ -27,7 +27,7 @@ HangarModel model() {
   return m;
 }
 
-Future<void> pumpHome(WidgetTester t, HangarModel m) async {
+Future<void> pumpHome(WidgetTester t, ElisModel m) async {
   t.view.physicalSize = const Size(390 * 3, 1400 * 3);
   t.view.devicePixelRatio = 3;
   addTearDown(t.view.reset);
@@ -80,7 +80,7 @@ void main() {
     T inRow<T extends Widget>(String key, Finder f) => t.widget<T>(find.descendant(of: find.byKey(Key(key)), matching: f).first);
     expect(inRow<Text>('row-s4', find.text('prod api')).style?.color, tintColor('red'));
     expect(inRow<AgentLogo>('row-s4', find.byType(AgentLogo)).color, tintColor('red'));
-    expect(inRow<Text>('ws-w1', find.text('hangar')).style?.color, tintColor('purple'));
+    expect(inRow<Text>('ws-w1', find.text('elis')).style?.color, tintColor('purple'));
     expect(inRow<Lucide>('ws-w1', find.byType(Lucide)).color, tintColor('purple'));
     await t.pumpWidget(const SizedBox());
   });

@@ -3,57 +3,57 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=$root/build
-export HANGAR_STATE_DIR=$(mktemp -d /tmp/agq.XXXX)
-unset HANGAR_SESSION_ID HANGAR_SOCKET
-ctl() { "$bin/hangarctl" "$@"; }
+export ELIS_STATE_DIR=$(mktemp -d /tmp/agq.XXXX)
+unset ELIS_SESSION_ID ELIS_SOCKET
+ctl() { "$bin/elisctl" "$@"; }
 pid=
 mpid=
 start() {
-  QT_QPA_PLATFORM=offscreen "$bin/hangar" >"$HANGAR_STATE_DIR/app.log" 2>&1 &
+  QT_QPA_PLATFORM=offscreen "$bin/elis" >"$ELIS_STATE_DIR/app.log" 2>&1 &
   pid=$!
   for _ in $(seq 50); do ctl tree >/dev/null 2>&1 && return; sleep 0.2; done
-  echo "socket never came up"; cat "$HANGAR_STATE_DIR/app.log"; exit 1
+  echo "socket never came up"; cat "$ELIS_STATE_DIR/app.log"; exit 1
 }
 stop() { kill "$pid"; wait "$pid" 2>/dev/null || true; }
 fail() { echo "FAIL: $*"; ctl tree || true; stop; exit 1; }
 fail0() { echo "FAIL: $*"; exit 1; } # before the app runs
-livedir=${XDG_RUNTIME_DIR:-/tmp}/hangar-$(printf %s "$HANGAR_STATE_DIR" | sha1sum | cut -c1-8)
-reap() { for s in "$livedir"/*.main "$livedir"/*.right; do [ -S "$s" ] && "$bin/hangar-session-host" --kill "$s"; done; rm -rf "$livedir"; }
-trap 'kill $pid $mpid 2>/dev/null || true; reap; rm -rf "$HANGAR_STATE_DIR"' EXIT
+livedir=${XDG_RUNTIME_DIR:-/tmp}/elis-$(printf %s "$ELIS_STATE_DIR" | sha1sum | cut -c1-8)
+reap() { for s in "$livedir"/*.main "$livedir"/*.right; do [ -S "$s" ] && "$bin/elis-session-host" --kill "$s"; done; rm -rf "$livedir"; }
+trap 'kill $pid $mpid 2>/dev/null || true; reap; rm -rf "$ELIS_STATE_DIR"' EXIT
 
-mkdir -p "$HANGAR_STATE_DIR/config" # an isolated state dir keeps keymap.conf and hooks.conf there too
+mkdir -p "$ELIS_STATE_DIR/config" # an isolated state dir keeps keymap.conf and hooks.conf there too
 # the installers the launch runs on install or update, run headless against a throwaway HOME
-fakehome=$HANGAR_STATE_DIR/home
+fakehome=$ELIS_STATE_DIR/home
 mkdir -p "$fakehome/.claude" "$fakehome/.codex"
-HOME=$fakehome SHELL=/bin/sh "$bin/hangar" --install agent-hooks --home "$fakehome" | grep -q "Agent Status Hooks Installed" || fail0 "agent hooks installer"
-grep -q hangar-claude-status.sh "$fakehome/.claude/settings.json" || fail0 "claude hooks merged"
+HOME=$fakehome SHELL=/bin/sh "$bin/elis" --install agent-hooks --home "$fakehome" | grep -q "Agent Status Hooks Installed" || fail0 "agent hooks installer"
+grep -q elis-claude-status.sh "$fakehome/.claude/settings.json" || fail0 "claude hooks merged"
 grep -q "hooks.Stop" "$fakehome/.codex/config.toml" || fail0 "codex hooks merged"
-"$bin/hangar" --install skill --home "$fakehome" | grep -q "Agent Skill Installed" || fail0 "skill installer"
-[ -f "$fakehome/.codex/skills/hangar/SKILL.md" ] || fail0 "codex skill copy"
-"$bin/hangar" --install cli --home "$fakehome" >/dev/null
-rm -rf "$fakehome/.local" && HOME=$fakehome SHELL=/bin/sh "$bin/hangar" --install all | grep -q "Command Line Tool Installed" || fail0 "install all"
-[ -s "$HANGAR_STATE_DIR/extras-installed" ] || fail0 "install all writes the launch stamp"
-[ "$(readlink "$fakehome/.local/bin/hangarctl")" = "$bin/hangarctl" ] || fail0 "command line tool link"
-cat >"$HANGAR_STATE_DIR/config/keymap.conf" <<EOF
+"$bin/elis" --install skill --home "$fakehome" | grep -q "Agent Skill Installed" || fail0 "skill installer"
+[ -f "$fakehome/.codex/skills/elis/SKILL.md" ] || fail0 "codex skill copy"
+"$bin/elis" --install cli --home "$fakehome" >/dev/null
+rm -rf "$fakehome/.local" && HOME=$fakehome SHELL=/bin/sh "$bin/elis" --install all | grep -q "Command Line Tool Installed" || fail0 "install all"
+[ -s "$ELIS_STATE_DIR/extras-installed" ] || fail0 "install all writes the launch stamp"
+[ "$(readlink "$fakehome/.local/bin/elisctl")" = "$bin/elisctl" ] || fail0 "command line tool link"
+cat >"$ELIS_STATE_DIR/config/keymap.conf" <<EOF
 map ctrl+alt+l toggle_split
-command "Mark" ctrl+a>m echo "{AGT_SESSION_ID}" > "$HANGAR_STATE_DIR/mark"
+command "Mark" ctrl+a>m echo "{AGT_SESSION_ID}" > "$ELIS_STATE_DIR/mark"
 map bogus toggle_split
 EOF
-cat >"$HANGAR_STATE_DIR/config/hooks.conf" <<EOF
-on app.launched touch "$HANGAR_STATE_DIR/launched"
-on session.created cat >> "$HANGAR_STATE_DIR/created"
+cat >"$ELIS_STATE_DIR/config/hooks.conf" <<EOF
+on app.launched touch "$ELIS_STATE_DIR/launched"
+on session.created cat >> "$ELIS_STATE_DIR/created"
 EOF
 start
 ctl version
-for _ in $(seq 20); do [ -f "$HANGAR_STATE_DIR/launched" ] && break; sleep 0.1; done
-[ -f "$HANGAR_STATE_DIR/launched" ] || fail "app.launched hook"
+for _ in $(seq 20); do [ -f "$ELIS_STATE_DIR/launched" ] && break; sleep 0.1; done
+[ -f "$ELIS_STATE_DIR/launched" ] || fail "app.launched hook"
 ctl keymap list | grep -qE '^  toggle_split +Ctrl\+Alt\+L  \(mapped\)' || fail "keymap list read-back"
 ctl keymap list | grep -q "line 3: invalid chord 'bogus'" || fail "keymap diagnostics"
 [ "$(ctl keymap reload)" = "1 diagnostic(s)" ] || fail "keymap reload count"
 first=$(ctl tree | awk 'NR==2{print $2}')
 ctl keymap run Mark --target "$first" >/dev/null
-for _ in $(seq 20); do [ -s "$HANGAR_STATE_DIR/mark" ] && break; sleep 0.1; done
-[ "$(cat "$HANGAR_STATE_DIR/mark")" = "$first" ] || fail "keymap run with {AGT_SESSION_ID}"
+for _ in $(seq 20); do [ -s "$ELIS_STATE_DIR/mark" ] && break; sleep 0.1; done
+[ "$(cat "$ELIS_STATE_DIR/mark")" = "$first" ] || fail "keymap run with {AGT_SESSION_ID}"
 ctl keymap run Nope 2>/dev/null && fail "unknown custom command accepted"
 ctl hooks list | grep -q 'on session.created' || fail "hooks list"
 ctl theme list | grep -q ' DarkPastels' || fail "theme list"
@@ -64,15 +64,15 @@ ctl theme set >/dev/null
 [ "$(ctl tree | grep -c '^  ')" = 1 ] || fail "first launch should open one session"
 id=$(ctl session new --name probe --cwd /tmp --workspace-name agents --create-workspace)
 sleep 1
-ctl session type 'echo MARK=$HANGAR_SESSION_ID' --target "$id"
+ctl session type 'echo MARK=$ELIS_SESSION_ID' --target "$id"
 ctl session type $'\n' --target "$id"
 sleep 1
 ctl session text --target "$id" --lines 5 | grep -q "MARK=$id" || fail "pane env or text read-back"
 ctl session status blocked --target "$id" --blink --pane main
 ctl tree | grep probe | grep -q blocked || fail "status not set"
 ctl session status bogus --target "$id" 2>/dev/null && fail "bogus status accepted"
-HANGAR_SESSION_ID=$id ctl session info | grep -q '^pid' || fail "info by env target"
-ctl session type "$root/share/agent-status/hangar-claude-status.sh completed --auto-reset"$'\n' --target "$id"
+ELIS_SESSION_ID=$id ctl session info | grep -q '^pid' || fail "info by env target"
+ctl session type "$root/share/agent-status/elis-claude-status.sh completed --auto-reset"$'\n' --target "$id"
 sleep 1
 ctl tree | grep probe | grep -q completed || fail "Claude hook adapter from a pane"
 ctl session split on --axis horizontal --target "$id"
@@ -110,7 +110,7 @@ sleep 0.5
 ctl session type $'printf "\\033]9;from osc\\007"\n' --target "$bg"
 for _ in $(seq 20); do ctl session info --target "$bg" | grep -qE '^unseen +1' && break; sleep 0.1; done
 ctl session info --target "$bg" | grep -qE '^unseen +1' || fail "OSC 9 from a pane raises the badge"
-grep -q "\"session\":\"$bg\"" "$HANGAR_STATE_DIR/created" || fail "session.created hook got the event on stdin"
+grep -q "\"session\":\"$bg\"" "$ELIS_STATE_DIR/created" || fail "session.created hook got the event on stdin"
 ctl filepanel show >/dev/null
 ctl tree --json | grep -q '"filePanel":{"visible":true' || fail "file panel show"
 ctl filepanel width 260 >/dev/null
@@ -183,9 +183,9 @@ inw2=$(ctl session new --name inw2 --window "$w2" --no-select)
 ctl tree --window "$w2" | grep -q inw2 || fail "session in the second window"
 ctl tree --window "$w1" | grep -q inw2 && fail "windows share a tree"
 ctl session info --target "$inw2" | grep -q '^name  *inw2' || fail "a session id reaches its window"
-ctl session type 'echo WIN=$HANGAR_WINDOW_ID'$'\n' --target "$inw2"
+ctl session type 'echo WIN=$ELIS_WINDOW_ID'$'\n' --target "$inw2"
 sleep 1
-ctl session text --target "$inw2" | grep -q "WIN=$w2" || fail "HANGAR_WINDOW_ID"
+ctl session text --target "$inw2" | grep -q "WIN=$w2" || fail "ELIS_WINDOW_ID"
 r=$(ctl window resize "$w2" --width 700 --height 500); [ "$r" = 700x500 ] || fail "window resize ($r)"
 ctl window rename "$w2" renamed-window
 ctl window list | grep -q renamed-window || fail "window rename"
@@ -200,12 +200,12 @@ ctl window list | grep -q doomed && fail "window delete"
 ctl window go --to next >/dev/null || fail "window go"
 ctl window select "$w1"
 # master's catalog: events, context, sidebar, text extents, pick/ask, messages, recent, batch targets, absent features
-timeout 3 "$bin/hangarctl" events --kind session.created >"$HANGAR_STATE_DIR/events.log" &
+timeout 3 "$bin/elisctl" events --kind session.created >"$ELIS_STATE_DIR/events.log" &
 evpid=$!
 sleep 0.5
 ctl session new --name evt --no-select >/dev/null
 wait "$evpid" || true
-grep -q 'session.created evt' "$HANGAR_STATE_DIR/events.log" || fail "events stream"
+grep -q 'session.created evt' "$ELIS_STATE_DIR/events.log" || fail "events stream"
 ctl session context 'PR 12' --target "$id"
 ctl tree --json | grep -q '"context":"PR 12"' || fail "session context read-back"
 ctl session context 2>/dev/null && fail "context without text or --clear"
@@ -234,9 +234,9 @@ ctl ask cancel "$ask"
 rc=0; ctl ask result "$ask" >/dev/null || rc=$?
 [ "$rc" = 2 ] || fail "ask result exit after cancel ($rc)"
 ctl ask 'No buttons' 2>/dev/null && fail "ask without buttons"
-ctl session type '"$HANGARCTL" msg send ping --to "$HANGAR_SESSION_ID:left" >/dev/null; "$HANGARCTL" msg read --ack > "'"$HANGAR_STATE_DIR"'/inbox"'$'\n' --target "$id"
-for _ in $(seq 20); do grep -q ping "$HANGAR_STATE_DIR/inbox" 2>/dev/null && break; sleep 0.2; done
-grep -q ping "$HANGAR_STATE_DIR/inbox" || fail "msg send/read from a pane"
+ctl session type '"$ELISCTL" msg send ping --to "$ELIS_SESSION_ID:left" >/dev/null; "$ELISCTL" msg read --ack > "'"$ELIS_STATE_DIR"'/inbox"'$'\n' --target "$id"
+for _ in $(seq 20); do grep -q ping "$ELIS_STATE_DIR/inbox" 2>/dev/null && break; sleep 0.2; done
+grep -q ping "$ELIS_STATE_DIR/inbox" || fail "msg send/read from a pane"
 b1=$(ctl session new --name batch1 --no-select)
 b2=$(ctl session new --name batch2 --no-select)
 [ "$(ctl session close --target "$b1" --target "$b2")" = "2 session(s)" ] || fail "batch close"
@@ -246,13 +246,13 @@ ctl tree | grep -q batch2 || fail "recent open by id"
 err=$(ctl zmx list 2>&1) && fail "zmx list answered"
 [[ $err == *'zmx.list is not supported on this platform'* ]] || fail "absent feature error"
 ctl notify 2>/dev/null && fail "notify without a body"
-# the phone relay: TLS pinned by the link's fingerprint, the token first, then hangarctl requests answered under their id
+# the phone relay: TLS pinned by the link's fingerprint, the token first, then elisctl requests answered under their id
 port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
-"$bin/hangarctl" mobile serve --no-qr --port "$port" --bind 127.0.0.1 --host 127.0.0.1 >"$HANGAR_STATE_DIR/relay.log" 2>&1 &
+"$bin/elisctl" mobile serve --no-qr --port "$port" --bind 127.0.0.1 --host 127.0.0.1 >"$ELIS_STATE_DIR/relay.log" 2>&1 &
 mpid=$!
-for _ in $(seq 50); do grep -q 'hangar://' "$HANGAR_STATE_DIR/relay.log" && break; sleep 0.1; done
-link=$(grep -om1 'hangar://[^ ]*' "$HANGAR_STATE_DIR/relay.log") || fail "relay link: $(cat "$HANGAR_STATE_DIR/relay.log")"
-[[ $link == "hangar://pair?h=127.0.0.1&p=$port&"* ]] || fail "relay link host and port ($link)"
+for _ in $(seq 50); do grep -q 'elis://' "$ELIS_STATE_DIR/relay.log" && break; sleep 0.1; done
+link=$(grep -om1 'elis://[^ ]*' "$ELIS_STATE_DIR/relay.log") || fail "relay link: $(cat "$ELIS_STATE_DIR/relay.log")"
+[[ $link == "elis://pair?h=127.0.0.1&p=$port&"* ]] || fail "relay link host and port ($link)"
 tok=$(sed 's/.*[?&]t=\([^&]*\).*/\1/' <<<"$link")
 pin=$(openssl s_client -connect "127.0.0.1:$port" </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d : | tr A-F a-f)
 [[ $link == *"&f=$pin&"* ]] || fail "the link pins the served certificate ($pin)"
@@ -265,7 +265,7 @@ grep -q '"error":"unauthorized"' <<<"$out" || fail "relay refuses a wrong token 
 grep -q '"id":1,' <<<"$out" && fail "relay answered after a wrong token"
 ctl mobile reset >/dev/null
 grep -q '"error":"unauthorized"' <<<"$(phone "{\"auth\":\"$tok\"}")" || fail "mobile reset revokes the old token"
-grep -q '"ok":true' <<<"$(phone "{\"auth\":\"$(cat "$HANGAR_STATE_DIR/mobile/token")\"}")" || fail "the new token after reset"
+grep -q '"ok":true' <<<"$(phone "{\"auth\":\"$(cat "$ELIS_STATE_DIR/mobile/token")\"}")" || fail "the new token after reset"
 kill "$mpid"; wait "$mpid" 2>/dev/null || true
 fit=$(ctl session new --name fitme --no-select)
 sleep 1
@@ -285,17 +285,17 @@ last=$(ctl session text --target "$fit" | grep -v '^$' | tail -1)
 ctl session scroll 30 --target "$fit" >/dev/null
 ctl session close --target "$fit" >/dev/null
 # Settings ▸ Connect a Phone switched on: the app runs the relay itself from launch and ends it with itself
-printf '{"on":true,"port":%s}\n' "$port" >"$HANGAR_STATE_DIR/mobile/desktop.json"
+printf '{"on":true,"port":%s}\n' "$port" >"$ELIS_STATE_DIR/mobile/desktop.json"
 cd /tmp
 ctl session type $'cd /usr\n' --target "$id"
 sleep 1
 stop
 
 start
-for _ in $(seq 50); do grep -q '"ok":true' <<<"$(phone "{\"auth\":\"$(cat "$HANGAR_STATE_DIR/mobile/token")\"}")" && break; sleep 0.2; done
-grep -q '"id":1,"ok":true,"result":{"tree"' <<<"$(phone "{\"auth\":\"$(cat "$HANGAR_STATE_DIR/mobile/token")\"}" '{"id":1,"cmd":"tree"}')" \
+for _ in $(seq 50); do grep -q '"ok":true' <<<"$(phone "{\"auth\":\"$(cat "$ELIS_STATE_DIR/mobile/token")\"}")" && break; sleep 0.2; done
+grep -q '"id":1,"ok":true,"result":{"tree"' <<<"$(phone "{\"auth\":\"$(cat "$ELIS_STATE_DIR/mobile/token")\"}" '{"id":1,"cmd":"tree"}')" \
   || fail "the app starts the relay it was switched on with"
-printf '{"on":false,"port":%s}\n' "$port" >"$HANGAR_STATE_DIR/mobile/desktop.json"
+printf '{"on":false,"port":%s}\n' "$port" >"$ELIS_STATE_DIR/mobile/desktop.json"
 ctl tree | grep -q 'renamed' || fail "session not restored"
 ctl tree | grep renamed | grep -q idle || fail "status must not survive a restart"
 ctl tree | grep renamed | grep -q '/usr' || fail "cwd not tracked"

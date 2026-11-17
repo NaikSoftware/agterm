@@ -10,8 +10,8 @@ set -e
 # the file private to this user: 0700 and 0600 rather than whatever the ambient umask gives.
 umask 077
 
-HANGARCTL=${HANGARCTL:-hangarctl}
-PARK_DIR=${AGT_PARK_DIR:-$HOME/.hangar-projects}
+ELISCTL=${ELISCTL:-elisctl}
+PARK_DIR=${AGT_PARK_DIR:-$HOME/.elis-projects}
 
 p=$1
 if [ -z "$p" ]; then
@@ -20,7 +20,7 @@ if [ -z "$p" ]; then
 fi
 
 mkdir -p "$PARK_DIR"
-t=$("$HANGARCTL" tree --json)
+t=$("$ELISCTL" tree --json)
 
 # write the snapshot to a temp file first, so a failed capture cannot destroy
 # the previous one and cannot be followed by the deletions below.
@@ -47,5 +47,5 @@ mv "$PARK_DIR/$p.json.tmp" "$PARK_DIR/$p.json"
 
 printf '%s' "$t" | jq -r --arg p "$p" '.result.tree.workspaces[] | select(.name|startswith($p)) | .id' |
 	while read -r w; do
-		"$HANGARCTL" workspace delete --target "$w"
+		"$ELISCTL" workspace delete --target "$w"
 	done

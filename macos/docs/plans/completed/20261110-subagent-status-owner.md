@@ -19,20 +19,20 @@
     `workflow`. After the last agent finishes or is stopped, the next `Stop` lists none;
   - every background completion, and a user stop (ctrl+x ctrl+k), re-invokes the main thread with
     `UserPromptSubmit` then `Stop` (5 of 5 runs), so the final `completed` arrives when the last agent ends.
-- Status writes: `HangarCore/Sources/HangarCore/AppStore+Status.swift` (`applyControlStatus`,
+- Status writes: `ElisCore/Sources/ElisCore/AppStore+Status.swift` (`applyControlStatus`,
   `StatusWriteResult`); request path `ControlDispatcher.swift` session-status arm, `ControlSessionStatusUpdate`
-  (`ControlModes.swift`), `ControlArgs` (`ControlProtocol.swift`), CLI `hangarctlKit/SessionMetadataCommands.swift`.
-  Both hosts, `Hangar/Control/ControlServer+SessionActions.swift` and
-  `HangarServerKit/ServerActions+Effects.swift`, check only `.refused` before the sound path.
-- Adapter `Hangar/Resources/agent-status/hangar-claude-status.sh` runs its ancestry guard, then forwards argv to
-  `hangar-agent-status.sh`, and never reads stdin today. The Codex adapter already parses payloads with
+  (`ControlModes.swift`), `ControlArgs` (`ControlProtocol.swift`), CLI `elisctlKit/SessionMetadataCommands.swift`.
+  Both hosts, `Elis/Control/ControlServer+SessionActions.swift` and
+  `ElisServerKit/ServerActions+Effects.swift`, check only `.refused` before the sound path.
+- Adapter `Elis/Resources/agent-status/elis-claude-status.sh` runs its ancestry guard, then forwards argv to
+  `elis-agent-status.sh`, and never reads stdin today. The Codex adapter already parses payloads with
   `/usr/bin/plutil` on Darwin and `jq` on Linux. Installed entries (`AgentHooksInstall.claudeHooks`) stay as
   they are.
 - Recipes: `subagent-status` calls the adapter with `</dev/null`; `truthful-agent-lights` passes Claude's full
   payload on stdin with its own argv from its `PostToolUse` and `Stop` hooks (measured with its real scripts against
   a recording stub), while its optional `PreToolUse[Bash]` hook `machinery-paint.sh` drains stdin with `jq` first,
   so the adapter sees no payload there.
-- agterm-linux consumes `HangarCore` public API: new parameters get defaults.
+- agterm-linux consumes `ElisCore` public API: new parameters get defaults.
 
 ## Development Approach
 - **testing approach**: TDD (bug fix): failing test first, confirm it fails, then the change.
@@ -42,8 +42,8 @@
 
 ## Testing Strategy
 - unit: `AppStoreStatusTests`, `ControlDispatcherSessionMetadataTests`, `ControlProtocolTests`,
-  `hangarctlKitTests/CommandsTests`, `HangarServerTests/ServerActionsEffectsTests`, `ClaudeStatusHookTests`.
-- hosted: `HangarTests/ControlServerStatusSoundTests`.
+  `elisctlKitTests/CommandsTests`, `ElisServerTests/ServerActionsEffectsTests`, `ClaudeStatusHookTests`.
+- hosted: `ElisTests/ControlServerStatusSoundTests`.
 - the adapter tests run on the macOS job (plutil) and the Linux CI job (jq; no-`jq` case via a constructed bin
   directory).
 
@@ -68,7 +68,7 @@
 a new `StatusWriteResult.skipped` before the pane-refusal check and before any change, so a block owned by the
 other pane answers ok rather than an error. Both hosts return ok before the sound path: no event, timestamp,
 presentation frame or sound. On an idle row it is an ordinary write. A running app older than the installed CLI drops the unknown field and applies
-the write as today; documented as an upgrade note. An adapter that falls back to an older `hangarctl` on PATH
+the write as today; documented as an upgrade note. An adapter that falls back to an older `elisctl` on PATH
 gets an unknown-option error for `--if-idle`, which the wrapper swallows, so that subagent `active` is not posted.
 
 **Adapter input**: stdin is read only when it is not a terminal (`[ -t 0 ]`), with a bounded read
@@ -107,13 +107,13 @@ Limitations, stated in the docs:
 ### Task 1: `--if-idle` on session.status
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Status.swift`, `ControlModes.swift`, `ControlProtocol.swift`,
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Status.swift`, `ControlModes.swift`, `ControlProtocol.swift`,
   `ControlDispatcher.swift`
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`, `HangarCore/Sources/HangarServerKit/ServerActions+Effects.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/SessionMetadataCommands.swift`
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`, `ElisCore/Sources/ElisServerKit/ServerActions+Effects.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionMetadataCommands.swift`
 - Modify tests: `AppStoreStatusTests`, `ControlDispatcherSessionMetadataTests`, `ControlProtocolTests`,
-  `hangarctlKitTests/CommandsTests`, `HangarServerTests/ServerActionsEffectsTests`,
-  `HangarTests/ControlServerStatusSoundTests`, `HangarUITests/PaneAwareStatusUITests`
+  `elisctlKitTests/CommandsTests`, `ElisServerTests/ServerActionsEffectsTests`,
+  `ElisTests/ControlServerStatusSoundTests`, `ElisUITests/PaneAwareStatusUITests`
 
 - [x] failing tests first in `AppStoreStatusTests`: `active --if-idle` applies on an idle row; returns
       `.skipped` with no event and no change on active, completed and blocked rows, the last including a block
@@ -123,24 +123,24 @@ Limitations, stated in the docs:
       `ControlDispatcherSessionMetadataTests` case, `applyControlStatus(_:forSession:ifIdle:)` with `.skipped`
 - [x] both hosts return ok before the sound path on `.skipped`; no-sound cases in `ControlServerStatusSoundTests`
       and `ServerActionsEffectsTests`
-- [x] CLI `hangarctl session status STATE --if-idle` with parse tests; protocol round-trip tests
+- [x] CLI `elisctl session status STATE --if-idle` with parse tests; protocol round-trip tests
 - [x] `fork:true` code search for agterm-linux switches over `StatusWriteResult` (a new case breaks an
       exhaustive switch); record the result here: none. `melonamin/agterm-linux` (shallow clone, 2026-11-10)
       reads the result only through `if case .refused` and `==` in tests
 - [x] targeted XCUITest beside `testStatusFromTheOtherPaneCannotReplaceABlock` in
-      `HangarUITests/PaneAwareStatusUITests.swift`, run with `-only-testing:`: blocked row, `active --if-idle`
+      `ElisUITests/PaneAwareStatusUITests.swift`, run with `-only-testing:`: blocked row, `active --if-idle`
       answers ok and the tree still reads `blocked`; idle row, the same write reads `active`
 - [x] run the touched tests - must pass before task 2
 
 ### Task 2: Payload-aware Claude adapter, docs and gates
 
 **Files:**
-- Modify: `Hangar/Resources/agent-status/hangar-claude-status.sh` (header comment rewritten: it reads stdin now)
+- Modify: `Elis/Resources/agent-status/elis-claude-status.sh` (header comment rewritten: it reads stdin now)
 - Modify tests: `ClaudeStatusHookTests` (the harness gains stdin, defaulting to an empty closed pipe so the
   existing cases never inherit the runner's stdin; the terminal case opens a pseudo-terminal with `openpty`,
   since Linux CI has no tty)
 - Modify docs: `site/docs.html` (agent status section and the hook mapping), `site/commands.html`,
-  `plugins/hangar/skills/hangar/SKILL.md` (the `session status` synopsis), `reference.md`,
+  `plugins/elis/skills/elis/SKILL.md` (the `session status` synopsis), `reference.md`,
   `.claude/rules/control-api.md` (the `session.status` flags bullet and the Claude hook mapping),
   `.claude/rules/notifications.md`
 
@@ -160,15 +160,15 @@ Limitations, stated in the docs:
         posts argv
 - [x] adapter: bounded stdin read, key-path parsing, the two argv rewrites
 - [x] rerun the recipe probe, run from `/tmp` and isolated: `AGT_STATUS_SCRIPT` set to the worktree adapter, a
-      recording wrapper via `HANGAR_STATUS_WRAPPER`, `HANGARCTL` set to a recording stub, `AGT_SUBAGENT_STATE`,
-      `AGT_LIGHTS_STATE` and a short `HANGAR_STATE_DIR` under `/tmp`, so nothing reaches the default socket or
+      recording wrapper via `ELIS_STATUS_WRAPPER`, `ELISCTL` set to a recording stub, `AGT_SUBAGENT_STATE`,
+      `AGT_LIGHTS_STATE` and a short `ELIS_STATE_DIR` under `/tmp`, so nothing reaches the default socket or
       `$HOME` state; the payloads come from the scratchpad. Expected: truthful-agent-lights' `PostToolUse` and
       `Stop` argv as specified above, its `machinery-paint.sh` argv unchanged, `subagent-status` argv unchanged
 - [x] docs: `site/commands.html` `--if-idle`; `site/docs.html` background subagents keep the row active, a
       subagent's `active` never overwrites main's status (its `blocked` still applies), the limitations, the minimum Claude Code version that sends
       `background_tasks` (from the `claude-releases` changelog), the upgrade note; `reference.md` `--if-idle`;
       `control-api.md` Claude mapping; `notifications.md` subagent rule
-- [x] full gates once: build, `cd HangarCore && swift test`, `make test-app`, `make lint`
+- [x] full gates once: build, `cd ElisCore && swift test`, `make test-app`, `make lint`
 - [x] verify every Overview requirement against the tests; move this plan to `docs/plans/completed/`
 
 ## Post-Completion

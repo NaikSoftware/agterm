@@ -5,14 +5,14 @@
 # pane and socket as $AGT_* environment variables and starts the process in the session's directory.
 set -eu
 
-HANGARCTL=${HANGARCTL:-hangarctl}
+ELISCTL=${ELISCTL:-elisctl}
 
 # carry the socket when the session names one, so the recipe also works in a second instance
 agt() {
     if [[ -n "${AGT_SOCKET:-}" ]]; then
-        "$HANGARCTL" "$@" --socket "$AGT_SOCKET"
+        "$ELISCTL" "$@" --socket "$AGT_SOCKET"
     else
-        "$HANGARCTL" "$@"
+        "$ELISCTL" "$@"
     fi
 }
 

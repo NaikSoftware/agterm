@@ -1,11 +1,11 @@
 ---
 worth: yes
-where: HangarCore/Sources/HangarCore/AppStore+Messages.swift:messagePane
+where: ElisCore/Sources/ElisCore/AppStore+Messages.swift:messagePane
 added: 2026-11-13
 ---
-# messaging between a local pane and an hangar-server pane
+# messaging between a local pane and an elis-server pane
 
-`msg send/read/ack` work between the panes of one Mac and between the panes of one hangar-server, but not
+`msg send/read/ack` work between the panes of one Mac and between the panes of one elis-server, but not
 across the two. Each host keeps its mailboxes in its own process, and no route carries `msg.*` from one to
 the other: a Mac send to a server row is rejected `unknown pane` with detail `remote session`, a server send
 to a Mac session is rejected `unknown pane`, and a server row as `--as` on the Mac is refused. This is a

@@ -6,7 +6,7 @@
 class QLineEdit;
 class QListWidget;
 
-// hangar's fuzzy palettes: type to filter, arrows or Ctrl-J/Ctrl-K to move, Enter to run, Esc to dismiss.
+// elis's fuzzy palettes: type to filter, arrows or Ctrl-J/Ctrl-K to move, Enter to run, Esc to dismiss.
 // In switcher mode (Ctrl-Tab) there is no search field: Tab walks the list and releasing Ctrl runs the pick.
 class Palette : public QFrame
 {

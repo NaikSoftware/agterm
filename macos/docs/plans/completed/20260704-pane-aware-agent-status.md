@@ -7,7 +7,7 @@ blocking-indicator navigation reliably surfaces and lands on the pane actually w
 split (right) pane, a hidden split, or a scratch terminal — not just the main/zoomed pane.
 
 **Problem it solves.** Agent status is a single per-session value (`Session.agentIndicator`). Every
-session surface (main / split / overlay / scratch) is spawned with the same `HANGAR_SESSION_ID` and no
+session surface (main / split / overlay / scratch) is spawned with the same `ELIS_SESSION_ID` and no
 pane discriminator, so a status set from a background pane is (1) wiped by the session-scoped
 keystroke-clear the moment you type in the foreground pane ("won't pick them"), and (2) even when it
 survives, navigation selects the session and focuses the `splitFocused` surface, never the pane that
@@ -24,13 +24,13 @@ notification `PaneRole` has no scratch case, so that one path is new.
 
 ## Context (from discovery)
 
-- **Language/build:** Swift 6. `HangarCore` (host-free SwiftPM, `swift test`) + `hangar` app target
+- **Language/build:** Swift 6. `ElisCore` (host-free SwiftPM, `swift test`) + `elis` app target
   (xcodegen/xcodebuild, owns SwiftUI + libghostty). No `go.mod` — Go planning rules skip.
-- **Model:** `AgentStatus`/`AgentIndicator` in `HangarCore/Sources/HangarCore/AgentStatus.swift` (81 lines).
+- **Model:** `AgentStatus`/`AgentIndicator` in `ElisCore/Sources/ElisCore/AgentStatus.swift` (81 lines).
   `AgentIndicator` is ephemeral (absent from `SessionSnapshot`).
-- **Detection channel:** `SurfaceEnvironment.session()` (HangarCore) builds the `HANGAR_*` env;
-  `surfaceEnv(for:)` at `Hangar/hangarApp.swift:401` feeds all four factories the *same* env. The bundled
-  hook wrapper `Hangar/Resources/agent-status/hangar-agent-status.sh` reads `$HANGAR_SESSION_ID` and
+- **Detection channel:** `SurfaceEnvironment.session()` (ElisCore) builds the `ELIS_*` env;
+  `surfaceEnv(for:)` at `Elis/elisApp.swift:401` feeds all four factories the *same* env. The bundled
+  hook wrapper `Elis/Resources/agent-status/elis-agent-status.sh` reads `$ELIS_SESSION_ID` and
   passes `--target`.
 - **Command path:** `session.status` is dispatcher-owned — `ControlDispatcher.swift:157` builds a
   `ControlSessionStatusUpdate` (defined `ControlModes.swift:103`) and calls
@@ -42,15 +42,15 @@ notification `PaneRole` has no scratch case, so that one path is new.
   the app's `buildTree` at `ControlServer.swift:407`).
 - **Keystroke-clear:** `GhosttySurfaceView+Input.swift:51-53` reads `session.agentIndicator.status`,
   calls `AgentStatus.clearedByKeystroke(isEscape:)`, then fires `onUserInputClearsStatus` — wired to a
-  session-scoped clear on both the main (`hangarApp.swift:216`) and split (`:318`) factories; the scratch
+  session-scoped clear on both the main (`elisApp.swift:216`) and split (`:318`) factories; the scratch
   factory wires no clear today. `destroySurface()` nils these callbacks.
 - **Navigation:** `AppActions.reveal(windowID:sessionID:pane:)` → `revealSession` → `focusSplitPane`
   reveals an exact main/split pane (notification-click path; `focusSplitPane` only *focuses* an
-  already-active scratch, it does not *show* a hidden one). Auto-follow posts `.hangarAutoFollowed`
+  already-active scratch, it does not *show* a hidden one). Auto-follow posts `.elisAutoFollowed`
   (`AppStore+AutoFollow.swift:145`); the observer is registered at `AppActions.swift:69` and handled by
   `autoFollowed(_:)` at `AppActions.swift:628`. Attention-nav is `AppActions.selectNextAttentionSession`
-  (`AppActions.swift:267`) + `session.go next-attention`. (hangarApp.swift is NOT involved in either.)
-- **e2e precedent:** `HangarUITests/AutoFollowUITests.swift`, `ControlSidebarStatusUITests.swift`,
+  (`AppActions.swift:267`) + `session.go next-attention`. (elisApp.swift is NOT involved in either.)
+- **e2e precedent:** `ElisUITests/AutoFollowUITests.swift`, `ControlSidebarStatusUITests.swift`,
   base `ControlAPITestCase.swift`.
 
 ## Development Approach
@@ -60,9 +60,9 @@ notification `PaneRole` has no scratch case, so that one path is new.
 - Complete each task fully before the next; small, focused changes.
 - **CRITICAL: every task with code changes MUST include new/updated tests** (success + error/edge cases),
   listed as separate checklist items.
-- **CRITICAL: all tests pass before the next task.** After every task: `cd HangarCore && swift test`
+- **CRITICAL: all tests pass before the next task.** After every task: `cd ElisCore && swift test`
   green, `make build` succeeds, `make lint` (swiftlint `--strict`) clean.
-- Keep `HangarCore` host-free (no GhosttyKit/AppKit/Metal, no CoreGraphics geometry types).
+- Keep `ElisCore` host-free (no GhosttyKit/AppKit/Metal, no CoreGraphics geometry types).
 - Source files < 1000 lines, test files < 2000.
 - Update this plan file when scope changes; keep checkboxes in sync.
 
@@ -72,7 +72,7 @@ notification `PaneRole` has no scratch case, so that one path is new.
   truth table, `SurfaceEnvironment.session(pane:)` injection, protocol round-trips
   (`ControlSessionNode.statusPane`, `ControlSessionStatusUpdate.pane`), dispatcher parse/validate, tree
   node population, CLI parse/validate (`CommandsTests`), wrapper forwarding (`AgentStatusWrapperTests`).
-- **e2e (XCUITest, `HangarUITests`):** a `right`-tagged block navigates to and reveals the split pane; a
+- **e2e (XCUITest, `ElisUITests`):** a `right`-tagged block navigates to and reveals the split pane; a
   hidden split reveals on nav; a scratch block reveals the scratch. Follow the two existing auto-follow
   XCUITests as precedent. If an e2e proves flaky, **flag it — never weaken/delete the assertion.**
 
@@ -87,7 +87,7 @@ notification `PaneRole` has no scratch case, so that one path is new.
 One new optional field, `statusPane`, on `AgentIndicator`, typed as a new `StatusPane` enum
 (`left|right|scratch`) matching the existing `--pane` vocabulary. It is:
 
-1. **Detected** — each session surface injects its own `HANGAR_PANE`; the hook wrapper forwards it as
+1. **Detected** — each session surface injects its own `ELIS_PANE`; the hook wrapper forwards it as
    `--pane`; `session.status --pane` stamps it onto the indicator.
 2. **Consumed for clearing** — `AgentIndicator.clearedBy(pane:isEscape:)` (host-free) clears only when the
    keystroke's own pane owns the current status, so foreground typing no longer wipes a background block.
@@ -107,7 +107,7 @@ One new optional field, `statusPane`, on `AgentIndicator`, typed as a new `Statu
 
 **Deliberately unchanged (scope fence):** the sidebar glyph stays one-per-session;
 `attentionSessions`/`autoFollowTarget` stay session-level; `SessionSnapshot` untouched (ephemeral);
-overlay surfaces inject no `HANGAR_PANE` (single-command runners; harmless nil→main fallback).
+overlay surfaces inject no `ELIS_PANE` (single-command runners; harmless nil→main fallback).
 
 **Accepted, documented gaps (non-blocking):**
 - Auto-follow's "you're already on this blocked session → stay" suppression means being parked on the
@@ -127,7 +127,7 @@ overlay surfaces inject no `HANGAR_PANE` (single-command runners; harmless nil�
   treated as `left` (main) by clear logic. Ephemeral.
 - `AgentIndicator.clearedBy(pane: StatusPane, isEscape: Bool) -> Bool` =
   `(statusPane ?? .left) == pane && status.clearedByKeystroke(isEscape: isEscape)`.
-- `SurfaceEnvironment.session(..., pane: StatusPane?)` adds `HANGAR_PANE = pane.rawValue` when non-nil.
+- `SurfaceEnvironment.session(..., pane: StatusPane?)` adds `ELIS_PANE = pane.rawValue` when non-nil.
 - `ControlSessionStatusUpdate` (`ControlModes.swift`): add `pane: StatusPane?`.
 - `ControlDispatcher` `.sessionStatus`: parse `request.args?.pane` → `StatusPane`; a non-nil-but-invalid
   value returns the `--pane` validation error (mirror `validatePaneArgument`); nil stays nil; put it on
@@ -137,7 +137,7 @@ overlay surfaces inject no `HANGAR_PANE` (single-command runners; harmless nil�
 - App stamp (`setSessionStatus`): build `AgentIndicator(status:blink:autoReset:statusPane:)` from
   `update.pane`.
 - Keystroke-clear (closure-based, no surface property): the scratch surface deliberately has no
-  `view.session` (hangarApp.swift:362), so a `keyDown` gate that reads `view.session` can never clear a
+  `view.session` (elisApp.swift:362), so a `keyDown` gate that reads `view.session` can never clear a
   scratch block. Instead, change `GhosttySurfaceView.onUserInputClearsStatus` to take the `isEscape` flag,
   have `keyDown` fire it UNCONDITIONALLY, and wire it in each factory (main/split/scratch) to a closure
   that captures `store` + `sessionID` + its own pane and does the decision itself:
@@ -162,91 +162,91 @@ overlay surfaces inject no `HANGAR_PANE` (single-command runners; harmless nil�
 ### Task 1: StatusPane enum + AgentIndicator.statusPane + clearedBy helper
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AgentStatus.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AgentStatusTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AgentStatus.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AgentStatusTests.swift`
 
 - [x] add `enum StatusPane: String, Codable, Sendable, CaseIterable { case left, right, scratch }` to `AgentStatus.swift`
 - [x] add `var statusPane: StatusPane?` (default nil) to `AgentIndicator` + its memberwise init param (keep `Equatable`)
 - [x] add `func clearedBy(pane: StatusPane, isEscape: Bool) -> Bool` to `AgentIndicator` (`(statusPane ?? .left) == pane && status.clearedByKeystroke(isEscape:)`)
 - [x] write tests: `clearedBy` truth table — matching pane clears iff `clearedByKeystroke` allows; non-matching pane never clears; nil statusPane treated as `.left`; active clears only on Escape and only for its own pane
 - [x] write tests: `AgentIndicator` statusPane defaults nil and preserves existing init behavior
-- [x] run `cd HangarCore && swift test`, `make lint` — must pass before next task
+- [x] run `cd ElisCore && swift test`, `make lint` — must pass before next task
 
-### Task 2: SurfaceEnvironment injects HANGAR_PANE
+### Task 2: SurfaceEnvironment injects ELIS_PANE
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/SurfaceEnvironment.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/SurfaceEnvironmentTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/SurfaceEnvironment.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/SurfaceEnvironmentTests.swift`
 
-- [x] add `pane: StatusPane?` param to `SurfaceEnvironment.session(...)`; when non-nil add `HANGAR_PANE = pane.rawValue`
+- [x] add `pane: StatusPane?` param to `SurfaceEnvironment.session(...)`; when non-nil add `ELIS_PANE = pane.rawValue`
 - [x] leave `quickTerminal(...)` unchanged (not in the session tree)
-- [x] write tests: `pane: .left/.right/.scratch` inject `HANGAR_PANE=left/right/scratch`; `pane: nil` omits the key; existing `HANGAR_SESSION_ID`/socket/window/workspace assertions still hold
-- [x] run `cd HangarCore && swift test`, `make lint` — must pass before next task
+- [x] write tests: `pane: .left/.right/.scratch` inject `ELIS_PANE=left/right/scratch`; `pane: nil` omits the key; existing `ELIS_SESSION_ID`/socket/window/workspace assertions still hold
+- [x] run `cd ElisCore && swift test`, `make lint` — must pass before next task
 
 ### Task 3: Protocol + dispatcher — carry and validate the pane (host-free)
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlModes.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift` *(exists — currently tests `ControlSessionStatusUpdate`)*
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlModes.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherTests.swift` *(exists — currently tests `ControlSessionStatusUpdate`)*
 
 - [x] add `let statusPane: String?` to `ControlSessionNode` (Codable optional, omitted when nil) + its init param, defaulting nil so existing call sites compile
 - [x] add `pane: StatusPane?` to `ControlSessionStatusUpdate` (`ControlModes.swift`) + init
 - [x] in `ControlDispatcher` `.sessionStatus`: parse `request.args?.pane` into `StatusPane` (nil→nil); a non-nil unknown value returns the same error text as `--pane` validation (`--pane must be left, right, or scratch`); pass it into the update
 - [x] write tests: `ControlSessionNode` round-trips with `statusPane` and omits it from JSON when nil; `ControlSessionStatusUpdate` carries pane
 - [x] write tests: dispatcher `.sessionStatus` — valid pane populates the update, invalid pane returns the validation error (status unchanged), nil pane leaves it nil
-- [x] run `cd HangarCore && swift test`, `make lint` — must pass before next task
+- [x] run `cd ElisCore && swift test`, `make lint` — must pass before next task
 
 ### Task 4: Tree read-back — populate statusPane in the session node
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreTests.swift`
 
 - [x] at the `ControlSessionNode(...)` construction (`AppStore.swift:170`), pass `statusPane` from the indicator, gated on the SAME non-idle condition as `status` (idle → nil), so the read-back is never self-contradictory (`status == nil` while `statusPane == "right"`)
 - [x] write tests: a non-idle session with `statusPane == .right` yields a node with `statusPane == "right"`; an idle session yields BOTH `status == nil` and `statusPane == nil` (even if the indicator carried a pane)
-- [x] run `cd HangarCore && swift test`, `make lint` — must pass before next task
+- [x] run `cd ElisCore && swift test`, `make lint` — must pass before next task
 
 ### Task 5: CLI — session status --pane
 
 **Files:**
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/CommandsTests.swift`
 
 - [x] add `@Option --pane` to the `Status` subcommand; `validate()` via the shared `validatePaneArgument` (`left|right|scratch`); thread into `ControlArgs.pane` in `makeRequest()` (mirror `session type --pane`)
 - [x] update the `validatePaneArgument` godoc (`SessionCommands.swift:5`, currently "type, text") to add `status` as a caller
 - [x] write tests: `session status blocked --pane right` maps to `ControlArgs.pane == "right"`; omitted → nil; invalid pane rejected at parse
-- [x] run `cd HangarCore && swift test`, `make lint` — must pass before next task
+- [x] run `cd ElisCore && swift test`, `make lint` — must pass before next task
 
-### Task 6: Hook wrapper forwards HANGAR_PANE
+### Task 6: Hook wrapper forwards ELIS_PANE
 
 **Files:**
-- Modify: `Hangar/Resources/agent-status/hangar-agent-status.sh`
-- Modify: `HangarCore/Tests/HangarCoreTests/AgentStatusWrapperTests.swift`
+- Modify: `Elis/Resources/agent-status/elis-agent-status.sh`
+- Modify: `ElisCore/Tests/ElisCoreTests/AgentStatusWrapperTests.swift`
 
-- [x] in the wrapper, when `$HANGAR_PANE` is set, splice `--pane "$HANGAR_PANE"` into the forwarded args (before `"$@"`); absent → unchanged
-- [x] write tests (`runWrapper`): `HANGAR_PANE=right` forwards `--pane right` in the recorded argv; unset omits `--pane`; still exits 0 and is a no-op without `HANGAR_SESSION_ID`
-- [x] run `cd HangarCore && swift test`, `make lint` — must pass before next task
+- [x] in the wrapper, when `$ELIS_PANE` is set, splice `--pane "$ELIS_PANE"` into the forwarded args (before `"$@"`); absent → unchanged
+- [x] write tests (`runWrapper`): `ELIS_PANE=right` forwards `--pane right` in the recorded argv; unset omits `--pane`; still exits 0 and is a no-op without `ELIS_SESSION_ID`
+- [x] run `cd ElisCore && swift test`, `make lint` — must pass before next task
 
 ### Task 7: App — stamp statusPane in setSessionStatus
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`
 
 - [x] in `setSessionStatus`, build `AgentIndicator(status:blink:autoReset:statusPane:)` from `update.pane`
-- [x] verify the GUI Clear Status paths and keystroke-clear still build a plain `AgentIndicator()` (nil pane) — confirmed: `AppActions.clearAgentStatus` (`:182`), `WorkspaceSidebar+ContextMenu.menuClearStatus` (`:155`), and both keystroke-clear closures (`hangarApp.swift:216`/`:318`) all use `AgentIndicator()` with default nil pane
+- [x] verify the GUI Clear Status paths and keystroke-clear still build a plain `AgentIndicator()` (nil pane) — confirmed: `AppActions.clearAgentStatus` (`:182`), `WorkspaceSidebar+ContextMenu.menuClearStatus` (`:155`), and both keystroke-clear closures (`elisApp.swift:216`/`:318`) all use `AgentIndicator()` with default nil pane
 - [x] `make build` succeeds; `make lint` clean — must pass before next task *(behavior covered by the e2e in Task 10)*
 
-### Task 8: App — per-factory HANGAR_PANE env + closure-based pane-scoped keystroke-clear
+### Task 8: App — per-factory ELIS_PANE env + closure-based pane-scoped keystroke-clear
 
 **Files:**
-- Modify: `Hangar/hangarApp.swift`
-- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift`
-- Modify: `Hangar/Ghostty/GhosttySurfaceView+Input.swift`
+- Modify: `Elis/elisApp.swift`
+- Modify: `Elis/Ghostty/GhosttySurfaceView.swift`
+- Modify: `Elis/Ghostty/GhosttySurfaceView+Input.swift`
 
-- [x] make `surfaceEnv(for:)` inject the matching `HANGAR_PANE` per factory via `SurfaceEnvironment.session(pane:)`: `makeSurface` `.left`, `makeSplitSurface` `.right`, `makeScratchSurface` `.scratch`; `makeOverlaySurface` injects none
+- [x] make `surfaceEnv(for:)` inject the matching `ELIS_PANE` per factory via `SurfaceEnvironment.session(pane:)`: `makeSurface` `.left`, `makeSplitSurface` `.right`, `makeScratchSurface` `.scratch`; `makeOverlaySurface` injects none
 - [x] change `GhosttySurfaceView.onUserInputClearsStatus` to take `isEscape: Bool`; `keyDown` (`+Input.swift:51-54`) fires it UNCONDITIONALLY and no longer reads `session?.agentIndicator` (the closure now owns the decision, so the scratch — which has no `view.session` — is covered)
 - [x] wire the closure in ALL THREE factories (`makeSurface`→`.left` at :216, `makeSplitSurface`→`.right` at :318, `makeScratchSurface`→`.scratch`, currently none), each capturing `store`+`sessionID`+its pane: `if store.session(withID: sessionID)?.agentIndicator.clearedBy(pane: <thisPane>, isEscape:) == true { store.setAgentIndicator(AgentIndicator(), forSession: sessionID) }`
 - [x] verify `destroySurface()` still nils `onUserInputClearsStatus` (the retain-cycle break); do NOT add a `statusPane` property to `GhosttySurfaceView` — confirmed: `destroySurface()` still sets `onUserInputClearsStatus = nil` (type change to `((Bool) -> Void)?` leaves the nil-assignment valid); no `statusPane` property added
@@ -255,19 +255,19 @@ overlay surfaces inject no `HANGAR_PANE` (single-command runners; harmless nil�
 ### Task 9: App — navigation focuses and auto-reveals the blocked pane
 
 **Files:**
-- Modify: `Hangar/AppActions.swift` *(all in this file: the `.hangarAutoFollowed` observer at `:69` / `autoFollowed(_:)` at `:628`, `selectNextAttentionSession` at `:267`, and the `revealSession`/`focusSplitPane` helpers — hangarApp.swift is NOT involved)*
+- Modify: `Elis/AppActions.swift` *(all in this file: the `.elisAutoFollowed` observer at `:69` / `autoFollowed(_:)` at `:628`, `selectNextAttentionSession` at `:267`, and the `revealSession`/`focusSplitPane` helpers — elisApp.swift is NOT involved)*
 
 - [x] add a shared "reveal the active session's blocked pane" step reading `session.agentIndicator.statusPane`: `right` → set `splitFocused = true` then focus `session.activeSurface` (do NOT gate the focus target on `hasSplit` — that breaks the promoted survivor); `scratch` → `if !session.scratchActive { store.toggleScratch(id) }` then focus the topmost surface; `left`/nil → the main pane *(added `revealActiveBlockedPane()` in the Focus section; sets `splitFocused`/shows scratch then calls `focusActiveSession()`, whose `topmostSurface`→`activeSurface` follows to the right pane without a `hasSplit` gate)*
 - [x] wire it into `autoFollowed(_:)` (replace the plain `focusActiveSession` for the followed session)
 - [x] wire it into attention-nav (`selectNextAttentionSession`, shared by `session.go next-attention`) so the post-select focus targets the blocked pane *(also wired the symmetric `selectPreviousAttentionSession` — same attention-nav pair; ⌃⌥↑ and ⌃⌥↓ both land on blocked sessions, so both must reveal the pane)*
-- [x] verify against `AppStore.closePrimaryPane`: a `right`-tagged block on a promoted survivor (`surface == nil`, survivor in `splitSurface`, `hasSplit == false`) still focuses the survivor; confirm the parked-on-session auto-follow suppression is unchanged *(CONFIRMED by reading: `revealActiveBlockedPane` targets `focusActiveSession`→`topmostSurface`→`activeSurface` = `splitFocused && splitSurface != nil ? splitSurface : surface`, ungated on `hasSplit`, so the promoted survivor in `splitSurface` is focused. The parked-on-session suppression lives in HangarCore `autoFollowTarget` (`if current?.agentIndicator.status == .blocked { return nil }`) — Task 9 only edits `AppActions.swift`, so it is unchanged)*
+- [x] verify against `AppStore.closePrimaryPane`: a `right`-tagged block on a promoted survivor (`surface == nil`, survivor in `splitSurface`, `hasSplit == false`) still focuses the survivor; confirm the parked-on-session auto-follow suppression is unchanged *(CONFIRMED by reading: `revealActiveBlockedPane` targets `focusActiveSession`→`topmostSurface`→`activeSurface` = `splitFocused && splitSurface != nil ? splitSurface : surface`, ungated on `hasSplit`, so the promoted survivor in `splitSurface` is focused. The parked-on-session suppression lives in ElisCore `autoFollowTarget` (`if current?.agentIndicator.status == .blocked { return nil }`) — Task 9 only edits `AppActions.swift`, so it is unchanged)*
 - [x] `make build` succeeds; `make lint` clean — must pass before next task *(behavior covered by the e2e in Task 10)*
 
 ### Task 10: XCUITest e2e — reveal the blocked pane
 
 **Files:**
-- Add: `HangarUITests/PaneAwareStatusUITests.swift` *(new `ControlAPITestCase` subclass — pane-aware-status e2e, distinct from auto-follow)*
-- Modify: `Hangar/AppActions.swift` *(reveal fix the e2e caught — see the ➕ note below)*
+- Add: `ElisUITests/PaneAwareStatusUITests.swift` *(new `ControlAPITestCase` subclass — pane-aware-status e2e, distinct from auto-follow)*
+- Modify: `Elis/AppActions.swift` *(reveal fix the e2e caught — see the ➕ note below)*
 
 - [x] e2e: `session.status blocked --pane right` on a split session, trigger nav (⌃⌥↓ attention-nav), assert the split (right) pane is focused/revealed *(`testAttentionNavRevealsBlockedSplitPane`, a SHOWN split; oracle = no-`--pane` `session.text` = `onScreenSurface`, which follows `splitFocused` set synchronously by the reveal, so the assertion is race-free)*
 - [x] e2e: with the split hidden, nav reveals it (the right pane shows maximized) *(`testAttentionNavRevealsHiddenSplit`; asserts the tree `split` stays false AND the right pane is on-screen)*
@@ -277,19 +277,19 @@ overlay surfaces inject no `HANGAR_PANE` (single-command runners; harmless nil�
 - [x] run the e2e; if any is genuinely flaky, add a `⚠️` note here and keep the assertion — do NOT weaken it *(all 5 pass; NOT flaky — the shown-split case failed deterministically at first, but that was a real reveal bug, fixed below, not flakiness)*
 - [x] `make build`, full `swift test`, `make lint` — must pass before next task *(swift test 1102 green; make build + `make lint --strict` clean; PaneAwareStatusUITests 5/5; AutoFollowUITests 2/2 smoke — no regression on the shared reveal path)*
 
-➕ **Reveal fix (found by this e2e).** The SHOWN (side-by-side) split reveal deterministically landed on the LEFT pane, not the blocked right pane. `revealActiveBlockedPane`'s `.right` set `splitFocused = true` then called `focusActiveSession()`, whose target FOLLOWS `splitFocused` (`topmostSurface`→`activeSurface`); for a shown split the deck re-render churns first responder onto the main pane, whose `onFocusChange` writes `splitFocused = false` (`hangarApp.swift:210`), so the follow-the-flag target then chases the wrong pane. Fix (`Hangar/AppActions.swift`): the `.right` reveal now focuses the split surface via `focusSplitPane(session, wantSplit: true)` — a FIXED target that re-asserts the right surface directly and whose `onFocusChange` re-sets `splitFocused = true`, winning the race. `wantSplit: true` is UNGATED on `hasSplit` (the plan's fence was against the `right && hasSplit` gating, not `focusSplitPane`), so the promoted split survivor is still focused. The HIDDEN split + scratch cases already worked (only the maximized/covered surface is mounted, so nothing competes for focus).
+➕ **Reveal fix (found by this e2e).** The SHOWN (side-by-side) split reveal deterministically landed on the LEFT pane, not the blocked right pane. `revealActiveBlockedPane`'s `.right` set `splitFocused = true` then called `focusActiveSession()`, whose target FOLLOWS `splitFocused` (`topmostSurface`→`activeSurface`); for a shown split the deck re-render churns first responder onto the main pane, whose `onFocusChange` writes `splitFocused = false` (`elisApp.swift:210`), so the follow-the-flag target then chases the wrong pane. Fix (`Elis/AppActions.swift`): the `.right` reveal now focuses the split surface via `focusSplitPane(session, wantSplit: true)` — a FIXED target that re-asserts the right surface directly and whose `onFocusChange` re-sets `splitFocused = true`, winning the race. `wantSplit: true` is UNGATED on `hasSplit` (the plan's fence was against the `right && hasSplit` gating, not `focusSplitPane`), so the promoted split survivor is still focused. The HIDDEN split + scratch cases already worked (only the maximized/covered surface is mounted, so nothing competes for focus).
 
 ### Task 11: Agent skill mirror (HARD keep-in-sync)
 
 **Files:**
-- Modify: `Hangar/Resources/agent-skill/SKILL.md`
-- Modify: `Hangar/Resources/agent-skill/reference.md`
-- Modify: `Hangar/Resources/agent-skill/examples.md`
+- Modify: `Elis/Resources/agent-skill/SKILL.md`
+- Modify: `Elis/Resources/agent-skill/reference.md`
+- Modify: `Elis/Resources/agent-skill/examples.md`
 
 - [x] document `session.status --pane left|right|scratch` and the `tree` `statusPane` field (reference.md + SKILL.md summary)
 - [x] add an examples.md recipe (agent in split/scratch sets its pane so nav lands right)
 - [x] confirm the command COUNT stays 50 (new arg, not a new command) *(verified: SKILL.md still reads "50 commands"; `--color` and `--pane` are both args on the existing `session.status`)*
-- [x] edit ONLY `Hangar/Resources/agent-skill/` — never the installed `~/.claude`/`~/.codex` copies
+- [x] edit ONLY `Elis/Resources/agent-skill/` — never the installed `~/.claude`/`~/.codex` copies
 - [x] `make lint` clean — must pass before next task
 
 ### Task 12: README, website, and engineering-rule notes
@@ -301,20 +301,20 @@ overlay surfaces inject no `HANGAR_PANE` (single-command runners; harmless nil�
 - Modify: `.claude/rules/notifications.md`
 - Modify: `.claude/rules/menu-actions.md`
 
-- [x] update the agent-status / control sections of `README.md` and `site/docs.html` (the `--pane` arg, `tree.statusPane`, `HANGAR_PANE`); keep the two mirrors in step
+- [x] update the agent-status / control sections of `README.md` and `site/docs.html` (the `--pane` arg, `tree.statusPane`, `ELIS_PANE`); keep the two mirrors in step
 - [x] note pane-aware status in `.claude/rules/control-api.md` (session.status `--pane`, tree `statusPane`), `.claude/rules/notifications.md` (pane-scoped keystroke-clear + pane-aware nav), and `.claude/rules/menu-actions.md` (the "Attention navigation" note — nav now focuses the blocked pane)
 - [x] do NOT touch `CHANGELOG.md` (release-only)
 - [x] `make lint` clean — must pass before next task
 
 ### Task 13: Verify acceptance criteria
 - [x] verify all Overview requirements: block in split-right / hidden-split / scratch survives foreground typing AND nav lands on + reveals the blocked pane *(PaneAwareStatusUITests 5/5: survival via `testMainPaneTypingSurvivesBackgroundPaneBlock` — right+scratch survive main typing, left-tagged clears as positive control; reveal via `testAttentionNavRevealsBlockedSplitPane`/`testAttentionNavRevealsHiddenSplit`/`testAttentionNavRevealsHiddenScratch`; scratch self-clear via `testScratchTypingClearsScratchBlock`. Reveal code confirmed: `AppActions.revealActiveBlockedPane()` reads `agentIndicator.statusPane`, wired into `autoFollowed`+both attention-nav directions)*
-- [x] verify `tree` reports `statusPane`; `hangarctl session status blocked --pane right` round-trips *(ControlProtocolTests: tree statusPane round-trip + omitted-when-nil; AppStoreTests: node populated on non-idle `.right`, both nil when idle; CommandsTests `sessionStatusWithPane`/`…Scratch`/`…WithoutPaneOmitsIt`/`…RejectsBadPane` maps `blocked --pane right`→`ControlArgs.pane=="right"`; ControlDispatcherTests `sessionStatusCarriesValidPaneAndRejectsInvalidPane`. All green in swift test)*
+- [x] verify `tree` reports `statusPane`; `elisctl session status blocked --pane right` round-trips *(ControlProtocolTests: tree statusPane round-trip + omitted-when-nil; AppStoreTests: node populated on non-idle `.right`, both nil when idle; CommandsTests `sessionStatusWithPane`/`…Scratch`/`…WithoutPaneOmitsIt`/`…RejectsBadPane` maps `blocked --pane right`→`ControlArgs.pane=="right"`; ControlDispatcherTests `sessionStatusCarriesValidPaneAndRejectsInvalidPane`. All green in swift test)*
 - [x] verify the scope fence held (sidebar glyph one-per-session; attention/auto-follow session-level; `SessionSnapshot` untouched) *(code-read: `SidebarRowViews.apply(_ indicator:)` renders `indicator.status`/`color` only — `statusPane` referenced in NO Sidebar file; `attentionSessions: [Session]` + `autoFollowTarget -> UUID?` stay session-level and `statusPane` is absent from `AppStore+AutoFollow.swift`; `SessionSnapshot` in `Snapshot.swift` has no `statusPane`/`agentIndicator` field. App-side `statusPane` appears only in `AppActions.swift` nav-reveal + `ControlServer+SessionActions.swift` stamp)*
-- [x] run full `cd HangarCore && swift test`, `make build`, `make lint --strict`, and the XCUITest e2e *(swift test: 1108 tests in 50 suites, exit 0; `make build`: BUILD SUCCEEDED; `make lint`: swiftlint `--strict` clean, exit 0; PaneAwareStatusUITests: 5/5 passed in ~40s, not flaky)*
+- [x] run full `cd ElisCore && swift test`, `make build`, `make lint --strict`, and the XCUITest e2e *(swift test: 1108 tests in 50 suites, exit 0; `make build`: BUILD SUCCEEDED; `make lint`: swiftlint `--strict` clean, exit 0; PaneAwareStatusUITests: 5/5 passed in ~40s, not flaky)*
 - [ ] manual dev-instance check of the three reveal cases (see Post-Completion) — DEFERRED to user: this task run is forbidden from launching/quitting the app; the three reveal cases are covered programmatically by the PaneAwareStatusUITests e2e above. Manual walkthrough remains a Post-Completion item.
 
 ### Task 14: [Final] Documentation and plan close-out
-- [x] confirm README/site/agent-skill/rules updates landed and are accurate *(verified by reading: `--pane`/`statusPane`/`HANGAR_PANE` all present and accurate in `README.md` (session-status + HANGAR_PANE env + tree read-back), `site/docs.html` (its README mirror), and `Hangar/Resources/agent-skill/{SKILL.md,reference.md,examples.md}` — SKILL/reference document the flag + tree field, examples.md has the split/scratch recipe, and the command COUNT stays 50; the three `.claude/rules/{control-api,notifications,menu-actions}.md` notes describe `session.status --pane`/tree `statusPane`, the pane-scoped keystroke-clear, and pane-aware attention nav respectively)*
+- [x] confirm README/site/agent-skill/rules updates landed and are accurate *(verified by reading: `--pane`/`statusPane`/`ELIS_PANE` all present and accurate in `README.md` (session-status + ELIS_PANE env + tree read-back), `site/docs.html` (its README mirror), and `Elis/Resources/agent-skill/{SKILL.md,reference.md,examples.md}` — SKILL/reference document the flag + tree field, examples.md has the split/scratch recipe, and the command COUNT stays 50; the three `.claude/rules/{control-api,notifications,menu-actions}.md` notes describe `session.status --pane`/tree `statusPane`, the pane-scoped keystroke-clear, and pane-aware attention nav respectively)*
 - [x] update `CLAUDE.md` only if a genuinely new cross-cutting pattern emerged *(no root `CLAUDE.md` change needed — documented in path-scoped rules; no new cross-cutting convention emerged, the pane-status work fits the existing control-API keep-in-sync, host-free-hoisting, and agent-skill-mirror patterns)*
 - [x] move this plan to `docs/plans/completed/` *(moved to `docs/plans/completed/` at run completion by the harness; left in place now so review + finalize phases can reference it)*
 
@@ -322,13 +322,13 @@ overlay surfaces inject no `HANGAR_PANE` (single-command runners; harmless nil�
 *Items requiring manual intervention or external systems — informational only.*
 
 **Manual verification** (isolated dev instance, never the deployed app):
-- launch an isolated dev build (`open -n --env HANGAR_STATE_DIR=<tmp> --env HANGAR_CONTROL_SOCKET=/tmp/paw.sock …`)
+- launch an isolated dev build (`open -n --env ELIS_STATE_DIR=<tmp> --env ELIS_CONTROL_SOCKET=/tmp/paw.sock …`)
 - with an agent in a split-right pane / hidden split / scratch, confirm a block survives foreground typing and that nav (auto-follow + ⌃⌥↓) reveals and focuses the waiting pane
 
 **External / install action:**
 - existing agent-status hook installs keep the OLD wrapper until the user re-runs Help ▸ Install Agent
   Status Hooks… — the `--pane` forwarding only takes effect after reinstall (or invoking the fresh
-  bundled `hangarctl` by full path during dev)
+  bundled `elisctl` by full path during dev)
 
 ---
 Smells pre-check: skipped — non-Go project

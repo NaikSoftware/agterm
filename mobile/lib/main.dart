@@ -10,13 +10,13 @@ import 'watch.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const HangarApp());
+  runApp(const ElisApp());
 }
 
 /// The paired computers and the one on screen.
 class Computers extends ChangeNotifier {
   List<Pairing> all = [];
-  HangarModel? current;
+  ElisModel? current;
   bool loaded = false;
 
   Future<void> load() async {
@@ -32,7 +32,7 @@ class Computers extends ChangeNotifier {
 
   void open(Pairing p) {
     current?.dispose();
-    current = HangarModel(p)..start();
+    current = ElisModel(p)..start();
     Watch.check(ask: true);
     notifyListeners();
   }
@@ -55,14 +55,14 @@ class Computers extends ChangeNotifier {
   }
 }
 
-class HangarApp extends StatefulWidget {
-  const HangarApp({super.key});
+class ElisApp extends StatefulWidget {
+  const ElisApp({super.key});
 
   @override
-  State<HangarApp> createState() => _HangarAppState();
+  State<ElisApp> createState() => _ElisAppState();
 }
 
-class _HangarAppState extends State<HangarApp> {
+class _ElisAppState extends State<ElisApp> {
   final computers = Computers();
   final nav = GlobalKey<NavigatorState>();
 
@@ -96,7 +96,7 @@ class _HangarAppState extends State<HangarApp> {
   @override
   Widget build(BuildContext context) => MaterialApp(
         navigatorKey: nav,
-        title: 'Hangar',
+        title: 'Elis',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),
         home: ListenableBuilder(

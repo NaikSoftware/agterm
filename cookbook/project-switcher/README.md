@@ -8,11 +8,11 @@ Author: [@umputun](https://github.com/umputun), ported from [discussion #293](ht
 
 `agt-only.sh A` marks every workspace whose name starts with `A` as the sidebar's focus set, unmarks the others, and applies the filter. The sidebar then shows that project's workspaces only. Session navigation follows the filter, so `session go`, Ctrl-Tab, attention navigation and the ⌃P session palette are all scoped to the marked workspaces while it is applied.
 
-Run it again with another prefix to swap projects. The marked set and the filter flag are independent, so `hangarctl workspace filter off` puts the whole tree back on screen without losing the selection, and `workspace filter on` narrows it again.
+Run it again with another prefix to swap projects. The marked set and the filter flag are independent, so `elisctl workspace filter off` puts the whole tree back on screen without losing the selection, and `workspace filter on` narrows it again.
 
 ## Requirements
 
-- Hangar 0.18.0 or later. `workspace filter` and the `workspace focus add` mode shipped in that release.
+- Elis 0.18.0 or later. `workspace filter` and the `workspace focus add` mode shipped in that release.
 - `jq`
 - workspace names carrying a per-project prefix, for example `A / frontend` and `A / backend`
 
@@ -26,16 +26,16 @@ cp agt-only.sh ~/bin/
 chmod +x ~/bin/agt-only.sh
 ```
 
-Add one entry per project to `~/.config/hangar/keymap.conf`:
+Add one entry per project to `~/.config/elis/keymap.conf`:
 
 ```
 command "only A"  ~/bin/agt-only.sh "A"
 command "only B"  ctrl+alt+1  ~/bin/agt-only.sh "B"
 ```
 
-The token after the quoted name is a key chord when it carries a modifier. Leave it out and the entry is palette-only, which scales better than chords once there are more than two or three projects. Apply the file with File ▸ Reload Keymap or `hangarctl keymap reload`.
+The token after the quoted name is a key chord when it carries a modifier. Leave it out and the entry is palette-only, which scales better than chords once there are more than two or three projects. Apply the file with File ▸ Reload Keymap or `elisctl keymap reload`.
 
-Fired from a key chord or the palette, the script runs under the app's `PATH` rather than your shell's. That is the launchd default: `/usr/local/bin` plus the system directories, with no `/opt/homebrew/bin` and nothing else your profile adds. Every binary the script calls has to resolve there or be written in full, `jq` as much as `hangarctl`. `hangarctl` normally does, because **Help ▸ Install Command Line Tool…** symlinks it into `/usr/local/bin`. `jq` does only if it is a system one; recent macOS ships `/usr/bin/jq`, but a Homebrew `jq` is out of reach and needs its absolute path written into the script. Set `HANGARCTL` to the binary's full path if yours sits somewhere unusual.
+Fired from a key chord or the palette, the script runs under the app's `PATH` rather than your shell's. That is the launchd default: `/usr/local/bin` plus the system directories, with no `/opt/homebrew/bin` and nothing else your profile adds. Every binary the script calls has to resolve there or be written in full, `jq` as much as `elisctl`. `elisctl` normally does, because **Help ▸ Install Command Line Tool…** symlinks it into `/usr/local/bin`. `jq` does only if it is a system one; recent macOS ships `/usr/bin/jq`, but a Homebrew `jq` is out of reach and needs its absolute path written into the script. Set `ELISCTL` to the binary's full path if yours sits somewhere unusual.
 
 A binary that does not resolve fails silently here. A custom command's output goes nowhere, and a missing `jq` breaks the marking loop from inside a pipeline, which `set -e` does not catch, so the script still reaches its final `workspace filter on` and the sidebar comes back showing the set from the previous run. Run the script from a shell if the result looks wrong; that is where the error text goes.
 
@@ -47,15 +47,15 @@ agt-only.sh A
 
 Or press ⌃⇧P, type the project name and hit Enter. Custom commands appear in the action palette marked `custom`. ⌃⇧O opens a palette holding the custom commands alone, which is the shorter route once you have a few of these.
 
-To see the whole tree again without losing the set, use the grid button in the sidebar's bottom bar, View ▸ Toggle Workspace Filter, or `hangarctl workspace filter off`.
+To see the whole tree again without losing the set, use the grid button in the sidebar's bottom bar, View ▸ Toggle Workspace Filter, or `elisctl workspace filter off`.
 
 ## How it works
 
-Three commands do the work. `hangarctl tree --json` lists the window's workspaces with their ids and names. `workspace focus add|off --target <id>` marks or unmarks one workspace. `workspace filter on|off` applies or suspends the whole set for the window.
+Three commands do the work. `elisctl tree --json` lists the window's workspaces with their ids and names. `workspace focus add|off --target <id>` marks or unmarks one workspace. `workspace filter on|off` applies or suspends the whole set for the window.
 
 The script suspends the filter before it touches the set. An `add` never switches the filter on by itself, and that is deliberate: a mark that narrowed the tree would hide the rows still to be marked. So the script unmarks and marks with the full tree on screen, then applies once at the end.
 
-Read the result back from `hangarctl tree --json`: each workspace node carries `focused` when it is a member of the set, and the tree's top level carries `workspaceFilter` for the flag. The two are reported independently, so a script can record a working set and put it back exactly as it was.
+Read the result back from `elisctl tree --json`: each workspace node carries `focused` when it is a member of the set, and the tree's top level carries `workspaceFilter` for the flag. The two are reported independently, so a script can record a working set and put it back exactly as it was.
 
 ## Limits
 

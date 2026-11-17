@@ -4,7 +4,7 @@
 building, and every `ghostty/*.patch` to a private checkout of the ghostty revision that `ZMX_REV` pins
 in its `build.zig.zon`. The digest of both sets is part of `.zmx-build-stamp`, so editing one rebuilds
 zmx. A daemon already running keeps the zmx it was started by. `scripts/setup-zmx-linux.sh` builds the same
-patched tree for `aarch64-linux-musl` and `x86_64-linux-musl`, the zmx hangar-server runs, each under its own
+patched tree for `aarch64-linux-musl` and `x86_64-linux-musl`, the zmx elis-server runs, each under its own
 stamp in `build/linux/<arch>/`, so a patch has to build for Linux as well as macOS.
 
 Each patch is a plain `diff -ruN` against a pristine copy of the tree it patches, made so `git apply`
@@ -21,12 +21,12 @@ longer apply, and re-running `check.py`.
   daemon's own terminal, which always has the leader's layout, and `zmx type` queues input with an
   acknowledgement and without taking the lead. A session switch is ignored while the leader is managed.
   A client that does not set the variable behaves as upstream does. `.claude/rules/control-api.md` owns
-  how Hangar uses it.
+  how Elis uses it.
 
 - `0002-private-ghostty-dependency.patch` points zmx's ghostty dependency at `../zmx-ghostty`, the
   private checkout `setup.sh` patches, in place of the zig package cache. Its context names the pinned
   revision, so a `ZMX_REV` that moves ghostty stops it applying. zmx's build reads the dependency hash
-  as its reported ghostty version, so the patch writes that string in, marked `+hangar`.
+  as its reported ghostty version, so the patch writes that string in, marked `+elis`.
 - `0003-atomic-socket-publish.patch` gives a session socket its name only after it listens. Upstream binds
   the session path and then listens, and `zmx list`, attach and the commands that connect to a session
   delete a path that refuses a connection as stale. A probe between bind and listen can unlink the new socket
@@ -39,7 +39,7 @@ longer apply, and re-running `check.py`.
   on every attach exit, which erases a Live `--command --wait` pane's output under its hold prompt. A client
   with a valid `ZMX_MANAGED` instead turns off the input reports a program may have left on and resets SGR
   and the OSC colors. An unmanaged client and a session switch still write RIS.
-- `0005-detached-create.patch` lets hangar-server start a pane with no terminal. `attach --detached NAME
+- `0005-detached-create.patch` lets elis-server start a pane with no terminal. `attach --detached NAME
   [command...]` creates the session as an attach would and returns, refusing a session that already answers;
   upstream `run` cannot do it, since it always starts bash and types the command into it. With
   `ZMX_EXIT_FILE` set, a session whose shell exits writes `exited` to that path, atomically, before its socket
@@ -52,7 +52,7 @@ longer apply, and re-running `check.py`.
 - `ghostty/0001-formatter-unstyled-blanks.patch` fixes the snapshot a re-attach replays. The formatter
   wrote cells a program skipped with a cursor move as spaces under the previous cell's style, so a gap
   after a colored run came back painted; a skipped cell now closes the style first. Spaces the program
-  wrote keep their style. Not Hangar's `GHOSTTY_REV`: this is the ghostty zmx links, nothing else.
+  wrote keep their style. Not Elis's `GHOSTTY_REV`: this is the ghostty zmx links, nothing else.
 
 `check.py <zmx>` drives managed clients on ptys of different sizes against one daemon in a throwaway
 `ZMX_DIR`, prints one line per rule, and exits nonzero when any of them is broken.

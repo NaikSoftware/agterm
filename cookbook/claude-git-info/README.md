@@ -20,7 +20,7 @@ The branch is bold, `✓ clean` green, the changed count orange, `↑` blue, `�
 
 ## Requirements
 
-- Hangar 0.40.0 or later, which shipped `session info`.
+- Elis 0.40.0 or later, which shipped `session info`.
 - Claude Code.
 - `jq`.
 - git 2.15 or later, for `--no-optional-locks`.
@@ -60,9 +60,9 @@ Register it for four events in `~/.claude/settings.json`, alongside anything alr
 }
 ```
 
-The hooks run beside Hangar's own status hooks from **Help ▸ Install Agent Hooks…**; Claude Code runs every hook registered for an event.
+The hooks run beside Elis's own status hooks from **Help ▸ Install Agent Hooks…**; Claude Code runs every hook registered for an event.
 
-Set `HANGARCTL` to the CLI's full path if `hangarctl` is not on the `PATH` Claude Code hands its hooks.
+Set `ELISCTL` to the CLI's full path if `elisctl` is not on the `PATH` Claude Code hands its hooks.
 
 ## Usage
 
@@ -71,22 +71,22 @@ Nothing to press. Start Claude in a repository and the line appears; it follows 
 **Settings ▸ Interface ▸ Session info** shows the line always, in the flagged view only, or never. Read it back from the tree:
 
 ```sh
-hangarctl tree --json | jq -r '.result.tree.workspaces[].sessions[] | "\(.name)\t\(.info // "-")"'
+elisctl tree --json | jq -r '.result.tree.workspaces[].sessions[] | "\(.name)\t\(.info // "-")"'
 ```
 
 ## How it works
 
-One script handles every event. It reads `hook_event_name` and `cwd` from the hook's JSON input, runs `git status --porcelain=v2 --branch` once in that directory, and turns the branch header and entry lines into one `hangarctl session info --markdown` call. SessionEnd, and a directory outside git, send `--clear` instead.
+One script handles every event. It reads `hook_event_name` and `cwd` from the hook's JSON input, runs `git status --porcelain=v2 --branch` once in that directory, and turns the branch header and entry lines into one `elisctl session info --markdown` call. SessionEnd, and a directory outside git, send `--clear` instead.
 
 - **The index lock.** A plain `git status` can take `index.lock` to refresh the index, and a `git commit` Claude runs at the same moment then fails with "index.lock exists". `--no-optional-locks` keeps the read off the lock.
 - **After the tool, not before.** PreToolUse would read the tree as it was before the edit, so the refresh is on PostToolUse.
-- **Synchronous.** A refresh moved into the background can finish after SessionEnd's clear and bring the line back, so every update runs inline. One `git status` and one `hangarctl` call take tens of milliseconds, and the `timeout` in the settings bounds a hung CLI.
+- **Synchronous.** A refresh moved into the background can finish after SessionEnd's clear and bring the line back, so every update runs inline. One `git status` and one `elisctl` call take tens of milliseconds, and the `timeout` in the settings bounds a hung CLI.
 - **Expiry.** Every set passes `--hide-after 86400`, the longest the API allows, so a Claude killed before SessionEnd still leaves no line behind past a day.
 - **Branch names are escaped.** Git allows backticks, underscores and closing brackets in a branch name, which would otherwise open a code span or break the markup; every character that could open markup is backslash-escaped before the name goes into the markup, and a name over 60 characters is cut.
-- **Headless runs stay out.** A `claude -p` started from a session inherits its `HANGAR_*` variables and would overwrite the line with its own directory. Claude Code sets `CLAUDE_CODE_ENTRYPOINT` to `cli` only for the agent in the pane, and the hook exits on anything else.
-- **The socket.** `hangarctl` does not read `HANGAR_SOCKET` itself, so the hook passes it as `--socket`, which addresses the Hangar instance the session belongs to.
+- **Headless runs stay out.** A `claude -p` started from a session inherits its `ELIS_*` variables and would overwrite the line with its own directory. Claude Code sets `CLAUDE_CODE_ENTRYPOINT` to `cli` only for the agent in the pane, and the hook exits on anything else.
+- **The socket.** `elisctl` does not read `ELIS_SOCKET` itself, so the hook passes it as `--socket`, which addresses the Elis instance the session belongs to.
 
-Everything fails open and prints nothing: a missing `jq` or `hangarctl`, or a closed socket, costs the update and nothing else. Silence matters for SessionStart in particular, whose output Claude Code adds to the model's context.
+Everything fails open and prints nothing: a missing `jq` or `elisctl`, or a closed socket, costs the update and nothing else. Silence matters for SessionStart in particular, whose output Claude Code adds to the model's context.
 
 ## Limits
 

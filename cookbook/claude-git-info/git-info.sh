@@ -1,23 +1,23 @@
 #!/bin/bash
-# Claude Code hook that shows the git state of Claude's working directory on the hangar session's
+# Claude Code hook that shows the git state of Claude's working directory on the elis session's
 # sidebar info line. Synchronous on purpose: a detached refresh could land after SessionEnd's clear.
 # Prints nothing, since SessionStart hook stdout becomes model context.
 set -u
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-[ -n "${HANGAR_SESSION_ID:-}" ] || exit 0
+[ -n "${ELIS_SESSION_ID:-}" ] || exit 0
 
-# a headless `claude -p` inherits HANGAR_* and would overwrite its spawner's line with its own cwd.
+# a headless `claude -p` inherits ELIS_* and would overwrite its spawner's line with its own cwd.
 # Claude Code sets this itself: sdk-cli for a headless run, cli for the agent in the pane.
 [ "${CLAUDE_CODE_ENTRYPOINT:-cli}" = cli ] || exit 0
 
 command -v jq >/dev/null 2>&1 || exit 0
-hangarctl=${HANGARCTL:-hangarctl}
+elisctl=${ELISCTL:-elisctl}
 
-# the CLI never reads HANGAR_SOCKET, so pass it: it names the instance this session belongs to.
+# the CLI never reads ELIS_SOCKET, so pass it: it names the instance this session belongs to.
 info() {
-    "$hangarctl" session info "$@" --target "$HANGAR_SESSION_ID" \
-        ${HANGAR_SOCKET:+--socket "$HANGAR_SOCKET"} >/dev/null 2>&1 || :
+    "$elisctl" session info "$@" --target "$ELIS_SESSION_ID" \
+        ${ELIS_SOCKET:+--socket "$ELIS_SOCKET"} >/dev/null 2>&1 || :
 }
 
 input=$(cat)

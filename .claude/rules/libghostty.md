@@ -1,14 +1,14 @@
 ---
 paths:
-  - "macos/Hangar/Ghostty/GhosttySurfaceView*.swift"
-  - "macos/Hangar/Ghostty/GhosttyApp.swift"
-  - "macos/Hangar/Ghostty/GhosttyCallbacks.swift"
-  - "macos/Hangar/Ghostty/GhosttyResources.swift"
-  - "macos/Hangar/ContentView.swift"
-  - "macos/Hangar/Views/WindowContentView*.swift"
-  - "macos/Hangar/Views/SplitRatioAccessor.swift"
-  - "macos/Hangar/Views/TerminalView.swift"
-  - "macos/Hangar/Views/TerminalSearchBar.swift"
+  - "macos/Elis/Ghostty/GhosttySurfaceView*.swift"
+  - "macos/Elis/Ghostty/GhosttyApp.swift"
+  - "macos/Elis/Ghostty/GhosttyCallbacks.swift"
+  - "macos/Elis/Ghostty/GhosttyResources.swift"
+  - "macos/Elis/ContentView.swift"
+  - "macos/Elis/Views/WindowContentView*.swift"
+  - "macos/Elis/Views/SplitRatioAccessor.swift"
+  - "macos/Elis/Views/TerminalView.swift"
+  - "macos/Elis/Views/TerminalSearchBar.swift"
   - "macos/scripts/setup.sh"
 ---
 
@@ -16,7 +16,7 @@ paths:
 
 ## Rendering
 
-- Nothing in Hangar paints a surface. `GHOSTTY_ACTION_RENDER` comes only from `Surface.redraw`, which
+- Nothing in Elis paints a surface. `GHOSTTY_ACTION_RENDER` comes only from `Surface.redraw`, which
   answers the `.redraw` surface message, and only the OpenGL renderer's `Frame` posts that message. Metal
   presents through its own layer, so the action is unreachable on macOS and the `action` switch drops it
   to `default`. If a `GHOSTTY_REV` has Metal post `.redraw`, check that frames still present without an
@@ -70,7 +70,7 @@ paths:
   Tint borderless New Session through `.tint`; its label ignores foreground style.
 - Pass `theme = light:X,dark:Y` raw. The pinned libghostty supports conditional themes, but
   `set_color_scheme` does not re-resolve the theme: it changes conditional state and emits an
-  unhandled soft reload. Hangar must set app and surface schemes, then call `update_config`.
+  unhandled soft reload. Elis must set app and surface schemes, then call `update_config`.
 - A dark launch must re-side the app config through `update_config` BEFORE the first surface exists;
   `GhosttyApp.syncLaunchColorScheme`, called from `applicationDidFinishLaunching`, owns that.
   `Surface.init` rebuilds a surface config whose conditional state differs from the app's, keeps only
@@ -91,7 +91,7 @@ paths:
   it for chrome colors, then free it.
 - AppKit draws disclosure triangles from `NSAppearance`, not explicit tint. Pin outline appearance to
   aqua/darkAqua from perceived luminance of the sidebar-tinted theme background, using the 0.5 midpoint.
-  Apply at creation and `.hangarAppearanceChanged`. Verify by eye.
+  Apply at creation and `.elisAppearanceChanged`. Verify by eye.
 - Disable AppKit outline selection immediately after `.plain`, which otherwise restores it. Also clear
   outline/scroll backgrounds; `.plain` avoids source-list's roughly 10px top inset but installs opaque
   control background.
@@ -138,7 +138,7 @@ paths:
   during sleep is pure spin. Nothing in the deck re-attempts on its own: every other retry path rides
   SwiftUI layout, which does not run for an off-display window, so `updateNSView` never fires. That is why
   a session a scheduled job creates overnight realized no surface and never ran its `--command`, while
-  `session.new` had already answered `ok` (#416). `SystemWakeObserver` posts `.hangarScreensDidWake` and
+  `session.new` had already answered `ok` (#416). `SystemWakeObserver` posts `.elisScreensDidWake` and
   `GhosttySurfaceView.retryCreationAfterWake` re-attempts, bounded, because creation can still fail for a
   second or two after the notification. A failed create also re-arms `pendingSurfaceCreation`, so the
   layout path retries as well: the wake hook makes recovery TIMELY, not possible, and a view first
@@ -285,7 +285,7 @@ paths:
   `no-title` prevents abbreviated local cwd OSC 2 from overriding sidebar names. User/remote OSC titles
   still work, and OSC 7 is unaffected.
 - `ssh-env` and `ssh-terminfo` are forced OFF after `ghostty_config_load_recursive_files`, so no user
-  source including a `config-file` include can enable them: their wrappers call a `ghostty` CLI Hangar
+  source including a `config-file` include can enable them: their wrappers call a `ghostty` CLI Elis
   does not bundle, and enabling either broke `ssh` outright (#463). The override reads the resolved
   packed bits back and restates all six flags, because ghostty re-parses the key from its defaults on
   every occurrence. Setting either is a silent no-op with no diagnostic: a report that it has no effect
@@ -363,7 +363,7 @@ paths:
   Ghostty.app, so selecting text never replaces the system clipboard. Primary stays on the general one,
   because an OSC 52 `p` write reaches the embedder although `supportsClipboard` reports none.
 - Default ungated writes are synchronous so a same-tick read sees them. Read defaults to ask; write defaults
-  allow and can be changed in Hangar `ghostty.conf`.
+  allow and can be changed in Elis `ghostty.conf`.
 - Deferred completion captures `GhosttySurfaceView`, then rereads its live surface. If a pane closed while
   the sheet was open, skip completion rather than use the freed raw pointer; freeing already discards the
   request. Keep request state `nonisolated(unsafe)` under the same lifetime check.

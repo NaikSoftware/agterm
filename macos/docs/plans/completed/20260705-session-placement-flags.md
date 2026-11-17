@@ -21,9 +21,9 @@ single round-trip, instead of appending and then walking it up with repeated
   with the workspace parameter — they are a self-contained placement mode, mutually
   exclusive with `--to` and with `--workspace`/the positional workspace/`--workspace-name`.
   Cross-workspace placement falls out for free with no ambiguity:
-  - `hangarctl session new --after active` → create right after the current session
+  - `elisctl session new --after active` → create right after the current session
     (the headline case), one round-trip.
-  - `hangarctl session move --after <sid> --target <sid>` → relocate + position in one
+  - `elisctl session move --after <sid> --target <sid>` → relocate + position in one
     shot, wherever the anchor lives.
 - **Integration:** dispatcher-first — arg validation + error strings in
   `ControlDispatcher` (host-free, unit-tested); the resolve-and-place side effect
@@ -37,35 +37,35 @@ single round-trip, instead of appending and then walking it up with repeated
 
 Files/components involved (with the exact hook points):
 
-- `HangarCore/Sources/HangarCore/ControlProtocol.swift` — `ControlArgs` struct (line
+- `ElisCore/Sources/ElisCore/ControlProtocol.swift` — `ControlArgs` struct (line
   61) + its `init` (line 161). Add `after`/`before` optional String fields.
-- `HangarCore/Sources/HangarCore/ControlModes.swift` — `ControlSessionMove` enum
+- `ElisCore/Sources/ElisCore/ControlModes.swift` — `ControlSessionMove` enum
   (lines 68–72: `.reorder(ReorderDirection)` / `.workspace(String)`). Add a placement
   case. `ControlSessionCreateOptions` (lines 81–100). Add `after`/`before`.
-- `HangarCore/Sources/HangarCore/ControlDispatcher.swift` — `.sessionNew` arm (lines
+- `ElisCore/Sources/ElisCore/ControlDispatcher.swift` — `.sessionNew` arm (lines
   138–154) and `.sessionMove` arm (lines 170–183). Add mutual-exclusion validation +
   routing for the new mode. `ControlActions` protocol methods `createSession` (line 9)
   and `moveSession` (line 18) keep their signatures (the new data rides inside the
   existing option/enum types).
-- `HangarCore/Sources/HangarCore/SidebarDrop.swift` — `resolveSession(...)` (lines
+- `ElisCore/Sources/ElisCore/SidebarDrop.swift` — `resolveSession(...)` (lines
   33–64): the "after this row" math (`sessionIndex + 1` on `onItemIndex`), the
   same-workspace post-removal off-by-one (`dropChildIndex - 1`), and no-op detection.
   Add a thin host-free `resolveRelative(...)` wrapper so the anchor→index mapping is
   unit-testable.
-- `HangarCore/Sources/HangarCore/AppStore.swift` — `moveSession(_:toWorkspace:at:)`
+- `ElisCore/Sources/ElisCore/AppStore.swift` — `moveSession(_:toWorkspace:at:)`
   (lines 376–385, already clamps `at index:`); `addSession(...)` (lines 220–231,
   currently always appends — add an optional `at index:`); `sessionLocation(ofSession:)`
   (lines 420–424) turns an anchor id into `(workspace, index, count)`.
-- `HangarCore/Sources/HangarCore/ControlResolve.swift` — `resolve(_:candidates:active:)`
+- `ElisCore/Sources/ElisCore/ControlResolve.swift` — `resolve(_:candidates:active:)`
   (lines 22–41): id / unique-prefix / `active` sugar. Reused to resolve the anchor sid
   against the store's full session-id set.
-- `Hangar/Control/ControlServer+SessionActions.swift` — `createSession` (lines 95–119)
+- `Elis/Control/ControlServer+SessionActions.swift` — `createSession` (lines 95–119)
   and `moveSession(_:window:move:)` (lines 417–435): the app-side `ControlActions`
   side effects. Thread the resolved anchor index into `store.addSession(...at:)` /
   `store.moveSession(...at:)`.
-- `Hangar/Control/ControlServer.swift` — `makeSessionResponse(in:workspaceID:options:)`
+- `Elis/Control/ControlServer.swift` — `makeSessionResponse(in:workspaceID:options:)`
   (lines 413–422): the create-session helper.
-- `HangarCore/Sources/hangarctlKit/SessionCommands.swift` — `Session.New` (lines 26–51)
+- `ElisCore/Sources/elisctlKit/SessionCommands.swift` — `Session.New` (lines 26–51)
   and `Session.Move` (lines 95–116): add `--after`/`--before` options, extend
   `validate()` (currently a two-way switch) and `makeRequest()` (currently a binary
   map) to the new mode.
@@ -78,15 +78,15 @@ Related patterns found:
   session, exact uuid, or unique prefix) — resolved exactly like `--target`.
 - Existing test harnesses to mirror: round-trip in `ControlProtocolTests.swift`
   (`sessionMoveReorderRoundTripsWithDirection`, lines 483–490); CLI parse/validate in
-  `hangarctlKitTests/CommandsTests.swift` (`sessionMove*`, lines 115–133; `sessionNew*`,
+  `elisctlKitTests/CommandsTests.swift` (`sessionMove*`, lines 115–133; `sessionNew*`,
   lines 75–100); dispatcher guards in `ControlDispatcherTests.swift`; e2e in
-  `HangarUITests/ControlAPIUITests.swift` (`testSessionMoveReorderWithinWorkspace`,
+  `ElisUITests/ControlAPIUITests.swift` (`testSessionMoveReorderWithinWorkspace`,
   lines 808–838, seeds ordered sessions via `relaunch(withSnapshot:)` and asserts with
   `pollSessionOrder`; `testSessionMoveToAnotherWorkspace`, lines 754–767, for
   cross-workspace + `pollSessionCounts`).
 
 Dependencies identified: `swift-argument-parser` (CLI only); no new deps. All
-host-free logic stays in `HangarCore` (no GhosttyKit/AppKit/CoreGraphics).
+host-free logic stays in `ElisCore` (no GhosttyKit/AppKit/CoreGraphics).
 
 ## Development Approach
 
@@ -95,7 +95,7 @@ host-free logic stays in `HangarCore` (no GhosttyKit/AppKit/CoreGraphics).
 - Complete each task fully before the next. Small, focused changes.
 - **CRITICAL: every task with code changes includes new/updated tests** (success +
   error/edge cases), listed as separate checklist items.
-- **CRITICAL: all tests pass before starting the next task.** `cd HangarCore && swift
+- **CRITICAL: all tests pass before starting the next task.** `cd ElisCore && swift
   test` must stay green; the app must build; `make lint` must pass (swiftlint
   `--strict`, zero findings) after every change.
 - Keep this plan file in sync if scope shifts (`➕` new task, `⚠️` blocker).
@@ -104,7 +104,7 @@ host-free logic stays in `HangarCore` (no GhosttyKit/AppKit/CoreGraphics).
 
 ## Testing Strategy
 
-- **Unit tests (HangarCore, `swift test`, no app host):**
+- **Unit tests (ElisCore, `swift test`, no app host):**
   - Protocol round-trip (`ControlProtocolTests`) for `session.new`/`session.move`
     carrying `after`/`before`.
   - `SidebarDrop.resolveRelative` placement math (same-workspace before/after, the
@@ -113,9 +113,9 @@ host-free logic stays in `HangarCore` (no GhosttyKit/AppKit/CoreGraphics).
   - Dispatcher validation/routing (`ControlDispatcherTests`) — the new mutual-exclusion
     guards and that the correct `ControlSessionMove`/`ControlSessionCreateOptions` is
     handed to the mock `ControlActions`.
-  - CLI parse/validate (`hangarctlKitTests/CommandsTests`) — `--after`/`--before`
+  - CLI parse/validate (`elisctlKitTests/CommandsTests`) — `--after`/`--before`
     mapping to `ControlArgs`, and `validate()` rejections.
-- **E2E (XCUITest, `HangarUITests/ControlAPIUITests.swift`):** raw JSON over the socket,
+- **E2E (XCUITest, `ElisUITests/ControlAPIUITests.swift`):** raw JSON over the socket,
   poll persisted state. Move after/before same-workspace (order), move after/before
   cross-workspace (counts + order), new after/before, and the error guards. Same rigor
   as unit tests — must pass before the plan is done. (Note: the app-side `ControlActions`
@@ -151,7 +151,7 @@ host-free logic stays in `HangarCore` (no GhosttyKit/AppKit/CoreGraphics).
       `after`/`before`, and `session.move` with `after`/`before` — asserting the fields
       survive encode/decode and other fields stay nil (mirror
       `sessionMoveReorderRoundTripsWithDirection`).
-- [x] `cd HangarCore && swift test` — must pass before Task 2.
+- [x] `cd ElisCore && swift test` — must pass before Task 2.
 
 ### Task 2: Host-free placement math — `SidebarDrop.resolveRelative` + `AppStore.addSession(at:)`
 - [x] `SidebarDrop.swift`: add
@@ -172,7 +172,7 @@ host-free logic stays in `HangarCore` (no GhosttyKit/AppKit/CoreGraphics).
       anchor==source → nil (no-op). Place alongside the existing `SidebarDrop` tests.
 - [x] Add unit tests for `addSession(...at:)`: insert at head/middle/tail, and
       out-of-range index clamps to `0...count`.
-- [x] `cd HangarCore && swift test` — must pass before Task 3.
+- [x] `cd ElisCore && swift test` — must pass before Task 3.
 
 ### Task 3: Dispatcher — validation + routing for the place mode
 - [x] `ControlDispatcher.swift` `.sessionMove` arm: extend the guards so exactly one
@@ -191,7 +191,7 @@ host-free logic stays in `HangarCore` (no GhosttyKit/AppKit/CoreGraphics).
 - [x] `ControlDispatcherTests.swift`: add tests using the existing mock `ControlActions`
       — assert each new error string, and that a valid `--after`/`--before` produces the
       right `ControlSessionMove.place`/`ControlSessionCreateOptions` handed to the mock.
-- [x] `cd HangarCore && swift test` — must pass before Task 4.
+- [x] `cd ElisCore && swift test` — must pass before Task 4.
 
 ### Task 4: App-side ControlActions — resolve the anchor and place
 - [x] `ControlServer+SessionActions.swift` `moveSession(...)`: handle the new
@@ -226,7 +226,7 @@ host-free logic stays in `HangarCore` (no GhosttyKit/AppKit/CoreGraphics).
       `--before`, `session move --after <sid> --target <sid>` / `--before` map to the
       expected `ControlRequest`; and `validate()` rejection tests for the new
       mutual-exclusion messages (mirror `sessionMoveRejectsWorkspaceAndTo`).
-- [x] `cd HangarCore && swift test` — must pass before Task 6.
+- [x] `cd ElisCore && swift test` — must pass before Task 6.
 
 ### Task 6: E2E — XCUITest over the socket
 - [x] `ControlAPIUITests.swift`: `session.move` `--after`/`--before` within one
@@ -247,29 +247,29 @@ host-free logic stays in `HangarCore` (no GhosttyKit/AppKit/CoreGraphics).
       `testSessionMovePlaceRejectsAfterAndTo`, `testSessionMovePlaceRejectsAfterAndWorkspace`,
       `testSessionNewPlaceRejectsConflicts`.)
 - [x] Run the XCUITest scheme — the new e2e tests must pass (deployed app untouched;
-      tests use the `.debug` bundle id + isolated `HANGAR_STATE_DIR`/socket).
+      tests use the `.debug` bundle id + isolated `ELIS_STATE_DIR`/socket).
       (All 7 new tests pass; deployed daily-driver untouched.)
 
 ### Task 7: Keep-in-sync docs (HARD)
-- [x] `Hangar/Resources/agent-skill/reference.md`: document `--after`/`--before` on
+- [x] `Elis/Resources/agent-skill/reference.md`: document `--after`/`--before` on
       `session.new` and `session.move` (args, semantics, cross-workspace behavior,
       mutual exclusion with `--to`/workspace).
-- [x] `Hangar/Resources/agent-skill/SKILL.md`: update the `session.new`/`session.move`
+- [x] `Elis/Resources/agent-skill/SKILL.md`: update the `session.new`/`session.move`
       summary lines; keep the command count at 50 (no new command).
-- [x] `Hangar/Resources/agent-skill/examples.md`: add the headline recipe
-      (`hangarctl session new --after active`) and a `session move --after <sid>` recipe.
+- [x] `Elis/Resources/agent-skill/examples.md`: add the headline recipe
+      (`elisctl session new --after active`) and a `session move --after <sid>` recipe.
 - [x] `.claude/rules/control-api.md`: update the `session.move` catalog note (it is now
       place-bearing too — `--after`/`--before` anchor-relative placement, anchor carries
       the workspace) and the `session.new` line.
 - [x] `README.md` / `site/docs.html` enumerate `session` flags — added `--after`/`--before`
-      example lines to the `hangarctl` recipe block in both.
+      example lines to the `elisctl` recipe block in both.
 
 ### Task 8: Verify acceptance criteria
-- [x] `hangarctl session new --after active` creates right after the current session in
+- [x] `elisctl session new --after active` creates right after the current session in
       one round-trip (functional path verified by e2e
       `testSessionNewPlaceRelativeToAnchor`; the "watch it land visually" smoke is manual
       — Post-Completion).
-- [x] `hangarctl session move --after <sid> --target <sid>` positions with no visible
+- [x] `elisctl session move --after <sid> --target <sid>` positions with no visible
       step-by-step shuffle; cross-workspace anchor relocates + positions (functional path
       verified by e2e `testSessionMovePlaceWithinWorkspace` /
       `testSessionMovePlaceCrossWorkspace`; the "no visible shuffle" visual is manual —
@@ -277,7 +277,7 @@ host-free logic stays in `HangarCore` (no GhosttyKit/AppKit/CoreGraphics).
 - [x] All error guards (after+before, after/before vs `--to`, after/before vs workspace,
       anchor not-found/ambiguous) return clear messages (dispatcher unit tests +
       `testSessionMovePlaceRejects*` / `testSessionNewPlaceRejectsConflicts` e2e).
-- [x] `cd HangarCore && swift test` green (1159 tests); `make build` succeeds; `make
+- [x] `cd ElisCore && swift test` green (1159 tests); `make build` succeeds; `make
       lint` passes (`--strict`, zero findings).
 - [x] XCUITest e2e suite passes (the 7 new tests added in Task 6).
 - [x] Verify no source file crossed 1000 lines from these edits — clean; only three
@@ -310,9 +310,9 @@ host-free logic stays in `HangarCore` (no GhosttyKit/AppKit/CoreGraphics).
 *Items requiring manual intervention or external systems — informational only*
 
 **Manual verification:**
-- Launch an ISOLATED dev instance (`open -n --env HANGAR_STATE_DIR=<tmp> --env
-  HANGAR_CONTROL_SOCKET=/tmp/hangar-dev.sock .../Debug/Hangar.app`) and drive
-  `hangarctl --socket /tmp/hangar-dev.sock session new --after active` /
+- Launch an ISOLATED dev instance (`open -n --env ELIS_STATE_DIR=<tmp> --env
+  ELIS_CONTROL_SOCKET=/tmp/elis-dev.sock .../Debug/Elis.app`) and drive
+  `elisctl --socket /tmp/elis-dev.sock session new --after active` /
   `session move --after <sid> --target <sid>` to watch placement land in one shot with
   no row-hopping. Do NOT touch the deployed daily-driver app.
 

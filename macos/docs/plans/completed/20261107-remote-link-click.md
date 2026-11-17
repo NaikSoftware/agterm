@@ -19,10 +19,10 @@
 - A forwarded click replaces a hidden clicked page an earlier forwarded click opened, as a local click does.
 
 ## Context (from discovery)
-- Click entry: `Hangar/Ghostty/GhosttySurfaceView+Input.swift:640-656` (`openLink`, `linkClickOrigin`,
-  `linkClickCwd`) → `Hangar/Ghostty/LinkOpener.swift` (`follow` :36-47, `carryOut` :49) → closures wired in
-  `Hangar/hangarApp.swift:143-161` to `ControlServer.open{Image,Markdown,Text,Document}Link`.
-- Policy: `HangarCore/Sources/HangarCore/LinkPolicy.swift` (`locations` :257, `relativePath` :306,
+- Click entry: `Elis/Ghostty/GhosttySurfaceView+Input.swift:640-656` (`openLink`, `linkClickOrigin`,
+  `linkClickCwd`) → `Elis/Ghostty/LinkOpener.swift` (`follow` :36-47, `carryOut` :49) → closures wired in
+  `Elis/elisApp.swift:143-161` to `ControlServer.open{Image,Markdown,Text,Document}Link`.
+- Policy: `ElisCore/Sources/ElisCore/LinkPolicy.swift` (`locations` :257, `relativePath` :306,
   `route(for:mode:origin:)` :364, the private origin switch :375-411, `localHostNames` :133).
 - Origin page placement: `AppStore.openRemotePage` (`AppStore+RemotePage.swift:54`) returns `.local` unless
   every covered pane follows on the presenter (`Session.followsRemotely`, `ZmxLead.swift:176`); called from
@@ -40,9 +40,9 @@
   reaches the store through `setRemoteMode` (`AppStore+RemotePresentation.swift:175`).
 - Pane mapping viewer→origin: `RemoteBinding.remotePane(forLocal:)` (`RemotePresentationState.swift:51`,
   internal). A viewer pane can have no origin counterpart (`AppStore+RemoteLayout.swift:35`).
-- Refusal HUD precedent: `RemoteAttachHud.fail` (`Hangar/AppActions+RemoteAttach.swift:139-143`) and its
+- Refusal HUD precedent: `RemoteAttachHud.fail` (`Elis/AppActions+RemoteAttach.swift:139-143`) and its
   `CommandFailure.message` cleaning of remote text (:153-156).
-- File sizes: `ControlServer+SessionActions.swift` 999 lines, `hangarApp.swift` 987, against a 1000-line
+- File sizes: `ControlServer+SessionActions.swift` 999 lines, `elisApp.swift` 987, against a 1000-line
   `file_length` warning.
 
 ## Decisions carried from earlier plans
@@ -52,7 +52,7 @@
 | #891 plan Overview (`completed/20261104-remote-content-pages.md:8-10`) | ⌘-click on a path in an attached pane stays ignored | changed | The origin resolves and opens it, so the path is read where it exists |
 | #891 plan | Origin's own ⌘-click routes reach a presenter-followed session | kept | Forwarded clicks reuse those routes |
 | #891 plan | Content pages need `page.content`; clicked HTML needs `page.document` | kept | Forwarded pages pass the same gates |
-| #674 / #131 | Hangar hands no terminal-printed path to LaunchServices | kept | Forwarded clicks open read-only pages only; every Finder fallback is suppressed |
+| #674 / #131 | Elis hands no terminal-printed path to LaunchServices | kept | Forwarded clicks open read-only pages only; every Finder fallback is suppressed |
 | #844 (`LinkPolicyTests.swift:285-296`) | A remote pane reveals a local-host `file://` link in Finder | changed | It revealed this Mac's same-named file; it is forwarded now |
 | control-api.md clicked-page bullets | A click replaces a hidden clicked page, except one handed to the presenter | changed for forwarded clicks | Eugene: a forwarded click replaces its own hidden page like a local click |
 
@@ -64,10 +64,10 @@
 - update this plan when scope changes
 
 ## Testing Strategy
-- **unit tests** (`HangarCore`): policy routes, the shared resolve step, frame codec round-trip, lenient mode
+- **unit tests** (`ElisCore`): policy routes, the shared resolve step, frame codec round-trip, lenient mode
   decode and unknown-kind tolerance, hub routing (presenter-only), client kind retention, the viewer's request
   builder and the origin's target resolution with every refusal reason, hidden-page replacement.
-- **hosted tests** (`HangarTests`): origin handling of a forwarded click end to end through
+- **hosted tests** (`ElisTests`): origin handling of a forwarded click end to end through
   `receivePresenterFrame` with a fake presenter; viewer forwarding and refusal reporting; a recorder-backed
   `LinkOpener` test.
 - No XCUITest: there is no two-Mac UI harness; manual verification is under Post-Completion.
@@ -80,11 +80,11 @@
 - **Viewer**: the policy turns a bare, relative or `file://` path clicked in a remote pane into
   `.forwardRemote(raw)`. `LinkOpener.carryOut` sends `.forwardRemote` to a new `forward` closure, or to
   `refuse` when the intent is reveal (⌘⌥). The app reads live AppKit state (HUD, zoom, cover overlay) and the
-  client's origin kinds, and passes them to one HangarCore builder that checks presenter mode, the origin's
+  client's origin kinds, and passes them to one ElisCore builder that checks presenter mode, the origin's
   `link.click` kind and the pane mapping, and returns either the frame or a refusal reason. The app sends the
   frame or reports the refusal: a self-hiding HUD naming the reason, or a beep when a HUD is already up or
   the panel would be hidden, judged from live state at report time.
-- **Origin**: `receivePresenterFrame` takes `link.click` from the current presenter only. An HangarCore resolver
+- **Origin**: `receivePresenterFrame` takes `link.click` from the current presenter only. An ElisCore resolver
   validates the pane identity and returns that pane's cwd; the shared resolve step (factored out of
   `LinkOpener.follow`) probes the candidates and routes with origin `.pane(session)`. Only page routes (image,
   markdown, text, document) are carried out, through the `open*Link` helpers called in forwarded mode: the zoom
@@ -129,7 +129,7 @@
 - Client: `RemotePresentationClient` retains the origin hello's `kinds`, reset on link drop, and exposes
   `originSupports(_:)`; `apply` hands `.linkRefused` to a new `effects.linkRefused` with a default so the fork's
   effect constructors still compile. Presenter state is read from `session.remotePresentation?.mode`.
-- Refusal reasons: one HangarCore enum `RemoteLinkRefusal` owns the wording, for example `notPresenter`,
+- Refusal reasons: one ElisCore enum `RemoteLinkRefusal` owns the wording, for example `notPresenter`,
   `originTooOld`, `paneNotAttached`, `revealIntent`, `hidden` (HUD/zoom/cover on this Mac), `notFound`,
   `notAPage` (reveal, ignore or web route on the origin), `notOpened` (any `open*Link` helper `false`: busy slot,
   mixed lead, probe failure). Its `message(host:)` builds the text on the presenting Mac from the raw value and
@@ -144,7 +144,7 @@
   `.local` when it is set. `RemoteBinding.remotePane(forLocal:)` becomes public.
 - Long files: before Task 3, `openLinkOverlay`, `canShowLinkOverlay` and their link-only helpers move from
   `ControlServer+SessionActions.swift` to a new `ControlServer+LinkOverlay.swift` with no behavior change
-  (Eugene approved). The `hangarApp.swift` wiring stays within its limit by calling one `ControlServer`
+  (Eugene approved). The `elisApp.swift` wiring stays within its limit by calling one `ControlServer`
   method that installs both closures.
 - Control API: no new command. A click is a gesture with no meaningful scripted form (a script opens the same
   page with `session overlay open --markdown|--text|--image|--html` on the origin); the result reads back as the
@@ -158,13 +158,13 @@
 
 ### Task 1: Policy, shared resolve step and opener on the viewer
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/LinkPolicy.swift`
-- Modify: `Hangar/Ghostty/LinkOpener.swift`
-- Modify: `Hangar/Ghostty/GhosttySurfaceView+Input.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/LinkPolicyTests.swift`
-- Modify: `HangarTests/GhosttySurfaceViewInputTests.swift` (the existing home of the `LinkOpener` click tests,
+- Modify: `ElisCore/Sources/ElisCore/LinkPolicy.swift`
+- Modify: `Elis/Ghostty/LinkOpener.swift`
+- Modify: `Elis/Ghostty/GhosttySurfaceView+Input.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/LinkPolicyTests.swift`
+- Modify: `ElisTests/GhosttySurfaceViewInputTests.swift` (the existing home of the `LinkOpener` click tests,
   which drive `openLink` on a surface; no separate `LinkOpenerTests.swift`)
-- Create: `HangarCore/Sources/HangarCore/RemoteLinkRefusal.swift` and `HangarCoreTests/RemoteLinkRefusalTests.swift`
+- Create: `ElisCore/Sources/ElisCore/RemoteLinkRefusal.swift` and `ElisCoreTests/RemoteLinkRefusalTests.swift`
 
 - [x] `RemoteLinkRefusal` with `message(host:)` and a test per reason (the opener's `refuse` closure needs it);
       ➕ it travels by raw value and the presenting Mac builds the text, so no remote wording reaches the HUD;
@@ -187,16 +187,16 @@
 
 ### Task 2: Presentation protocol
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`
-- Modify: `HangarCore/Sources/HangarCore/PresentationHub.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemotePresentationClient.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/{PresentationFramesTests,PresentationHubTests,RemotePresentationClientTests}.swift`
+- Modify: `ElisCore/Sources/ElisCore/PresentationFrames.swift`
+- Modify: `ElisCore/Sources/ElisCore/PresentationHub.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemotePresentationClient.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/{PresentationFramesTests,PresentationHubTests,RemotePresentationClientTests}.swift`
 
 - [x] `link.click` / `link.refused` bodies, codec, `kind`, lenient mode, `linkClickKind` in `supportedKinds`;
       ➕ the refusal's reason decodes leniently too, an unknown one as `notOpened`
 - [x] hub routes `.linkClick` only from the current presenter
 - [x] client retains and resets origin kinds, `originSupports(_:)`, applies `.linkRefused` (defaulted effect)
-- [x] ➕ `remotePane(forLocal:)` stays internal: the viewer builder lives in HangarCore (Task 5), so no export
+- [x] ➕ `remotePane(forLocal:)` stays internal: the viewer builder lives in ElisCore (Task 5), so no export
 - [x] tests: codec round-trip, an unknown mode decodes to `.overlay`, an unknown reason to `notOpened`, hub drops
       a non-presenter's click, client kinds before hello, after a drop and on a reconnect without the kind,
       `.linkRefused` reaches effects; an older peer skipping the kinds is the existing unknown-kind and
@@ -209,25 +209,25 @@
 
 ### Task 3: Move the link helpers out of the long file
 **Files:**
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
-- Create: `Hangar/Control/ControlServer+LinkOverlay.swift`
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`
+- Create: `Elis/Control/ControlServer+LinkOverlay.swift`
 
 - [x] move `openLinkOverlay`, `canShowLinkOverlay` and the helpers only they call, unchanged
 - [x] build and run `ControlServerLinkOverlayTests` (25 passed); commit on its own
 
 ### Task 4: Origin carries out a forwarded click
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcherOptions.swift`
-- Create: `HangarCore/Sources/HangarCore/AppStore+ForwardedClick.swift` and `HangarCoreTests/AppStoreForwardedClickTests.swift`
-- Modify: `Hangar/Control/ControlServer+Ask.swift`
-- Modify: `Hangar/Control/ControlServer+LinkOverlay.swift`, `Hangar/Control/ControlServer+SessionActions.swift` (`openHtmlOverlay` only)
-- Modify: `Hangar/Control/ControlServer+{ImagePage,MarkdownPage,TextPage,DocumentPage}.swift`
-- Create: `Hangar/Control/ControlServer+ForwardedClick.swift` and `HangarTests/ControlServerForwardedClickTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcherOptions.swift`
+- Create: `ElisCore/Sources/ElisCore/AppStore+ForwardedClick.swift` and `ElisCoreTests/AppStoreForwardedClickTests.swift`
+- Modify: `Elis/Control/ControlServer+Ask.swift`
+- Modify: `Elis/Control/ControlServer+LinkOverlay.swift`, `Elis/Control/ControlServer+SessionActions.swift` (`openHtmlOverlay` only)
+- Modify: `Elis/Control/ControlServer+{ImagePage,MarkdownPage,TextPage,DocumentPage}.swift`
+- Create: `Elis/Control/ControlServer+ForwardedClick.swift` and `ElisTests/ControlServerForwardedClickTests.swift`
 
 - [x] `forwarded` option carried through `with(imagePixels:)` and the image `sized` rebuild; `openHtmlOverlay`
       refuses `.local` for it; helpers take the click's presenter generation (`forward:`) and
       `canShowLinkOverlay` takes `forwarded` (zoom skipped, HUD kept)
-- [x] `forwardedClickPane` in HangarCore (returns the pane's cwd); `openRemotePage` in forwarded mode admits a hidden
+- [x] `forwardedClickPane` in ElisCore (returns the pane's cwd); `openRemotePage` in forwarded mode admits a hidden
       clicked remote occupant at its slot check and closes it through `closeRemoteOverlay` only after every other
       check passed, immediately before the new reservation
 - [x] `receivePresenterFrame` handles `.linkClick` (`receiveForwardedClick`): capture the presenter generation,
@@ -248,12 +248,12 @@
 
 ### Task 5: Viewer forwarding path
 **Files:**
-- Modify: `Hangar/hangarApp.swift` (one call)
-- Modify: `Hangar/Control/ControlServer+RemotePresentation.swift` (the `linkRefused` effect)
-- Create: `Hangar/Control/ControlServer+RemoteLinkClick.swift` and `HangarTests/ControlServerRemoteLinkClickTests.swift`
-- Create: `HangarCore/Sources/HangarCore/AppStore+LinkClickRequest.swift` and `HangarCoreTests/AppStoreLinkClickRequestTests.swift`
+- Modify: `Elis/elisApp.swift` (one call)
+- Modify: `Elis/Control/ControlServer+RemotePresentation.swift` (the `linkRefused` effect)
+- Create: `Elis/Control/ControlServer+RemoteLinkClick.swift` and `ElisTests/ControlServerRemoteLinkClickTests.swift`
+- Create: `ElisCore/Sources/ElisCore/AppStore+LinkClickRequest.swift` and `ElisCoreTests/AppStoreLinkClickRequestTests.swift`
 
-- [x] `linkClickRequest` in HangarCore: presenter mode, origin kind, pane mapping, the app's hidden flag
+- [x] `linkClickRequest` in ElisCore: presenter mode, origin kind, pane mapping, the app's hidden flag
 - [x] `ControlServer.installRemoteLinkClicks` installs `LinkOpener.forward` and `refuse`; forward reads HUD / zoom /
       cover on this Mac, calls the builder, then `answer(.linkClick)` or returns the refusal
 - [x] `refuse` beeps when the session already shows a HUD (local or mirrored), its window has a zoomed terminal,
@@ -268,8 +268,8 @@
 
 ### Task 6: Verify acceptance criteria
 - [x] every Overview item holds; each refusal reports exactly once and its HUD clears itself; local panes unchanged
-- [x] `cd HangarCore && swift test`, `make test-app` (1872, 0 failures), `make lint`, Release build
-- [x] `lsappinfo list | grep -A4 hangar.debug` after the hosted run
+- [x] `cd ElisCore && swift test`, `make test-app` (1872, 0 failures), `make lint`, Release build
+- [x] `lsappinfo list | grep -A4 elis.debug` after the hosted run
 
 ### Task 7: [Final] Update documentation
 - [x] `site/docs.html`: replace "In a session attached from another Mac, a plain path names a file on that Mac,
@@ -277,7 +277,7 @@
 - [x] `.claude/rules/control-api.md`: a forwarded-click bullet beside the click paths (kind, presenter-only,
       origin pane identity, forwarded mode, hidden-page replacement, refusal frame and panel, no Finder fallback,
       control API exemption), the `.remotePane` routing sentence, and a lenient-decode line in the stream bullet
-- [x] `plugins/hangar/skills/hangar/SKILL.md` (:834, :884 "in a local pane"); `site/commands.html` states neither
+- [x] `plugins/elis/skills/elis/SKILL.md` (:834, :884 "in a local pane"); `site/commands.html` states neither
       remote-click behavior nor presentation kinds, and README, ARCHITECTURE.md, llms.txt and index.html neither
 - [x] move this plan to `docs/plans/completed/`
 

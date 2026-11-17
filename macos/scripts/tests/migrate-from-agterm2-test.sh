@@ -210,21 +210,21 @@ code=$?
 check "first run exits 0" '[ $code -eq 0 ]'
 [ $code -eq 0 ] || cat "$root/run1.out"
 
-nstate="$H/Library/Application Support/hangar"
-nconf="$H/.config/hangar"
+nstate="$H/Library/Application Support/elis"
+nconf="$H/.config/elis"
 check "sessions file byte-identical" 'cmp -s "$state/workspaces.json" "$nstate/workspaces.json"'
 check "window file byte-identical" 'cmp -s "$state/windows/w1.json" "$nstate/windows/w1.json"'
 check "socket and lock not copied" '[ ! -e "$nstate/agterm.sock" ] && [ ! -e "$nstate/agterm.lock" ]'
-printf '{\n  "configDirectory" : "~/.config/hangar",\n  "darkTheme" : "hangar",\n  "fontSize" : 13,\n  "theme" : "hangar"\n}' > "$root/expected-app-settings.json"
-check "settings theme is hangar" 'cmp -s "$root/expected-app-settings.json" "$nstate/settings.json"'
-check "keymap calls hangarctl" 'grep -q "\"Jump\" hangarctl session focus \"\$HANGAR_SESSION_ID\" --socket ~/Library/Application\\\\ Support/hangar/hangar.sock" "$nconf/keymap.conf"'
-check "keymap keeps user path, renames app" 'grep -qF "cd ~/IdeaProjects/agterm && open -a Hangar.app" "$nconf/keymap.conf"'
-check "keymap session link scheme renamed" 'grep -qF "printf '"'"'hangar://session/%s'"'"'" "$nconf/keymap.conf"'
+printf '{\n  "configDirectory" : "~/.config/elis",\n  "darkTheme" : "elis",\n  "fontSize" : 13,\n  "theme" : "elis"\n}' > "$root/expected-app-settings.json"
+check "settings theme is elis" 'cmp -s "$root/expected-app-settings.json" "$nstate/settings.json"'
+check "keymap calls elisctl" 'grep -q "\"Jump\" elisctl session focus \"\$ELIS_SESSION_ID\" --socket ~/Library/Application\\\\ Support/elis/elis.sock" "$nconf/keymap.conf"'
+check "keymap keeps user path, renames app" 'grep -qF "cd ~/IdeaProjects/agterm && open -a Elis.app" "$nconf/keymap.conf"'
+check "keymap session link scheme renamed" 'grep -qF "printf '"'"'elis://session/%s'"'"'" "$nconf/keymap.conf"'
 check "keymap has no agtermctl" '! grep -q agtermctl "$nconf/keymap.conf"'
-check "ghostty theme is hangar" '[ "$(head -1 "$nconf/ghostty.conf")" = "theme = light:hangar,dark:hangar" ]'
+check "ghostty theme is elis" '[ "$(head -1 "$nconf/ghostty.conf")" = "theme = light:elis,dark:elis" ]'
 check "denylist byte-identical" 'cmp -s "$conf/restore-denylist.conf" "$nconf/restore-denylist.conf"'
-check "hooks.conf path renamed" 'grep -qx "on status ~/.config/hangar/hooks/status.sh" "$nconf/hooks.conf"'
-check "hook script renamed, mode kept" 'grep -q "^hangarctl notify \"\$AGT_EVENT_STATUS\"" "$nconf/hooks/status.sh" && [ "$(stat -f %Lp "$nconf/hooks/status.sh")" = 755 ]'
+check "hooks.conf path renamed" 'grep -qx "on status ~/.config/elis/hooks/status.sh" "$nconf/hooks.conf"'
+check "hook script renamed, mode kept" 'grep -q "^elisctl notify \"\$AGT_EVENT_STATUS\"" "$nconf/hooks/status.sh" && [ "$(stat -f %Lp "$nconf/hooks/status.sh")" = 755 ]'
 check "agent-status scripts not copied" '[ ! -e "$nconf/agent-status" ]'
 check "no temp dirs left" '[ -z "$(ls -a "$H/.config" "$H/Library/Application Support" | grep migrating)" ]'
 
@@ -255,8 +255,8 @@ mkdir -p "$H2/.config/agterm" "$H2/dotfiles"
 printf 'command cmd+j "Jump" agtermctl session focus "$AGTERM_SESSION_ID"\n' > "$H2/dotfiles/keymap.conf"
 ln -s "$H2/dotfiles/keymap.conf" "$H2/.config/agterm/keymap.conf"
 env -u CODEX_HOME -u OPENCODE_CONFIG_DIR -u XDG_CONFIG_HOME /bin/bash "$script" --home "$H2" > "$root/link.out" 2>&1
-check "symlinked keymap reported" 'grep -q "keymap.conf links to .*still names agterm" "$root/link.out" && [ -L "$H2/.config/hangar/keymap.conf" ]'
-check "existing Hangar state names the extras reset" 'grep -q "extrasInstalledBuild" "$root/run2.out"'
+check "symlinked keymap reported" 'grep -q "keymap.conf links to .*still names agterm" "$root/link.out" && [ -L "$H2/.config/elis/keymap.conf" ]'
+check "existing Elis state names the extras reset" 'grep -q "extrasInstalledBuild" "$root/run2.out"'
 check "summary names window positions and own scripts" 'grep -q "Window positions" "$root/run1.out" && grep -q "Your own scripts" "$root/run1.out"'
 
 echo

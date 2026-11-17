@@ -31,7 +31,7 @@ public:
     explicit Hud(QWidget *parent)
         : QFrame(parent)
     {
-        setObjectName(QStringLiteral("hangarHud"));
+        setObjectName(QStringLiteral("elisHud"));
         setAttribute(Qt::WA_TransparentForMouseEvents);
         setFocusPolicy(Qt::NoFocus);
         auto *row = new QHBoxLayout(this);
@@ -84,7 +84,7 @@ public:
         const QString bg = s.value("color").toString(palette().color(QPalette::Window).name());
         const QString ink = s.value("textColor").toString();
         const bool framed = s.value("frame").toBool(true);
-        setStyleSheet(QStringLiteral("QFrame#hangarHud{background:%1;%2}%3")
+        setStyleSheet(QStringLiteral("QFrame#elisHud{background:%1;%2}%3")
                           .arg(bg, framed ? QStringLiteral("border:1px solid palette(mid);border-radius:8px;") : QString(),
                                ink.isEmpty() ? QString() : QStringLiteral("QLabel{color:%1}").arg(ink)));
         const int secs = s.value("hideAfter").toInt();
@@ -199,9 +199,9 @@ bool MainWindow::openOverlay(const QString &id, const QString &pane, const QStri
     ov.height = height;
     ov.command = command;
     ov.onClose = std::move(onClose);
-    ov.codeFile = QDir::tempPath() + QStringLiteral("/hangar-ovl-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    ov.codeFile = QDir::tempPath() + QStringLiteral("/elis-ovl-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
     auto *frame = new QFrame(p.view);
-    frame->setObjectName(QStringLiteral("hangarOverlay"));
+    frame->setObjectName(QStringLiteral("elisOverlay"));
     auto *box = new QVBoxLayout(frame);
     box->setContentsMargins(sizePercent > 0 ? QMargins(1, 1, 1, 1) : QMargins());
     if (sizePercent > 0) { // floating: framed over the visible session
@@ -214,13 +214,13 @@ bool MainWindow::openOverlay(const QString &id, const QString &pane, const QStri
         }
     }
     // master's wrapper: the command and the code file travel in the environment, output is untouched
-    QString wrapper = QStringLiteral("( eval \"$HANGAR_OVL_CMD\" ); c=$?; echo $c > \"$HANGAR_OVL_CODE\"");
+    QString wrapper = QStringLiteral("( eval \"$ELIS_OVL_CMD\" ); c=$?; echo $c > \"$ELIS_OVL_CODE\"");
     if (wait)
         wrapper += QStringLiteral("; printf '\\n[exited %s, press a key to close]' \"$c\"; stty -icanon -echo; head -c1 >/dev/null");
     wrapper.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
     const QString dir = !cwd.isEmpty() ? cwd : liveCwd(id).isEmpty() ? s->cwd : liveCwd(id);
     ov.part = spawnPart(id, QStringLiteral("overlay"), dir, QStringLiteral("exec /bin/sh -c '%1'").arg(wrapper), frame,
-                        {QStringLiteral("HANGAR_OVL_CMD=") + command, QStringLiteral("HANGAR_OVL_CODE=") + ov.codeFile});
+                        {QStringLiteral("ELIS_OVL_CMD=") + command, QStringLiteral("ELIS_OVL_CODE=") + ov.codeFile});
     if (!ov.part) {
         delete frame;
         return *error = QStringLiteral("cannot start the overlay terminal"), false;
@@ -229,9 +229,9 @@ bool MainWindow::openOverlay(const QString &id, const QString &pane, const QStri
     ov.frame = frame;
     connect(ov.part, &QObject::destroyed, this, [this, key, part = ov.part] { overlayExited(key, part); });
     under->installEventFilter(this); // a divider drag or window resize re-lays the cover
-    under->setProperty("hangarOverlayHost", id);
+    under->setProperty("elisOverlayHost", id);
     p.view->installEventFilter(this);
-    p.view->setProperty("hangarOverlayHost", id);
+    p.view->setProperty("elisOverlayHost", id);
     m_overlays.insert(key, ov);
     frame->show();
     layoutOverlays(id);
@@ -309,7 +309,7 @@ bool MainWindow::openHud(const QString &id, const QJsonObject &spec, QString *er
     hud->apply(spec);
     m_huds.insert(id, hud);
     p.view->installEventFilter(this);
-    p.view->setProperty("hangarOverlayHost", id);
+    p.view->setProperty("elisOverlayHost", id);
     hud->show();
     layoutOverlays(id);
     return true;

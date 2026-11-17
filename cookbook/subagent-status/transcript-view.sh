@@ -1,5 +1,5 @@
 #!/bin/sh
-# transcript-view.sh TRANSCRIPT TITLE [--follow] - page a subagent transcript in an hangar overlay.
+# transcript-view.sh TRANSCRIPT TITLE [--follow] - page a subagent transcript in an elis overlay.
 # Claude Code JSONL and Codex rollouts render as turns and tool calls with their bookkeeping skipped; other
 # JSONL renders role/content records as turns and the rest as indented JSON. JavaScript for Automation does
 # the rendering because macOS 14 has no jq. --follow keeps appending a running subagent's new records.
@@ -126,8 +126,8 @@ if [ ! -t 1 ]; then
   exit 0
 fi
 
-compact=$(mktemp -t hangar-transcript) || exit 1
-full=$(mktemp -t hangar-transcript) || exit 1
+compact=$(mktemp -t elis-transcript) || exit 1
+full=$(mktemp -t elis-transcript) || exit 1
 # the picker reads this pid to tell its own overlay from another program's; a viewer it replaced exits after the
 # new one wrote its pid, so the file is removed only while it still names this viewer
 pid_file=${AGT_SUBAGENT_VIEWER_PID_FILE:-}

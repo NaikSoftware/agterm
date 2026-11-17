@@ -15,7 +15,7 @@
   only to a presenter whose hello lists the new capability.
 
 ## Context (from discovery)
-- Placement and hand-over on the origin: `HangarCore/Sources/HangarCore/AppStore+RemotePage.swift`
+- Placement and hand-over on the origin: `ElisCore/Sources/ElisCore/AppStore+RemotePage.swift`
   (`openRemotePage`, `presentationSource` returning nil for `.image/.markdown/.text`, `expireRemotePageClaims`,
   `navigateRemotePage`), `AppStore+HtmlOverlay.swift` (`openHtmlOverlay` refuses via `pageBelongsRemote`).
 - Wire types: `PresentationFrames.swift` (`PresentationPageSource` with `.file`/`.url`, synthesized `Codable`; an
@@ -23,19 +23,19 @@
   `PresentationHub.swift` (`supportedKinds`, `pageKinds`, `overlayPointsKind` as the precedent for a capability
   that names no frame body; one list serves both hello directions).
 - Viewer: `AppStore+ReplicaPage.swift` (`presentReplicaPage`, `replicaSource`), `HtmlSource.replica(path:)` in
-  `HtmlOverlay.swift`, `Hangar/Control/ControlServer+RemotePage.swift` (`showReplicaPage` starts the channel
-  for `.file`), `Hangar/Control/RemotePageChannel.swift` (`fetch(path:)` returns MIME plus chunks),
-  `Hangar/Views/HtmlOverlayRegistry.swift` (`loadOriginal`, `bridged`, `styled`), `HtmlOverlayView.swift`.
-- Serving on the origin: `Hangar/Control/ControlServer+PageServe.swift` (`PageServeStream.transfer` reads any
+  `HtmlOverlay.swift`, `Elis/Control/ControlServer+RemotePage.swift` (`showReplicaPage` starts the channel
+  for `.file`), `Elis/Control/RemotePageChannel.swift` (`fetch(path:)` returns MIME plus chunks),
+  `Elis/Views/HtmlOverlayRegistry.swift` (`loadOriginal`, `bridged`, `styled`), `HtmlOverlayView.swift`.
+- Serving on the origin: `Elis/Control/ControlServer+PageServe.swift` (`PageServeStream.transfer` reads any
   file `RemotePageResources.resolve` admits, raw, with no size cap; `answer` runs bridge requests),
-  `HangarCore/Sources/HangarCore/RemotePageResources.swift` (`.file` only).
-- Local page builders: `Hangar/Control/ControlServer+ImagePage.swift` (origin-side sizing from
-  `ImagePage.points`), `Hangar/Views/ImageProbe.swift`, `MarkdownProbe.swift`, `TextProbe.swift` (all read through
-  `BoundedFile`), `HangarCore/Sources/HangarCore/MarkdownPage.swift` (`imageReferences`, whose `localPath` runs
+  `ElisCore/Sources/ElisCore/RemotePageResources.swift` (`.file` only).
+- Local page builders: `Elis/Control/ControlServer+ImagePage.swift` (origin-side sizing from
+  `ImagePage.points`), `Elis/Views/ImageProbe.swift`, `MarkdownProbe.swift`, `TextProbe.swift` (all read through
+  `BoundedFile`), `ElisCore/Sources/ElisCore/MarkdownPage.swift` (`imageReferences`, whose `localPath` runs
   a lexical check and then resolves symlinks on the local disk), `TextPage.swift`.
-- Tests: `HangarCore/Tests/HangarCoreTests/AppStoreRemotePageTests.swift` (pins the refusal for these kinds),
-  `RemotePageResourcesTests.swift`, `HangarTests/ControlServerRemotePresentationTests.swift` (both Mac roles in one
-  process, real `hangarctl` helpers), `ControlServerPageServeTests.swift`, `ImageProbeTests`, `MarkdownProbeTests`,
+- Tests: `ElisCore/Tests/ElisCoreTests/AppStoreRemotePageTests.swift` (pins the refusal for these kinds),
+  `RemotePageResourcesTests.swift`, `ElisTests/ControlServerRemotePresentationTests.swift` (both Mac roles in one
+  process, real `elisctl` helpers), `ControlServerPageServeTests.swift`, `ImageProbeTests`, `MarkdownProbeTests`,
   `TextProbeTests`.
 - agterm-linux (`melonamin/agterm-linux`) is a full fork of this repo: its app target switches over
   `PresentationPageSource` (`ControlServer+RemotePage.swift`) and `HtmlSource`. It breaks only when it merges
@@ -60,9 +60,9 @@
   kinds
 
 ## Testing Strategy
-- **unit tests** (`cd HangarCore && swift test`): wire round-trip, capability gating, placement, serving rules,
+- **unit tests** (`cd ElisCore && swift test`): wire round-trip, capability gating, placement, serving rules,
   lexical picture references, replica mapping, tree projection
-- **hosted tests** (`make test-app`, targeted with `-only-testing:HangarTests/<Class>/<test>` while iterating):
+- **hosted tests** (`make test-app`, targeted with `-only-testing:ElisTests/<Class>/<test>` while iterating):
   byte-based probes, page serving with caps, and end-to-end hand-over of each page kind in
   `ControlServerRemotePresentationTests`
 - no UI test is added: the hand-over has no new chrome, and the hosted end-to-end tests cover both roles
@@ -147,28 +147,28 @@
 ### Task 1: Wire format, origin placement and serving rules, with the app target kept building
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`
-- Modify: `HangarCore/Sources/HangarCore/PresentationHub.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePage.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+ReplicaPage.swift`
-- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemotePageResources.swift`
-- Modify: `HangarCore/Sources/HangarCore/MarkdownPage.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcherOptions.swift` (image size on
+- Modify: `ElisCore/Sources/ElisCore/PresentationFrames.swift`
+- Modify: `ElisCore/Sources/ElisCore/PresentationHub.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RemotePage.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+HtmlOverlay.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+ReplicaPage.swift`
+- Modify: `ElisCore/Sources/ElisCore/HtmlOverlay.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemotePageResources.swift`
+- Modify: `ElisCore/Sources/ElisCore/MarkdownPage.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProjection.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcherOptions.swift` (image size on
   `ControlSessionOverlayOpenOptions`)
-- Modify: `HangarCore/Sources/HangarCore/AppStore+ClickedPage.swift` (only if the internal caller needs a touch)
-- Modify: app-target switches the new cases make non-exhaustive: `Hangar/Control/ControlServer+RemotePage.swift`,
-  `Hangar/Control/ControlServer+RemoteCompanions.swift`, `Hangar/Views/HtmlOverlayRegistry.swift`,
-  `Hangar/Views/HtmlOverlayView.swift`, `Hangar/Control/ControlServer+CompanionPage.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreRemotePageTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreReplicaPageTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/HtmlOverlayTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/RemotePageResourcesTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/MarkdownPageTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/PresentationFramesTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTreeProjectionTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+ClickedPage.swift` (only if the internal caller needs a touch)
+- Modify: app-target switches the new cases make non-exhaustive: `Elis/Control/ControlServer+RemotePage.swift`,
+  `Elis/Control/ControlServer+RemoteCompanions.swift`, `Elis/Views/HtmlOverlayRegistry.swift`,
+  `Elis/Views/HtmlOverlayView.swift`, `Elis/Control/ControlServer+CompanionPage.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreRemotePageTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreReplicaPageTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/HtmlOverlayTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/RemotePageResourcesTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/MarkdownPageTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/PresentationFramesTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreTreeProjectionTests.swift`
 
 - [x] add the three `PresentationPageSource` cases and `PresentationHub.pageContentKind`, listed in
       `supportedKinds`
@@ -193,17 +193,17 @@
       is a symlink pointing outside the folder: the reference is still listed (the origin decides), so the
       filesystem-resolving `localPath` cannot be reused by mistake
 - [x] tests: `replicaSource` per case, viewer tree projection, claim expiry of an unclaimed content page
-- [x] run the touched suites with `cd HangarCore && swift test --filter` and build the app target - must pass before
+- [x] run the touched suites with `cd ElisCore && swift test --filter` and build the app target - must pass before
       task 2
 
 ### Task 2: Origin app side - sizing hand-off, bounded serving and bridge refusal
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer+ImagePage.swift`
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
-- Modify: `Hangar/Control/ControlServer+PageServe.swift`
-- Modify: `Hangar/Views/ImageProbe.swift` (shared reader caps, if the cap constants move)
-- Modify: `HangarTests/ControlServerPageServeTests.swift`
+- Modify: `Elis/Control/ControlServer+ImagePage.swift`
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`
+- Modify: `Elis/Control/ControlServer+PageServe.swift`
+- Modify: `Elis/Views/ImageProbe.swift` (shared reader caps, if the cap constants move)
+- Modify: `ElisTests/ControlServerPageServeTests.swift`
 
 - [x] `openImageOverlay`: when `pageBelongsRemote` says the presenter holds the slot, skip origin-side sizing and
       pass the probed oriented pixel size in the open options
@@ -221,21 +221,21 @@
       a FIFO and a file outside the kind's rule; a bridge request on a content page is refused
 - [x] tests: for a markdown page, a non-picture sibling is refused (one named `notes.txt` and one named `fake.png`),
       a valid picture with no image suffix is served, and a picture over 4 MiB but under 32 MiB is served
-- [x] run the targeted hosted tests (`-only-testing:HangarTests/ControlServerPageServeTests`) - must pass before
+- [x] run the targeted hosted tests (`-only-testing:ElisTests/ControlServerPageServeTests`) - must pass before
       task 3
 
 ### Task 3: Viewer app side - fetch, probe, build and size content replicas
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer+RemotePage.swift`
-- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`
-- Modify: `Hangar/Views/HtmlOverlayView.swift`
-- Modify: `Hangar/Views/ImageProbe.swift`
-- Modify: `Hangar/Views/MarkdownProbe.swift`
-- Modify: `Hangar/Views/TextProbe.swift`
-- Modify: `HangarTests/ImageProbeTests.swift`, `MarkdownProbeTests.swift`, `TextProbeTests.swift`
-- Modify: `HangarTests/HtmlOverlayRegistryTests.swift`
-- Modify: `HangarTests/ControlServerRemotePresentationTests.swift`
+- Modify: `Elis/Control/ControlServer+RemotePage.swift`
+- Modify: `Elis/Views/HtmlOverlayRegistry.swift`
+- Modify: `Elis/Views/HtmlOverlayView.swift`
+- Modify: `Elis/Views/ImageProbe.swift`
+- Modify: `Elis/Views/MarkdownProbe.swift`
+- Modify: `Elis/Views/TextProbe.swift`
+- Modify: `ElisTests/ImageProbeTests.swift`, `MarkdownProbeTests.swift`, `TextProbeTests.swift`
+- Modify: `ElisTests/HtmlOverlayRegistryTests.swift`
+- Modify: `ElisTests/ControlServerRemotePresentationTests.swift`
 
 - [x] `showReplicaPage` starts the page channel for the content kinds as it does for `.file`, replacing Task 1's
       refusal
@@ -267,8 +267,8 @@
 ### Task 4: Agent skill, user docs and engineering rules
 
 **Files:**
-- Modify: `plugins/hangar/skills/hangar/SKILL.md`
-- Modify: `plugins/hangar/skills/hangar/reference.md`
+- Modify: `plugins/elis/skills/elis/SKILL.md`
+- Modify: `plugins/elis/skills/elis/reference.md`
 - Modify: `site/docs.html`
 - Modify: `site/commands.html`
 - Modify: `.claude/rules/control-api.md`
@@ -286,10 +286,10 @@
 ### Task 5: Verify acceptance criteria
 - [x] verify every Overview item: three kinds via CLI, origin ⌘-click routes, attached-pane ⌘-click still ignored,
       older-presenter refusal, no bridge, viewer-side sizing and tree read-back
-- [x] run `cd HangarCore && swift test`
+- [x] run `cd ElisCore && swift test`
 - [x] run `make test-app`
 - [x] run `make lint`
-- [x] after the hosted run: `lsappinfo list | grep -A4 hangar.debug` and stop any leaked test process
+- [x] after the hosted run: `lsappinfo list | grep -A4 elis.debug` and stop any leaked test process
 
 ### Task 6: [Final] Update documentation
 - [x] update README.md only if its remote-session synopsis names the page kinds that travel (it names none: no change)

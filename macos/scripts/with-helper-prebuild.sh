@@ -7,8 +7,8 @@ log=build/helper-prebuild.log
 
 # keep the two helper commands in their own process group
 set -m
-(swift build --package-path HangarCore -c release --product hangarctl &&
-  swift build --package-path HangarCore -c release --product hangar-session-host) >"$log" 2>&1 &
+(swift build --package-path ElisCore -c release --product elisctl &&
+  swift build --package-path ElisCore -c release --product elis-session-host) >"$log" 2>&1 &
 helpers=$!
 set +m
 prebuilt=
@@ -20,7 +20,7 @@ stop_helpers() {
     wait "$helpers" 2>/dev/null || true
   fi
   # swift build starts each compiler job in a group of its own and leaves it running when signalled
-  pkill -f -- "$PWD/HangarCore/.build/" 2>/dev/null || true
+  pkill -f -- "$PWD/ElisCore/.build/" 2>/dev/null || true
 }
 trap stop_helpers EXIT
 trap 'exit 143' TERM

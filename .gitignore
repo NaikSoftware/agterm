@@ -1,22 +1,22 @@
 # downloaded prebuilt libghostty (never committed — see scripts/setup.sh)
 # no trailing slash so the symlink form (worktree setup) is ignored too, not just the dir
 GhosttyKit.xcframework
-macos/Hangar/Resources/ghostty
-macos/Hangar/Resources/terminfo
+macos/Elis/Resources/ghostty
+macos/Elis/Resources/terminfo
 .ghostty-build-stamp
-macos/Hangar/Resources/zmx
+macos/Elis/Resources/zmx
 .zmx-build-stamp
 *.tar.gz
 
 # build artifacts
 build/
 .build/
-Hangar.xcodeproj/
+Elis.xcodeproj/
 .swiftpm/
 
 .DS_Store
 
-# app state / runtime files (only appear if HANGAR_STATE_DIR is pointed at the repo)
+# app state / runtime files (only appear if ELIS_STATE_DIR is pointed at the repo)
 settings.json
 windows.json
 workspaces.json

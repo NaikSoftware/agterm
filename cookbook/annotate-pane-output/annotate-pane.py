@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Annotate what the pane just printed and hand the notes back to it as an unsent paste.
 
-Runs as an hangar keymap custom command, so the runner exports $AGT_* and the app spawns it with a
+Runs as an elis keymap custom command, so the runner exports $AGT_* and the app spawns it with a
 PATH of its own choosing and stdout on /dev/null.
 
     text selected    -> that selection is what you annotate
@@ -13,7 +13,7 @@ point: a note like "why this one?" is unreadable on its own once the pane has sc
 
 The reply is delivered through the CLIPBOARD, saved and restored around the paste. This is not a
 convenience - `session type` sends real keystrokes, so a multi-line reply submits itself one line at
-a time whatever is reading, while `session paste` is the only bracketed-paste path hangar exposes
+a time whatever is reading, while `session paste` is the only bracketed-paste path elis exposes
 and it reads the system clipboard. Measured against a pty with DECSET 2004 on: type produced bare
 lines, paste produced one `^[[200~...^[[201~` block, so the reply lands whole and unsent. 2004 is
 the PROGRAM's mode, not a property of the route: against one with it off the newlines submit, the
@@ -48,7 +48,7 @@ CAPTURE_LINES = 50
 OVERLAY_PERCENT = 80
 OVERLAY_TINT = "#3a2c1e"
 
-LOG = Path(os.environ.get("ANNOTATE_LOG") or (Path(tempfile.gettempdir()) / "hangar-annotate.log"))
+LOG = Path(os.environ.get("ANNOTATE_LOG") or (Path(tempfile.gettempdir()) / "elis-annotate.log"))
 
 # `## path:line (type)` and `## path:line-end (type)`, the record header revdiff writes. The path is
 # non-greedy so a colon inside it cannot eat the line number
@@ -88,31 +88,31 @@ def find_revdiff() -> str:
     return ""
 
 
-def find_hangarctl() -> str:
+def find_elisctl() -> str:
     """Resolve the CLI, falling back to the install target when the bare name does not resolve.
 
     Before 0.22.0 a custom command ran with launchd's bare `/usr/bin:/bin:/usr/sbin:/sbin`, which
     does not contain the `/usr/local/bin` that Help > Install Command Line Tool writes to, so a bare
-    `hangarctl` exited 127 before anything happened. From 0.22.0 the app widens PATH and the lookup
+    `elisctl` exited 127 before anything happened. From 0.22.0 the app widens PATH and the lookup
     above succeeds. Returning the bare name last keeps the failure legible rather than silent.
     """
-    for candidate in (os.environ.get("HANGARCTL") or "", shutil.which("hangarctl") or "",
-                      "/usr/local/bin/hangarctl"):
+    for candidate in (os.environ.get("ELISCTL") or "", shutil.which("elisctl") or "",
+                      "/usr/local/bin/elisctl"):
         if candidate and os.access(candidate, os.X_OK):
             return candidate
-    return "hangarctl"
+    return "elisctl"
 
 
-HANGARCTL = find_hangarctl()
+ELISCTL = find_elisctl()
 
 
 def cli_error(res: subprocess.CompletedProcess[str]) -> str:
-    """Pull hangarctl's own sentence out of a failed call, falling back to the exit status."""
+    """Pull elisctl's own sentence out of a failed call, falling back to the exit status."""
     for stream in (res.stderr, res.stdout):
         line = (stream or "").strip().splitlines()
         if line:
             return line[-1]
-    return f"hangarctl exited {res.returncode}"
+    return f"elisctl exited {res.returncode}"
 
 
 def copy_clipboard(text: str) -> None:
@@ -121,7 +121,7 @@ def copy_clipboard(text: str) -> None:
 
 
 class Agt:
-    """The hangar control channel: hangarctl plus this session's addressing."""
+    """The elis control channel: elisctl plus this session's addressing."""
 
     def __init__(self) -> None:
         self.socket = os.environ.get("AGT_SOCKET") or ""
@@ -129,18 +129,18 @@ class Agt:
         self.pane = os.environ.get("AGT_PANE") or ""
 
     def run(self, *args: str) -> subprocess.CompletedProcess[str]:
-        """Invoke hangarctl against the instance the chord came from, never raising on a nonzero exit.
+        """Invoke elisctl against the instance the chord came from, never raising on a nonzero exit.
 
         An unresolvable binary is turned into a 127 rather than a FileNotFoundError: the traceback
         would go to a stdout the runner pins to /dev/null, and the chord would appear to do nothing.
         """
-        cmd = [HANGARCTL, *args]
+        cmd = [ELISCTL, *args]
         if self.socket:
             cmd += ["--socket", self.socket]
         try:
             return subprocess.run(cmd, capture_output=True, text=True, check=False)
         except OSError as err:
-            return subprocess.CompletedProcess(cmd, 127, "", f"{HANGARCTL}: {err}")
+            return subprocess.CompletedProcess(cmd, 127, "", f"{ELISCTL}: {err}")
 
     def notify(self, message: str) -> None:
         """Post a desktop banner, the one channel a keybinding has when it cannot paste."""
@@ -163,10 +163,10 @@ class Agt:
         return res.stdout, ""
 
     def review(self, revdiff: str, src: Path, out: Path) -> tuple[int, str]:
-        """Open revdiff over this session and block, returning (exit status, hangarctl error).
+        """Open revdiff over this session and block, returning (exit status, elisctl error).
 
         10 means annotations were written, 0 that the review was quit without any. A nonzero status
-        is ambiguous on its own: hangarctl can refuse before revdiff ever runs, "overlay already
+        is ambiguous on its own: elisctl can refuse before revdiff ever runs, "overlay already
         open" being the one a second press produces, so its own message is carried out with it.
         """
         # the overlay runs this string through a shell, so a REVDIFF path with a space in it would
@@ -267,7 +267,7 @@ def main(argv: list[str]) -> int:
     """Capture, review, and paste the notes back into the session."""
     agt = Agt()
     if not agt.sid:
-        fail("no $AGT_SESSION_ID: run this as an hangar custom command")
+        fail("no $AGT_SESSION_ID: run this as an elis custom command")
     revdiff = find_revdiff()
     if not revdiff:
         fail("revdiff not found: set REVDIFF to its full path", agt)
@@ -280,7 +280,7 @@ def main(argv: list[str]) -> int:
     if not text.strip():
         fail("nothing to annotate: no selection and the pane read empty", agt)
 
-    room = Path(tempfile.mkdtemp(prefix="hangar-annotate-"))
+    room = Path(tempfile.mkdtemp(prefix="elis-annotate-"))
     src, out = room / "session.txt", room / "notes.md"
     src.write_text(text)
     try:

@@ -5,6 +5,6 @@ cd "$(dirname "$0")/.."
 
 ./scripts/setup.sh
 xcodegen generate
-xcodebuild -project Hangar.xcodeproj -scheme Hangar -configuration Debug \
+xcodebuild -project Elis.xcodeproj -scheme Elis -configuration Debug \
   -derivedDataPath build/DerivedData build
-open build/DerivedData/Build/Products/Debug/Hangar.app
+open build/DerivedData/Build/Products/Debug/Elis.app

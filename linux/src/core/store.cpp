@@ -732,25 +732,25 @@ void Store::setSettings(const Settings &s)
 }
 
 // every field by its master name; empty strings and defaults stay out of the file
-#define HANGAR_SETTINGS_STRINGS(X)                                                                                                  \
+#define ELIS_SETTINGS_STRINGS(X)                                                                                                  \
     X(newSessionDirectory) X(newSessionCustomDirectory) X(newSessionPlacement) X(statusReset) X(lastLauncher) X(fontFamily) X(theme) \
     X(cursorStyle) X(cursorBlink) X(notificationSoundName) X(dockBounce) X(activeStatusColorHex) X(blockedStatusColorHex)            \
     X(completedStatusColorHex) X(activeStatusShape) X(blockedStatusShape) X(completedStatusShape) X(blockedStatusSoundName)            \
     X(configDirectory) X(restoreMode) X(autoFollowAttention) X(flaggedViewLayout)
-#define HANGAR_SETTINGS_BOOLS(X)                                                                                                  \
+#define ELIS_SETTINGS_BOOLS(X)                                                                                                  \
     X(confirmCloseSession) X(closeUndo) X(workspaceRowClickExpands) X(notificationsEnabled) X(notificationBadgeEnabled) X(attentionIncludesActive) X(autoFollowStayOnActive) \
         X(windowBlur)
-#define HANGAR_SETTINGS_DOUBLES(X) X(fontSize) X(sidebarFontSize) X(interfaceFontSize) X(windowTransparency)
-#define HANGAR_SETTINGS_LISTS(X) X(hiddenInterfaceElements) X(shownInterfaceElements)
+#define ELIS_SETTINGS_DOUBLES(X) X(fontSize) X(sidebarFontSize) X(interfaceFontSize) X(windowTransparency)
+#define ELIS_SETTINGS_LISTS(X) X(hiddenInterfaceElements) X(shownInterfaceElements)
 
 QJsonObject Settings::toJson() const
 {
     QJsonObject o;
 #define X(f) o.insert(QStringLiteral(#f), f);
-    HANGAR_SETTINGS_STRINGS(X) HANGAR_SETTINGS_BOOLS(X) HANGAR_SETTINGS_DOUBLES(X)
+    ELIS_SETTINGS_STRINGS(X) ELIS_SETTINGS_BOOLS(X) ELIS_SETTINGS_DOUBLES(X)
 #undef X
 #define X(f) o.insert(QStringLiteral(#f), QJsonArray::fromStringList(f));
-    HANGAR_SETTINGS_LISTS(X)
+    ELIS_SETTINGS_LISTS(X)
 #undef X
     return o;
 }
@@ -759,18 +759,18 @@ Settings Settings::fromJson(const QJsonObject &o)
 {
     Settings s;
 #define X(f) s.f = o.value(QStringLiteral(#f)).toString(s.f);
-    HANGAR_SETTINGS_STRINGS(X)
+    ELIS_SETTINGS_STRINGS(X)
 #undef X
 #define X(f) s.f = o.value(QStringLiteral(#f)).toBool(s.f);
-    HANGAR_SETTINGS_BOOLS(X)
+    ELIS_SETTINGS_BOOLS(X)
 #undef X
 #define X(f) s.f = o.value(QStringLiteral(#f)).toDouble(s.f);
-    HANGAR_SETTINGS_DOUBLES(X)
+    ELIS_SETTINGS_DOUBLES(X)
 #undef X
 #define X(f)                                                                                                                       \
     for (const auto &v : o.value(QStringLiteral(#f)).toArray())                                                                    \
         s.f << v.toString();
-    HANGAR_SETTINGS_LISTS(X)
+    ELIS_SETTINGS_LISTS(X)
 #undef X
     return s;
 }

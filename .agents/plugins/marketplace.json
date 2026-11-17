@@ -1,14 +1,14 @@
 {
-  "name": "hangar",
+  "name": "elis",
   "interface": {
-    "displayName": "Hangar"
+    "displayName": "Elis"
   },
   "plugins": [
     {
-      "name": "hangar",
+      "name": "elis",
       "source": {
         "source": "local",
-        "path": "./plugins/hangar"
+        "path": "./plugins/elis"
       },
       "policy": {
         "installation": "AVAILABLE"

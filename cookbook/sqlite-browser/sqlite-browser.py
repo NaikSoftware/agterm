@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pick a SQLite database from THIS session's repo and open it in a TUI viewer, in an overlay.
 
-Runs as an hangar keymap custom command, so the runner exports $AGT_*, widens PATH with the CLI and
+Runs as an elis keymap custom command, so the runner exports $AGT_*, widens PATH with the CLI and
 Homebrew directories, and pins stdout to /dev/null.
 
 Candidates are files under the repo root carrying a database extension AND starting with the SQLite
@@ -34,7 +34,7 @@ EXTS = {".db", ".db3", ".sqlite", ".sqlite3", ".sqlitedb"}
 # rather than a list: .mypy_cache alone put 32 of its own sqlite files ahead of every real one in a
 # repo tried during development, and .pytest_cache, .tox and .venv are the same shape.
 PRUNE = {"node_modules", "vendor", "venv", "__pycache__", "site-packages", "target", "Pods"}
-# hangar's picker refuses a longer list outright (ControlPickItem.maxItems) rather than truncating it,
+# elis's picker refuses a longer list outright (ControlPickItem.maxItems) rather than truncating it,
 # so a tree with more databases than this would open no picker at all. Rows are newest-first, so the
 # cut falls on the least interesting end.
 MAX_ROWS = 1000
@@ -153,7 +153,7 @@ def viewer_command(path: Path, viewer: str) -> str:
 
 
 class Agt:
-    """Agt is the hangar control channel: hangarctl plus this session's addressing."""
+    """Agt is the elis control channel: elisctl plus this session's addressing."""
 
     def __init__(self) -> None:
         self.bin = self.resolve_bin()
@@ -163,18 +163,18 @@ class Agt:
 
     @staticmethod
     def resolve_bin() -> str:
-        """resolve_bin returns the hangarctl to drive, "" when there is none to run.
+        """resolve_bin returns the elisctl to drive, "" when there is none to run.
 
         A plain PATH lookup is enough from 0.22.0 on: the custom-command runner widens the child's PATH
         with the CLI install directory and Homebrew's prefix before spawning it.
         """
-        override = os.environ.get("HANGARCTL", "")
+        override = os.environ.get("ELISCTL", "")
         if override:
             return override if os.access(override, os.X_OK) else ""
-        return shutil.which("hangarctl") or ""
+        return shutil.which("elisctl") or ""
 
     def run(self, *args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
-        """run invokes hangarctl with the socket appended, never raising on a nonzero exit."""
+        """run invokes elisctl with the socket appended, never raising on a nonzero exit."""
         cmd = [self.bin, *args]
         if self.socket:
             cmd += ["--socket", self.socket]
@@ -267,7 +267,7 @@ def scan_root() -> Path | None:
 
     The three states of AGT_SESSION_PWD are three different situations and only the variable tells them
     apart. UNSET is a plain shell run, so the shell's own cwd is the subject. SET AND EMPTY is the chord
-    firing in a window holding no session: hangar exports every token whether or not it resolved, and
+    firing in a window holding no session: elis exports every token whether or not it resolved, and
     leaves the child in the APP's working directory, which is / for a Dock-launched bundle. Reading that
     as "no value, use the cwd" is what turns one keypress into a walk of the whole filesystem, a TCC
     prompt per protected folder, and a picker listing personal databases.
@@ -322,12 +322,12 @@ def main(argv: list[str]) -> int:
 
     agt = Agt()
     if not agt.bin:
-        fail(f"HANGARCTL is not executable: {os.environ['HANGARCTL']}" if os.environ.get("HANGARCTL")
-             else "no hangarctl found; install the command line tool or set HANGARCTL")
+        fail(f"ELISCTL is not executable: {os.environ['ELISCTL']}" if os.environ.get("ELISCTL")
+             else "no elisctl found; install the command line tool or set ELISCTL")
 
     if root is None:
         # not announce: with no session there is no target, so the hud and the notification both
-        # resolve `active` to nothing. A nonzero exit is the one channel left — hangar banners it.
+        # resolve `active` to nothing. A nonzero exit is the one channel left — elis banners it.
         fail("no session here: the chord needs a session to take its directory from", agt)
     if reason := too_broad(root):
         announce(agt, f"refusing to scan {reason}", f"this session's directory is {root}")
@@ -449,12 +449,12 @@ class Tests(unittest.TestCase):
         import tempfile
         from unittest import mock
         with tempfile.TemporaryDirectory() as tmp:
-            binary = Path(tmp) / "hangarctl"
+            binary = Path(tmp) / "elisctl"
             binary.write_text("#!/bin/sh\n")
             binary.chmod(0o755)
-            with mock.patch.dict(os.environ, {"HANGARCTL": str(binary)}):
+            with mock.patch.dict(os.environ, {"ELISCTL": str(binary)}):
                 self.assertEqual(Agt.resolve_bin(), str(binary))
-            with mock.patch.dict(os.environ, {"HANGARCTL": str(Path(tmp) / "gone")}):
+            with mock.patch.dict(os.environ, {"ELISCTL": str(Path(tmp) / "gone")}):
                 self.assertEqual(Agt.resolve_bin(), "")
 
     def test_scan_root_tells_the_three_pwd_states_apart(self) -> None:
@@ -483,7 +483,7 @@ class Tests(unittest.TestCase):
         for dropped, want in ((0, "sqlite"), (5, "sqlite (newest 2 of 7)")):
             with self.subTest(dropped=dropped):
                 agt = Agt.__new__(Agt)
-                agt.bin, agt.socket, agt.sid, agt.window = "/x/hangarctl", "", "sid-1", "active"
+                agt.bin, agt.socket, agt.sid, agt.window = "/x/elisctl", "", "sid-1", "active"
                 calls: list[tuple[str, ...]] = []
                 with mock.patch.object(Agt, "run", lambda self, *a, _c=calls, **kw: _c.append(a) or
                                        subprocess.CompletedProcess(a, 2, "", "")):
@@ -494,7 +494,7 @@ class Tests(unittest.TestCase):
         import tempfile
         from unittest import mock
         agt = Agt.__new__(Agt)
-        agt.bin, agt.socket, agt.sid, agt.window = "/x/hangarctl", "", "sid-1", "active"
+        agt.bin, agt.socket, agt.sid, agt.window = "/x/elisctl", "", "sid-1", "active"
         said = []
 
         def fake_run(self: Agt, *args: str, **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -514,7 +514,7 @@ class Tests(unittest.TestCase):
     def test_overlay_targets_this_session(self) -> None:
         from unittest import mock
         agt = Agt.__new__(Agt)
-        agt.bin, agt.socket, agt.sid, agt.window = "/x/hangarctl", "", "sid-1", "active"
+        agt.bin, agt.socket, agt.sid, agt.window = "/x/elisctl", "", "sid-1", "active"
         calls = []
         with mock.patch.object(Agt, "run", lambda self, *a, **kw: calls.append(a) or
                                subprocess.CompletedProcess(a, 0, "", "")):

@@ -23,7 +23,7 @@ HOOK = Path(
     os.environ.get("CODEX_RESUME_HOOK", HERE / "codex-resume-hook.zsh")
 ).resolve()
 TRANSCRIPT = "/tmp/rollout-2026-08-30T00-00-00-01900000-0000-7000-8000-000000000001.jsonl"
-OWN = ["--no-daemon", "-c", 'shell_environment_policy.set.CODEX_HANGAR_TAB=""']
+OWN = ["--no-daemon", "-c", 'shell_environment_policy.set.CODEX_ELIS_TAB=""']
 
 
 class CodexResumeTest(unittest.TestCase):
@@ -32,7 +32,7 @@ class CodexResumeTest(unittest.TestCase):
         self.addCleanup(self.temp_dir.cleanup)
         self.home = Path(self.temp_dir.name)
         self.sessions = self.home / ".codex" / "sessions" / "2026" / "08" / "30"
-        self.map_file = self.home / ".codex" / "hangar" / TAB_ID
+        self.map_file = self.home / ".codex" / "elis" / TAB_ID
         self.log = self.home / "codex-args.jsonl"
         self.bin_dir = self.home / "bin"
         self.bin_dir.mkdir()
@@ -49,7 +49,7 @@ class CodexResumeTest(unittest.TestCase):
                 with Path(os.environ["FAKE_CODEX_LOG"]).open("a") as log:
                     print(json.dumps({{
                         "argv": sys.argv[1:],
-                        "tab": os.environ.get("CODEX_HANGAR_TAB"),
+                        "tab": os.environ.get("CODEX_ELIS_TAB"),
                     }}), file=log)
 
                 # another codex on the machine, such as a `codex exec` an agent in the same tab
@@ -92,10 +92,10 @@ class CodexResumeTest(unittest.TestCase):
 
     def run_codex_logged(self, *args, foreign_rollout=False):
         env = os.environ.copy()
-        env.pop("CODEX_HANGAR_TAB", None)
+        env.pop("CODEX_ELIS_TAB", None)
         env.update(
             {
-                "HANGAR_SESSION_ID": TAB_ID,
+                "ELIS_SESSION_ID": TAB_ID,
                 "FAKE_CODEX_LOG": str(self.log),
                 "HOME": str(self.home),
                 "PATH": f"{self.bin_dir}{os.pathsep}{env['PATH']}",
@@ -128,10 +128,10 @@ class CodexResumeTest(unittest.TestCase):
 
     def run_hook(self, event, tab=TAB_ID):
         env = os.environ.copy()
-        env.pop("CODEX_HANGAR_TAB", None)
+        env.pop("CODEX_ELIS_TAB", None)
         env["HOME"] = str(self.home)
         if tab is not None:
-            env["CODEX_HANGAR_TAB"] = tab
+            env["CODEX_ELIS_TAB"] = tab
         return subprocess.run(
             ["zsh", "-f", str(HOOK)],
             input=event,
@@ -364,7 +364,7 @@ class CodexResumeTest(unittest.TestCase):
         result = self.run_hook(event, tab="../../escape")
 
         self.assertEqual(1, result.returncode)
-        self.assertFalse((self.home / ".codex" / "hangar").exists())
+        self.assertFalse((self.home / ".codex" / "elis").exists())
 
     def test_hook_refuses_an_event_without_a_session_id(self):
         event = json.dumps(

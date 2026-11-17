@@ -19,17 +19,17 @@ Two gaps have to close:
 - **Nothing replays.** In the `.wrapped` factory branches `initialInput` is nil for a restored primary and
   nil unconditionally for a split — right while the daemon survives, wrong once it is gone.
 
-Deliberate product change: `README.md` currently promises *"A reboot, `hangarctl zmx kill`, or another
+Deliberate product change: `README.md` currently promises *"A reboot, `elisctl zmx kill`, or another
 missing daemon restores that pane as a fresh shell."*
 
 ## Context (from discovery)
 
 - **Two capture sites**: `AppDelegate.captureForegroundCommands` (quit) and `WindowAccessor`'s last-window
   close before surface teardown. Changing only the first still loses captures when the last window closes.
-- **Injection chain**: the resolver is built in `hangarApp.swift:246`, not on `GhosttyApp`. Reaching
+- **Injection chain**: the resolver is built in `elisApp.swift:246`, not on `GhosttyApp`. Reaching
   `WindowAccessor` crosses `ContentView.swift:58` → `WindowContentView.swift:223`. All three are in scope.
 - **Resolver**: `ZmxForegroundResolver` — a failed `refreshIfNeeded` **retains the old map**, so it cannot
-  serve capture as-is. Its `LeaderProvider` takes no timeout and the closure built in `hangarApp` carries the
+  serve capture as-is. Its `LeaderProvider` takes no timeout and the closure built in `elisApp` carries the
   fixed 3 s client.
 - **Eligibility**: `CommandRestore.shouldRestore(argv:denylist:)` refuses an empty argv0, any control
   character or U+FFFD, and any denylisted basename.
@@ -37,7 +37,7 @@ missing daemon restores that pane as a fresh shell."*
 Verified in pinned zmx `fb1b6b6`:
 
 - `ensureSession` decides by **connecting**: a daemon that answers logs `session already exists, ignoring
-  command`, and only the create path reaches `createCmdZ`. One zmx-controlled create-or-attach, no Hangar
+  command`, and only the create path reaches `createCmdZ`. One zmx-controlled create-or-attach, no Elis
   preflight race — but **not** strictly atomic: the liveness probe closes before the attach connection, so a
   daemon dying in that window makes attach fail rather than create.
 - `createCmdZ` with a command allocates argv **verbatim**, `argv[0]` as the executable. No shell composition
@@ -46,11 +46,11 @@ Verified in pinned zmx `fb1b6b6`:
 ## Development Approach
 
 - **testing approach**: TDD — this closes observable regressions, so each task starts from a failing test.
-- host-free logic (`HangarCore` tests): script, eligibility, argv composition. App behaviour: `HangarTests`.
+- host-free logic (`ElisCore` tests): script, eligibility, argv composition. App behaviour: `ElisTests`.
 - gates run ONCE, after documentation and the plan move, so the tree that passes is the tree that ships.
 - no XCUITest run — nothing here changes UI.
 
-**Isolation for every runtime and benchmark step.** A private short `HANGAR_STATE_DIR` under `/tmp` so the
+**Isolation for every runtime and benchmark step.** A private short `ELIS_STATE_DIR` under `/tmp` so the
 derived `ZMX_DIR` is a private namespace; launch-and-signal-own-pid only, after confirming that pid's
 environment names the state dir; explicit teardown of the accept-but-never-answer fixture and of every
 daemon created in the private namespace.
@@ -68,7 +68,7 @@ means bare attach and a fresh shell, as today. Without this, live replay would r
 and turn currently-refused bytes into shell text.
 
 **Replay (create-only).** An eligible restored live pane attaches as `zmx attach <daemon> <shell> -lic
-<script>`. Hangar does not check whether the daemon exists — zmx decides. A survivor ignores the payload; a
+<script>`. Elis does not check whether the daemon exists — zmx decides. A survivor ignores the payload; a
 missing daemon is created running the script.
 
 **The script.** `createCmdZ` runs `argv[0]` directly, so the payload's first element is the validated
@@ -113,8 +113,8 @@ currently preserves.
 
 ## Verification Record
 
-The isolated run used `HANGAR_STATE_DIR=/tmp/agtr3` and private zmx namespace
-`/private/tmp/hangar-zmx-a53bf053842b803b`. A clean Cocoa quit used
+The isolated run used `ELIS_STATE_DIR=/tmp/agtr3` and private zmx namespace
+`/private/tmp/elis-zmx-a53bf053842b803b`. A clean Cocoa quit used
 `NSRunningApplication.terminate()`; POSIX SIGTERM does not run the quit callbacks and was excluded.
 
 | Case | Result |
@@ -135,10 +135,10 @@ no app process, zmx session, private namespace, or state directory.
 ### Task 1: Replay payload (host-free)
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/ZmxReplayScript.swift`
-- Modify: `HangarCore/Sources/HangarCore/ZmxSupport.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/ZmxReplayScriptTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ZmxSupportTests.swift`
+- Create: `ElisCore/Sources/ElisCore/ZmxReplayScript.swift`
+- Modify: `ElisCore/Sources/ElisCore/ZmxSupport.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/ZmxReplayScriptTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ZmxSupportTests.swift`
 
 - [x] failing tests first: custom original `ZDOTDIR`, nil original, argv needing quoting, denied basename,
       control character, U+FFFD, empty argv0
@@ -154,16 +154,16 @@ no app process, zmx session, private namespace, or state directory.
 ### Task 2: Capture at both exits
 
 **Files:**
-- Modify: `Hangar/Ghostty/ZmxForegroundResolver.swift`
-- Modify: `Hangar/Ghostty/ZmxClient.swift`
-- Modify: `Hangar/AppDelegate.swift`
-- Modify: `Hangar/Views/WindowAccessor.swift`
-- Modify: `Hangar/Views/WindowContentView.swift` (constructs `WindowAccessor` at line 223)
-- Modify: `Hangar/ContentView.swift` (constructs `WindowContentView` at line 58 — injection cannot cross the
+- Modify: `Elis/Ghostty/ZmxForegroundResolver.swift`
+- Modify: `Elis/Ghostty/ZmxClient.swift`
+- Modify: `Elis/AppDelegate.swift`
+- Modify: `Elis/Views/WindowAccessor.swift`
+- Modify: `Elis/Views/WindowContentView.swift` (constructs `WindowAccessor` at line 223)
+- Modify: `Elis/ContentView.swift` (constructs `WindowContentView` at line 58 — injection cannot cross the
   chain without it)
-- Modify: `Hangar/hangarApp.swift` (owns the resolver; injects the capture route)
-- Create: `HangarTests/AppDelegateCaptureTests.swift`
-- Modify: `HangarTests/ZmxClientTests.swift`
+- Modify: `Elis/elisApp.swift` (owns the resolver; injects the capture route)
+- Create: `ElisTests/AppDelegateCaptureTests.swift`
+- Modify: `ElisTests/ZmxClientTests.swift`
 
 - [x] benchmark first: time a full refresh plus per-pane reads against ~55 healthy daemons, cold and warm,
       repeated; build the accept-but-never-answer fixture and confirm the chosen cap cuts zmx's one-second
@@ -195,8 +195,8 @@ no app process, zmx session, private namespace, or state directory.
 ### Task 3: Wire the payload into the factories, and verify at runtime
 
 **Files:**
-- Modify: `Hangar/hangarApp.swift` (both `.wrapped` branches)
-- Create: `HangarTests/SurfaceFactorySeedTests.swift`
+- Modify: `Elis/elisApp.swift` (both `.wrapped` branches)
+- Create: `ElisTests/SurfaceFactorySeedTests.swift`
 - Create: `docs/plans/notes/20260830-runtime-verification.md` (scratch; folded in before completion)
 
 - [x] failing tests first: consume-once on primary and split, and `.fallback` does not consume. These are
@@ -215,7 +215,7 @@ no app process, zmx session, private namespace, or state directory.
 ### Task 4: Documentation, then gates
 
 **Files:**
-- Modify: `README.md`, `site/docs.html`, `plugins/hangar/skills/hangar/SKILL.md`
+- Modify: `README.md`, `site/docs.html`, `plugins/elis/skills/elis/SKILL.md`
 - Modify: `.claude/rules/control-api.md` if the restore contract text lives there
 - Modify: this plan
 
@@ -227,7 +227,7 @@ no app process, zmx session, private namespace, or state directory.
 - [x] update `CLAUDE.md` if the capture/replay split is a pattern worth recording
 - [x] move this plan to `docs/plans/completed/` — BEFORE the gates
 - [x] verify every Overview requirement is implemented and all three exclusions behave as documented
-- [x] run `make build`, `cd HangarCore && swift test`, `make test-app`, `make lint` — last, on the final tree
+- [x] run `make build`, `cd ElisCore && swift test`, `make test-app`, `make lint` — last, on the final tree
 
 ## Post-Completion
 

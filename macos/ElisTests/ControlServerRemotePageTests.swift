@@ -1,0 +1,533 @@
+import WebKit
+import XCTest
+@testable import Elis
+import ElisCore
+
+@MainActor
+final class ControlServerRemotePageTests: XCTestCase {
+    @MainActor
+    private final class Transport: RemotePresentationTransport {
+        final class Link: RemotePresentationLink {
+            var sent: [PresentationFrame.Body] = []
+            func send(_ line: Data) {
+                if let frame = try? PresentationCodec.decode(line.dropLast()) { sent.append(frame.body) }
+            }
+            func stop() {}
+        }
+
+        var links: [Link] = []
+        var deliver: [(Data) -> Void] = []
+        private var rev = 0
+
+        func open(_: [String], onLine: @escaping @MainActor (Data) -> Void,
+                  onClose _: @escaping @MainActor (String) -> Void) -> RemotePresentationLink {
+            deliver.append(onLine)
+            let link = Link()
+            links.append(link)
+            return link
+        }
+
+        func feed(_ body: PresentationFrame.Body) throws {
+            rev += 1
+            let line = try PresentationCodec.encode(PresentationFrame(gen: 3, rev: rev, body: body)).dropLast()
+            deliver.last?(Data(line))
+        }
+
+        var sent: [PresentationFrame.Body] { links.last?.sent ?? [] }
+    }
+
+    private final class Browser: HtmlBrowser {
+        var opened: [URL] = []
+        func confirm(_: URL, over _: NSView, _ done: @escaping (Bool) -> Void) -> (() -> Void)? {
+            done(false)
+            return nil
+        }
+        func open(_ url: URL) -> Bool {
+            opened.append(url)
+            return true
+        }
+    }
+
+    private struct Fixture {
+        let server: ControlServer
+        let store: AppStore
+        let session: Session
+        let transport: Transport
+        let launcher: FakePageLauncher
+        let forwards: FakeForwardLauncher
+    }
+
+    private static let origin = UUID(uuidString: "BBBBBBBB-0000-0000-0000-000000000002")!
+    private var stateDir: URL!
+    private var servers: [ControlServer] = []
+    private var launchers: [FakePageLauncher] = []
+    private var forwardLaunchers: [FakeForwardLauncher] = []
+    private var windows: [NSWindow] = []
+    private var savedBrowser: (any HtmlBrowser)?
+
+    override func setUp() async throws {
+        try await super.setUp()
+        stateDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("elis-remote-page-\(UUID().uuidString)", isDirectory: true)
+        savedBrowser = HtmlOverlayRegistry.shared.browser
+    }
+
+    override func tearDown() async throws {
+        for window in windows { window.orderOut(nil) }
+        windows.removeAll()
+        for server in servers {
+            for store in server.library.openIDs().compactMap({ server.library.store(for: $0) }) {
+                for session in store.workspaces.flatMap(\.sessions) { store.closeSession(session.id) }
+            }
+            server.stop()
+        }
+        servers.removeAll()
+        for launcher in launchers { launcher.closeAll() }
+        launchers.removeAll()
+        for forwards in forwardLaunchers { forwards.processes.forEach { $0.terminate() } }
+        forwardLaunchers.removeAll()
+        if let savedBrowser { HtmlOverlayRegistry.shared.browser = savedBrowser }
+        try? FileManager.default.removeItem(at: stateDir)
+        try await super.tearDown()
+    }
+
+    private func fixture(files: [String: (String, Data)] = [:], reply: String? = #"{"ok":true,"result":{}}"#) throws -> Fixture {
+        let library = WindowLibrary(directory: stateDir)
+        let server = ControlServer(
+            library: library,
+            actions: AppActions(library: library),
+            settingsModel: SettingsModel(library: library, settingsStore: SettingsStore(directory: stateDir)),
+            identity: AppIdentity(version: "9.9.9"),
+            socketPath: "/tmp/elis-rpg-\(UUID().uuidString.prefix(8)).sock"
+        )
+        servers.append(server)
+        server.attachPresentationHub()
+        let launcher = FakePageLauncher(files: files)
+        launcher.reply = reply
+        launchers.append(launcher)
+        server.pageLauncher = launcher
+        let forwards = FakeForwardLauncher()
+        forwardLaunchers.append(forwards)
+        server.forwardLauncher = forwards
+        let transport = Transport()
+        server.remoteTransport = transport
+        let store = try XCTUnwrap(library.activeStore)
+        let workspace = try XCTUnwrap(store.currentWorkspaceID)
+        let session = try XCTUnwrap(store.addSession(toWorkspace: workspace, cwd: NSHomeDirectory(), remoteHost: "buildbox"))
+        store.bindRemote(RemoteBinding(remoteSessionID: "s1", daemonsByLocalPane: [:], presentationVersion: 1),
+                         forSession: session.id)
+        server.startRemotePresentation(for: session)
+        try transport.feed(.hello(PresentationHello(version: 1, kinds: PresentationHub.supportedKinds, mode: .presenter)))
+        try transport.feed(.snapshot(PresentationSnapshot(status: nil, hud: nil)))
+        return Fixture(server: server, store: store, session: session, transport: transport, launcher: launcher, forwards: forwards)
+    }
+
+    private func page(_ source: PresentationPageSource, javascript: Bool = true) -> PresentationPage {
+        PresentationPage(page: Self.origin.uuidString, token: "tok-1", source: source, identity: "index.html",
+                         chromeless: false, javascript: javascript, navigation: true, browse: false, persistent: false,
+                         backgroundColor: nil, pane: nil, sizePercent: nil, follow: false)
+    }
+
+    private func html(_ text: String) -> (String, Data) { ("text/html", Data(text.utf8)) }
+
+    private func present(_ fix: Fixture, _ page: PresentationPage) throws -> HtmlOverlayPage {
+        try fix.transport.feed(.pageRequest(page))
+        let local = try XCTUnwrap(fix.session.htmlOverlay?.id)
+        return try XCTUnwrap(HtmlOverlayRegistry.shared.existing(local))
+    }
+
+    private func closedNotices(_ fix: Fixture) -> Int {
+        fix.transport.sent.filter { $0 == .pageClosed(PresentationPageChange(page: Self.origin.uuidString)) }.count
+    }
+
+    private func states(_ fix: Fixture) -> [PresentationPageState] {
+        fix.transport.sent.compactMap { if case .pageState(let state) = $0 { state } else { nil } }
+    }
+
+    func testAFileReplicaLoadsItsPageAndAnAssetThroughItsChannel() async throws {
+        let fix = try fixture(files: [
+            "/docs/index.html": html(#"<title>R</title><link rel="stylesheet" href="style.css"><p id="p">x</p>"#),
+            "/docs/style.css": ("text/css", Data("#p { color: rgb(1, 2, 3); }".utf8)),
+        ])
+
+        let shown = try present(fix, page(.file(path: "/docs/index.html", grantRoot: "/docs")))
+
+        try await waitForJS(shown.webView, "getComputedStyle(document.getElementById('p')).color", equals: "rgb(1, 2, 3)")
+        try await waitFor("the logical path is read back") { fix.session.htmlOverlay?.current?.page == "/docs/index.html" }
+        XCTAssertEqual(fix.launcher.launches.count, 1)
+        XCTAssertEqual(fix.launcher.launches.first?.prefix(2), ["ssh", "-T"])
+        XCTAssertTrue(try XCTUnwrap(fix.launcher.launches.first?.last).contains("page-serve"))
+        XCTAssertTrue(try XCTUnwrap(fix.launcher.launches.first?.last).contains("tok-1"))
+        XCTAssertFalse(fix.transport.sent.contains { if case .pageRejected = $0 { true } else { false } })
+        let node = try XCTUnwrap(fix.store.controlTree().workspaces.flatMap(\.sessions).first { $0.id == fix.session.id.uuidString }?
+            .htmlOverlays?.first)
+        XCTAssertEqual(node.replica, true)
+        XCTAssertEqual(node.file, "/docs/index.html")
+    }
+
+    func testAReplicaAwaitsItsFirstContentUntilItsChannelDeliversIt() async throws {
+        let fix = try fixture(files: ["/docs/index.html": html("<title>R</title><p>x</p>")])
+
+        _ = try present(fix, page(.file(path: "/docs/index.html", grantRoot: "/docs")))
+        XCTAssertEqual(fix.session.htmlOverlay?.awaitsFirstContent, true)
+
+        try await waitFor("the page loaded") { fix.session.htmlOverlay?.loadState == .loaded }
+        XCTAssertEqual(fix.session.htmlOverlay?.awaitsFirstContent, false)
+    }
+
+    func testThePageScriptsBridgeRelaysToTheOriginAndKeepsUnknownFields() async throws {
+        let fix = try fixture(files: [
+            "/docs/index.html": html("<title>R</title><script>elis.request('tree').then(r => document.title = r.extra.nested)</script>"),
+        ], reply: #"{"ok":true,"result":{"extra":{"nested":"kept"}}}"#)
+
+        let shown = try present(fix, page(.file(path: "/docs/index.html", grantRoot: nil)))
+
+        try await waitFor("the reply reached the page") { shown.webView.title == "kept" }
+        let bridged = fix.launcher.origins[0].received.compactMap { if case .bridge(_, let request) = $0 { request } else { nil } }
+        XCTAssertEqual(bridged.count, 1)
+        XCTAssertTrue(bridged[0].contains(#""cmd":"tree""#))
+    }
+
+    func testATaggedControlRelaysWithPageScriptOff() async throws {
+        let fix = try fixture(files: [
+            "/docs/index.html": html("""
+                <title>T</title>
+                <button type="button" id="b" data-elis="session.select" data-elis-target="3F2A" data-elis-into="#out">go</button>
+                <p id="out"></p>
+                """),
+        ], reply: #"{"ok":true,"result":{"text":"done"}}"#)
+        let shown = try present(fix, page(.file(path: "/docs/index.html", grantRoot: nil), javascript: false))
+        let window = try host(shown.webView)
+        try await waitFor("loaded") { fix.session.htmlOverlay?.loadState == .loaded }
+
+        try await click("b", in: shown.webView, window: window)
+
+        try await waitForJS(shown.webView, "document.getElementById('out').textContent", equals: "done")
+        let bridged = fix.launcher.origins[0].received.compactMap { if case .bridge(_, let request) = $0 { request } else { nil } }
+        XCTAssertEqual(bridged.count, 1)
+        XCTAssertTrue(bridged[0].contains("session.select") && bridged[0].contains("3F2A"))
+    }
+
+    func testAUrlReplicaNeedsNoHelperAndItsLocalCloseTellsTheOriginOnce() throws {
+        let fix = try fixture()
+
+        _ = try present(fix, page(.url("http://127.0.0.1:9/a")))
+        XCTAssertEqual(fix.session.htmlOverlay?.source, .url(try XCTUnwrap(URL(string: "http://127.0.0.1:9/a"))))
+        XCTAssertTrue(fix.launcher.launches.isEmpty)
+
+        fix.store.closeOverlay(fix.session.id)
+        fix.store.closeOverlay(fix.session.id)
+
+        XCTAssertEqual(closedNotices(fix), 1)
+    }
+
+    func testEveryReportOnAReplicaEchoesTheOfferItWasShownUnder() async throws {
+        let fix = try fixture(files: ["/src/a.diff": ("text/plain", Data("@@ -1 +1 @@\n-a\n+b\n".utf8))])
+        var shown = page(.text(path: "/src/a.diff", line: nil))
+        shown.offer = 7
+        var refused = page(.url("http://127.0.0.1:9/b"))
+        refused.page = UUID().uuidString
+        refused.offer = 8
+        _ = try present(fix, shown)
+        try await waitFor("the diff reports its changes") { fix.session.htmlOverlay?.textChanges?.count == 1 }
+
+        try fix.transport.feed(.pageRequest(refused))
+        try fix.transport.feed(.pageCommand(PresentationPageCommand(page: shown.page, seq: 1, action: .wrap, toggle: .on)))
+        try await waitFor("the action is answered") { !self.results(fix).isEmpty }
+        fix.store.closeOverlay(fix.session.id)
+
+        let rejected = fix.transport.sent.compactMap { if case .pageRejected(let change) = $0 { change } else { nil } }
+        XCTAssertEqual(rejected.map(\.offer), [8])
+        XCTAssertEqual(results(fix).map(\.offer), [7])
+        XCTAssertFalse(states(fix).isEmpty)
+        XCTAssertTrue(states(fix).allSatisfy { $0.offer == 7 })
+        XCTAssertEqual(fix.transport.sent.last, .pageClosed(PresentationPageChange(page: shown.page, offer: 7)))
+    }
+
+    private func waitUntil(_ what: String, _ condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(10)
+        while !condition(), Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
+        XCTAssertTrue(condition(), what)
+    }
+
+    func testAForwardedPageLoadsItsOwnHostAtALocalPortAndReloadsOnceTheForwardAnswers() throws {
+        let fix = try fixture()
+
+        _ = try present(fix, page(.forwarded("https://localhost:8443/app?x=1")))
+
+        let port = try XCTUnwrap(fix.forwards.localPort)
+        let script = try XCTUnwrap(fix.forwards.launches.first?.last)
+        XCTAssertTrue(script.hasSuffix("'-L' 'localhost:\(port):localhost:8443' 'buildbox'"))
+        XCTAssertTrue(script.contains("'ControlPath=none'"))
+        XCTAssertEqual(fix.session.htmlOverlay?.source, .url(try XCTUnwrap(URL(string: "https://localhost:\(port)/app?x=1"))))
+        let before = try XCTUnwrap(fix.session.htmlOverlay?.reloadRevision)
+        waitUntil("the page reloads once the forward answers") { fix.session.htmlOverlay?.reloadRevision == before + 1 }
+    }
+
+    func testAForwardEndingAfterItAnsweredPinsTheFailure() throws {
+        let fix = try fixture()
+        _ = try present(fix, page(.forwarded("http://localhost:3000/")))
+        let before = try XCTUnwrap(fix.session.htmlOverlay?.reloadRevision)
+        waitUntil("the forward answers") { fix.session.htmlOverlay?.reloadRevision == before + 1 }
+
+        fix.forwards.processes[0].onExit?("channel 2: open failed: connect failed: Connection refused\n")
+        fix.store.setHtmlLoadState(try XCTUnwrap(fix.session.htmlOverlay?.id), state: .loaded, error: nil)
+
+        XCTAssertEqual(fix.session.htmlOverlay?.loadState, .failed)
+        XCTAssertEqual(fix.session.htmlOverlay?.loadError, "the port forward ended: channel 2: open failed: connect failed: Connection refused")
+    }
+
+    func testClosingAForwardedPageBeforeItsForwardAnswersStopsIt() throws {
+        let fix = try fixture()
+        fix.forwards.listens = false
+        _ = try present(fix, page(.forwarded("http://localhost:3000/")))
+
+        fix.store.closeOverlay(fix.session.id)
+        let port = try XCTUnwrap(fix.forwards.localPort)
+        let late = FakeForwardLauncher.listen(port)
+        defer { close(late) }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+
+        XCTAssertTrue(fix.forwards.processes[0].terminated)
+        XCTAssertEqual(closedNotices(fix), 1)
+        XCTAssertNil(fix.session.htmlOverlay)
+    }
+
+    func testAForwardedPageTheStoreRefusesStartsNoForward() throws {
+        let fix = try fixture()
+        XCTAssertTrue(fix.store.openOverlay(fix.session.id, command: "htop"))
+
+        try fix.transport.feed(.pageRequest(page(.forwarded("http://localhost:3000/"))))
+
+        XCTAssertTrue(fix.forwards.launches.isEmpty)
+        XCTAssertTrue(fix.server.replicaPages.isEmpty)
+    }
+
+    func testFinderAndBrowserAreRefusedOnAFileReplicaButBrowserOpensAUrlReplica() throws {
+        let browser = Browser()
+        HtmlOverlayRegistry.shared.browser = browser
+        let fix = try fixture(files: ["/docs/index.html": html("<p>x</p>")])
+        let file = try present(fix, page(.file(path: "/docs/index.html", grantRoot: nil)))
+
+        XCTAssertEqual(HtmlOverlayRegistry.shared.navigate(file.id, .finder), OverlayHtmlError.remoteFile)
+        XCTAssertEqual(HtmlOverlayRegistry.shared.navigate(file.id, .browser), OverlayHtmlError.remoteFile)
+        fix.store.closeOverlay(fix.session.id)
+
+        let web = try present(fix, page(.url("http://127.0.0.1:9/a")))
+        XCTAssertNil(HtmlOverlayRegistry.shared.navigate(web.id, .browser))
+        XCTAssertEqual(browser.opened, [try XCTUnwrap(URL(string: "http://127.0.0.1:9/a"))])
+    }
+
+    func testASocketSubmitOnAReplicaIsRefusedAndTheReplicaStays() throws {
+        let fix = try fixture()
+        _ = try present(fix, page(.url("http://127.0.0.1:9/a")))
+
+        let response = fix.server.submitSessionOverlay(fix.session.id.uuidString, window: nil, pane: nil, value: "x")
+
+        XCTAssertEqual(response.error, OverlayHtmlError.replicaSubmit)
+        XCTAssertTrue(fix.session.htmlOverlayActive)
+        XCTAssertEqual(closedNotices(fix), 0)
+    }
+
+    func testEachTeardownTriggerEndsThePageOnce() throws {
+        let fix = try fixture(files: ["/docs/index.html": html("<p>x</p>")])
+        let file = PresentationPageSource.file(path: "/docs/index.html", grantRoot: nil)
+
+        _ = try present(fix, page(file))
+        try fix.transport.feed(.pageClose(PresentationPageChange(page: Self.origin.uuidString)))
+        XCTAssertFalse(fix.session.overlayActive)
+        XCTAssertEqual(closedNotices(fix), 1)
+        XCTAssertTrue(fix.launcher.helpers[0].terminated)
+
+        _ = try present(fix, page(file))
+        fix.launcher.helpers[1].exit()
+        XCTAssertFalse(fix.session.overlayActive)
+        XCTAssertEqual(fix.transport.sent.last, .pageClosed(PresentationPageChange(page: Self.origin.uuidString,
+                                                                                   reason: PresentationPageChange.channelLost)))
+        XCTAssertEqual(closedNotices(fix), 1)
+
+        _ = try present(fix, page(file))
+        fix.store.closeOverlay(fix.session.id)
+        XCTAssertEqual(closedNotices(fix), 2)
+        XCTAssertTrue(fix.launcher.helpers[2].terminated)
+
+        _ = try present(fix, page(file))
+        fix.store.setRemoteConnection(.failed("gone"), forSession: fix.session.id)
+        XCTAssertFalse(fix.session.overlayActive)
+        XCTAssertTrue(fix.launcher.helpers[3].terminated)
+        XCTAssertTrue(fix.server.replicaPages.isEmpty)
+    }
+
+    // regression: the reply to an origin's withdrawal read as a dismissal, which ended a page the origin still held
+    func testAPageTheOriginWithdrewIsReportedAsALostChannel() throws {
+        let fix = try fixture(files: ["/docs/index.html": html("<p>x</p>")])
+        _ = try present(fix, page(.file(path: "/docs/index.html", grantRoot: nil)))
+
+        try fix.transport.feed(.pageClose(PresentationPageChange(page: Self.origin.uuidString, reason: PresentationPageChange.channelLost)))
+
+        XCTAssertFalse(fix.session.overlayActive)
+        XCTAssertEqual(fix.transport.sent.last, .pageClosed(PresentationPageChange(page: Self.origin.uuidString,
+                                                                                   reason: PresentationPageChange.channelLost)))
+    }
+
+    func testAnOriginCommandIsAppliedAndReportedWithItsSequence() async throws {
+        let fix = try fixture()
+        _ = try present(fix, page(.url("http://127.0.0.1:9/a")))
+
+        try fix.transport.feed(.pageCommand(PresentationPageCommand(page: Self.origin.uuidString, seq: 5, action: .hide)))
+
+        XCTAssertTrue(fix.session.overlayHidden(nil))
+        try await waitFor("the state is reported") { self.states(fix).last?.appliedSeq == 5 }
+        XCTAssertEqual(states(fix).last?.hidden, true)
+    }
+
+    func testATextActionOnAPageThatIsNotTextAnswersTheLocalRefusalAndAdvancesNoSequence() async throws {
+        let fix = try fixture(files: ["/docs/index.html": html("<p>x</p>")])
+        _ = try present(fix, page(.file(path: "/docs/index.html", grantRoot: nil)))
+        try fix.transport.feed(.pageCommand(PresentationPageCommand(page: Self.origin.uuidString, seq: 5, action: .hide)))
+        try await waitFor("the loaded page reports the hide") {
+            self.states(fix).last.map { $0.appliedSeq == 5 && $0.load == .loaded } == true
+        }
+        let before = states(fix).count
+
+        try fix.transport.feed(.pageCommand(PresentationPageCommand(page: Self.origin.uuidString, seq: 6, action: .search,
+                                                                    query: "x")))
+        try fix.transport.feed(.pageCommand(PresentationPageCommand(page: Self.origin.uuidString, seq: 7, action: .search)))
+
+        try await waitFor("both actions are answered") { self.results(fix).count == 2 }
+        XCTAssertEqual(results(fix), [
+            PresentationPageResult(page: Self.origin.uuidString, seq: 7, ok: false, error: "invalid text page action"),
+            PresentationPageResult(page: Self.origin.uuidString, seq: 6, ok: false, error: TextSearchFailure.notText.message),
+        ])
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(states(fix).count, before)
+    }
+
+    func testAnOriginTextActionRunsAsTheLocalCommandAndAnswersWithThePageState() async throws {
+        let fix = try fixture(files: ["/src/a.diff": ("text/plain", Data("@@ -1 +1 @@\n-a\n+b\n".utf8))])
+        _ = try present(fix, page(.text(path: "/src/a.diff", line: nil)))
+        try await waitFor("the diff reports its changes") { fix.session.htmlOverlay?.textChanges?.count == 1 }
+        let origin = Self.origin.uuidString
+
+        try fix.transport.feed(.pageCommand(PresentationPageCommand(page: origin, seq: 1, action: .wrap, toggle: .on)))
+        try fix.transport.feed(.pageCommand(PresentationPageCommand(page: origin, seq: 2, action: .changes, step: .next)))
+        try fix.transport.feed(.pageCommand(PresentationPageCommand(page: origin, seq: 3, action: .follow, toggle: .on)))
+
+        try await waitFor("every action is answered") { self.results(fix).count == 3 }
+        let answered = results(fix)
+        XCTAssertEqual(answered.map(\.seq), [1, 2, 3])
+        XCTAssertEqual(answered[0].text, "wrapped")
+        XCTAssertEqual(answered[0].state?.wrap, true)
+        XCTAssertEqual(answered[1].text, "1 of 1")
+        XCTAssertEqual(answered[1].state?.changes, TextChanges(count: 1, current: 1))
+        XCTAssertEqual(answered[2], PresentationPageResult(page: origin, seq: 3, ok: false, error: "no log page",
+                                                           state: answered[1].state))
+    }
+
+    func testAQueuedTextActionNeverReachesAPageThatReplacedItsOwn() async throws {
+        let fix = try fixture(files: ["/src/a.txt": ("text/plain", Data("a\n".utf8))])
+        _ = try present(fix, page(.text(path: "/src/a.txt", line: nil)))
+        let first = try XCTUnwrap(fix.session.htmlOverlay?.id)
+
+        try fix.transport.feed(.pageCommand(PresentationPageCommand(page: Self.origin.uuidString, seq: 1, action: .wrap, toggle: .on)))
+        fix.store.closeReplicaPage(Self.origin.uuidString, forSession: fix.session.id)
+        _ = try present(fix, page(.text(path: "/src/a.txt", line: nil)))
+
+        try await waitFor("the action is answered") { !self.results(fix).isEmpty }
+        XCTAssertEqual(results(fix), [PresentationPageResult(page: Self.origin.uuidString, seq: 1, ok: false, error: "page not shown")])
+        XCTAssertNotEqual(fix.session.htmlOverlay?.id, first)
+        XCTAssertEqual(fix.session.htmlOverlay?.textWrap, false)
+    }
+
+    private func results(_ fix: Fixture) -> [PresentationPageResult] {
+        fix.transport.sent.compactMap { if case .pageResult(let result) = $0 { result } else { nil } }
+    }
+
+    func testTextCommandsOnAReplicaAnswerAsLocallyAndReachTheOrigin() async throws {
+        let fix = try fixture(files: ["/src/a.diff": ("text/plain", Data("@@ -1 +1 @@\n-a\n+b\n".utf8))])
+        _ = try present(fix, page(.text(path: "/src/a.diff", line: nil)))
+        let target = fix.session.id.uuidString
+        try await waitFor("the diff reports its changes") { fix.session.htmlOverlay?.textChanges?.count == 1 }
+
+        let search = await fix.server.searchSessionOverlay(target, window: nil, pane: nil, request: .query("b"))
+        let wrap = await fix.server.setSessionOverlayWrap(target, window: nil, pane: nil, mode: .on)
+        let follow = await fix.server.setSessionOverlayFollow(target, window: nil, pane: nil, mode: .on)
+        let step = await fix.server.stepSessionOverlayChanges(target, window: nil, pane: nil, forward: true)
+
+        XCTAssertTrue(search.ok, search.error ?? "")
+        XCTAssertEqual(wrap.result?.text, "wrapped")
+        XCTAssertEqual(follow.error, "no log page")
+        XCTAssertEqual(step.result?.text, "1 of 1", step.error ?? "")
+        try await waitFor("the origin is told") { self.states(fix).last?.text?.changes?.current == 1 }
+        let text = try XCTUnwrap(states(fix).last?.text)
+        XCTAssertEqual(text.query, "b")
+        XCTAssertTrue(text.wrap)
+        XCTAssertNil(text.following)
+    }
+
+    func testStateChangesInOneTurnAreReportedOnce() async throws {
+        let fix = try fixture(files: ["/docs/index.html": html("<p>x</p>")])
+        _ = try present(fix, page(.file(path: "/docs/index.html", grantRoot: nil)))
+        let local = try XCTUnwrap(fix.session.htmlOverlay?.id)
+        try await waitFor("the page loads") { fix.session.htmlOverlay?.loadState == .loaded && !self.states(fix).isEmpty }
+        try await Task.sleep(for: .milliseconds(100))
+        let before = states(fix).count
+
+        fix.store.setHtmlLoadState(local, state: .failed, error: "one")
+        fix.store.setHtmlLoadState(local, state: .failed, error: "two")
+        fix.store.setHtmlPage(local, HtmlPageInfo(page: "https://example.com/b", title: "B", canGoBack: true, canGoForward: false))
+
+        try await waitFor("the change is reported") { self.states(fix).count > before }
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(states(fix).count, before + 1)
+        XCTAssertEqual(states(fix).last?.error, "two")
+        XCTAssertEqual(states(fix).last?.title, "B")
+    }
+
+    private func host(_ view: NSView) throws -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        view.frame = try XCTUnwrap(window.contentView).bounds
+        window.contentView?.addSubview(view)
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(view)
+        windows.append(window)
+        return window
+    }
+
+    private func click(_ id: String, in view: WKWebView, window: NSWindow) async throws {
+        let value = try await view.evaluateJavaScript("""
+            (() => { const r = document.getElementById('\(id)').getBoundingClientRect();
+                     return [r.x + r.width / 2, r.y + r.height / 2] })()
+            """)
+        let center = try XCTUnwrap(value as? [Double])
+        let local = NSPoint(x: center[0], y: view.isFlipped ? center[1] : view.bounds.height - center[1])
+        let point = view.convert(local, to: nil)
+        let content = try XCTUnwrap(window.contentView)
+        let hit = try XCTUnwrap(content.hitTest(content.convert(point, from: nil)))
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = try XCTUnwrap(NSEvent.mouseEvent(
+                with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+                pressure: type == .leftMouseDown ? 1 : 0))
+            if type == .leftMouseDown { hit.mouseDown(with: event) } else { hit.mouseUp(with: event) }
+        }
+    }
+
+    private func waitForJS<T: Equatable>(_ view: WKWebView, _ script: String, equals expected: T) async throws {
+        let deadline = Date().addingTimeInterval(10)
+        while (try? await view.evaluateJavaScript(script)) as? T != expected {
+            guard Date() < deadline else { return XCTFail("\(script) never became \(expected)") }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    private func waitFor(_ what: String, timeout: TimeInterval = 10, _ condition: () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            guard Date() < deadline else { return XCTFail("\(what) not reached within \(timeout)s") }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+    }
+}

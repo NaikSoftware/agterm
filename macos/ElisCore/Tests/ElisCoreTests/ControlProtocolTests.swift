@@ -1,0 +1,1996 @@
+import Foundation
+import Testing
+@testable import ElisCore
+
+struct ControlProtocolTests {
+    @Test func askWidthRoundTripsAndNullMeansAuto() throws {
+        let request = ControlRequest(cmd: .askOpen, args: ControlArgs(width: 50))
+        #expect(try roundTrip(request) == request)
+        let data = Data(#"{"cmd":"ask.open","args":{"width":null}}"#.utf8)
+        #expect(try JSONDecoder().decode(ControlRequest.self, from: data).args?.width == nil)
+    }
+
+    // round-trip a request through JSON and back, asserting equality with the original.
+    private func roundTrip(_ request: ControlRequest) throws -> ControlRequest {
+        let data = try JSONEncoder().encode(request)
+        return try JSONDecoder().decode(ControlRequest.self, from: data)
+    }
+
+    private func roundTrip(_ response: ControlResponse) throws -> ControlResponse {
+        let data = try JSONEncoder().encode(response)
+        return try JSONDecoder().decode(ControlResponse.self, from: data)
+    }
+
+    @Test func logPageArgumentsRoundTripAndAreOmittedWhenUnset() throws {
+        let open = ControlRequest(cmd: .sessionOverlayOpen, args: ControlArgs(textFile: "/tmp/a.log", tail: 50, followFile: true))
+        #expect(try roundTrip(open) == open)
+        let follow = ControlRequest(cmd: .sessionOverlayFollow, args: ControlArgs(mode: "off", pane: "left"))
+        #expect(try roundTrip(follow) == follow)
+        #expect(Command.sessionOverlayFollow.rawValue == "session.overlay.follow")
+        let search = ControlRequest(cmd: .sessionOverlaySearch, args: ControlArgs(text: "main()", pane: "right"))
+        #expect(try roundTrip(search) == search)
+        #expect(Command.sessionOverlaySearch.rawValue == "session.overlay.search")
+        let wrap = ControlRequest(cmd: .sessionOverlayWrap, args: ControlArgs(mode: "on", pane: "right"))
+        #expect(try roundTrip(wrap) == wrap)
+        #expect(Command.sessionOverlayWrap.rawValue == "session.overlay.wrap")
+        let changes = ControlRequest(cmd: .sessionOverlayChanges, args: ControlArgs(pane: "right", to: "prev"))
+        #expect(try roundTrip(changes) == changes)
+        #expect(Command.sessionOverlayChanges.rawValue == "session.overlay.changes")
+        let files = ControlRequest(cmd: .sessionOverlayFiles, args: ControlArgs(pane: "right", to: "src/b.go"))
+        #expect(try roundTrip(files) == files)
+        #expect(Command.sessionOverlayFiles.rawValue == "session.overlay.files")
+
+        let plain = String(data: try JSONEncoder().encode(ControlArgs(textFile: "/tmp/a.txt")), encoding: .utf8) ?? ""
+        #expect(!plain.contains("tail"))
+        #expect(!plain.contains("followFile"))
+    }
+
+    @Test func terminateAndThePinnedKillKeepTheirWireNames() {
+        #expect(Command.sessionTerminate.rawValue == "session.terminate")
+        #expect(Command.zmxKillPane.rawValue == "zmx.kill.pane")
+    }
+
+    @Test func closeRecentIDRoundTripsAndIsOmittedWhenNil() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(id: "s1", closed: ["s1"], recentID: "r1"))
+        #expect(try roundTrip(response) == response)
+        #expect(!String(decoding: try JSONEncoder().encode(ControlResult(id: "s1", closed: ["s1"])), as: UTF8.self).contains("recentID"))
+    }
+
+    @Test func catalogViewersRoundTripOnTheTreeAndWindowNodeAndAreOmittedAtNone() throws {
+        var tree = ControlTree(workspaces: [])
+        var node = ControlWindowNode(id: "w1", name: "w", open: true, active: true)
+        let bare = (String(decoding: try JSONEncoder().encode(tree), as: UTF8.self),
+                    String(decoding: try JSONEncoder().encode(node), as: UTF8.self))
+        tree.catalogViewers = 2
+        node.catalogViewers = 2
+
+        #expect(!bare.0.contains("catalogViewers") && !bare.1.contains("catalogViewers"))
+        #expect(try JSONDecoder().decode(ControlTree.self, from: JSONEncoder().encode(tree)).catalogViewers == 2)
+        #expect(try JSONDecoder().decode(ControlWindowNode.self, from: JSONEncoder().encode(node)).catalogViewers == 2)
+    }
+
+    @Test func treeRequestRoundTrips() throws {
+        let request = ControlRequest(cmd: .tree)
+        #expect(try roundTrip(request) == request)
+    }
+
+    @Test func askOpenRoundTripsEveryArgument() throws {
+        let request = ControlRequest(
+            cmd: .askOpen, target: "session-id",
+            args: ControlArgs(
+                follow: true, message: "Keep the current changes?",
+                buttons: [
+                    ControlAskButton(id: "save", label: "Save", hotkey: "s"),
+                    ControlAskButton(id: "cancel", label: "Not now"),
+                    ControlAskButton(id: "discard", label: "Discard", hotkey: "d"),
+                ],
+                defaultButton: "save", destructiveButton: "discard", style: "gui", align: "left",
+                window: "window-id", pane: "right", paneID: "pane-id", title: "Unsaved changes"
+            )
+        )
+        let json = """
+        {"cmd":"ask.open","target":"session-id","args":{
+            "title":"Unsaved changes","message":"Keep the current changes?","follow":true,
+            "buttons":[
+                {"id":"save","label":"Save","hotkey":"s"},
+                {"id":"cancel","label":"Not now"},
+                {"id":"discard","label":"Discard","hotkey":"d"}
+            ],
+            "defaultButton":"save","destructiveButton":"discard","style":"gui","align":"left",
+            "window":"window-id","pane":"right","paneID":"pane-id"
+        }}
+        """
+
+        #expect(try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8)) == request)
+        #expect(try roundTrip(request) == request)
+    }
+
+    @Test(arguments: [(Command.askResult, "ask.result"), (.askCancel, "ask.cancel")])
+    func askLookupCommandsRoundTrip(command: Command, wireName: String) throws {
+        let request = ControlRequest(cmd: command, target: "ask-id", args: ControlArgs(window: "window-id"))
+        let json = """
+        {"cmd":"\(wireName)","target":"ask-id","args":{"window":"window-id"}}
+        """
+
+        #expect(try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8)) == request)
+        #expect(try roundTrip(request) == request)
+    }
+
+    @Test(arguments: [
+        (ControlAskResult(result: .pending), #"{"ok":true,"result":{"ask":{"result":"pending"}}}"#),
+        (ControlAskResult(result: .answered, id: "save", label: "Save", index: 0),
+         #"{"ok":true,"result":{"ask":{"result":"answered","id":"save","label":"Save","index":0}}}"#),
+        (ControlAskResult(result: .cancelled), #"{"ok":true,"result":{"ask":{"result":"cancelled"}}}"#),
+        (ControlAskResult(result: .escaped), #"{"ok":true,"result":{"ask":{"result":"escaped"}}}"#),
+    ])
+    func askResultRoundTripsEveryOutcomeShape(ask: ControlAskResult, json: String) throws {
+        let response = ControlResponse(ok: true, result: ControlResult(ask: ask))
+        let encoded = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(response)) as? NSDictionary)
+        let expected = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? NSDictionary)
+
+        #expect(encoded == expected)
+        #expect(try roundTrip(response) == response)
+    }
+
+    @Test func controlResultAskOmitsWhenNil() throws {
+        let result = ControlResult(id: "ask-id")
+        let data = try JSONEncoder().encode(result)
+        let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: String])
+
+        #expect(json == ["id": "ask-id"])
+        #expect(try JSONDecoder().decode(ControlResult.self, from: data).ask == nil)
+    }
+
+    @Test func askOpenResponseRoundTripsPaneReadBack() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(id: "ask-id", pane: "right"))
+        #expect(try roundTrip(response) == response)
+    }
+
+    @Test func askOptionalFieldsRemainAbsent() throws {
+        let request = ControlRequest(cmd: .askOpen, args: ControlArgs(
+            buttons: [ControlAskButton(id: "ok", label: "OK")], title: "Ready"
+        ))
+        let data = try JSONEncoder().encode(request)
+        let encoded = try #require(try JSONSerialization.jsonObject(with: data) as? NSDictionary)
+        let json = #"{"cmd":"ask.open","args":{"title":"Ready","buttons":[{"id":"ok","label":"OK"}]}}"#
+        let expected = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? NSDictionary)
+
+        #expect(encoded == expected)
+        #expect(try roundTrip(request) == request)
+        #expect(try JSONDecoder().decode(ControlArgs.self, from: Data("{}".utf8)) == ControlArgs())
+    }
+
+    @Test(arguments: [(ControlArgs(), "{}"), (ControlArgs(buttons: []), #"{"buttons":[]}"#)])
+    func controlArgsDistinguishesEmptyButtonsFromAbsentButtons(args: ControlArgs, json: String) throws {
+        #expect(String(decoding: try JSONEncoder().encode(args), as: UTF8.self) == json)
+        #expect(try JSONDecoder().decode(ControlArgs.self, from: Data(json.utf8)) == args)
+    }
+
+    @Test func pickCommandsRoundTrip() throws {
+        let items = [
+            ControlPickItem(id: "first", label: "First choice", subtitle: "recommended"),
+            ControlPickItem(id: "second", label: "Second choice"),
+        ]
+        let cases: [ControlRequest] = [
+            ControlRequest(
+                cmd: .pickOpen,
+                args: ControlArgs(follow: true, items: items, prompt: "Choose one",
+                                  query: "prefilled", allowCustom: true, selection: "second", window: "window-id")
+            ),
+            ControlRequest(cmd: .pickResult, target: "pick-id"),
+            ControlRequest(cmd: .pickCancel, target: "pick-id"),
+        ]
+
+        for request in cases {
+            #expect(try roundTrip(request) == request)
+        }
+    }
+
+    @Test func pickResultRoundTripsEveryOutcomeShape() throws {
+        let cases = [
+            ControlPickResult(result: .pending),
+            ControlPickResult(result: .picked, id: "second", label: "Second choice", index: 1),
+            ControlPickResult(result: .custom, query: "A custom answer"),
+            ControlPickResult(result: .cancelled),
+        ]
+
+        for pick in cases {
+            let response = ControlResponse(ok: true, result: ControlResult(pick: pick))
+            #expect(try roundTrip(response) == response)
+        }
+    }
+
+    @Test func controlResultPickOmitsWhenNil() throws {
+        let result = ControlResult(id: "pick-id")
+        let json = String(decoding: try JSONEncoder().encode(result), as: UTF8.self)
+
+        #expect(!json.contains("\"pick\""), "a nil pick must be omitted from the JSON; got \(json)")
+        #expect(try JSONDecoder().decode(ControlResult.self, from: Data(json.utf8)).pick == nil)
+    }
+
+    @Test func controlResultCursorRoundTripsAndOmitsWhenNil() throws {
+        let carried = ControlResponse(ok: true, result: ControlResult(id: "surface:s1:left",
+                                                                     cursor: ControlCursor(column: 12)))
+        #expect(try roundTrip(carried) == carried)
+
+        let json = String(decoding: try JSONEncoder().encode(ControlResult(id: "surface:s1:left")), as: UTF8.self)
+        #expect(!json.contains("\"cursor\""), "a nil cursor must be omitted from the JSON; got \(json)")
+        #expect(try JSONDecoder().decode(ControlResult.self, from: Data(json.utf8)).cursor == nil)
+    }
+
+    @Test func pageSubmitAndResultRoundTripAndOmitWhenNil() throws {
+        let submit = ControlRequest(cmd: .sessionOverlaySubmit, target: "s1", args: ControlArgs(pane: "right", value: ""))
+        #expect(try roundTrip(submit) == submit)
+        let read = ControlRequest(cmd: .sessionOverlayResult, args: ControlArgs(page: "D1B6A0F2-6E3B-4C11-9F1A-3E2B1C0D9A88"))
+        #expect(try roundTrip(read) == read)
+        let outcome = ControlHtmlPageOutcome(pageID: "p1", outcome: .submitted, value: "a\nb")
+        let carried = ControlResponse(ok: true, result: ControlResult(id: "s1", pageID: "p1", pageOutcome: outcome))
+        #expect(try roundTrip(carried) == carried)
+
+        let args = String(decoding: try JSONEncoder().encode(ControlArgs(pane: "right")), as: UTF8.self)
+        #expect(!args.contains("\"value\"") && !args.contains("\"page\""), "nil page fields must be omitted; got \(args)")
+        let result = String(decoding: try JSONEncoder().encode(ControlResult(id: "s1")), as: UTF8.self)
+        #expect(!result.contains("pageID") && !result.contains("pageOutcome"), "nil page results must be omitted; got \(result)")
+        let dismissed = String(decoding: try JSONEncoder().encode(ControlHtmlPageOutcome(pageID: "p1", outcome: .dismissed)),
+                               as: UTF8.self)
+        #expect(!dismissed.contains("\"value\""), "a dismissed page carries no value; got \(dismissed)")
+    }
+
+    @Test func controlTreePickPendingOmitsWhenNil() throws {
+        let tree = ControlTree(workspaces: [])
+        let json = String(decoding: try JSONEncoder().encode(tree), as: UTF8.self)
+
+        #expect(!json.contains("pickPending"), "a nil pending picker must be omitted from the JSON; got \(json)")
+        #expect(try JSONDecoder().decode(ControlTree.self, from: Data(json.utf8)).pickPending == nil)
+    }
+
+    @Test func controlTreeAskPendingRoundTripsAndOmitsWhenNil() throws {
+        let populated = ControlTree(workspaces: [], askPending: "ask-id")
+        let data = try JSONEncoder().encode(populated)
+        let fields = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(fields["askPending"] as? String == "ask-id")
+        #expect(try JSONDecoder().decode(ControlTree.self, from: data) == populated)
+
+        let absentData = try JSONEncoder().encode(ControlTree(workspaces: []))
+        let absent = try #require(try JSONSerialization.jsonObject(with: absentData) as? [String: Any])
+        #expect(absent["askPending"] == nil)
+        #expect(try JSONDecoder().decode(ControlTree.self, from: absentData).askPending == nil)
+    }
+
+    @Test func controlTreeSnapshotUnsavedRoundTripsAndOmitsWhenNil() throws {
+        let populated = ControlTree(workspaces: [], snapshotUnsaved: true)
+        let data = try JSONEncoder().encode(populated)
+        let fields = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(fields["snapshotUnsaved"] as? Bool == true)
+        #expect(try JSONDecoder().decode(ControlTree.self, from: data) == populated)
+
+        let absentData = try JSONEncoder().encode(ControlTree(workspaces: []))
+        let absent = try #require(try JSONSerialization.jsonObject(with: absentData) as? [String: Any])
+        #expect(absent["snapshotUnsaved"] == nil)
+        #expect(try JSONDecoder().decode(ControlTree.self, from: Data(#"{"workspaces":[]}"#.utf8)).snapshotUnsaved == nil)
+    }
+
+    @Test func controlArgsDistinguishesEmptyItemsFromAbsentItems() throws {
+        let empty = String(decoding: try JSONEncoder().encode(ControlArgs(items: [])), as: UTF8.self)
+        let absent = String(decoding: try JSONEncoder().encode(ControlArgs(allowCustom: true)), as: UTF8.self)
+
+        #expect(empty.contains("\"items\":[]"), "an empty list must survive as an empty array; got \(empty)")
+        #expect(!absent.contains("items"), "absent items must be omitted from the JSON; got \(absent)")
+        #expect(try JSONDecoder().decode(ControlArgs.self, from: Data(empty.utf8)).items == [])
+        #expect(try JSONDecoder().decode(ControlArgs.self, from: Data(absent.utf8)).items == nil)
+    }
+
+    @Test func controlArgsQueryOmitsWhenNil() throws {
+        let args = ControlArgs(items: [ControlPickItem(id: "first", label: "First choice")])
+        let json = String(decoding: try JSONEncoder().encode(args), as: UTF8.self)
+
+        #expect(!json.contains("query"), "a nil query must be omitted from the JSON; got \(json)")
+        #expect(try JSONDecoder().decode(ControlArgs.self, from: Data(json.utf8)).query == nil)
+    }
+
+    @Test func controlPickItemSubtitleOmitsWhenNil() throws {
+        let item = ControlPickItem(id: "first", label: "First choice")
+        let json = String(decoding: try JSONEncoder().encode(item), as: UTF8.self)
+
+        #expect(!json.contains("subtitle"), "a nil subtitle must be omitted from the JSON; got \(json)")
+        #expect(try JSONDecoder().decode(ControlPickItem.self, from: Data(json.utf8)).subtitle == nil)
+    }
+
+    @Test func workspaceCommandsRoundTrip() throws {
+        let cases: [ControlRequest] = [
+            ControlRequest(cmd: .workspaceNew, args: ControlArgs(name: "work")),
+            ControlRequest(cmd: .workspaceRename, target: "active", args: ControlArgs(name: "renamed")),
+            ControlRequest(cmd: .workspaceDelete, target: "9f3c"),
+            ControlRequest(cmd: .workspaceSelect, target: "9f3c"),
+        ]
+        for request in cases {
+            #expect(try roundTrip(request) == request)
+        }
+    }
+
+    @Test func sessionCommandsRoundTrip() throws {
+        let cases: [ControlRequest] = [
+            ControlRequest(cmd: .sessionNew, args: ControlArgs(cwd: "/tmp", workspace: "active")),
+            ControlRequest(cmd: .sessionNew, args: ControlArgs(cwd: "/tmp", command: "ssh host -p 22")),
+            ControlRequest(cmd: .sessionNew, args: ControlArgs(name: "myhost", command: "ssh host")),
+            ControlRequest(cmd: .sessionNew, args: ControlArgs(workspaceName: "servers", createWorkspace: true)),
+            ControlRequest(cmd: .sessionNew, args: ControlArgs(noSelect: true)),
+            ControlRequest(cmd: .sessionDuplicate, target: "9f3c"),
+            ControlRequest(cmd: .sessionDuplicate, target: "active", args: ControlArgs(window: "win")),
+            ControlRequest(cmd: .sessionClose, target: "9f3c"),
+            ControlRequest(cmd: .sessionClose, args: ControlArgs(targets: ["9f3c", "abcd"])),
+            ControlRequest(cmd: .sessionSelect, target: "9f3c"),
+            ControlRequest(cmd: .sessionRename, target: "active", args: ControlArgs(name: "build")),
+            ControlRequest(cmd: .sessionReveal, target: "active"),
+            ControlRequest(cmd: .sessionMove, target: "9f3c", args: ControlArgs(workspace: "other")),
+            ControlRequest(cmd: .sessionMove, args: ControlArgs(targets: ["9f3c", "abcd"], workspace: "other")),
+            ControlRequest(cmd: .sessionMove, args: ControlArgs(targets: ["9f3c", "abcd"], after: "anchor")),
+            ControlRequest(cmd: .sessionCopy, target: "9f3c"),
+            ControlRequest(cmd: .sessionPaste, target: "9f3c"),
+            ControlRequest(cmd: .sessionSelectAll, target: "9f3c"),
+            ControlRequest(cmd: .sessionOverlayOpen, target: "9f3c", args: ControlArgs(cwd: "/b", command: "revdiff")),
+            ControlRequest(cmd: .sessionOverlayOpen, target: "9f3c", args: ControlArgs(command: "htop", sizePercent: 70)),
+            ControlRequest(cmd: .sessionOverlayOpen, target: "9f3c", args: ControlArgs(command: "revdiff", color: "#2a1a3a")),
+            ControlRequest(cmd: .sessionOverlayClose, target: "9f3c"),
+            ControlRequest(cmd: .sessionOverlayResize, target: "9f3c", args: ControlArgs(sizePercent: 60)),
+            ControlRequest(cmd: .sessionOverlayResize, target: "9f3c", args: ControlArgs(full: true)),
+            ControlRequest(cmd: .sessionOverlayResult, target: "9f3c"),
+            ControlRequest(cmd: .sessionOverlayCopy, target: "9f3c"),
+            ControlRequest(cmd: .sessionOverlayCopy, target: "9f3c", args: ControlArgs(pane: "right")),
+            ControlRequest(cmd: .sessionOverlayText, target: "9f3c", args: ControlArgs(pane: "left", all: true)),
+            ControlRequest(cmd: .sessionOverlayText, target: "9f3c", args: ControlArgs(lines: 20)),
+            ControlRequest(cmd: .surfaceZoom, target: "surface:5E5B1C5B-75C5-49E6-8806-2C61D8D6BBA9:right",
+                           args: ControlArgs(mode: "show", window: "win")),
+            ControlRequest(cmd: .surfaceCursor, target: "surface:5E5B1C5B-75C5-49E6-8806-2C61D8D6BBA9:left",
+                           args: ControlArgs(window: "win")),
+        ]
+        for request in cases {
+            #expect(try roundTrip(request) == request)
+        }
+    }
+
+    @Test func sessionBatchTargetsOmitWhenNilAndRoundTripWhenSet() throws {
+        let single = ControlRequest(cmd: .sessionClose, target: "9f3c")
+        let singleJSON = String(data: try JSONEncoder().encode(single), encoding: .utf8) ?? ""
+        #expect(!singleJSON.contains("targets"), "nil targets must be omitted from single-target JSON; got \(singleJSON)")
+
+        let batch = ControlRequest(cmd: .sessionClose, args: ControlArgs(targets: ["a", "b"]))
+        let decoded = try roundTrip(batch)
+        #expect(decoded == batch)
+        #expect(decoded.args?.targets == ["a", "b"])
+    }
+
+    @Test func sessionOverlayResizeOmitsFullWhenNil() throws {
+        let request = ControlRequest(cmd: .sessionOverlayResize, target: "9f3c", args: ControlArgs(sizePercent: 60))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.full == nil)
+        let json = String(data: try JSONEncoder().encode(request), encoding: .utf8) ?? ""
+        #expect(!json.contains("full"), "a nil full must be omitted from the JSON; got \(json)")
+    }
+
+    @Test func sessionOverlayOpenRoundTripsWithFollow() throws {
+        let follow = ControlRequest(cmd: .sessionOverlayOpen, target: "9f3c",
+                                    args: ControlArgs(command: "revdiff", follow: true))
+        let decodedFollow = try roundTrip(follow)
+        #expect(decodedFollow == follow)
+        #expect(decodedFollow.args?.follow == true)
+
+        let noFollow = ControlRequest(cmd: .sessionOverlayOpen, target: "9f3c",
+                                      args: ControlArgs(command: "revdiff", follow: false))
+        let decodedNoFollow = try roundTrip(noFollow)
+        #expect(decodedNoFollow == noFollow)
+        #expect(decodedNoFollow.args?.follow == false)
+    }
+
+    @Test func sessionOverlayOpenOmitsFollowWhenNil() throws {
+        let request = ControlRequest(cmd: .sessionOverlayOpen, target: "9f3c", args: ControlArgs(command: "revdiff"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.follow == nil)
+        let json = String(data: try JSONEncoder().encode(request), encoding: .utf8) ?? ""
+        #expect(!json.contains("follow"), "a nil follow must be omitted from the JSON; got \(json)")
+    }
+
+    @Test func sessionHudCommandsRoundTrip() throws {
+        let cases: [ControlRequest] = [
+            ControlRequest(cmd: .sessionHudOpen, target: "9f3c", args: ControlArgs(message: "gathering options")),
+            ControlRequest(cmd: .sessionHudOpen, target: "9f3c",
+                           args: ControlArgs(sizePercent: 40, message: "gathering options",
+                                             detail: "scanning 400 files", spinner: "braille",
+                                             window: "win", pane: "right", paneID: "stable-token",
+                                             color: "#2a1a3a", position: "top")),
+            ControlRequest(cmd: .sessionHudUpdate, target: "9f3c",
+                           args: ControlArgs(message: "almost there", detail: "12 left", position: "bottom")),
+            ControlRequest(cmd: .sessionHudClose, target: "9f3c"),
+        ]
+        for request in cases {
+            #expect(try roundTrip(request) == request)
+        }
+    }
+
+    @Test func hudReadBackRoundTripsItsCurrentPaneAndOmitsSessionWideScope() throws {
+        let paneHud = ControlHudNode(message: "working", sizePercent: 30, heightPercent: 8,
+                                     position: "bottom-right", pane: "right")
+        let paneData = try JSONEncoder().encode(paneHud)
+        #expect(try JSONDecoder().decode(ControlHudNode.self, from: paneData) == paneHud)
+
+        let sessionHud = ControlHudNode(message: "working", position: "center")
+        let json = String(decoding: try JSONEncoder().encode(sessionHud), as: UTF8.self)
+        #expect(!json.contains("pane"))
+    }
+
+    @Test func sessionHudOpenRoundTripsMarkdownAndFontSize() throws {
+        let request = ControlRequest(cmd: .sessionHudOpen, target: "9f3c",
+                                     args: ControlArgs(message: "# t", markdown: true, fontSize: 18))
+
+        let decoded = try roundTrip(request)
+
+        #expect(decoded == request)
+        #expect(decoded.args?.markdown == true)
+        #expect(decoded.args?.fontSize == 18)
+    }
+
+    @Test func sessionHudOpenOmitsUnsetMarkdownAndFontSize() throws {
+        let json = String(data: try JSONEncoder().encode(ControlArgs(message: "working")), encoding: .utf8) ?? ""
+
+        #expect(!json.contains("markdown"))
+        #expect(!json.contains("fontSize"))
+    }
+
+    @Test func sessionHudRawStringsMapToCommands() throws {
+        #expect(Command(rawValue: "session.hud.open") == .sessionHudOpen)
+        #expect(Command(rawValue: "session.hud.update") == .sessionHudUpdate)
+        #expect(Command(rawValue: "session.hud.close") == .sessionHudClose)
+    }
+
+    @Test func sessionHudOpenOmitsUnsetArgs() throws {
+        let request = ControlRequest(cmd: .sessionHudOpen, target: "9f3c", args: ControlArgs(message: "working"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.detail == nil)
+        #expect(decoded.args?.spinner == nil)
+        #expect(decoded.args?.position == nil)
+        #expect(decoded.args?.sizePercent == nil)
+        let json = String(data: try JSONEncoder().encode(request), encoding: .utf8) ?? ""
+        for key in ["detail", "spinner", "position", "sizePercent", "color"] {
+            #expect(!json.contains(key), "an unset \(key) must be omitted from the JSON; got \(json)")
+        }
+    }
+
+    @Test(arguments: HudSpinner.allCases) func everySpinnerStyleRoundTrips(style: HudSpinner) throws {
+        let request = ControlRequest(cmd: .sessionHudOpen, target: "9f3c",
+                                     args: ControlArgs(message: "x", spinner: style.rawValue))
+        #expect(try roundTrip(request).args?.spinner == style.rawValue)
+    }
+
+    @Test func sessionHudSpinnerCarriesNoneAsAnAbsentField() throws {
+        let off = ControlRequest(cmd: .sessionHudOpen, target: "9f3c", args: ControlArgs(message: "x"))
+        #expect(try roundTrip(off).args?.spinner == nil)
+    }
+
+    @Test func sessionTextRoundTripsWithAllLinesAndPane() throws {
+        let request = ControlRequest(cmd: .sessionText, target: "9f3c",
+                                     args: ControlArgs(pane: "left", paneID: "stable-token", all: true, lines: 50))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .sessionText)
+        #expect(decoded.args?.all == true)
+        #expect(decoded.args?.lines == 50)
+        #expect(decoded.args?.pane == "left")
+        #expect(decoded.args?.paneID == "stable-token")
+    }
+
+    @Test func sessionTextBareRoundTrips() throws {
+        let request = ControlRequest(cmd: .sessionText)
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.all == nil)
+        #expect(decoded.args?.lines == nil)
+        #expect(decoded.args?.pane == nil)
+    }
+
+    @Test func sessionTypeWithSelectRoundTrips() throws {
+        let request = ControlRequest(cmd: .sessionType, target: "9f3c", args: ControlArgs(text: "ls\n", select: true))
+        #expect(try roundTrip(request) == request)
+    }
+
+    @Test func sessionTypeWithoutSelectRoundTrips() throws {
+        let request = ControlRequest(cmd: .sessionType, target: "active", args: ControlArgs(text: "pwd\n"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.select == nil)
+    }
+
+    @Test func sessionTypeWithPaneRoundTrips() throws {
+        let request = ControlRequest(cmd: .sessionType, target: "9f3c",
+                                     args: ControlArgs(text: "ls\n", pane: "right"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.pane == "right")
+    }
+
+    @Test func sessionSeenRoundTrips() throws {
+        let request = ControlRequest(cmd: .sessionSeen, target: "9f3c", args: ControlArgs(window: "win"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .sessionSeen)
+    }
+
+    @Test func sessionRestoreRoundTripsEachMode() throws {
+        let cases: [ControlRequest] = [
+            ControlRequest(cmd: .sessionRestore, target: "9f3c",
+                           args: ControlArgs(mode: "set", command: "claude --resume abc")),
+            ControlRequest(cmd: .sessionRestore, target: "9f3c", args: ControlArgs(mode: "none")),
+            ControlRequest(cmd: .sessionRestore, target: "9f3c", args: ControlArgs(mode: "clear")),
+        ]
+        for request in cases {
+            let decoded = try roundTrip(request)
+            #expect(decoded == request)
+            #expect(decoded.cmd == .sessionRestore)
+        }
+    }
+
+    @Test func sessionRestoreRoundTripsWithPaneAndWindow() throws {
+        let request = ControlRequest(cmd: .sessionRestore, target: "9f3c",
+                                     args: ControlArgs(mode: "set", command: "cd repo && claude -r xyz",
+                                                       window: "win", pane: "right", paneID: "surface-token-abc"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.command == "cd repo && claude -r xyz")
+        #expect(decoded.args?.pane == "right")
+        #expect(decoded.args?.paneID == "surface-token-abc")
+        #expect(decoded.args?.window == "win")
+    }
+
+    @Test func sessionRestoreOmitsCommandWhenNil() throws {
+        let request = ControlRequest(cmd: .sessionRestore, target: "9f3c", args: ControlArgs(mode: "clear"))
+        let decoded = try roundTrip(request)
+        #expect(decoded.args?.command == nil)
+        #expect(decoded.args?.pane == nil)
+        #expect(decoded.args?.paneID == nil)
+    }
+
+    @Test func sessionStatusRoundTripsWithStateAndBlink() throws {
+        let request = ControlRequest(cmd: .sessionStatus, target: "9f3c",
+                                     args: ControlArgs(status: "active", blink: true, autoReset: true))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .sessionStatus)
+        #expect(decoded.args?.status == "active")
+        #expect(decoded.args?.blink == true)
+        #expect(decoded.args?.autoReset == true)
+    }
+
+    @Test func sessionStatusRoundTripsWithSound() throws {
+        let request = ControlRequest(cmd: .sessionStatus, target: "9f3c",
+                                     args: ControlArgs(status: "blocked", sound: "Glass"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.sound == "Glass")
+    }
+
+    @Test func sessionStatusOmitsSoundWhenNil() throws {
+        let request = ControlRequest(cmd: .sessionStatus, target: "9f3c", args: ControlArgs(status: "active"))
+        let decoded = try roundTrip(request)
+        #expect(decoded.args?.sound == nil)
+    }
+
+    @Test func sessionStatusRoundTripsWithColor() throws {
+        let request = ControlRequest(cmd: .sessionStatus, target: "9f3c",
+                                     args: ControlArgs(status: "blocked", color: "#ff0000"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.color == "#ff0000")
+    }
+
+    @Test func sessionStatusOmitsColorWhenNil() throws {
+        let request = ControlRequest(cmd: .sessionStatus, target: "9f3c", args: ControlArgs(status: "active"))
+        let decoded = try roundTrip(request)
+        #expect(decoded.args?.color == nil)
+    }
+
+    @Test func sessionStatusRoundTripsWithShape() throws {
+        let request = ControlRequest(cmd: .sessionStatus, target: "9f3c",
+                                     args: ControlArgs(status: "blocked", shape: "triangle"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.shape == "triangle")
+    }
+
+    @Test func sessionStatusOmitsShapeWhenNil() throws {
+        let request = ControlRequest(cmd: .sessionStatus, target: "9f3c", args: ControlArgs(status: "active"))
+        let json = String(decoding: try JSONEncoder().encode(request), as: UTF8.self)
+        #expect(!json.contains("shape"), "a nil shape must be omitted from the JSON; got \(json)")
+        #expect(try roundTrip(request).args?.shape == nil)
+    }
+
+    @Test func sessionStatusRoundTripsWithPaneID() throws {
+        let request = ControlRequest(cmd: .sessionStatus, target: "9f3c",
+                                     args: ControlArgs(paneID: "surface-token-abc", status: "blocked"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.paneID == "surface-token-abc")
+    }
+
+    @Test func sessionStatusOmitsPaneIDWhenNil() throws {
+        let request = ControlRequest(cmd: .sessionStatus, target: "9f3c", args: ControlArgs(status: "active"))
+        let decoded = try roundTrip(request)
+        #expect(decoded.args?.paneID == nil)
+    }
+
+    @Test func sessionStatusDecodesSound() throws {
+        let json = #"{"cmd":"session.status","args":{"status":"blocked","sound":"default"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8))
+        #expect(decoded.cmd == .sessionStatus)
+        #expect(decoded.args?.status == "blocked")
+        #expect(decoded.args?.sound == "default")
+    }
+
+    @Test func sessionStatusRawStringMapsToCommandAndArgs() throws {
+        let json = #"{"cmd":"session.status","args":{"status":"blocked"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8))
+        #expect(decoded.cmd == .sessionStatus)
+        #expect(decoded.args?.status == "blocked")
+        #expect(decoded.args?.blink == nil)
+        #expect(decoded.args?.autoReset == nil)
+    }
+
+    @Test func sessionStatusDecodesAutoReset() throws {
+        let json = #"{"cmd":"session.status","args":{"status":"completed","autoReset":true}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8))
+        #expect(decoded.cmd == .sessionStatus)
+        #expect(decoded.args?.status == "completed")
+        #expect(decoded.args?.autoReset == true)
+    }
+
+    @Test func sessionStatusIfIdleRoundTrips() throws {
+        let json = #"{"cmd":"session.status","args":{"status":"active","ifIdle":true}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8))
+        #expect(decoded.args?.ifIdle == true)
+
+        let encoded = try JSONEncoder().encode(ControlRequest(cmd: .sessionStatus, args: ControlArgs(status: "active")))
+        #expect(try JSONDecoder().decode(ControlRequest.self, from: encoded).args?.ifIdle == nil)
+    }
+
+    @Test func sessionStatusUnknownStateDecodesForServerToReject() throws {
+        let json = #"{"cmd":"session.status","args":{"status":"bogus"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8))
+        #expect(decoded.cmd == .sessionStatus)
+        #expect(decoded.args?.status == "bogus")
+        #expect(AgentStatus(rawValue: decoded.args?.status ?? "") == nil)
+    }
+
+    @Test func modeBearingCommandsRoundTrip() throws {
+        let cases: [ControlRequest] = [
+            ControlRequest(cmd: .sessionSplit, target: "active",
+                           args: ControlArgs(mode: "toggle", axis: "horizontal")),
+            ControlRequest(cmd: .sessionScratch, target: "active", args: ControlArgs(mode: "toggle")),
+            ControlRequest(cmd: .sessionScratch, target: "9f3c", args: ControlArgs(mode: "on")),
+            ControlRequest(cmd: .sessionScratch, target: "active", args: ControlArgs(mode: "on", command: "htop")),
+            ControlRequest(cmd: .quick, args: ControlArgs(mode: "show")),
+            ControlRequest(cmd: .sidebar, args: ControlArgs(mode: "hide")),
+            ControlRequest(cmd: .sessionFlag, target: "active", args: ControlArgs(mode: "toggle")),
+            ControlRequest(cmd: .sessionFlag, target: "9f3c", args: ControlArgs(mode: "on")),
+            ControlRequest(cmd: .sessionFlag, args: ControlArgs(mode: "clear")),
+            ControlRequest(cmd: .sidebarMode, args: ControlArgs(mode: "flagged")),
+            ControlRequest(cmd: .sidebarMode, args: ControlArgs(mode: "toggle")),
+            ControlRequest(cmd: .workspaceFocus, target: "active", args: ControlArgs(mode: "on")),
+            ControlRequest(cmd: .workspaceFocus, target: "9f3c", args: ControlArgs(mode: "off")),
+            ControlRequest(cmd: .workspaceFocus, target: "active", args: ControlArgs(mode: "toggle")),
+            ControlRequest(cmd: .workspaceFocus, target: "9f3c", args: ControlArgs(mode: "add")),
+            ControlRequest(cmd: .workspaceFilter, args: ControlArgs(mode: "on")),
+            ControlRequest(cmd: .workspaceFilter, args: ControlArgs(mode: "off")),
+            ControlRequest(cmd: .workspaceFilter, args: ControlArgs(mode: "toggle")),
+        ]
+        for request in cases {
+            #expect(try roundTrip(request) == request)
+        }
+    }
+
+    @Test func quickTypeAndTextCommandsRoundTrip() throws {
+        let cases: [ControlRequest] = [
+            ControlRequest(cmd: .quickType, args: ControlArgs(text: "hello\n")),
+            ControlRequest(cmd: .quickText),
+            ControlRequest(cmd: .quickText, args: ControlArgs(all: true)),
+            ControlRequest(cmd: .quickText, args: ControlArgs(lines: 50)),
+        ]
+        for request in cases {
+            #expect(try roundTrip(request) == request)
+        }
+    }
+
+    @Test func sessionScratchRoundTripsWithCommand() throws {
+        let request = ControlRequest(cmd: .sessionScratch, target: "active", args: ControlArgs(mode: "on", command: "htop"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.mode == "on")
+        #expect(decoded.args?.command == "htop")
+    }
+
+    @Test func sessionResizeRoundTrips() throws {
+        let cases: [ControlRequest] = [
+            ControlRequest(cmd: .sessionResize, target: "active", args: ControlArgs(ratio: 0.7)),
+            ControlRequest(cmd: .sessionResize, target: "9f3c", args: ControlArgs(ratioDelta: 0.05)),
+            ControlRequest(cmd: .sessionResize, args: ControlArgs(ratioDelta: -0.05)),
+        ]
+        for request in cases {
+            #expect(try roundTrip(request) == request)
+        }
+    }
+
+    @Test func sessionResizeRawStringMapsToCommandAndArgs() throws {
+        let raw = #"{"cmd":"session.resize","target":"active","args":{"ratio":0.7}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(raw.utf8))
+        #expect(decoded.cmd == .sessionResize)
+        #expect(decoded.args?.ratio == 0.7)
+        #expect(decoded.args?.ratioDelta == nil)
+    }
+
+    @Test func sessionResizeResultRoundTripsRatio() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(id: "9f3c", ratio: 0.85))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.ratio == 0.85)
+    }
+
+    @Test func sessionRestoreResultRoundTripsPaneAndOmitsWhenNil() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(id: "9f3c", pane: "right"))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.pane == "right")
+
+        let json = String(decoding: try JSONEncoder().encode(ControlResult(id: "9f3c")), as: UTF8.self)
+        #expect(!json.contains("\"pane\""), "a nil pane must be omitted from the JSON; got \(json)")
+        #expect(try JSONDecoder().decode(ControlResult.self, from: Data(json.utf8)).pane == nil)
+    }
+
+    @Test func sessionFlagRawStringMapsToCommandAndMode() throws {
+        let raw = #"{"cmd":"session.flag","target":"active","args":{"mode":"on"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(raw.utf8))
+        #expect(decoded.cmd == .sessionFlag)
+        #expect(decoded.args?.mode == "on")
+    }
+
+    @Test func sessionContextRawStringMapsToCommandModeAndText() throws {
+        let raw = #"{"cmd":"session.context","target":"active","args":{"mode":"set","text":"PR #517"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(raw.utf8))
+        #expect(decoded.cmd == .sessionContext)
+        #expect(decoded.args?.mode == "set")
+        #expect(decoded.args?.text == "PR #517")
+    }
+
+    @Test func sessionContextNodeRoundTripsAndOmitsAnUnsetValue() throws {
+        let set = ControlSessionNode(id: "s1", name: "alpha", cwd: "/repo", active: true, split: false,
+                                     backedByZmx: nil, context: "PR #517")
+        let encoded = try JSONEncoder().encode(set)
+        #expect(try JSONDecoder().decode(ControlSessionNode.self, from: encoded).context == "PR #517")
+
+        let unset = ControlSessionNode(id: "s2", name: "beta", cwd: "/repo", active: false, split: false,
+                                       backedByZmx: nil)
+        let bare = try String(decoding: JSONEncoder().encode(unset), as: UTF8.self)
+        #expect(!bare.contains("context"))
+        #expect(try JSONDecoder().decode(ControlSessionNode.self, from: Data(bare.utf8)).context == nil)
+    }
+
+    @Test func workspaceFocusRawStringMapsToCommandAndMode() throws {
+        let raw = #"{"cmd":"workspace.focus","target":"active","args":{"mode":"on"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(raw.utf8))
+        #expect(decoded.cmd == .workspaceFocus)
+        #expect(decoded.args?.mode == "on")
+        #expect(decoded.target == "active")
+    }
+
+    @Test func workspaceFilterRoundTripsWithWindow() throws {
+        // workspace.filter is window-scoped and takes no --target.
+        let request = ControlRequest(cmd: .workspaceFilter, args: ControlArgs(mode: "on", window: "9f3c"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.target == nil)
+        #expect(decoded.args?.mode == "on")
+        #expect(decoded.args?.window == "9f3c")
+    }
+
+    @Test func workspaceFilterRawStringMapsToCommandAndMode() throws {
+        let raw = #"{"cmd":"workspace.filter","args":{"mode":"toggle"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(raw.utf8))
+        #expect(decoded.cmd == .workspaceFilter)
+        #expect(decoded.args?.mode == "toggle")
+    }
+
+    @Test func workspaceFilterBareRequestOmitsMode() throws {
+        // a bare `elisctl workspace filter` sends no mode; the dispatcher defaults it to toggle.
+        let request = ControlRequest(cmd: .workspaceFilter)
+        let json = String(data: try JSONEncoder().encode(request), encoding: .utf8) ?? ""
+        #expect(!json.contains("mode"), "a nil mode must be omitted from the JSON; got \(json)")
+        #expect(try roundTrip(request) == request)
+    }
+
+    @Test func sessionBackgroundRoundTrips() throws {
+        let cases: [ControlRequest] = [
+            ControlRequest(cmd: .sessionBackground, target: "active",
+                           args: ControlArgs(mode: "image", path: "/tmp/bg.png", opacity: 0.2,
+                                             fit: "cover", position: "top-left", repeats: true)),
+            ControlRequest(cmd: .sessionBackground, target: "9f3c",
+                           args: ControlArgs(text: "DRAFT", mode: "text", color: "#ff0000",
+                                             opacity: 0.15, fit: "contain", position: "center")),
+            ControlRequest(cmd: .sessionBackground, target: "active", args: ControlArgs(mode: "color", color: "#112233")),
+            ControlRequest(cmd: .sessionBackground, target: "active", args: ControlArgs(mode: "clear")),
+        ]
+        for request in cases {
+            #expect(try roundTrip(request) == request)
+        }
+    }
+
+    @Test func sessionBackgroundRawStringMapsToCommandAndArgs() throws {
+        let raw = ##"{"cmd":"session.background","target":"active","args":{"mode":"text","text":"DRAFT","color":"#ff0000","opacity":0.15}}"##
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(raw.utf8))
+        #expect(decoded.cmd == .sessionBackground)
+        #expect(decoded.args?.mode == "text")
+        #expect(decoded.args?.text == "DRAFT")
+        #expect(decoded.args?.color == "#ff0000")
+        #expect(decoded.args?.opacity == 0.15)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithFlagged() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false, flagged: true)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.flagged == true)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithTitle() throws {
+        let session = ControlSessionNode(id: "s1", name: "build", cwd: "/tmp", title: "user@web1: ~",
+                                         active: true, split: false)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.title == "user@web1: ~")
+    }
+
+    @Test func treeSessionNodeOmitsTitleWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("title"), "a nil title must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.title == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithForeground() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: true,
+                                         foreground: ["ssh", "gate"], splitForeground: ["tail", "-f", "/x"])
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        let node = decoded.result?.tree?.workspaces.first?.sessions.first
+        #expect(node?.foreground == ["ssh", "gate"])
+        #expect(node?.splitForeground == ["tail", "-f", "/x"])
+    }
+
+    @Test func treeSessionNodeOmitsForegroundWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("foreground"), "a nil foreground must be omitted from the JSON; got \(json)")
+        #expect(!json.contains("foregroundShell"), "a nil foregroundShell must be omitted from the JSON; got \(json)")
+    }
+
+    @Test func treeSessionNodeRoundTripsWithIdleShell() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: true,
+                                         backedByZmx: nil, foregroundShell: "zsh", splitForegroundShell: "fish")
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        let node = decoded.result?.tree?.workspaces.first?.sessions.first
+        #expect(node?.foregroundShell == "zsh")
+        #expect(node?.splitForegroundShell == "fish")
+        #expect(node?.foreground == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithFontSizes() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: true,
+                                         fontSize: 13, splitFontSize: 9.5, scratchFontSize: 11)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        let node = decoded.result?.tree?.workspaces.first?.sessions.first
+        #expect(node?.fontSize == 13)
+        #expect(node?.splitFontSize == 9.5)
+        #expect(node?.scratchFontSize == 11)
+    }
+
+    @Test func treeSessionNodeOmitsFontSizesWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        // contains is case-sensitive: assert both "fontSize" and "FontSize" so all three keys are covered.
+        #expect(!json.contains("fontSize"), "the main fontSize key must be omitted when nil; got \(json)")
+        #expect(!json.contains("FontSize"), "splitFontSize/scratchFontSize must be omitted when nil; got \(json)")
+    }
+
+    @Test func treeSessionNodeRoundTripsWithRealized() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false,
+                                         realized: false)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.realized == false)
+    }
+
+    @Test func treeSessionNodeEncodesRealizedFalseRatherThanOmittingIt() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false,
+                                         realized: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        // false is the answer a caller needs most - a session with no terminal - so it must not be dropped
+        // the way a nil optional is. Omission means "server predates the field", which is a different thing.
+        #expect(json.contains("\"realized\":false"), "realized:false must survive encoding; got \(json)")
+    }
+
+    @Test func treeSessionNodeOmitsRealizedWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("realized"), "a nil realized must be omitted from the JSON; got \(json)")
+    }
+
+    @Test func treeSessionNodeRoundTripsWithStatus() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false, status: "blocked")
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.status == "blocked")
+    }
+
+    @Test func treeSessionNodeOmitsStatusWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("status"), "a nil status must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.status == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithStatusPane() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: true,
+                                         status: "blocked", statusPane: "right")
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.statusPane == "right")
+    }
+
+    @Test func treeSessionNodeOmitsStatusPaneWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("statusPane"), "a nil statusPane must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.statusPane == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithStatusBlinkAndColor() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false,
+                                         status: "blocked", statusBlink: true, statusColor: "#ff8800")
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        let node = decoded.result?.tree?.workspaces.first?.sessions.first
+        #expect(node?.statusBlink == true)
+        #expect(node?.statusColor == "#ff8800")
+    }
+
+    @Test func treeSessionNodeOmitsStatusBlinkAndColorWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false, status: "blocked")
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("statusBlink"), "a nil statusBlink must be omitted; got \(json)")
+        #expect(!json.contains("statusColor"), "a nil statusColor must be omitted; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.statusBlink == nil)
+        #expect(decoded.statusColor == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithStatusShape() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false,
+                                         status: "blocked", statusShape: "triangle")
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.statusShape == "triangle")
+    }
+
+    @Test func treeSessionNodeOmitsStatusShapeWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false, status: "blocked")
+        let json = String(decoding: try JSONEncoder().encode(session), as: UTF8.self)
+        #expect(!json.contains("statusShape"), "a nil statusShape must be omitted; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.statusShape == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithStatusChangedAt() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false,
+                                         status: "active", statusChangedAt: 1_700_000_000.5)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.statusChangedAt == 1_700_000_000.5)
+    }
+
+    @Test func treeSessionNodeOmitsStatusChangedAtWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false, status: "active")
+        let json = String(decoding: try JSONEncoder().encode(session), as: UTF8.self)
+        #expect(!json.contains("statusChangedAt"), "a nil statusChangedAt must be omitted; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.statusChangedAt == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithBackground() throws {
+        let watermark = BackgroundWatermark(kind: .text, text: "PROD", colorHex: "#ff0000",
+                                            opacity: 0.2, fit: .cover, position: .topRight)
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false,
+                                         background: watermark)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        let node = decoded.result?.tree?.workspaces.first?.sessions.first
+        #expect(node?.background == watermark)
+        #expect(node?.background?.fit == .cover)
+        #expect(node?.background?.position == .topRight)
+    }
+
+    @Test func treeSessionNodeOmitsBackgroundWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("background"), "a nil background must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.background == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsPaneBackgroundsAndOmitsInheritingPanes() throws {
+        let overrides = PaneBackgrounds(right: BackgroundWatermark(kind: .text, text: "PEER"))
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: true,
+                                         backedByZmx: nil, paneBackgrounds: overrides)
+        let data = try JSONEncoder().encode(session)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let panes = try #require(object["paneBackgrounds"] as? [String: Any])
+        #expect(Set(panes.keys) == ["right"])
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: data)
+        #expect(decoded.paneBackgrounds == overrides)
+
+        let plain = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        #expect(!(String(data: try JSONEncoder().encode(plain), encoding: .utf8) ?? "").contains("paneBackgrounds"))
+    }
+
+    @Test func treeSessionNodeRoundTripsWithUnseen() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: false, split: false, unseen: 3)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.unseen == 3)
+    }
+
+    @Test func treeSessionNodeOmitsUnseenWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("unseen"), "a nil unseen count must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.unseen == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithCommandWait() throws {
+        let session = ControlSessionNode(id: "s1", name: "build", cwd: "/tmp", active: false, split: false,
+                                         commandWait: true)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.commandWait == true)
+    }
+
+    @Test func treeSessionNodeOmitsCommandWaitWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("commandWait"), "a nil commandWait must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.commandWait == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithOverlaySizePercent() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false,
+                                         overlay: true, overlaySizePercent: 95)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.overlaySizePercent == 95)
+    }
+
+    @Test func treeSessionNodeOmitsOverlaySizePercentWhenNil() throws {
+        // an absent key means a full-pane overlay OR no overlay — gate on the `overlay` bool first.
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false, overlay: true)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("overlaySizePercent"), "a nil overlay size must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.overlaySizePercent == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithPaneOverlays() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: true,
+                                         paneOverlays: ["left", "right"])
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.paneOverlays == ["left", "right"])
+    }
+
+    @Test func treeSessionNodeOmitsPaneOverlaysWhenNone() throws {
+        // a session-wide overlay must not imply a pane one: the two kinds are independent.
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false,
+                                         overlay: true)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("paneOverlays"), "no pane overlay must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.paneOverlays == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithHud() throws {
+        let hud = ControlHudNode(message: "gathering options", detail: "scanning 400 files", spinner: "braille",
+                                 backgroundColor: "#2a1a3a", sizePercent: 35, position: "top")
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false, hud: hud)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.hud == hud)
+    }
+
+    @Test func treeSessionNodeOmitsHudWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false, overlay: true)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("hud"), "no HUD must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.hud == nil)
+    }
+
+    @Test func controlHudNodeOmitsUnsetFieldsButAlwaysReportsPosition() throws {
+        let hud = ControlHudNode(message: "working", position: "center")
+        let json = String(data: try JSONEncoder().encode(hud), encoding: .utf8) ?? ""
+        #expect(!json.contains("detail"), "a nil detail must be omitted from the JSON; got \(json)")
+        #expect(!json.contains("backgroundColor"), "a nil background must be omitted from the JSON; got \(json)")
+        #expect(!json.contains("sizePercent"), "a nil size must be omitted from the JSON; got \(json)")
+        #expect(json.contains("\"position\":\"center\""), "the effective position must always be emitted; got \(json)")
+        #expect(json.contains("\"spinner\":\"none\""), "the effective spinner must always be emitted; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlHudNode.self, from: Data(json.utf8))
+        #expect(decoded == hud)
+    }
+
+    @Test func controlHudNodeRoundTripsMarkdownAndFontSize() throws {
+        let hud = ControlHudNode(message: "# status", position: "center", markdown: true, fontSize: 16)
+
+        let decoded = try JSONDecoder().decode(ControlHudNode.self, from: JSONEncoder().encode(hud))
+
+        #expect(decoded == hud)
+    }
+
+    @Test func controlHudNodeAlwaysReportsMarkdownAndOmitsAnInheritedFontSize() throws {
+        let json = String(decoding: try JSONEncoder().encode(ControlHudNode(message: "working", position: "center")),
+                          as: UTF8.self)
+
+        #expect(json.contains("\"markdown\":false"))
+        #expect(!json.contains("fontSize"))
+    }
+
+    // an app deployed but not restarted still serves a tree without the markdown key to a newer CLI.
+    @Test func controlHudNodeFromAnOlderServerDecodesAsPlain() throws {
+        let raw = #"{"message":"working","spinner":"none","position":"center","hideAfter":0}"#
+
+        let hud = try JSONDecoder().decode(ControlHudNode.self, from: Data(raw.utf8))
+
+        #expect(hud.markdown == false)
+        #expect(hud.fontSize == nil)
+    }
+
+    // an app deployed but not restarted still serves page nodes without the chromeless key to a newer CLI.
+    @Test func controlHtmlOverlayNodeFromAnOlderServerDecodesWithItsStrip() throws {
+        let raw = #"{"file":"/tmp/r.html","state":"loaded","javascript":false}"#
+
+        let node = try JSONDecoder().decode(ControlHtmlOverlayNode.self, from: Data(raw.utf8))
+
+        #expect(node.chromeless == false)
+        #expect(node.persistent == false)
+        #expect(node.file == "/tmp/r.html")
+    }
+
+    @Test func treeSessionNodeToleratesMissingHud() throws {
+        // a pre-`session.hud.open` server omits the key entirely, so it must decode as nil.
+        let raw = #"{"id":"s1","name":"shell","cwd":"/tmp","active":true,"split":false,"# +
+            #""overlay":false,"scratch":false,"flagged":false}"#
+        #expect(try JSONDecoder().decode(ControlSessionNode.self, from: Data(raw.utf8)).hud == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithRestoreCommand() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: true,
+                                         restoreCommand: "claude --resume abc",
+                                         splitRestoreCommand: "tail -f log")
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        let node = decoded.result?.tree?.workspaces.first?.sessions.first
+        #expect(node?.restoreCommand == "claude --resume abc")
+        #expect(node?.splitRestoreCommand == "tail -f log")
+    }
+
+    @Test func treeSessionNodeRoundTripsRestoreCommandPinnedToNothing() throws {
+        // "" = pinned to nothing (a plain shell); the key must be present and empty, not omitted.
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: true,
+                                         restoreCommand: "", splitRestoreCommand: "")
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(json.contains("\"restoreCommand\":\"\""), "an empty override must emit an empty string; got \(json)")
+        #expect(json.contains("\"splitRestoreCommand\":\"\""), "an empty split override must emit an empty string; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.restoreCommand == "")
+        #expect(decoded.splitRestoreCommand == "")
+    }
+
+    @Test func treeSessionNodeOmitsRestoreCommandWhenNil() throws {
+        // absent (auto-capture) must stay distinguishable from "" (pinned to nothing).
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("restoreCommand"), "a nil override must be omitted from the JSON; got \(json)")
+        #expect(!json.contains("splitRestoreCommand"), "a nil split override must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.restoreCommand == nil)
+        #expect(decoded.splitRestoreCommand == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithSplitRatio() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: true, splitRatio: 0.35)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.splitRatio == 0.35)
+    }
+
+    @Test func treeSessionNodeOmitsSplitRatioWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("splitRatio"), "a nil split ratio must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.splitRatio == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithSplitFocused() throws {
+        // false = the main (left) pane, true = the split (right) pane.
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: true, splitFocused: false)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.splitFocused == false)
+    }
+
+    @Test func treeSessionNodeOmitsSplitFocusedWhenNil() throws {
+        // a false IS emitted (the left pane is focused); only "no split" omits the key.
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("splitFocused"), "a nil split focus must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.splitFocused == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithHasSplit() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false,
+                                         hasSplit: true, splitRatio: 0.35, splitFocused: true)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        let node = decoded.result?.tree?.workspaces.first?.sessions.first
+        #expect(node?.hasSplit == true)
+        #expect(node?.split == false)
+    }
+
+    @Test func treeSessionNodeOmitsHasSplitWhenNil() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let json = String(data: try JSONEncoder().encode(session), encoding: .utf8) ?? ""
+        #expect(!json.contains("hasSplit"), "a session with no split must omit hasSplit; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(json.utf8))
+        #expect(decoded.hasSplit == nil)
+    }
+
+    @Test func treeSessionNodeRoundTripsWithSurfaces() throws {
+        let surfaces = [
+            ControlSurfaceNode(id: "surface:s1:left", kind: "left", active: true, visible: true,
+                               backedByZmx: true),
+            ControlSurfaceNode(id: "surface:s1:right", kind: "right", active: false, visible: false,
+                               backedByZmx: false),
+        ]
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true,
+                                         split: true, backedByZmx: false, surfaces: surfaces)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+
+        let decoded = try roundTrip(response)
+
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.surfaces == surfaces)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.backedByZmx == false)
+    }
+
+    @Test func treeSessionNodeToleratesMissingZmxBacking() throws {
+        let raw = #"{"id":"s1","name":"shell","cwd":"/tmp","active":true,"split":false,"# +
+            #""overlay":false,"scratch":false,"flagged":false}"#
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(raw.utf8))
+        #expect(decoded.backedByZmx == nil)
+    }
+
+    @Test func treeSessionNodeReportsAndOmitsTheRemoteHost() throws {
+        let remote = ControlSessionNode(id: "s1", name: "build", cwd: "/tmp", active: true, split: false,
+                                        backedByZmx: nil, remoteHost: "buildbox", remoteSessionID: "r1")
+        let encoded = try JSONEncoder().encode(remote)
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: encoded)
+        #expect(decoded.remoteHost == "buildbox")
+        #expect(decoded.remoteSessionID == "r1")
+
+        let local = ControlSessionNode(id: "s2", name: "shell", cwd: "/tmp", active: false, split: false,
+                                       backedByZmx: nil)
+        let localJSON = try #require(try JSONSerialization
+            .jsonObject(with: try JSONEncoder().encode(local)) as? [String: Any])
+        #expect(localJSON["remoteHost"] == nil, "a local session omits the key, never nulls it")
+        #expect(localJSON["remoteSessionID"] == nil)
+    }
+
+    @Test func treeSessionNodeToleratesMissingSurfaces() throws {
+        // a pre-`surface.zoom` server omits the key entirely, so it must decode as nil.
+        let raw = #"{"id":"s1","name":"shell","cwd":"/tmp","active":true,"split":false,"# +
+            #""overlay":false,"scratch":false,"flagged":false}"#
+        let decoded = try JSONDecoder().decode(ControlSessionNode.self, from: Data(raw.utf8))
+        #expect(decoded.surfaces == nil)
+
+        let json = String(data: try JSONEncoder().encode(decoded), encoding: .utf8) ?? ""
+        #expect(!json.contains("surfaces"), "nil surfaces must be omitted from the JSON; got \(json)")
+    }
+
+    @Test func treeRoundTripsWithLiveWindowFields() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let tree = ControlTree(workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true,
+                                                                 sessions: [session])],
+                               idleMs: 4200, autoFollowMs: 30_000, sidebarVisible: false)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: tree))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.idleMs == 4200)
+        #expect(decoded.result?.tree?.autoFollowMs == 30_000)
+        #expect(decoded.result?.tree?.sidebarVisible == false)
+    }
+
+    @Test func treeOmitsLiveWindowFieldsWhenNil() throws {
+        let tree = ControlTree(workspaces: [])
+        let json = String(data: try JSONEncoder().encode(tree), encoding: .utf8) ?? ""
+        #expect(!json.contains("idleMs"), "a nil idleMs must be omitted from the JSON; got \(json)")
+        #expect(!json.contains("autoFollowMs"), "a nil autoFollowMs must be omitted from the JSON; got \(json)")
+        #expect(!json.contains("sidebarVisible"), "a nil sidebarVisible must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlTree.self, from: Data(json.utf8))
+        #expect(decoded.idleMs == nil)
+        #expect(decoded.autoFollowMs == nil)
+        #expect(decoded.sidebarVisible == nil)
+    }
+
+    @Test func workspaceNodeRoundTripsWithFocused() throws {
+        // `focused` (a member of the sidebar focus set) is distinct from `active` (the selected one).
+        let ws = ControlWorkspaceNode(id: "w1", name: "work", active: true, focused: true, sessions: [])
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(workspaces: [ws])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.focused == true)
+    }
+
+    @Test func workspaceNodeOmitsFocusedWhenNil() throws {
+        let ws = ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [])
+        let json = String(data: try JSONEncoder().encode(ws), encoding: .utf8) ?? ""
+        #expect(!json.contains("focused"), "a nil focused must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlWorkspaceNode.self, from: Data(json.utf8))
+        #expect(decoded.focused == nil)
+    }
+
+    @Test func workspaceNodeRoundTripsWithCollapsed() throws {
+        let ws = ControlWorkspaceNode(id: "w1", name: "work", active: true, collapsed: true, sessions: [])
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(workspaces: [ws])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.collapsed == true)
+    }
+
+    @Test func workspaceNodeOmitsCollapsedWhenNil() throws {
+        let ws = ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [])
+        let json = String(data: try JSONEncoder().encode(ws), encoding: .utf8) ?? ""
+        #expect(!json.contains("collapsed"), "a nil collapsed must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlWorkspaceNode.self, from: Data(json.utf8))
+        #expect(decoded.collapsed == nil)
+    }
+
+    @Test func workspaceCollapseExpandRawStringsMapToCommands() throws {
+        let collapse = try JSONDecoder().decode(ControlRequest.self,
+                                                from: Data(#"{"cmd":"workspace.collapse","target":"9f3c"}"#.utf8))
+        #expect(collapse.cmd == .workspaceCollapse)
+        #expect(collapse.target == "9f3c")
+        let expand = try JSONDecoder().decode(ControlRequest.self,
+                                              from: Data(#"{"cmd":"workspace.expand","target":"active"}"#.utf8))
+        #expect(expand.cmd == .workspaceExpand)
+        #expect(expand.target == "active")
+    }
+
+    @Test func treeRoundTripsWithWorkspaceFilter() throws {
+        // a workspace row is visible only when sidebarVisible && tree mode && (filter off || focused).
+        let marked = ControlWorkspaceNode(id: "w1", name: "work", active: true, focused: true, sessions: [])
+        let other = ControlWorkspaceNode(id: "w2", name: "play", active: false, sessions: [])
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [marked, other], workspaceFilter: true)))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaceFilter == true)
+        #expect(decoded.result?.tree?.workspaces.first?.focused == true)
+        #expect(decoded.result?.tree?.workspaces.last?.focused == nil)
+    }
+
+    @Test func treeRoundTripsWithWorkspaceFilterOff() throws {
+        // membership is reported independently of the flag, so `false` is a real state, not an omission.
+        let marked = ControlWorkspaceNode(id: "w1", name: "work", active: true, focused: true, sessions: [])
+        let tree = ControlTree(workspaces: [marked], workspaceFilter: false)
+        let json = String(data: try JSONEncoder().encode(tree), encoding: .utf8) ?? ""
+        #expect(json.contains("\"workspaceFilter\":false"))
+        let decoded = try JSONDecoder().decode(ControlTree.self, from: Data(json.utf8))
+        #expect(decoded.workspaceFilter == false)
+        #expect(decoded.workspaces.first?.focused == true)
+    }
+
+    @Test func treeOmitsWorkspaceFilterWhenNil() throws {
+        let tree = ControlTree(workspaces: [])
+        let json = String(data: try JSONEncoder().encode(tree), encoding: .utf8) ?? ""
+        #expect(!json.contains("workspaceFilter"), "a nil workspaceFilter must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlTree.self, from: Data(json.utf8))
+        #expect(decoded.workspaceFilter == nil)
+    }
+
+    @Test func treeRoundTripsWithQuickVisible() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [], quickVisible: true)))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.quickVisible == true)
+    }
+
+    @Test func treeOmitsQuickVisibleWhenNil() throws {
+        let tree = ControlTree(workspaces: [])
+        let json = String(data: try JSONEncoder().encode(tree), encoding: .utf8) ?? ""
+        #expect(!json.contains("quickVisible"), "a nil quickVisible must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlTree.self, from: Data(json.utf8))
+        #expect(decoded.quickVisible == nil)
+    }
+
+    @Test func treeRoundTripsWithZoomedSurface() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [], zoomedSurface: "surface:5E5B1C5B-75C5-49E6-8806-2C61D8D6BBA9:right")))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.zoomedSurface == "surface:5E5B1C5B-75C5-49E6-8806-2C61D8D6BBA9:right")
+    }
+
+    @Test func treeOmitsZoomedSurfaceWhenNil() throws {
+        let tree = ControlTree(workspaces: [])
+        let json = String(data: try JSONEncoder().encode(tree), encoding: .utf8) ?? ""
+        #expect(!json.contains("zoomedSurface"), "a nil zoomedSurface must be omitted from the JSON; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlTree.self, from: Data(json.utf8))
+        #expect(decoded.zoomedSurface == nil)
+    }
+
+    @Test func dashboardRequestRoundTrips() throws {
+        let cases: [ControlRequest] = [
+            ControlRequest(cmd: .dashboard, args: ControlArgs(targets: ["9f3c", "abcd"])),
+            ControlRequest(cmd: .dashboard, args: ControlArgs(targets: ["9f3c"], window: "win", fontSize: 12)),
+            ControlRequest(cmd: .dashboard, args: ControlArgs(targets: ["9f3c", "abcd"], autoSize: true)),
+            ControlRequest(cmd: .dashboard, args: ControlArgs(close: true)),
+            ControlRequest(cmd: .dashboard, args: ControlArgs(window: "win", autoSize: true, mru: true)),
+        ]
+        for request in cases {
+            #expect(try roundTrip(request) == request)
+        }
+        let opened = try roundTrip(ControlRequest(cmd: .dashboard,
+                                                  args: ControlArgs(targets: ["a", "b"], fontSize: 14)))
+        #expect(opened.args?.targets == ["a", "b"])
+        #expect(opened.args?.fontSize == 14)
+        #expect(opened.args?.autoSize == nil)
+        #expect(opened.args?.mru == nil)
+        let closed = try roundTrip(ControlRequest(cmd: .dashboard, args: ControlArgs(close: true)))
+        #expect(closed.args?.close == true)
+        let mru = try roundTrip(ControlRequest(cmd: .dashboard, args: ControlArgs(mru: true)))
+        #expect(mru.args?.mru == true)
+        #expect(mru.args?.targets == nil)
+    }
+
+    @Test func dashboardArgsOmitFieldsWhenNil() throws {
+        let request = ControlRequest(cmd: .dashboard, args: ControlArgs(targets: ["9f3c"]))
+        let json = String(data: try JSONEncoder().encode(request), encoding: .utf8) ?? ""
+        #expect(!json.contains("close"), "a nil close must be omitted from the JSON; got \(json)")
+        #expect(!json.contains("fontSize"), "a nil fontSize must be omitted from the JSON; got \(json)")
+        #expect(!json.contains("autoSize"), "a nil autoSize must be omitted from the JSON; got \(json)")
+        #expect(!json.contains("mru"), "a nil mru must be omitted from the JSON; got \(json)")
+    }
+
+    @Test func treeRoundTripsWithDashboardFields() throws {
+        let members = ["9f3c:left", "9f3c:right", "abcd:left"]
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [], dashboardMembers: members, dashboardHighlighted: "9f3c:right",
+            dashboardFontSize: 12, dashboardFontMode: "auto")))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        let tree = decoded.result?.tree
+        #expect(tree?.dashboardMembers == members)
+        #expect(tree?.dashboardHighlighted == "9f3c:right")
+        #expect(tree?.dashboardFontSize == 12)
+        #expect(tree?.dashboardFontMode == "auto")
+    }
+
+    @Test func treeOmitsDashboardFieldsWhenNil() throws {
+        let tree = ControlTree(workspaces: [])
+        let json = String(data: try JSONEncoder().encode(tree), encoding: .utf8) ?? ""
+        #expect(!json.contains("dashboardMembers"), "a nil dashboardMembers must be omitted; got \(json)")
+        #expect(!json.contains("dashboardHighlighted"), "a nil dashboardHighlighted must be omitted; got \(json)")
+        #expect(!json.contains("dashboardFontSize"), "a nil dashboardFontSize must be omitted; got \(json)")
+        #expect(!json.contains("dashboardFontMode"), "a nil dashboardFontMode must be omitted; got \(json)")
+        let decoded = try JSONDecoder().decode(ControlTree.self, from: Data(json.utf8))
+        #expect(decoded.dashboardMembers == nil)
+        #expect(decoded.dashboardHighlighted == nil)
+        #expect(decoded.dashboardFontSize == nil)
+        #expect(decoded.dashboardFontMode == nil)
+    }
+
+    @Test func backgroundWatermarkFitPositionSerializeAsRawStrings() throws {
+        // the enums must serialize as ghostty's exact key strings.
+        let watermark = BackgroundWatermark(kind: .image, imagePath: "/a.png", fit: .stretch, position: .bottomCenter)
+        let json = String(data: try JSONEncoder().encode(watermark), encoding: .utf8) ?? ""
+        #expect(json.contains("\"fit\":\"stretch\""))
+        #expect(json.contains("\"position\":\"bottom-center\""))
+        let decoded = try JSONDecoder().decode(BackgroundWatermark.self, from: Data(json.utf8))
+        #expect(decoded == watermark)
+    }
+
+    @Test func backgroundWatermarkColorKindSerializes() throws {
+        // a `.color` watermark carries only the hex — no opacity, since it takes the window translucency.
+        let watermark = BackgroundWatermark(kind: .color, colorHex: "#112233")
+        let json = String(decoding: try JSONEncoder().encode(watermark), as: UTF8.self)
+        #expect(json.contains("\"kind\":\"color\""))
+        #expect(try JSONDecoder().decode(BackgroundWatermark.self, from: Data(json.utf8)) == watermark)
+
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false,
+                                         background: watermark)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let node = try roundTrip(response).result?.tree?.workspaces.first?.sessions.first
+        #expect(node?.background == watermark)
+        #expect(node?.background?.kind == .color)
+        #expect(node?.background?.colorHex == "#112233")
+    }
+
+    @Test func restoreCaptureRoundTrips() throws {
+        let request = ControlRequest(cmd: .restoreCapture)
+        #expect(try roundTrip(request) == request)
+    }
+
+    @Test func restoreClearRoundTrips() throws {
+        let request = ControlRequest(cmd: .restoreClear)
+        #expect(try roundTrip(request) == request)
+    }
+
+    @Test func sessionFocusRoundTripsWithPane() throws {
+        let request = ControlRequest(cmd: .sessionFocus, target: "active", args: ControlArgs(pane: "right"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.pane == "right")
+    }
+
+    @Test func sessionGoRoundTripsWithDirection() throws {
+        let request = ControlRequest(cmd: .sessionGo, args: ControlArgs(to: "next"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .sessionGo)
+        #expect(decoded.args?.to == "next")
+    }
+
+    @Test func sessionGoRoundTripsWithAttentionDirection() throws {
+        let request = ControlRequest(cmd: .sessionGo, args: ControlArgs(to: "next-attention"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.to == "next-attention")
+        #expect(SessionNavigation(wire: decoded.args!.to!) == .nextAttention)
+    }
+
+    @Test func workspaceGoRoundTripsWithDirection() throws {
+        let request = ControlRequest(cmd: .workspaceGo, args: ControlArgs(window: "w1", to: "prev"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .workspaceGo)
+        #expect(decoded.args?.window == "w1")
+        #expect(WorkspaceNavigation(wire: decoded.args!.to!) == .previous)
+    }
+
+    @Test func workspaceNavigationWireMapping() {
+        #expect(WorkspaceNavigation(wire: "next") == .next)
+        #expect(WorkspaceNavigation(wire: "prev") == .previous)
+        #expect(WorkspaceNavigation(wire: "previous") == .previous)
+        #expect(WorkspaceNavigation(wire: "first") == nil)
+        #expect(WorkspaceNavigation(wire: "next-attention") == nil)
+        #expect(WorkspaceNavigation(wire: "") == nil)
+    }
+
+    @Test func sessionMoveReorderRoundTripsWithDirection() throws {
+        let request = ControlRequest(cmd: .sessionMove, target: "9f3c", args: ControlArgs(to: "up"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .sessionMove)
+        #expect(decoded.args?.to == "up")
+        #expect(decoded.args?.workspace == nil)
+    }
+
+    @Test func sessionMoveRoundTripsWithAfterAnchor() throws {
+        let request = ControlRequest(cmd: .sessionMove, target: "9f3c", args: ControlArgs(after: "active"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.after == "active")
+        #expect(decoded.args?.before == nil)
+        #expect(decoded.args?.to == nil)
+        #expect(decoded.args?.workspace == nil)
+    }
+
+    @Test func sessionMoveRoundTripsWithBeforeAnchor() throws {
+        let request = ControlRequest(cmd: .sessionMove, target: "9f3c", args: ControlArgs(before: "1a2b"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.before == "1a2b")
+        #expect(decoded.args?.after == nil)
+    }
+
+    @Test func sessionNewRoundTripsWithAfterAnchor() throws {
+        let request = ControlRequest(cmd: .sessionNew, args: ControlArgs(after: "active"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.after == "active")
+        #expect(decoded.args?.before == nil)
+        #expect(decoded.args?.workspace == nil)
+    }
+
+    @Test func sessionNewRoundTripsWithBeforeAnchor() throws {
+        let request = ControlRequest(cmd: .sessionNew, args: ControlArgs(before: "1a2b"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.before == "1a2b")
+        #expect(decoded.args?.after == nil)
+    }
+
+    @Test func workspaceMoveRoundTripsWithDirection() throws {
+        let request = ControlRequest(cmd: .workspaceMove, target: "active", args: ControlArgs(to: "top"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .workspaceMove)
+        #expect(decoded.args?.to == "top")
+    }
+
+    @Test func workspaceMoveRawStringMapsToCommand() throws {
+        let json = #"{"cmd":"workspace.move","target":"active","args":{"to":"bottom"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8))
+        #expect(decoded.cmd == .workspaceMove)
+        #expect(decoded.args?.to == "bottom")
+    }
+
+    @Test func sessionSearchRoundTripsWithNeedleAndDirection() throws {
+        let request = ControlRequest(cmd: .sessionSearch, target: "active", args: ControlArgs(text: "foo", to: "next"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .sessionSearch)
+        #expect(decoded.args?.text == "foo")
+        #expect(decoded.args?.to == "next")
+    }
+
+    @Test(arguments: ["next", "prev", "close"]) func sessionSearchRoundTripsEachDirection(_ to: String) throws {
+        let request = ControlRequest(cmd: .sessionSearch, target: "active", args: ControlArgs(to: to))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .sessionSearch)
+        #expect(decoded.args?.to == to)
+    }
+
+    @Test func sessionSearchResultRoundTripsWithCountAndText() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(text: "3 of 12", count: 12))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.count == 12)
+        #expect(decoded.result?.text == "3 of 12")
+    }
+
+    @Test func sessionSearchRawStringMapsToCommand() throws {
+        let json = #"{"cmd":"session.search"}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8))
+        #expect(decoded.cmd == .sessionSearch)
+    }
+
+    @Test func notifyRoundTripsWithTitleAndBody() throws {
+        let request = ControlRequest(cmd: .notify, target: "active", args: ControlArgs(title: "Build", body: "done"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.title == "Build")
+        #expect(decoded.args?.body == "done")
+    }
+
+    @Test func fontCommandsRoundTrip() throws {
+        let cases: [ControlRequest] = [
+            ControlRequest(cmd: .fontInc, target: "active"),
+            ControlRequest(cmd: .fontDec, target: "active"),
+            ControlRequest(cmd: .fontReset, target: "active"),
+        ]
+        for request in cases {
+            #expect(try roundTrip(request) == request)
+        }
+    }
+
+    @Test func keymapReloadRequestRoundTrips() throws {
+        let request = ControlRequest(cmd: .keymapReload)
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .keymapReload)
+    }
+
+    @Test func keymapReloadRawStringMapsToCommand() throws {
+        let json = #"{"cmd":"keymap.reload"}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8))
+        #expect(decoded.cmd == .keymapReload)
+    }
+
+    @Test func configReloadRequestRoundTrips() throws {
+        let request = ControlRequest(cmd: .configReload)
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .configReload)
+    }
+
+    @Test func configReloadRawStringMapsToCommand() throws {
+        let json = #"{"cmd":"config.reload"}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8))
+        #expect(decoded.cmd == .configReload)
+    }
+
+    @Test func responseOkWithCountRoundTrips() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(count: 3))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.count == 3)
+    }
+
+    @Test func responseOkWithAffectedRoundTrips() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(affected: 2))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.affected == 2)
+        #expect(decoded.result?.count == nil)
+    }
+
+    @Test func themeSetRequestRoundTrips() throws {
+        let request = ControlRequest(cmd: .themeSet, args: ControlArgs(name: "Dracula"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .themeSet)
+        #expect(decoded.args?.name == "Dracula")
+    }
+
+    @Test func themeSetRawStringMapsToCommand() throws {
+        let json = #"{"cmd":"theme.set","args":{"name":"Nord"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8))
+        #expect(decoded.cmd == .themeSet)
+        #expect(decoded.args?.name == "Nord")
+    }
+
+    @Test func themeListRequestRoundTrips() throws {
+        let request = ControlRequest(cmd: .themeList)
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.cmd == .themeList)
+    }
+
+    @Test func themeListResponseRoundTrips() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(theme: "Nord", themes: ["Dracula", "Nord"]))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.theme == "Nord")
+        #expect(decoded.result?.themes == ["Dracula", "Nord"])
+    }
+
+    @Test func themeSetResponseEchoesAppliedTheme() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(theme: "Dracula"))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.theme == "Dracula")
+        #expect(decoded.result?.themes == nil)
+    }
+
+    @Test func themeSetSyncRequestRoundTrips() throws {
+        let request = ControlRequest(cmd: .themeSet, args: ControlArgs(light: "Builtin Light", dark: "elis"))
+        let decoded = try roundTrip(request)
+        #expect(decoded.cmd == .themeSet)
+        #expect(decoded.args?.light == "Builtin Light")
+        #expect(decoded.args?.dark == "elis")
+        #expect(decoded.args?.name == nil)
+    }
+
+    @Test func themeListResponseCarriesSyncState() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(
+            theme: "elis", themes: ["elis", "Builtin Light"], sync: true, light: "Builtin Light", dark: "elis"))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.sync == true)
+        #expect(decoded.result?.light == "Builtin Light")
+        #expect(decoded.result?.dark == "elis")
+    }
+
+    @Test func sessionCommandWithWindowArgRoundTrips() throws {
+        let request = ControlRequest(cmd: .sessionSelect, target: "9f3c", args: ControlArgs(window: "main"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.window == "main")
+    }
+
+    @Test func requestUsesExpectedWireFieldNames() throws {
+        let request = ControlRequest(cmd: .sessionType, target: "9f3c", args: ControlArgs(text: "ls\n", select: true))
+        let json = try #require(String(data: JSONEncoder().encode(request), encoding: .utf8))
+        #expect(json.contains("\"cmd\":\"session.type\""))
+        #expect(json.contains("\"target\":\"9f3c\""))
+        #expect(json.contains("\"args\":"))
+        #expect(json.contains("\"text\":\"ls\\n\""))
+        #expect(json.contains("\"select\":true"))
+    }
+
+    @Test func responseOkWithIDRoundTrips() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(id: "9f3c"))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.id == "9f3c")
+    }
+
+    @Test func responseOkWithTreeRoundTrips() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false)
+        let workspace = ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(workspaces: [workspace])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.name == "shell")
+    }
+
+    @Test func responseOkWithTextRoundTrips() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(text: "selected\nlines"))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.text == "selected\nlines")
+    }
+
+    @Test func responseOkWithExitCodeRoundTrips() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(id: "9f3c", exitCode: 10))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.exitCode == 10)
+    }
+
+    @Test func responseErrorRoundTrips() throws {
+        let response = ControlResponse(ok: false, error: "ambiguous prefix '9f'")
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.ok == false)
+        #expect(decoded.error == "ambiguous prefix '9f'")
+    }
+
+    @Test func responseUsesExpectedWireFieldNames() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(id: "9f3c"))
+        let json = try #require(String(data: JSONEncoder().encode(response), encoding: .utf8))
+        #expect(json.contains("\"ok\":true"))
+        #expect(json.contains("\"result\":"))
+        #expect(json.contains("\"id\":\"9f3c\""))
+    }
+
+    @Test func unknownCommandFailsToDecode() {
+        let json = #"{"cmd":"bogus.command"}"#
+        #expect(throws: (any Error).self) {
+            try JSONDecoder().decode(ControlRequest.self, from: Data(json.utf8))
+        }
+    }
+
+    @Test func appIdentityRoundTripsInTreeAndResult() throws {
+        let identity = AppIdentity(version: "0.24.0", commit: "a1b2c3d")
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(workspaces: [], app: identity),
+                                                                      app: identity))
+        let decoded = try JSONDecoder().decode(ControlResponse.self, from: JSONEncoder().encode(response))
+
+        #expect(decoded.result?.app == identity)
+        #expect(decoded.result?.tree?.app == identity)
+        #expect(decoded.result?.tree?.app == decoded.result?.app)
+    }
+
+    @Test func appIdentityIsOmittedWhenAbsentSoAnOlderPayloadStillDecodes() throws {
+        let line = String(decoding: try JSONEncoder().encode(ControlTree(workspaces: [])), as: UTF8.self)
+        #expect(!line.contains("app"))
+        #expect(try JSONDecoder().decode(ControlTree.self, from: Data(line.utf8)).app == nil)
+
+        let commitless = AppIdentity(version: "0.24.0")
+        let encoded = String(decoding: try JSONEncoder().encode(commitless), as: UTF8.self)
+        #expect(!encoded.contains("commit"))
+        #expect(try JSONDecoder().decode(AppIdentity.self, from: Data(encoded.utf8)) == commitless)
+    }
+
+    private static let liveResetOutcome = LiveReset.Outcome(
+        panes: LiveReset.PaneCounts(confirmed: 3, killed: 2, gone: 0, skipped: 0), unconfirmed: [UUID()],
+        sessions: LiveReset.SessionCounts(affected: 2, reset: 1, partial: 1, unconfirmed: 1), inventoryFailed: false)
+
+    @Test func liveResetStatusRoundTrips() throws {
+        let response = ControlResponse(ok: true, result: ControlResult(
+            text: "2 live sessions will be reset.", liveReset: ControlLiveResetStatus(sessions: 2, panes: 3, pending: true)))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.liveReset?.pending == true)
+    }
+
+    @Test func liveResetStatusOmitsOutdatedUnlessSet() throws {
+        let plain = try JSONEncoder().encode(ControlLiveResetStatus(sessions: 2, panes: 3, pending: true))
+        #expect(!String(decoding: plain, as: UTF8.self).contains("outdated"))
+        let status = ControlLiveResetStatus(sessions: 2, panes: 3, pending: true, outdated: 1)
+        #expect(try JSONDecoder().decode(ControlLiveResetStatus.self, from: JSONEncoder().encode(status)) == status)
+    }
+
+    @Test func zmxEntryCarriesOutdatedOnlyWhenTrue() throws {
+        let row = ZmxInventoryRow(daemon: "elis-a", state: .orphan, observation: .running, clients: 0, leaderPID: 1,
+                                  claim: nil, createdAt: Date(timeIntervalSince1970: 999))
+        let old = ControlZmxEntry(row: row, outdatedBefore: Date(timeIntervalSince1970: 1000))
+        #expect(old.outdated == true)
+        let current = ControlZmxEntry(row: row, outdatedBefore: Date(timeIntervalSince1970: 999))
+        #expect(current.outdated == nil)
+        #expect(!String(decoding: try JSONEncoder().encode(current), as: UTF8.self).contains("outdated"))
+        #expect(ControlZmxEntry(row: row).outdated == nil)
+    }
+
+    @Test func liveResetReadbackRoundTrips() throws {
+        let readback = ControlLiveResetReadback(pending: 3, last: Self.liveResetOutcome)
+        let tree = ControlTree(workspaces: [], liveReset: readback)
+        let inventory = ControlZmxInventory(
+            restore: ControlRestoreStatus(configured: .live, requestedAtLaunch: .live, active: .live, unavailableReason: nil),
+            result: ZmxInventoryResult(rows: [], inventoryComplete: true), liveReset: readback)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: tree, zmx: inventory))
+
+        let decoded = try roundTrip(response)
+
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.liveReset == readback)
+        #expect(decoded.result?.zmx?.liveReset == readback)
+    }
+
+    @Test func liveResetOutcomeRoundTrips() throws {
+        let data = try JSONEncoder().encode(Self.liveResetOutcome)
+        #expect(try JSONDecoder().decode(LiveReset.Outcome.self, from: data) == Self.liveResetOutcome)
+    }
+
+    @Test func liveResetIsOmittedWhenNil() throws {
+        let tree = try JSONEncoder().encode(ControlTree(workspaces: []))
+        let inventory = try JSONEncoder().encode(ControlZmxInventory(
+            restore: ControlRestoreStatus(configured: .live, requestedAtLaunch: .live, active: .live, unavailableReason: nil),
+            result: ZmxInventoryResult(rows: [], inventoryComplete: true)))
+        let result = try JSONEncoder().encode(ControlResult(text: "x"))
+        for encoded in [tree, inventory, result] {
+            #expect(!String(decoding: encoded, as: UTF8.self).contains("liveReset"))
+        }
+    }
+}

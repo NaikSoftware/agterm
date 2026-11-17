@@ -17,16 +17,16 @@
 ## Context (from discovery)
 
 - Current implementation: PR #556 (`32ec288d`), plan `docs/plans/20260905-ask-dialog.md`.
-- Model: `HangarCore/Sources/HangarCore/Ask.swift` (`PendingAsk`, `AskAnchor`, `AskNavigation`),
+- Model: `ElisCore/Sources/ElisCore/Ask.swift` (`PendingAsk`, `AskAnchor`, `AskNavigation`),
   `Pick.swift` (`PickController.pendingAsk`, `modalPending`, `PickRegistry` ask retention).
 - HUD ownership to mirror: `Session.swift` `hudSpec`, `hudPaneIdentity`, `hudTargetPane`,
   `paneRole(forIdentity:)`; HUD pane-close hooks in `AppStore+Panes.swift:175-178, 223-235`.
 - Validation and host: `ControlDispatcher+Ask.swift` (rejects `--pane` without a target at :93),
-  `Hangar/Control/ControlServer+Ask.swift` (builds `AskAnchor` for both styles at :26-41, refuses under
+  `Elis/Control/ControlServer+Ask.swift` (builds `AskAnchor` for both styles at :26-41, refuses under
   zoom or dashboard, enforces `--window` for either style including retained results at :70-105; shipped
   errors are `ask already pending` and `session not visible`). GUI tree read-back: `ControlServer.swift:750`
   supplies `askPending` into `store.controlTree`; session nodes are built once in `AppStore.swift:296`.
-- View: `Hangar/Views/AskDialogView.swift`; the backdrop fills its host (:66-91) and `AskKeyCatcher`
+- View: `Elis/Views/AskDialogView.swift`; the backdrop fills its host (:66-91) and `AskKeyCatcher`
   re-grabs first responder on every update and never relinquishes (:292-327). Mounted from
   `WindowContentView.swift:606` with `askAnchorFrame` (:650) and the anchor-invalid cancel (:627). The
   session layer it joins is the HUD panel in `WindowContentView+Detail.swift:284-300`.
@@ -35,7 +35,7 @@
   their retries: `retryReparentFocus` (`GhosttySurfaceView.swift:810`, no deck-active guard),
   `GhosttySurfaceView+Input.swift:155` `mouseDown`, `TerminalView.swift:69-94` attachment grab,
   `AppActions+Focus.swift:128-197` retry loops, `WindowContentView+Detail.swift:168-189` overlay-close and
-  scratch-toggle refocus, `hangarApp.swift:483`, `WorkspaceSidebar.swift:730-735` direct grab.
+  scratch-toggle refocus, `elisApp.swift:483`, `WorkspaceSidebar.swift:730-735` direct grab.
   Cmd-W dismissal ladder: `AppActions.swift:218-264` (`escapePendingAsk`).
 - Close paths that drop ownership: `AppStore.closeSession`, `removeWorkspace`;
   `AppStore+PendingClose.swift` `softCloseSession` (:86), `softCloseSessions` (:131-153),
@@ -45,27 +45,27 @@
   `PickRegistry.shared.unregister` from `WindowAccessor.swift:150` (willClose) and
   `WindowContentView.swift:244` (onDisappear); quit cancels before `ControlServer.stop` in
   `AppDelegate.swift:317-321`.
-- CLI: `HangarCore/Sources/hangarctlKit/AskCommands.swift`; `ModalCommandRunner` polls by id only.
+- CLI: `ElisCore/Sources/elisctlKit/AskCommands.swift`; `ModalCommandRunner` polls by id only.
 - Docs stating one pick or ask per window: `.claude/rules/control-api.md:557`,
-  `.claude/rules/menu-actions.md:31`, `site/commands.html:2270`, `plugins/hangar/skills/hangar/SKILL.md:522`,
-  `plugins/hangar/skills/hangar/reference.md:1003,1037` (plus `askPending` and style semantics at
+  `.claude/rules/menu-actions.md:31`, `site/commands.html:2270`, `plugins/elis/skills/elis/SKILL.md:522`,
+  `plugins/elis/skills/elis/reference.md:1003,1037` (plus `askPending` and style semantics at
   :251,258,1051,1090).
 
 ## Development Approach
 
 - **testing approach**: Regular (code first, then tests in the same task)
 - one task at a time; every task ends with its tests green before the next starts, and the app target
-  builds after every task (`make test-app` scoped with `-only-testing` where a task touches `hangar/`)
-- gates run once at the end: `cd HangarCore && swift test`, `make test-app`, `make lint`
-- host-free logic stays in `HangarCore`; the app target resolves geometry, focus and drawing
+  builds after every task (`make test-app` scoped with `-only-testing` where a task touches `elis/`)
+- gates run once at the end: `cd ElisCore && swift test`, `make test-app`, `make lint`
+- host-free logic stays in `ElisCore`; the app target resolves geometry, focus and drawing
 - existing hosted GUI tests stay GUI fixtures; they are not rewritten to the terminal contract
 - update this plan when scope changes
 
 ## Testing Strategy
 
-- unit tests in `HangarCore` in the existing test file of each source file touched
-- hosted tests (`HangarTests`) for mounting, clipping and input ownership
-- UI tests (`HangarUITests/ControlAskUITests`) for the acceptance list in Task 6
+- unit tests in `ElisCore` in the existing test file of each source file touched
+- hosted tests (`ElisTests`) for mounting, clipping and input ownership
+- UI tests (`ElisUITests/ControlAskUITests`) for the acceptance list in Task 6
 
 ## Progress Tracking
 
@@ -77,7 +77,7 @@
   (`askPending`, `askPaneIdentity`), independent of the overlay slot HUD and programs share, so an ask never
   refuses or destroys overlay work. `style: gui` keeps `PickController.pendingAsk` with its `AskAnchor`
   unchanged. Style therefore decides ownership and default placement, not only rendering.
-- **One registry for lookup.** `AskRegistry` in `HangarCore` indexes each live ask id to its owner at open
+- **One registry for lookup.** `AskRegistry` in `ElisCore` indexes each live ask id to its owner at open
   (the window id for GUI, the session id plus owning window id for terminal) and retains finished outcomes
   with their owning window in a bounded cache, replacing the ask half of `PickRegistry`. Pending state is
   owned once, by `Session` or `PickController`; the registry points at it. `ask.result` and `ask.cancel`
@@ -119,8 +119,8 @@
 ### Task 1: Session ask slot and the shared id registry
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Ask.swift`, `Session.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AskTests.swift`, `SessionTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/Ask.swift`, `Session.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AskTests.swift`, `SessionTests.swift`
 
 - [x] add `askPending`, `askPaneIdentity`, `askTargetPane`, `openAsk`, `resolveAsk(id:)`, `cancelAsk(id:)`
       to `Session`; a second open is refused; a stale id is ignored
@@ -135,9 +135,9 @@
 ### Task 2: Cancel on every owner-removal path in the store
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`, `AppStore+PendingClose.swift`,
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift`, `AppStore+PendingClose.swift`,
   `AppStore+Panes.swift`, `WindowLibrary.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`, `AppStorePendingCloseTests.swift`,
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreTests.swift`, `AppStorePendingCloseTests.swift`,
   `AppStorePaneTests.swift`, `AppStorePaneSwapTests.swift`, `WindowLibraryTests.swift`
 
 - [x] cancel the session ask in `closeSession`, `softCloseSession`, `softCloseSessions`, `removeWorkspace`,
@@ -152,10 +152,10 @@
 ### Task 3: Session-owned dialog mount and input ownership
 
 **Files:**
-- Modify: `Hangar/Views/AskDialogView.swift`, `WindowContentView+Detail.swift`,
+- Modify: `Elis/Views/AskDialogView.swift`, `WindowContentView+Detail.swift`,
   `Ghostty/GhosttySurfaceView.swift`, `Ghostty/GhosttySurfaceView+Input.swift`, `TerminalView.swift`,
-  `AppActions.swift`, `AppActions+Focus.swift`, `hangarApp.swift`, `Views/WorkspaceSidebar.swift`
-- Modify: `HangarTests/AskDialogViewTests.swift`, `PickFocusGuardTests.swift`,
+  `AppActions.swift`, `AppActions+Focus.swift`, `elisApp.swift`, `Views/WorkspaceSidebar.swift`
+- Modify: `ElisTests/AskDialogViewTests.swift`, `PickFocusGuardTests.swift`,
   `GhosttySurfaceViewInputTests.swift`
 
 - [x] mount `Session.askPending` in the session detail layer above the HUD panel, framed and hit-tested to
@@ -182,12 +182,12 @@
 ### Task 4: Host, dispatcher and read-back switch over by style
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Ask.swift`, `ControlProjection.swift`,
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Ask.swift`, `ControlProjection.swift`,
   `AppStore.swift`, `Pick.swift`, `ControlActions*.swift`
-- Modify: `Hangar/Control/ControlServer+Ask.swift`, `ControlServer.swift`, `AppDelegate.swift`,
+- Modify: `Elis/Control/ControlServer+Ask.swift`, `ControlServer.swift`, `AppDelegate.swift`,
   `Views/WindowAccessor.swift`, `Views/WindowContentView.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherAskTests.swift`, `PickTests.swift`,
-  `AppStoreTreeProjectionTests.swift`; `HangarTests/ControlServerAskTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherAskTests.swift`, `PickTests.swift`,
+  `AppStoreTreeProjectionTests.swift`; `ElisTests/ControlServerAskTests.swift`
 
 - [x] dispatcher: accept `--pane`/`--pane-id` without a target for terminal style only; GUI keeps the
       rejection and its target-anchored placement
@@ -211,8 +211,8 @@
 ### Task 5: CLI accepts pane placement without a target
 
 **Files:**
-- Modify: `HangarCore/Sources/hangarctlKit/AskCommands.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/AskCommandsTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/AskCommands.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/AskCommandsTests.swift`
 
 - [x] drop the target requirement for `--pane`/`--pane-id` when the style is terminal; help text names
       the selected-session default
@@ -223,8 +223,8 @@
 ### Task 6: UI acceptance tests
 
 **Files:**
-- Modify: `HangarUITests/ControlAskUITests.swift`
-- Modify: `Hangar/Views/AskDialogView.swift`, `HangarTests/PickFocusGuardTests.swift` (picker focus repair found by UI acceptance)
+- Modify: `ElisUITests/ControlAskUITests.swift`
+- Modify: `Elis/Views/AskDialogView.swift`, `ElisTests/PickFocusGuardTests.swift` (picker focus repair found by UI acceptance)
 
 - [x] left pane keeps typing while a right-pane ask is pending; answering it sends no bytes to the right
       shell
@@ -238,14 +238,14 @@
       ask on top, scratch over a pane ask hides it until dismissed
 - [x] soft close then immediate `ask result` returns `cancelled`; undo brings the session back without the
       dialog
-- [x] `-only-testing:HangarUITests/ControlAskUITests`; must pass before Task 7
+- [x] `-only-testing:ElisUITests/ControlAskUITests`; must pass before Task 7
 
 ### Task 7: Documentation
 
 **Files:**
 - Modify: `.claude/rules/control-api.md`, `.claude/rules/menu-actions.md`, `CLAUDE.md`,
-  `site/commands.html`, `site/docs.html`, `plugins/hangar/skills/hangar/SKILL.md`,
-  `plugins/hangar/skills/hangar/reference.md`
+  `site/commands.html`, `site/docs.html`, `plugins/elis/skills/elis/SKILL.md`,
+  `plugins/elis/skills/elis/reference.md`
 
 - [x] `control-api.md` owns the contract: ownership by style, cancel paths, input priority order, scratch
       rule; `menu-actions.md` modal-cover line names GUI asks only; `CLAUDE.md` overlay-slot note gains one
@@ -262,7 +262,7 @@
       (control half verified on the instance: right-pane ask with no target, session-node read-back,
       GUI ask coexisting with top-level `askPending`, overlay program receiving its result; keystroke
       delivery is covered by `ControlAskUITests`, since the shell cannot send keys without Accessibility)
-- [x] run `cd HangarCore && swift test`, `make test-app`, `make lint` once; zero findings
+- [x] run `cd ElisCore && swift test`, `make test-app`, `make lint` once; zero findings
       (3060 core, 557 hosted via the make target's xcodegen and xcodebuild commands without `setup.sh`,
       which in a worktree would rewrite the main checkout's linked artifacts; lint clean)
 - [x] move this plan to `docs/plans/completed/` (done at merge; the exec run leaves the plan in place)

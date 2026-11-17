@@ -1,12 +1,12 @@
 ---
 worth: maybe
-where: HangarCore/Sources/HangarCore/AppStore+Messages.swift:livePanes
+where: ElisCore/Sources/ElisCore/AppStore+Messages.swift:livePanes
 added: 2026-11-15
 ---
 # messages to a pane in a hidden split are refused as unknown pane
 
 Seen on the deployed build on 2026-11-15: a session's split had been shown, codex running in its right pane, then
-hidden (`tree` reported `split: false`, `hasSplit: true`). `hangarctl msg send --to SESSION:RIGHT-PANE-ID` was
+hidden (`tree` reported `split: false`, `hasSplit: true`). `elisctl msg send --to SESSION:RIGHT-PANE-ID` was
 refused twice with `unknown pane`, while `tree --json` still listed the right surface with that same `paneID`. After
 `session split on`, the identical send was delivered at once.
 

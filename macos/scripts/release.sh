@@ -6,14 +6,14 @@
 #   scripts/release.sh <version>            # build + sign + notarize + DMG (no publish)
 #   scripts/release.sh <version> --publish  # also: gh release + upload
 #
-# MOBILE_APK=<path> also uploads the phone app as hangar-mobile.apk; without it the release has no APK.
+# MOBILE_APK=<path> also uploads the phone app as elis-mobile.apk; without it the release has no APK.
 #
 # Signing identity: auto-detected from the keychain ("Developer ID Application"),
-# or override with HANGAR_SIGN_IDENTITY. With no identity it produces an AD-HOC
-# DMG (not notarized) — a dry run by default, but set HANGAR_ALLOW_UNSIGNED=1 to
+# or override with ELIS_SIGN_IDENTITY. With no identity it produces an AD-HOC
+# DMG (not notarized) — a dry run by default, but set ELIS_ALLOW_UNSIGNED=1 to
 # --publish it as an unsigned release. Notary creds come from a keychain profile created
-# with `xcrun notarytool store-credentials` (default name: hangar-notary,
-# override with HANGAR_NOTARY_PROFILE).
+# with `xcrun notarytool store-credentials` (default name: elis-notary,
+# override with ELIS_NOTARY_PROFILE).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
@@ -29,8 +29,8 @@ if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 TAG="v$VERSION"
-DMG="$BUILD_DIR/Hangar-$VERSION.dmg"
-GH_REPO=NaikSoftware/hangar
+DMG="$BUILD_DIR/Elis-$VERSION.dmg"
+GH_REPO=NaikSoftware/elis
 [ -z "${MOBILE_APK:-}" ] || [ -f "$MOBILE_APK" ] || { echo "MOBILE_APK not found: $MOBILE_APK" >&2; exit 1; }
 
 # ── plugin manifest version ───────────────────────────────────────────────────
@@ -43,8 +43,8 @@ GH_REPO=NaikSoftware/hangar
 # and committed, rather than rewriting git history from inside a release script.
 REPO_ROOT="$(cd "$ROOT/.." && pwd)"
 PLUGIN_MANIFESTS=(
-  "$REPO_ROOT/plugins/hangar/.claude-plugin/plugin.json"
-  "$REPO_ROOT/plugins/hangar/.codex-plugin/plugin.json"
+  "$REPO_ROOT/plugins/elis/.claude-plugin/plugin.json"
+  "$REPO_ROOT/plugins/elis/.codex-plugin/plugin.json"
   "$REPO_ROOT/.claude-plugin/marketplace.json"
 )
 for manifest in "${PLUGIN_MANIFESTS[@]}"; do
@@ -69,12 +69,12 @@ if [ "$PUBLISH" = "1" ]; then
     fi
   done
 fi
-APP="$BUILD_DIR/DerivedData/Build/Products/Release/Hangar.app"
-NOTARY_PROFILE="${HANGAR_NOTARY_PROFILE:-hangar-notary}"
+APP="$BUILD_DIR/DerivedData/Build/Products/Release/Elis.app"
+NOTARY_PROFILE="${ELIS_NOTARY_PROFILE:-elis-notary}"
 
 # resolve the signing identity: explicit override, else the first Developer ID
 # Application identity in the keychain, else ad-hoc dry-run.
-SIGN_ID="${HANGAR_SIGN_IDENTITY:-}"
+SIGN_ID="${ELIS_SIGN_IDENTITY:-}"
 if [ -z "$SIGN_ID" ]; then
   SIGN_ID="$(security find-identity -v -p codesigning | awk -F'"' '/Developer ID Application/{print $2; exit}')"
 fi
@@ -86,9 +86,9 @@ else
   echo "==> WARNING: no Developer ID Application identity found — building AD-HOC (dry-run, not notarized)"
 fi
 
-if [ "$PUBLISH" = "1" ] && [ "$SIGNED" = "0" ] && [ "${HANGAR_ALLOW_UNSIGNED:-0}" != "1" ]; then
+if [ "$PUBLISH" = "1" ] && [ "$SIGNED" = "0" ] && [ "${ELIS_ALLOW_UNSIGNED:-0}" != "1" ]; then
   echo "refusing to --publish an ad-hoc (unsigned) build" >&2
-  echo "set HANGAR_ALLOW_UNSIGNED=1 to publish the interim unsigned build (CI does this)" >&2
+  echo "set ELIS_ALLOW_UNSIGNED=1 to publish the interim unsigned build (CI does this)" >&2
   exit 1
 fi
 
@@ -126,11 +126,11 @@ release_notes() {
   if [ "$SIGNED" = "1" ]; then
     echo "Signed with a Developer ID certificate and notarized by Apple, so macOS Gatekeeper opens it with no extra steps. Apple Silicon (arm64) only, macOS 14 or later."
   else
-    echo "Not notarized: after installing, run \`xattr -dr com.apple.quarantine /Applications/Hangar.app\` once. Apple Silicon (arm64) only, macOS 14 or later."
+    echo "Not notarized: after installing, run \`xattr -dr com.apple.quarantine /Applications/Elis.app\` once. Apple Silicon (arm64) only, macOS 14 or later."
   fi
   cat <<EOF
 
-- **Download:** open the \`.dmg\` and drag \`Hangar.app\` into \`/Applications\`.
+- **Download:** open the \`.dmg\` and drag \`Elis.app\` into \`/Applications\`.
 EOF
 }
 
@@ -138,13 +138,13 @@ EOF
 "$ROOT/scripts/setup.sh"
 
 # the Linux server ships with each release, one tarball per architecture; the app carries their checksums, which
-# `hangarctl server install` checks a download against
-docker info >/dev/null 2>&1 || { echo "release needs Docker running to build hangar-server" >&2; exit 1; }
+# `elisctl server install` checks a download against
+docker info >/dev/null 2>&1 || { echo "release needs Docker running to build elis-server" >&2; exit 1; }
 "$ROOT/scripts/setup-zmx-linux.sh"
 SERVER_TARBALLS=()
 for arch in aarch64 x86_64; do
   "$ROOT/scripts/server-package.sh" "$arch" "$VERSION"
-  SERVER_TARBALLS+=("$BUILD_DIR/server/hangar-server-$VERSION-linux-$arch.tar.gz")
+  SERVER_TARBALLS+=("$BUILD_DIR/server/elis-server-$VERSION-linux-$arch.tar.gz")
 done
 
 xcodegen generate >/dev/null
@@ -153,13 +153,13 @@ xcodegen generate >/dev/null
 # timestamp, so trying to inject Developer ID at build time is racy. Instead we
 # re-sign authoritatively below, AFTER xcodebuild returns.
 GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-xcodebuild -project Hangar.xcodeproj -scheme Hangar -configuration Release \
+xcodebuild -project Elis.xcodeproj -scheme Elis -configuration Release \
   -derivedDataPath "$BUILD_DIR/DerivedData" \
   MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$VERSION" GIT_COMMIT="$GIT_COMMIT" \
   ARCHS=arm64 build
 [ -d "$APP" ] || { echo "expected app not found: $APP" >&2; exit 1; }
 # written before the seal below, which then covers it
-(cd "$BUILD_DIR/server" && shasum -a 256 "${SERVER_TARBALLS[@]##*/}") >"$APP/Contents/Resources/hangar-server.sha256"
+(cd "$BUILD_DIR/server" && shasum -a 256 "${SERVER_TARBALLS[@]##*/}") >"$APP/Contents/Resources/elis-server.sha256"
 
 # authoritative Developer ID signing — AFTER xcodebuild so nothing clobbers it,
 # with a secure --timestamp on every Mach-O (notarization requires it). Sign the
@@ -168,13 +168,13 @@ xcodebuild -project Hangar.xcodeproj -scheme Hangar -configuration Release \
 # TCC grants onto standalone executables. Same constraint as the build-phase re-seal in project.yml.
 if [ "$SIGNED" = "1" ]; then
   echo "==> signing Developer ID (timestamped)"
-  for helper in hangarctl zmx hangar-session-host; do
+  for helper in elisctl zmx elis-session-host; do
     codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$APP/Contents/MacOS/$helper"
   done
   codesign --force --options runtime --timestamp \
-    --entitlements "$ROOT/Hangar/hangar.entitlements" --sign "$SIGN_ID" "$APP"
+    --entitlements "$ROOT/Elis/elis.entitlements" --sign "$SIGN_ID" "$APP"
   codesign --verify --deep --strict "$APP"
-  for helper in hangarctl zmx hangar-session-host; do
+  for helper in elisctl zmx elis-session-host; do
     if codesign -d --entitlements - "$APP/Contents/MacOS/$helper" 2>/dev/null | grep -q 'com.apple.security'; then
       echo "$helper carries entitlements: --deep must not be used on the app sign above" >&2
       exit 1
@@ -182,13 +182,13 @@ if [ "$SIGNED" = "1" ]; then
   done
 else
   # the checksum file joined the bundle after the build sealed it; the helpers are untouched, so only the app re-seals
-  codesign --force --entitlements "$ROOT/Hangar/hangar.entitlements" --sign - "$APP"
+  codesign --force --entitlements "$ROOT/Elis/elis.entitlements" --sign - "$APP"
   codesign --verify --deep --strict "$APP"
 fi
 
 # ── notarize + staple the app ─────────────────────────────────────────────────
 if [ "$SIGNED" = "1" ]; then
-  ZIP="$BUILD_DIR/hangar-$VERSION.zip"
+  ZIP="$BUILD_DIR/elis-$VERSION.zip"
   ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
   notarize "$ZIP"
   rm -f "$ZIP"
@@ -203,7 +203,7 @@ rm -rf "$STAGING"; mkdir -p "$STAGING"
 cp -R "$APP" "$STAGING/"
 ln -s /Applications "$STAGING/Applications"
 rm -f "$DMG"
-hdiutil create -volname Hangar -srcfolder "$STAGING" -ov -format UDZO "$DMG"
+hdiutil create -volname Elis -srcfolder "$STAGING" -ov -format UDZO "$DMG"
 rm -rf "$STAGING"
 
 # ── sign + notarize + staple the DMG ──────────────────────────────────────────
@@ -239,14 +239,14 @@ rm -f "$NOTES_FILE"
 ASSETS=("$DMG" "${SERVER_TARBALLS[@]}" "$ROOT/scripts/migrate-from-agterm2.sh")
 if [ -n "${MOBILE_APK:-}" ]; then
   APK_STAGE="$(mktemp -d)"
-  cp "$MOBILE_APK" "$APK_STAGE/hangar-mobile.apk"
-  ASSETS+=("$APK_STAGE/hangar-mobile.apk")
+  cp "$MOBILE_APK" "$APK_STAGE/elis-mobile.apk"
+  ASSETS+=("$APK_STAGE/elis-mobile.apk")
 fi
 gh release upload "$TAG" --repo "$GH_REPO" "${ASSETS[@]}" --clobber
 [ -z "${APK_STAGE:-}" ] || rm -rf "$APK_STAGE"
 if [ -z "${MOBILE_APK:-}" ]; then
-  echo "==> !!! NO PHONE APP UPLOADED: README and the site link hangar-mobile.apk. Re-run with MOBILE_APK=<path> or" >&2
-  echo "==> !!! upload it yourself: gh release upload $TAG --repo $GH_REPO hangar-mobile.apk --clobber" >&2
+  echo "==> !!! NO PHONE APP UPLOADED: README and the site link elis-mobile.apk. Re-run with MOBILE_APK=<path> or" >&2
+  echo "==> !!! upload it yourself: gh release upload $TAG --repo $GH_REPO elis-mobile.apk --clobber" >&2
 fi
 
 echo "==> done"

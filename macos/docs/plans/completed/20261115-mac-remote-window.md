@@ -1,23 +1,23 @@
 # Remote window on a Mac origin
 
 ## Overview
-- File ▸ Open Remote Window… and `hangarctl window remote open HOST` accept a host that is a Mac running Hangar,
-  not only an hangar-server host. A Mac with one open window opens it at once; with more, the same picker
+- File ▸ Open Remote Window… and `elisctl window remote open HOST` accept a host that is a Mac running Elis,
+  not only an elis-server host. A Mac with one open window opens it at once; with more, the same picker
   asks which window.
 - The remote window behaves like a server window for structure: its sidebar follows that Mac window live, and
   creating, renaming, moving, splitting, closing and terminating sessions, companions and workspaces, flags, tints and
   Recent Closed act on the origin Mac's window, in front of whoever sits there.
 - Dialogs (asks, picks, page questions) follow today's Attach Remote presentation rules, unchanged. Eugene chose this
   scope on 2026-11-15; moving dialogs to the viewer on takeover is a separate follow-up.
-- Today picking a Mac host ends in "a Mac app rather than hangar-server; a remote window needs hangar-server"
-  (`HangarCore/Sources/HangarCore/RemoteCatalogMirror.swift:104`).
+- Today picking a Mac host ends in "a Mac app rather than elis-server; a remote window needs elis-server"
+  (`ElisCore/Sources/ElisCore/RemoteCatalogMirror.swift:104`).
 
 ## Context (from discovery)
-- Server catalog: `HangarServerKit/ServerCatalog.swift` (projection, `CatalogStream` sink, heartbeat, hello
+- Server catalog: `ElisServerKit/ServerCatalog.swift` (projection, `CatalogStream` sink, heartbeat, hello
   deadline, adoption at :6-123), `ServerStreams.swift` (`CatalogHub`), `ServerActions+Receipts.swift` (op serving on
-  `ServerActions` state); shared already in HangarCore: `CatalogHub.swift`, `CatalogFrames.swift`,
-  `CatalogOperations.swift` (`adopt` at :79-86). The app target links HangarCore only (`project.yml:188-190`), not
-  HangarServerKit. Stream-host precedent: `PresentationStreamHost` (`PresentationStream.swift:8`),
+  `ServerActions` state); shared already in ElisCore: `CatalogHub.swift`, `CatalogFrames.swift`,
+  `CatalogOperations.swift` (`adopt` at :79-86). The app target links ElisCore only (`project.yml:188-190`), not
+  ElisServerKit. Stream-host precedent: `PresentationStreamHost` (`PresentationStream.swift:8`),
   `OverlayJobStreamHost` (`OverlayJobStream.swift:8`).
 - Mac attachability: `ControlServer+Zmx.swift:140-169` `localAttachableSessions`, `RemoteTree.swift:93-180`
   `RemoteTreeMerger`; window identity `WindowInfo.id` (durable, `WindowLibrary.swift:6-16, 613-618`); `window list`
@@ -26,7 +26,7 @@
   (states, `versionRefusal`, hello check :186-190, reconcile :286), `RemoteCatalogActions.swift` (`prepare`/`send`/
   `request`, `RemoteOperation.words` :213-257), `AppStore+Catalog.swift` (`catalogBinding` hardcodes
   `originHeadless: true` at :293-300), `WindowLibrary+Remote.swift` (raise-existing by host at :19-33, `bindCatalog`
-  at :36-47, `WindowSource{host, catalogID}` at :184-192), picker `Hangar/AppActions+RemoteAttach.swift:71-93`,
+  at :36-47, `WindowSource{host, catalogID}` at :184-192), picker `Elis/AppActions+RemoteAttach.swift:71-93`,
   `ControlServer+RemoteCatalog.swift`, `HtmlBridge.swift:61-96` (fills `args.window` with the page's window).
 - Mac dispatch: hand-off arm for `zmx.present` `ControlServer.swift:504-511`; remote/attached forwarding before
   dispatch `ControlServer.swift:543` (`remoteRoute`, `ControlServer+RemoteActions.swift:23-46`); receipt gate
@@ -54,7 +54,7 @@ The design was reviewed with codex over three revisions and the plan by the plan
 | No incidental selection or reveal on the origin | kept | narrowed: closing the selected row still reconciles selection |
 | Per-window Recent Closed with the existing restore-destination rule | kept | the Mac list is app-global; a moved workspace must not be recreated |
 | Dirty seam: Observation for observed fields, explicit marks for backing, inventory, mail, history | kept | surfaces and zmx inventory are not observable |
-| Receipt book shared in HangarCore; hub never evicted; receipts durable per window | changed | the catalog stream plumbing moves too, since the app does not link HangarServerKit |
+| Receipt book shared in ElisCore; hub never evicted; receipts durable per window | changed | the catalog stream plumbing moves too, since the app does not link ElisServerKit |
 | Presenter transfer and pending-dialog migration on takeover | dropped | Eugene: separate follow-up; Attach Remote rules apply |
 | Rows attached from a third Mac are left out of the catalog | kept | no chains |
 | `zmx present` on the Mac accepts ended rows | dropped | a local Mac row is never ended |
@@ -66,18 +66,18 @@ The design was reviewed with codex over three revisions and the plan by the plan
 - **CRITICAL: all tests must pass before starting the next task** - no exceptions.
 - **CRITICAL: update this plan file when scope changes during implementation.**
 - run only the tests a change touches while working; the full gates run once at the end.
-- keep existing server-window and Attach Remote behavior unchanged; a new viewer against an hangar-server host and an
+- keep existing server-window and Attach Remote behavior unchanged; a new viewer against an elis-server host and an
   old viewer against a new Mac must behave as today.
-- every task that changes a `public` HangarCore symbol keeps the `agterm-linux` downstream consumer building:
+- every task that changes a `public` ElisCore symbol keeps the `agterm-linux` downstream consumer building:
   defaulted parameters or overloads for protocol requirements, and a check of exhaustive switches over a new enum case.
 
 ## Testing Strategy
-- **host-free**: `cd HangarCore && swift test --filter <Suite>`; suites live in `HangarCore/Tests/HangarCoreTests/`
-  (protocol, projection, receipts, scope, Recent Closed, viewer state), `HangarCore/Tests/HangarServerTests/`
-  (server switched to shared code), `HangarCore/Tests/hangarctlKitTests/` (CLI parsing and requests).
-- **hosted AppKit** in `HangarTests/`: `scripts/test-app.sh` takes no arguments, so a scoped run calls xcodebuild
-  directly with its flags: `xcodebuild test -project Hangar.xcodeproj -scheme HangarTests -destination 'platform=macOS'
-  -derivedDataPath build/DerivedData -only-testing:HangarTests/<Class>/<test>` (after `scripts/setup.sh` and
+- **host-free**: `cd ElisCore && swift test --filter <Suite>`; suites live in `ElisCore/Tests/ElisCoreTests/`
+  (protocol, projection, receipts, scope, Recent Closed, viewer state), `ElisCore/Tests/ElisServerTests/`
+  (server switched to shared code), `ElisCore/Tests/elisctlKitTests/` (CLI parsing and requests).
+- **hosted AppKit** in `ElisTests/`: `scripts/test-app.sh` takes no arguments, so a scoped run calls xcodebuild
+  directly with its flags: `xcodebuild test -project Elis.xcodeproj -scheme ElisTests -destination 'platform=macOS'
+  -derivedDataPath build/DerivedData -only-testing:ElisTests/<Class>/<test>` (after `scripts/setup.sh` and
   `xcodegen generate`).
 - **gates at the end**: `swift test`, `make test-app`, `make lint`, each once.
 
@@ -88,7 +88,7 @@ The design was reviewed with codex over three revisions and the plan by the plan
 
 ## Solution Overview
 - The origin Mac serves a catalog per window, with the window's durable id as `catalogID`, reusing the hub, frames,
-  stream plumbing and receipt book from HangarCore. Its projection reuses the `zmx tree` attachability rule for one
+  stream plumbing and receipt book from ElisCore. Its projection reuses the `zmx tree` attachability rule for one
   window.
 - The viewer's existing remote window, mirror, client and actions serve both origins; the differences are the
   advertisement it reads, the origin window it saves and names on every command, and the origin kind it binds with.
@@ -100,8 +100,8 @@ The design was reviewed with codex over three revisions and the plan by the plan
   viewer sees only nil `versions` and refuses as today, before subscribing. The Mac's hello and snapshot carry a real
   `CatalogVersions` (app version, `PresentationCodec.version`, `CatalogCodec.version`), which `CatalogHub.subscribe`
   and the mirror's hello check need; the `CatalogFrames.swift:3-4` doc changes to match.
-- **Refusal texts**: a new viewer facing an old Mac says HOST runs a Hangar without remote windows and needs this
-  version or later; the strings saying a remote window needs hangar-server change wherever they now mislead:
+- **Refusal texts**: a new viewer facing an old Mac says HOST runs an Elis without remote windows and needs this
+  version or later; the strings saying a remote window needs elis-server change wherever they now mislead:
   `RemoteCatalogMirror.swift:104`, `ControlActionsDefaults.swift:181`, `ControlDispatcher.swift:18`,
   `CatalogCommands.swift:8,50-53,61`, `WindowCommands.swift:142-148`, the picker prompt
   `AppActions+RemoteAttach.swift:73` ("Open a window for which host?"), `.claude/rules/control-api.md:199`; pinned
@@ -112,10 +112,10 @@ The design was reviewed with codex over three revisions and the plan by the plan
   `ControlRestoreStatus` active), unknown window, version mismatch. Not final: window closed on the origin, which ends
   the stream with that reason; the viewer shows it in `RemoteConnectionStrip` and keeps its backoff.
 - **Stream plumbing**: `CatalogStream` (sink, 10 s heartbeat, stale drop, no-hello deadline, inbound backpressure,
-  adoption) moves from `ServerCatalog.swift:6-123` into HangarCore behind a `CatalogStreamHost` protocol, as
+  adoption) moves from `ServerCatalog.swift:6-123` into ElisCore behind a `CatalogStreamHost` protocol, as
   `PresentationStreamHost` does; the server switches to it. The Mac's `handleConnection` gains a `catalog.subscribe`
   hand-off arm after the `zmx.present` arm (`ControlServer.swift:504-511`).
-- **Receipt book**: op serving moves into HangarCore behind a host seam that supplies session resolution, page-row
+- **Receipt book**: op serving moves into ElisCore behind a host seam that supplies session resolution, page-row
   and scratch refusal and a checked save; the server and the Mac each implement it.
 - **Window discovery**: the picker reads the origin's `window list --json` (`open`, `remote` exist) and lists open
   local windows, empty ones included.
@@ -154,7 +154,7 @@ The design was reviewed with codex over three revisions and the plan by the plan
   (optional, set only by a Mac origin), and the row is `.ended` only when every pane is held. A pane being restarted
   by `session restart` stays listed through the kill and rebuild. The per-window listed set drops a row that leaves
   the store, so a Recent Closed reopen waits for its new daemon. A restored hidden split is listed from the inventory
-  without a local attach. Page rows are listed. Shared shape-building code in HangarCore where the server and the Mac
+  without a local attach. Page rows are listed. Shared shape-building code in ElisCore where the server and the Mac
   agree.
 - **Inventory reads**: `zmx list` runs off the main actor only when the window's evidence can change: at subscribe,
   before and after a receipt op, when the window's pane identity set changes, at a surface slot replacement, a lead
@@ -187,7 +187,7 @@ The design was reviewed with codex over three revisions and the plan by the plan
 - **`catalog op` lookup**: `CatalogCommands.swift` `Operation` takes `BasicOptions` only (:77), so it gains
   `--window`, with its `ControlArgs`, dispatcher arm and `ControlActions` signature (defaulted for downstream).
 - **Security**: the new input is catalog frames and op-bearing commands on the origin's control socket, reachable
-  only over ssh as the same user, who can already run every `hangarctl` command there. New: one window's tree as a
+  only over ssh as the same user, who can already run every `elisctl` command there. New: one window's tree as a
   stream, and receipts. Bound: every op is scoped to the window it names; no incidental selection change.
 
 ## What Goes Where
@@ -196,17 +196,17 @@ The design was reviewed with codex over three revisions and the plan by the plan
 
 ## Implementation Steps
 
-### Task 1: Shared catalog protocol, stream, receipts and per-window Recent Closed in HangarCore
+### Task 1: Shared catalog protocol, stream, receipts and per-window Recent Closed in ElisCore
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/CatalogFrames.swift`, `CatalogHub.swift`, `CatalogOperations.swift`,
+- Modify: `ElisCore/Sources/ElisCore/CatalogFrames.swift`, `CatalogHub.swift`, `CatalogOperations.swift`,
   `ControlProtocol.swift`, `ControlDispatcher.swift`, `ControlActions.swift`, `ControlActionsDefaults.swift`,
   `RemoteCatalogMirror.swift`, `RecentClosed.swift`, `WindowLibrary+RecentClosed.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/CatalogCommands.swift`, `WindowCommands.swift` (texts)
-- Move: `CatalogStream` and op serving out of `HangarCore/Sources/HangarServerKit/ServerCatalog.swift`,
-  `ServerActions+Receipts.swift` into HangarCore; the server implements the new host seams
-- Tests: `HangarCore/Tests/HangarCoreTests/` (frames, hub, mirror, receipts, Recent Closed),
-  `HangarCore/Tests/HangarServerTests/` (server on shared code), `HangarCore/Tests/hangarctlKitTests/` (catalog op)
+- Modify: `ElisCore/Sources/elisctlKit/CatalogCommands.swift`, `WindowCommands.swift` (texts)
+- Move: `CatalogStream` and op serving out of `ElisCore/Sources/ElisServerKit/ServerCatalog.swift`,
+  `ServerActions+Receipts.swift` into ElisCore; the server implements the new host seams
+- Tests: `ElisCore/Tests/ElisCoreTests/` (frames, hub, mirror, receipts, Recent Closed),
+  `ElisCore/Tests/ElisServerTests/` (server on shared code), `ElisCore/Tests/elisctlKitTests/` (catalog op)
 
 - [x] write failing tests: `macCatalog` advertisement round-trip and old-decoder tolerance; hello `window`; `refused`
       frame encode/decode and an old decoder stepping past it; mirror accepts a Mac hello with real `CatalogVersions`;
@@ -219,19 +219,19 @@ The design was reviewed with codex over three revisions and the plan by the plan
 - [x] implement the protocol fields and frame, advertisement check and texts, shared stream and receipt book with
       host seams (server switched, behavior unchanged), Recent Closed ownership, `catalog op --window`
 - [x] downstream check for every changed `public` symbol and the new `CatalogFrame` case
-- [x] `cd HangarCore && swift test` for the touched suites passes, the server's catalog suites included
+- [x] `cd ElisCore && swift test` for the touched suites passes, the server's catalog suites included
 - ⚠️ the `catalog` CLI help (`CatalogCommands.swift`, `WindowCommands.swift`) and the docs quoting the old receipt
-  refusal still say only hangar-server serves a catalog; they change with Task 2 and Task 4, once a Mac does
+  refusal still say only elis-server serves a catalog; they change with Task 2 and Task 4, once a Mac does
 
 ### Task 2: The origin Mac serves one window's catalog
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer.swift`, `ControlServer+Zmx.swift`, `ControlServer+Presentation.swift`,
+- Modify: `Elis/Control/ControlServer.swift`, `ControlServer+Zmx.swift`, `ControlServer+Presentation.swift`,
   `ControlServer+Recent.swift`, `ControlServer+WorkspaceCommands.swift`, `ControlServer+RemoteActions.swift`,
-  `Hangar/Ghostty/GhosttySurfaceView.swift`, `HangarCore/Sources/HangarCore/WindowLibrary.swift`, `ControlActions.swift`,
+  `Elis/Ghostty/GhosttySurfaceView.swift`, `ElisCore/Sources/ElisCore/WindowLibrary.swift`, `ControlActions.swift`,
   `ControlActionsDefaults.swift`, the AppStore dirty-mark sites
-- Create: `Hangar/Control/ControlServer+MacCatalog.swift` (serving), the one-window projection in HangarCore
-- Tests: `HangarCore/Tests/HangarCoreTests/` (projection, dirty seam, scope rules), `HangarTests/` hosted
+- Create: `Elis/Control/ControlServer+MacCatalog.swift` (serving), the one-window projection in ElisCore
+- Tests: `ElisCore/Tests/ElisCoreTests/` (projection, dirty seam, scope rules), `ElisTests/` hosted
   (`ControlServerMacCatalogTests.swift`: socket-level subscribe and op end to end, close/reopen)
 
 - [x] write failing tests: one-window projection on an injected inventory (deferred startup omitted, running lists,
@@ -250,7 +250,7 @@ The design was reviewed with codex over three revisions and the plan by the plan
       flag clear, hidden third-Mac row as target or anchor, workspace delete refused while it holds hidden rows with
       the count in the reason, workspace flag and tint applied, closed window), `catalogViewers` read-back counts
       subscribers and is omitted at zero, ops
-      never reach `remoteRoute` forwarding; every `RemoteOperation.words` plus `--window <id>` parses in hangarctlKit;
+      never reach `remoteRoute` forwarding; every `RemoteOperation.words` plus `--window <id>` parses in elisctlKit;
       no incidental selection or reveal, selected-row close still reconciles; an op before any subscribe
 - [x] write failing hosted tests: `catalog.subscribe` and `catalog.op` over the socket end to end; close the origin
       window (stream ends with non-final "window closed", receipts kept on disk), reopen it (hub, dirty tracking and
@@ -261,19 +261,19 @@ The design was reviewed with codex over three revisions and the plan by the plan
       no-select creation with the bounded eligibility wait, window-scoped Recent Closed and undo, window-closed stream
       end, `zmx present` accepting page rows, `version` with `macCatalog`
 - [x] downstream check for changed `public` symbols (`ControlActions`, `catalogOperation` signature)
-- [x] focused HangarCore and hosted tests pass
+- [x] focused ElisCore and hosted tests pass
 
 ### Task 3: The viewer opens and drives a Mac-origin remote window
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/RemoteCatalogClient.swift`, `RemoteCatalogActions.swift`,
+- Modify: `ElisCore/Sources/ElisCore/RemoteCatalogClient.swift`, `RemoteCatalogActions.swift`,
   `AppStore+Catalog.swift`, `RemotePresentationState.swift`, `WindowLibrary+Remote.swift`, `ControlProtocol.swift`
   (`originWindow` arg), `ControlDispatcher.swift`, `ControlActions.swift`, `ControlProjection.swift` (read-back),
   `HtmlBridge.swift`
-- Modify: `Hangar/AppActions+RemoteAttach.swift` (picker), `Hangar/Control/ControlServer+RemoteCatalog.swift`,
-  `Hangar/Views/RemoteConnectionStrip.swift`, `HangarCore/Sources/hangarctlKit/WindowCommands.swift`
-- Tests: `HangarCore/Tests/HangarCoreTests/` (client, actions, binding, library, bridge),
-  `HangarCore/Tests/hangarctlKitTests/` (`--origin-window`), `HangarTests/` (`AppActions+RemoteCatalogTests.swift`,
+- Modify: `Elis/AppActions+RemoteAttach.swift` (picker), `Elis/Control/ControlServer+RemoteCatalog.swift`,
+  `Elis/Views/RemoteConnectionStrip.swift`, `ElisCore/Sources/elisctlKit/WindowCommands.swift`
+- Tests: `ElisCore/Tests/ElisCoreTests/` (client, actions, binding, library, bridge),
+  `ElisCore/Tests/elisctlKitTests/` (`--origin-window`), `ElisTests/` (`AppActions+RemoteCatalogTests.swift`,
   remote window open end to end)
 
 - [x] show the picker's window step and the strip's non-final reason in an isolated Debug instance before their tests
@@ -307,14 +307,14 @@ The design was reviewed with codex over three revisions and the plan by the plan
 - [x] confirm a server host takes exactly today's path (no window step, no `--window`)
 - [x] downstream check for changed `public` symbols (`windowRemoteOpen` overload with a default, `WindowSource`,
       `ControlRemoteWindow.init`, client and actions)
-- [x] focused HangarCore and hosted tests pass
+- [x] focused ElisCore and hosted tests pass
 
 ### Task 4: Docs, skill and gates
 
 **Files:**
-- Modify: `site/docs.html`, `site/commands.html`, `plugins/hangar/skills/hangar/` (SKILL.md, reference),
+- Modify: `site/docs.html`, `site/commands.html`, `plugins/elis/skills/elis/` (SKILL.md, reference),
   `.claude/rules/control-api.md`, `.claude/rules/windows.md` (rule at :33), `.claude/rules/menu-actions.md`,
-  `ARCHITECTURE.md`, `HangarCore/Sources/HangarCore/EventFormatter.swift` (if events change)
+  `ARCHITECTURE.md`, `ElisCore/Sources/ElisCore/EventFormatter.swift` (if events change)
 
 - [x] ➕ `site/docs.html` "Who leads a pane": a Mac remote window takes the lead when opened and for rows this Mac
       creates; a reconnect does not
@@ -324,7 +324,7 @@ The design was reviewed with codex over three revisions and the plan by the plan
 - [x] mechanism (advertisement, refusal frame, stream and receipt seams, dirty seam, op scope, reversed server-plan
       decision) recorded in `control-api.md`, `windows.md` and `ARCHITECTURE.md`
 - [x] verify requirements in Overview are met; server-window and Attach Remote behavior unchanged
-- [x] gates once: `cd HangarCore && swift test`, `make test-app`, `make lint`; `lsappinfo list | grep -A4 hangar.debug`
+- [x] gates once: `cd ElisCore && swift test`, `make test-app`, `make lint`; `lsappinfo list | grep -A4 elis.debug`
       after the hosted run
 - [x] move this plan to `docs/plans/completed/`
 
@@ -335,7 +335,7 @@ The design was reviewed with codex over three revisions and the plan by the plan
 - Two real Macs, both on this build, origin in Live sessions mode: open a one-window and a two-window origin, create,
   rename, move, split, close and terminate from the mirror and watch the origin window follow, then edit on the origin
   and watch the mirror follow; close the origin window and reopen it; quit the origin app; relaunch the viewer.
-- An `ssh localhost` origin reaches the default socket of whatever Hangar runs there, which is the live terminal; a
+- An `ssh localhost` origin reaches the default socket of whatever Elis runs there, which is the live terminal; a
   same-Mac check needs an origin instance whose state directory the ssh command resolves, never the live one.
 - An old viewer against a new Mac and a new viewer against an old Mac both show a final refusal.
 

@@ -14,12 +14,12 @@ The command family, blocking CLI, result retention, and tree read-back copy `pic
 
 ## Context (from discovery)
 
-- `pick` family is the template: `HangarCore/Sources/HangarCore/{Pick,ControlPick}.swift`,
-  `ControlDispatcher+Pick.swift`, `Hangar/Control/ControlServer+Pick.swift`,
-  `hangarctlKit/MiscCommands.swift` (`Pick` command, poll loop, `abandon`), `SocketClient.pickExitCode`.
+- `pick` family is the template: `ElisCore/Sources/ElisCore/{Pick,ControlPick}.swift`,
+  `ControlDispatcher+Pick.swift`, `Elis/Control/ControlServer+Pick.swift`,
+  `elisctlKit/MiscCommands.swift` (`Pick` command, poll loop, `abandon`), `SocketClient.pickExitCode`.
 - Modal gates that read the pending picker today: `AppActions+Focus.swift` `pickActive`,
   `GhosttySurfaceView.pickOwnsFocus`, `WindowContentView.swift` auto-follow suppression and frontmost
-  handling (`pick.pending`), `hangarApp.swift:482,729,736` (search cleanup, quick terminal summon),
+  handling (`pick.pending`), `elisApp.swift:482,729,736` (search cleanup, quick terminal summon),
   `AppActions.swift` `cancelPendingPick`/`cancelAllPendingPicks` (⌘W, termination), tree
   `pickPending` in `ControlServer.swift:747` and `ControlProjection.swift`.
 - Pane anchoring exists for the HUD, but inside one session's own layer: `HudPaneAnchors` is published
@@ -32,9 +32,9 @@ The command family, blocking CLI, result retention, and tree read-back copy `pic
   `settingsModel.settings`. The HUD is a terminal helper program (`hud.sh`), not a SwiftUI view, so its
   transport is not reused; only its look is.
 - Keyboard capture pattern for a SwiftUI modal without a text field: `DashboardKeyCatcher`
-  (`NSViewRepresentable` owning first responder) in `Hangar/Views/DashboardView.swift`.
+  (`NSViewRepresentable` owning first responder) in `Elis/Views/DashboardView.swift`.
 - Docs surfaces: `.claude/rules/control-api.md`, `site/commands.html`, `site/docs.html`,
-  `plugins/hangar/skills/hangar/{SKILL,reference,examples}.md`, `.claude/rules/menu-actions.md` (modal
+  `plugins/elis/skills/elis/{SKILL,reference,examples}.md`, `.claude/rules/menu-actions.md` (modal
   cover list).
 - No command count is stated on any surface, and stays that way.
 
@@ -42,17 +42,17 @@ The command family, blocking CLI, result retention, and tree read-back copy `pic
 
 - **testing approach**: Regular (code first, then tests in the same task)
 - one task at a time; every task ends with its tests green before the next starts
-- gates run once at the end: `cd HangarCore && swift test`, `make test-app`, `make lint`; targeted
-  runs during work (`-only-testing:HangarUITests/ControlAskUITests`)
-- host-free logic (model, validation, result shaping, CLI parsing) lives in `HangarCore`; the app target
+- gates run once at the end: `cd ElisCore && swift test`, `make test-app`, `make lint`; targeted
+  runs during work (`-only-testing:ElisUITests/ControlAskUITests`)
+- host-free logic (model, validation, result shaping, CLI parsing) lives in `ElisCore`; the app target
   resolves windows, sessions, geometry, and draws
 - update this plan when scope changes
 
 ## Testing Strategy
 
-- **unit tests** (Swift Testing, `HangarCore/Tests`): model and controller, protocol round trip,
+- **unit tests** (Swift Testing, `ElisCore/Tests`): model and controller, protocol round trip,
   dispatcher validation, projection, CLI parsing and exit codes. One test file per source file.
-- **hosted UI tests** (`HangarUITests/ControlAskUITests.swift`, XCTest on `ControlAPITestCase`):
+- **hosted UI tests** (`ElisUITests/ControlAskUITests.swift`, XCTest on `ControlAPITestCase`):
   render, click, keyboard, dismissal semantics, tree read-back, shared modal slot, pane anchoring. Keep
   the count small; each hosted test costs seconds.
 
@@ -115,7 +115,7 @@ Decisions settled in design review (Eugene, with codex as second reader):
   of vertical layout.
   `ask.result` over the socket also reports `pending`; the blocking CLI prints only the terminal answer.
 - **Tree** exposes `askPending` (the id) on the window node next to `pickPending`.
-- **Naming**: `ask.open` / `ask.result` / `ask.cancel`; CLI `hangarctl ask`.
+- **Naming**: `ask.open` / `ask.result` / `ask.cancel`; CLI `elisctl ask`.
 
 Rejected alternatives: `NSAlert` sheet (not theme-styled, ugly past three buttons); folding buttons into
 `pick.open` (muddles a contract of 1..1000 searchable rows); session-scoped modality that leaves the other
@@ -158,7 +158,7 @@ across ten files for no behavior; the shared-slot predicate is named `modalPendi
 - Errors keep pick's phrasing: `ask.open requires a title`, `ask.open requires buttons`,
   `too many buttons (max 6)`, `ask button ids must be unique`, `unknown default button: X`, and so on.
 
-### Model (`Ask.swift`, HangarCore)
+### Model (`Ask.swift`, ElisCore)
 
 - `PendingAsk { id, title, message?, buttons, defaultID?, destructiveID?, style, align, width?, anchor: AskAnchor? }`
   with `AskAnchor { sessionID: UUID, pane: OverlayPane?, paneIdentity: UUID? }`.
@@ -173,7 +173,7 @@ across ten files for no behavior; the shared-slot predicate is named `modalPendi
   seeded from `defaultID`, otherwise the first non-destructive button or first available button.
   `moveForward()` and `moveBackward()` wrap; `activate() -> Int?` is nil only for an empty list, `hotkey(_ letter:) -> Int?`. The app-side key
   catcher only maps key events onto these calls, so the whole keyboard contract is unit-tested in
-  `HangarCore`.
+  `ElisCore`.
 
 ### App host (`ControlServer+Ask.swift`)
 
@@ -192,15 +192,15 @@ across ten files for no behavior; the shared-slot predicate is named `modalPendi
 ### Modal gates
 
 Every site that reads the pending pick switches to `modalPending`. The grep
-`pick\.pending|PickRegistry\.shared|pickerActive|pickActive` over `hangar` and `HangarCore/Sources` finds
+`pick\.pending|PickRegistry\.shared|pickerActive|pickActive` over `elis` and `ElisCore/Sources` finds
 about 48 hits in 20 files, and the task is complete only when that grep shows no `pending != nil` read
 left outside the pick host itself. Sites by kind:
 
 - host-free: `PaletteCatalog.swift` `PaletteContext.pickerActive`, the input to `modalActive`, which
   `menu-actions.md` names as the single owner of menu enablement (rename to `modalPickerActive` or feed it
   from `modalPending`; `PaletteCatalogTests` covers it)
-- menus and actions: `hangarApp+Menus.swift:68,330`, `AppActions.swift:48` (`uiActionsEnabled`),
-  `AppActions+Focus.pickActive`, `hangarApp.swift:482,729,736`
+- menus and actions: `elisApp+Menus.swift:68,330`, `AppActions.swift:48` (`uiActionsEnabled`),
+  `AppActions+Focus.pickActive`, `elisApp.swift:482,729,736`
 - views: `GhosttySurfaceView.pickOwnsFocus`, `WindowContentView` frontmost/auto-follow handling and
   palette-close-on-open, `WindowContentView+Dashboard.swift:110`, `+Zoom.swift:177`,
   `+Titlebar.swift:192`, `+RecentSessions.swift` (six reads)
@@ -212,7 +212,7 @@ left outside the pick host itself. Sites by kind:
 
 ⌘W and Esc: `escapeAsk()` resolves `escaped`; termination and teardown call `cancelAsk()`.
 
-### View (`Hangar/Views/AskDialogView.swift`)
+### View (`Elis/Views/AskDialogView.swift`)
 
 - Colors: `GhosttyApp.shared.terminalBackgroundColor` / `terminalForegroundColor` with the standard
   fallbacks; a one-cell border in the foreground at reduced opacity; font from
@@ -246,14 +246,14 @@ left outside the pick host itself. Sites by kind:
   is geometry movement, allowed; only a different anchor would be relocation, which never happens.
 - Accessibility ids: `ask-dialog`, `ask-title`, `ask-message`, `ask-button-<id>`.
 
-### CLI (`hangarctlKit/AskCommands.swift`, `Ask` command)
+### CLI (`elisctlKit/AskCommands.swift`, `Ask` command)
 
 ```
-hangarctl ask TITLE [--message TEXT] --button ID=LABEL [--button ...] [--hotkey ID=K ...]
+elisctl ask TITLE [--message TEXT] --button ID=LABEL [--button ...] [--hotkey ID=K ...]
              [--default ID] [--destructive ID] [--style terminal|gui]
              [--target SESSION] [--pane left|right] [--pane-id TOKEN] [--window W] [--follow] [--no-block]
-hangarctl ask result ID
-hangarctl ask cancel ID
+elisctl ask result ID
+elisctl ask cancel ID
 ```
 
 - `--button ID=LABEL` splits on the first `=`; a missing `=` uses the token as both. `--hotkey ID=K`
@@ -261,7 +261,7 @@ hangarctl ask cancel ID
 - `--target` is `ask`'s own optional option, not `TargetOptions`, whose default of `active` would turn
   every no-target call into an anchored one and break terminal-area placement.
 - `--pane-id` exposes the existing stable-token wire field, with the same target requirement as `--pane`.
-- `Ask.self` is registered in `Hangarctl.configuration.subcommands` (`hangarctlKit/Commands.swift`).
+- `Ask.self` is registered in `Elisctl.configuration.subcommands` (`elisctlKit/Commands.swift`).
 - Default subcommand is open. Blocking poll, delays, abandon-on-transport-failure, and exit codes (0
   answered, 3 escaped, 2 cancelled, 1 failure) reuse the pick helpers, generalized to take the outcome kind.
 - `--no-block` prints `{"id":...}`. The one-shot `ask result ID` prints whatever the socket reports,
@@ -277,10 +277,10 @@ event-arguments rule.
 ### Task 1: Wire types and protocol round trip
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/ControlAsk.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift` (nil fallthrough until Task 3)
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Create: `ElisCore/Sources/ElisCore/ControlAsk.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift` (nil fallthrough until Task 3)
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
 
 - [x] add `ControlAskButton`, `ControlAskOutcome`, `ControlAskResult`, `ResolvedAsk` (with sequence)
 - [x] add the three `Command` cases and the `ControlArgs`/`ControlResult` fields
@@ -292,10 +292,10 @@ event-arguments rule.
 ### Task 2: Pending ask model on the shared modal slot
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/Ask.swift`
-- Modify: `HangarCore/Sources/HangarCore/Pick.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/AskTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/PickTests.swift`
+- Create: `ElisCore/Sources/ElisCore/Ask.swift`
+- Modify: `ElisCore/Sources/ElisCore/Pick.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/AskTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/PickTests.swift`
 
 - [x] add `PendingAsk` and `AskAnchor`
 - [x] add `pendingAsk`, `recentAskResults`, `openAsk`, `resolveAsk`, `cancelAsk`, `askResult(for:)`, and
@@ -307,16 +307,16 @@ event-arguments rule.
 - [x] tests: ask refuses while a pick is pending and pick refuses while an ask is pending
 - [x] tests: the whole keyboard contract on `AskNavigation`, with and without `default`, one and six
       buttons, hotkey case folding
-- [x] run `swift test --filter 'HangarCoreTests\.(AskTests|PickTests)/'` (35 tests passed)
+- [x] run `swift test --filter 'ElisCoreTests\.(AskTests|PickTests)/'` (35 tests passed)
 
 ### Task 3: Host-free validation and dispatch
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/ControlDispatcher+Ask.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift` (`ControlActions` + routing)
-- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift` (unsupported-host defaults)
-- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/ControlDispatcherAskTests.swift`
+- Create: `ElisCore/Sources/ElisCore/ControlDispatcher+Ask.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift` (`ControlActions` + routing)
+- Modify: `ElisCore/Sources/ElisCore/ControlActionsDefaults.swift` (unsupported-host defaults)
+- Modify: `ElisCore/Tests/ElisCoreTests/MockControlActions.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/ControlDispatcherAskTests.swift`
 
 - [x] add `openAsk`, `askResult`, `cancelAsk` to `ControlActions`; route the three commands
 - [x] implement every validation rule from Technical Details with pick-style messages
@@ -325,21 +325,21 @@ event-arguments rule.
       ids, default==destructive, cancel==destructive, hotkey length and collision, pane without session,
       invalid pane, missing result/cancel target)
 - [x] tests: a valid open reaches the mock with the parsed `PendingAsk` fields intact
-- [x] run `swift test --filter 'HangarCoreTests\.ControlDispatcher(Ask|Pick|Hud)Tests/'` (51 tests passed)
+- [x] run `swift test --filter 'ElisCoreTests\.ControlDispatcher(Ask|Pick|Hud)Tests/'` (51 tests passed)
 
 ### Task 4: App-side host and tree read-back
 
 **Files:**
-- Create: `Hangar/Control/ControlServer+Ask.swift`
-- Create: `Hangar/Control/ControlServer+PanePlacement.swift`
-- Create: `HangarTests/ControlServerAskTests.swift`
-- Modify: `Hangar/Control/ControlServer+Hud.swift` (move `resolveHudPlacement` to a shared pane
+- Create: `Elis/Control/ControlServer+Ask.swift`
+- Create: `Elis/Control/ControlServer+PanePlacement.swift`
+- Create: `ElisTests/ControlServerAskTests.swift`
+- Modify: `Elis/Control/ControlServer+Hud.swift` (move `resolveHudPlacement` to a shared pane
   placement resolver)
-- Modify: `Hangar/Control/ControlServer.swift` (tree `askPending` closure)
-- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`, `AppStore.swift` (tree builder
+- Modify: `Elis/Control/ControlServer.swift` (tree `askPending` closure)
+- Modify: `ElisCore/Sources/ElisCore/ControlProjection.swift`, `AppStore.swift` (tree builder
   parameter and call), `ControlProtocolCompatibility.swift` (agterm-linux shim)
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift` (`result.pane` documentation)
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTreeProjectionTests.swift`,
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift` (`result.pane` documentation)
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreTreeProjectionTests.swift`,
   `ControlProtocolTests.swift`
 
 - [x] `openAsk` resolves the session or placement window, requires a visible session and pane, rejects
@@ -349,20 +349,20 @@ event-arguments rule.
 - [x] add top-level `askPending` through projection, store builder, shim, and server closure
 - [x] projection test for `askPending` presence and absence; nil-omission test beside the `pickPending`
       one in `ControlProtocolTests`
-- [x] build the app target through the isolated `HangarTests` scheme; 18 hosted tests passed
+- [x] build the app target through the isolated `ElisTests` scheme; 18 hosted tests passed
 
 ### Task 5: Shared modal gates and ⌘W/termination paths
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/PaletteCatalog.swift`,
-  `HangarCore/Tests/HangarCoreTests/PaletteCatalogTests.swift`
-- Modify: `HangarCore/Sources/HangarCore/Pick.swift`, `HangarCore/Tests/HangarCoreTests/PickTests.swift`
-- Modify: `HangarTests/ControlServerAskTests.swift`
-- Modify: `Hangar/AppActions+Focus.swift`, `Hangar/AppActions.swift`, `Hangar/hangarApp.swift`,
-  `Hangar/AppDelegate.swift`, `Hangar/Ghostty/GhosttySurfaceView.swift`
-- Modify: `Hangar/Views/WindowContentView.swift`, `WindowContentView+Dashboard.swift`,
+- Modify: `ElisCore/Sources/ElisCore/PaletteCatalog.swift`,
+  `ElisCore/Tests/ElisCoreTests/PaletteCatalogTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/Pick.swift`, `ElisCore/Tests/ElisCoreTests/PickTests.swift`
+- Modify: `ElisTests/ControlServerAskTests.swift`
+- Modify: `Elis/AppActions+Focus.swift`, `Elis/AppActions.swift`, `Elis/elisApp.swift`,
+  `Elis/AppDelegate.swift`, `Elis/Ghostty/GhosttySurfaceView.swift`
+- Modify: `Elis/Views/WindowContentView.swift`, `WindowContentView+Dashboard.swift`,
   `WindowContentView+Zoom.swift`, `WindowContentView+Titlebar.swift`, `WindowContentView+RecentSessions.swift`
-- Modify: `Hangar/Control/ControlServer.swift`, `ControlServer+AppCommands.swift`,
+- Modify: `Elis/Control/ControlServer.swift`, `ControlServer+AppCommands.swift`,
   `ControlServer+SurfaceIO.swift`, `ControlServer+SessionActions.swift`, `ControlServer+Ask.swift`
 
 - [x] switch every pending-pick predicate to `modalPending`, the five control entry points included,
@@ -378,12 +378,12 @@ event-arguments rule.
 ### Task 6: Dialog view, keyboard, and placement
 
 **Files:**
-- Create: `Hangar/Views/AskDialogView.swift`
-- Create: `HangarTests/AskDialogViewTests.swift` (native keyboard/scrolling and render attachments)
-- Modify: `HangarCore/Sources/HangarCore/Session.swift` (`askTargetPane`),
-  `HangarCore/Tests/HangarCoreTests/SessionTests.swift`
-- Modify: `Hangar/Views/WindowContentView.swift` (mount at zIndex 20 beside `pickPaletteOverlay`),
-  `Hangar/Views/WindowContentView+Detail.swift` (publish `AskAnchorPreferenceKey` from the selected
+- Create: `Elis/Views/AskDialogView.swift`
+- Create: `ElisTests/AskDialogViewTests.swift` (native keyboard/scrolling and render attachments)
+- Modify: `ElisCore/Sources/ElisCore/Session.swift` (`askTargetPane`),
+  `ElisCore/Tests/ElisCoreTests/SessionTests.swift`
+- Modify: `Elis/Views/WindowContentView.swift` (mount at zIndex 20 beside `pickPaletteOverlay`),
+  `Elis/Views/WindowContentView+Detail.swift` (publish `AskAnchorPreferenceKey` from the selected
   session's container and rendered panes)
 
 - [x] panel with theme colors, terminal font, title/message/buttons, horizontal-or-vertical layout
@@ -405,28 +405,28 @@ event-arguments rule.
 ### Task 7: CLI command
 
 **Files:**
-- Create: `HangarCore/Sources/hangarctlKit/AskCommands.swift` (`MiscCommands.swift` is 741 lines and
+- Create: `ElisCore/Sources/elisctlKit/AskCommands.swift` (`MiscCommands.swift` is 741 lines and
   the pick family alone is about 200; the package already splits per family)
-- Modify: `HangarCore/Sources/hangarctlKit/MiscCommands.swift` (share the poll loop with pick)
-- Modify: `HangarCore/Sources/hangarctlKit/Commands.swift` (register `Ask.self`)
-- Modify: `HangarCore/Sources/hangarctlKit/SocketClient.swift` (exit code and format helpers)
-- Create: `HangarCore/Tests/hangarctlKitTests/AskCommandsTests.swift` (the existing CommandsTests is at its line limit)
-- Modify: `HangarCore/Tests/hangarctlKitTests/SocketClientTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/MiscCommands.swift` (share the poll loop with pick)
+- Modify: `ElisCore/Sources/elisctlKit/Commands.swift` (register `Ask.self`)
+- Modify: `ElisCore/Sources/elisctlKit/SocketClient.swift` (exit code and format helpers)
+- Create: `ElisCore/Tests/elisctlKitTests/AskCommandsTests.swift` (the existing CommandsTests is at its line limit)
+- Modify: `ElisCore/Tests/elisctlKitTests/SocketClientTests.swift`
 
 - [x] `Ask` command with `Open` (default), `Result`, `Cancel`; button and hotkey parsing; its own
       optional `--target`
 - [x] register `Ask.self` in the root subcommand list
 - [x] blocking poll and abandon reuse the pick loop, generalized over the outcome kind
-- [x] tests through `Hangarctl.parseAsRoot`: every option, `ID=LABEL` split, default subcommand, no
+- [x] tests through `Elisctl.parseAsRoot`: every option, `ID=LABEL` split, default subcommand, no
       target means no `target` in the request, request shaping
 - [x] tests: exit codes and result formatting
-- [x] run `swift test --filter hangarctlKitTests` (463 tests passed, using the existing clean scratch path)
+- [x] run `swift test --filter elisctlKitTests` (463 tests passed, using the existing clean scratch path)
 
 ### Task 8: Hosted UI tests
 
 **Files:**
-- Create: `HangarUITests/ControlAskUITests.swift`
-- Modify: `HangarUITests/ControlAPITestCase.swift` (ask helpers next to the pick helpers)
+- Create: `ElisUITests/ControlAskUITests.swift`
+- Modify: `ElisUITests/ControlAPITestCase.swift` (ask helpers next to the pick helpers)
 
 - [x] render, click a button, `askPending` in tree, result id/label/index, dialog dismissed
 - [x] keyboard: no default leaves Return inert, Tab then Return answers the first button; hotkey answers
@@ -446,7 +446,7 @@ event-arguments rule.
 
 **Files:**
 - Modify: `.claude/rules/control-api.md`, `.claude/rules/menu-actions.md`, `site/commands.html`,
-  `site/docs.html`, `plugins/hangar/skills/hangar/SKILL.md`, `reference.md`, `examples.md`;
+  `site/docs.html`, `plugins/elis/skills/elis/SKILL.md`, `reference.md`, `examples.md`;
   `ARCHITECTURE.md` does not list control widgets and `cookbook/` stays untouched
 
 - [x] control-api.md: ask section (validation, shared slot, dismissal kinds, anchor rules, events
@@ -463,14 +463,14 @@ Eugene's review of the built dialog changed the contract after Task 9 documented
 code to what the docs already say; the Solution Overview above is the authority.
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlAsk.swift` (`escaped`, `ControlAskStyle`),
+- Modify: `ElisCore/Sources/ElisCore/ControlAsk.swift` (`escaped`, `ControlAskStyle`),
   `ControlProtocol.swift` (drop `cancelButton`, add `style` and `align`),
   `Ask.swift` (drop `cancelID`, add `style` and `align`),
   `Pick.swift` (`escapeAsk()`), `ControlDispatcher+Ask.swift` (drop the cancel role, validate `style`)
-- Modify: `HangarCore/Sources/hangarctlKit/AskCommands.swift` (drop `--cancel`, add `--style`),
+- Modify: `ElisCore/Sources/elisctlKit/AskCommands.swift` (drop `--cancel`, add `--style`),
   `SocketClient.swift` (`escaped` exits 3)
-- Modify: `Hangar/AppActions+Focus.swift` (`dismissPendingAsk` becomes escape, no button lookup),
-  `Hangar/Views/AskDialogView.swift` (filled buttons, `gui` rendering), `Hangar/Views/WindowContentView.swift`
+- Modify: `Elis/AppActions+Focus.swift` (`dismissPendingAsk` becomes escape, no button lookup),
+  `Elis/Views/AskDialogView.swift` (filled buttons, `gui` rendering), `Elis/Views/WindowContentView.swift`
   (Esc resolves `escaped`)
 - Modify: every test that named the cancel role: `ControlProtocolTests`, `AskTests`,
   `ControlDispatcherAskTests`, `AskCommandsTests`, `SocketClientTests`, `ControlServerAskTests`,
@@ -499,7 +499,7 @@ code to what the docs already say; the Solution Overview above is the authority.
 - [x] UI tests: `--default` then Return answers the default; Right arrow then Return answers the second
       button; a `--style gui` open renders `ask-dialog` with native buttons and answers by click
 - [x] hosted render check of both styles in light and dark appearance
-- [x] run `-only-testing:HangarUITests/ControlAskUITests` and the affected core suites
+- [x] run `-only-testing:ElisUITests/ControlAskUITests` and the affected core suites
 - [x] one button is always highlighted: `AskNavigation` seeds from `default`, else the first
       non-destructive button, else the first; `activate()` never returns nil for a non-empty list; the
       inert-Return unit and UI cases become "Return without default answers the first non-destructive
@@ -511,7 +511,7 @@ From Eugene's case-by-case review of the Debug build on 2026-09-05. Terminal sty
 style passed as is.
 
 **Files:**
-- Modify: `Hangar/Views/AskDialogView.swift`, `HangarTests/AskDialogViewTests.swift`
+- Modify: `Elis/Views/AskDialogView.swift`, `ElisTests/AskDialogViewTests.swift`
 - Modify: `.claude/rules/control-api.md` and the skill reference only where they state the panel width
 
 - [x] message text is drawn in a muted foreground (foreground at reduced opacity), the title stays full
@@ -521,7 +521,7 @@ style passed as is.
       of the anchor width and the 72-cell maximum; a short question gets a short panel, a long one
       keeps a margin on both sides; the column fallback and wrapping still apply within the cap
 - [x] hosted render checks: short question in a narrow pane, long label in a narrow pane, light and dark
-- [x] targeted `AskDialogViewTests` and `-only-testing:HangarUITests/ControlAskUITests`
+- [x] targeted `AskDialogViewTests` and `-only-testing:ElisUITests/ControlAskUITests`
 - [x] terminal buttons drop the `[ ` and ` ]` brackets; the filled block is the button. The destructive
       button keeps its `! ` prefix. Update `buttonLabel`, its tests, the Solution Overview rendering
       bullet, and every doc line that shows a bracketed button; re-run the targeted render and UI checks
@@ -540,7 +540,7 @@ style passed as is.
 
 ### Task 12: Verify acceptance criteria
 - [x] every decision in Solution Overview is implemented and has a test
-- [x] `cd HangarCore && swift test`
+- [x] `cd ElisCore && swift test`
 - [x] `make test-app`
 - [x] `make lint` with zero findings
 - [x] Debug instance: manual pass of the keyboard contract and a theme switch while the dialog is up,
@@ -557,6 +557,6 @@ style passed as is.
 
 **Manual verification**:
 - run the bundled skill's example hook against a Release build installed with `make deploy`
-- confirm `hangarctl ask` from inside a session with no `--target` still draws at terminal-area center
+- confirm `elisctl ask` from inside a session with no `--target` still draws at terminal-area center
 
 Smells pre-check: skipped — non-Go project

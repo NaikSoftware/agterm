@@ -1,39 +1,39 @@
-# HTML overlay bridge: Hangar commands from file pages
+# HTML overlay bridge: Elis commands from file pages
 
 ## Overview
-- A file page shown with `session overlay open --html` can run any Hangar command, read the tree,
+- A file page shown with `session overlay open --html` can run any Elis command, read the tree,
   switch sessions, and return a chosen value to a script waiting on `--block`, the way `pick` does.
 - Two surfaces:
-  - `data-hangar` tag attributes, handled by an hangar-injected script, work with page JavaScript off.
-  - `hangar.request(cmd, {target, args})` is available on `--js` pages and returns the reply.
+  - `data-elis` tag attributes, handled by an elis-injected script, work with page JavaScript off.
+  - `elis.request(cmd, {target, args})` is available on `--js` pages and returns the reply.
 - One new socket command, `session.overlay.submit`, turns a page into a selector.
 - No permission tiers: pages are self-authored and trusted like a program overlay, which already gets
-  `HANGAR_SOCKET`. `--url` pages get nothing.
-- Out of scope: `data-hangar-trigger`, `data-hangar-confirm`, templates, `hangar:` links, a URL scheme
+  `ELIS_SOCKET`. `--url` pages get nothing.
+- Out of scope: `data-elis-trigger`, `data-elis-confirm`, templates, `elis:` links, a URL scheme
   handler, and pushing tree changes into a page. Live lists use `--js`.
 
 ## Context (from discovery)
-- Web view: `Hangar/Views/HtmlOverlayRegistry.swift` (583 lines).
+- Web view: `Elis/Views/HtmlOverlayRegistry.swift` (583 lines).
   - `install()` (:19) owns the single `HtmlOverlayReleases.shared.onRelease` callback and is called from
     `AppDelegate.swift:83`.
   - `installTheme` (~193) calls `removeAllUserScripts()` and adds only the theme user script, in
     `themeWorld`.
   - `close()` (~252) clears delegates.
-- Page model and release seam: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`.
+- Page model and release seam: `ElisCore/Sources/ElisCore/HtmlOverlay.swift`.
   - `HtmlNavigationPolicy` (~206).
   - `HtmlOverlayReleases.release()` (~235) fires once per page from every path that empties a slot.
 - Slot lookup: `AppStore+HtmlOverlay.swift`.
   - `htmlOverlaySlot(id)` (~106) sees only live sessions, not soft-closed ones.
   - `closeHtmlOverlay` (~118).
   - `htmlOverlayNodes` (~123) carries no page id.
-- Socket entry: `Hangar/Control/ControlServer.swift`.
+- Socket entry: `Elis/Control/ControlServer.swift`.
   - `dispatch` (~576) is private; its `defer { refreshWindowCache() }` must run for page requests too.
   - The exhaustive `switch request.cmd` follows `dispatch`.
   - `decodeDetail` (:129, used at :439) formats decode errors and is private to the app target.
 - Dispatcher: `ControlDispatcher.swift` owns the routing switches and the `ControlActions` protocol
   (`sessionOverlayResult` at :102). `ControlActionsDefaults.swift` holds the defaults. Tests use
   `MockControlActions.swift`.
-- Targeting: `Hangar/Control/ControlTargetResolver.swift`.
+- Targeting: `Elis/Control/ControlTargetResolver.swift`.
   - `resolveWindowStore` (~55) falls back to the frontmost window.
   - `resolveSessionTarget` (~109) scopes any request carrying `args.window` to that window.
 - Session close:
@@ -42,12 +42,12 @@
   - Multi-target batches with undo enabled soft-close and keep pages through the grace period.
 - Result read: `session.overlay.result` refuses pages (`ControlServer+SessionActions.swift:165`).
 - Pick pattern for retained results: `Pick.swift` (`recentResults`, `retainedResults`); exit codes in
-  `hangarctlKit/SocketClient.swift` `pickExitCode` (0 submitted, 2 cancelled).
+  `elisctlKit/SocketClient.swift` `pickExitCode` (0 submitted, 2 cancelled).
 - CLI:
-  - `hangarctlKit/SessionCommands.swift` (997 lines) holds overlay-open `validate()`, which rejects
+  - `elisctlKit/SessionCommands.swift` (997 lines) holds overlay-open `validate()`, which rejects
     `--block`/`--wait` with a page.
-  - `hangarctlKit/OverlayPageCommands.swift` already holds `Reload` and `Navigate`.
-- Hosted tests: `HangarTests/HtmlOverlayRegistryTests.swift` and `HangarTests/ControlServerSessionActionsTests.swift`.
+  - `elisctlKit/OverlayPageCommands.swift` already holds `Reload` and `Navigate`.
+- Hosted tests: `ElisTests/HtmlOverlayRegistryTests.swift` and `ElisTests/ControlServerSessionActionsTests.swift`.
   - `scripts/test-app.sh` forwards no arguments, so scoped runs call `xcodebuild` directly.
 - `SkillInstallTests.bundledSkillDescriptionFitsTheSpecLimit` caps the SKILL.md description at 1024
   characters; it is about 1014 now.
@@ -66,10 +66,10 @@
 - **CRITICAL: all tests must pass before starting next task** - no exceptions
 - **CRITICAL: update this plan file when scope changes during implementation**
 - run tests after each change, scoped per project rules:
-  - host-free: `cd HangarCore && swift test --filter <Suite>`
+  - host-free: `cd ElisCore && swift test --filter <Suite>`
   - hosted: `./scripts/setup.sh && xcodegen generate` once, then
-    `xcodebuild test -project Hangar.xcodeproj -scheme HangarTests -destination 'platform=macOS'
-    -derivedDataPath build/DerivedData -only-testing:HangarTests/<Class>/<test>`
+    `xcodebuild test -project Elis.xcodeproj -scheme ElisTests -destination 'platform=macOS'
+    -derivedDataPath build/DerivedData -only-testing:ElisTests/<Class>/<test>`
 - the full gates (`swift test`, `make test-app`, `make lint`) run once, in Task 8, after the docs
 - maintain backward compatibility:
   - program overlays keep their `--block`/`--wait`/`result` contract unchanged
@@ -77,13 +77,13 @@
 - no production code exists only for tests: test seams are the real injected closures
 
 ## Testing Strategy
-- **unit tests** (`HangarCore`, host-free):
+- **unit tests** (`ElisCore`, host-free):
   - protocol round-trip
   - the outcome store and the release seam
   - dispatcher arms
   - request building, page-relative defaults and exclusions
-  - CLI parsing, validation, the open/poll runner and exit codes (`hangarctlKitTests`)
-- **hosted tests** (`HangarTests`, isolated AppKit):
+  - CLI parsing, validation, the open/poll runner and exit codes (`elisctlKitTests`)
+- **hosted tests** (`ElisTests`, isolated AppKit):
   - real input delivery with JS off and on, with a JS-off sentinel
   - proof that the form's submission was cancelled
   - form-value conversion in the injected script
@@ -101,14 +101,14 @@
 - keep plan in sync with actual work done
 
 ## Solution Overview
-- **Adapter script.** An hangar-owned script in a dedicated content world, injected at document start into
+- **Adapter script.** An elis-owned script in a dedicated content world, injected at document start into
   every file page's main frame. It works with page JS off because user scripts still run there, and the DOM
   is shared across worlds.
-  - It listens for `submit` on `form[data-hangar]` and for `click` on `[data-hangar]` elements that are
+  - It listens for `submit` on `form[data-elis]` and for `click` on `[data-elis]` elements that are
     outside an annotated form and have `type="button"` (or are not buttons).
   - It calls `preventDefault()` synchronously before any await.
   - It sends `{cmd, target, args}` through a reply handler registered in its own world.
-- **Page helper.** On `--js` pages only, a page-world `hangar.request(cmd, {target, args} = {})` wrapper
+- **Page helper.** On `--js` pages only, a page-world `elis.request(cmd, {target, args} = {})` wrapper
   over a reply handler registered in the page world. Its Promise always settles: resolved with the result,
   or rejected with the error.
 - **One native path.** Both handlers:
@@ -127,7 +127,7 @@
     when the web view is realized. A failed open registers nothing. Registering URL pages too keeps submit
     uniform and costs nothing: their release records `dismissed` like any other page.
   - `session.overlay.submit {value}` records `submitted` before releasing the page.
-  - `HtmlOverlayReleases.release()` in HangarCore records `dismissed` for a page still pending, before it
+  - `HtmlOverlayReleases.release()` in ElisCore records `dismissed` for a page still pending, before it
     calls `onRelease`. The registry keeps sole ownership of `onRelease`.
   - Pending entries are bounded by open and undo-retained pages. Release moves an entry into a bounded
     terminal history, like pick's retained results.
@@ -146,9 +146,9 @@
   - A key that would receive more than one serialized value is refused with an error, for example two
     text inputs with the same name or a multi-select. A radio group is one value, not a repeat.
   - File inputs are refused.
-  - `data-hangar-args` (JSON object) is the base, and named controls override matching keys.
-  - `data-hangar-target` is the envelope target, never an argument.
-- **`data-hangar-into`:** writes `result.text` when present, otherwise the JSON of the result, or the
+  - `data-elis-args` (JSON object) is the base, and named controls override matching keys.
+  - `data-elis-target` is the envelope target, never an argument.
+- **`data-elis-into`:** writes `result.text` when present, otherwise the JSON of the result, or the
   error string, as `textContent`.
 - **Page-relative defaults**, captured once when the request is admitted:
   - Every session-targeted command with no `target`, no `args.targets` and no `args.window` gets the
@@ -164,7 +164,7 @@
 - **Refused commands** (execution limits, not permissions):
   - `zmx.present` and `session.overlay.job.run`, which take over a stream;
   - `zmx.reset`, which does work after its reply.
-- **Decode errors:** move `decodeDetail`'s formatting into HangarCore so the socket and the bridge produce
+- **Decode errors:** move `decodeDetail`'s formatting into ElisCore so the socket and the bridge produce
   the same `invalid request: …` text.
 - **Wire:**
   - `session.overlay.submit`: `target`, `args.pane`, `args.value` (string; required, and may be empty).
@@ -182,15 +182,15 @@
 ### Task 1: Prove the adapter mechanism and add the dispatch seam
 
 **Files:**
-- Create: `Hangar/Views/HtmlOverlayBridge.swift`
-- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`
-- Modify: `Hangar/Control/ControlServer.swift`
-- Modify: `Hangar/AppDelegate.swift` (if the closure is wired there alongside `install()`)
-- Modify: `HangarTests/HtmlOverlayRegistryTests.swift`
+- Create: `Elis/Views/HtmlOverlayBridge.swift`
+- Modify: `Elis/Views/HtmlOverlayRegistry.swift`
+- Modify: `Elis/Control/ControlServer.swift`
+- Modify: `Elis/AppDelegate.swift` (if the closure is wired there alongside `install()`)
+- Modify: `ElisTests/HtmlOverlayRegistryTests.swift`
 
 - [x] write failing hosted tests, with JS off, for both a text-loaded page and a `--cwd` folder page:
   - a JS-off sentinel shows page script did not run: an inline `<script>` sets a marker that stays unset;
-  - a real mouse down and up through normal AppKit hit-testing on `<button type="button" data-hangar>`
+  - a real mouse down and up through normal AppKit hit-testing on `<button type="button" data-elis>`
     reaches the injected dispatch closure exactly once;
   - Return in a focused text input submits an annotated form exactly once;
   - the form's `action` is a destination the fixture demonstrably allows: `b.html` for the `--cwd` page,
@@ -209,21 +209,21 @@
 ### Task 2: Add session.overlay.submit and page outcomes in the model
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/HtmlPageOutcomes.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/HtmlPageOutcomesTests.swift`
-- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift` (`HtmlOverlayReleases.release`)
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Overlay.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
-- Modify: `Hangar/Control/ControlServer.swift` (the command switch)
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherOverlayTests.swift`
-- Modify: `HangarTests/ControlServerSessionActionsTests.swift`
+- Create: `ElisCore/Sources/ElisCore/HtmlPageOutcomes.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/HtmlPageOutcomesTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/HtmlOverlay.swift` (`HtmlOverlayReleases.release`)
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Overlay.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlActionsDefaults.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+HtmlOverlay.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProjection.swift`
+- Modify: `Elis/Control/ControlServer.swift` (the command switch)
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/MockControlActions.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherOverlayTests.swift`
+- Modify: `ElisTests/ControlServerSessionActionsTests.swift`
 
 - [x] write failing store tests:
   - a successful open registers `pending`, and a failed open registers nothing;
@@ -248,12 +248,12 @@
   app-action test in `ControlServerSessionActionsTests`
 - [x] run `swift test --filter` for the touched suites and the scoped hosted test - must pass before Task 3
 
-### Task 3: Build requests and page-relative defaults in HangarCore
+### Task 3: Build requests and page-relative defaults in ElisCore
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/HtmlBridge.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/HtmlBridgeTests.swift`
-- Modify: `Hangar/Control/ControlServer.swift` (move the `decodeDetail` formatting into HangarCore)
+- Create: `ElisCore/Sources/ElisCore/HtmlBridge.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/HtmlBridgeTests.swift`
+- Modify: `Elis/Control/ControlServer.swift` (move the `decodeDetail` formatting into ElisCore)
 
 - [x] write failing tests for decoding a page message into `ControlRequest`:
   - dotted command name, `target`, `args` object;
@@ -269,19 +269,19 @@
   - `reload` gets `current: true` only when omitted
 - [x] write failing tests for refusing `zmx.present`, `session.overlay.job.run` and `zmx.reset`
 - [x] implement `HtmlBridge`, taking the page's current window, session and pane as input, and move the
-  decode-error formatting into HangarCore, used by both the socket and the bridge
+  decode-error formatting into ElisCore, used by both the socket and the bridge
 - [x] run `swift test --filter HtmlBridgeTests` and the existing socket decode tests - must pass before
   Task 4
 
 ### Task 4: Wire the native bridge, page helper and full adapter behavior
 
 **Files:**
-- Modify: `Hangar/Views/HtmlOverlayBridge.swift`
-- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`
-- Modify: `HangarTests/HtmlOverlayRegistryTests.swift`
+- Modify: `Elis/Views/HtmlOverlayBridge.swift`
+- Modify: `Elis/Views/HtmlOverlayRegistry.swift`
+- Modify: `ElisTests/HtmlOverlayRegistryTests.swift`
 
 - [x] write failing hosted tests for the round trip:
-  - a `tree` request returns the tree to a `--js` Promise, and to `data-hangar-into` text with JS off;
+  - a `tree` request returns the tree to a `--js` Promise, and to `data-elis-into` text with JS off;
   - `session.select` switches the session;
   - a subframe request is refused;
   - a `--url` page has no adapter and no helper;
@@ -290,14 +290,14 @@
   - empty and valid number fields;
   - an unchecked checkbox sends false;
   - disabled controls are skipped;
-  - `data-hangar-args` is the base and a named control overrides it;
+  - `data-elis-args` is the base and a named control overrides it;
   - a selected radio group sends one value;
   - a repeated serialized value is refused
 - [x] implement the reply handlers through one request-handling helper that takes the reply closure as a
   parameter: main-frame check, live-page admission, `HtmlBridge` build, dispatch through the closure, and
   exactly one call to the reply closure
-- [x] add the page-world `hangar.request` helper on `--js` pages, and finish the adapter: form rules,
-  args merge, `data-hangar-into`
+- [x] add the page-world `elis.request` helper on `--js` pages, and finish the adapter: form rules,
+  args merge, `data-elis-into`
 - [x] unregister handlers on page release and keep them on reload; test that a released page sends nothing
   further
 - [x] run the scoped hosted tests - must pass before Task 5
@@ -305,11 +305,11 @@
 ### Task 5: CLI for submit, page results and --block selectors
 
 **Files:**
-- Modify: `HangarCore/Sources/hangarctlKit/OverlayPageCommands.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift` (register `Submit` in `Overlay`, the
+- Modify: `ElisCore/Sources/elisctlKit/OverlayPageCommands.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift` (register `Submit` in `Overlay`, the
   stored `--page` option and request on `Result`, `Open.run` routing to the page poll, and `validate()`)
-- Modify: `HangarCore/Sources/hangarctlKit/SocketClient.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/OverlayCommandsTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SocketClient.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/OverlayCommandsTests.swift`
 
 - [x] write failing tests for parsing and validation:
   - `session overlay submit [--value V] [--pane] [--target]` builds the request;
@@ -333,8 +333,8 @@
 ### Task 6: Own-page and interleaving hosted tests
 
 **Files:**
-- Modify: `HangarTests/HtmlOverlayRegistryTests.swift`
-- Modify: `Hangar/Views/HtmlOverlayBridge.swift` (fixes only, if tests expose them)
+- Modify: `ElisTests/HtmlOverlayRegistryTests.swift`
+- Modify: `Elis/Views/HtmlOverlayBridge.swift` (fixes only, if tests expose them)
 
 - [x] write hosted tests for commands that affect their own page. Each counts calls to the actual reply
   completion. The production request-handling helper takes its reply closure as a parameter: the WebKit
@@ -370,7 +370,7 @@
   - the `pageID` and tree `id` read-back
 - [x] update `site/docs.html`: the page bridge guide with the switcher, forms, page controls and selector
   examples
-- [x] update `plugins/hangar/skills/hangar/`:
+- [x] update `plugins/elis/skills/elis/`:
   - a `SKILL.md` section plus a description trigger that keeps the description within 1024 characters;
   - the `reference.md` entries;
   - an `examples.md` switcher and selector
@@ -381,13 +381,13 @@
 ### Task 8: Verify acceptance criteria
 - [x] verify the Overview requirements:
   - tags run commands with JS off;
-  - `hangar.request` returns replies on `--js` pages;
+  - `elis.request` returns replies on `--js` pages;
   - selectors return values through `--block`;
   - `--url` pages get nothing
 - [x] verify the edge cases above are covered by tests (defaults, exclusions, own-page commands, soft
   close, form conversion)
 - [x] build: `scripts/build.sh`
-- [x] run full host-free suite: `cd HangarCore && swift test`
+- [x] run full host-free suite: `cd ElisCore && swift test`
 - [x] run hosted suite: `make test-app`
 - [x] run lint: `make lint` (zero findings)
 
@@ -400,7 +400,7 @@
 *Items requiring manual intervention or external systems - no checkboxes, informational only*
 
 **Manual verification:**
-- In an isolated Debug instance (short `/tmp` `HANGAR_STATE_DIR`, `open -n`):
+- In an isolated Debug instance (short `/tmp` `ELIS_STATE_DIR`, `open -n`):
   - a no-JS switcher generated from `tree`;
   - a `--js` live switcher with Refresh;
   - a rename form;

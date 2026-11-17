@@ -1,8 +1,8 @@
 // On a device against a live relay:
-//   flutter test integration_test/app_test.dart --dart-define=PAIR_LINK='hangar://pair?h=10.0.2.2&...'
+//   flutter test integration_test/app_test.dart --dart-define=PAIR_LINK='elis://pair?h=10.0.2.2&...'
 // The computer must have a session named "phone-target" running a shell.
-import 'package:hangar_mobile/main.dart' as app;
-import 'package:hangar_mobile/model.dart';
+import 'package:elis_mobile/main.dart' as app;
+import 'package:elis_mobile/model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';

@@ -7,7 +7,7 @@
 #include <QStringList>
 
 // keymap.conf and hooks.conf live here: an explicit directory setting, else <state dir>/config while
-// HANGAR_STATE_DIR is set (test isolation, as master), else ~/.config/hangar.
+// ELIS_STATE_DIR is set (test isolation, as master), else ~/.config/elis.
 QString configDirectory(const QString &setting, const QString &stateDirEnv, const QString &home);
 
 struct KeymapDiagnostic {

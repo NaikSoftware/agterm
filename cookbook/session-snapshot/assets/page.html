@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Hangar snapshot</title>
+<title>Elis snapshot</title>
 <style>
 :root{--bg:#f6f5f1;--panel:#fff;--fg:#1d1f1c;--mut:#6b6f68;--line:#e2e0d8;--acc:#2f6b3f;--accbg:#e4efe6;
   --sel:#a9512f;--code:#f0efe9;--you:#eef3fb;--youline:#c9d7ee;--run:#b5651d;--flag:#c0392b}
@@ -74,7 +74,7 @@ summary{cursor:pointer;color:var(--mut);font-size:12px}
 </head>
 <body>
 <div class="top"><div class="top-in">
-  <h1>Hangar snapshot</h1><span class="meta" id="meta"></span>
+  <h1>Elis snapshot</h1><span class="meta" id="meta"></span>
   <input id="q" type="search" placeholder="filter sessions… ( / )" autocomplete="off">
 </div></div>
 <div class="layout">
@@ -155,7 +155,7 @@ function renderTree() {
   }
   const nc = SNAP.sessions.filter(s => s.claude).length;
   $("#meta").textContent = `${SNAP.created} · ${SNAP.sessions.length} sessions · ${nc} with a Claude conversation`;
-  $("#foot").append("Copy a snippet and paste it into a bash or zsh shell in hangar; a session that is still open is selected instead of duplicated. Data: ",
+  $("#foot").append("Copy a snippet and paste it into a bash or zsh shell in elis; a session that is still open is selected instead of duplicated. Data: ",
     el("code", {}, SNAP.file));
 }
 

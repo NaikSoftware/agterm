@@ -149,18 +149,18 @@ class BluetoothPref {
 
 /// What the screen says when no transport connected; [unseen] is how long no Bluetooth scan has matched.
 String connectError(Object e, Pairing p, Duration unseen) => switch (e) {
-      HangarError() => e.message,
+      ElisError() => e.message,
       BleNotFound() when unseen >= const Duration(minutes: 2) =>
         "Can't find ${p.name}: out of range, Bluetooth off, or the pairing was reset.",
       BleNotFound() => 'Looking for ${p.name} over Bluetooth…',
       _ when p.host == null => 'Cannot reach ${p.name} over Bluetooth. Is phone access on?',
-      _ => 'Cannot reach ${p.host}:${p.port}. Is `hangarctl mobile serve` running?',
+      _ => 'Cannot reach ${p.host}:${p.port}. Is `elisctl mobile serve` running?',
     };
 
 enum LinkState { connecting, connected, offline }
 
-class HangarModel extends ChangeNotifier {
-  HangarModel(this.pairing, {@visibleForTesting this.open = Connection.open}) {
+class ElisModel extends ChangeNotifier {
+  ElisModel(this.pairing, {@visibleForTesting this.open = Connection.open}) {
     _lifecycle = AppLifecycleListener(onResume: resume, onPause: _background);
   }
 
@@ -261,7 +261,7 @@ class HangarModel extends ChangeNotifier {
   /// A control command; window-addressed commands go to the window on screen.
   Future<Map<String, dynamic>> call(String cmd, {String? target, Map<String, dynamic>? args, bool windowed = true}) {
     final c = _c;
-    if (c == null || state != LinkState.connected) return Future.error(HangarError('Not connected'));
+    if (c == null || state != LinkState.connected) return Future.error(ElisError('Not connected'));
     return c.call(cmd, target: target, args: args, window: windowed ? windowId : null);
   }
 
@@ -271,7 +271,7 @@ class HangarModel extends ChangeNotifier {
       await call(cmd, target: target, args: args);
       scheduleRefresh(const Duration(milliseconds: 150));
       return null;
-    } on HangarError catch (e) {
+    } on ElisError catch (e) {
       return e.message;
     } on TimeoutException {
       return 'The computer did not answer';
@@ -288,7 +288,7 @@ class HangarModel extends ChangeNotifier {
       loaded = true;
       if (background) Watch.clear(Watch.posted.read(sessions));
       if (!_disposed) notifyListeners();
-    } on HangarError catch (e) {
+    } on ElisError catch (e) {
       error = e.message;
       if (!_disposed) notifyListeners();
     } on TimeoutException {
@@ -308,7 +308,7 @@ class HangarModel extends ChangeNotifier {
     refresh();
   }
 
-  // polls events.read with hangarctl's cursor rules: anchor with no cursor, then {run, after: "<next>"}
+  // polls events.read with elisctl's cursor rules: anchor with no cursor, then {run, after: "<next>"}
   Future<void> _eventLoop(int gen) async {
     while (gen == _generation && !_disposed) {
       try {
@@ -324,7 +324,7 @@ class HangarModel extends ChangeNotifier {
           scheduleRefresh();
         }
         await Future.delayed(Duration(milliseconds: items.isEmpty ? 1000 : 150));
-      } on HangarError catch (e) {
+      } on ElisError catch (e) {
         if (e.message == 'Disconnected' || e.message == 'Not connected') return;
         _run = null; // "event run changed" (the app restarted) or "event cursor expired": start over
         scheduleRefresh(Duration.zero);

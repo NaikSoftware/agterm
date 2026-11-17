@@ -22,24 +22,24 @@ not be focusable (Task 4).
 
 Files/components involved:
 
-- `Hangar/hangarApp.swift:417-487` — `overlayExitWrapper` and `makeOverlaySurface`; every overlay surface is
+- `Elis/elisApp.swift:417-487` — `overlayExitWrapper` and `makeOverlaySurface`; every overlay surface is
   spawned with a command and `autoFocus: true`.
-- `Hangar/Views/WindowContentView+Detail.swift:58` — `DeckPaneGates(overlaid: session.overlayActive || …)`;
+- `Elis/Views/WindowContentView+Detail.swift:58` — `DeckPaneGates(overlaid: session.overlayActive || …)`;
   `:187-190` the floating click catcher; `:275` `backdropWashActive`.
-- `Hangar/Views/TerminalView.swift:63-69` — an inactive pane has first responder taken away.
-- `HangarCore/Sources/HangarCore/AppStore+Panes.swift:169-219` — `openOverlay` / `resizeOverlay` /
+- `Elis/Views/TerminalView.swift:63-69` — an inactive pane has first responder taken away.
+- `ElisCore/Sources/ElisCore/AppStore+Panes.swift:169-219` — `openOverlay` / `resizeOverlay` /
   `closeOverlay` / `recordOverlayExit`.
-- `HangarCore/Sources/HangarCore/AppStore.swift:259-285` — where `ControlSessionNode` is populated.
-- `HangarCore/Sources/HangarCore/Session.swift:243-253` — `overlaySizePercent`, `fullOverlayActive`,
+- `ElisCore/Sources/ElisCore/AppStore.swift:259-285` — where `ControlSessionNode` is populated.
+- `ElisCore/Sources/ElisCore/Session.swift:243-253` — `overlaySizePercent`, `fullOverlayActive`,
   `floatingOverlayActive`.
-- `HangarCore/Sources/HangarCore/ControlProtocol.swift:387` — `ControlSessionNode`; `:40-43`
+- `ElisCore/Sources/ElisCore/ControlProtocol.swift:387` — `ControlSessionNode`; `:40-43`
   `session.overlay.*` cases; `:133` `ControlArgs.color`.
-- `Hangar/Control/ControlServer.swift:336-356` — an exhaustive `Command` switch with no `default`.
-- `Hangar/Control/ControlServer+SessionActions.swift:80` — app-side overlay result, where store state is known.
-- `HangarCore/Sources/HangarCore/ControlDispatcher.swift` + `ControlDispatcher+Pick.swift` — dispatcher-first
+- `Elis/Control/ControlServer.swift:336-356` — an exhaustive `Command` switch with no `default`.
+- `Elis/Control/ControlServer+SessionActions.swift:80` — app-side overlay result, where store state is known.
+- `ElisCore/Sources/ElisCore/ControlDispatcher.swift` + `ControlDispatcher+Pick.swift` — dispatcher-first
   validation pattern to mirror.
-- `HangarCore/Sources/hangarctlKit/SessionCommands.swift:600-740` — the `overlay` subcommand group.
-- `Hangar/Resources/agent-status` + `project.yml:53` (`sources.excludes`) and `:78-82` (folder reference) —
+- `ElisCore/Sources/elisctlKit/SessionCommands.swift:600-740` — the `overlay` subcommand group.
+- `Elis/Resources/agent-status` + `project.yml:53` (`sources.excludes`) and `:78-82` (folder reference) —
   the bundled-asset pattern the helper follows; it is **two** entries, not one.
 
 Related patterns found:
@@ -48,7 +48,7 @@ Related patterns found:
   (`WindowContentView+Detail.swift:185-186`), with the session visible around it — exactly the geometry a HUD
   wants.
 - `--background-color` is already carried on the session's overlay slot (`overlayBackgroundColor`) and applied
-  in `createSurface` because the overlay is sessionless (`hangarApp.swift:441`).
+  in `createSurface` because the overlay is sessionless (`elisApp.swift:441`).
 - `ShellEscape.swift` exists host-free for quoting the helper path into the wrapper's `eval`.
 
 Dependencies and hazards identified (all verified against the code):
@@ -91,13 +91,13 @@ everything else to what changed. Never re-run a whole XCUITest suite to verify a
 
 ## Testing Strategy
 
-- **host-free unit tests** (`HangarCore/Tests/HangarCoreTests/`): sizing math, session state, store lifecycle,
+- **host-free unit tests** (`ElisCore/Tests/ElisCoreTests/`): sizing math, session state, store lifecycle,
   dispatcher validation, protocol round-trip, tree-node population, zoom resolution. The bulk of coverage.
-- **CLI tests** (`HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`): argument parsing and validation.
-- **hosted AppKit tests** (`HangarTests/`, via `make test-app`): the first-responder property — the session
+- **CLI tests** (`ElisCore/Tests/elisctlKitTests/CommandsTests.swift`): argument parsing and validation.
+- **hosted AppKit tests** (`ElisTests/`, via `make test-app`): the first-responder property — the session
   keeps focus and receives typed input while a HUD is up. This is the property that makes it a HUD rather than
   an overlay and must be pinned. Also the HUD→overlay surface swap and the app-side action wiring.
-- **e2e UI test** (`HangarUITests/ControlHudUITests.swift`): open → read back from `tree` → update → close over
+- **e2e UI test** (`ElisUITests/ControlHudUITests.swift`): open → read back from `tree` → update → close over
   the real socket, following `ControlPickUITests.swift`'s shape.
 
 ## Progress Tracking
@@ -111,7 +111,7 @@ everything else to what changed. Never re-run a whole XCUITest suite to verify a
 
 The HUD is an **app-owned overlay variant**, not a new surface kind and not CLI sugar.
 
-Why a pty at all: every overlay surface is spawned with a command, and Hangar drives pty *input* only — it has
+Why a pty at all: every overlay surface is spawned with a command, and Elis drives pty *input* only — it has
 no path to paint output into a libghostty surface. A HUD is therefore necessarily a surface running a program
 that prints the message and waits. The app owns that program (a bundled helper), so caller text never
 round-trips through a shell line the caller composed.
@@ -156,7 +156,7 @@ Explicitly out of scope (cut during design — do not add): TTL/auto-expiry; a w
 
 ## Technical Details
 
-**Host-free model** (`HangarCore/Sources/HangarCore/Hud.swift`):
+**Host-free model** (`ElisCore/Sources/ElisCore/Hud.swift`):
 
 ```swift
 public struct HudSpec: Codable, Equatable, Sendable {
@@ -202,9 +202,9 @@ reports the effective value, including the `center` default, so a script never h
 `overlay` field reports **false** and `overlaySizePercent` stays omitted, so a script polling "is a program
 covering this session" cannot mistake a HUD for a running program; the HUD's size is reported inside `hud`.
 
-**Helper contract** (`Hangar/Resources/hud/hud.sh`), one environment variable and one file:
+**Helper contract** (`Elis/Resources/hud/hud.sh`), one environment variable and one file:
 
-- `HANGAR_HUD_FILE` — path to the rendered body (`HudLayout.renderedBody`), read every tick.
+- `ELIS_HUD_FILE` — path to the rendered body (`HudLayout.renderedBody`), read every tick.
 - The body's FIRST line is `<columns> <rows> <spinner> <pid>`: the box the app computed, so centering needs
   no `stty`/`tput`; `1` in the third field enables the frame counter and the faster tick; the fourth is the
   app's own pid, and a builtin `kill -0` on it is the second stop (Task 14), the only one a hard-killed app
@@ -228,26 +228,26 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 ### Task 1: Host-free HUD spec, metrics, and sizing math
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/Hud.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/HudTests.swift`
+- Create: `ElisCore/Sources/ElisCore/Hud.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/HudTests.swift`
 
 - [x] create `HudSpec` (message, detail, spinner, backgroundColor, sizePercent, position) as a `Codable`, `Sendable` value, defaulting `position` to `.center`
 - [x] create `HudPosition` (`top`/`center`/`bottom`, `CaseIterable` so validation and CLI help derive from it) with the `edgeMarginPercent` constant
 - [x] create `PaneMetrics` with Double-backed cell and pane dimensions — no CoreGraphics types cross the module boundary
 - [x] add `HudLayout.box(for:)` — wrap message and detail at `maxColumns`, add the padding frame, return columns/rows
 - [x] add `HudLayout.sizePercent(box:pane:)` — cell box to pane percentage, clamped to `minSizePercent...maxSizePercent`
-- [x] add `HudLayout.renderedBody(for:)` — the exact bytes the app writes to `HANGAR_HUD_FILE`
+- [x] add `HudLayout.renderedBody(for:)` — the exact bytes the app writes to `ELIS_HUD_FILE`
 - [x] write tests for wrapping (short message, long single word, message plus detail, embedded newlines)
 - [x] write tests for the percent conversion (typical pane, tiny pane clamping to min, huge message clamping to max, zero-size pane)
 - [x] write tests for the position default (omitted decodes to `center`) and that every `HudPosition` case round-trips
-- [x] run `cd HangarCore && swift test --filter HudTests` — must pass before task 2
+- [x] run `cd ElisCore && swift test --filter HudTests` — must pass before task 2
 
 ### Task 2: Session state for the HUD slot
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/SessionTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/SnapshotRoundTripTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/SessionTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/SnapshotRoundTripTests.swift`
 
 - [x] add `hudSpec: HudSpec?` and `hudFile: String?` to `Session`, both non-persisted (live-only, like overlay state)
 - [x] add `hudActive` (derived: `overlayActive && hudSpec != nil`) and audit `fullOverlayActive`/`floatingOverlayActive` call sites so program-overlay questions stay program-only
@@ -259,9 +259,9 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 ### Task 3: Store lifecycle and replacement semantics
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`
-- Modify: `HangarCore/Sources/HangarCore/Session.swift` (added during Task 3: `overlaySlotGeneration`)
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePaneTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Panes.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift` (added during Task 3: `overlaySlotGeneration`)
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStorePaneTests.swift`
 
 - [x] add `openHud(_:spec:file:sizePercent:)` — sets the overlay slot to the helper command, stores `hudSpec`/`hudFile`, sets `overlaySizePercent`, marks the slot active
 - [x] add `updateHud(_:spec:file:sizePercent:)` — rewrites spec/size in place without touching the surface (no respawn)
@@ -275,10 +275,10 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 ### Task 4: Deck exemptions — make the HUD actually passive
 
 **Files:**
-- Modify: `Hangar/Views/WindowContentView+Detail.swift`
-- Modify: `HangarCore/Sources/HangarCore/Session.swift` (added during Task 4: `programOverlayActive`)
-- Modify: `HangarCore/Tests/HangarCoreTests/SessionTests.swift`
-- Create: `HangarTests/HudDeckGatesTests.swift`
+- Modify: `Elis/Views/WindowContentView+Detail.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift` (added during Task 4: `programOverlayActive`)
+- Modify: `ElisCore/Tests/ElisCoreTests/SessionTests.swift`
+- Create: `ElisTests/HudDeckGatesTests.swift`
 
 - [x] exempt a HUD from `gates.overlaid` (`:58`) so the session's pane stays `isActive` and keeps first responder — without this `TerminalView.updateNSView` resigns it and typing goes nowhere
 - [x] exempt a HUD from the floating click catcher (`:187-190`) so clicks reach the panes underneath
@@ -303,19 +303,19 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 ### Task 5: Protocol commands, arguments, read-back, and server routing
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
-- Modify: `Hangar/Control/ControlServer.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift` (added during Task 5: the exhaustive routing switch)
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/AppStoreHudTests.swift` (replaced `AppStoreTests.swift`, see below)
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift`
+- Modify: `Elis/Control/ControlServer.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift` (added during Task 5: the exhaustive routing switch)
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlProtocolTests.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/AppStoreHudTests.swift` (replaced `AppStoreTests.swift`, see below)
 
 - [x] add `Command` cases `sessionHudOpen = "session.hud.open"`, `sessionHudUpdate = "session.hud.update"`, `sessionHudClose = "session.hud.close"`
 - [x] add `message`, `detail`, `spinner`, `position` to `ControlArgs`; reuse the existing `sizePercent` and `color` — do NOT add a `backgroundColor` field (`position` already existed for `session.background`, so only its doc grew)
 - [x] add the `hud` node type and field to `ControlSessionNode` (`:387`)
 - [x] populate `hud` in `AppStore.swift:259-285`, and make `overlay`/`overlaySizePercent` report false/omitted while a HUD occupies the slot
 - [x] add the three cases to `ControlServer.swift:336-356` — the switch is exhaustive with no `default`, and these are dispatcher-handled, so they belong on the `preconditionFailure` arm alongside the pick commands
-- [x] ➕ add the three cases to `ControlDispatcher.dispatch`'s equally exhaustive switch, returning nil until Task 6 routes them to `dispatchHudCommand` — without it `HangarCore` does not build
+- [x] ➕ add the three cases to `ControlDispatcher.dispatch`'s equally exhaustive switch, returning nil until Task 6 routes them to `dispatchHudCommand` — without it `ElisCore` does not build
 - [x] ⚠️ `AppStore.swift` is 982 lines against SwiftLint's 1000-line warning and `make lint` requires zero findings. Resolved at 993 lines: the population is one flipped argument plus an 8-line `hudNode` helper, so no split was needed
 - [x] ➕ `AppStoreTests.swift` was 1972 lines against the 2000-line test limit, so the population tests went into a new `AppStoreHudTests.swift`, following the existing `AppStore<Concern>Tests.swift` split
 - [x] write round-trip tests for the three commands and their arguments
@@ -325,13 +325,13 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 ### Task 6: Dispatcher validation and control actions
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/ControlDispatcher+Hud.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/ControlDispatcherHudTests.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
-- Modify: `HangarCore/Sources/HangarCore/Hud.swift` (added during Task 6: `HudSpec.maxTextLength`)
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Pick.swift` (added during Task 6: shared control-character check)
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift` (added during Task 6: refusing conformance stubs)
-- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
+- Create: `ElisCore/Sources/ElisCore/ControlDispatcher+Hud.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/ControlDispatcherHudTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher.swift`
+- Modify: `ElisCore/Sources/ElisCore/Hud.swift` (added during Task 6: `HudSpec.maxTextLength`)
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Pick.swift` (added during Task 6: shared control-character check)
+- Modify: `Elis/Control/ControlServer+SessionActions.swift` (added during Task 6: refusing conformance stubs)
+- Modify: `ElisCore/Tests/ElisCoreTests/MockControlActions.swift`
 
 - [x] add `openHud`/`updateHud`/`closeHud` to the `ControlActions` protocol and to `MockControlActions`
 - [x] create `dispatchHudCommand` mirroring `ControlDispatcher+Pick.swift`: require a non-empty message on open, reject control characters in message and detail, cap length, validate `sizePercent` 1...100 and `color` through the shared `#rrggbb` validator, and validate `position` against `HudPosition.allCases` (absent means `center`, per the `StatusShape` precedent)
@@ -350,45 +350,45 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 ### Task 7: Bundled helper script
 
 **Files:**
-- Create: `Hangar/Resources/hud/hud.sh`
+- Create: `Elis/Resources/hud/hud.sh`
 - Modify: `project.yml`
-- Create: `HangarCore/Tests/HangarCoreTests/HudHelperTests.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/HudHelperTests.swift`
 
-- [x] write `hud.sh`: each tick read `HANGAR_HUD_FILE`, take the box and spinner flag from its header line, clear, print the message centered in that box with the detail line dimmed, sleep ~500ms (~100ms and advance the spinner frame with the spinner on), exit when the file disappears
+- [x] write `hud.sh`: each tick read `ELIS_HUD_FILE`, take the box and spinner flag from its header line, clear, print the message centered in that box with the detail line dimmed, sleep ~500ms (~100ms and advance the spinner frame with the spinner on), exit when the file disappears
 - [x] keep it POSIX `sh` with nothing beyond `printf`/`sleep` — the box comes from the body file, so no `stty`, `tput`, `$COLUMNS`, or SIGWINCH trap
-- [x] add `Hangar/Resources/hud` to the `hangar` target's `sources.excludes` (`project.yml:53` pattern) **and** as a folder-reference resource entry (`:78-82` pattern), landing at `Contents/Resources/hud`
+- [x] add `Elis/Resources/hud` to the `elis` target's `sources.excludes` (`project.yml:53` pattern) **and** as a folder-reference resource entry (`:78-82` pattern), landing at `Contents/Resources/hud`
 - [x] write tests that run the script against a temp file and assert it renders the message, picks up a rewritten file, honors the box, and exits when the file is removed
 - [x] run the new tests and `xcodegen generate` — must pass before task 8
 - [x] ⚠️ the box was delivered by environment variables, which a running process cannot see change, so an
   update would have left the text centered in the spawned box. RESOLVED in Task 8 by moving the box and the
   spinner flag into the body file's header line — the helper re-reads them every tick, so no respawn and no
-  blink. `HANGAR_HUD_COLS`/`_ROWS`/`_SPINNER` no longer exist; `HANGAR_HUD_FILE` is the whole environment
+  blink. `ELIS_HUD_COLS`/`_ROWS`/`_SPINNER` no longer exist; `ELIS_HUD_FILE` is the whole environment
 - [x] ⚠️ the helper re-reads the body file on every tick with no locking. RESOLVED in Task 8: the app writes
   it with `Data.write(options: .atomic)` (temp file plus rename), so a repaint sees the old body or the new
 
 ### Task 8: App wiring — font measurement, non-focusing surface, temp-file lifecycle
 
 **Files:**
-- Modify: `Hangar/hangarApp.swift`
-- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift` (added during Task 8: `hudBodyFile`)
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift` (stubs removed)
-- Create: `Hangar/Control/ControlServer+Hud.swift` (added during Task 8, see below)
-- Modify: `HangarCore/Sources/HangarCore/Hud.swift` (added during Task 8: `fileEnvKey`, header line)
-- Modify: `Hangar/Resources/hud/hud.sh` and `HangarCore/Tests/HangarCoreTests/{HudTests,HudHelperTests}.swift`
-- Modify: `HangarTests/ControlServerSessionActionsTests.swift`
+- Modify: `Elis/elisApp.swift`
+- Modify: `Elis/Ghostty/GhosttySurfaceView.swift` (added during Task 8: `hudBodyFile`)
+- Modify: `Elis/Control/ControlServer+SessionActions.swift` (stubs removed)
+- Create: `Elis/Control/ControlServer+Hud.swift` (added during Task 8, see below)
+- Modify: `ElisCore/Sources/ElisCore/Hud.swift` (added during Task 8: `fileEnvKey`, header line)
+- Modify: `Elis/Resources/hud/hud.sh` and `ElisCore/Tests/ElisCoreTests/{HudTests,HudHelperTests}.swift`
+- Modify: `ElisTests/ControlServerSessionActionsTests.swift`
 
 - [x] measure the configured terminal font (name + size) with CTFont advance to build `PaneMetrics`, and derive the pane's live size from the session's surface bounds
-- [x] in `makeOverlaySurface`, spawn a HUD slot with `autoFocus: false` and the HUD environment (`HANGAR_HUD_FILE` — see the Task 7 ⚠️: the box and spinner moved into the body file's header line, so no other variable exists), leaving program overlays byte-for-byte unchanged
+- [x] in `makeOverlaySurface`, spawn a HUD slot with `autoFocus: false` and the HUD environment (`ELIS_HUD_FILE` — see the Task 7 ⚠️: the box and spinner moved into the body file's header line, so no other variable exists), leaving program overlays byte-for-byte unchanged
 - [x] resolve the bundled helper path and shell-escape it through `ShellEscape` into the existing `overlayExitWrapper`
 - [x] implement `openHud`/`updateHud`/`closeHud`: write/rewrite the temp file, compute the size via `HudLayout`, honor an explicit `sizePercent` override, and delete the temp file on teardown
 - [x] make the exit-code capture path ignore HUD surfaces so a HUD never records an `overlayExitCode`
 - [x] write tests for environment and command composition, size computation from measured metrics, and temp-file cleanup on close
 - [x] run via `-only-testing:` — must pass before task 9
-- [x] ➕ the effects went into a NEW `Hangar/Control/ControlServer+Hud.swift` rather than growing the
+- [x] ➕ the effects went into a NEW `Elis/Control/ControlServer+Hud.swift` rather than growing the
   759-line `ControlServer+SessionActions.swift`, following the `ControlServer+Pick.swift` split: the host
   half is font measurement, pane geometry, bundle resolution, and temp-file IO, none of which the
   target-resolution file owns. The three refusing stubs Task 6 added were deleted with it
-- [x] ➕ the body file is per SESSION (`hangar-hud-<id>.txt`), not per open, so an update rewrites the path
+- [x] ➕ the body file is per SESSION (`elis-hud-<id>.txt`), not per open, so an update rewrites the path
   the running helper already opened. `GhosttySurfaceView.hudBodyFile` deletes it on every teardown path
   beside `overlayCodeFile`, which is also how a torn-down helper learns to exit; `session.hud.close` deletes
   it too, for a HUD whose surface never realized
@@ -396,8 +396,8 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 ### Task 9: Zoom resolution
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/TerminalZoom.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/TerminalZoomTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/TerminalZoom.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/TerminalZoomTests.swift`
 
 - [x] narrow the `.overlay` case so a HUD is not the active zoom target **and** widen `uncovered` (`:56-62`) for the HUD case — narrowing alone leaves no case active and falls through to the `?? .primary` fallback the code documents as unreachable
 - [x] decide once whether the explicit `surface:<id>:overlay` address resolves a HUD or is refused, and pin it
@@ -419,12 +419,12 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 ### Task 10: Overlay-command interplay (app-side)
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
-- Modify: `HangarTests/ControlServerSessionActionsTests.swift`
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`, `ControlProtocol.swift` (added during Task 10:
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`
+- Modify: `ElisTests/ControlServerSessionActionsTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`, `ControlProtocol.swift` (added during Task 10:
   `OverlayHudError`)
-- Modify: `Hangar/AppActions.swift`, `Hangar/hangarApp.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/SessionTests.swift`
+- Modify: `Elis/AppActions.swift`, `Elis/elisApp.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/SessionTests.swift`
 
 - [x] make `session.overlay.result` error with a clear message when the slot holds a HUD (`:80`, where store state is known — the host-free dispatcher cannot see slot occupancy)
 - [x] assert `session.overlay.close` closes a HUD as a courtesy — free once Task 3 clears HUD state in `closeOverlay`, but pin it
@@ -435,11 +435,11 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
       session selection, pane focus, and overlay-close refocus cannot hand first responder to the HUD
       helper. Audit `AppActions.searchTarget`'s scratch rung (`AppActions.swift:775`) in the same pass —
       it reads BOTH `!session.overlayActive` and `topmostSurface`, so a HUD over a shown scratch strands ⌘F.
-      Modify `HangarCore/.../Session.swift`, `Hangar/AppActions.swift`, `HangarCore/Tests/.../SessionTests.swift`
+      Modify `ElisCore/.../Session.swift`, `Elis/AppActions.swift`, `ElisCore/Tests/.../SessionTests.swift`
 - [x] ➕ the same audit caught two more raw-slot reads of the same class, both fixed with
       `programOverlayActive`: `Session.onScreenSurface` (`:605`), which sends `session.text` and
       `session.search` to the pane hidden under a scratch while a HUD is up, and the scratch factory's
-      `suppressAutoFocus` (`hangarApp.swift:103`), which would withhold focus from a scratch just shown
+      `suppressAutoFocus` (`elisApp.swift:103`), which would withhold focus from a scratch just shown
 - [x] ➕ ⚠️ `session.overlay.result` did NOT refuse a HUD for free, contrary to the Task 8 note: the slot's
       `overlayActive` made it answer "overlay still running", not "no overlay result". Now
       `OverlayHudError.noResult` names the HUD
@@ -448,11 +448,11 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
       the invariant `AppStore.openHud` already states — a HUD must never cover the session it is about
 - [x] run via `-only-testing:` — must pass before task 11
 
-### Task 11: hangarctl `session hud`
+### Task 11: elisctl `session hud`
 
 **Files:**
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
-- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift`
+- Modify: `ElisCore/Tests/elisctlKitTests/CommandsTests.swift`
 
 - [x] add a `hud` subcommand group next to `overlay`: `hud <message> [--detail T] [--spinner] [--position top|center|bottom] [--background-color #rrggbb] [--size-percent N] [--target T] [--window W]`, mapping `--background-color` to `ControlArgs.color` as the overlay group does (`:648`) and deriving the position help text from `HudPosition.allCases`
 - [x] add `hud update <message> [--detail T] [--position P]` and `hud close`, matching the overlay group's shape
@@ -470,14 +470,14 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 ### Task 12: End-to-end UI test
 
 **Files:**
-- Create: `HangarUITests/ControlHudUITests.swift`
+- Create: `ElisUITests/ControlHudUITests.swift`
 
 - [x] following `ControlPickUITests.swift`'s isolation and socket setup, open a HUD and assert `tree` reports `hud` with the message and `overlay` false
 - [x] assert `position` reads back as `center` when omitted and as the requested value when set
 - [x] update the HUD and assert the read-back changes
 - [x] close it and assert both `hud` and `overlay` are gone
 - [x] assert `overlay result` against a HUD errors
-- [x] run `xcodegen generate`, then only this class via `-only-testing:HangarUITests/ControlHudUITests` — must pass before task 13
+- [x] run `xcodegen generate`, then only this class via `-only-testing:ElisUITests/ControlHudUITests` — must pass before task 13
 - [x] ➕ the class overrides `tearDown` to close the HUD before `super` terminates the app: XCUITest's
       `terminate()` is a hard kill that never runs surface teardown, so a HUD left up leaves `hud.sh`
       spinning forever on a body file nothing deletes (see the ⚠️ below)
@@ -497,10 +497,10 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 ### Task 13: Documentation surfaces and command count
 
 **Files:**
-- Modify: `plugins/hangar/skills/hangar/SKILL.md`, `reference.md`, `examples.md`
+- Modify: `plugins/elis/skills/elis/SKILL.md`, `reference.md`, `examples.md`
 - Modify: `README.md`, `CONTRIBUTING.md` (added during Task 13: a second count mention), `site/commands.html`, `site/docs.html`
 - Modify: `.claude/rules/control-api.md`
-- Modify: `HangarCore/Tests/HangarCoreTests/SkillInstallTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/SkillInstallTests.swift`
 
 - [x] add the three commands to the skill's command summary, full reference, and one worked recipe (post a HUD, compute items, open the picker, close the HUD)
 - [x] document the read-back contract everywhere: `hud` object present with the effective `position`, `overlay` false, `overlay.result` refuses, state is poll-only via `tree` with no event
@@ -517,7 +517,7 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
       has no card there, which is the precedent a control-only HUD with no menu, chord, or asset follows.
       `softwareVersion` is a release-time field and was left alone
 - [x] ➕ two count mentions the plan's list did not name, both found by the pattern search and updated:
-      `CONTRIBUTING.md:7` ("Hangar carries 71 control commands") and `control-api.md:102`, where
+      `CONTRIBUTING.md:7` ("Elis carries 71 control commands") and `control-api.md:102`, where
       `debug.appearance` is described as the private 72nd `Command` case and is now the 75th
 - [x] ➕ documented beyond the checkboxes, since each is a contract a caller hits: `open` as the group's
       default subcommand, `hud update` taking `--spinner`/`--size-percent` but never `--background-color`,
@@ -533,9 +533,9 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
       builtin, so no fork and no change to the tick. A header naming no owner keeps painting, so the body
       file stays the primary stop. Covered by `exitsWhenTheOwningProcessIsGone` (starts the helper against a
       pid that then exits and asserts it exits on its own) and `keepsPaintingWhenTheHeaderNamesNoOwner`.
-      Modify `Hangar/Resources/hud/hud.sh`, `HangarCore/Sources/HangarCore/Hud.swift`,
-      `Hangar/Control/ControlServer+Hud.swift`, `HangarCore/Tests/HangarCoreTests/{HudTests,HudHelperTests}.swift`,
-      `HangarTests/ControlServerSessionActionsTests.swift`, `.claude/rules/control-api.md`
+      Modify `Elis/Resources/hud/hud.sh`, `ElisCore/Sources/ElisCore/Hud.swift`,
+      `Elis/Control/ControlServer+Hud.swift`, `ElisCore/Tests/ElisCoreTests/{HudTests,HudHelperTests}.swift`,
+      `ElisTests/ControlServerSessionActionsTests.swift`, `.claude/rules/control-api.md`
 - [x] a HUD posted on a background session appears without stealing selection or focus, and the user can type into the session while it is up
       — the focus half is pinned by `HudDeckGatesTests.testHudLeavesTheSessionUncovered` (the gate
       `TerminalView` resigns first responder on) plus the `autoFocus: false` spawn; the on-screen appearance
@@ -560,9 +560,9 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
       `overlaySlotGeneration` moving. That the replacement renders is (manual - deferred to maintainer)
 - [x] `tree` never reports a HUD as a program overlay
       — `AppStoreHudTests.controlTreeNeverReportsAHudAsAProgramOverlay` and the e2e `ControlHudUITests`
-- [x] run the full host-free suite: `cd HangarCore && swift test` — 2303 tests, 91 suites, passed
+- [x] run the full host-free suite: `cd ElisCore && swift test` — 2303 tests, 91 suites, passed
 - [x] run `make test-app` — 146 tests, 0 failures
-- [x] run `-only-testing:HangarUITests/ControlHudUITests` — 5 tests passed, and the run left ZERO new
+- [x] run `-only-testing:ElisUITests/ControlHudUITests` — 5 tests passed, and the run left ZERO new
       orphaned painters where Task 12's runs left seven
 - [x] run `make lint` — zero findings required
 
@@ -570,7 +570,7 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 
 - [x] update `README.md` if the feature needs more than the command-reference line
       — NO further change. Task 13 already gave the feature a Concepts sentence on the Overlay paragraph
-      (`:143`) and a `session hud` block under Scripting Hangar (`:353`) covering the default subcommand,
+      (`:143`) and a `session hud` block under Scripting Elis (`:353`) covering the default subcommand,
       `--position` and the `center` default, measured-versus-explicit sizing, in-place update replacing the
       whole spec, the replacement rules against a program overlay, and the poll-only `tree` read-back.
       That is everything a README owes a control-only feature; the per-argument detail is the command
@@ -589,7 +589,7 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 
 **Manual verification:**
 
-- Launch an isolated Debug instance (short `/tmp` `HANGAR_STATE_DIR`, `mkdir -p "$HANGAR_STATE_DIR/windows"`
+- Launch an isolated Debug instance (short `/tmp` `ELIS_STATE_DIR`, `mkdir -p "$ELIS_STATE_DIR/windows"`
   to skip the welcome alert) and post a HUD on a background session, then visit it — the panel should already
   be there, typing should reach the terminal, and clicking the session should work.
 - Check the spinner's CPU cost with a HUD open for several minutes.
@@ -602,7 +602,7 @@ disappears. POSIX `sh`, nothing beyond `printf` and `sleep`.
 
 **External system updates:**
 
-- Installed skill copies under `~/.claude/skills/hangar/` and `~/.codex/skills/hangar/` only refresh when the
+- Installed skill copies under `~/.claude/skills/elis/` and `~/.codex/skills/elis/` only refresh when the
   user re-runs Help ▸ Install Agent Skill…, and the plugin cache keys on the manifest version — a release bump
   is what propagates the new commands.
 

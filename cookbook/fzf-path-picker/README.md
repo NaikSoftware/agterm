@@ -12,7 +12,7 @@ Two entries: one over files, one over directories. It is the terminal-side answe
 
 ## Requirements
 
-- Hangar 0.8.0 or later. The commands are older, but floating overlays settled into their current behavior in that release: an overlay opens on its target session in the background, and switches to it only with `--follow`.
+- Elis 0.8.0 or later. The commands are older, but floating overlays settled into their current behavior in that release: an overlay opens on its target session in the background, and switches to it only with `--follow`.
 - `fzf` and `fd`
 - `zsh`, which the script's shebang names
 
@@ -36,16 +36,16 @@ Put that export in `.zshenv` or `.zprofile`, not in `.zshrc`. The keymap entry b
 
 `AGT_FZF_ROOTS` defaults to `$HOME/src`, and the script prints a message and exits if none of the listed directories exist. You will not see that message with the keymap entries below: they open the overlay without `--wait`, so it closes the moment the script exits and takes the text with it. Add `--wait` to the entry to hold the overlay on a "press any key to close" prompt while you are getting the roots right, or run the script in a shell. Keep the list to the trees you actually work in. Searching all of `$HOME` is slow, and it walks Documents, Desktop and Downloads, which makes macOS raise a privacy prompt per directory.
 
-Add two entries to `~/.config/hangar/keymap.conf`:
+Add two entries to `~/.config/elis/keymap.conf`:
 
 ```
-command "FZF Files" ctrl+a>f hangarctl session overlay open 'zsh -lc "$HOME/bin/fzf-insert.zsh files {AGT_SESSION_ID}"' --size-percent 80 --target {AGT_SESSION_ID}
-command "FZF Dirs" ctrl+a>shift+f hangarctl session overlay open 'zsh -lc "$HOME/bin/fzf-insert.zsh dirs {AGT_SESSION_ID}"' --size-percent 80 --target {AGT_SESSION_ID}
+command "FZF Files" ctrl+a>f elisctl session overlay open 'zsh -lc "$HOME/bin/fzf-insert.zsh files {AGT_SESSION_ID}"' --size-percent 80 --target {AGT_SESSION_ID}
+command "FZF Dirs" ctrl+a>shift+f elisctl session overlay open 'zsh -lc "$HOME/bin/fzf-insert.zsh dirs {AGT_SESSION_ID}"' --size-percent 80 --target {AGT_SESSION_ID}
 ```
 
-Apply the file with File ▸ Reload Keymap or `hangarctl keymap reload`. `ctrl+a>f` is a leader sequence: press ⌃A, release, then press F. Any chord with a modifier works, and leaving the chord out makes the entry palette-only.
+Apply the file with File ▸ Reload Keymap or `elisctl keymap reload`. `ctrl+a>f` is a leader sequence: press ⌃A, release, then press F. Any chord with a modifier works, and leaving the chord out makes the entry palette-only.
 
-If `hangarctl` is not on your `PATH`, set `HANGARCTL` to its full path in the environment the script runs in.
+If `elisctl` is not on your `PATH`, set `ELISCTL` to its full path in the environment the script runs in.
 
 ## Usage
 
@@ -55,13 +55,13 @@ The overlay runs on the session you pressed the key in, so the path goes back to
 
 ## How it works
 
-The keymap entry opens an overlay running the script, and the script ends by calling `hangarctl session type` to put the result back.
+The keymap entry opens an overlay running the script, and the script ends by calling `elisctl session type` to put the result back.
 
 Two things about overlays shape the whole recipe.
 
 An overlay is a fresh pty, and the `AGT_*` values a keybinding sees belong to the custom command's own process, not to any terminal. So `$AGT_SESSION_ID` is empty inside the script, and it is passed as an argument instead: the keymap expands `{AGT_SESSION_ID}` before the command runs, once for `--target` (which session the overlay opens over) and once as the script's own argument (where to type the result). Without it `session type` falls back to `--target active`, which is right only until you switch sessions while fzf is open.
 
-The overlay pty does carry Hangar's own `HANGAR_SESSION_ID`, naming the session the overlay was opened over, and a script that always opens over the current session can read that instead of taking an argument. Passing the id keeps the two independent, so the same script still works when the overlay is opened over some other session.
+The overlay pty does carry Elis's own `ELIS_SESSION_ID`, naming the session the overlay was opened over, and a script that always opens over the current session can read that instead of taking an argument. Passing the id keeps the two independent, so the same script still works when the overlay is opened over some other session.
 
 An overlay also runs under the app's `PATH`, which is the launchd default and does not include `/opt/homebrew/bin`. A bare `fzf-insert.zsh`, or a bare `fd` inside it, fails with exit 127 and the overlay flashes open and vanishes. Hence `zsh -lc`: a login shell sources your profile, so `PATH` is the one you normally have. The alternative is absolute paths for every binary the script touches.
 
@@ -69,7 +69,7 @@ An overlay also runs under the app's `PATH`, which is the launchd default and do
 
 ## Limits
 
-`ctrl+a` becomes a leader once bound, so Hangar consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.
+`ctrl+a` becomes a leader once bound, so Elis consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.
 
 Nothing is typed if you cancel, but the path is typed with no confirmation if you pick. A path with a space arrives unquoted, so quote it yourself before pressing Return.
 

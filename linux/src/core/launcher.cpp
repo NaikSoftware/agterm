@@ -94,7 +94,7 @@ QString antigravityTitle(const QString &fdDir, const QString &dataDir)
     }
     if (id.isEmpty())
         return {};
-    const QString connection = QStringLiteral("hangar-antigravity");
+    const QString connection = QStringLiteral("elis-antigravity");
     QString title;
     {
         QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connection);

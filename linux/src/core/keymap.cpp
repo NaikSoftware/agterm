@@ -9,7 +9,7 @@ QString configDirectory(const QString &setting, const QString &stateDirEnv, cons
         return setting;
     if (!stateDirEnv.isEmpty())
         return stateDirEnv + QStringLiteral("/config");
-    return home + QStringLiteral("/.config/hangar");
+    return home + QStringLiteral("/.config/elis");
 }
 
 const QStringList &masterBuiltinActions()
@@ -308,7 +308,7 @@ Keymap parseKeymap(const QString &text, const QMap<QString, QStringList> &defaul
             if (keys.isEmpty()) {
                 km.diagnostics.append({n, error + QStringLiteral("; map skipped")});
             } else if (!defaults.contains(action)) {
-                km.diagnostics.append({n, masterBuiltinActions().contains(action) ? QStringLiteral("action '%1' is not available in Hangar").arg(action)
+                km.diagnostics.append({n, masterBuiltinActions().contains(action) ? QStringLiteral("action '%1' is not available in Elis").arg(action)
                                                                                    : QStringLiteral("unknown action '%1'").arg(action)});
             } else {
                 maps.append({action, chord, keys, n});
@@ -327,7 +327,7 @@ Keymap parseKeymap(const QString &text, const QMap<QString, QStringList> &defaul
             if (c.repeat && !dup)
                 km.diagnostics.append({n, QStringLiteral("command '%1': --repeat is not supported yet; binding kept without it").arg(c.name)});
         } else if (verb == QLatin1String("global-hotkey")) {
-            km.diagnostics.append({n, QStringLiteral("global-hotkey summons the quick terminal, which Hangar does not have; line skipped")});
+            km.diagnostics.append({n, QStringLiteral("global-hotkey summons the quick terminal, which Elis does not have; line skipped")});
         } else {
             km.diagnostics.append({n, QStringLiteral("unknown verb '%1'").arg(verb)});
         }
@@ -413,14 +413,14 @@ QString starterKeymap(const QMap<QString, QStringList> &defaults)
     for (const QString &t : commandTokens())
         tokens += QStringLiteral("#   {%1}\n").arg(t);
     return QStringLiteral(
-               "# Hangar keymap: a kitty-flavored config for rebinding built-in shortcuts and defining\n"
-               "# custom shell commands. Edit this file and run File > Reload Keymap (or `hangarctl keymap\n"
+               "# Elis keymap: a kitty-flavored config for rebinding built-in shortcuts and defining\n"
+               "# custom shell commands. Edit this file and run File > Reload Keymap (or `elisctl keymap\n"
                "# reload`) to apply. Blank lines and lines starting with `#` are ignored. A line that is\n"
-               "# rejected or skipped is reported in Settings > Key Mapping and by `hangarctl keymap list`.\n"
+               "# rejected or skipped is reported in Settings > Key Mapping and by `elisctl keymap list`.\n"
                "#\n"
                "#   map <chord> <action>\n"
                "#       Rebind a built-in action. Mods: ctrl, shift, alt (opt), super, joined by `+`, e.g.\n"
-               "#       `ctrl+alt+l`. Hangar's macOS words also work: cmd alone means ctrl+shift, cmd with any\n"
+               "#       `ctrl+alt+l`. Elis's macOS words also work: cmd alone means ctrl+shift, cmd with any\n"
                "#       other modifier means ctrl+alt+shift, opt means alt. Keys: a character, tab, space, return,\n"
                "#       delete, escape, left, right, up, down, home, end, pageup, pagedown, f1-f20. A Shift-typed\n"
                "#       symbol is shift+<base key> (shift+/ for ?). Alternatives join with `|` (no spaces), and\n"
@@ -437,7 +437,7 @@ QString starterKeymap(const QMap<QString, QStringList> &defaults)
                "#       A non-zero exit posts a notification; --error-hud adds the command's stderr to it.\n"
                "#\n"
                "#           command \"Open in Kate\"  ctrl+alt+k  kate \"$AGT_SESSION_PWD\"\n"
-               "#           command \"Lazygit\"       ctrl+a>g    hangarctl session new --parent \"$AGT_SESSION_ID\" --command lazygit --socket \"$AGT_SOCKET\"\n"
+               "#           command \"Lazygit\"       ctrl+a>g    elisctl session new --parent \"$AGT_SESSION_ID\" --command lazygit --socket \"$AGT_SOCKET\"\n"
                "#           command \"Deploy\"                    ./deploy.sh\n"
                "#\n"
                "# Built-in actions (raw name, shipped default):\n"
@@ -510,14 +510,14 @@ QList<HookLine> parseHooks(const QString &text, QList<KeymapDiagnostic> *diagnos
 QString starterHooks()
 {
     return QStringLiteral(
-               "# Hangar hooks: run a shell line when a control event fires. Edit this file and run\n"
-               "# File > Reload Hooks (or `hangarctl hooks reload`) to apply. Blank lines and lines starting\n"
+               "# Elis hooks: run a shell line when a control event fires. Edit this file and run\n"
+               "# File > Reload Hooks (or `elisctl hooks reload`) to apply. Blank lines and lines starting\n"
                "# with `#` are ignored.\n"
                "#\n"
                "#   on <kind> <shell...>\n"
                "#\n"
                "# Kinds: %1.\n"
-               "# (pane.scratch, pane.focused and remote.* never fire in Hangar.)\n"
+               "# (pane.scratch, pane.focused and remote.* never fire in Elis.)\n"
                "# Several lines per kind run independently; an identical kind+command line is skipped with a\n"
                "# diagnostic. Everything after the kind is passed to `/bin/sh -c` untouched, detached with no\n"
                "# terminal, one process per line at a time; further events for a busy line queue in order\n"
@@ -525,14 +525,14 @@ QString starterHooks()
                "#\n"
                "# The script gets the event as one JSON object on stdin and these variables: AGT_EVENT_KIND,\n"
                "# AGT_EVENT_STATUS, AGT_EVENT_HOST, AGT_SESSION_ID, AGT_WORKSPACE_ID, AGT_WINDOW_ID, AGT_SOCKET.\n"
-               "# Pass `--socket \"$AGT_SOCKET\"` to any hangarctl call. A hook whose command emits another event\n"
+               "# Pass `--socket \"$AGT_SOCKET\"` to any elisctl call. A hook whose command emits another event\n"
                "# of its own kind triggers itself again.\n"
                "#\n"
                "# Examples:\n"
                "#\n"
-               "#   on status           ~/.config/hangar/hooks/status.sh\n"
-               "#   on session.closed   echo \"$(date +%T) closed $AGT_SESSION_ID\" >> ~/.local/state/hangar/sessions.log\n"
-               "#   on tree.changed     ~/.config/hangar/hooks/sync-outline.sh\n"
+               "#   on status           ~/.config/elis/hooks/status.sh\n"
+               "#   on session.closed   echo \"$(date +%T) closed $AGT_SESSION_ID\" >> ~/.local/state/elis/sessions.log\n"
+               "#   on tree.changed     ~/.config/elis/hooks/sync-outline.sh\n"
                "#\n"
                "# Uncomment and edit a line below to start.\n"
                "# on status [ \"$AGT_EVENT_STATUS\" = blocked ] || exit 0; notify-send \"$AGT_SESSION_ID needs input\"\n")

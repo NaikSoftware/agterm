@@ -3,45 +3,45 @@
 ## Overview
 - A URL overlay keeps its cookies, `localStorage` and IndexedDB only in memory: every page gets its own
   `WKWebsiteDataStore.nonPersistent()`, so a login or cookie-saved app state is gone on every close.
-- `hangarctl session overlay open --url URL --persistent` opens the page on one persistent store shared by
-  all persistent pages of this Hangar state directory. A login made there is still there on the next open
+- `elisctl session overlay open --url URL --persistent` opens the page on one persistent store shared by
+  all persistent pages of this Elis state directory. A login made there is still there on the next open
   and after an app relaunch.
 - The default is unchanged: without the flag a page is isolated and in memory. File pages (`--html`) are
   always in memory.
-- `hangarctl browser clear` removes everything the persistent store holds. Each `htmlOverlays` entry reports
+- `elisctl browser clear` removes everything the persistent store holds. Each `htmlOverlays` entry reports
   `persistent`.
 
 ## Context (from discovery)
-- Store choice: `Hangar/Views/HtmlOverlayRegistry.swift:155` (`HtmlOverlayPage.init`,
+- Store choice: `Elis/Views/HtmlOverlayRegistry.swift:155` (`HtmlOverlayPage.init`,
   `configuration.websiteDataStore = .nonPersistent()`). `HtmlOverlayRegistry.shared` owns every page by id,
   soft-closed ones included, until `HtmlOverlayReleases` releases it. `install()` is called with no
   directory from `AppDelegate.swift:83` and from tests.
-- Model: `HangarCore/Sources/HangarCore/HtmlOverlay.swift` (`javascript`, `navigation`, `chromeless`).
-- The path `--js` takes, which `--persistent` mirrors: CLI `hangarctlKit/SessionCommands.swift:566-618`,
+- Model: `ElisCore/Sources/ElisCore/HtmlOverlay.swift` (`javascript`, `navigation`, `chromeless`).
+- The path `--js` takes, which `--persistent` mirrors: CLI `elisctlKit/SessionCommands.swift:566-618`,
   `ControlArgs.javascript` and `OverlayHtmlError` in `ControlProtocol.swift`, validation in
   `ControlDispatcher+Overlay.swift:40,131`, `ControlDispatcherOptions.swift`, host construction in
-  `Hangar/Control/ControlServer+SessionActions.swift:66`, read-back `ControlHtmlOverlayNode` in
+  `Elis/Control/ControlServer+SessionActions.swift:66`, read-back `ControlHtmlOverlayNode` in
   `ControlProjection.swift:400-450` (`chromeless` decodes with `decodeIfPresent ... ?? false`).
-- State directory: `hangarApp.swift:70` resolves it once and hands it to stores built as
+- State directory: `elisApp.swift:70` resolves it once and hands it to stores built as
   `LiveResetMarkerStore(directory:)`, `SettingsStore(directory:)`.
 - `ControlActions` already has `async` methods (`windowNew`, `typeSession`); the connection waits for
   `server.dispatch` before writing the reply (`ControlServer.swift:482`). App-wide adapters live in
-  `Hangar/Control/ControlServer+AppCommands.swift`.
+  `Elis/Control/ControlServer+AppCommands.swift`.
 - Page bridge: only file pages get it; `HtmlBridge.windowless` lists commands that take no window.
-- Existing storage test: `HangarTests/HtmlOverlayRegistryTests.swift:488`
+- Existing storage test: `ElisTests/HtmlOverlayRegistryTests.swift:488`
   (`testBrowserStorageLastsThroughAReloadButNotIntoTheNextOverlay`), on an in-process listener.
-  Socket round trips: `HangarTests/ControlServerTests.swift`.
+  Socket round trips: `ElisTests/ControlServerTests.swift`.
 - "Gone when it closes" is stated in `.claude/rules/control-api.md:452`,
-  `plugins/hangar/skills/hangar/SKILL.md:755`, `reference.md:851`, `site/commands.html:1783`.
+  `plugins/elis/skills/elis/SKILL.md:755`, `reference.md:851`, `site/commands.html:1783`.
 - Deployment target is macOS 14 (`project.yml`), which `WKWebsiteDataStore(forIdentifier:)` requires.
 
 ## Development Approach
-- **testing approach**: tests first for everything host-free in `HangarCore` (profile id file, protocol,
+- **testing approach**: tests first for everything host-free in `ElisCore` (profile id file, protocol,
   dispatcher, projection, CLI); hosted tests on the in-process listener for the WebKit store and one hosted
   socket round trip. No new XCUITest.
 - run only the tests a task touches; the full gates (`make build`, `swift test`, `make test-app`,
   `make lint`) run once, in the last task.
-- `HangarCore` stays free of WebKit/AppKit: it owns the profile id and the wire contract, the app owns the
+- `ElisCore` stays free of WebKit/AppKit: it owns the profile id and the wire contract, the app owns the
   store.
 - **CRITICAL: update this plan file when scope changes during implementation**
 
@@ -50,7 +50,7 @@
   a different id; an unreadable or malformed file is an error and the file is left as it was;
   `--persistent` refusals; `persistent` on the node and a node encoded without it decodes as false; wire
   round trips; CLI flag conflicts and the `browser clear` request.
-- **hosted tests** (`HangarTests`, local listener, a temporary state directory per test):
+- **hosted tests** (`ElisTests`, local listener, a temporary state directory per test):
   - a server cookie with `Max-Age`, a `localStorage` value and an IndexedDB record survive close plus a new
     persistent overlay;
   - a non-persistent page sees none of them, before and after;
@@ -73,7 +73,7 @@
 - add newly discovered tasks with ➕ prefix, blockers with ⚠️ prefix
 
 ## Solution Overview
-- **One profile per state directory.** `BrowserProfile` (HangarCore) reads a UUID from
+- **One profile per state directory.** `BrowserProfile` (ElisCore) reads a UUID from
   `<stateDir>/browser-profile`, creating it when the file is missing. The app builds the store with
   `WKWebsiteDataStore(forIdentifier:)`. A fixed UUID is rejected: WebKit keys the on-disk location by
   bundle id and UUID only, so every instance, an isolated test instance included, would share one jar.
@@ -103,7 +103,7 @@
   `ControlActions.clearBrowser() async -> ControlResponse` with its unsupported default;
   `BrowserClearError.pagesOpen` (`browser.clear refused: N persistent page(s) still open`) and
   `BrowserClearError.clearing` (`browser storage is being cleared`).
-- App: the registry gets `BrowserProfile` from `hangarApp.init`, set separately from `install()`. It
+- App: the registry gets `BrowserProfile` from `elisApp.init`, set separately from `install()`. It
   builds the store on the first persistent open or the first clear, so an instance that never uses the
   feature writes no id file and no WebKit profile. A clear with no id file replies ok without creating one.
 - Limits, stated in the docs and not solved here:
@@ -119,17 +119,17 @@
 
 ## Implementation Steps
 
-### Task 1: Profile id and the `--persistent` wire contract (HangarCore, CLI)
+### Task 1: Profile id and the `--persistent` wire contract (ElisCore, CLI)
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/BrowserProfile.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/BrowserProfileTests.swift`
-- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`, `ControlProtocol.swift`,
+- Create: `ElisCore/Sources/ElisCore/BrowserProfile.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/BrowserProfileTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/HtmlOverlay.swift`, `ControlProtocol.swift`,
   `ControlDispatcher+Overlay.swift`, `ControlDispatcherOptions.swift`, `ControlProjection.swift`,
   `AppStore+HtmlOverlay.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/{HtmlOverlayTests,ControlDispatcherOverlayTests,AppStoreTreeProjectionTests,ControlProtocolTests}.swift`,
-  `HangarCore/Tests/hangarctlKitTests/OverlayCommandsTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/{HtmlOverlayTests,ControlDispatcherOverlayTests,AppStoreTreeProjectionTests,ControlProtocolTests}.swift`,
+  `ElisCore/Tests/elisctlKitTests/OverlayCommandsTests.swift`
 
 - [x] write `BrowserProfile` tests: created when missing, reused, distinct per directory, unreadable and
       malformed files throw and stay untouched
@@ -138,14 +138,14 @@
       with `--url`, refused with `--html` and with a command, reported on the node, a node without the
       key decodes as false, absent flag encodes nothing
 - [x] carry `persistent` through `ControlArgs`, options, `HtmlOverlay`, the node and the CLI flag
-- [x] run the touched `HangarCore` tests
+- [x] run the touched `ElisCore` tests
 
 ### Task 2: The persistent store in the app
 
 **Files:**
-- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`, `Hangar/Control/ControlServer+SessionActions.swift`,
-  `Hangar/hangarApp.swift`
-- Modify: `HangarTests/HtmlOverlayRegistryTests.swift`
+- Modify: `Elis/Views/HtmlOverlayRegistry.swift`, `Elis/Control/ControlServer+SessionActions.swift`,
+  `Elis/elisApp.swift`
+- Modify: `ElisTests/HtmlOverlayRegistryTests.swift`
 
 - [x] give the registry its `BrowserProfile` and a lazily built store, with a way to release the cached
       store; a persistent URL page uses it, every other page keeps `.nonPersistent()`
@@ -160,17 +160,17 @@
 ### Task 3: `browser.clear`
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`, `ControlDispatcher.swift`,
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`, `ControlDispatcher.swift`,
   `ControlActionsDefaults.swift`, `HtmlBridge.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/MiscCommands.swift`, `Commands.swift`
-- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`, `Hangar/Control/ControlServer+AppCommands.swift`,
-  `Hangar/Control/ControlServer.swift` (the unhandled-command list only)
-- Create: `HangarTests/ControlServerBrowserTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/{ControlDispatcherTests,ControlProtocolTests,HtmlBridgeTests}.swift`,
-  `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`, `HangarTests/HtmlOverlayRegistryTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/MiscCommands.swift`, `Commands.swift`
+- Modify: `Elis/Views/HtmlOverlayRegistry.swift`, `Elis/Control/ControlServer+AppCommands.swift`,
+  `Elis/Control/ControlServer.swift` (the unhandled-command list only)
+- Create: `ElisTests/ControlServerBrowserTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/{ControlDispatcherTests,ControlProtocolTests,HtmlBridgeTests}.swift`,
+  `ElisCore/Tests/elisctlKitTests/CommandsTests.swift`, `ElisTests/HtmlOverlayRegistryTests.swift`
 
 - [x] protocol command, awaited dispatch to `ControlActions.clearBrowser`, unsupported default,
-      `windowless` bridge entry, CLI `hangarctl browser clear`, with tests
+      `windowless` bridge entry, CLI `elisctl browser clear`, with tests
 - [x] registry clear: refuse while a persistent page is registered; otherwise enter the clearing state,
       remove all data types, leave it, reply; a persistent open during the clearing state is refused
 - [x] hosted tests: clear then reopen is empty; refused with a persistent page open and with one
@@ -182,7 +182,7 @@
 - [x] `.claude/rules/control-api.md`: replace the storage line with the two-mode contract, the profile id
       file and its error rule, the on-disk location, the clear rule, and the no-read-back, no-event,
       no-menu exemptions of `browser.clear`
-- [x] `plugins/hangar/skills/hangar/SKILL.md` (a trigger in `description` and the URL section) and
+- [x] `plugins/elis/skills/elis/SKILL.md` (a trigger in `description` and the URL section) and
       `reference.md`
 - [x] `site/commands.html` (`--persistent`, `persistent` read-back, `browser clear`) and `site/docs.html`,
       limits included
@@ -193,7 +193,7 @@
 - [x] relaunch persistence in an isolated Debug instance against a local fixture server: set a cookie with
       `Max-Age`, `localStorage` and IndexedDB, stop the instance, launch it again, read them back; then
       `browser clear` and read again; remove the instance's WebKit profile afterwards
-- [x] `make build`, `cd HangarCore && swift test`, `make test-app`, `make lint`, each once
+- [x] `make build`, `cd ElisCore && swift test`, `make test-app`, `make lint`, each once
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion

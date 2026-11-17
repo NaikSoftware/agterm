@@ -1,21 +1,21 @@
 ---
 paths:
-  - "macos/Hangar/SettingsModel.swift"
-  - "macos/Hangar/Views/SettingsView.swift"
-  - "macos/Hangar/Views/AppearanceSettingsView.swift"
-  - "macos/Hangar/SettingsCatalog.swift"
-  - "macos/Hangar/Views/WindowAppearance.swift"
-  - "macos/Hangar/NSColor+HangarHex.swift"
-  - "macos/HangarCore/Sources/HangarCore/AppSettings.swift"
-  - "macos/HangarCore/Sources/HangarCore/QuickTerminalMetrics.swift"
-  - "macos/HangarCore/Sources/HangarCore/SettingsStore.swift"
-  - "macos/HangarUITests/SettingsUITests.swift"
+  - "macos/Elis/SettingsModel.swift"
+  - "macos/Elis/Views/SettingsView.swift"
+  - "macos/Elis/Views/AppearanceSettingsView.swift"
+  - "macos/Elis/SettingsCatalog.swift"
+  - "macos/Elis/Views/WindowAppearance.swift"
+  - "macos/Elis/NSColor+ElisHex.swift"
+  - "macos/ElisCore/Sources/ElisCore/AppSettings.swift"
+  - "macos/ElisCore/Sources/ElisCore/QuickTerminalMetrics.swift"
+  - "macos/ElisCore/Sources/ElisCore/SettingsStore.swift"
+  - "macos/ElisUITests/SettingsUITests.swift"
 ---
 
 ## Settings
 
-- `AppSettings` is a versionless Codable value in `HangarCore`; optional fields provide forward
-  compatibility. `SettingsStore` writes `<stateDir>/settings.json` and follows `HANGAR_STATE_DIR`.
+- `AppSettings` is a versionless Codable value in `ElisCore`; optional fields provide forward
+  compatibility. `SettingsStore` writes `<stateDir>/settings.json` and follows `ELIS_STATE_DIR`.
   Store enum-like settings as raw strings and resolve unknown values to defaults rather than failing the
   file.
 - Theme slots and following are owned by the theme-picker rule. `ToolbarMode` is
@@ -34,7 +34,7 @@ paths:
 - `newSessionPlacement` (nil = `end`) applies only to New Session: `AppActions.newSession()` and the
   workspace row's New Session and "+", through `AppActions.resolvedNewSessionIndex`. It inserts after the
   selection only when that lives in the destination workspace. Open Directory, folder drops, and
-  `open -a Hangar <dir>` keep appending; `session new` keeps its own `--after`/`--before` rules.
+  `open -a Elis <dir>` keep appending; `session new` keeps its own `--after`/`--before` rules.
   Deliberate control exemption, like `newSessionDirectory`: no command sets or reads it.
 - `sidebarFontSize` and `interfaceFontSize` are separate settings, both 9...20 default 13, read through
   `effectiveSidebarFontSize`/`effectiveInterfaceFontSize`. Neither falls back to the other: the sidebar
@@ -65,7 +65,7 @@ paths:
   `font-family` is ghostty's `RepeatableString` and ACCUMULATES instead, so the merge rule is per key and
   not a single precedence order.
   Never tell a user a picked value beats their `ghostty.conf`; it beats a scalar key written directly in it.
-- Non-Ghostty settings update app mirrors and `.hangarAppearanceChanged`, not surfaces. The mute wash
+- Non-Ghostty settings update app mirrors and `.elisAppearanceChanged`, not surfaces. The mute wash
   fades text toward terminal color; with transparency it also tints the see-through area. Sidebar tint
   composes over opaque or blurred backgrounds; AppKit must leave the sidebar unfilled.
 - `quickTerminalSizePercent` is the quick-terminal panel's share of its screen, nil for the built-in size.
@@ -76,7 +76,7 @@ paths:
   the quick terminal, so its label names both. [[libghostty]] owns how those washes render.
 - Status colors default to active `#DBD9E6`, system amber, and system green. Shapes are raw
   `StatusShape` strings resolved only by `effectiveStatusShape(for:)`; nil and circle render identically.
-  `SettingsModel` pushes both into `GhosttyApp`, then `.hangarAppearanceChanged` makes
+  `SettingsModel` pushes both into `GhosttyApp`, then `.elisAppearanceChanged` makes
   `reapplyStatusGlyphs()` update both sidebar and attention list. Per-call `session.status` color/shape
   overrides win.
 - Blocked sound is nil/"None" by default and previews through `StatusSoundPlayer`. On a transition into
@@ -101,7 +101,7 @@ paths:
   flushes, and debouncing still catches keyboard changes.
 - Keep each successful replacement config in `GhosttyApp.config`; `update_config` has no ownership
   contract, so freeing it risks a crash and the rare leak is accepted.
-- `.hangarAppearanceChanged` is required because terminal color is not observable; it updates
+- `.elisAppearanceChanged` is required because terminal color is not observable; it updates
   `terminalColor`, quick-terminal backing, title/window appearance, and non-observable chrome mirrors.
 - Settings is a 540x710 six-tab SwiftUI scene with explicit selection defaulting General, preventing
   `com_apple_SwiftUI_Settings_selectedTabIndex` persistence. General holds Mouse and Sessions; the
@@ -119,7 +119,7 @@ paths:
   tab's last control and require it not to move, as `assertGeneralTabFits` does, and look at the tab.
   To capture it, have the XCUITest write `window.screenshot().pngRepresentation` to
   `NSTemporaryDirectory()` and read it from
-  `~/Library/Containers/ua.naiksoftware.hangarUITests.xctrunner/Data/tmp`; xcresult attachment export
+  `~/Library/Containers/ua.naiksoftware.elisUITests.xctrunner/Data/tmp`; xcresult attachment export
   returned 60-byte stubs.
 - `statusReset` stores a raw `StatusReset` (`firstKey`|`enter`|`never`), nil for the default `firstKey`,
   resolved by `effectiveStatusReset` and mirrored to `GhosttyApp.statusReset`, which the surface factories'
@@ -150,15 +150,15 @@ paths:
   `WindowAppearance.sync` gets it resolved through `Chrome`, and the mute wash and Settings hint call it too.
   Mirrored through `setWindowTranslucency`; GUI-only, like opacity and blur.
 - On macOS 26, find the wrapping `NSContainerConcentricGlassEffectView` by walking from
-  `hangar-sidebar-scroll`; for translucent windows use clear style plus terminal tint. Its Liquid Glass
+  `elis-sidebar-scroll`; for translucent windows use clear style plus terminal tint. Its Liquid Glass
   blur is not pixel-identical to CGS blur. Reapply on key/main/fullscreen and appearance changes.
   `SystemAccessibilityObserver` bridges workspace accessibility changes to every window; SwiftUI's
   environment independently makes palettes/switcher opaque and changes the hint.
-- `configDirectory` resolution is explicit setting, else `<HANGAR_STATE_DIR>/config` unless that
-  directory is the `hangar-debug` sibling (`DebugStateDirectory.configStateDirectory`), else
-  `~/.config/hangar`. It contains keymap, scoped Ghostty config, and restore denylist. Seed starter files
+- `configDirectory` resolution is explicit setting, else `<ELIS_STATE_DIR>/config` unless that
+  directory is the `elis-debug` sibling (`DebugStateDirectory.configStateDirectory`), else
+  `~/.config/elis`. It contains keymap, scoped Ghostty config, and restore denylist. Seed starter files
   only when absent. Keymap starter documents every action/default and token but rebinds nothing; reload
-  posts `.hangarKeymapChanged`, never a surface config update.
+  posts `.elisKeymapChanged`, never a surface config update.
 - Ghostty layers are bundled defaults, optional `~/.config/ghostty/config`, always-loaded scoped
   `<configDir>/ghostty.conf`, then UI settings. Each overrides the previous; standalone Ghostty never
   reads the scoped file. `resolveConfigInputs()` must load settings once before `SettingsModel` exists and
@@ -297,7 +297,7 @@ paths:
   already refresh the window-list cache.
 - `flaggedViewLayout` is a raw `FlaggedViewLayout` (`flat`|`plain`|`tree`), nil for the default `flat`, resolved by
   `effectiveFlaggedViewLayout` and mirrored to `GhosttyApp.flaggedViewLayout`. App-wide, never per window.
-  Every sidebar Coordinator picks it up on `.hangarAppearanceChanged`, and only one showing the flagged view
+  Every sidebar Coordinator picks it up on `.elisAppearanceChanged`, and only one showing the flagged view
   rebuilds. The picker sits at the bottom of the General tab's Sessions section: the Interface tab is full at
   540x710, and one more row pushes the quick-terminal Size off the bottom. A grouped Form scrolls, so an
   overflowing tab still reports every control hittable, and its last text can sit inside the window while
@@ -309,16 +309,16 @@ paths:
   metric it changes, and [[sidebar]] owns how a mounted outline applies them. Its picker sits under Sidebar font
   size in Appearance, which `testSidebarDensityPickerPersistsAndTheAppearanceTabFits` keeps from scrolling.
   The control catalog carries it as `sidebar.density`.
-- `terminalInputSource` is a macOS input source id, nil = off. `InputSourceLock` in `HangarCore` decides and
-  `TerminalInputSource` is the only caller of Text Input Source selection: it selects the id while Hangar
+- `terminalInputSource` is a macOS input source id, nil = off. `InputSourceLock` in `ElisCore` decides and
+  `TerminalInputSource` is the only caller of Text Input Source selection: it selects the id while Elis
   is active and any of its windows is key, whatever holds first responder there (terminals, pages, palettes,
   ask dialogs, rename fields, Settings, alerts), reselects on every source-change notification, and
   restores the earlier source otherwise and in `applicationWillTerminate`.
   One app-wide rule, because a responder-scoped lock released in some text fields and not others.
   Key window alone is not enough: a long-running instance was measured enforcing over other apps with
-  Hangar in the background, the window still reporting key unidentified. `isActive` is true while the
+  Elis in the background, the window still reporting key unidentified. `isActive` is true while the
   quick panel is key over another app (measured), so the gate keeps it, and activation edges are observed
-  alongside key-window ones. The source-change notification reaches Hangar while it is inactive and another
+  alongside key-window ones. The source-change notification reaches Elis while it is inactive and another
   app is frontmost (measured), so the observer needs no suspension override.
   Selection is system-wide and macOS restores nothing itself (measured with the per-document input source
   option off), so a crash leaves the id selected; never persist the baseline to restore at the next

@@ -23,13 +23,13 @@ It then asks which of four designs to use, unless the brief already names one:
 
 The built-in *Other* answer takes a design you describe in your own words.
 
-The page takes the terminal theme: its colors come from the CSS variables Hangar gives every page, so it matches a dark or a light theme without a palette of its own. Every page ends with a collapsed "Markdown copy" box holding the same content as plain markdown, ready to paste elsewhere; asking for the markdown version puts it on the clipboard. A follow-up such as "drop the risks section" rewrites the same file and reloads the panel.
+The page takes the terminal theme: its colors come from the CSS variables Elis gives every page, so it matches a dark or a light theme without a palette of its own. Every page ends with a collapsed "Markdown copy" box holding the same content as plain markdown, ready to paste elsewhere; asking for the markdown version puts it on the clipboard. A follow-up such as "drop the risks section" rewrites the same file and reloads the panel.
 
 Optionally, "share it" publishes the page on a private link that expires on its own, after you approve the exact copy in a dialog over the session. A shared link shows a preview card with the page's title and a one-line summary in Telegram and X. This part needs a Cloudflare tunnel of your own and is set up separately; without it, everything else works.
 
 ## Requirements
 
-- Hangar 0.33.0 or later, which added HTML pages in overlays (`session overlay open --html`) and their `htmlOverlays` read-back in `tree --json`.
+- Elis 0.33.0 or later, which added HTML pages in overlays (`session overlay open --html`) and their `htmlOverlays` read-back in `tree --json`.
 - Claude Code. The skill uses Claude Code's `allowed-tools` and `CLAUDE_SKILL_DIR`, so it does not load in other agents as written.
 - jq.
 - Python 3, standard library only, for `scripts/embed-md.py` and `scripts/share.py`.
@@ -47,7 +47,7 @@ cp -R SKILL.md scripts assets ~/.claude/skills/agdoc/
 
 The skill finds `scripts/` and `assets/` relative to its own directory, so they must stay together. The three scripts are committed executable and `cp -R` keeps the bit.
 
-Set `HANGARCTL` in the environment Claude Code starts from if your `hangarctl` is not on its `PATH`.
+Set `ELISCTL` in the environment Claude Code starts from if your `elisctl` is not on its `PATH`.
 
 ### Sharing (optional)
 
@@ -71,11 +71,11 @@ Then set these in the environment Claude Code starts from:
 
 ## Usage
 
-Inside a Hangar session, type `/agdoc` in Claude Code, with or without a brief, or ask in plain words: "show this as a doc", "make an html doc of this PR and show it". Answer the design question. The page opens over the session at 95% of its size without switching you to it, so a page built while you work elsewhere waits on its own session.
+Inside an Elis session, type `/agdoc` in Claude Code, with or without a brief, or ask in plain words: "show this as a doc", "make an html doc of this PR and show it". Answer the design question. The page opens over the session at 95% of its size without switching you to it, so a page built while you work elsewhere waits on its own session.
 
 The bar above it carries back, forward, reload and open in browser. Close it with ⌘W or the close button in that bar. To change it, say what to change; the panel reloads in place.
 
-Outside Hangar the page opens in the default browser instead.
+Outside Elis the page opens in the default browser instead.
 
 With sharing set up, say "share it", or "share it for 2h"; the default is 24 hours. The page's copy appears in the overlay with a Publish or Cancel dialog over it, and after Publish the link is printed and put on the clipboard. Sharing again after an edit asks again and keeps the same link and expiry. "List shares" shows what is live, and "stop sharing" stops the current page, or the one you name.
 
@@ -85,11 +85,11 @@ The skill does the work in seven steps: settle the subject and the angle (techni
 
 Content comes from git and, for issues and PRs, from the forge CLI that matches the `origin` remote: `gh` for `github.com`, `tea` for a host `tea login list` knows, `glab` for a host `glab auth status --all` knows. Any other host gets a question rather than a guess, since sending a Bitbucket remote to `glab` would only produce errors.
 
-The templates are self-contained static HTML and CSS: no JavaScript, which a file page in an overlay would not run without `--js`, and no fonts, images or stylesheets from anywhere else. Every color is derived from `--hangar-background`, `--hangar-foreground` and `--hangar-color-*` with a fallback, so the same file also reads in a browser.
+The templates are self-contained static HTML and CSS: no JavaScript, which a file page in an overlay would not run without `--js`, and no fonts, images or stylesheets from anywhere else. Every color is derived from `--elis-background`, `--elis-foreground` and `--elis-color-*` with a fallback, so the same file also reads in a browser.
 
 `scripts/embed-md.py PAGE.html PAGE.md` writes the markdown into the page as a `<details>` box placed before the first `<footer>` or `</main>`, replacing a box an earlier run left, so the skill runs it after every edit and before every show. The markdown is a translation of the saved page rather than a summary: every fact, number and link stays, and only decoration and navigation go. `embed-md.py --test` runs its own tests.
 
-`scripts/show.sh FILE` shows every page. It reads the session node from `tree --json --window "$HANGAR_WINDOW_ID"`, because `tree` without `--window` reports the frontmost window only, and a session in a background window would read as missing when you switch windows while the page is being written. Every call also passes `--socket "$HANGAR_SOCKET"` when that variable is set: `hangarctl` never reads it, so a bare call in a second Hangar instance can reach the socket of the one already running. It reloads the page when the same file is already shown, and otherwise closes whatever page is up and opens the new one with `--size-percent 95 --navigation`; it leaves out `--follow`, so opening never moves you to another session. It then polls `htmlOverlays[].state` for about five seconds, up to 25 reads 0.2 seconds apart, and prints the state it last saw. A `failed` state exits non-zero with the page's error, so the agent fixes the page instead of reporting success; a page still `loading` when the time runs out is reported as such, with exit zero. The comparison against the shown file resolves the parent directories on both sides first: `/tmp` is a link to `/private/tmp` on macOS, so the same page can be named both ways, and a plain string compare can miss the match and close and reopen the page on every follow-up.
+`scripts/show.sh FILE` shows every page. It reads the session node from `tree --json --window "$ELIS_WINDOW_ID"`, because `tree` without `--window` reports the frontmost window only, and a session in a background window would read as missing when you switch windows while the page is being written. Every call also passes `--socket "$ELIS_SOCKET"` when that variable is set: `elisctl` never reads it, so a bare call in a second Elis instance can reach the socket of the one already running. It reloads the page when the same file is already shown, and otherwise closes whatever page is up and opens the new one with `--size-percent 95 --navigation`; it leaves out `--follow`, so opening never moves you to another session. It then polls `htmlOverlays[].state` for about five seconds, up to 25 reads 0.2 seconds apart, and prints the state it last saw. A `failed` state exits non-zero with the page's error, so the agent fixes the page instead of reporting success; a page still `loading` when the time runs out is reported as such, with exit zero. The comparison against the shown file resolves the parent directories on both sides first: `/tmp` is a link to `/private/tmp` on macOS, so the same page can be named both ways, and a plain string compare can miss the match and close and reopen the page on every follow-up.
 
 `scripts/share.py` publishes a snapshot, never the live file. It copies the page to a staging file, shows that copy through `show.sh`, and opens a non-blocking `ask` with Publish and Cancel, Cancel the default, then polls `ask result` once a second for up to ten minutes and cancels the question on any other exit. Only Publish moves the copy where it is served. Either way the overlay then goes back to the file page that was open before, or closes when there was none; a URL page or HUD shown before is not brought back. All live shares go through one local `python3 -m http.server` bound to 127.0.0.1 and one `cloudflared` named tunnel, started by the first share and stopped with the last. Each share sits at `https://$AGDOC_SHARE_HOST/<token>/`, where the token is random and is the only thing keeping it private; the root serves an empty page so it lists nothing. A watcher process per share checks the clock every 30 seconds and stops the share within that interval after its deadline, counted from approval. The `share.py` process that creates a share records its own PID and identity in the share. Until the expiry watcher is up, `list` shows that share as pending and leaves it alone, and a second share of the same page is refused. Once that process is gone, the leftover is cleaned up and no longer keeps the tunnel running. Each process stages its own copy, so overlapping updates of one page each publish only the bytes their own Publish approved. State lives under `/tmp/agdoc-share`, and every stop checks a process's start time and command line before signalling it, so a recycled PID is left alone. `share.py --test` runs its own tests.
 

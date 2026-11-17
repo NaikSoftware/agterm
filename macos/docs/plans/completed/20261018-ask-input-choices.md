@@ -11,19 +11,19 @@
   and exit codes. Plain button asks keep their exact current behavior.
 
 ## Context (from discovery)
-- host-free model and validation: `HangarCore/Sources/HangarCore/Ask.swift` (`PendingAsk`,
+- host-free model and validation: `ElisCore/Sources/ElisCore/Ask.swift` (`PendingAsk`,
   `AskRegistry`, `AskNavigation`), `ControlAsk.swift` (`ControlAskButton`, `ControlAskResult`),
   `ControlProtocol.swift` (`ControlArgs`), `ControlDispatcher+Ask.swift` (validation),
   `Session.swift` (terminal slot `askPending`, `openAsk`/`resolveAsk`), `Pick.swift`
   (`PickController.pendingAsk`, gui slot)
-- CLI: `HangarCore/Sources/hangarctlKit/AskCommands.swift`, `MiscCommands.swift` (`ModalCommandRunner`,
+- CLI: `ElisCore/Sources/elisctlKit/AskCommands.swift`, `MiscCommands.swift` (`ModalCommandRunner`,
   exit codes via `SocketClient.askExitCode`)
 - remote: `PresentationFrames.swift` (`PresentationAsk`, `PresentationAskAnswer`), `PresentationHub.swift`
   (`supportedKinds`, hello negotiation, `sendToPresenter`), `AppStore+RemoteAsk.swift` (origin handover and
   answer validation), `AppStore+RemotePresentation.swift` (replica build), `RemotePresentationClient.swift`
-- app: `Hangar/Views/AskDialogView.swift` (`SessionAskInput`, `SessionAskOverlay`, `AskDialogView`,
-  `AskKeyCatcher`), `Hangar/AppActions+Focus.swift` (field-editor resign, `escapePendingSessionAsk`),
-  `Hangar/AppActions.swift` (Cmd-W ladder), `Hangar/Control/ControlServer+Ask.swift`
+- app: `Elis/Views/AskDialogView.swift` (`SessionAskInput`, `SessionAskOverlay`, `AskDialogView`,
+  `AskKeyCatcher`), `Elis/AppActions+Focus.swift` (field-editor resign, `escapePendingSessionAsk`),
+  `Elis/AppActions.swift` (Cmd-W ladder), `Elis/Control/ControlServer+Ask.swift`
 - verified constraints the design answers:
   - `SessionAskInput.ownsInput` refuses whenever the window's first responder is any `NSText`
     (`AskDialogView.swift:58`), so a text editor inside the dialog would lose its own key ownership
@@ -57,9 +57,9 @@
 - maintain backward compatibility: a plain button ask's wire shape, behavior and result are unchanged
 
 ## Testing Strategy
-- **unit tests**: host-free Swift Testing in `HangarCore/Tests` for model, validation, navigation, draft
+- **unit tests**: host-free Swift Testing in `ElisCore/Tests` for model, validation, navigation, draft
   state, CLI parsing/output and presentation negotiation/round trips
-- **hosted tests**: `HangarTests/AskDialogViewTests` and `ControlServerAskTests` for focus ownership,
+- **hosted tests**: `ElisTests/AskDialogViewTests` and `ControlServerAskTests` for focus ownership,
   editor key handling and server wiring
 - **UI tests**: targeted `ControlAskUITests` methods for typing into a focused field, choosing items with
   the keyboard, and draft survival across a session switch; run with `-only-testing:` per method
@@ -179,14 +179,14 @@ in the tree.
 ### Task 1: Form model, validation, cancel role and slot drafts (host-free)
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Ask.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlAsk.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Ask.swift`
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`
-- Modify: `HangarCore/Sources/HangarCore/Pick.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AskTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherAskTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/Ask.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlAsk.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Ask.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`
+- Modify: `ElisCore/Sources/ElisCore/Pick.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AskTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherAskTests.swift`
 
 - [x] add the form (`input` or `choices`) and `cancelButton` to `PendingAsk`, and `text`/`selected` to
       `ControlAskResult`, keeping a plain ask's encoded shape unchanged
@@ -206,9 +206,9 @@ in the tree.
 ### Task 2: CLI flags and result output
 
 **Files:**
-- Modify: `HangarCore/Sources/hangarctlKit/AskCommands.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/MiscCommands.swift` (only if result printing needs it)
-- Modify: `HangarCore/Tests/hangarctlKitTests/AskCommandsTests.swift`
+- Modify: `ElisCore/Sources/elisctlKit/AskCommands.swift`
+- Modify: `ElisCore/Sources/elisctlKit/MiscCommands.swift` (only if result printing needs it)
+- Modify: `ElisCore/Tests/elisctlKitTests/AskCommandsTests.swift`
 
 - [x] add `--input line|multiline`, `--value`, `--placeholder`, repeatable `--choice ID=LABEL`,
       repeatable `--choice-subtitle ID=TEXT`, `--multiple`, repeatable `--checked ID`, `--cancel ID`;
@@ -221,15 +221,15 @@ in the tree.
 ### Task 3: Remote presentation of form asks
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`
-- Modify: `HangarCore/Sources/HangarCore/PresentationHub.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RemoteAsk.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePresentation.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemotePresentationClient.swift` (only if hello kinds need it)
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreRemoteAskTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/PresentationFramesTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/PresentationHubTests.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/RemotePresentationStateTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/PresentationFrames.swift`
+- Modify: `ElisCore/Sources/ElisCore/PresentationHub.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RemoteAsk.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RemotePresentation.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemotePresentationClient.swift` (only if hello kinds need it)
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreRemoteAskTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/PresentationFramesTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/PresentationHubTests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/RemotePresentationStateTests.swift`
 
 - [x] carry the form and `cancelButton` in `PresentationAsk`, and `text`/`selected` in
       `PresentationAskAnswer`; build the replica's `PendingAsk` with them and forward the payload from the
@@ -248,13 +248,13 @@ in the tree.
 ### Task 4: Dialog rendering, editor, choice list and sizing
 
 **Files:**
-- Modify: `Hangar/Views/AskDialogView.swift`
-- Create: `Hangar/Views/AskFormViews.swift`
-- Modify: `Hangar/Views/WindowContentView.swift` (gui `askDialogOverlay`: bind `PickController`'s draft and
+- Modify: `Elis/Views/AskDialogView.swift`
+- Create: `Elis/Views/AskFormViews.swift`
+- Modify: `Elis/Views/WindowContentView.swift` (gui `askDialogOverlay`: bind `PickController`'s draft and
   use the shared result builder in place of its button-only result)
-- Modify: `Hangar/Control/ControlServer+Ask.swift`
-- Modify: `HangarTests/AskDialogViewTests.swift`
-- Modify: `HangarTests/ControlServerAskTests.swift`
+- Modify: `Elis/Control/ControlServer+Ask.swift`
+- Modify: `ElisTests/AskDialogViewTests.swift`
+- Modify: `ElisTests/ControlServerAskTests.swift`
 
 - [x] add AppKit-backed one-line and multiline editors (`NSTextField`/`NSTextView` representables) bound to
       the slot draft, with the Tab/Return/Cmd-Return/Esc handling and the marked-text guard from Technical
@@ -272,15 +272,15 @@ in the tree.
 ### Task 5: Keyboard ownership with an in-dialog editor
 
 **Files:**
-- Modify: `Hangar/Views/AskDialogView.swift`
-- Modify: `Hangar/AppActions+Focus.swift`
-- Modify: `Hangar/AppActions.swift`
-- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift` (terminal focus deferral, `:822`)
-- Modify: `Hangar/Views/HtmlOverlayRegistry.swift` (HTML focus deferral, `:687`)
-- Modify: `Hangar/Views/HtmlOverlayView.swift` (its `firstResponder is NSText` guard, `:198`)
-- Modify: `Hangar/Ghostty/HudLinkClick.swift` (HUD click coverage, `:75`)
-- Modify: `HangarTests/AskDialogViewTests.swift`
-- Modify: `HangarUITests/ControlAskUITests.swift`
+- Modify: `Elis/Views/AskDialogView.swift`
+- Modify: `Elis/AppActions+Focus.swift`
+- Modify: `Elis/AppActions.swift`
+- Modify: `Elis/Ghostty/GhosttySurfaceView.swift` (terminal focus deferral, `:822`)
+- Modify: `Elis/Views/HtmlOverlayRegistry.swift` (HTML focus deferral, `:687`)
+- Modify: `Elis/Views/HtmlOverlayView.swift` (its `firstResponder is NSText` guard, `:198`)
+- Modify: `Elis/Ghostty/HudLinkClick.swift` (HUD click coverage, `:75`)
+- Modify: `ElisTests/AskDialogViewTests.swift`
+- Modify: `ElisUITests/ControlAskUITests.swift`
 
 - [x] register one dialog input owner per ask that knows its own editor, so `ownsInput` and
       `blocksTerminalFocus` treat that editor as the dialog's and still yield to unrelated editors, palettes,
@@ -293,7 +293,7 @@ in the tree.
       survival and a real layout swap; UI test: check choice items by keyboard and read the selection
 - [x] run the touched hosted tests and the choice UI test with `-only-testing:` - must pass before next task
 - ⚠️ XCUITest text typing (`typeText`) on this desktop delivered every key with Command set: Cmd-H hid the
-  test app and the rest reached the live Hangar (Cmd-O). The four typing UI tests were removed on the
+  test app and the rest reached the live Elis (Cmd-O). The four typing UI tests were removed on the
   user's decision; typing, Return, Cmd-Return, Tab, Esc, Cmd-W, cap, composition, draft survival and a
   real layout swap are covered by hosted tests that call the editor directly. The choice-list UI test stays.
 - ➕ review fixes: cap refuses an over-budget edit before it happens (composition included, one-line field
@@ -306,8 +306,8 @@ in the tree.
 - Modify: `.claude/rules/control-api.md`
 - Modify: `site/commands.html`
 - Modify: `site/docs.html`
-- Modify: `plugins/hangar/skills/hangar/SKILL.md`
-- Modify: `plugins/hangar/skills/hangar/reference.md`
+- Modify: `plugins/elis/skills/elis/SKILL.md`
+- Modify: `plugins/elis/skills/elis/reference.md`
 
 - [x] state the form contract once in `control-api.md`: arguments, defaults, cancel role, payloads, keys,
       sizing, drafts and handback reset, `ask.form` negotiation, and that drafts are not tree state
@@ -323,8 +323,8 @@ in the tree.
 - [x] verify items with multi-line subtitles render dimmed under their labels, stay readable on the cursor
       row, and the cursor scrolls them in, using a 50-item list with three-line subtitles
 - [x] verify a long list scrolls with buttons pinned and `width` affects width only
-- [x] run full gates once: `make build` (Release), `cd HangarCore && swift test`, `make test-app`, `make lint`
-- [x] run `lsappinfo list | grep -A4 hangar.debug` after the hosted and UI runs
+- [x] run full gates once: `make build` (Release), `cd ElisCore && swift test`, `make test-app`, `make lint`
+- [x] run `lsappinfo list | grep -A4 elis.debug` after the hosted and UI runs
 - ➕ the 50-item check found a long list opening at the top with the checked cursor row out of view: the
   opening row now goes through `scrollPosition(id:)`, pinned by `testALongListOpensScrolledToTheCheckedItem`
 - ⚠️ one full `swift test` run failed in `realHostStartupReplyAndClientlessControl` with the DA1-in-DA2
@@ -347,7 +347,7 @@ passed):
 - visual check of both styles in light and dark themes in an isolated Debug instance
 
 **External system updates**:
-- the `agterm-linux` fork consumes `HangarCore`; new public fields are additive, but its dialog renderer
+- the `agterm-linux` fork consumes `ElisCore`; new public fields are additive, but its dialog renderer
   needs the form to show these asks
 
 Smells pre-check: skipped — non-Go project

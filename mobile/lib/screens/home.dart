@@ -17,7 +17,7 @@ import 'session.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.model, required this.computers});
-  final HangarModel model;
+  final ElisModel model;
   final Computers computers;
 
   @override
@@ -32,7 +32,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Timer? snippetTimer;
   late final wave = AnimationController(vsync: this, duration: const Duration(milliseconds: 4800));
 
-  HangarModel get m => widget.model;
+  ElisModel get m => widget.model;
 
   // a closed session keeps its row, at its old place, while _Leave plays; keyed by window and filter so a
   // switch of either, which replaces the whole list, plays nothing
@@ -175,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     Navigator.pop(sheet);
                     final body = await promptText(context, 'Notify the computer', hint: 'Message', action: 'Send');
                     if (body != null && body.trim().isNotEmpty && mounted) {
-                      reportOf(context, m.act('notify', args: {'body': body.trim(), 'title': 'Hangar'}));
+                      reportOf(context, m.act('notify', args: {'body': body.trim(), 'title': 'Elis'}));
                     }
                   }),
               StatefulBuilder(
@@ -183,7 +183,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         key: const Key('watch'),
                         secondary: const Icon(Icons.notifications_active_outlined, color: C.muted),
                         title: const Text('Alerts in the background'),
-                        subtitle: Text(Watch.enabled && !Watch.permitted ? 'Notifications are off for Hangar in Android settings' : 'When an agent needs you',
+                        subtitle: Text(Watch.enabled && !Watch.permitted ? 'Notifications are off for Elis in Android settings' : 'When an agent needs you',
                             style: const TextStyle(fontSize: 12, color: C.muted)),
                         value: Watch.enabled,
                         onChanged: (v) async {
@@ -228,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     List items;
     try {
       items = (await m.call('recent.list', windowed: false))['recent'] as List? ?? const [];
-    } on HangarError catch (e) {
+    } on ElisError catch (e) {
       if (mounted) report(context, e.message);
       return;
     }
@@ -343,7 +343,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   const SizedBox(width: 11),
                   Flexible(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('Hangar', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                      const Text('Elis', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                       Text('${m.pairing.name} · $line', style: const TextStyle(fontSize: 12.5, color: C.muted), maxLines: 1, overflow: TextOverflow.ellipsis),
                     ]),
                   ),
@@ -730,7 +730,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 }
 
-// hangar's running-row wave: the tint, then the active blue, drifting one period (two row widths) every 4.8 s
+// elis's running-row wave: the tint, then the active blue, drifting one period (two row widths) every 4.8 s
 /// A closed session's row on its way out: it fades and drifts left, then the gap closes.
 class _Leave extends StatefulWidget {
   const _Leave({super.key, required this.child, required this.onDone});

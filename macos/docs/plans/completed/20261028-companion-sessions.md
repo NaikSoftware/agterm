@@ -13,7 +13,7 @@
   page companions, Duplicate as Companion with layout copy and process replay, and remote companions.
 
 ## Context (from discovery)
-- Model and store: `HangarCore/Sources/HangarCore/Session.swift`, `Workspace.swift`, `AppStore.swift`
+- Model and store: `ElisCore/Sources/ElisCore/Session.swift`, `Workspace.swift`, `AppStore.swift`
   (`moveSession`, `moveSessions`, `closeSession`), `AppStore+Duplicate.swift`, `AppStore+PendingClose.swift`,
   `AppStore+RecentClosed.swift`, `RecentClosed.swift`, `Snapshot.swift`, `AppStore+Snapshot.swift`,
   `AppStore+Persistence.swift`, `AppStore+Restore.swift`, `AppStore+Naming.swift`, `AppStore+Panes.swift`,
@@ -21,13 +21,13 @@
   `ZmxSupport.swift`, `ZmxReplayScript.swift`, `RemoteSession.swift`, `RemoteTree.swift`.
 - Control: `ControlProtocol.swift`, `ControlDispatcher*.swift`, `ControlProjection.swift` (`ControlSessionNode`),
   `ControlModes.swift` (`ControlSessionCreateOptions`), `ControlDispatcherOptions.swift`
-  (`ControlSessionOverlayOpenOptions`), `ControlActionsDefaults.swift`, `Hangar/Control/ControlServer.swift`
+  (`ControlSessionOverlayOpenOptions`), `ControlActionsDefaults.swift`, `Elis/Control/ControlServer.swift`
   (`waitsOnNetwork`), `ControlServer+SessionActions.swift`, `+SessionClose.swift`, `+Restart.swift`, `+Zmx.swift`,
-  `+RemotePage.swift`, `HangarCore/Sources/hangarctlKit/`.
-- Sidebar and lists: `Hangar/Views/WorkspaceSidebar*.swift`, `SidebarRowViews.swift`, `SessionSwitcher.swift`,
+  `+RemotePage.swift`, `ElisCore/Sources/elisctlKit/`.
+- Sidebar and lists: `Elis/Views/WorkspaceSidebar*.swift`, `SidebarRowViews.swift`, `SessionSwitcher.swift`,
   `Palette.swift`, `WindowContentView+RecentSessions.swift`, `WindowContentView+Detail.swift`, `DashboardView.swift`,
-  `Hangar/AppActions+Palette.swift`, `Hangar/AppDelegate+DockMenu.swift`, `Hangar/hangarApp.swift` (surface
-  `onExit` wiring), `Hangar/Ghostty/ZmxLaunch.swift`, `LaunchSeed.swift`.
+  `Elis/AppActions+Palette.swift`, `Elis/AppDelegate+DockMenu.swift`, `Elis/elisApp.swift` (surface
+  `onExit` wiring), `Elis/Ghostty/ZmxLaunch.swift`, `LaunchSeed.swift`.
 - Facts the design rests on:
   - `Workspace.sessions` is the single owner of session order; the sidebar is an `NSOutlineView` whose
     `isItemExpandable` admits only workspaces today (`WorkspaceSidebar.swift:797`).
@@ -42,7 +42,7 @@
   - The detail deck mounts a terminal for every session (`WindowContentView+Detail.swift`).
   - `ControlServer+Restart.swift` already observes a pane's live foreground argv and process cwd and validates
     them through `RestartReplay.resolve` with the restore denylist.
-  - The viewer runs the origin's `hangarctl` over ssh through `RemoteCommandRunner` (`remoteTree`), and only
+  - The viewer runs the origin's `elisctl` over ssh through `RemoteCommandRunner` (`remoteTree`), and only
     `zmx.tree`, `zmx.attach` and `session.restart` are dispatched off the accept thread (`waitsOnNetwork`).
   - `attachRemoteSession` requires the origin session to be zmx-backed with every pane's daemon present
     (`RemoteTreeMerger`), so a just-created origin session is not attachable until its panes realize.
@@ -76,11 +76,11 @@
   keeps `workspace.sessions` flat
 
 ## Testing Strategy
-- **unit tests**: host-free `HangarCore` tests for the command seed, model invariants, move/close/undo/reopen,
+- **unit tests**: host-free `ElisCore` tests for the command seed, model invariants, move/close/undo/reopen,
   labels, drop resolution, dispatcher parsing and response shape, replay planning, remote creation with a fake runner
-- **hosted tests** (`HangarTests`): sidebar outline shape, row rendering and icons, palette/switcher/Dock labels,
+- **hosted tests** (`ElisTests`): sidebar outline shape, row rendering and icons, palette/switcher/Dock labels,
   launch seeds, control server effects
-- **UI tests** (`HangarUITests`): one end-to-end flow per stage through `hangarctl` plus the sidebar, added to the
+- **UI tests** (`ElisUITests`): one end-to-end flow per stage through `elisctl` plus the sidebar, added to the
   existing control, sidebar and Live suites
 
 ## Progress Tracking
@@ -122,7 +122,7 @@
 - Duplicate as Companion (stage 3) copies the split layout and starts another copy of each pane's freshly observed
   foreground program in that pane's process cwd, through the restart replay seam and the restore denylist. Plain
   Duplicate keeps its directory-only contract.
-- Remote companions (stage 4) are owned by the origin: the viewer asks the origin's Hangar over ssh to create the
+- Remote companions (stage 4) are owned by the origin: the viewer asks the origin's Elis over ssh to create the
   companion under its session, waits for it to become attachable, then attaches it. Closing on the viewer detaches
   only. Origin policy (denylist, process reading) is authoritative for replay. Terminal and page companions are both
   supported on remote parents; a remote page stays owned by the origin and survives viewer detach. Until stage 4
@@ -165,7 +165,7 @@
   never reruns its command. The store bumps an observed host invalidation so the deck remounts the primary host,
   since `surface` and `primarySurfaceHostRevision` are observation-ignored and a nil surface alone remounts nothing.
 - `SessionSnapshot.parentID: UUID?` optional, encoded only when set. Restore validates: a parent id naming no
-  restored session in the same workspace, or naming a companion, is dropped (HangarCore has no logger and must
+  restored session in the same workspace, or naming a companion, is dropped (ElisCore has no logger and must
   build for the Linux fork), the only case a companion becomes top level (corrupt or hand-edited state).
 - `Session.isExpanded` for parents, persisted as `SessionSnapshot.collapsed` written only when true, matching
   `WorkspaceSnapshot.collapsed`.
@@ -186,7 +186,7 @@
   - read-back: `ControlSessionNode.parent` (id), `collapsed` on parents, `content` kind; `session.created`
     events carry `parent` in both JSON and `EventFormatter.human`
   - `session collapse|expand` for a parent's fold, mirroring `workspace collapse|expand`
-- Remote creation (stage 4): the viewer runs the origin's `hangarctl session new --parent <origin-id>` (or
+- Remote creation (stage 4): the viewer runs the origin's `elisctl session new --parent <origin-id>` (or
   `duplicate --companion`, or `overlay open --html --companion`) through `RemoteCommandRunner`, reads the created id
   from the JSON response, waits a bounded time for the origin's tree to report it attachable, then attaches it with
   the viewer's remote parent row as parent. The new remote-capable requests join `waitsOnNetwork` so ssh never blocks
@@ -207,10 +207,10 @@
 ### Task 1: Live `--command` sessions close on exit and honor `--wait`
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ZmxReplayScript.swift`, `ZmxSupport.swift`
-- Modify: `Hangar/Ghostty/ZmxLaunch.swift`, `Hangar/Ghostty/LaunchSeed.swift`, `Hangar/Control/ControlServer+Restart.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/ZmxReplayScriptTests.swift`, `ZmxSupportTests.swift`,
-  `HangarTests/LaunchSeedTests.swift`, `HangarTests/ControlServerRestartTests.swift`, `HangarUITests/ZmxLiveUITests.swift`
+- Modify: `ElisCore/Sources/ElisCore/ZmxReplayScript.swift`, `ZmxSupport.swift`
+- Modify: `Elis/Ghostty/ZmxLaunch.swift`, `Elis/Ghostty/LaunchSeed.swift`, `Elis/Control/ControlServer+Restart.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/ZmxReplayScriptTests.swift`, `ZmxSupportTests.swift`,
+  `ElisTests/LaunchSeedTests.swift`, `ElisTests/ControlServerRestartTests.swift`, `ElisUITests/ZmxLiveUITests.swift`
 
 - [x] add a creation-command rendering (zsh and fish) that runs the command and ends with it, with no login-shell
       continuation, selected by a distinct parameter on `ZmxSupport.attachCommand` that only `ZmxLaunch` passes for
@@ -231,10 +231,10 @@
 ### Task 2: Companion model, persistence and group movement
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`, `Workspace.swift`, `AppStore.swift`,
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`, `Workspace.swift`, `AppStore.swift`,
   `AppStore+Duplicate.swift`, `AppStore+NewSessionPlacement.swift`, `Snapshot.swift`, `AppStore+Snapshot.swift`
   (`sessionSnapshot`, `session(from:)`), `AppStore+Persistence.swift`, `AppStore+Restore.swift`, `Reorder.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`, `AppStoreOrganizationTests.swift`,
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreTests.swift`, `AppStoreOrganizationTests.swift`,
   `SnapshotRoundTripTests.swift`, `AppStoreRestoreTests.swift`, `ReorderTests.swift`
 
 - [x] add `parentID` and `isExpanded` to `Session` and a store entry point that creates a companion right after
@@ -256,14 +256,14 @@
 ### Task 3: Group close, parent shell respawn, undo and Reopen Recent
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`, `AppStore+PendingClose.swift`,
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift`, `AppStore+PendingClose.swift`,
   `AppStore+RecentClosed.swift`, `RecentClosed.swift`, `AppStore+CloseReselection.swift`, `AppStore+Panes.swift`,
   `WindowLibrary+RecentClosed.swift`
-- Modify: `Hangar/hangarApp.swift` (primary surface `onExit`, `handlePaneExit`, `makeSurface` cwd), `Hangar/AppActions.swift`
-  (confirmation text), `Hangar/Views/WindowContentView.swift` (`primarySurfaceID`), `Hangar/Ghostty/LaunchSeed.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePendingCloseTests.swift`, `RecentClosedTests.swift`,
+- Modify: `Elis/elisApp.swift` (primary surface `onExit`, `handlePaneExit`, `makeSurface` cwd), `Elis/AppActions.swift`
+  (confirmation text), `Elis/Views/WindowContentView.swift` (`primarySurfaceID`), `Elis/Ghostty/LaunchSeed.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStorePendingCloseTests.swift`, `RecentClosedTests.swift`,
   `AppStoreCloseReselectionTests.swift`, `AppStorePaneTests.swift`, `WindowLibraryRecentClosedTests.swift`,
-  `HangarTests/LaunchSeedTests.swift`
+  `ElisTests/LaunchSeedTests.swift`
 
 - [x] closing a parent (hard or soft, single or batch, workspace removal included) closes its companions as one
       group with one pending undo that restores ids, order and parent links; `session.closed` fires once per member
@@ -289,18 +289,18 @@
 ### Task 4: Sidebar third level
 
 **Files:**
-- Modify: `Hangar/Views/WorkspaceSidebar.swift`, `WorkspaceSidebar+RowRendering.swift`,
+- Modify: `Elis/Views/WorkspaceSidebar.swift`, `WorkspaceSidebar+RowRendering.swift`,
   `WorkspaceSidebar+DragDrop.swift`, `WorkspaceSidebar+FlaggedLayout.swift`, `WorkspaceSidebar+ContextMenu.swift`,
   `SidebarRowViews.swift`
-- Modify: `HangarCore/Sources/HangarCore/SidebarDrop.swift`, `AppStore+Sidebar.swift`, `AppStore+SidebarSelection.swift`,
+- Modify: `ElisCore/Sources/ElisCore/SidebarDrop.swift`, `AppStore+Sidebar.swift`, `AppStore+SidebarSelection.swift`,
   `BuiltinAction.swift`, `PaletteCatalog.swift` (`PaletteCommand.isEnabled(in:)`)
-- Modify: `Hangar/AppActions+Palette.swift` (dispatch), `Hangar/hangarApp+Menus.swift` (Session menu)
+- Modify: `Elis/AppActions+Palette.swift` (dispatch), `Elis/elisApp+Menus.swift` (Session menu)
 - Modify: `.claude/rules/sidebar.md`, `.claude/rules/menu-actions.md`, `.claude/rules/keymap.md` (built-in count),
-  `site/docs.html` (built-in list), `plugins/hangar/skills/hangar/reference.md` (built-in list)
-- Modify: `HangarCore/Tests/HangarCoreTests/SidebarDropTests.swift`, `BuiltinActionTests.swift`, `PaletteCatalogTests.swift`,
-  `HangarCore/Tests/hangarctlKitTests/SocketClientTests.swift` (keymap fixture), `HangarTests/SidebarRowViewsTests.swift`,
-  `HangarTests/SidebarRowIndentTests.swift`, `HangarTests/SidebarExpansionMirrorTests.swift`,
-  `HangarTests/AppActionsPaletteTests.swift`, `HangarUITests/SidebarUITests.swift`
+  `site/docs.html` (built-in list), `plugins/elis/skills/elis/reference.md` (built-in list)
+- Modify: `ElisCore/Tests/ElisCoreTests/SidebarDropTests.swift`, `BuiltinActionTests.swift`, `PaletteCatalogTests.swift`,
+  `ElisCore/Tests/elisctlKitTests/SocketClientTests.swift` (keymap fixture), `ElisTests/SidebarRowViewsTests.swift`,
+  `ElisTests/SidebarRowIndentTests.swift`, `ElisTests/SidebarExpansionMirrorTests.swift`,
+  `ElisTests/AppActionsPaletteTests.swift`, `ElisUITests/SidebarUITests.swift`
 
 - [x] build companion nodes under their parent node, make parents expandable, indent companion rows; track parent
       expansion alongside `expandedWorkspaceIDs` and persist only genuine user toggles; `TreeShape` and the
@@ -331,15 +331,15 @@
 ### Task 5: `parent › child` labels in flat lists
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Naming.swift`, `WindowLibrary+Attention.swift`
-- Modify: `Hangar/AppActions+Palette.swift`, `Hangar/Views/Palette.swift`, `Hangar/Views/SessionSwitcher.swift`,
-  `Hangar/Views/WindowContentView+RecentSessions.swift`, `Hangar/AppDelegate+DockMenu.swift`,
-  `Hangar/Views/DashboardView.swift`, `Hangar/Views/WorkspaceSidebar+FlaggedLayout.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Naming.swift`, `WindowLibrary+Attention.swift`
+- Modify: `Elis/AppActions+Palette.swift`, `Elis/Views/Palette.swift`, `Elis/Views/SessionSwitcher.swift`,
+  `Elis/Views/WindowContentView+RecentSessions.swift`, `Elis/AppDelegate+DockMenu.swift`,
+  `Elis/Views/DashboardView.swift`, `Elis/Views/WorkspaceSidebar+FlaggedLayout.swift`
 - Modify: `.claude/rules/menu-actions.md` (⌃P empty-query order)
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreNameSanitizeTests.swift`, `WindowLibraryAttentionTests.swift`,
-  `HangarTests/AppActionsPaletteTests.swift`, `HangarTests/PaletteTests.swift`, `HangarTests/DockMenuTests.swift`,
-  `HangarTests/SidebarFlaggedLayoutTests.swift`, `HangarTests/DashboardViewTests.swift`,
-  `HangarUITests/SessionSwitcherUITests.swift`, `HangarUITests/RecentSessionsButtonUITests.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreNameSanitizeTests.swift`, `WindowLibraryAttentionTests.swift`,
+  `ElisTests/AppActionsPaletteTests.swift`, `ElisTests/PaletteTests.swift`, `ElisTests/DockMenuTests.swift`,
+  `ElisTests/SidebarFlaggedLayoutTests.swift`, `ElisTests/DashboardViewTests.swift`,
+  `ElisUITests/SessionSwitcherUITests.swift`, `ElisUITests/RecentSessionsButtonUITests.swift`
 
 - [x] add `AppStore.listLabel(for:)` and use it in ⌃P, ⌃Tab, attention palette, clock and bell popovers, Dock menu,
       dashboard tiles and all three flagged layouts; the ordinary tree sidebar, rename and Copy Name stay bare
@@ -357,19 +357,19 @@
 ### Task 6: Control API, CLI, skill and docs for terminal companions
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`, `ControlDispatcher.swift`, `ControlModes.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlProtocol.swift`, `ControlDispatcher.swift`, `ControlModes.swift`
   (`ControlSessionCreateOptions`), `ControlActionsDefaults.swift`, `ControlProjection.swift` (`ControlSessionNode`),
   `ControlEvents.swift`, `AppStore+Events.swift`, `ControlRecent.swift`, `ControlDispatcher+Recent.swift`
-- Modify: `Hangar/Control/ControlServer.swift` (`makeSessionResponse`), `ControlServer+SessionActions.swift`,
-  `ControlServer+SessionClose.swift`, `Hangar/AppActions.swift` (parent expansion persist-then-notify),
-  `Hangar/Views/WorkspaceSidebar.swift` (expansion notification)
-- Modify: `HangarCore/Sources/hangarctlKit/` (session subcommands, `SocketClient.formatRecent`)
-- Modify: `plugins/hangar/skills/hangar/SKILL.md`, `plugins/hangar/skills/hangar/reference.md`
+- Modify: `Elis/Control/ControlServer.swift` (`makeSessionResponse`), `ControlServer+SessionActions.swift`,
+  `ControlServer+SessionClose.swift`, `Elis/AppActions.swift` (parent expansion persist-then-notify),
+  `Elis/Views/WorkspaceSidebar.swift` (expansion notification)
+- Modify: `ElisCore/Sources/elisctlKit/` (session subcommands, `SocketClient.formatRecent`)
+- Modify: `plugins/elis/skills/elis/SKILL.md`, `plugins/elis/skills/elis/reference.md`
 - Modify: `site/docs.html`, `site/commands.html`, `.claude/rules/sidebar.md`, `.claude/rules/control-api.md` (public catalog)
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift`, `ControlProtocolTests.swift`,
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherTests.swift`, `ControlProtocolTests.swift`,
   `ControlDispatcherSessionCloseTests.swift`, `ControlEventProtocolTests.swift`, `ControlDispatcherRecentTests.swift`,
-  `MockControlActions.swift`, `HangarCore/Tests/hangarctlKitTests/`, `HangarTests/ControlServerSessionActionsTests.swift`,
-  `HangarUITests/ControlAPIUITests.swift`
+  `MockControlActions.swift`, `ElisCore/Tests/elisctlKitTests/`, `ElisTests/ControlServerSessionActionsTests.swift`,
+  `ElisUITests/ControlAPIUITests.swift`
 
 - [x] add the `session.companion.new` wire command behind `session new --parent` (see Technical Details for the
       older-app guarantee), combining with `--command`, `--wait`, `--name`, `--cwd`, `--no-select`; refused
@@ -384,11 +384,11 @@
 - [x] add read-back: `parent` and `collapsed` on `ControlSessionNode`, `parent` in `session.created` JSON and
       `EventFormatter.human`; `workspace.sessions` stays flat; `recent list` shows a parent record's companions and
       `recent open` of an unavailable lone companion returns a clear error, with CLI formatting
-- [x] wire `hangarctl` subcommands and flags
+- [x] wire `elisctl` subcommands and flags
 - [x] update the bundled skill (trigger in `description` plus a section), `site/docs.html`, `site/commands.html` and
       the two rules files; document a command companion as the way to keep a related program next to a session
 - [x] write dispatcher, protocol round-trip, nil-omission and CLI tests
-- [x] write the e2e test creating, reading back, moving and closing a group through `hangarctl`
+- [x] write the e2e test creating, reading back, moving and closing a group through `elisctl`
       (written; its run waits for UI-test approval)
 - [x] ➕ write e2e tests that a respawned parent shell is visible and takes input, in Live and outside Live, and that
       a parent created with `--command` respawns as a plain shell in the directory it had moved to (moved from Task 3)
@@ -403,15 +403,15 @@
 ### Task 7: Page companion kind
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`, `Session+HtmlOverlay.swift`, `Session+OverlayVisibility.swift`,
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`, `Session+HtmlOverlay.swift`, `Session+OverlayVisibility.swift`,
   `AppStore+Panes.swift`, `AppStore+HtmlOverlay.swift`, `AppStore+OverlayVisibility.swift`, `AppStore+Persistence.swift`,
   `AppStore+RecentClosed.swift`
   `AppStore+Dashboard.swift`, `PaletteCatalog.swift`
-- Modify: `Hangar/Views/WindowContentView+Detail.swift`, `Hangar/Views/TerminalView.swift`, `Hangar/hangarApp.swift`,
-  `Hangar/Views/WorkspaceSidebar.swift`, `Hangar/AppActions.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/SessionTests.swift`, `AppStorePaneTests.swift`, `HtmlOverlayTests.swift`,
+- Modify: `Elis/Views/WindowContentView+Detail.swift`, `Elis/Views/TerminalView.swift`, `Elis/elisApp.swift`,
+  `Elis/Views/WorkspaceSidebar.swift`, `Elis/AppActions.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/SessionTests.swift`, `AppStorePaneTests.swift`, `HtmlOverlayTests.swift`,
   `AppStoreOverlayVisibilityTests.swift`, `PersistenceTests.swift`, `AppStore+DashboardTests.swift`,
-  `PaletteCatalogTests.swift`, `HangarTests/AppActionsOverlayTests.swift`
+  `PaletteCatalogTests.swift`, `ElisTests/AppActionsOverlayTests.swift`
 
 - [x] add `SessionContent` (`.terminal`, `.page`) fixed at creation; a page companion spawns no shell, claims no pane
       or daemon identity, and renders its page in place of a terminal in the detail deck
@@ -437,12 +437,12 @@
 ### Task 8: Control API, CLI, skill and docs for page companions
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Overlay.swift`, `ControlDispatcherOptions.swift`
+- Modify: `ElisCore/Sources/ElisCore/ControlDispatcher+Overlay.swift`, `ControlDispatcherOptions.swift`
   (`ControlSessionOverlayOpenOptions`), `ControlProjection.swift`, `ControlProtocol.swift`
-- Modify: `Hangar/Control/ControlServer+SessionActions.swift`, `HangarCore/Sources/hangarctlKit/`
-- Modify: `plugins/hangar/skills/hangar/`, `site/docs.html`, `site/commands.html`, `.claude/rules/control-api.md`
-- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherOverlayTests.swift`, `MockControlActions.swift`,
-  `HangarUITests/ControlHtmlOverlayUITests.swift`
+- Modify: `Elis/Control/ControlServer+SessionActions.swift`, `ElisCore/Sources/elisctlKit/`
+- Modify: `plugins/elis/skills/elis/`, `site/docs.html`, `site/commands.html`, `.claude/rules/control-api.md`
+- Modify: `ElisCore/Tests/ElisCoreTests/ControlDispatcherOverlayTests.swift`, `MockControlActions.swift`,
+  `ElisUITests/ControlHtmlOverlayUITests.swift`
 
 - [x] the `session.companion.page` wire command behind `session overlay open --html ... --companion` creates a page
       companion under the target's parent group and returns its id with `result.parent`; an older app rejects the
@@ -461,20 +461,20 @@
 ### Task 9: Layout copy and process replay
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/DuplicateReplay.swift`, `HangarCore/Tests/HangarCoreTests/DuplicateReplayTests.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+Companions.swift`, `RestartReplay.swift`, `ControlProtocol.swift`,
+- Create: `ElisCore/Sources/ElisCore/DuplicateReplay.swift`, `ElisCore/Tests/ElisCoreTests/DuplicateReplayTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+Companions.swift`, `RestartReplay.swift`, `ControlProtocol.swift`,
   `ControlDispatcher.swift`, `ControlDispatcher+Companions.swift`, `ControlActionsDefaults.swift`, `BuiltinAction.swift`,
   `PaletteCatalog.swift`
-- Modify: `Hangar/Ghostty/ForegroundProcess.swift` (shared observation), `Hangar/Control/ControlServer+Restart.swift`,
-  `Hangar/Control/ControlServer+Companions.swift`, `Hangar/Control/ControlServer.swift`, `Hangar/AppActions.swift`,
-  `Hangar/AppActions+Companions.swift`, `Hangar/AppActions+Palette.swift`, `Hangar/hangarApp.swift`,
-  `Hangar/hangarApp+Menus.swift`, `Hangar/Views/WorkspaceSidebar+ContextMenu.swift`
-- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`, `plugins/hangar/skills/hangar/`, `site/docs.html`,
+- Modify: `Elis/Ghostty/ForegroundProcess.swift` (shared observation), `Elis/Control/ControlServer+Restart.swift`,
+  `Elis/Control/ControlServer+Companions.swift`, `Elis/Control/ControlServer.swift`, `Elis/AppActions.swift`,
+  `Elis/AppActions+Companions.swift`, `Elis/AppActions+Palette.swift`, `Elis/elisApp.swift`,
+  `Elis/elisApp+Menus.swift`, `Elis/Views/WorkspaceSidebar+ContextMenu.swift`
+- Modify: `ElisCore/Sources/elisctlKit/SessionCommands.swift`, `plugins/elis/skills/elis/`, `site/docs.html`,
   `site/commands.html`, `.claude/rules/control-api.md`, `sidebar.md`, `menu-actions.md`, `keymap.md`
 - Modify: `AppStoreCompanionsTests.swift`, `ZmxReplayScriptTests.swift`, `BuiltinActionTests.swift`, `PaletteCatalogTests.swift`,
-  `ControlDispatcherCompanionsTests.swift`, `MockControlActions.swift`, `hangarctlKitTests/SocketClientTests.swift`,
-  `SessionCompanionsCommandsTests.swift`, `HangarTests/ControlServerCompanionsTests.swift`,
-  `HangarUITests/ControlCompanionsUITests.swift`
+  `ControlDispatcherCompanionsTests.swift`, `MockControlActions.swift`, `elisctlKitTests/SocketClientTests.swift`,
+  `SessionCompanionsCommandsTests.swift`, `ElisTests/ControlServerCompanionsTests.swift`,
+  `ElisUITests/ControlCompanionsUITests.swift`
 
 - [x] extract the per-pane foreground, process-cwd and executable observation from the restart path into
       `ForegroundProcess.replayObservation`, used by restart and duplicate; `DuplicateReplay` plans a pane from it with
@@ -508,25 +508,25 @@
 ### Task 10: Origin-owned remote terminal companions
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/RemoteSession.swift`, `RemoteTree.swift`, `ControlDispatcher.swift`,
+- Modify: `ElisCore/Sources/ElisCore/RemoteSession.swift`, `RemoteTree.swift`, `ControlDispatcher.swift`,
   `ControlDispatcher+Zmx.swift`, `ControlActionsDefaults.swift` (async creation actions)
-- Modify: `Hangar/Control/ControlServer.swift` (`waitsOnNetwork`), `Hangar/Control/ControlServer+Zmx.swift`,
-  `Hangar/Control/ControlServer+SessionActions.swift`, `Hangar/Control/ControlServer+RemoteReconnect.swift`,
-  `Hangar/AppActions+RemoteAttach.swift`, `Hangar/hangarApp.swift` (`onExitHeld` for remote rows),
-  `Hangar/hangarApp+RemoteLayout.swift`, `Hangar/Views/WorkspaceSidebar+ContextMenu.swift`
-- Modify: `HangarCore/Sources/HangarCore/RemoteReconnect.swift`, `AppStore+RemoteLayout.swift`
-- Modify: `plugins/hangar/skills/hangar/`, `site/docs.html`, `.claude/rules/control-api.md`
-- Modify: `HangarCore/Tests/HangarCoreTests/RemoteSessionTests.swift`, `RemoteTreeTests.swift`,
+- Modify: `Elis/Control/ControlServer.swift` (`waitsOnNetwork`), `Elis/Control/ControlServer+Zmx.swift`,
+  `Elis/Control/ControlServer+SessionActions.swift`, `Elis/Control/ControlServer+RemoteReconnect.swift`,
+  `Elis/AppActions+RemoteAttach.swift`, `Elis/elisApp.swift` (`onExitHeld` for remote rows),
+  `Elis/elisApp+RemoteLayout.swift`, `Elis/Views/WorkspaceSidebar+ContextMenu.swift`
+- Modify: `ElisCore/Sources/ElisCore/RemoteReconnect.swift`, `AppStore+RemoteLayout.swift`
+- Modify: `plugins/elis/skills/elis/`, `site/docs.html`, `.claude/rules/control-api.md`
+- Modify: `ElisCore/Tests/ElisCoreTests/RemoteSessionTests.swift`, `RemoteTreeTests.swift`,
   `ControlDispatcherZmxTests.swift`, `MockControlActions.swift`, `RemoteReconnectTests.swift`,
-  `AppStoreRemoteLayoutTests.swift`, `HangarTests/RemoteAttachTests.swift`, `HangarTests/ControlServerZmxTests.swift`,
-  `HangarTests/ControlServerTests.swift`, `HangarTests/ControlServerRemoteReconnectTests.swift`,
-  `HangarTests/RemoteLayoutCloseTests.swift`
+  `AppStoreRemoteLayoutTests.swift`, `ElisTests/RemoteAttachTests.swift`, `ElisTests/ControlServerZmxTests.swift`,
+  `ElisTests/ControlServerTests.swift`, `ElisTests/ControlServerRemoteReconnectTests.swift`,
+  `ElisTests/RemoteLayoutCloseTests.swift`
 
 - [x] make companion creation an async control action and add the three `session.companion.*` commands to
       `waitsOnNetwork` (see Technical Details), so ssh never blocks the accept thread or deadlocks a same-Mac origin
       on its own socket; the GUI path calls `AppActions` directly
 - [x] New Companion (with or without a command) and Duplicate as Companion on a remote row run the origin's
-      `hangarctl` over ssh with `--no-select` (`RemoteSession.controlCommand`, quoted for any login shell) to create
+      `elisctl` over ssh with `--no-select` (`RemoteSession.controlCommand`, quoted for any login shell) to create
       the companion under the origin session; an origin that cannot decode the command answers "too old for
       companions". The viewer first checks the origin still offers the session, then polls the origin tree for up to 20 s until it reports the id
       attachable (every pane's daemon present), without re-running creation, then attaches it under the viewer's row
@@ -554,14 +554,14 @@
 ### Task 11: Origin-owned remote page companions
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/RemoteTree.swift`, `RemotePageResources.swift`, `AppStore+RemotePage.swift`,
+- Modify: `ElisCore/Sources/ElisCore/RemoteTree.swift`, `RemotePageResources.swift`, `AppStore+RemotePage.swift`,
   `ControlDispatcher+Overlay.swift`
-- Modify: `Hangar/Control/ControlServer+RemotePage.swift`, `Hangar/Control/ControlServer+RemotePresentation.swift`,
-  `Hangar/AppActions+RemoteAttach.swift`
-- Modify: `plugins/hangar/skills/hangar/`, `site/docs.html`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreRemotePageTests.swift`, `RemoteTreeTests.swift`,
-  `RemotePageResourcesTests.swift`, `HangarTests/ControlServerRemotePageTests.swift`,
-  `HangarTests/ControlServerRemotePresentationTests.swift`
+- Modify: `Elis/Control/ControlServer+RemotePage.swift`, `Elis/Control/ControlServer+RemotePresentation.swift`,
+  `Elis/AppActions+RemoteAttach.swift`
+- Modify: `plugins/elis/skills/elis/`, `site/docs.html`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreRemotePageTests.swift`, `RemoteTreeTests.swift`,
+  `RemotePageResourcesTests.swift`, `ElisTests/ControlServerRemotePageTests.swift`,
+  `ElisTests/ControlServerRemotePresentationTests.swift`
 
 - [x] the origin creates the page companion through `overlay open --html --companion`; the origin's remote tree
       reports page companions, which own no daemon, with no panes and their parent, when the parent is listed
@@ -583,7 +583,7 @@
 - [x] verify edge cases: illegal moves, insertion next to a group, lone companion reopen, parent shell respawn, page
       close, refused replay, replay outside Live, older-app detection, remote attach failure, remote page surviving
       viewer detach, Live `--command` exit and `--wait`
-- [x] run full test suite: `cd HangarCore && swift test`
+- [x] run full test suite: `cd ElisCore && swift test`
 - [x] run hosted tests: `make test-app` (the XCUITest classes written by the tasks run with the user's approval)
 - [x] run `make lint` with zero findings
 
@@ -607,6 +607,6 @@
   companion rows attached and detached; the viewer row reattaches to the new shell and typed input reaches it
 
 **External system updates**:
-- `agterm-linux` fork consumes `HangarCore`; the new `Session` and snapshot fields and control payloads are additive
+- `agterm-linux` fork consumes `ElisCore`; the new `Session` and snapshot fields and control payloads are additive
 
 Smells pre-check: skipped — non-Go project

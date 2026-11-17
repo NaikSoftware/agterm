@@ -47,11 +47,11 @@ log_new() { # message -> log it unless the last line already says exactly this
 }
 
 # A scheduled job runs under launchd's PATH, not yours, so a Homebrew jq or an
-# hangarctl that was never symlinked is simply absent here. Say so in the log:
+# elisctl that was never symlinked is simply absent here. Say so in the log:
 # a sweeper that exits silently every two minutes looks exactly like a sweeper
 # that has nothing to do.
-if ! command -v "$HANGARCTL" >/dev/null 2>&1 && [ ! -x "$HANGARCTL" ]; then
-  log "no hangarctl on PATH as '$HANGARCTL' (PATH=$PATH) — nothing done"
+if ! command -v "$ELISCTL" >/dev/null 2>&1 && [ ! -x "$ELISCTL" ]; then
+  log "no elisctl on PATH as '$ELISCTL' (PATH=$PATH) — nothing done"
   exit 0
 fi
 if ! command -v jq >/dev/null 2>&1; then
@@ -90,7 +90,7 @@ find "$AGT_LIGHTS_STATE" -maxdepth 1 -type f -name 'agent-map.*' -mtime +1 -dele
 now=$(date +%s)
 
 # ---- discovery: session id -> agent pid, for every pane-attached agent ----
-# Every agent started inside a session carries HANGAR_SESSION_ID in its
+# Every agent started inside a session carries ELIS_SESSION_ID in its
 # environment, so this covers sessions that predate the hooks and repairs a pid
 # note that was written by something else.
 # the pattern travels through the environment, not through -v: awk interprets
@@ -106,10 +106,10 @@ ps -axo pid=,tty=,command= |
     # pgrep cannot read another process's environment; `ps eww` is the only
     # way to ask which session a running agent belongs to
     # shellcheck disable=SC2009
-    sid=$(ps eww "$cand" 2>/dev/null | grep -o 'HANGAR_SESSION_ID=[A-Za-z0-9-]*' | head -1)
-    [ -n "$sid" ] && printf '%s %s\n' "${sid#HANGAR_SESSION_ID=}" "$cand"
+    sid=$(ps eww "$cand" 2>/dev/null | grep -o 'ELIS_SESSION_ID=[A-Za-z0-9-]*' | head -1)
+    [ -n "$sid" ] && printf '%s %s\n' "${sid#ELIS_SESSION_ID=}" "$cand"
     # More than one process can legitimately claim one session: a split with
-    # an agent in each half shares HANGAR_SESSION_ID, and both halves have a
+    # an agent in each half shares ELIS_SESSION_ID, and both halves have a
     # tty. Keeping only one of them would judge the whole row from that pane's
     # tree, so an idle half could post completed over a busy one. Collect them
     # all, lowest pid first, and let the caller combine the counts.
@@ -144,9 +144,9 @@ set_status() { # session-id pane args…
     return 0
   fi
   if [ -n "$pane" ]; then
-    "$HANGARCTL" session status "$@" --target "$sid" --pane "$pane" >/dev/null 2>&1 || true
+    "$ELISCTL" session status "$@" --target "$sid" --pane "$pane" >/dev/null 2>&1 || true
   else
-    "$HANGARCTL" session status "$@" --target "$sid" >/dev/null 2>&1 || true
+    "$ELISCTL" session status "$@" --target "$sid" >/dev/null 2>&1 || true
   fi
 }
 
@@ -288,13 +288,13 @@ shape_for() { # work state -> the shape configured for it, empty when blanked
 }
 
 # The status of that pipeline used to be jq's, and jq exits 0 on empty input,
-# so a dead socket or an HANGARCTL wrapper that never worked looked exactly
+# so a dead socket or an ELISCTL wrapper that never worked looked exactly
 # like "no window is open": nothing done, nothing logged, and a reader left
 # reading an entirely empty log. Take the CLI's own status instead, and say
 # which of the two it was. Both lines go through log_new, because a closed
-# hangar is a normal state to sit in for hours and must not write every pass.
-if ! window_json=$("$HANGARCTL" window list --json 2>/dev/null); then
-  log_new "window list failed through '$HANGARCTL': hangar not running, or the socket or wrapper is wrong"
+# elis is a normal state to sit in for hours and must not write every pass.
+if ! window_json=$("$ELISCTL" window list --json 2>/dev/null); then
+  log_new "window list failed through '$ELISCTL': elis not running, or the socket or wrapper is wrong"
   exit 0
 fi
 windows=$(printf '%s\n' "$window_json" | jq -r '.result.windows[]? | select(.open) | .id' 2>/dev/null)
@@ -304,7 +304,7 @@ if [ -z "$windows" ]; then
 fi
 
 for w in $windows; do
-  "$HANGARCTL" tree --window "$w" --json 2>/dev/null | jq -c '
+  "$ELISCTL" tree --window "$w" --json 2>/dev/null | jq -c '
     .result.tree.workspaces[]?.sessions[]? |
     {id, status: (.status // "idle"),
      pane: (.statusPane // ""),

@@ -1,29 +1,29 @@
 ---
 paths:
-  - "macos/Hangar/Control/ControlServer*.swift"
-  - "macos/Hangar/Control/ControlTargetResolver.swift"
-  - "macos/HangarCore/Sources/HangarCore/ControlProtocol.swift"
-  - "macos/HangarCore/Sources/HangarCore/ControlResolve.swift"
-  - "macos/HangarCore/Sources/hangarctlKit/*.swift"
-  - "macos/HangarCore/Sources/hangarctl/main.swift"
-  - "macos/Hangar/CLIInstaller.swift"
-  - "macos/Hangar/AgentHooksInstaller.swift"
-  - "macos/Hangar/SkillInstaller.swift"
-  - "macos/HangarCore/Sources/HangarCore/CLIInstall.swift"
-  - "macos/HangarCore/Sources/HangarCore/AgentHooksInstall.swift"
-  - "macos/HangarCore/Sources/HangarCore/SkillInstall.swift"
-  - "macos/HangarUITests/Control*.swift"
-  - "macos/HangarUITests/SessionTextUITests.swift"
-  - "plugins/hangar/skills/hangar/**"
+  - "macos/Elis/Control/ControlServer*.swift"
+  - "macos/Elis/Control/ControlTargetResolver.swift"
+  - "macos/ElisCore/Sources/ElisCore/ControlProtocol.swift"
+  - "macos/ElisCore/Sources/ElisCore/ControlResolve.swift"
+  - "macos/ElisCore/Sources/elisctlKit/*.swift"
+  - "macos/ElisCore/Sources/elisctl/main.swift"
+  - "macos/Elis/CLIInstaller.swift"
+  - "macos/Elis/AgentHooksInstaller.swift"
+  - "macos/Elis/SkillInstaller.swift"
+  - "macos/ElisCore/Sources/ElisCore/CLIInstall.swift"
+  - "macos/ElisCore/Sources/ElisCore/AgentHooksInstall.swift"
+  - "macos/ElisCore/Sources/ElisCore/SkillInstall.swift"
+  - "macos/ElisUITests/Control*.swift"
+  - "macos/ElisUITests/SessionTextUITests.swift"
+  - "plugins/elis/skills/elis/**"
 ---
 
 ## Control API
 
-- `hangarctl` drives app/store actions over a local Unix socket. One-shot commands and polled
+- `elisctl` drives app/store actions over a local Unix socket. One-shot commands and polled
   `events.read` are in scope; terminal-output streaming is not.
-- `HangarCore` owns protocol types, target/socket resolution, and host-free dispatch.
+- `ElisCore` owns protocol types, target/socket resolution, and host-free dispatch.
   `ControlServer` owns the socket and app-side effects; blocking accept/read runs off-main and requests
-  hop to the main actor. SwiftPM `hangarctlKit` owns ArgumentParser and `SocketClient`.
+  hop to the main actor. SwiftPM `elisctlKit` owns ArgumentParser and `SocketClient`.
 - New commands are dispatcher-first (#78). `ControlDispatcher` owns parsing, validation, error text, and
   response shape; `ControlActions` supplies resolution and effects. Nil falls through only for unmigrated
   commands. Never add validation to the fallback switch.
@@ -35,25 +35,25 @@ paths:
 
 ## Installation and agent integrations
 
-- Xcode's CLI phase builds Release, copies/signs `hangarctl`, then deep re-signs the app; shallow signing
-  fails with `Hangar.debug.dylib`. The automatic installer links into `/usr/local/bin`, directly or through one
+- Xcode's CLI phase builds Release, copies/signs `elisctl`, then deep re-signs the app; shallow signing
+  fails with `Elis.debug.dylib`. The automatic installer links into `/usr/local/bin`, directly or through one
   admin prompt. Host-free `CLIInstall` owns paths/quoting; app code owns filesystem/auth.
 - `ExtrasAutoInstaller` runs the CLI, hooks and skill installers once per build (version, commit and bundle
   path, kept in UserDefaults), Release only, alerting only when the user must act.
 - Agent Hooks installation copies generic, Claude, Codex, Pi, OpenCode, and shell assets under
-  `~/.config/hangar/agent-status`, baking the bundled CLI. Marker merges are idempotent and preserve
+  `~/.config/elis/agent-status`, baking the bundled CLI. Marker merges are idempotent and preserve
   unrelated config; unreadable config is never treated as absent.
 - Claude maps prompt/tool work to `active --blink`, Stop to `completed --auto-reset`, and a permission
   request to blocked. `PermissionRequest` fires as the prompt opens.
   `Notification[permission_prompt]` waits about six idle seconds and stays for the sandboxed network
   prompt, which `PermissionRequest` skips. The main thread's PostToolUse clears a prior block because there is
   no answer event; a subagent's cannot, being `--if-idle`.
-  `hangar-claude-status.sh` reads the hook payload (non-terminal stdin, 2-second bound, plutil or jq key paths):
+  `elis-claude-status.sh` reads the hook payload (non-terminal stdin, 2-second bound, plutil or jq key paths):
   an event carrying `agent_id` adds `--if-idle` to `active`, and a Stop whose `background_tasks` lists a
   running subagent, workflow or shell posts `active --blink` in place of `completed`, dropping the caller's flags
   so `--auto-reset` cannot idle the row. Anything else, an unreadable payload included, posts argv.
   A `teammate` task stays `running` while idle, so it counts only while busy: `SubagentStart` touches
-  `$TMPDIR/hangar-claude-busy/<session_id>/<agent_id>` and `SubagentStop`, which fires each time a teammate goes
+  `$TMPDIR/elis-claude-busy/<session_id>/<agent_id>` and `SubagentStop`, which fires each time a teammate goes
   idle, removes it; a Stop listing no teammate drops the session's directory. Teammate task ids are not agent ids,
   so a mark is not matched to its task: one any agent leaves without `SubagentStop` (killed, interrupted)
   holds the row while any teammate is alive.
@@ -76,18 +76,18 @@ paths:
   and drifts from it silently.
 - Install Pi only when `~/.pi/agent` exists. Start is active; settle only after retries, compaction, and
   queued continuations. Pi exposes no reliable blocked event, so never infer it from prose.
-- Install OpenCode only when its config exists; v1 exports only `HangarStatusPlugin`, as the legacy loader
+- Install OpenCode only when its config exists; v1 exports only `ElisStatusPlugin`, as the legacy loader
   treats every export as a plugin. Busy/retry is active; asked permission/question is blocked
   until every pending request is answered, then active.
   Latch a busy terminal error across sibling idle. Skip abort; defer ContextOverflow until idle unless busy
   resumes. Ignore deprecated `session.idle`.
-- OpenCode v2 uses a separate dependency-free CLI entrypoint, `plugins/hangar-v2/tui.js`, with its own marker.
+- OpenCode v2 uses a separate dependency-free CLI entrypoint, `plugins/elis-v2/tui.js`, with its own marker.
   Install the detected major, offering a choice or skip when unknown.
   Status follows the client's selected session and descendants; lifecycle details live in the plugin and its tests.
 - Preserve unmarked Pi/OpenCode files and require restart or reload. Host-free `AgentHooksInstall` owns
   merge, marker, backup, and optional-agent policy.
 - Skill installation targets every existing Claude/Codex skill root, creating Claude only when neither
-  exists. Refuse an unmarked `SKILL.md`. The sole source is `plugins/hangar/skills/hangar/` with
+  exists. Refuse an unmarked `SKILL.md`. The sole source is `plugins/elis/skills/elis/` with
   `SKILL.md`, references, examples, cookbook, troubleshooting, and `scripts/show-image.sh`. The whole
   directory copies verbatim, so a new file ships automatically — but the loader opens only what `SKILL.md`
   routes to, so a file added without a `description`/`when_to_use` trigger and a body pointer is dead
@@ -95,19 +95,19 @@ paths:
 - `show-image.sh` opens a PTY overlay and emits chunked kitty APC/base64. Pinned Ghostty has no OSC-1337
   or sixel, agent stdout escapes controls, and tool shells lack `/dev/tty`. Resolve relative to the loaded
   skill; hardcoded install paths and `${CLAUDE_PLUGIN_ROOT}` fail across app/plugin copies.
-- Bundle the leaf at `Contents/Resources/hangar`. Claude uses array
-  `skills: ["./skills/hangar"]`; Codex uses string `skills: "./skills/"`; the marketplace shapes differ.
-  Keep plugin root `plugins/hangar` to avoid copying the roughly 21 MiB repository.
+- Bundle the leaf at `Contents/Resources/elis`. Claude uses array
+  `skills: ["./skills/elis"]`; Codex uses string `skills: "./skills/"`; the marketplace shapes differ.
+  Keep plugin root `plugins/elis` to avoid copying the roughly 21 MiB repository.
 - Release bumps all three manifest versions and stops for commit because caches key on version.
-  App-installed and plugin skills may coexist as `hangar` and `hangar:hangar` with undefined precedence.
+  App-installed and plugin skills may coexist as `elis` and `elis:elis` with undefined precedence.
 
 ## Transport and addressing
 
-- Resolve socket from `HANGAR_CONTROL_SOCKET`, then `<HANGAR_STATE_DIR>/hangar.sock`, then Application
+- Resolve socket from `ELIS_CONTROL_SOCKET`, then `<ELIS_STATE_DIR>/elis.sock`, then Application
   Support. CLI `--socket` overrides. Explicit short paths avoid Unix `sun_path` near 104 bytes. Use 0600.
 - Each connection sets `SO_NOSIGPIPE` and a 5-second receive timeout. Close on non-EINTR read failure,
   including EAGAIN. Start is idempotent and logs bind failure without blocking launch.
-- `hangarctl events` branches on the connect errno: once it holds a cursor it retries `ECONNREFUSED`
+- `elisctl events` branches on the connect errno: once it holds a cursor it retries `ECONNREFUSED`
   with that cursor, bounded by `EventStreamState.retryBudget`, and treats every other failure as fatal.
   A change to what a refused or absent server returns must keep that path in step.
   `reference.md` owns the user contract.
@@ -116,7 +116,7 @@ paths:
   it exits at launch on `StateDirectoryLock` (CLAUDE.md), so this lock separates only instances on
   different state directories sharing one socket.
   Ownership is decided at INIT, not at start: the launch window's
-  surfaces are built during the initial render pass and snapshot `HANGAR_SOCKET` into the pty environment,
+  surfaces are built during the initial render pass and snapshot `ELIS_SOCKET` into the pty environment,
   while start runs from the scene's `.task` afterwards, so deciding there would hand the first shell the
   owner's live socket. Start retries acquisition for the instance refused while the owner was still alive,
   guarding on the held fd first — flock is per open file description, so re-opening a file this process
@@ -130,14 +130,14 @@ paths:
   exclude nobody.
 - A refused instance advertises `<socketPath>.unavailable` through `resolvedSocketPath`, so its shells and
   `{AGT_SOCKET}` carry a path nothing serves instead of the resolved default, which would point them at
-  the other instance, where an untargeted command would land. Do NOT omit the variable instead: `hangar-agent-status.sh` drops `--socket` when it is absent and
-  `hangarctl` then resolves that same default, so an unset value routes agent status onto the live app.
+  the other instance, where an untargeted command would land. Do NOT omit the variable instead: `elis-agent-status.sh` drops `--socket` when it is absent and
+  `elisctl` then resolves that same default, so an unset value routes agent status onto the live app.
   `refused` clears on a later successful acquire, since `start()` re-runs per window scene and the owner
   may have quit. Its `stop()` returns early without unlinking, leaving the owner's socket intact.
 - One newline-delimited JSON request and response uses each connection, capped at 1 MiB. Unknown commands
   return structured errors. Mutations may return `result.id`; trees use `result.tree`.
   A decode failure reports the `DecodingError`'s CONTEXT `debugDescription`, not `localizedDescription`, so
-  the error NAMES the rejected `cmd`. A caller that cares preflights with `hangarctl version`; no command
+  the error NAMES the rejected `cmd`. A caller that cares preflights with `elisctl version`; no command
   adds a version handshake of its own. A server carrying this code names a LATER unknown command, so it
   diagnoses skew forward — never the newest command against a server that predates it. Read the context,
   never the error:
@@ -150,11 +150,11 @@ paths:
   server did, rather than leaving the two outcomes indistinguishable. A read-back is any observable read, not
   necessarily a response field: `session.paste --pane` is covered by `session.text --pane`, its documented
   read-back command, as `session.type` and `font.*` are, and `result.pane` is carried by `session.restore`,
-  `session.text` and `session.type` for the token reason below, and by `ask.open` for its resolved pane anchor. Since `hangarctl` ships inside the
+  `session.text` and `session.type` for the token reason below, and by `ask.open` for its resolved pane anchor. Since `elisctl` ships inside the
   bundle, the CLI that sends a field and the app that reads it are the same build, so the exposure is a
   stale RUNNING process across an upgrade, not a mismatched install. Only an app predating `result.pane`
   omits it from a successful `session.restore`; treat absence as UNKNOWN, never as the default pane.
-- `hangarctl --json` prints the server's line unchanged: `SocketClient.send` returns a `SocketReply`
+- `elisctl --json` prints the server's line unchanged: `SocketClient.send` returns a `SocketReply`
   carrying the bytes beside the decoded `ControlResponse`, and `formatResponse` is human-only. Re-encoding
   the decoded struct drops every field the CLI build does not model (#625), so no CLI path prints JSON from
   the model; the pick/ask `--no-block` id object, their result payloads, `events`' per-event lines and
@@ -204,13 +204,13 @@ renumbering. Do not reintroduce a count anywhere.
   `restore.clear`, `restore.mode`, `version`
 - `recent.list`, `recent.open`, `recent.clear`, `session.undo`
 - `zmx.list`, `zmx.screen`, `zmx.prune`, `zmx.kill`, `zmx.kill.pane`, `zmx.reset`, `zmx.tree`, `zmx.attach`, `zmx.attach.group`, `zmx.present`
-- `catalog.subscribe`, `catalog.op`: served by hangar-server, and by a Mac in Live sessions mode for the window the
+- `catalog.subscribe`, `catalog.op`: served by elis-server, and by a Mac in Live sessions mode for the window the
   stream's hello or the op's `--window` names (`ControlServer+MacCatalog`); an `opID` request never reaches a Mac's
   remote route
 
 `terminfo install` is a CLI-only command with no protocol counterpart, one of the three exemptions from the
 protocol/dispatcher contract: it runs `infocmp` and `ssh` locally and never opens the socket, so there is
-nothing for the app to dispatch or read back. `TerminfoInstall` in `HangarCore` owns the argv and the
+nothing for the app to dispatch or read back. `TerminfoInstall` in `ElisCore` owns the argv and the
 pipeline; the CLI owns the typed option surface, deliberately narrower than ssh's so `-G`, `-N`, `-n` and
 `-f` cannot fake a success or hang the install.
 
@@ -218,21 +218,21 @@ pipeline; the CLI owns the typed option surface, deliberately narrower than ssh'
 `zmx print <ZMX_SESSION>`, run from the `zmx` beside the CLI, and never opens the socket. The socket still
 never writes a clipboard: the write arrives in the pane's bytes, so every attached terminal applies its own
 `clipboard-write` policy, and a session attached from another Mac gets the text on the Mac showing it.
-`TerminalClipboard` in `HangarCore` owns the sequence, the size bound and the daemon resolution.
+`TerminalClipboard` in `ElisCore` owns the sequence, the size bound and the daemon resolution.
 It takes no target: the daemon is the one zmx named in the pane's environment, so quick and overlay
 terminals and a scratch outside Live sessions, which have none, are refused, and a name `ZmxSupport.isDaemonName` rejects is too.
 `zmx print` reads no reply and exits 0 on a dropped connection, so exit 0 confirms neither receipt nor a
 pasteboard write. It also injects between two 4096-byte pty reads, where the program's own escape sequence
 may be unfinished: the OSC 52 still parses whole, and the interrupted sequence is cut short.
 
-`server install` is the third, macOS-only. It installs the hangar-server release matching the app over ssh
-and a download, and opens no socket. `ServerInstall` in `HangarCore` owns the asset naming, the checksum
+`server install` is the third, macOS-only. It installs the elis-server release matching the app over ssh
+and a download, and opens no socket. `ServerInstall` in `ElisCore` owns the asset naming, the checksum
 rules and the argv on `TerminfoInstall`'s connection surface; `ServerInstaller` in the CLI runs the steps
 over injectable effects, and no archive bytes are sent to the host until the tarball's sha256 matches the app's
-`hangar-server.sha256`. A bad destination is refused in `run`, not `validate`, so every refusal exits 1.
+`elis-server.sha256`. A bad destination is refused in `run`, not `validate`, so every refusal exits 1.
 
 `mobile serve|reset` are CLI-only too: `serve` is a TLS and Bluetooth relay and `reset` rewrites its token file, so neither has a
-protocol command. `phone.*` is the protocol face of the app's `PhoneRelay`. hangar-server leaves `session.grid`,
+protocol command. `phone.*` is the protocol face of the app's `PhoneRelay`. elis-server leaves `session.grid`,
 `session.scroll` and all `phone.*` unserved, a page cannot send `phone.*` (`HtmlBridge` refuses them), and the relay
 refuses `phone.*` from a phone. `site/commands.html#phone` owns the rest.
 Debug builds are ad-hoc signed with a bare `cdhash` requirement,
@@ -245,7 +245,7 @@ of the token over a 900 s epoch, re-registered at each boundary, so a passive sc
 `<mobileDir>/bluetooth.lock` (`flock`) lets one relay per state directory advertise, so a Release and a Debug
 instance can both advertise. The `maxPhones` busy cap (reject `[0x02]`)
 counts authenticated phones only, so replayed handshakes cannot lock out a paired phone; the unauthenticated cap
-and the 10 s auth timeout cover the rest. hangarctl embeds an Info.plist (`ua.naiksoftware.hangar.hangarctl`, usage string)
+and the 10 s auth timeout cover the rest. elisctl embeds an Info.plist (`ua.naiksoftware.elis.elisctl`, usage string)
 via `-sectcreate` in project.yml's Bundle helper executables phase, so a hand-run serve prompts under a stable identity. The L2CAP streams run on
 their own `StreamThread`, never `RunLoop.main`. `commands.html#mobile` owns the user-visible values.
 A Bluetooth wrong-key handshake emits no `phone.refused`: a stranger in radio range could flood the event.
@@ -262,7 +262,7 @@ server's own rule. `SocketClient` has no receive timeout and `runBlocking` waits
 deadline check in the poll loop alone cannot.
 
 `debug.appearance` is a private `Command` case, absent from the list above, used only by `AppearanceFlipUITests`.
-It accepts light/dark, sets `NSApp.appearance`, posts `.hangarSystemAppearanceChanged`, echoes the effective
+It accepts light/dark, sets `NSApp.appearance`, posts `.elisSystemAppearanceChanged`, echoes the effective
 side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provide no CLI or skill entry.
 
 ## Organization commands
@@ -314,7 +314,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   split shell's own exit are what tear it down.
   `split` reports SHOWN, so a hidden split reads false;
   `hasSplit` reports the pane existing at all and is present exactly when `splitRatio`/`splitFocused`
-  can be. Callers asking "does this session have a split" read `hasSplit`, and `hangarctl tree` tags the
+  can be. Callers asking "does this session have a split" read `hasSplit`, and `elisctl tree` tags the
   hidden case `(split hidden)`.
 - `session.split.close` is the teardown verb, its own command rather than a fourth `ControlToggleMode`
   value, which is shared with `session.scratch`/`sidebar` and cannot express close (a hidden split is
@@ -329,8 +329,8 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   through `cwd`/`title`/`foreground`/`restoreCommand`/`commandWait`, and the other side through
   `splitCwd`/`splitForeground`/`splitRestoreCommand`/`splitCommandWait`; split title remains unexposed.
 - `session.restart` replaces one LIVE pane's shell in place: `killConfirmed` on its daemon, then
-  `hangarApp.replacePane` with the command a `session.new --command` pane spawns, so the pane identity, the
-  daemon name and the `HANGAR_*` environment stay. The old surface's exit is claimed right after the kill,
+  `elisApp.replacePane` with the command a `session.new --command` pane spawns, so the pane identity, the
+  daemon name and the `ELIS_*` environment stay. The old surface's exit is claimed right after the kill,
   before the first suspension, or the dead client would close the pane during the wait that follows.
   The kill hangs up the old foreground program (next bullet); a restart then waits a second and SIGKILLs
   what is left of that job through `ZmxClient.forceEnd`, since it replaces the program. The new shell
@@ -447,12 +447,12 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
 - The target is the parent, a companion meaning its parent. The dispatcher refuses workspace and placement
   fields rather than dropping them, and reuses `creationTint`. The reply carries `result.parent`.
   A remote parent's companion is created by its origin: `ControlServer.createRemoteCompanion` runs the origin's
-  `hangarctl` through `RemoteSession.controlCommand`, whose outer quoting every login shell reads alike, polls the
+  `elisctl` through `RemoteSession.controlCommand`, whose outer quoting every login shell reads alike, polls the
   origin's `zmx tree` until the new id is attachable, then attaches it under the row through `attach(_:placement:)`.
   Creation is never retried or done locally; a created but unattached companion is named in the error. The three
   creation commands are in `waitsOnNetwork`, local ones included; `session.companion.convert` is local only and is not.
 - A remote parent's page companion is the origin's page. `session.companion.page.attach` hands out one view through
-  the host's `PageAttachmentBook` (`ControlServer.pageAttachments`, `ServerStreams.pageAttachments` on hangar-server):
+  the host's `PageAttachmentBook` (`ControlServer.pageAttachments`, `ServerStreams.pageAttachments` on elis-server):
   a per-claim token, claimed through `claimPageServe` into a `PageServeStream` in companion mode, kept by claim.
   A claim, an expired token, an unanswered reply or EOF ends only that view,
   never `endRemotePage`; `HtmlOverlayReleases.onServedRelease` at the page's final release ends every view, so a
@@ -480,7 +480,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   prompt; the remote tick prunes entries no open or soft-closed row owns. Never prune on the row-hidden callback: a
   soft close emits it before registering its pending record, and the prune would drop state Undo restores.
 - `session.collapse`/`.expand` persist through `AppActions.setSessionExpanded`, then post
-  `.hangarSetSessionExpanded` (see [[sidebar]]). Read back `parent` and `collapsed` on session nodes.
+  `.elisSetSessionExpanded` (see [[sidebar]]). Read back `parent` and `collapsed` on session nodes.
 - `session.close` answers `result.closed` with every id it closed, from the group computed before the close,
   deduplicated; a parent close also sets `affected`. A single-target close also answers `recentID`, the Recent Closed
   entry it wrote (the soft close's too, written at close time), which `recent.open` takes; a batch and a row Recent
@@ -508,7 +508,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   stores each program as `initialCommand`/`splitInitialCommand`, so it runs as a `--command` pane does, ungated by
   restore mode. It stores them only after the copy and its split exist, rewriting the source's session id, pane ids
   and their zmx daemon names to the copy's: an argv carrying its own pane identity, as a codex started with
-  `shell_environment_policy.set.HANGAR_SESSION_ID` does, otherwise addresses the source. Outside Live the command runs on the GUI PATH, so a program not started by absolute path is copied by
+  `shell_environment_policy.set.ELIS_SESSION_ID` does, otherwise addresses the source. Outside Live the command runs on the GUI PATH, so a program not started by absolute path is copied by
   the path it was started from: the first entry of its own PATH (read from the same `KERN_PROCARGS2` blob as its
   argv) resolving to the `proc_pidpath` image, else its first executable entry (a version manager's shim re-execs
   under the bare name), or its directory, launched unresolved, since the image alone turns `vimdiff` into plain vim.
@@ -533,7 +533,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   to that origin keeps its old grouping until it reattaches, the presentation stream carrying no grouping.
   Read back `parent` and the session order.
 - `PageSessionRefusal` is the one pre-dispatch guard, run by `ControlServer.pageCompanionRefusal`, a remote window's
-  route and hangar-server's `pageRowRefusal`, covering the socket and a page's bridge.
+  route and elis-server's `pageRowRefusal`, covering the socket and a page's bridge.
   It judges `surface.zoom`/`surface.cursor` only for an explicit target, since their `active` means the
   window's zoom target, and never refuses a zoom hide, which stays idempotent.
 - `AppStore.closeOverlay` on a page session closes the session before slot teardown; the strip X and ⌘W go
@@ -595,7 +595,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   The gap is blocking, never scheduled: a deferred Return can be overtaken by another injection or a keystroke.
   It is one fixed gap per call, so do not scale it by length or add one per line.
   A receiver classifying one long line or a multi-line payload as a paste is the caller's to work around
-  by sending shorter pieces; pacing inside Hangar would block the main thread per piece on both routes.
+  by sending shorter pieces; pacing inside Elis would block the main thread per piece on both routes.
   Limits: Returns inside a multi-line payload stay back to back and still read as paste in such a program;
   a writer on another Mac can land between the two daemon calls;
   a failed second daemon call answers an error with the text already typed and is never retried,
@@ -633,7 +633,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   `quick.text` keeps its own vocabulary and still reports that string for an unrealized quick surface.
   Output is plain text because pinned Ghostty exposes no styled-cell read.
   `--pane-id` accepts a stable surface token and resolves it against live slots before `--pane`.
-  This is the read path for a long-running watcher whose baked `HANGAR_PANE` spawn role may be stale
+  This is the read path for a long-running watcher whose baked `ELIS_PANE` spawn role may be stale
   after promotion or swap.
   `onScreenSurface` is pane-vs-scratch only, so every `--pane` and the default alike read the surface
   UNDER an overlay; the covering program is `session.overlay.text`.
@@ -688,7 +688,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
 - Handle `GHOSTTY_ACTION_SHOW_CHILD_EXITED`. Return true for immediate close, false for wait; process-exit
   handling must be idempotent. Use bounded first-responder retries and refocus underlying surface on close.
 - Exit status uses env-carried command/temp path in fixed
-  `sh -c '( eval "$HANGAR_OVL_CMD" ); echo $? > "$HANGAR_OVL_CODE"'`, without output redirection.
+  `sh -c '( eval "$ELIS_OVL_CMD" ); echo $? > "$ELIS_OVL_CODE"'`, without output redirection.
   Read/delete during surface teardown before callbacks are cleared. `overlay.result` returns exit code,
   still-running, or no-result. CLI `--block` polls returned session ID, rejects `--wait`, prints no process
   output, and exits with captured status.
@@ -833,7 +833,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   `file://` paths (any host) name files on the far Mac and route to `.forwardRemote`, which reveals nothing here; every
   other local route from it is `.ignore`. Its scratch is `.scratch` while that shell is local; one running on the
   row's origin (`Session.originScratch`) is `.remotePane`, and its click names the origin's scratch identity, which
-  `forwardedClickPane` resolves with the scratch's cwd (`PaneObserver` tracks it on hangar-server).
+  `forwardedClickPane` resolves with the scratch's cwd (`PaneObserver` tracks it on elis-server).
 - A forwarded click (`ControlServer+RemoteLinkClick`, `+ForwardedClick`) travels as `link.click` only while this Mac
   presents the session, or leads the clicked pane on an origin taking `lead.report`, and the origin agreed the `link.click` kind (`RemotePresentationClient.originSupports`), with the
   ORIGIN's pane identity (`AppStore.linkClickRequest`). The origin resolves it with that pane's cwd and opens only page
@@ -857,11 +857,11 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   using it is released. Each waiting click opens its own address, a row that goes away gets nothing, and a failed
   forward is refused on the row as `RemoteLinkRefusal.forwardFailed`, which never travels. It is no
   `LinkPolicy.Route` case, since the agterm-linux fork switches over `Route` exhaustively.
-- Session links use `LinkPolicy.sessionLink`: exactly `hangar://session/` (case-insensitive prefix) plus a
+- Session links use `LinkPolicy.sessionLink`: exactly `elis://session/` (case-insensitive prefix) plus a
   36-character hyphenated UUID (either case), with no suffix, query, fragment, credentials, port or encoding.
   The raw string is checked, not URL components, so even an empty port is refused.
-  A plain-text link reaches it through `scripts/ghostty-patches/0004`, which adds `hangar://session/` to
-  libghostty's URL pattern: Codex renders an `hangar://` Markdown link as plain `label (url)` text, and ghostty's
+  A plain-text link reaches it through `scripts/ghostty-patches/0004`, which adds `elis://session/` to
+  libghostty's URL pattern: Codex renders an `elis://` Markdown link as plain `label (url)` text, and ghostty's
   `link` setting cannot be set.
   The `.selectSession` route precedes remote forwarding in every link-open mode, from pane, remote pane and
   scratch only; quick terminal and program overlay clicks are ignored, as for the link-open overlay.
@@ -927,7 +927,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
 - A markdown page with `--navigation` carries `HtmlOverlay.markdownLinks`, a `MarkdownLinkGrant` (canonical file and
   folder) computed by the app at open, nil when that folder is `/` or home, which also drops navigation. A clicked
   `.md` always asks for it. Render.js then keeps relative `.md`/`.markdown` hrefs, and the page loads through
-  `HtmlPageSchemeHandler` at `hangar-page://<page-id>/<path>`, so WebKit owns history and scroll. The policy allows
+  `HtmlPageSchemeHandler` at `elis-page://<page-id>/<path>`, so WebKit owns history and scroll. The policy allows
   only that page's own host with a markdown path lexically inside the root; `MarkdownPageSource.linkSource` judges
   every read again with `MarkdownPage.linkedDocument` and reads at the normalized request, so pictures and links share
   one base. A link that fails after the first commit keeps the shown page `loaded` with no error.
@@ -988,7 +988,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   The page resolves a jump's target from that index, so no Swift catalog can disagree with the document loaded. A pick makes the file's first change current,
   and that change stays the step's origin while the view is where the pick left it; a step reports the file it reached.
   A rebuild from the same text keeps that origin and a pinned file only while the view is still where they were left
-  (`hangarTextNavigation`, then `data-entered` and `data-file`); a fresh read keeps neither.
+  (`elisTextNavigation`, then `data-entered` and `data-file`); a fresh read keeps neither.
   The page posts `{count, current, path}` on ready and whenever the file in view changes, from the scroll handler
   itself (an animation frame never runs off screen), into `HtmlOverlay.textFiles` (`setTextFilesReport`, never
   emitted). The remote action needs `page.files` beside `page.text`; an older presenter is never sent it.
@@ -1021,8 +1021,8 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   rule for scheme and text color, injected at document start. Its background is NOT in CSS: the file web view
   draws no canvas (`drawsBackground`, the one private key) and the panel paints the theme or
   `--background-color` behind it, so an authored `html` or `body` background still fills the canvas.
-- Every page's rule, a URL page's included, defines `--hangar-background`, `--hangar-foreground` and
-  `--hangar-color-0..15` (`GhosttyApp.terminalPalette`, slots kept, an invalid entry omitted). A URL page gets
+- Every page's rule, a URL page's included, defines `--elis-background`, `--elis-foreground` and
+  `--elis-color-0..15` (`GhosttyApp.terminalPalette`, slots kept, an invalid entry omitted). A URL page gets
   only those variables and keeps the browser's opaque canvas, because a web app styled against a white canvas
   turns unreadable over the theme backing. Inject the rule at document start in a dedicated content world.
   Do not evaluate theme scripts in a live document: page callbacks can inherit evaluation's user gesture.
@@ -1072,9 +1072,9 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   A page the placement rule hands to the presenting Mac is shown there (Remote sessions); one already open stays local.
 - A FILE page drives the control API from its own content; `site/docs.html#page-bridge` owns the user
   contract. Pages are self-authored and trusted like a program overlay, which already inherits
-  `HANGAR_SOCKET`, so there are no permission tiers; a URL page gets none of it. Two surfaces, one path:
-  `HtmlOverlayBridge.adapterScript` handles `data-hangar` tags in its own content world, so it runs with
-  page JS off, and `--js` adds the page-world `hangar.request`. Both reach `HtmlOverlayPage.handleBridgeRequest`,
+  `ELIS_SOCKET`, so there are no permission tiers; a URL page gets none of it. Two surfaces, one path:
+  `HtmlOverlayBridge.adapterScript` handles `data-elis` tags in its own content world, so it runs with
+  page JS off, and `--js` adds the page-world `elis.request`. Both reach `HtmlOverlayPage.handleBridgeRequest`,
   which refuses frames, resolves the page where it sits NOW through `htmlOverlaySlot`, builds the request
   with `HtmlBridge` and dispatches through `HtmlOverlayRegistry.dispatch`, the closure `ControlServer` sets
   to its own `dispatch` so the window cache refreshes and unmigrated commands still reach the app switch.
@@ -1207,8 +1207,8 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   or move, a remote reservation's included.
   Session, workspace and window removal do not: `session.closed` and the window close already do.
 - The panel is a pty running bundled `Resources/hud/hud.sh`, spawned `autoFocus: false` with
-  `HANGAR_HUD_FILE` as its only HUD-SPECIFIC variable (the surface still inherits the session environment
-  and the overlay wrapper's `HANGAR_OVL_*` pair) and capturing no exit code. Grid, spinner (flag, interval
+  `ELIS_HUD_FILE` as its only HUD-SPECIFIC variable (the surface still inherits the session environment
+  and the overlay wrapper's `ELIS_OVL_*` pair) and capturing no exit code. Grid, spinner (flag, interval
   and frames), text color and the APP'S PID
   ride the body file's HEADER line and are re-read every tick, so `hud.update` repaints in place with no
   respawn; write that file atomically. The frames are LAST because they alone are variable-length and the
@@ -1302,7 +1302,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   zoom and silently closes a live dashboard. MRU takes up to nine valid recency entries before expansion and
   errors on an empty window.
 - `closePrimaryPane` promotes a split survivor into the primary slot, so `DashboardController`
-  `promoteSplitMember` rewrites that session's `.split` cell to `.primary` from `hangarApp.handlePaneExit`.
+  `promoteSplitMember` rewrites that session's `.split` cell to `.primary` from `elisApp.handlePaneExit`.
   Reconcile cannot do this: `closeSplit` and `closePrimaryPane` leave identical `hasSplit == false` state,
   and only the exit path knows which happened.
 - Dashboard is per-window and view-only; GUI Command-Shift-G/menu/palette toggles MRU auto-size.
@@ -1566,7 +1566,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   every open store with `window: nil`, never the frontmost default, then asks `AppStore.messagePane`.
 - An identity is `SESSION:PANE-ID` only and must be a live pane of that session, on send, read and ack alike.
   There is no fallback to a role or the active pane, and a stale or incomplete identity never becomes an
-  anonymous send: the CLI sends without one only when neither `HANGAR_*` variable is present.
+  anonymous send: the CLI sends without one only when neither `ELIS_*` variable is present.
 - Disposal is per site, never by pruning panes that look dead, since close-then-undo cannot be told from a
   live pane afterwards. `releaseLeavingSession` covers every session, workspace and window leaving; the
   other sites are `closeSplit`, `closePrimaryPane` (the departing primary only), `closeScratch`,
@@ -1578,7 +1578,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
 - `read --ack` removes its batch in one synchronous mailbox operation and answers `acked`. The CLI refuses to
   print unless `acked` names exactly the returned ids, and `--wait` repeats that same read rather than probing
   first, since a probe leaves a gap in which another reader drains the mailbox.
-- hangar-server hosts its own bus. A headless store's live pane is a daemon-backed main or split identity or
+- elis-server hosts its own bus. A headless store's live pane is a daemon-backed main or split identity or
   the `scratchDaemon`, so an ended row keeps only its scratch, and `markSessionEnded` is one more disposal site.
   A Mac remote row is refused by name: `MessagePaneError.detail` becomes `MessageRejection.detail`
   (`remote session`), a field rather than a new `Reason`, since a client decodes the whole reply.
@@ -1625,7 +1625,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   terminated AND the `DispatchIO` cleanup handler has closed the write end. The scheduler's `onFailure`
   sink is the only banner source, one per hook until success or reload. `WindowLibrary.onControlEvent`
   fires after the ring append, so hooks and `events.read` see the same events; dispatch never waits on a
-  hook, which is what makes a hook's own same-socket `hangarctl` call safe.
+  hook, which is what makes a hook's own same-socket `elisctl` call safe.
 - `theme.set` operates on light and dark slots. Name/light aliases conflict; setting light preserves dark.
   Nil/empty means Ghostty built-in, while bare set clears both and disables sync. Dark enables sync,
   seeding missing light from current or Builtin Light; reserved `none` clears dark and sync but preserves
@@ -1700,13 +1700,13 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   running identity after a replacement. Absent means unknown, and equal metadata does not prove equal
   executables. It is deliberately not on the tree: `version` is the build preflight, and a tree copy
   would cost a file read on every poll.
-- `hangarctl version`'s `client:` line is HUMAN OUTPUT ONLY. `--json` stays the raw `ControlResponse` like
+- `elisctl version`'s `client:` line is HUMAN OUTPUT ONLY. `--json` stays the raw `ControlResponse` like
   every other command; a client-reported path in the protocol would be a field the server cannot vouch
   for. Resolve it with `_NSGetExecutablePath` + `realpath`, never `argv[0]`, and never print it after a
   server error.
 - A keymap- or palette-launched process inherits the APP's launch environment, not a surface's, so it has
   no `TERM_PROGRAM_VERSION` (`CustomCommandRunner` merges `ProcessInfo.processInfo.environment` with the
-  `AGT_*` context only). That is why a recipe preflight uses `hangarctl version` rather than the variable.
+  `AGT_*` context only). That is why a recipe preflight uses `elisctl version` rather than the variable.
 
 - `splitCwd` reports `cwd(for: .right)` while `hasSplit` is true, shown or hidden. It falls back from
   the last reported split cwd to its restored initial cwd, then the primary effective cwd. Omitted without
@@ -1721,14 +1721,14 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   surfaces, `realized`, `backedByZmx`, `remoteHost`, and `liveAttribution`/`splitLiveAttribution`.
 - `foregroundShell`/`splitForegroundShell` name the RECOGNIZED shell HOLDING a pane's foreground, present
   exactly when that pane's `foreground` is absent because a shell holds it.
-  For a pane that EXISTS, neither field means Hangar could not determine the foreground state — a bare nil
+  For a pane that EXISTS, neither field means Elis could not determine the foreground state — a bare nil
   foreground alone conflated the two, which `cookbook/park-and-resume` documents as a data-loss limit: an
   unreadable pane is parked as idle and replayed as a plain shell. Consult `hasSplit` before interpreting the
   split pair: with no split pane both are absent because there is no pane, and `hasSplit` is itself omitted
   when false. Do not make `hasSplit` always present to compensate.
 - The pair is NOT proof of an interactive prompt and must never be treated as permission to type. A builtin
   such as `read` or `vared`, and a shell loop, run inside the shell process, so argv stays the shell's and a
-  pane blocked on input is indistinguishable from one at a prompt; libghostty exposes no OSC 133 mark, so Hangar
+  pane blocked on input is indistinguishable from one at a prompt; libghostty exposes no OSC 133 mark, so Elis
   has no prompt signal to offer instead. This is why the field says `foregroundShell` rather than naming
   idleness. Recognized is `CommandRestore.knownShells` plus `$SHELL`; a shell outside both reports in
   `foreground` like any program, and widening that set is NOT the fix — `paneForeground` is the one
@@ -1758,7 +1758,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   session unrealized until the displays wake (#416). It is the main pane because that is what `--command`
   spawns on and what `session.type`/`session.text` address by default; per-pane liveness stays with the
   `fontSize`/`splitFontSize`/`scratchFontSize` triple, so do not add a second per-pane spelling.
-  `hangarctl tree` tags the row `(not realized)`, beside `(split hidden)`. Foreground shares the
+  `elisctl tree` tags the row `(not realized)`, beside `(split hidden)`. Foreground shares the
   restore capture's pid/sysctl/host-free extraction but adds one step the capture must never take.
   libghostty's foreground pid is `tcgetpgrp`, a process GROUP id, and a pane with no job-control shell
   leaves its program in the group led by setuid-root `login`, whose argv `KERN_PROCARGS2` refuses. The tree
@@ -1884,7 +1884,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   daemon observed detached. It is CHECKED AND REVALIDATED, never atomic — pinned zmx has no
   kill-if-detached, `--force` is consulted only when the connection fails, and a successful connection
   kills regardless of clients. So it re-lists immediately before mutating and drops anything that gained a
-  client; a client attaching from outside Hangar in the remaining gap can still be terminated, and the docs
+  client; a client attaching from outside Elis in the remaining gap can still be terminated, and the docs
   say so. It never passes `--force`, whose failed-connection branch unlinks a socket and exits zero,
   possibly leaving a live unresponsive daemon unreachable by name. Success counts ONLY the exact
   `killed session NAME` line, which zmx prints after draining to EOF.
@@ -1902,17 +1902,17 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   `the running app is too old for a pinned pane kill`.
 - After a successful kill the app marks the surface's exit handled through the existing
   `didHandleProcessExit`, never a parallel flag, and only AFTER the kill so a failed one leaves the natural
-  path working. It then runs `hangarApp.handlePaneExit`, which owns the model transition plus the promoted
+  path working. It then runs `elisApp.handlePaneExit`, which owns the model transition plus the promoted
   survivor's font callback, its dashboard membership and the refocus — a store-only transition skips all
   three. `alreadyFinalized` threads down the close chain so the teardown does not ask zmx to kill a name
   already gone. The suppression is gated on `backedByZmx`: a requested-live launch that fell back keeps its
   claimed daemons while each pane runs a plain shell, so an ungated kill would close a pane that never
   attached to what it destroyed.
-- `zmx.reset` is Hangar ▸ Reset Live Sessions… without the dialog, and both run `LiveResetCoordinator`.
+- `zmx.reset` is Elis ▸ Reset Live Sessions… without the dialog, and both run `LiveResetCoordinator`.
   The dispatcher refuses without `--force` before the host; the coordinator then refuses, in order, when
   Live is not both the configured and the launched mode, when the listing failed, when the claim walk is
   incomplete or claims a pane twice, and when no pane is selected.
-  `LiveReset.select` in HangarCore joins `paneClaims()` to the listing; the dialog counts distinct sessions
+  `LiveReset.select` in ElisCore joins `paneClaims()` to the listing; the dialog counts distinct sessions
   and the reply carries `result.liveReset` (sessions, panes, pending, and `outdated` and `staleHost` sessions
   when any) plus the dialog body as `text`.
 - A pane is selected for one of three reasons, carried on each marker target. `outdated`: its daemon's
@@ -1958,7 +1958,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   whole-workspace teleport is out of scope, and several remote
   rows may sit side by side.
 - A row carries what a PICKER needs, not only what attach needs. Without that a caller has to run a second
-  ssh and join `hangarctl tree --json` by session id, paying another authentication for data the walk
+  ssh and join `elisctl tree --json` by session id, paying another authentication for data the walk
   already held and discarded. The exact fields are below, plus the far node's non-idle
   `status`/`statusColor`/`statusShape`, which File ▸ Attach Remote draws on its rows.
 - A remote pane is an ORDINARY command surface whose command is ssh. There is no new surface kind, no new
@@ -1969,10 +1969,10 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   `ControlServer.attachedRoute`: `session.terminate` (`session close --terminate`; a local or server window row
   closes as `session.close` does), `session.restart`, a pinned `zmx.kill` (`zmx.kill.pane` on the origin's pane
   token), Convert to Companion, Duplicate, `session.split` and `.split.close`, `session.scratch`, and
-  `session.restore` (refused for an hangar-server origin with `hangar-server keeps every pane running`, as on a
+  `session.restore` (refused for an elis-server origin with `elis-server keeps every pane running`, as on a
   server window's row). `AttachedForward` owns each origin argv, run once through `RemoteSession.controlCommand`
   from a worker: never retried, never done locally instead, and an answer that does not decode is reported as
-  unknown. An origin refusing the command or a field is `the hangar on <host> is too old for this`. The GUI
+  unknown. An origin refusing the command or a field is `the elis on <host> is too old for this`. The GUI
   paths share the route through `AppActions.forwardAttached`. A request the dispatcher's own argument checks
   refuse (`ControlDispatcher.refusesArguments`) is never sent and gets the dispatcher's words; a pane token must
   name a pane of the origin's layout, and a pinned kill sends the role that pane holds on the origin. A batch
@@ -2009,7 +2009,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
 - The far side cannot know which name reached it, so `ControlRemoteTree.host` is stamped by the
   REQUESTING app after decoding and is the validated ssh destination it was given, never a self-reported
   hostname. It is absent from the bare local answer, which sshed nowhere.
-- Still read the exit status BEFORE the output. `hangarctl --json` prints a not-ok response to stdout and
+- Still read the exit status BEFORE the output. `elisctl --json` prints a not-ok response to stdout and
   exits nonzero, and an ssh that dies mid-write leaves output that may still parse, so an ok-looking
   payload from a nonzero process is never accepted.
 - Scope is EVERY open window on the far side, keyed by a live store the way `openCounts` tests it. Rows
@@ -2017,7 +2017,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   the ids, because neither rename path nor `addWorkspace` enforces uniqueness, so two windows called
   `main` and a `dev` workspace in each are ordinary and name-grouping silently merges them.
 - A terminal session is offered only when the store reports `backedByZmx` AND every pane resolves to a `claimed`
-  daemon observed `running` under a Hangar daemon name. A claimed daemon alone proves nothing: a
+  daemon observed `running` under an Elis daemon name. A claimed daemon alone proves nothing: a
   requested-live launch that fell back preserves its daemons while showing fresh shells. An incomplete
   split is dropped whole, never offered half. These are ELIGIBILITY rules, not only a defence against a
   race, so losing the two network reads does not retire them: the zmx observation is still a subprocess
@@ -2036,7 +2036,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   reads each as `getenv orelse ""` with a length check, so empty IS unset to it, and because one
   convention across both panes beats two spellings of one intent. An inherited `ZMX_SESSION` is the
   dangerous one: attach reads it first and SWITCHES session instead of attaching, never reaching the
-  create-only guard. An inherited `ZMX_SESSION_PREFIX` resolves a name Hangar never created, since its
+  create-only guard. An inherited `ZMX_SESSION_PREFIX` resolves a name Elis never created, since its
   daemons are always unprefixed. The detach key is disabled for the same reason as locally — a detached
   pane has no way back. The tree read needs none of this: it goes through the far side's own app.
 - Two ssh shapes. Tree uses `-T` plus an outer process deadline, `ConnectTimeout` bounding the handshake
@@ -2059,22 +2059,22 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   character through the same `RemoteSession.isPlain` the argv builders use — outer whitespace is trimmed
   before the check — so the unresolved-session message can name the id it could not find. The later host
   interpolations are safe because reaching them means `treeCommand` already accepted it. JSON encoding
-  escapes control bytes, so the protocol framing was never at risk; `hangarctl` decodes and prints to a
+  escapes control bytes, so the protocol framing was never at risk; `elisctl` decodes and prints to a
   terminal, which is what this closes. Remote-supplied error detail is deliberately NOT sanitized beyond
   an edge trim: an ssh failure is worth reading intact, and a chosen remote is the same trust model as
   running ssh by hand.
-- The far side needs `hangarctl` on sshd's remote-command PATH — a machine merely running Hangar has no
+- The far side needs `elisctl` on sshd's remote-command PATH — a machine merely running Elis has no
   CLI an ssh command can find, and the read fails with exit 127. sshd's compiled-in default is
   `/usr/bin:/bin:/usr/sbin:/sbin`, so the tree chain APPENDS `CommandPath.standardDirectories`:
   `/usr/local/bin` where the Help action links, `/opt/homebrew/bin` where the cask does. Appending is what
-  leaves a PATH deliberately supplied to sshd, and a custom hangarctl already on it, ahead of those two.
+  leaves a PATH deliberately supplied to sshd, and a custom elisctl already on it, ahead of those two.
   State this precondition on every surface describing the setup, not only where it is demonstrated:
   `site/docs.html`, `site/commands.html`, `reference.md`, `SKILL.md` and `examples.md`.
 - That chain travels as `/bin/sh -c '<chain>'` because sshd runs a remote command through the ACCOUNT's
   shell, where a bare `VAR=value` assignment is a syntax error in fish and tcsh — the whole read then
-  fails before the first `hangarctl`, so it is not merely a PATH that failed to widen. `attachCommand`
+  fails before the first `elisctl`, so it is not merely a PATH that failed to widen. `attachCommand`
   already followed the same one-command rule, reaching it through `/usr/bin/env ZMX_DIR=...` rather than
-  an assignment. The account shell can also change under a running Hangar: live-backed panes survive a
+  an assignment. The account shell can also change under a running Elis: live-backed panes survive a
   `chsh` that a later sshd command then honors.
 - The runner is async behind an injected seam. `ControlActions` is `@MainActor`, so a blocking wait would
   freeze the UI for the whole network deadline, and the fake is what lets the end-to-end tests run without
@@ -2087,7 +2087,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   is the only one that closes it. A remote `overlay.close` does not leave the thread: it replies at once.
   Everything else stays inline, because dispatch
   refreshes the window cache in the same execution the fast path reads. Running an ssh inline instead
-  makes `zmx tree <this machine>` DEADLOCK: the far side's own `hangarctl` waits in the backlog this
+  makes `zmx tree <this machine>` DEADLOCK: the far side's own `elisctl` waits in the backlog this
   connection is holding. Local `zmx.list` blocks that thread too, on a subprocess bounded at 3s, and
   stays inline deliberately — contention is not deadlock. `ControlServerTests` pins the free accept
   thread by probing `window.list`, which the cache answers with no main-actor hop, so only a held ACCEPT
@@ -2119,7 +2119,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   holds its own press-any-key prompt, and the wrapper's one sanitized line — host, session, pane, exit
   status — can be read under the last remote screen. The wrapper runs as `/usr/bin/env /bin/sh -c`, since
   libghostty's `exec -l` would otherwise replace the shell with ssh and drop it. On ssh's own 255 it instead
-  resets the reporting modes the remote left on, shows a reconnecting bar naming the host, reports `RemoteLinkNotice` (`OSC 2;hangar-remote;<lead nonce>:lost`, intercepted beside
+  resets the reporting modes the remote left on, shows a reconnecting bar naming the host, reports `RemoteLinkNotice` (`OSC 2;elis-remote;<lead nonce>:lost`, intercepted beside
   `zmx-role;`) and waits on `cat`, which ends with the app's pty. The pane then never reaches `onExitHeld`;
   `PaneLead.linkLost` believes only the current attachment's nonce and runs the same `remotePaneStopped`
   cleanup. A failed probe's stderr is kept as the entry's `reason`, last non-empty line, sanitized and
@@ -2192,16 +2192,16 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   records the origin's own `recentID` on it.
 - `Session.locallyManagedPaneIdentities` is the single local-ownership predicate, empty for a remote
   session, read by `finalizePaneIdentities`, the direct `closeSplit` finalizer path, `liveClaims` and live
-  `finalizeWindowPanes`. Without it `liveClaims` invents an `hangar-<uuid>` claim for a pane whose daemon
-  is on another machine and the zmx commands resolve a session Hangar does not manage. Structural
+  `finalizeWindowPanes`. Without it `liveClaims` invents an `elis-<uuid>` claim for a pane whose daemon
+  is on another machine and the zmx commands resolve a session Elis does not manage. Structural
   `paneIdentity` stays valid either way: swap, promotion and control addressing still need it.
 - `ZmxLaunch.wrapsLocally` is the one gate both surface factories read, so a remote pane is never wrapped
   in a local daemon. Wrapping buys nothing for a session that never restores, and under live mode window
   close would drop the local client while the daemon kept ssh connected with no UI showing it.
 - Presentation carries status, context, the info line, notifications, the HUD and the layout of attached panes. Such a program runs
   on the origin and reaches the origin's socket, so without a stream the viewer sees terminal bytes only.
-  Every terminal attach opens one; a page row has only its page channel. The viewer runs `ssh -T <host> hangarctl zmx present <session>`, whose far end
-  bridges stdio to a `zmx.present` connection. The far-side `hangarctl` PATH precondition above applies.
+  Every terminal attach opens one; a page row has only its page channel. The viewer runs `ssh -T <host> elisctl zmx present <session>`, whose far end
+  bridges stdio to a `zmx.present` connection. The far-side `elisctl` PATH precondition above applies.
 - The stream is newline-delimited JSON, `PresentationFrame` with `gen`, `rev` and a body. The hub registers
   a subscriber BEFORE it takes the snapshot and holds deltas until the snapshot is sent, so nothing falls
   between the two. A viewer drops a frame from another generation or an old revision, and skips an unknown
@@ -2251,7 +2251,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   viewer as a nil frame. Stream end clears only the mirror.
 - The origin's `Session.agentSessionID` rides the `agent.session` frame and snapshot field into the row's own
   `agentSessionID`, and the viewer drops a value that is not a plain token.
-  An older origin or hangar-server sends none, so the row falls back to `remoteSessionID`.
+  An older origin or elis-server sends none, so the row falls back to `remoteSessionID`.
   Unlike status and context, stream end does not clear it, since it still names the conversation.
 - A mirrored HUD carries the origin's REMAINING time, and the viewer counts that down on its own clock.
   The two expiries are not synchronized, so the panels can close a moment apart; the origin's withdrawal
@@ -2303,10 +2303,10 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   (Open work, below). A late answer from the former presenter is refused.
 - An overlay handed over is a JOB. The origin reserves the slot, so the session stays uncovered here while
   no second overlay opens on it, and the viewer opens an ordinary overlay running
-  `ssh -tt <origin> hangarctl session overlay run-job <job>`. That helper claims the job over
+  `ssh -tt <origin> elisctl session overlay run-job <job>`. That helper claims the job over
   `session.overlay.job.run`, which is the claim itself: one winner against a 30-second launch deadline,
   after which a late claim spawns nothing. The helper runs the program under the ssh terminal, in the cwd a
-  local overlay would get and with Hangar's session variables over the environment and `TERM` the ssh
+  local overlay would get and with Elis's session variables over the environment and `TERM` the ssh
   session gave the helper, and reports `started` and one outcome. For `TERM=xterm-ghostty` the helper fills
   an absent or empty `TERMINFO` from the database beside its resolved CLI, when one is found
   (`OverlayJobRunner.terminalEnvironment`), since an ssh-spawned overlay bypasses libghostty's terminfo setup. The first outcome
@@ -2333,7 +2333,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   page id of its own (`HtmlOverlay.replicaOf` names the origin's), as `HtmlSource.replica` for a file or an
   ordinary URL page that loads directly with viewer-local `--persistent` storage.
 - A file page's files and bridge requests travel over a channel of their own, never the shared stream: the
-  presenter runs `ssh -T <origin> hangarctl session overlay page-serve <token>`, whose single-use token
+  presenter runs `ssh -T <origin> elisctl session overlay page-serve <token>`, whose single-use token
   (bound to the page, the owning viewer's token and a 30-second deadline) is the claim, and the origin adopts
   the connection as a `PageServeStream`. It serves only files inside the grant (the page file alone without
   `--cwd`), off the main actor in 64 KiB chunks, and dispatches each bridge request through `HtmlBridge`
@@ -2416,7 +2416,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   its row is off screen, instead of refusing.
 - A lost viewer's work goes where new work would: on a Mac to `pendingRecipient`, else here, a page with its
   outcome still pending and dismissed only when no slot here can show it, a GUI ask that cannot be seen here as
-  `presentation-lost`; on hangar-server back to pending. A Mac shows here a recovered page the next viewer refuses. A page whose connection breaks after it loaded under its
+  `presentation-lost`; on elis-server back to pending. A Mac shows here a recovered page the next viewer refuses. A page whose connection breaks after it loaded under its
   current offer is offered once more, the same viewer included (`AppStore.remotePageLost`), and a retried page
   that breaks again before reporting loaded ends. A close of the copy that broke, overtaken by the channel's end,
   still dismisses the page offered since (`RemotePage.withdrawnOffer`). A first break with no load, or a viewer without offers, keeps the
@@ -2429,16 +2429,16 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
 - XCUITest exemption: `zmx.present` needs a second app as its peer, and its effects on a viewer are the
   existing status, context, notification, HUD and pane paths those suites already cover. `ControlServerRemotePresentationTests`
   runs both roles in one process over the real bridge binary instead.
-## hangar-server and remote windows
+## elis-server and remote windows
 
 `site/docs.html#remote-server` owns the user contract and `site/commands.html#remote` the commands.
 
-- hangar-server (`HangarServerKit`, product `hangar-server`) keeps a windowless `AppStore` on Linux.
+- elis-server (`ElisServerKit`, product `elis-server`) keeps a windowless `AppStore` on Linux.
   Every pane is a zmx daemon in a systemd user scope of its own, so a server restart or crash keeps it.
 - `ServerCommandPolicy.served` is default-deny: a protocol command reaches the server's store only once it
   is listed there, and `HeadlessCommandPolicy` gives the physical-window reason for the rest.
-- The Linux rendezvous is `ControlResolve.defaultStateDirectory`: `$XDG_STATE_HOME/hangar` (absolute only)
-  or `~/.local/state/hangar`, so a bare `hangarctl` over ssh finds the socket. zmx sockets live under
+- The Linux rendezvous is `ControlResolve.defaultStateDirectory`: `$XDG_STATE_HOME/elis` (absolute only)
+  or `~/.local/state/elis`, so a bare `elisctl` over ssh finds the socket. zmx sockets live under
   `XDG_RUNTIME_DIR`, and the server refuses to start without one (`ServerConfiguration`).
 - `catalog.subscribe` hands its descriptor to a stream like `zmx.present`: a hello with `CatalogVersions`,
   a snapshot carrying `epoch`, `rev` and `catalogID`, then diffs (`CatalogHub`, `CatalogDiff`).
@@ -2458,7 +2458,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   relaunched, and a restart forgets everything still waiting.
 - A viewer tells a headless origin from a Mac by `RemoteBinding.originHeadless`, from `zmx.tree`'s
   `headless`. Only for such a row does a GUI ask for an offscreen row wait hidden and a busy window queue a
-  pick. `version` reports `headless`, and the CLI binds an untargeted pick to `HANGAR_SESSION_ID` only then.
+  pick. `version` reports `headless`, and the CLI binds an untargeted pick to `ELIS_SESSION_ID` only then.
 - A remote window's store is filled by `RemoteCatalogMirror` from `RemoteCatalogClient`'s stream, over
   `SshConnectionPool` masters of at most eight channels each, below stock sshd's `MaxSessions 10`.
   A pane joined to a master ignores its own ServerAlive options, so the master runs the pane attach's
@@ -2470,7 +2470,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   A remote window's terminal row takes `customName` as its own, so an unnamed row follows its terminal title as a
   local one does (#991); a page row takes `name`. An omitted `customName` marks an older server, whose `name` is
   taken instead, so the server sends `""` for an unnamed session, never nil.
-- A loopback URL page on an origin, hangar-server or a Mac, opens through `PooledForward` on the row's ssh master, or
+- A loopback URL page on an origin, elis-server or a Mac, opens through `PooledForward` on the row's ssh master, or
   a standalone `RemotePortForward`, only for a presenter listing `PresentationHub.pageForwardKind`.
 - The server keeps page rows: `session.page`, `session.companion.page` and `session.companion.page.attach` are
   served, the page rows take operation receipts, and a loopback URL is refused
@@ -2489,7 +2489,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   - Advertisement: its `version` keeps `versions` nil and adds `macCatalog`, so an older viewer refuses before it
     subscribes; the hello names the window (`CatalogHello.window`, saved as `WindowSource.originWindow`).
     `OriginCatalogRefusal` answers through `CatalogFrame.refused(reason, final)`: only a closed window is retried.
-  - `CatalogStream`, `CatalogHub` and `CatalogOperationBook` are shared with hangar-server behind `CatalogStreamHost`
+  - `CatalogStream`, `CatalogHub` and `CatalogOperationBook` are shared with elis-server behind `CatalogStreamHost`
     and `CatalogOperationHost`. `OriginCatalog` holds one window's hub, `CatalogPublisher` and receipts from first use
     until quit, on `ControlServer.originEpoch`, and rebinds to the store when the window reopens.
   - Publication: `CatalogPublisher` reruns the projection under Observation and `markDirty` covers mail and Recent
@@ -2515,7 +2515,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   sends bytes it classifies as typing, which `session.type` on the origin is, and so is a terminal's reply
   to a Kitty keyboard-status query. `scripts/zmx-patches/0001-explicit-leadership.patch` adds an opt-in:
   a client attached with `ZMX_MANAGED=<nonce>` leads only by claiming at attach (`ZMX_MANAGED_CLAIM`), its
-  input is dropped while it follows, and a resize from it never claims a vacant slot. Every attach Hangar
+  input is dropped while it follows, and a resize from it never claims a vacant slot. Every attach Elis
   starts is managed; a stock client on the same daemon keeps upstream behaviour.
 - `zmx.attach` claims in every pane, so the attaching Mac's grid applies with no key press. A local pane
   attaches WITHOUT the claim: it leads a daemon nobody leads, and one relaunched under another Mac's lead
@@ -2531,7 +2531,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   included, while the daemon goes on enforcing a role the app never learned: a follower's
   `session.type` would answer ok for input the daemon drops. `GhosttyApp.clearStaticTitle` therefore
   clears the key in EVERY config build, reload and per-surface overlay included, keeps the string as
-  `staticTitle`, and Hangar applies it itself where libghostty used to: when a pane is wired, in place of
+  `staticTitle`, and Elis applies it itself where libghostty used to: when a pane is wired, in place of
   every title a program sets, and to every surface on a reload.
 - The client writes a report only where it cannot split an escape sequence or a UTF-8 character,
   tracked with Ghostty's own `Stream.nextSliceUntilGround`, and forces one with CAN after 250 ms. The
@@ -2551,8 +2551,8 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   arrives and cannot take a lead someone claimed meanwhile. In place repair was rejected: libghostty
   reports a new grid before its terminal has it, and the role report reaches the app a main-queue hop
   after the bytes behind it, so a replay could be parsed at the old grid.
-- `hangarApp.reattachPane` runs none of the pane's close paths: session, daemon and pane identity stay,
-  so the program keeps its `HANGAR_PANE_ID`. The cover stays up from the swap until the new client's
+- `elisApp.reattachPane` runs none of the pane's close paths: session, daemon and pane identity stay,
+  so the program keeps its `ELIS_PANE_ID`. The cover stays up from the swap until the new client's
   first report. An open search owned by the old surface is cleared synchronously, since END_SEARCH
   answers through a callback `destroySurface` clears first; a dashboard cell's transient font is carried
   as the override and never seeds the new surface's own size. `remotePaneStopped` drops the pane's

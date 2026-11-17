@@ -60,21 +60,21 @@ static void ensureProfile()
     if (!entry.readEntry("DefaultProfile", QString()).isEmpty())
         return;
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/konsole");
-    const QString file = dir + QStringLiteral("/hangar.profile");
+    const QString file = dir + QStringLiteral("/elis.profile");
     if (!QFile::exists(file)) {
         QDir().mkpath(dir);
         KConfig profile(file, KConfig::SimpleConfig);
-        profile.group(QStringLiteral("General")).writeEntry("Name", "hangar");
+        profile.group(QStringLiteral("General")).writeEntry("Name", "elis");
         profile.group(QStringLiteral("General")).writeEntry("Parent", "FALLBACK/");
         profile.group(QStringLiteral("General")).writeEntry("TerminalMargin", 10);
         profile.group(QStringLiteral("Appearance")).writeEntry("ColorScheme", "Breeze");
         profile.sync();
     }
-    entry.writeEntry("DefaultProfile", "hangar.profile");
+    entry.writeEntry("DefaultProfile", "elis.profile");
     entry.sync();
 }
 
-// hangar --install agent-hooks|cli|skill|all [--home DIR]: the extras the launch installs, run by hand
+// elis --install agent-hooks|cli|skill|all [--home DIR]: the extras the launch installs, run by hand
 static int installFromCommandLine(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
@@ -104,18 +104,18 @@ int main(int argc, char **argv)
         return installFromCommandLine(argc, argv);
     QApplication app(argc, argv);
     app.installEventFilter(new SmoothWheel(&app));
-    app.setApplicationName(QStringLiteral("hangar")); // also names the Konsole-part profile namespace
+    app.setApplicationName(QStringLiteral("elis")); // also names the Konsole-part profile namespace
     app.setApplicationVersion(QLatin1String(appVersion));
-    app.setDesktopFileName(QStringLiteral("hangar"));
+    app.setDesktopFileName(QStringLiteral("elis"));
     Q_INIT_RESOURCE(resources); // before the window: the fallback icon lives in the static UI library
-    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("hangar"), QIcon(QStringLiteral(":/hangar.png"))));
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("elis"), QIcon(QStringLiteral(":/elis.png"))));
 
     const QString dir = stateDir();
     QDir().mkpath(dir);
     // two instances on one state dir would each rewrite the whole file from memory and lose the other's sessions
-    QLockFile lock(dir + QStringLiteral("/hangar.lock"));
+    QLockFile lock(dir + QStringLiteral("/elis.lock"));
     if (!lock.tryLock(0)) {
-        QMessageBox::warning(nullptr, QStringLiteral("Hangar"), QStringLiteral("Hangar is already running on %1").arg(dir));
+        QMessageBox::warning(nullptr, QStringLiteral("Elis"), QStringLiteral("Elis is already running on %1").arg(dir));
         return 1;
     }
 
@@ -157,8 +157,8 @@ int main(int argc, char **argv)
             w->save();
         library.saveIndex();
     });
-    installExtrasOnUpdate(); // first launch or a new install: hooks, skill and the hangarctl link follow the build
-    if (const QString shot = qEnvironmentVariable("HANGAR_SCREENSHOT"); !shot.isEmpty()) // dev aid for UI review
+    installExtrasOnUpdate(); // first launch or a new install: hooks, skill and the elisctl link follow the build
+    if (const QString shot = qEnvironmentVariable("ELIS_SCREENSHOT"); !shot.isEmpty()) // dev aid for UI review
         QTimer::singleShot(6000, &window, [&window, shot] { window.grab().save(shot); });
 
     return app.exec();

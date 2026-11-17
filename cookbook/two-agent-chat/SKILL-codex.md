@@ -1,6 +1,6 @@
 ---
 name: peer-chat
-description: 'Hold a back-and-forth conversation with Claude Code running in the other pane of this Hangar session''s split, as peers. Use when the user says "chat with claude", "talk to claude", "work with claude", "do this with claude", "build this with claude", "discuss this with claude", or when a prompt arrives starting with "Chat from Claude:". Not for a one-shot task handed to Claude, and not for a read-only second opinion.'
+description: 'Hold a back-and-forth conversation with Claude Code running in the other pane of this Elis session''s split, as peers. Use when the user says "chat with claude", "talk to claude", "work with claude", "do this with claude", "build this with claude", "discuss this with claude", or when a prompt arrives starting with "Chat from Claude:". Not for a one-shot task handed to Claude, and not for a read-only second opinion.'
 ---
 
 # Peer chat, Codex side
@@ -8,7 +8,7 @@ description: 'Hold a back-and-forth conversation with Claude Code running in the
 Talk with Claude Code in the other pane of the split. The user reads both panes, so the conversation
 itself is the result even when code comes out of it.
 
-Everything that touches the pane goes through `peer-chat.py`. Do not drive `hangarctl` directly:
+Everything that touches the pane goes through `peer-chat.py`. Do not drive `elisctl` directly:
 the script checks the target agent, window, composer and cursor, sends the body as bounded, separately
 observed pieces through `session type --stdin`, then sends the submit key after the final piece
 settles. A raw command bypasses those checks.
@@ -53,8 +53,8 @@ Say so and let him decide; never pass `--session` with an id you inferred, and n
 to see if it works.
 
 Before typing, the script confirms the target pane really is running Claude Code, looking for
-`claude` in what Hangar reports for that pane. A wrapper script is common here, and then that name
-is what Hangar sees instead: add `--target-command <name>` with the wrapper's name and the send goes
+`claude` in what Elis reports for that pane. A wrapper script is common here, and then that name
+is what Elis sees instead: add `--target-command <name>` with the wrapper's name and the send goes
 through; the name to use is recorded here at setup time. Never guess a name after a refusal and
 never retry with a different one until a human has told you which is right.
 

@@ -1,0 +1,806 @@
+import ElisCore
+import AppKit
+import os
+import SwiftUI
+
+private let logger = Logger(subsystem: "ua.naiksoftware.elis", category: "SettingsView")
+
+/// The Settings window (Cmd+,): six tabs — General (mouse, sessions, ghostty config), Appearance
+/// (font/theme/cursor + window translucency + mute), Interface (per-element title-bar and sidebar chrome
+/// visibility), Notifications (banner / badge / attention toggles), Agent Status (sidebar glyph colors and
+/// shapes + blocked sound + auto-follow), and Key Mapping (config directory + keymap diagnostics + Reload).
+/// Throughout, a control's binding maps its DEFAULT value back to nil so `settings.json` stays minimal.
+struct SettingsView: View {
+    let model: SettingsModel
+
+    /// Identifies each tab. The explicit selection binding keeps the window opening on General: without it
+    /// SwiftUI's Settings scene persists the last tab to `selectedTabIndex` in defaults and restores it.
+    private enum Tab: Hashable { case general, appearance, interface, notifications, agentStatus, keyMapping }
+    @State private var selection: Tab = .general
+
+    var body: some View {
+        TabView(selection: $selection) {
+            GeneralSettingsView(model: model)
+                .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(Tab.general)
+            AppearanceSettingsView(model: model)
+                .tabItem { Label("Appearance", systemImage: "paintbrush") }
+                .tag(Tab.appearance)
+            InterfaceSettingsView(model: model)
+                .tabItem { Label("Interface", systemImage: "macwindow") }
+                .tag(Tab.interface)
+            NotificationsSettingsView(model: model)
+                .tabItem { Label("Notifications", systemImage: "bell") }
+                .tag(Tab.notifications)
+            AgentStatusSettingsView(model: model)
+                .tabItem { Label("Agent Status", systemImage: "smallcircle.filled.circle") }
+                .tag(Tab.agentStatus)
+            KeyMappingSettingsView(model: model)
+                .tabItem { Label("Key Mapping", systemImage: "keyboard") }
+                .tag(Tab.keyMapping)
+        }
+        .frame(width: 540, height: 710)
+        // without this a process-launch reopen (see elisApp's FB11763863 workaround) resurrects a stale
+        // Settings window on its last tab, stealing key focus from the real launch window.
+        .background(NonRestorableWindow())
+    }
+}
+
+/// Marks its hosting `NSWindow` non-restorable so macOS doesn't persist/reopen it.
+struct NonRestorableWindow: NSViewRepresentable {
+    func makeNSView(context _: Context) -> NSView { Probe() }
+    func updateNSView(_: NSView, context _: Context) {}
+
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            window.isRestorable = false
+            window.disableSnapshotRestoration()
+        }
+    }
+}
+
+/// A terse one-line caption under a control; only non-obvious controls carry one, so tabs fit unscrolled.
+struct SettingHint: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+    }
+}
+
+/// General tab: Mouse (scroll speed, right-click-pastes, link opening, workspace-row click) and Sessions
+/// (new-session directory, restore mode, the flagged view layout, here because the Interface tab is full,
+/// and the inherit-global-ghostty-config toggle, here because a section of its own made the tab scroll);
+/// visual and notification settings have their own tabs.
+private struct GeneralSettingsView: View {
+    let model: SettingsModel
+
+    var body: some View {
+        Form {
+            Section("Mouse") {
+                HStack {
+                    Text("Scroll speed")
+                    Slider(value: mouseScrollMultiplier, in: 1 ... 10, step: 1)
+                        .accessibilityIdentifier("settings-scroll-speed")
+                    Text("\(Int(model.settings.mouseScrollMultiplier ?? 3))x")
+                        .monospacedDigit()
+                        .frame(width: 42, alignment: .trailing)
+                }
+                Toggle("Right-click pastes", isOn: rightClickPaste)
+                    .accessibilityIdentifier("settings-right-click-paste")
+                Picker("Open links in", selection: linkOpenMode) {
+                    Text("Browser").tag(LinkOpenMode.browser)
+                    Text("Session overlay").tag(LinkOpenMode.overlay)
+                    Text("Session overlay at 95%").tag(LinkOpenMode.overlay95)
+                    Text("Session overlay at 75%").tag(LinkOpenMode.overlay75)
+                    Text("Session overlay at 50%").tag(LinkOpenMode.overlay50)
+                }
+                .accessibilityIdentifier("settings-link-open-mode")
+                Toggle("Click a workspace row to expand or collapse", isOn: workspaceRowClickExpands)
+                    .accessibilityIdentifier("settings-workspace-row-click-expands")
+            }
+
+            Section("Sessions") {
+                Picker("New sessions open in", selection: newSessionDirectory) {
+                    Text("Home directory").tag(AppSettings.NewSessionDirectory.home)
+                    Text("Current session's directory").tag(AppSettings.NewSessionDirectory.currentSession)
+                    Text("Custom directory").tag(AppSettings.NewSessionDirectory.custom)
+                }
+                .accessibilityIdentifier("settings-new-session-directory")
+                if newSessionDirectory.wrappedValue == .custom {
+                    HStack {
+                        Text(customDirectory ?? "Not set")
+                            .font(.system(size: 12).monospaced())
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                            .foregroundStyle(customDirectory == nil ? .secondary : .primary)
+                            .accessibilityIdentifier("settings-new-session-custom-dir")
+                        Spacer()
+                        Button("Choose…") { chooseCustomDirectory() }
+                            .accessibilityIdentifier("settings-new-session-choose")
+                    }
+                }
+                Picker("New sessions are added", selection: newSessionPlacement) {
+                    Text("At the end of the workspace").tag(AppSettings.NewSessionPlacement.end)
+                    Text("After the current session").tag(AppSettings.NewSessionPlacement.afterCurrent)
+                }
+                .accessibilityIdentifier("settings-new-session-placement")
+                Picker("Restore sessions", selection: restoreMode) {
+                    ForEach(RestoreMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .accessibilityIdentifier("settings-restore-mode")
+                SettingHint("Changes apply after restarting Elis.")
+                    .accessibilityIdentifier("settings-restore-restart-hint")
+                if model.settings.effectiveRestoreMode == .live,
+                   let reason = GhosttyApp.shared.liveRestoreUnavailableReason {
+                    SettingHint(reason)
+                }
+                Toggle("Confirm before closing a session", isOn: confirmCloseSession)
+                    .accessibilityIdentifier("settings-confirm-close-session")
+                Toggle("Allow undo after closing sessions and workspaces", isOn: closeGraceUndoEnabled)
+                    .accessibilityIdentifier("settings-close-grace-undo")
+                Picker("Flagged view layout", selection: flaggedViewLayout) {
+                    Text("Flat list").tag(FlaggedViewLayout.flat)
+                    Text("Flat list, names only").tag(FlaggedViewLayout.plain)
+                    Text("Workspace tree").tag(FlaggedViewLayout.tree)
+                }
+                .accessibilityIdentifier("settings-flagged-view-layout")
+                Toggle("Use my global Ghostty config", isOn: inheritGlobalGhosttyConfig)
+                    .accessibilityIdentifier("settings-inherit-global-ghostty")
+                SettingHint("Also loads ~/.config/ghostty/config.")
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    private var restoreMode: Binding<RestoreMode> {
+        Binding(get: { model.settings.effectiveRestoreMode }, set: { model.setRestoreMode($0) })
+    }
+
+    private var confirmCloseSession: Binding<Bool> {
+        Binding(get: { model.settings.confirmCloseSession ?? false },
+                set: { model.setConfirmCloseSession($0 ? true : nil) })
+    }
+
+    /// Default ON; turning it off stores false and makes GUI closes immediate.
+    private var closeGraceUndoEnabled: Binding<Bool> {
+        Binding(get: { model.settings.closeGraceUndoEnabled ?? true },
+                set: { model.setCloseGraceUndoEnabled($0 ? nil : false) })
+    }
+
+    private var inheritGlobalGhosttyConfig: Binding<Bool> {
+        Binding(get: { model.settings.inheritGlobalGhosttyConfig ?? false },
+                set: { model.setInheritGlobalGhosttyConfig($0 ? true : nil) })
+    }
+
+    /// Default ON. Drives the ghostty `right-click-action` key (paste when on, ignore when off).
+    private var rightClickPaste: Binding<Bool> {
+        Binding(get: { model.settings.rightClickPaste ?? true },
+                set: { model.setRightClickPaste($0 ? nil : false) })
+    }
+
+    private var linkOpenMode: Binding<LinkOpenMode> {
+        Binding(get: { model.settings.effectiveLinkOpenMode },
+                set: { model.setLinkOpenMode($0) })
+    }
+
+    private var flaggedViewLayout: Binding<FlaggedViewLayout> {
+        Binding(get: { model.settings.effectiveFlaggedViewLayout },
+                set: { model.setFlaggedViewLayout($0) })
+    }
+
+    /// workspaceRowClickExpands defaults on; off stores false and leaves the triangle and row icon as hit targets.
+    private var workspaceRowClickExpands: Binding<Bool> {
+        Binding(get: { model.settings.workspaceRowClickExpands ?? true },
+                set: { model.setWorkspaceRowClickExpands($0 ? nil : false) })
+    }
+
+    /// Default 3. The config emits 3 either way, so the default speed is effective regardless.
+    private var mouseScrollMultiplier: Binding<Double> {
+        Binding(get: { model.settings.mouseScrollMultiplier ?? 3 },
+                set: { model.setMouseScrollMultiplier($0 == 3 ? nil : $0) })
+    }
+
+    /// The directory to display, treating nil OR empty as "unset" to match `resolveNewSessionCwd` (home for
+    /// both), so a blank hand-edited `settings.json` value renders as "Not set", not a blank styled path.
+    private var customDirectory: String? {
+        let dir = model.settings.newSessionCustomDirectory
+        return dir?.isEmpty == false ? dir : nil
+    }
+
+    /// The new-session directory mode; nil (the default) or an unknown stored value resolves to `.home`.
+    private var newSessionDirectory: Binding<AppSettings.NewSessionDirectory> {
+        Binding(get: { model.settings.effectiveNewSessionDirectory },
+                set: { model.setNewSessionDirectory($0 == .currentSession ? nil : $0.rawValue) })
+    }
+
+    private var newSessionPlacement: Binding<AppSettings.NewSessionPlacement> {
+        Binding(get: { model.settings.effectiveNewSessionPlacement },
+                set: { model.setNewSessionPlacement($0 == .end ? nil : $0.rawValue) })
+    }
+
+    /// Pick the `custom` new-session mode's fixed directory with the standard open panel (dirs only), persist.
+    private func chooseCustomDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = DirectoryPanelDefaults.url(paths: customDirectory, model.activeSessionCwd)
+        panel.prompt = "Choose"
+        panel.message = "Choose a directory for new sessions"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        model.setNewSessionCustomDirectory(url.path)
+    }
+}
+
+/// Interface tab: per-element title-bar and sidebar chrome visibility, grouped by surface, two toggles per
+/// row so the tab keeps fitting the fixed 540×710 window as the element set grows, plus the quick terminal's
+/// panel size — that panel belongs to no window, so it is not a Window setting. A toggle off adds the
+/// element to `AppSettings.hiddenInterfaceElements`, a `hiddenByDefault` one toggled on to
+/// `shownInterfaceElements`, and both live-apply — title-bar and footer elements re-gate in open windows on
+/// `.elisAppearanceChanged`, the add-session "+" on hover.
+private struct InterfaceSettingsView: View {
+    let model: SettingsModel
+
+    var body: some View {
+        Form {
+            twoColumnSection("Title Bar", elements: InterfaceElement.settingsOrder(in: .titleBar), fill: { Spacer() },
+                             trailing: { EmptyView() })
+            // the multi-window toggle and the info-line picker share the Sidebar section's last row: the tab is
+            // full at 540x710, and a row or section header of their own would push the quick-terminal Size off.
+            twoColumnSection("Sidebar", elements: InterfaceElement.settingsOrder(in: .sidebar), fill: { EmptyView() },
+                             trailing: {
+                HStack(spacing: 16) {
+                    sessionInfoPicker.frame(maxWidth: .infinity)
+                    Divider()
+                    Toggle(isOn: autoHideSidebarInactiveWindows) {
+                        HStack(spacing: 6) {
+                            Color.clear.frame(width: 18).accessibilityHidden(true)
+                            Text("Active window only")
+                        }
+                    }
+                    .accessibilityLabel("Active window only")
+                    .accessibilityIdentifier("settings-auto-hide-inactive-sidebars")
+                    .frame(maxWidth: .infinity)
+                }
+            })
+            Section("Quick Terminal") {
+                Picker("Size", selection: quickTerminalSizePercent) {
+                    Text("Default").tag(Int?.none)
+                    ForEach(QuickTerminalMetrics.sizePercentChoices, id: \.self) { percent in
+                        Text("\(percent)% of screen").tag(Int?.some(percent))
+                    }
+                }
+                .accessibilityIdentifier("settings-quick-terminal-size")
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    /// Default OFF; ON hides the sidebar on every non-frontmost window.
+    private var autoHideSidebarInactiveWindows: Binding<Bool> {
+        Binding(get: { model.settings.autoHideSidebarInactiveWindows ?? false },
+                set: { model.setAutoHideSidebarInactiveWindows($0 ? true : nil) })
+    }
+
+    /// The quick-terminal panel's share of the screen; nil is the built-in size, not a percentage.
+    private var quickTerminalSizePercent: Binding<Int?> {
+        Binding(get: { model.settings.effectiveQuickTerminalSizePercent },
+                set: { model.setQuickTerminalSizePercent($0) })
+    }
+
+    /// twoColumnSection lays toggles out TWO per row, each filling half the row around a centered `Divider` so
+    /// the columns read as EVEN and visibly separated; an odd final element pairs with `fill`.
+    @ViewBuilder
+    private func twoColumnSection(_ title: String, elements: [InterfaceElement], @ViewBuilder fill: @escaping () -> some View,
+                                  @ViewBuilder trailing: () -> some View) -> some View {
+        Section(title) {
+            ForEach(Array(stride(from: 0, to: elements.count, by: 2)), id: \.self) { start in
+                HStack(spacing: 16) {
+                    toggle(for: elements[start]).frame(maxWidth: .infinity)
+                    Divider()
+                    if start + 1 < elements.count {
+                        toggle(for: elements[start + 1]).frame(maxWidth: .infinity)
+                    } else {
+                        fill().frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            trailing()
+        }
+    }
+
+    /// One element's show/hide toggle: ON = visible (the default), so hiding is the opt-in that writes.
+    private func toggle(for element: InterfaceElement) -> some View {
+        Toggle(isOn: binding(for: element)) {
+            HStack(spacing: 6) {
+                Group {
+                    if element.symbolName != nil {
+                        element.icon().foregroundStyle(.secondary)
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(width: 18).accessibilityHidden(true)
+                Text(element.displayName)
+            }
+        }
+        .accessibilityLabel(element.displayName)
+        .accessibilityIdentifier("settings-interface-\(element.rawValue)")
+    }
+
+    private func binding(for element: InterfaceElement) -> Binding<Bool> {
+        Binding(get: { !model.settings.isInterfaceElementHidden(element) },
+                set: { model.setInterfaceElementVisible(element, visible: $0) })
+    }
+
+    private var sessionInfoPicker: some View {
+        Picker(selection: Binding(get: { model.settings.effectiveSessionInfoDisplay },
+                                  set: { model.setSessionInfoDisplay($0) })) {
+            ForEach(SessionInfoDisplay.allCases, id: \.self) { Text($0.displayName).tag($0) }
+        } label: {
+            HStack(spacing: 6) {
+                Color.clear.frame(width: 18).accessibilityHidden(true)
+                Text("Session info").fixedSize()
+            }
+        }
+        .accessibilityIdentifier("settings-session-info-display")
+    }
+}
+
+/// Notifications tab: the banner / badge / attention-indicator toggles plus the Dock-bounce and sound
+/// pickers. All independent — the badge count keeps tracking and a bounce or sound can fire with banners off.
+private struct NotificationsSettingsView: View {
+    let model: SettingsModel
+
+    var body: some View {
+        Form {
+            Section("Notifications") {
+                Toggle("Show notification banners", isOn: notificationsEnabled)
+                    .accessibilityIdentifier("settings-notifications")
+
+                Toggle("Show notification badges", isOn: notificationBadgeEnabled)
+                    .accessibilityIdentifier("settings-notification-badges")
+
+                Picker("Badge reset", selection: badgeReset) {
+                    Text("On first key").tag(StatusReset.firstKey)
+                    Text("On Enter").tag(StatusReset.enter)
+                    Text("Disabled").tag(StatusReset.never)
+                }
+                .accessibilityIdentifier("settings-badge-reset")
+
+                Picker("Bounce Dock icon", selection: dockBounce) {
+                    Text("None").tag(DockBounce.off)
+                    Text("Once").tag(DockBounce.once)
+                    Text("Until focused").tag(DockBounce.untilFocused)
+                }
+                .accessibilityIdentifier("settings-dock-bounce")
+
+                Picker("Notification sound", selection: notificationSound) {
+                    Text("None").tag("None")
+                    ForEach(StatusSoundPlayer.standardNames, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .accessibilityIdentifier("settings-notification-sound")
+
+                Toggle("Show attention indicator", isOn: attentionButtonEnabled)
+                    .accessibilityIdentifier("settings-attention-button")
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    /// Default ON.
+    private var notificationsEnabled: Binding<Bool> {
+        Binding(get: { model.settings.notificationsEnabled ?? true },
+                set: { model.setNotificationsEnabled($0 ? nil : false) })
+    }
+
+    /// Default ON.
+    private var notificationBadgeEnabled: Binding<Bool> {
+        Binding(get: { model.settings.notificationBadgeEnabled ?? true },
+                set: { model.setNotificationBadgeEnabled($0 ? nil : false) })
+    }
+
+    private var badgeReset: Binding<StatusReset> {
+        Binding(get: { model.settings.effectiveBadgeReset },
+                set: { model.setBadgeReset($0 == .firstKey ? nil : $0) })
+    }
+
+    /// Resolves nil (the default) to `.off`.
+    private var dockBounce: Binding<DockBounce> {
+        Binding(get: { model.settings.effectiveDockBounce },
+                set: { model.setDockBounce($0 == .off ? nil : $0) })
+    }
+
+    // the sound played when a notification is delivered; selecting one previews it, like macOS sound settings
+    private var notificationSound: Binding<String> {
+        Binding(get: { model.settings.notificationSoundName ?? "None" },
+                set: { name in
+                    let value = name == "None" ? nil : name
+                    model.setNotificationSoundName(value)
+                    if let value {
+                        Task {
+                            await StatusSoundPlayer.shared.preview(value, ifCurrent: { model.settings.notificationSoundName == value })
+                        }
+                    }
+                })
+    }
+
+    private var attentionButtonEnabled: Binding<Bool> {
+        Binding(get: { model.settings.attentionButtonEnabled ?? false },
+                set: { model.setAttentionButtonEnabled($0 ? true : nil) })
+    }
+}
+
+/// Agent Status tab: Colors and Shapes (a row per state — active/blocked/completed — with that glyph's color
+/// well and shape picker), Sound, Typing (which keystroke clears a blocked/completed glyph), Auto-follow (idle
+/// timeout + stay-on-active), and a Reset clearing the first three.
+private struct AgentStatusSettingsView: View {
+    /// Gap between a glyph row's color well and its shape picker.
+    private static let controlSpacing: CGFloat = 8
+    /// Column width every shape picker reserves: a menu button sizes to the glyph it shows and the
+    /// silhouettes differ by a few points, so without a fixed column the color wells jog between rows. Snug
+    /// enough to read as spacing, not a hole, with room above the widest silhouette's button.
+    private static let shapePickerWidth: CGFloat = 80
+
+    let model: SettingsModel
+
+    var body: some View {
+        Form {
+            Section("Colors and Shapes") {
+                glyphRow(.active)
+                glyphRow(.blocked)
+                glyphRow(.completed)
+            }
+
+            Section("Sound") {
+                Picker("Blocked sound", selection: blockedStatusSound) {
+                    Text("None").tag("None")
+                    ForEach(StatusSoundPlayer.standardNames, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .accessibilityIdentifier("settings-status-blocked-sound")
+            }
+
+            Section("Typing") {
+                Picker("Status reset", selection: statusReset) {
+                    Text("On first key").tag(StatusReset.firstKey)
+                    Text("On Enter").tag(StatusReset.enter)
+                    Text("Disabled").tag(StatusReset.never)
+                }
+                .accessibilityIdentifier("settings-status-clear")
+            }
+
+            Section("Navigation") {
+                Toggle("Attention navigation includes active sessions", isOn: attentionIncludesActive)
+                    .accessibilityIdentifier("settings-attention-includes-active")
+                Toggle("Attention navigation crosses windows", isOn: attentionNavigationAcrossWindows)
+                    .accessibilityIdentifier("settings-attention-across-windows")
+                Picker("Auto-follow blocked sessions", selection: autoFollowAttention) {
+                    Text("Disabled").tag(AppSettings.AutoFollowAttention.off)
+                    Text("5 sec idle").tag(AppSettings.AutoFollowAttention.s5)
+                    Text("10 sec idle").tag(AppSettings.AutoFollowAttention.s10)
+                    Text("30 sec idle").tag(AppSettings.AutoFollowAttention.s30)
+                    Text("60 sec idle").tag(AppSettings.AutoFollowAttention.s60)
+                    Text("5 min idle").tag(AppSettings.AutoFollowAttention.m5)
+                }
+                .accessibilityIdentifier("settings-auto-follow")
+                Toggle("Auto-follow away from a running session", isOn: autoFollowAwayFromRunning)
+                    .accessibilityIdentifier("settings-auto-follow-stay-active")
+                    .disabled(autoFollowAttention.wrappedValue == .off)
+            }
+
+            Section {
+                Button("Reset to defaults") { model.resetAgentStatus() }
+                    .accessibilityIdentifier("settings-status-reset")
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    /// One state's glyph row: the state name labels it, with the color well and shape picker trailing, both
+    /// label-hidden so the state name is the row's only visible label. The shape picker draws at the TRAILING
+    /// edge of its fixed-width column so the row ends flush with the tab's right margin — the column's default
+    /// center alignment left it floating inboard. Both bindings and both accessibility ids derive from the
+    /// state argument, so a row cannot label one status while driving another's setting.
+    private func glyphRow(_ status: AgentStatus) -> some View {
+        let color = statusColor(for: status)
+        let shape = statusShape(for: status)
+        return LabeledContent(status.rawValue.capitalized) {
+            HStack(spacing: Self.controlSpacing) {
+                ColorPicker("Color", selection: color, supportsOpacity: false)
+                    .labelsHidden()
+                    .accessibilityIdentifier("settings-status-\(status.rawValue)")
+                Picker("Shape", selection: shape) { shapeOptions(tint: NSColor(color.wrappedValue)) }
+                    .labelsHidden()
+                    .frame(width: Self.shapePickerWidth, alignment: .trailing)
+                    .accessibilityIdentifier("settings-status-shape-\(status.rawValue)")
+                    .accessibilityValue(shape.wrappedValue.displayName)
+            }
+        }
+    }
+
+    // binds to the resolved color (the user's hex or the system default); a pick stores the sRGB hex, and
+    // "Reset to defaults" clears it back to nil, the system color.
+    private func statusColor(for status: AgentStatus) -> Binding<Color> {
+        Binding(get: { Color(nsColor: NSColor(elisHex: storedColorHex(for: status)) ?? Self.defaultColor(for: status)) },
+                set: { setColorHex(NSColor($0).elisHexString, for: status) })
+    }
+
+    private func storedColorHex(for status: AgentStatus) -> String? {
+        switch status {
+        case .active: return model.settings.activeStatusColorHex
+        case .blocked: return model.settings.blockedStatusColorHex
+        case .completed: return model.settings.completedStatusColorHex
+        case .idle: return nil
+        }
+    }
+
+    private static func defaultColor(for status: AgentStatus) -> NSColor {
+        switch status {
+        case .active: return GhosttyApp.defaultActiveStatusColor
+        case .blocked: return .systemOrange
+        case .completed: return .systemGreen
+        case .idle: return .clear
+        }
+    }
+
+    private func setColorHex(_ hex: String?, for status: AgentStatus) {
+        switch status {
+        case .active: model.setActiveStatusColorHex(hex)
+        case .blocked: model.setBlockedStatusColorHex(hex)
+        case .completed: model.setCompletedStatusColorHex(hex)
+        case .idle: break
+        }
+    }
+
+    /// The options one shape picker shows: one per `StatusShape` from `allCases`, so it cannot drift from the
+    /// enum. Each entry is the symbol ALONE (a name beside it crowds the row), with the shape name kept as its
+    /// accessibility label for VoiceOver; `tint` is the row's live glyph color, so a color change redraws them.
+    @ViewBuilder
+    private func shapeOptions(tint: NSColor) -> some View {
+        ForEach(StatusShape.allCases, id: \.self) { shape in
+            Image(nsImage: Self.shapeImage(shape, tint: tint))
+                .accessibilityLabel(shape.displayName)
+                .tag(shape)
+        }
+    }
+
+    /// One picker option's glyph, drawn like the sidebar's: the symbol at the sidebar glyph point size, tinted
+    /// with the status's current color. NON-template — a menu recolors a template symbol to its own text color
+    /// and would wash out the previewed tint.
+    private static func shapeImage(_ shape: StatusShape, tint: NSColor) -> NSImage {
+        let config = NSImage.SymbolConfiguration(pointSize: StatusIconView.glyphPointSize, weight: GhosttyApp.symbolWeight(shape))
+            .applying(NSImage.SymbolConfiguration(paletteColors: [tint]))
+        guard let image = NSImage(systemSymbolName: shape.symbolName, accessibilityDescription: shape.displayName)?
+            .withSymbolConfiguration(config) else {
+            // a blank option row would silently offer an un-pickable-looking shape, so say which symbol failed
+            logger.error("no SF Symbol for status shape \(shape.rawValue, privacy: .public)")
+            return NSImage()
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    // the status's default shape maps back to nil; nil and the default render identically
+    private func statusShape(for status: AgentStatus) -> Binding<StatusShape> {
+        Binding(get: { model.settings.effectiveStatusShape(for: status) ?? status.defaultShape },
+                set: { setShape($0 == status.defaultShape ? nil : $0, for: status) })
+    }
+
+    private func setShape(_ shape: StatusShape?, for status: AgentStatus) {
+        switch status {
+        case .active: model.setActiveStatusShape(shape)
+        case .blocked: model.setBlockedStatusShape(shape)
+        case .completed: model.setCompletedStatusShape(shape)
+        case .idle: break
+        }
+    }
+
+    // the sound played when a session enters `blocked`; selecting one previews it, like the notification sound
+    /// Default first key; the default maps to nil so it never lands in the file.
+    private var statusReset: Binding<StatusReset> {
+        Binding(get: { model.settings.effectiveStatusReset },
+                set: { model.setStatusReset($0 == .firstKey ? nil : $0) })
+    }
+
+    private var blockedStatusSound: Binding<String> {
+        Binding(get: { model.settings.blockedStatusSoundName ?? "None" },
+                set: { name in
+                    let value = name == "None" ? nil : name
+                    model.setBlockedStatusSoundName(value)
+                    if let value {
+                        Task {
+                            await StatusSoundPlayer.shared.preview(value, ifCurrent: { model.settings.blockedStatusSoundName == value })
+                        }
+                    }
+                })
+    }
+
+    /// The auto-follow idle timeout; nil (the default) or an unknown stored value resolves to `.off`.
+    private var autoFollowAttention: Binding<AppSettings.AutoFollowAttention> {
+        Binding(get: { AppSettings.AutoFollowAttention(tolerant: model.settings.autoFollowAttention) },
+                set: { model.setAutoFollowAttention($0 == .off ? nil : $0.rawValue) })
+    }
+
+    private var attentionIncludesActive: Binding<Bool> {
+        Binding(get: { model.settings.attentionIncludesActive ?? false },
+                set: { model.setAttentionIncludesActive($0 ? true : nil) })
+    }
+
+    private var attentionNavigationAcrossWindows: Binding<Bool> {
+        Binding(get: { model.settings.attentionNavigationAcrossWindows ?? false },
+                set: { model.setAttentionNavigationAcrossWindows($0 ? true : nil) })
+    }
+
+    /// Inverted view of the stored `autoFollowStayOnActive` so the toggle reads forward — ON = do leave a
+    /// running session — instead of a double negative. The nil default means "follow away", so it shows ON.
+    private var autoFollowAwayFromRunning: Binding<Bool> {
+        Binding(get: { !(model.settings.autoFollowStayOnActive ?? false) },
+                set: { model.setAutoFollowStayOnActive($0 ? nil : true) })
+    }
+}
+
+/// Key Mapping tab: the config directory holding `keymap.conf` (picker + "Use Default"), a read-only
+/// parse-diagnostics list, and Reload. Both route through `SettingsModel`, which re-reads and re-parses the
+/// keymap and posts the change, updating the menu shortcuts, custom-command runner and action palette.
+private struct KeyMappingSettingsView: View {
+    let model: SettingsModel
+    @State private var enabledInputSources = TerminalInputSource.enabledSources()
+
+    /// configDirectoryPath is the directory shown in the field, matching `SettingsModel`'s own resolution.
+    private var configDirectoryPath: String {
+        ConfigPaths.configDirectory(
+            setting: model.settings.configDirectory,
+            stateDir: DebugStateDirectory.configStateDirectory(environment: ProcessInfo.processInfo.environment,
+                                                               liveDirectory: PersistenceStore.defaultDirectory),
+            home: FileManager.default.homeDirectoryForCurrentUser).path
+    }
+
+    var body: some View {
+        Form {
+            Section("Keyboard Layout") {
+                Picker("Lock in Elis", selection: terminalInputSource) {
+                    Text("Off").tag(String?.none)
+                    ForEach(inputSources, id: \.id) { source in
+                        Text(source.name).tag(String?.some(source.id))
+                    }
+                }
+                .accessibilityIdentifier("settings-terminal-input-source")
+                .onAppear { enabledInputSources = TerminalInputSource.enabledSources() }
+                // enabling a source means a trip to System Settings and back, so activation is the reload.
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    enabledInputSources = TerminalInputSource.enabledSources()
+                }
+            }
+
+            Section("Config Directory") {
+                HStack {
+                    Text(configDirectoryPath)
+                        .font(.system(size: 12).monospaced())
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .accessibilityIdentifier("settings-keymap-directory")
+                    Spacer()
+                    Button("Choose…") { chooseDirectory() }
+                        .accessibilityIdentifier("settings-keymap-choose")
+                    if model.settings.configDirectory != nil {
+                        Button("Use Default") { model.setConfigDirectory(nil) }
+                            .accessibilityIdentifier("settings-keymap-default")
+                    }
+                }
+                Text("The directory holding keymap.conf and hooks.conf. Changing it reloads both.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Diagnostics") {
+                if model.keymapDiagnostics.isEmpty {
+                    Text("No issues.")
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings-keymap-diagnostics")
+                        .accessibilityValue(diagnosticsSummary)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(model.keymapDiagnostics.enumerated()), id: \.offset) { _, diagnostic in
+                            Text(diagnosticLine(diagnostic))
+                                .font(.system(size: 12).monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("settings-keymap-diagnostics")
+                    .accessibilityValue(diagnosticsSummary)
+                }
+                Button("Reload") { model.reloadKeymap() }
+                    .accessibilityIdentifier("settings-keymap-reload")
+            }
+
+            Section("Hooks") {
+                if model.hooksDiagnostics.isEmpty {
+                    Text("No issues.")
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings-hooks-diagnostics")
+                        .accessibilityValue(hooksDiagnosticsSummary)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(model.hooksDiagnostics.enumerated()), id: \.offset) { _, diagnostic in
+                            Text(diagnosticLine(diagnostic))
+                                .font(.system(size: 12).monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("settings-hooks-diagnostics")
+                    .accessibilityValue(hooksDiagnosticsSummary)
+                }
+                Button("Reload") { model.reloadHooks() }
+                    .accessibilityIdentifier("settings-hooks-reload")
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    /// inputSources is what macOS can select, plus a saved source it no longer can, so the picker still
+    /// shows the stored choice.
+    private var inputSources: [KeyboardInputSource] {
+        let enabled = enabledInputSources
+        guard let saved = model.settings.terminalInputSource, !enabled.contains(where: { $0.id == saved }) else {
+            return enabled
+        }
+        return enabled + [KeyboardInputSource(id: saved, name: "\(saved) (unavailable)")]
+    }
+
+    private var terminalInputSource: Binding<String?> {
+        Binding(get: { model.settings.terminalInputSource },
+                set: { model.setTerminalInputSource($0) })
+    }
+
+    private var hooksDiagnosticsSummary: String {
+        model.hooksDiagnostics.isEmpty ? "No issues." : model.hooksDiagnostics.map(diagnosticLine).joined(separator: " | ")
+    }
+
+    /// A diagnostic as one line, "line N: message"; a whole-file/cross-section one (line 0) shows the message.
+    private func diagnosticLine(_ diagnostic: KeymapDiagnostic) -> String {
+        diagnostic.line > 0 ? "line \(diagnostic.line): \(diagnostic.message)" : diagnostic.message
+    }
+
+    /// The diagnostics joined into one accessibility value, so a UI test reads the full content from the
+    /// container without scrolling each row into view. "No issues." when empty.
+    private var diagnosticsSummary: String {
+        model.keymapDiagnostics.isEmpty ? "No issues." : model.keymapDiagnostics.map(diagnosticLine).joined(separator: " | ")
+    }
+
+    /// Pick a config directory with the standard open panel (directories only), then persist + reload.
+    private func chooseDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = DirectoryPanelDefaults.url(paths: configDirectoryPath, model.activeSessionCwd)
+        panel.prompt = "Choose"
+        panel.message = "Choose a directory for keymap.conf"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        model.setConfigDirectory(url.path)
+    }
+}

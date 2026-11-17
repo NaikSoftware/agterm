@@ -26,9 +26,9 @@ It is the record format [revdiff](https://github.com/umputun/revdiff) prints, so
 
 ## Requirements
 
-- Hangar 0.38.1 or later. `--fit` sizes the panel with `session overlay open --width/--height` and `session overlay resize`, which shipped in 0.38.1. The rest needs 0.35.0, which added `--chromeless` file pages, and 0.34.0, which added the page bridge with `session.overlay.submit` and `session overlay result --page`.
+- Elis 0.38.1 or later. `--fit` sizes the panel with `session overlay open --width/--height` and `session overlay resize`, which shipped in 0.38.1. The rest needs 0.35.0, which added `--chromeless` file pages, and 0.34.0, which added the page bridge with `session.overlay.submit` and `session overlay result --page`.
 - Python 3.10 or later, standard library only.
-- Claude Code for the skill. It uses Claude Code's `allowed-tools` and `CLAUDE_SKILL_DIR`, so it does not load in other agents as written. The script itself works from any agent or shell inside Hangar; see Usage.
+- Claude Code for the skill. It uses Claude Code's `allowed-tools` and `CLAUDE_SKILL_DIR`, so it does not load in other agents as written. The script itself works from any agent or shell inside Elis; see Usage.
 
 ## Setup
 
@@ -41,7 +41,7 @@ cp -R SKILL.md scripts assets ~/.claude/skills/webrev/
 
 The script finds `assets/` relative to its own directory, so the three must stay together. `scripts/webrev.py` is committed executable and `cp -R` keeps the bit.
 
-Set `HANGARCTL` in the environment Claude Code starts from if your `hangarctl` is not on its `PATH`.
+Set `ELISCTL` in the environment Claude Code starts from if your `elisctl` is not on its `PATH`.
 
 To review every draft before it goes out, not only when you ask, add a line like this to your `~/.claude/CLAUDE.md`:
 
@@ -53,7 +53,7 @@ Optional: set `WEBREV_STYLE=terminal` in the same environment to make the termin
 
 ## Usage
 
-Inside a Hangar session, ask Claude Code:
+Inside an Elis session, ask Claude Code:
 
 ```
 /webrev docs/plan.md
@@ -63,7 +63,7 @@ review this draft before posting
 
 On the page, `j`/`k` move between blocks, `a` or Enter annotates the current one, `A` opens the note for the whole file, `t` lists headings, `m` lists notes, and `n`/`p` jump between notes. `⌘↵` saves a note. `q` or the Submit button sends the review; `Esc`, `Q` or Cancel discards it, asking for a second press when notes would be lost. The skill file lists every key.
 
-The script runs without the skill too, from any shell or agent in a Hangar session:
+The script runs without the skill too, from any shell or agent in an Elis session:
 
 ```sh
 ~/.claude/skills/webrev/scripts/webrev.py review notes.md
@@ -75,15 +75,15 @@ It blocks until you answer. A submitted review exits 0 with the records on stdou
 
 ## How it works
 
-`webrev.py` builds one self-contained HTML file per review from `assets/page.html`. markdown-it 14.1.0 and highlight.js 11.11.1 are inlined from `assets/`, with their license texts beside them, so the page loads no script from the network; a CDN would run remote code in a page that can drive Hangar. The document goes into the page as JSON with every `<` escaped, so a `</script>` in it stays text. markdown-it runs with raw HTML off, because the page has the Hangar bridge and markup from the document must never become live.
+`webrev.py` builds one self-contained HTML file per review from `assets/page.html`. markdown-it 14.1.0 and highlight.js 11.11.1 are inlined from `assets/`, with their license texts beside them, so the page loads no script from the network; a CDN would run remote code in a page that can drive Elis. The document goes into the page as JSON with every `<` escaped, so a `</script>` in it stays text. markdown-it runs with raw HTML off, because the page has the Elis bridge and markup from the document must never become live.
 
-It opens the page with `session overlay open --html FILE --chromeless --js` on the session in `HANGAR_SESSION_ID`, marks the session's status as blocked and blinking, and polls `session overlay result --page` once a second. Submit calls `hangar.request('session.overlay.submit')` with the records as the value; Cancel calls `session.overlay.close`, which reads back as dismissed. When the outcome arrives, the script clears its status to idle, deletes the page file and prints the result. It does not restore the status it found: the session has one status, and replaying a block another pane set would claim it for this pane. An agent's own status hooks set its next state after the call returns. Both status writes pass `--pane` from `HANGAR_PANE` and `--pane-id` from `HANGAR_PANE_ID`, so they land on the pane that opened the review even after a split pane was swapped or promoted. Saved notes are kept in the page's local storage under a per-review key, so a theme change, which reloads the page, does not lose them. Text still open in an editor is not saved and is lost on that reload.
+It opens the page with `session overlay open --html FILE --chromeless --js` on the session in `ELIS_SESSION_ID`, marks the session's status as blocked and blinking, and polls `session overlay result --page` once a second. Submit calls `elis.request('session.overlay.submit')` with the records as the value; Cancel calls `session.overlay.close`, which reads back as dismissed. When the outcome arrives, the script clears its status to idle, deletes the page file and prints the result. It does not restore the status it found: the session has one status, and replaying a block another pane set would claim it for this pane. An agent's own status hooks set its next state after the call returns. Both status writes pass `--pane` from `ELIS_PANE` and `--pane-id` from `ELIS_PANE_ID`, so they land on the pane that opened the review even after a split pane was swapped or promoted. Saved notes are kept in the page's local storage under a per-review key, so a theme change, which reloads the page, does not lose them. Text still open in an editor is not saved and is lost on that reload.
 
-Every `hangarctl` call passes `--socket "$HANGAR_SOCKET"` when that variable is set. `hangarctl` never reads it, so without the flag a session running on a custom control socket would send its commands to the default one and fail to find its own session.
+Every `elisctl` call passes `--socket "$ELIS_SOCKET"` when that variable is set. `elisctl` never reads it, so without the flag a session running on a custom control socket would send its commands to the default one and fail to find its own session.
 
-`--fit` estimates the panel from the text: 80 columns for plain text, the longest line within 60 to 100 columns for markdown, and one row per wrapped line. The numbers are measured at an HTML page zoom of 1.0. Hangar reports the zoom only for an open page, in `tree --json`'s `htmlOverlays[].zoom`, so after opening the script reads it with `tree --window "$HANGAR_WINDOW_ID"` and resizes the panel once when it is not 1.0. Without `--window`, `tree` reports only the frontmost window, and a review opened in a background window would miss its page and keep the unscaled size.
+`--fit` estimates the panel from the text: 80 columns for plain text, the longest line within 60 to 100 columns for markdown, and one row per wrapped line. The numbers are measured at an HTML page zoom of 1.0. Elis reports the zoom only for an open page, in `tree --json`'s `htmlOverlays[].zoom`, so after opening the script reads it with `tree --window "$ELIS_WINDOW_ID"` and resizes the panel once when it is not 1.0. Without `--window`, `tree` reports only the frontmost window, and a review opened in a background window would miss its page and keep the unscaled size.
 
-The page takes its colors from the `--hangar-*` variables Hangar gives every page, so it follows the terminal theme. It also reads `sidebarBackgroundShift` from Hangar's `settings.json`, under `HANGAR_STATE_DIR` or `~/Library/Application Support/hangar`, to match the sidebar's tint.
+The page takes its colors from the `--elis-*` variables Elis gives every page, so it follows the terminal theme. It also reads `sidebarBackgroundShift` from Elis's `settings.json`, under `ELIS_STATE_DIR` or `~/Library/Application Support/elis`, to match the sidebar's tint.
 
 The skill runs the script as a foreground call with Claude Code's 600-second tool timeout. In a background task Claude Code's own status hooks would overwrite the blocked status the script sets. A review that outlasts the timeout is recovered from the `--output` file and `webrev.py result`, which the skill describes step by step.
 
@@ -91,12 +91,12 @@ The skill runs the script as a foreground call with Claude Code's 600-second too
 
 Opening a review replaces a HUD panel shown in the session's overlay slot. It refuses to open while another HTML page or a program overlay is in that slot; close it first.
 
-Closing the panel with ⌘W or `hangarctl session overlay close` reads as a cancel and drops any note still open in an editor, since it bypasses the page's own Cancel handling. Saved notes are dropped with it.
+Closing the panel with ⌘W or `elisctl session overlay close` reads as a cancel and drops any note still open in an editor, since it bypasses the page's own Cancel handling. Saved notes are dropped with it.
 
-A waiter that is killed leaves its page file in `$TMPDIR/webrev`, because the open page still reads it on a theme change. These files are not cleaned up. `webrev.py result` works only while the same Hangar instance runs, and Hangar keeps only the last 32 finished page outcomes; a completed `--output` file survives either, while one still reading `pending` needs `webrev.py result`.
+A waiter that is killed leaves its page file in `$TMPDIR/webrev`, because the open page still reads it on a theme change. These files are not cleaned up. `webrev.py result` works only while the same Elis instance runs, and Elis keeps only the last 32 finished page outcomes; a completed `--output` file survives either, while one still reading `pending` needs `webrev.py result`.
 
 The draft review is instructions to Claude Code, nothing more. Nothing stops a post or a commit when the skill is not invoked, and the CLAUDE.md line above only asks the agent to invoke it.
 
-`--fit` fails on a session presented from another Mac: Hangar refuses point sizes for a remote page, and the script exits 1 with that error. Run the review again without `--fit`.
+`--fit` fails on a session presented from another Mac: Elis refuses point sizes for a remote page, and the script exits 1 with that error. Run the review again without `--fit`.
 
 Markdown images in the reviewed document load from wherever they point, network included.

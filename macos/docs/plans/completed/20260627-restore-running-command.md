@@ -2,7 +2,7 @@
 
 ## Overview
 
-Today Hangar restores each session pane's working directory on relaunch, but a pane that was running a program (a gate `ssh`, `tail -f`, `top`) comes back as a plain shell. This feature optionally **re-runs the command each pane had in the foreground** at the last clean quit. Opt-in via a Settings ▸ General toggle, default off.
+Today Elis restores each session pane's working directory on relaunch, but a pane that was running a program (a gate `ssh`, `tail -f`, `top`) comes back as a plain shell. This feature optionally **re-runs the command each pane had in the foreground** at the last clean quit. Opt-in via a Settings ▸ General toggle, default off.
 
 Approach: **re-run** (capture the foreground argv at quit, re-spawn on launch). NOT the daemon/keep-alive model (Forge/Zmx run a sidecar daemon so PTYs survive — out of scope), and NOT name-only re-run (the one prior-art fork, `ryanbreen/ghostty-with-sessionexplorer`, drops arguments). We capture the **full argv** so `ssh gate -t "ssh server"` re-runs intact.
 
@@ -12,18 +12,18 @@ Key benefit: gate `ssh` sessions reconnect automatically after a restart; any si
 
 ## Context (from discovery)
 
-- **Project**: native macOS terminal, Swift 6 + SwiftUI + AppKit on libghostty. Host-free model/persistence/pure logic in the `HangarCore` SwiftPM package (`swift test`); app target owns SwiftUI + the libghostty C boundary + Darwin syscalls.
+- **Project**: native macOS terminal, Swift 6 + SwiftUI + AppKit on libghostty. Host-free model/persistence/pure logic in the `ElisCore` SwiftPM package (`swift test`); app target owns SwiftUI + the libghostty C boundary + Darwin syscalls.
 - **Files involved** (verified against the real code):
-  - `HangarCore/Sources/HangarCore/Snapshot.swift` — `SessionSnapshot` (`:59`, `splitCwd` at `:76`), the persisted shape.
-  - `HangarCore/Sources/HangarCore/Session.swift` — `Session` fields (`initialCommand` ~`:99`, `scratchCommand`, `splitCwd`/`initialSplitCwd`).
-  - `HangarCore/Sources/HangarCore/AppStore.swift` — `snapshot()` (`:639`, captures `splitCwd` at `:644`) and `restore(from:)` (`:661`, seeds `initialSplitCwd` at `:668`).
-  - `HangarCore/Sources/HangarCore/AppSettings.swift` — `Bool?` settings + the hand-written public `init` (`:81-103`); `notificationsEnabled` pattern.
-  - `Hangar/SettingsModel.swift` — the `set…(_:) { settings.x = value; persistAndApply() }` setters (`:77-85`).
-  - `Hangar/Views/SettingsView.swift` — General-tab `Toggle` + binding via `model.setNotificationsEnabled` (`:99-102`).
-  - `Hangar/hangarApp.swift` — the surface factories `makeSurface`/`makeSplitSurface`/`makeScratchSurface` (`initialCommand` passed at `:442`; `scratchCommand` read-then-nil run-once clear at `:597-599`) and the quit-flush (`AppDelegate.applicationWillTerminate`, per `.claude/rules/windows.md`).
-  - `Hangar/Ghostty/GhosttySurfaceView.swift` — `config.command` at `:428` (raw, argv-style exec); `readSelection()`/`inject(text:)` surface-method precedent; add `config.initial_input`.
+  - `ElisCore/Sources/ElisCore/Snapshot.swift` — `SessionSnapshot` (`:59`, `splitCwd` at `:76`), the persisted shape.
+  - `ElisCore/Sources/ElisCore/Session.swift` — `Session` fields (`initialCommand` ~`:99`, `scratchCommand`, `splitCwd`/`initialSplitCwd`).
+  - `ElisCore/Sources/ElisCore/AppStore.swift` — `snapshot()` (`:639`, captures `splitCwd` at `:644`) and `restore(from:)` (`:661`, seeds `initialSplitCwd` at `:668`).
+  - `ElisCore/Sources/ElisCore/AppSettings.swift` — `Bool?` settings + the hand-written public `init` (`:81-103`); `notificationsEnabled` pattern.
+  - `Elis/SettingsModel.swift` — the `set…(_:) { settings.x = value; persistAndApply() }` setters (`:77-85`).
+  - `Elis/Views/SettingsView.swift` — General-tab `Toggle` + binding via `model.setNotificationsEnabled` (`:99-102`).
+  - `Elis/elisApp.swift` — the surface factories `makeSurface`/`makeSplitSurface`/`makeScratchSurface` (`initialCommand` passed at `:442`; `scratchCommand` read-then-nil run-once clear at `:597-599`) and the quit-flush (`AppDelegate.applicationWillTerminate`, per `.claude/rules/windows.md`).
+  - `Elis/Ghostty/GhosttySurfaceView.swift` — `config.command` at `:428` (raw, argv-style exec); `readSelection()`/`inject(text:)` surface-method precedent; add `config.initial_input`.
   - `GhosttyKit.xcframework/.../ghostty.h` — `ghostty_surface_foreground_pid` (`:1117`), `config.working_directory` (`:473`), `config.initial_input` (`:477`).
-  - `HangarUITests/MultiWindowUITests.swift` — `relaunch()` + `testReopenAllAfterQuit` (`:217-358`) prove `XCUIApplication.terminate()` fires `applicationWillTerminate` and persists state — the quit→relaunch precedent for the e2e.
+  - `ElisUITests/MultiWindowUITests.swift` — `relaunch()` + `testReopenAllAfterQuit` (`:217-358`) prove `XCUIApplication.terminate()` fires `applicationWillTerminate` and persists state — the quit→relaunch precedent for the e2e.
 - **Patterns**: host-free pure utilities in enum namespaces (`ConfigPaths`, `SettingsCatalog`); settings are `Bool?` with nil = default; one test file per source file; the eager deck spawns every session surface at launch; run-once command fields are read-then-nil'd in the factory.
 
 ## Development Approach
@@ -32,12 +32,12 @@ Key benefit: gate `ssh` sessions reconnect automatically after a restart; any si
 - complete each task fully before the next; small, focused changes.
 - **CRITICAL: every task with code MUST include new/updated tests** (success + error/edge), as SEPARATE checklist items.
 - **CRITICAL: all tests must pass before the next task.** Tasks 5 and 6 (live syscall / `initial_input`) cannot be unit-tested host-free; their decision logic is fully covered host-free in Task 2, and their live behavior is covered by the Task 7 e2e which immediately follows — treat 5+6+7 as one verification unit.
-- host-free tests: `cd HangarCore && swift test`; app builds: `make build`; XCUITest: `xcodebuild test … -only-testing:…`.
+- host-free tests: `cd ElisCore && swift test`; app builds: `make build`; XCUITest: `xcodebuild test … -only-testing:…`.
 - backward compatible: a snapshot without the new fields decodes to nil (plain shell); inert when the flag is off.
 
 ## Testing Strategy
 
-- **unit tests (host-free, `HangarCore`)** carry the logic: snapshot round-trip + legacy-decode (Task 1); `KERN_PROCARGS2` blob parse incl. exec-path NUL-padding + truncated input (Task 2); argv→shell-quoted-string join; the denylist + known-shell(+`$SHELL`) predicates; `AppSettings` decode/default + init.
+- **unit tests (host-free, `ElisCore`)** carry the logic: snapshot round-trip + legacy-decode (Task 1); `KERN_PROCARGS2` blob parse incl. exec-path NUL-padding + truncated input (Task 2); argv→shell-quoted-string join; the denylist + known-shell(+`$SHELL`) predicates; `AppSettings` decode/default + init.
 - **app-side / XCUITest** (Task 7): the live capture (`sysctl` + a real foreground process) and the quit→relaunch→re-run cycle, driven through a counter file whose growth proves re-run; plus a flag-off case asserting no growth.
 - treat the XCUITest with the same rigor as unit tests (must pass before the next task).
 
@@ -53,7 +53,7 @@ Re-run uses `config.initial_input` (feed the quoted command + newline to the res
 
 ## Technical Details
 
-New host-free `enum CommandRestore` (`HangarCore`, static funcs, mirroring `ConfigPaths`):
+New host-free `enum CommandRestore` (`ElisCore`, static funcs, mirroring `ConfigPaths`):
 - `parseProcArgs(_ data: Data) -> [String]?` — parse a `KERN_PROCARGS2` blob (`[argc:Int32][exec_path\0][\0…padding…][argv0\0…argvN\0][env…]`) into `[argv0…argvN]`; skip the exec-path + its NUL padding; nil on truncated/malformed.
 - `isKnownShell(_ basename: String, extra: String?) -> Bool` — basename ∈ {`zsh`,`bash`,`sh`,`fish`,`dash`,`ksh`,`tcsh`,`csh`} OR == `extra` (the user's `$SHELL` basename, passed app-side).
 - `shouldRestore(argv: [String]) -> Bool` — false when argv empty OR `argv[0]` basename ∈ the denylist {`vim`,`nvim`,`vi`,`view`,`nano`,`emacs`,`emacsclient`,`less`,`more`,`man`,`python`,`python3`,`node`,`irb`,`ipython`,`pry`,`lua`,`ghci`}.
@@ -75,48 +75,48 @@ App target: `enum ForegroundProcess { static func command(for surface:, shellBas
 ### Task 1: Persist foreground command in the snapshot
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Snapshot.swift`
-- Modify: `HangarCore/Sources/HangarCore/Session.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/Snapshot.swift`
+- Modify: `ElisCore/Sources/ElisCore/Session.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/AppStoreTests.swift`
 
 - [x] add `var foregroundCommand: [String]?` + `var splitForegroundCommand: [String]?` to `SessionSnapshot` (Codable, default nil), beside `splitCwd`
 - [x] add matching `@ObservationIgnored var foregroundCommand: [String]?` / `splitForegroundCommand: [String]?` on `Session`
 - [x] capture both in `AppStore.snapshot()` (`:639`); seed both back in `AppStore.restore(from:)` (`:661`)
 - [x] write tests in `AppStoreTests.swift`, mirroring `splitCwdRoundTripsThroughSnapshot` (`:540`): both fields round-trip; a snapshot lacking the keys decodes to nil (legacy stays a plain shell)
-- [x] run `cd HangarCore && swift test` — must pass before next task
+- [x] run `cd ElisCore && swift test` — must pass before next task
 
 ### Task 2: CommandRestore host-free logic (parse / shell / denylist / quote)
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/CommandRestore.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/CommandRestoreTests.swift`
+- Create: `ElisCore/Sources/ElisCore/CommandRestore.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/CommandRestoreTests.swift`
 
 - [x] create `enum CommandRestore` with `parseProcArgs(_:)`, `isKnownShell(_:extra:)`, `shouldRestore(argv:)`, `shellQuotedLine(_:)` (signatures in Technical Details)
 - [x] implement `parseProcArgs` against the documented `KERN_PROCARGS2` layout — read `argc`, skip the exec path AND its trailing NUL padding before reading `argc` NUL-separated args; nil on truncated/short input
 - [x] implement the predicates + POSIX single-quote join
 - [x] write tests for `parseProcArgs`: a synthetic multi-arg blob WITH exec-path NUL padding between exec path and argv0 (the real-world gotcha); a truncated-argc blob; an empty blob → nil
 - [x] write tests for `isKnownShell` (zsh/bash → true, ssh/vim → false, `extra` match → true), `shouldRestore` (ssh/top → true, `/usr/bin/vim` → false by basename, empty → false), `shellQuotedLine` (spaces, quotes, `$`, glob chars survive)
-- [x] run `cd HangarCore && swift test` — must pass before next task
+- [x] run `cd ElisCore && swift test` — must pass before next task
 
 ### Task 3: Add the restoreRunningCommand setting
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/AppSettings.swift`
-- Modify: `HangarCore/Tests/HangarCoreTests/SettingsStoreTests.swift` (the AppSettings/SettingsStore test file)
+- Modify: `ElisCore/Sources/ElisCore/AppSettings.swift`
+- Modify: `ElisCore/Tests/ElisCoreTests/SettingsStoreTests.swift` (the AppSettings/SettingsStore test file)
 
 - [x] add `var restoreRunningCommand: Bool?` to `AppSettings` (nil = off), beside the other `Bool?` toggles
 - [x] add the matching parameter to the hand-written public `init` (`:81-103`) so callers/tests can construct it
 - [x] confirm `ghosttyConfigLines()` is unaffected (this flag drives app behavior, not ghostty config)
 - [x] write tests: decode with the key true/false and absent (nil → off); Equatable round-trip unchanged
-- [x] run `cd HangarCore && swift test` — must pass before next task
+- [x] run `cd ElisCore && swift test` — must pass before next task
 
 ### Task 4: SettingsModel setter + General toggle
 
 **Files:**
-- Modify: `Hangar/SettingsModel.swift`
-- Modify: `Hangar/Views/SettingsView.swift`
-- Modify: `HangarUITests/SettingsUITests.swift` (or the existing settings-persistence UI test file)
+- Modify: `Elis/SettingsModel.swift`
+- Modify: `Elis/Views/SettingsView.swift`
+- Modify: `ElisUITests/SettingsUITests.swift` (or the existing settings-persistence UI test file)
 
 - [x] add `func setRestoreRunningCommand(_ value: Bool?) { settings.restoreRunningCommand = value; persistAndApply() }` (`persistAndApply` no-ops the surface reload — not a ghostty key)
 - [x] add a General-tab `Toggle("Restore running commands on restart", isOn: …)` bound via `model.setRestoreRunningCommand`, mirroring the `notificationsEnabled` binding (`:99-102`), with an `accessibilityIdentifier` `settings-restore-running-command`
@@ -127,24 +127,24 @@ App target: `enum ForegroundProcess { static func command(for surface:, shellBas
 ### Task 5: Capture the foreground command at clean quit
 
 **Files:**
-- Create: `Hangar/Ghostty/ForegroundProcess.swift`
-- Modify: `Hangar/hangarApp.swift` (the quit-flush in `AppDelegate.applicationWillTerminate`)
+- Create: `Elis/Ghostty/ForegroundProcess.swift`
+- Modify: `Elis/elisApp.swift` (the quit-flush in `AppDelegate.applicationWillTerminate`)
 
 - [x] ⚠️ FIRST: empirically confirm what `ghostty_surface_foreground_pid` returns (foreground-group leader vs running leaf vs a backgrounded shell) with a throwaway probe in an isolated dev instance; record the finding — it decides whether `sh -c 'a; b'` captures `sh` or `b`. The Task 7 marker is designed to be robust either way, but capture must guard correctly.
 - [x] add `enum ForegroundProcess { static func command(for surface:, shellBasename:) -> [String]? }` — `ghostty_surface_foreground_pid` → guard `pid != 0` → `sysctl KERN_PROCARGS2` (guard failure → nil) → `CommandRestore.parseProcArgs`; return nil when `CommandRestore.isKnownShell(argv[0].basename, extra: shellBasename)`
 - [x] in the quit-flush, only when `settings.restoreRunningCommand == true`, walk each session's main + split surface and set `session.foregroundCommand` / `session.splitForegroundCommand` from `ForegroundProcess.command(for:shellBasename:)` (`shellBasename` = `$SHELL` basename), before the final snapshot/save
 - [x] write tests: the decision seams are host-free and already covered (Task 2 `parseProcArgs`/`isKnownShell`); the live `sysctl` + at-prompt-captures-nothing path is covered by Task 7 (note this explicitly — no own-task host-free test is possible for the syscall)
-- [x] run `make build` + `cd HangarCore && swift test` — must pass before next task
+- [x] run `make build` + `cd ElisCore && swift test` — must pass before next task
 
 ### Task 6: Re-run the command on restore via initial_input
 
 **Files:**
-- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift` (add `initialInput` init param → `config.initial_input`)
-- Modify: `Hangar/hangarApp.swift` (the `makeSurface` / `makeSplitSurface` factories)
+- Modify: `Elis/Ghostty/GhosttySurfaceView.swift` (add `initialInput` init param → `config.initial_input`)
+- Modify: `Elis/elisApp.swift` (the `makeSurface` / `makeSplitSurface` factories)
 
 - [x] add an `initialInput: String?` init param to `GhosttySurfaceView`; when non-nil, set `config.initial_input` (strdup'd, same buffer lifetime as `working_directory`)
 - [x] in `makeSurface`/`makeSplitSurface`, when `settings.restoreRunningCommand == true` and the session's `foregroundCommand`/`splitForegroundCommand` passes `CommandRestore.shouldRestore`, pass `initialInput = CommandRestore.shellQuotedLine(argv) + "\n"`; else nil
-- [x] CLEAR run-once IN THE FACTORY on the `Session` field (`let cmd = session.foregroundCommand; session.foregroundCommand = nil`), exactly mirroring the `scratchCommand` read-then-nil at `hangarApp.swift:597-599`, so a later in-session structural `save()` cannot re-persist and re-fire it
+- [x] CLEAR run-once IN THE FACTORY on the `Session` field (`let cmd = session.foregroundCommand; session.foregroundCommand = nil`), exactly mirroring the `scratchCommand` read-then-nil at `elisApp.swift:597-599`, so a later in-session structural `save()` cannot re-persist and re-fire it
 - [x] confirm the restored command runs INSIDE the login shell (exit returns to prompt), NOT via `config.command`
 - [x] write tests: gating logic is host-free + already covered (Task 2 `shouldRestore`/`shellQuotedLine`); the live re-run is covered by Task 7 (note this — no own-task host-free test for `initial_input`)
 - [x] run `make build` — must pass before next task
@@ -152,19 +152,19 @@ App target: `enum ForegroundProcess { static func command(for surface:, shellBas
 ### Task 7: XCUITest — capture → relaunch → re-run cycle
 
 **Files:**
-- Create: `HangarUITests/RestoreCommandUITests.swift`
+- Create: `ElisUITests/RestoreCommandUITests.swift`
 
-- [x] `testRestoreReRunsForegroundCommand`: seed `restoreRunningCommand=true` in the isolated `HANGAR_STATE_DIR` settings.json; start a session whose foreground is `sh -c 'printf x >> <COUNTER>; read _'` (blocks on the `read` BUILTIN, so the single foreground process IS the re-runnable `sh -c` shell — avoids the `sleep`/leaf-capture trap); confirm `<COUNTER>` has 1 byte; quit (`terminate()`), relaunch (per `MultiWindowUITests.relaunch()` `:217`), assert `<COUNTER>` grows to 2 bytes (proves the command re-ran)
+- [x] `testRestoreReRunsForegroundCommand`: seed `restoreRunningCommand=true` in the isolated `ELIS_STATE_DIR` settings.json; start a session whose foreground is `sh -c 'printf x >> <COUNTER>; read _'` (blocks on the `read` BUILTIN, so the single foreground process IS the re-runnable `sh -c` shell — avoids the `sleep`/leaf-capture trap); confirm `<COUNTER>` has 1 byte; quit (`terminate()`), relaunch (per `MultiWindowUITests.relaunch()` `:217`), assert `<COUNTER>` grows to 2 bytes (proves the command re-ran)
 - [x] `testRestoreOffDoesNotReRun`: flag off, same setup, relaunch, assert `<COUNTER>` stays 1 byte
 - [x] follow `.claude/rules/ui-tests.md`: `launchForUITest`, isolated state dir, observable side effects; ASK before a full UI run, run only this class. (Drop a `vim` denylist e2e — it is unobservable and fully covered host-free by Task 2's `shouldRestore('/usr/bin/vim') == false`.)
-- [x] run `xcodebuild test … -only-testing:HangarUITests/RestoreCommandUITests` — must pass before next task
+- [x] run `xcodebuild test … -only-testing:ElisUITests/RestoreCommandUITests` — must pass before next task
 
 ### Task 8: Verify acceptance criteria
 
 - [x] verify all Overview requirements: opt-in flag (default off), full-argv capture, denylist skip, re-run via `initial_input` returns to a prompt on exit
 - [x] verify edge cases: legacy snapshot (no fields) → plain shell; flag off → no capture + no re-run; split pane captured independently; at-prompt/blank panes capture nothing (pid==0 / known-shell → nil)
-- [x] run the full host-free suite: `cd HangarCore && swift test`
-- [x] run the focused UI class: `xcodebuild test … -only-testing:HangarUITests/RestoreCommandUITests`
+- [x] run the full host-free suite: `cd ElisCore && swift test`
+- [x] run the focused UI class: `xcodebuild test … -only-testing:ElisUITests/RestoreCommandUITests`
 - [x] confirm keep-in-sync: no `AppActions`/`AppStore` user action and no `ControlSessionNode`/`tree --json` exposure were introduced, so control-API + agent-skill are correctly untouched (justified in Task 9)
 
 ### Task 9: [Final] Update documentation

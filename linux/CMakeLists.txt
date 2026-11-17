@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(hangar VERSION 0.1.0 LANGUAGES CXX)
+project(elis VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,52 +31,52 @@ if(NOT TARGET KF6::Parts)
     INTERFACE_LINK_LIBRARIES "KF6::CoreAddons;KF6::XmlGui")
 endif()
 
-add_library(hangar-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/livehost.cpp)
-target_include_directories(hangar-core PUBLIC src/core)
-target_link_libraries(hangar-core PUBLIC Qt6::Core PRIVATE Qt6::Sql)
+add_library(elis-core STATIC src/core/store.cpp src/core/control.cpp src/core/launcher.cpp src/core/keymap.cpp src/core/hooks.cpp src/core/restore.cpp src/core/commands.cpp src/core/installers.cpp src/core/livehost.cpp)
+target_include_directories(elis-core PUBLIC src/core)
+target_link_libraries(elis-core PUBLIC Qt6::Core PRIVATE Qt6::Sql)
 
 find_package(KF6Config REQUIRED)
 find_package(KF6WidgetsAddons REQUIRED)
-add_library(hangar-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/settingsdialog.cpp src/app/sidebar.cpp src/app/palette.cpp src/app/overlay.cpp src/app/dashboard.cpp src/app/library.cpp src/app/attention.cpp src/app/konsoleprivate.cpp src/app/controlui.cpp src/app/help.cpp src/app/smoothwheel.cpp src/app/phone.cpp src/ctl/qrcodegen/qrcodegen.cpp
+add_library(elis-ui STATIC src/app/mainwindow.cpp src/app/config.cpp src/app/settingsdialog.cpp src/app/sidebar.cpp src/app/palette.cpp src/app/overlay.cpp src/app/dashboard.cpp src/app/library.cpp src/app/attention.cpp src/app/konsoleprivate.cpp src/app/controlui.cpp src/app/help.cpp src/app/smoothwheel.cpp src/app/phone.cpp src/ctl/qrcodegen/qrcodegen.cpp
   resources/resources.qrc)
-target_include_directories(hangar-ui PUBLIC src/app)
+target_include_directories(elis-ui PUBLIC src/app)
 find_package(KF6Notifications REQUIRED)
 find_package(KF6SyntaxHighlighting REQUIRED)
 find_package(KF6WindowSystem REQUIRED)
-target_link_libraries(hangar-ui PUBLIC hangar-core Qt6::Widgets Qt6::DBus Qt6::Svg KF6::Parts KF6::Notifications KF6::SyntaxHighlighting KF6::WindowSystem KF6::ConfigCore KF6::WidgetsAddons ${CMAKE_DL_LIBS})
-add_executable(hangar src/app/main.cpp)
-target_link_libraries(hangar PRIVATE hangar-ui Qt6::Network KF6::ConfigCore)
+target_link_libraries(elis-ui PUBLIC elis-core Qt6::Widgets Qt6::DBus Qt6::Svg KF6::Parts KF6::Notifications KF6::SyntaxHighlighting KF6::WindowSystem KF6::ConfigCore KF6::WidgetsAddons ${CMAKE_DL_LIBS})
+add_executable(elis src/app/main.cpp)
+target_link_libraries(elis PRIVATE elis-ui Qt6::Network KF6::ConfigCore)
 
-add_executable(hangar-session-host src/host/sessionhost.cpp) # plain POSIX: it outlives the app, so no Qt
-target_link_libraries(hangar-session-host PRIVATE util)
-add_dependencies(hangar hangar-session-host) # spawned from the app's own directory
+add_executable(elis-session-host src/host/sessionhost.cpp) # plain POSIX: it outlives the app, so no Qt
+target_link_libraries(elis-session-host PRIVATE util)
+add_dependencies(elis elis-session-host) # spawned from the app's own directory
 
-add_executable(hangarctl src/ctl/hangarctl.cpp src/ctl/mobile.cpp src/ctl/qrcodegen/qrcodegen.cpp)
-target_link_libraries(hangarctl PRIVATE hangar-core Qt6::Network)
+add_executable(elisctl src/ctl/elisctl.cpp src/ctl/mobile.cpp src/ctl/qrcodegen/qrcodegen.cpp)
+target_link_libraries(elisctl PRIVATE elis-core Qt6::Network)
 
 enable_testing()
 add_executable(test_core tests/test_core.cpp)
-target_link_libraries(test_core PRIVATE hangar-core Qt6::Sql Qt6::Test)
-target_compile_definitions(test_core PRIVATE HANGAR_SOURCE_SHARE="${CMAKE_SOURCE_DIR}/share" HANGAR_SESSION_HOST="$<TARGET_FILE:hangar-session-host>")
-add_dependencies(test_core hangar-session-host)
+target_link_libraries(test_core PRIVATE elis-core Qt6::Sql Qt6::Test)
+target_compile_definitions(test_core PRIVATE ELIS_SOURCE_SHARE="${CMAKE_SOURCE_DIR}/share" ELIS_SESSION_HOST="$<TARGET_FILE:elis-session-host>")
+add_dependencies(test_core elis-session-host)
 add_test(NAME core COMMAND test_core)
 add_executable(test_ui tests/test_ui.cpp)
-target_link_libraries(test_ui PRIVATE hangar-ui Qt6::Test)
+target_link_libraries(test_ui PRIVATE elis-ui Qt6::Test)
 add_test(NAME ui COMMAND test_ui)
-set_tests_properties(ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;HANGAR_STATE_DIR=/tmp/hangar-test-ui")
+set_tests_properties(ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;ELIS_STATE_DIR=/tmp/elis-test-ui")
 
-target_sources(hangar-core PRIVATE src/core/filetree.cpp src/core/fileicons.cpp)
-target_sources(hangar-ui PRIVATE src/app/filepanel.cpp src/app/fileviewer.cpp resources/fileicons.qrc)
+target_sources(elis-core PRIVATE src/core/filetree.cpp src/core/fileicons.cpp)
+target_sources(elis-ui PRIVATE src/app/filepanel.cpp src/app/fileviewer.cpp resources/fileicons.qrc)
 add_executable(test_filepanel tests/test_filepanel.cpp)
-target_link_libraries(test_filepanel PRIVATE hangar-ui Qt6::Test)
+target_link_libraries(test_filepanel PRIVATE elis-ui Qt6::Test)
 add_test(NAME filepanel COMMAND test_filepanel)
 set_tests_properties(filepanel PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 include(GNUInstallDirs)
-install(TARGETS hangar hangarctl hangar-session-host RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-configure_file(packaging/hangar.desktop.in hangar.desktop @ONLY) # Exec is absolute: the Plasma menu does not see ~/.local/bin
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/hangar.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(TARGETS elis elisctl elis-session-host RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+configure_file(packaging/elis.desktop.in elis.desktop @ONLY) # Exec is absolute: the Plasma menu does not see ~/.local/bin
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/elis.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(DIRECTORY resources/icons/ DESTINATION ${CMAKE_INSTALL_DATADIR}/icons)
-install(DIRECTORY share/agent-status share/skill USE_SOURCE_PERMISSIONS DESTINATION ${CMAKE_INSTALL_DATADIR}/hangar)
+install(DIRECTORY share/agent-status share/skill USE_SOURCE_PERMISSIONS DESTINATION ${CMAKE_INSTALL_DATADIR}/elis)
 # a build-tree run finds the shipped agent-status package and skill in the source tree
-target_compile_definitions(hangar-ui PRIVATE HANGAR_SOURCE_SHARE="${CMAKE_SOURCE_DIR}/share")
+target_compile_definitions(elis-ui PRIVATE ELIS_SOURCE_SHARE="${CMAKE_SOURCE_DIR}/share")

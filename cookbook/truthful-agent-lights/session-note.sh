@@ -22,7 +22,7 @@ DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lights-common.sh
 . "$DIR/lights-common.sh"
 
-[ -n "${HANGAR_SESSION_ID:-}" ] || exit 0
+[ -n "${ELIS_SESSION_ID:-}" ] || exit 0
 
 # the hook payload arrives as JSON on stdin: transcript_path binds this session
 # to its transcript file (the agent does not hold it open, so nothing else can
@@ -42,11 +42,11 @@ fi
 agent_pid=$(agt_find_agent_pid "$PPID") || exit 0
 [ -n "$agent_pid" ] || exit 0
 
-agt_write_pid_note "$(agt_state_dir pid)/$HANGAR_SESSION_ID" "$agent_pid"
+agt_write_pid_note "$(agt_state_dir pid)/$ELIS_SESSION_ID" "$agent_pid"
 if [ -n "$tp" ]; then
-  printf '%s\n' "$tp" > "$(agt_state_dir transcript)/$HANGAR_SESSION_ID" 2>/dev/null || true
+  printf '%s\n' "$tp" > "$(agt_state_dir transcript)/$ELIS_SESSION_ID" 2>/dev/null || true
 fi
 if [ "$ev" = "UserPromptSubmit" ]; then
-  touch "$(agt_state_dir turnstart)/$HANGAR_SESSION_ID" 2>/dev/null || true
+  touch "$(agt_state_dir turnstart)/$ELIS_SESSION_ID" 2>/dev/null || true
 fi
 exit 0

@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NamedTuple
 
-HANGARCTL = os.environ.get("HANGARCTL", "hangarctl")
+ELISCTL = os.environ.get("ELISCTL", "elisctl")
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 CODEX_BIN = os.environ.get("CODEX_BIN", "codex")
 MODEL = os.environ.get("CLAUDE_SWAP_MODEL", "gpt-5.6-luna")
@@ -149,7 +149,7 @@ def write_record(sid: str, pane: str, record: Record) -> None:
 
 
 def record_hook(data: Any) -> None:
-    sid, pane = os.environ.get("HANGAR_SESSION_ID", ""), os.environ.get("HANGAR_PANE", "left")
+    sid, pane = os.environ.get("ELIS_SESSION_ID", ""), os.environ.get("ELIS_PANE", "left")
     if not sid or pane not in {"left", "right"} or not isinstance(data, dict):
         return
     transcript, session_id = data.get("transcript_path"), data.get("session_id")
@@ -197,27 +197,27 @@ def live_record(sid: str, accounts: list[Account]) -> tuple[Record, Account]:
 class Agt:
     def __init__(self, sid: str) -> None:
         self.sid = sid
-        self.socket = os.environ.get("AGT_SOCKET") or os.environ.get("HANGAR_SOCKET", "")
-        self.window = os.environ.get("AGT_WINDOW_ID") or os.environ.get("HANGAR_WINDOW_ID", "")
+        self.socket = os.environ.get("AGT_SOCKET") or os.environ.get("ELIS_SOCKET", "")
+        self.window = os.environ.get("AGT_WINDOW_ID") or os.environ.get("ELIS_WINDOW_ID", "")
         if not self.window:
-            raise Fail("the window ID is missing; invoke this from an hangar custom command")
+            raise Fail("the window ID is missing; invoke this from an elis custom command")
 
     def run(self, *args: str, stdin: str = "", timeout: float | None = 30) -> subprocess.CompletedProcess[str]:
-        command = [HANGARCTL, *args]
+        command = [ELISCTL, *args]
         if self.socket:
             command += ["--socket", self.socket]
         try:
             return subprocess.run(command, input=stdin, capture_output=True, text=True,
                                   check=False, timeout=timeout)
         except (OSError, subprocess.SubprocessError) as exc:
-            raise Fail(f"hangarctl {args[0]} failed: {exc}") from exc
+            raise Fail(f"elisctl {args[0]} failed: {exc}") from exc
 
     def node(self, sid: str) -> dict[str, Any]:
         res = self.run("tree", "--json", "--window", self.window)
         try:
             node = find_session(json.loads(res.stdout)["result"]["tree"], sid)
         except (ValueError, KeyError, TypeError) as exc:
-            raise Fail("cannot read the hangar tree") from exc
+            raise Fail("cannot read the elis tree") from exc
         if res.returncode or node is None:
             raise Fail("the session is no longer in this window")
         return node
@@ -314,9 +314,9 @@ def wait_for_agent(agt: Agt, sid: str, accounts: list[Account], target: Account,
 
 
 def swap(accounts: list[Account], dry_run: bool) -> int:
-    sid = os.environ.get("AGT_SESSION_ID") or os.environ.get("HANGAR_SESSION_ID", "")
+    sid = os.environ.get("AGT_SESSION_ID") or os.environ.get("ELIS_SESSION_ID", "")
     if not sid:
-        raise Fail("not inside an hangar session")
+        raise Fail("not inside an elis session")
     agt = Agt(sid)
     original, current = live_record(sid, accounts)
     node = check_pane(agt, sid, original.transcript)
@@ -370,7 +370,7 @@ def swap(accounts: list[Account], dry_run: bool) -> int:
 
 
 def report(message: str) -> None:
-    sid = os.environ.get("AGT_SESSION_ID") or os.environ.get("HANGAR_SESSION_ID", "")
+    sid = os.environ.get("AGT_SESSION_ID") or os.environ.get("ELIS_SESSION_ID", "")
     if sid:
         with contextlib.suppress(Exception):
             agt = Agt(sid)
@@ -382,7 +382,7 @@ def report(message: str) -> None:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--accounts", type=Path,
-                        default=Path.home() / ".config/hangar/claude-accounts.json")
+                        default=Path.home() / ".config/elis/claude-accounts.json")
     parser.add_argument("--dry-run", action="store_true", help="check the live map and list destinations; no model call")
     parser.add_argument("--record-hook", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)

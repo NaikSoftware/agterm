@@ -6,7 +6,7 @@
 #                    create the tmux session, start CMD in it on first creation,
 #                    record the port its statuses go to, and attach
 #   status STATE [--blink] [--auto-reset]
-#                    an agent hook: post STATE to the hangar tab attached here
+#                    an agent hook: post STATE to the elis tab attached here
 #   list             sessions and projects as TSV, for the picker
 #   kill NAME        end a session (DESTRUCTIVE: everything in it dies)
 #   setup            host preparation, run by `agt-remote.sh install`; idempotent
@@ -37,7 +37,7 @@ attach() {
 
 	mkdir -p "$STATE"
 	# the port this session's statuses go to: rewritten on every attach, so a
-	# tab opened later, or after an hangar restart, is the one that lights up.
+	# tab opened later, or after an elis restart, is the one that lights up.
 	# The relay on the Mac side owns the target; nothing about it is stored here.
 	if [[ $port =~ ^[0-9]{1,5}$ ]]; then
 		printf '%s\n' "$port" >"$STATE/$name.target"

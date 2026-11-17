@@ -8,7 +8,7 @@
   the page.
 - One rule for users: a question, picker or page is where you are typing into its pane. A disconnect is one
   case of that rule, not a separate one.
-- Applies on a Mac origin and on an hangar-server origin; viewers are Macs running the same replica code.
+- Applies on a Mac origin and on an elis-server origin; viewers are Macs running the same replica code.
 - What a move costs, accepted by Eugene: unsent ask text and pick query are reset, a page reloads (scroll,
   form and JS state lost). Running program overlays never move.
 - Eugene's decisions (2026-11-16):
@@ -49,13 +49,13 @@
   side (`ControlServer+RemotePresentation.swift:33`).
 - File limits: `Session.swift` 1000 lines (lint warns at 1000), `ServerStreamsTests.swift` 1990 of 2000,
   `PresentationFrames.swift` 938.
-- `HangarCore` is consumed by the agterm-linux fork: add public API, do not change existing signatures.
+- `ElisCore` is consumed by the agterm-linux fork: add public API, do not change existing signatures.
 
 ## Development Approach
 - **testing approach**: code first within each task, its tests written and passing before the task closes.
   Reproduced defects are written first and run red against today's code: the reporter's three steps, a stale
   page close after a re-offer, a queued bridge request after a move, a GUI ask against an unrelated pick.
-  New seams are tested once their shape settles. Tests live in `HangarCore` wherever the logic does; hosted
+  New seams are tested once their shape settles. Tests live in `ElisCore` wherever the logic does; hosted
   AppKit tests for app-side code (viewer replica echo and hold, GUI placement, window controllers).
 - run the touched tests after each change (`swift test --filter`, `-only-testing`); the full gates once, at
   the end.
@@ -65,7 +65,7 @@
 - `Session.swift` is not touched; no file is split.
 
 ## Testing Strategy
-- unit tests in `HangarCore/Tests/HangarCoreTests` with the existing two-viewer fixtures
+- unit tests in `ElisCore/Tests/ElisCoreTests` with the existing two-viewer fixtures
   (`AppStoreRemotePageTests.origin()/claimant()`, `AppStoreRemoteAskTests`, pick tests), and a new
   `AppStoreOpenWorkTests.swift` for the pass on Mac and headless stores.
 - `ServerStreamsTests.swift` holds only the headless wiring, one test per event, and stays under 2000 lines.
@@ -210,11 +210,11 @@ carried row by row first, then its Solution Overview rules this plan touches.
 ### Task 1: Offer identity on the wire, and viewers that hold
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`, `SessionPick.swift`, `PresentationHub.swift`
-- Create: `HangarCore/Sources/HangarCore/RemoteAskOffers.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RemoteAsk.swift`, `AppStore+RemotePage.swift`,
+- Modify: `ElisCore/Sources/ElisCore/PresentationFrames.swift`, `SessionPick.swift`, `PresentationHub.swift`
+- Create: `ElisCore/Sources/ElisCore/RemoteAskOffers.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RemoteAsk.swift`, `AppStore+RemotePage.swift`,
   `AppStore+RemotePresentation.swift`, `AppStore+ReplicaPage.swift`
-- Modify: viewer side `Hangar/Control/ControlServer+RemotePresentation.swift`, `ControlServer+RemotePage.swift`,
+- Modify: viewer side `Elis/Control/ControlServer+RemotePresentation.swift`, `ControlServer+RemotePage.swift`,
   `ControlServer+Pick.swift`
 - Modify: matching core tests; hosted tests for the app-side echo and hold
 
@@ -234,11 +234,11 @@ carried row by row first, then its Solution Overview rules this plan touches.
 ### Task 2: Transfer seams and two-phase page moves
 
 **Files:**
-- Modify: `HangarCore/Sources/HangarCore/Pick.swift`, `SessionPick.swift`, `AppStore+RemoteAsk.swift`,
+- Modify: `ElisCore/Sources/ElisCore/Pick.swift`, `SessionPick.swift`, `AppStore+RemoteAsk.swift`,
   `RemoteAskOffers.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift`, `AppStore+RemotePage.swift`,
+- Modify: `ElisCore/Sources/ElisCore/AppStore+HtmlOverlay.swift`, `AppStore+RemotePage.swift`,
   `HtmlOverlay.swift`, `AppStore+RemoteOverlay.swift`, `PageServeStream.swift`
-- Modify: `Hangar/Control/ControlServer+PageServe.swift`, `HangarCore/Sources/HangarServerKit/ServerStreams.swift`
+- Modify: `Elis/Control/ControlServer+PageServe.swift`, `ElisCore/Sources/ElisServerKit/ServerStreams.swift`
   (retire the exact old stream on confirmation)
 - Modify: tests for each
 
@@ -262,9 +262,9 @@ carried row by row first, then its Solution Overview rules this plan touches.
 ### Task 3: Reconcile pass and the loss transitions
 
 **Files:**
-- Create: `HangarCore/Sources/HangarCore/AppStore+OpenWork.swift`
-- Create: `HangarCore/Tests/HangarCoreTests/AppStoreOpenWorkTests.swift`
-- Modify: `HangarCore/Sources/HangarCore/AppStore+RemoteOverlay.swift`, `AppStore+RemotePage.swift`,
+- Create: `ElisCore/Sources/ElisCore/AppStore+OpenWork.swift`
+- Create: `ElisCore/Tests/ElisCoreTests/AppStoreOpenWorkTests.swift`
+- Modify: `ElisCore/Sources/ElisCore/AppStore+RemoteOverlay.swift`, `AppStore+RemotePage.swift`,
   `AppStore+Interactions.swift`, `PageServeStream.swift`
 - Modify: the existing remote ask/page/pick tests whose contract changes
 
@@ -304,14 +304,14 @@ carried row by row first, then its Solution Overview rules this plan touches.
 ### Task 4: Event wiring on both origins, docs and gates
 
 **Files:**
-- Modify: `Hangar/Control/ControlServer+Presentation.swift`, `ControlServer+PageServe.swift`,
+- Modify: `Elis/Control/ControlServer+Presentation.swift`, `ControlServer+PageServe.swift`,
   `ControlServer+RemotePresentation.swift`, `ControlServer+Ask.swift`, `ControlServer+Pick.swift`
 - Modify: the selection, terminal zoom and dashboard close seams the Mac origin observes
   (`AppStore.swift` selection, `TerminalZoomRegistry`, `DashboardControllerRegistry` owners)
-- Modify: `HangarCore/Sources/HangarServerKit/ServerStreams.swift`, `HangarCore/Sources/HangarCore/PresentationHub.swift`
-- Modify: `HangarCore/Tests/HangarServerTests/ServerStreamsTests.swift` (wiring only, under 2000 lines),
-  hosted tests under `HangarTests/`
-- Modify: `.claude/rules/control-api.md`, `site/docs.html`, `plugins/hangar/skills/hangar/` where it states
+- Modify: `ElisCore/Sources/ElisServerKit/ServerStreams.swift`, `ElisCore/Sources/ElisCore/PresentationHub.swift`
+- Modify: `ElisCore/Tests/ElisServerTests/ServerStreamsTests.swift` (wiring only, under 2000 lines),
+  hosted tests under `ElisTests/`
+- Modify: `.claude/rules/control-api.md`, `site/docs.html`, `plugins/elis/skills/elis/` where it states
   where open work shows, `ARCHITECTURE.md` if it describes presentation ownership
 
 - [x] reproduce red first: origin takes the lead while V1 (connected) holds a GUI ask and the window modal
@@ -334,7 +334,7 @@ carried row by row first, then its Solution Overview rules this plan touches.
 - [x] update the contract once in `control-api.md` (presentation ownership, loss, offer identity, holding, the
       #630 line), cross-referenced; `site/docs.html` attached sessions: where questions and pages show and that
       they follow the lead; the skill if it states the old behavior
-- [x] verify every Overview requirement against the tests; run `cd HangarCore && swift test`, `make test-app`,
+- [x] verify every Overview requirement against the tests; run `cd ElisCore && swift test`, `make test-app`,
       `make lint`, and the app build, once each
 - [x] move this plan to `docs/plans/completed/`
 
@@ -348,6 +348,6 @@ carried row by row first, then its Solution Overview rules this plan touches.
   test on two Macs after a release.
 
 **External system updates:**
-- agterm-linux consumes `HangarCore`: the new public API is additive; confirm its build.
+- agterm-linux consumes `ElisCore`: the new public API is additive; confirm its build.
 
 Smells pre-check: skipped — non-Go project

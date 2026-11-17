@@ -63,7 +63,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: |
-            macos/Hangar/Resources/zmx
+            macos/Elis/Resources/zmx
             macos/.zmx-build-stamp
           key: zmx-v2-${{ steps.revisions.outputs.zmx }}-${{ steps.revisions.outputs.zmx_target }}-${{ hashFiles('macos/scripts/zmx-patches/**/*.patch') }}
       # the session-host fixtures attach to a real zmx daemon; a cache miss builds it here
@@ -85,25 +85,25 @@ jobs:
         run: which fish && fish --version
       # built outside the watchdog so a slow runner's compile cannot spend its budget; the test step reuses it
       - name: swift build tests (with coverage)
-        working-directory: macos/HangarCore
+        working-directory: macos/ElisCore
         run: swift build --build-tests --enable-code-coverage
       - name: swift test (with coverage)
-        working-directory: macos/HangarCore
+        working-directory: macos/ElisCore
         run: ../scripts/watchdog.sh swift test --enable-code-coverage
         env:
-          HANGAR_REQUIRE_FISH: "1"
-          HANGAR_REQUIRE_ZMX: "1"
-          HANGAR_SHELL_INTEGRATION: ${{ github.workspace }}/macos/build/linux/ghostty/shell-integration
+          ELIS_REQUIRE_FISH: "1"
+          ELIS_REQUIRE_ZMX: "1"
+          ELIS_SHELL_INTEGRATION: ${{ github.workspace }}/macos/build/linux/ghostty/shell-integration
           WATCHDOG_SECONDS: "600"
           DIAG_DIR: ${{ github.workspace }}/test-hang
       # the server logs why it closed each presentation stream only to the unified log
-      - name: save the hangar log
+      - name: save the elis log
         if: failure()
         continue-on-error: true
         run: |
           mkdir -p "$GITHUB_WORKSPACE/test-hang"
           perl -e 'alarm shift; exec @ARGV' 120 log show --style compact --last 45m \
-            --predicate 'subsystem == "ua.naiksoftware.hangar"' > "$GITHUB_WORKSPACE/test-hang/hangar.log" 2>&1
+            --predicate 'subsystem == "ua.naiksoftware.elis"' > "$GITHUB_WORKSPACE/test-hang/elis.log" 2>&1
       - name: upload hang diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -112,13 +112,13 @@ jobs:
           path: test-hang
           if-no-files-found: ignore
       - name: export lcov
-        working-directory: macos/HangarCore
+        working-directory: macos/ElisCore
         # rewrite the absolute SF: paths llvm-cov emits to repo-relative so the
         # separate linux coverage job can resolve them against its own checkout
         run: |
           BIN=$(swift build --show-bin-path)
           xcrun llvm-cov export \
-            "$BIN/HangarCorePackageTests.xctest/Contents/MacOS/HangarCorePackageTests" \
+            "$BIN/ElisCorePackageTests.xctest/Contents/MacOS/ElisCorePackageTests" \
             -instr-profile "$BIN/codecov/default.profdata" \
             -format=lcov \
             -ignore-filename-regex='(\.build|Tests|checkouts)/' \
@@ -130,7 +130,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-lcov
-          path: macos/HangarCore/coverage.lcov
+          path: macos/ElisCore/coverage.lcov
 
   coverage:
     name: Coverage upload
@@ -181,7 +181,7 @@ jobs:
     timeout-minutes: 45
     container:
       image: swift:6.3.2-noble
-      # the watchdog's lldb attaches, as root, to the test runner owned by hangar-test
+      # the watchdog's lldb attaches, as root, to the test runner owned by elis-test
       options: --cap-add=SYS_PTRACE
     defaults:
       run:
@@ -205,7 +205,7 @@ jobs:
             macos/build/linux/.shell-integration-stamp
           key: shell-integration-linux-v1-${{ steps.zmx.outputs.ghostty }}
       - name: Stage the Linux shell integration
-        # the zsh, fish and bash integration hangar-server panes load, from ghostty's source at the pin
+        # the zsh, fish and bash integration elis-server panes load, from ghostty's source at the pin
         run: scripts/setup-zmx-linux.sh --shell-integration
       - name: Cache the Linux zmx
         id: zmx-cache
@@ -214,31 +214,31 @@ jobs:
           path: macos/build/linux/x86_64
           key: zmx-linux-v2-${{ steps.zmx.outputs.rev }}-x86_64-${{ hashFiles('macos/scripts/zmx-patches/**/*.patch') }}
       - name: Build the Linux zmx
-        # the musl zmx hangar-server runs; HangarServerTests drive real daemons with it
+        # the musl zmx elis-server runs; ElisServerTests drive real daemons with it
         if: steps.zmx-cache.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz | tar -xJ -C /opt
-          HANGAR_ZMX_ZIG=/opt/zig-x86_64-linux-0.16.0/zig HANGAR_ZMX_TARGET=x86_64-linux-musl \
-            HANGAR_ZMX_STAGE_DIR=build/linux/x86_64/zmx HANGAR_ZMX_STAMP_FILE=build/linux/x86_64/.zmx-build-stamp \
+          ELIS_ZMX_ZIG=/opt/zig-x86_64-linux-0.16.0/zig ELIS_ZMX_TARGET=x86_64-linux-musl \
+            ELIS_ZMX_STAGE_DIR=build/linux/x86_64/zmx ELIS_ZMX_STAMP_FILE=build/linux/x86_64/.zmx-build-stamp \
             scripts/setup.sh --zmx-only
       - name: Create the test user
         # root passes the permission checks several tests rely on failing
         run: |
-          useradd --create-home hangar-test
-          chown -R hangar-test "$GITHUB_WORKSPACE"
+          useradd --create-home elis-test
+          chown -R elis-test "$GITHUB_WORKSPACE"
       - name: swift build
-        working-directory: macos/HangarCore
-        run: runuser --user hangar-test -- env HOME=/home/hangar-test swift build --build-tests
+        working-directory: macos/ElisCore
+        run: runuser --user elis-test -- env HOME=/home/elis-test swift build --build-tests
       - name: swift test
-        working-directory: macos/HangarCore
+        working-directory: macos/ElisCore
         # the server's real-daemon suite and the fish cases fail rather than skip without zmx or fish
         run: >-
-          ../scripts/watchdog.sh runuser --user hangar-test --
-          env HOME=/home/hangar-test HANGAR_REQUIRE_ZMX=1 HANGAR_REQUIRE_FISH=1 swift test --skip-build
+          ../scripts/watchdog.sh runuser --user elis-test --
+          env HOME=/home/elis-test ELIS_REQUIRE_ZMX=1 ELIS_REQUIRE_FISH=1 swift test --skip-build
         env:
           WATCHDOG_SECONDS: "600"
           WATCHDOG_DIAG_SECONDS: "300"
-          WATCHDOG_RUNNER: HangarCorePackageTests.xctest
+          WATCHDOG_RUNNER: ElisCorePackageTests.xctest
           # relative: in a container job github.workspace names the host path, not the mounted one
           DIAG_DIR: ../../test-hang
       - name: upload hang diagnostics
@@ -276,15 +276,15 @@ jobs:
         with:
           path: |
             macos/GhosttyKit.xcframework
-            macos/Hangar/Resources/ghostty
-            macos/Hangar/Resources/terminfo
+            macos/Elis/Resources/ghostty
+            macos/Elis/Resources/terminfo
             macos/.ghostty-build-stamp
           key: ghosttykit-v3-${{ steps.revisions.outputs.ghostty }}-${{ hashFiles('macos/scripts/ghostty-patches/*.patch') }}
       - name: Cache zmx
         uses: actions/cache@v6
         with:
           path: |
-            macos/Hangar/Resources/zmx
+            macos/Elis/Resources/zmx
             macos/.zmx-build-stamp
           key: zmx-v2-${{ steps.revisions.outputs.zmx }}-${{ steps.revisions.outputs.zmx_target }}-${{ hashFiles('macos/scripts/zmx-patches/**/*.patch') }}
       - name: Install xcodegen
@@ -292,16 +292,16 @@ jobs:
       - name: Build libghostty + app (Release)
         run: scripts/with-helper-prebuild.sh scripts/build.sh
       - name: Zip app (fork only)
-        if: github.repository == 'NaikSoftware/hangar'
-        run: ditto -c -k --keepParent build/DerivedData/Build/Products/Release/Hangar.app hangar-app.zip
+        if: github.repository == 'NaikSoftware/elis'
+        run: ditto -c -k --keepParent build/DerivedData/Build/Products/Release/Elis.app elis-app.zip
       - name: Upload app (fork only)
-        if: github.repository == 'NaikSoftware/hangar'
+        if: github.repository == 'NaikSoftware/elis'
         uses: actions/upload-artifact@v4
         with:
-          name: hangar-app
-          path: macos/hangar-app.zip
+          name: elis-app
+          path: macos/elis-app.zip
       - name: Surface teardown under mailbox pressure
-        run: python3 scripts/test-surface-teardown.py build/DerivedData/Build/Products/Release/Hangar.app --evidence surface-teardown
+        run: python3 scripts/test-surface-teardown.py build/DerivedData/Build/Products/Release/Elis.app --evidence surface-teardown
       - name: Upload surface teardown diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -314,8 +314,8 @@ jobs:
       - name: Verify helper signatures and entitlements
         shell: bash
         run: |
-          app=build/DerivedData/Build/Products/Release/Hangar.app
-          for name in hangarctl zmx hangar-session-host; do
+          app=build/DerivedData/Build/Products/Release/Elis.app
+          for name in elisctl zmx elis-session-host; do
             helper="$app/Contents/MacOS/$name"
             [ -f "$helper" ] || { echo "$name not found at $helper" >&2; exit 1; }
             codesign --verify --strict "$helper"
@@ -331,7 +331,7 @@ jobs:
       - name: Verify the app's Release entitlements
         shell: bash
         run: |
-          app=build/DerivedData/Build/Products/Release/Hangar.app
+          app=build/DerivedData/Build/Products/Release/Elis.app
           [ -d "$app" ] || { echo "app not found at $app" >&2; exit 1; }
           # values and their types, not just names. A key set to <false/> is not granted and macOS treats
           # it exactly like a missing one, so a name-only compare would pass that through; and codesign
@@ -363,15 +363,15 @@ jobs:
         shell: bash
         run: |
           keys() { plutil -convert json -o - -- "$1" | jq -r 'to_entries[] | "\(.key)=\(.value|tojson)"' | sort; }
-          release=$(keys Hangar/hangar.entitlements)
-          debug=$(keys Hangar/hangar-debug.entitlements)
+          release=$(keys Elis/elis.entitlements)
+          debug=$(keys Elis/elis-debug.entitlements)
           exceptions=$(printf '%s=true\n' \
             com.apple.security.cs.allow-jit \
             com.apple.security.cs.allow-unsigned-executable-memory \
             com.apple.security.cs.disable-library-validation | sort)
           expected=$(printf '%s\n%s\n' "$release" "$exceptions" | sort)
           if [ "$debug" != "$expected" ]; then
-            echo "hangar-debug.entitlements is not the shipping set plus the three exceptions." >&2
+            echo "elis-debug.entitlements is not the shipping set plus the three exceptions." >&2
             diff <(echo "$expected") <(echo "$debug") >&2 || true
             exit 1
           fi
@@ -403,15 +403,15 @@ jobs:
         with:
           path: |
             macos/GhosttyKit.xcframework
-            macos/Hangar/Resources/ghostty
-            macos/Hangar/Resources/terminfo
+            macos/Elis/Resources/ghostty
+            macos/Elis/Resources/terminfo
             macos/.ghostty-build-stamp
           key: ghosttykit-v3-${{ steps.revisions.outputs.ghostty }}-${{ hashFiles('macos/scripts/ghostty-patches/*.patch') }}
       - name: Cache zmx
         uses: actions/cache@v6
         with:
           path: |
-            macos/Hangar/Resources/zmx
+            macos/Elis/Resources/zmx
             macos/.zmx-build-stamp
           key: zmx-v2-${{ steps.revisions.outputs.zmx }}-${{ steps.revisions.outputs.zmx_target }}-${{ hashFiles('macos/scripts/zmx-patches/**/*.patch') }}
       - name: Install xcodegen
@@ -430,21 +430,21 @@ jobs:
         run: |
           xcodegen generate
           scripts/with-helper-prebuild.sh xcodebuild build-for-testing \
-            -project Hangar.xcodeproj \
-            -scheme HangarTests \
+            -project Elis.xcodeproj \
+            -scheme ElisTests \
             -destination 'platform=macOS' \
             -derivedDataPath build/DerivedData
       # xcodebuild hands the test host only TEST_RUNNER_-prefixed variables, prefix stripped.
       - name: Application-hosted unit tests
         env:
-          TEST_RUNNER_HANGAR_REQUIRE_FISH: "1"
+          TEST_RUNNER_ELIS_REQUIRE_FISH: "1"
           WATCHDOG_SECONDS: "600"
-          WATCHDOG_RUNNER: '^${{ github.workspace }}/macos/build/DerivedData/Build/Products/Debug/hangar\.app/Contents/MacOS/Hangar( |$)'
+          WATCHDOG_RUNNER: '^${{ github.workspace }}/macos/build/DerivedData/Build/Products/Debug/elis\.app/Contents/MacOS/Elis( |$)'
           DIAG_DIR: ${{ github.workspace }}/hosted-test-hang
         run: |
           scripts/watchdog.sh xcodebuild test-without-building \
-            -project Hangar.xcodeproj \
-            -scheme HangarTests \
+            -project Elis.xcodeproj \
+            -scheme ElisTests \
             -destination 'platform=macOS' \
             -derivedDataPath build/DerivedData
       - name: upload hosted hang diagnostics
@@ -458,16 +458,16 @@ jobs:
           if-no-files-found: ignore
       - name: Plain fish login shell seam
         env:
-          TEST_RUNNER_HANGAR_REQUIRE_FISH_LOGIN_SHELL: "1"
-          TEST_RUNNER_HANGAR_REQUIRE_FISH: "1"
+          TEST_RUNNER_ELIS_REQUIRE_FISH_LOGIN_SHELL: "1"
+          TEST_RUNNER_ELIS_REQUIRE_FISH: "1"
         run: |
           sudo dscl . -create "/Users/$(id -un)" UserShell "$(which fish)"
           xcodebuild test-without-building \
-            -project Hangar.xcodeproj \
-            -scheme HangarTests \
+            -project Elis.xcodeproj \
+            -scheme ElisTests \
             -destination 'platform=macOS' \
             -derivedDataPath build/DerivedData \
-            -only-testing:HangarTests/SessionHostFishSeamTests/testPlainLoginShellStartsIntegratedFish
+            -only-testing:ElisTests/SessionHostFishSeamTests/testPlainLoginShellStartsIntegratedFish
 
   cookbook:
     name: Cookbook checks
