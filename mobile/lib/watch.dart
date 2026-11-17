@@ -18,6 +18,7 @@ class Watch {
   /// Reads the toggle and routes taps to [onTap]; the session whose notification launched the app, if one did.
   static Future<String?> init(void Function(String sessionId) onTap) async {
     enabled = await _storage.read(key: _key) != 'off';
+    await _android?.deleteNotificationChannel(channelId: 'watch'); // the old status channel badged the app icon; a channel's badge can't change
     await _n.initialize(
       settings: const InitializationSettings(android: AndroidInitializationSettings('ic_stat')),
       onDidReceiveNotificationResponse: (r) {
@@ -46,9 +47,10 @@ class Watch {
         id: 1,
         title: 'Watching $computer',
         body: 'Tells you when an agent needs you',
-        notificationDetails: const AndroidNotificationDetails('watch', 'Watching',
+        notificationDetails: const AndroidNotificationDetails('watching', 'Watching',
             channelDescription: 'Shown while Agterm2 watches your computer in the background',
-            importance: Importance.low, priority: Priority.low, ongoing: true, showWhen: false),
+            importance: Importance.low, priority: Priority.low, ongoing: true, showWhen: false,
+            channelShowBadge: false, icon: 'ic_watch'), // the icon's dot means an agent alert, not that the app is watching
         startType: AndroidServiceStartType.startNotSticky, // the plugin's service can't restart without its intent
         foregroundServiceTypes: {
           AndroidServiceForegroundType.foregroundServiceTypeSpecialUse,
@@ -63,15 +65,23 @@ class Watch {
     await _n.cancelAll();
   }
 
-  // one per session, updated in place; the id is also the tap intent's request code, so it must differ per session
-  static Future<void> show(Alert a) => _n.show(
-        id: a.sessionId.hashCode & 0x7fffffff,
-        title: a.title,
-        body: a.body,
-        payload: a.sessionId,
-        notificationDetails: NotificationDetails(
-            android: AndroidNotificationDetails('alerts', 'Agent alerts',
-                channelDescription: 'An agent is blocked, has finished, or sent a notification',
-                importance: Importance.high, priority: Priority.high, category: AndroidNotificationCategory.message)),
-      );
+  static Future<void> show(Alert a, String workspace) async {
+    for (final n in alertNotifications(a, workspace)) {
+      await _n.show(id: n.id, title: n.title, body: n.body, payload: n.payload, notificationDetails: NotificationDetails(android: n.details));
+    }
+  }
+}
+
+/// One notification per session, updated in place, plus its workspace's group summary, which Android needs to stack them.
+/// The id is also the tap intent's request code, so it must differ per session.
+List<({int id, String title, String body, String payload, AndroidNotificationDetails details})> alertNotifications(Alert a, String workspace) {
+  final name = workspace.isEmpty ? 'Sessions' : workspace;
+  AndroidNotificationDetails details({bool summary = false}) => AndroidNotificationDetails('alerts', 'Agent alerts',
+      channelDescription: 'An agent is blocked, has finished, or sent a notification',
+      importance: Importance.high, priority: Priority.high, category: AndroidNotificationCategory.message,
+      subText: name, groupKey: 'ws:$name', setAsGroupSummary: summary, groupAlertBehavior: GroupAlertBehavior.children);
+  return [
+    (id: a.sessionId.hashCode & 0x7fffffff, title: a.title, body: a.body, payload: a.sessionId, details: details()),
+    (id: 'ws:$name'.hashCode & 0x7fffffff, title: name, body: '', payload: '', details: details(summary: true)),
+  ];
 }

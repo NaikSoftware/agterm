@@ -2,6 +2,8 @@ import 'package:agterm_mobile/client.dart';
 import 'package:agterm_mobile/model.dart';
 import 'package:agterm_mobile/screens/prompt.dart';
 import 'package:agterm_mobile/theme.dart';
+import 'package:agterm_mobile/watch.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -135,7 +137,21 @@ void main() {
     expect(of('status', {'status': 'completed'})!.body, 'finished');
     final n = of('notify', {'title': 'Build', 'body': 'green'})!;
     expect((n.title, n.body, n.status), ('Build', 'green', 'notify'));
+    final c = of('notify', {'name': 'Redesign tree', 'title': 'Claude Code', 'body': 'Claude needs your permission'})!;
+    expect((c.title, c.body), ('Redesign tree', 'Claude needs your permission'));
+    expect(of('notify', {'name': 'Redesign tree', 'title': 'Claude Code', 'body': ''})!.body, 'Claude Code');
+    expect(of('notify', {'name': 'Redesign tree', 'title': 'Redesign tree', 'body': ''})!.body, '');
     expect(of('status', {'status': 'active'}), isNull);
     expect(of('lifecycle', {}), isNull);
+  });
+
+  test('alert notifications stack under their workspace, and only the session alerts', () {
+    final [n, sum] = alertNotifications(Alert('s1', 'claude', 'finished', 'completed'), 'agterm');
+    final other = alertNotifications(Alert('s2', 'codex', 'finished', 'completed'), 'site').last;
+    expect((n.payload, n.details.groupKey, n.details.setAsGroupSummary), ('s1', 'ws:agterm', false));
+    expect((sum.title, sum.payload, sum.details.groupKey, sum.details.setAsGroupSummary), ('agterm', '', 'ws:agterm', true));
+    expect(n.details.groupAlertBehavior, GroupAlertBehavior.children);
+    expect(other.id, isNot(sum.id));
+    expect(alertNotifications(Alert('s3', 'x', 'y', 'notify'), '').last.title, 'Sessions');
   });
 }

@@ -101,7 +101,9 @@ class Alert {
     return switch (e['kind']) {
       'status' when p['status'] == 'blocked' || p['status'] == 'completed' =>
         Alert(sid, '${p['name'] ?? 'Session'}', p['status'] == 'blocked' ? 'needs your input' : 'finished', p['status']),
-      'notify' => Alert(sid, '${p['title'] ?? p['name'] ?? 'Notification'}', '${p['body'] ?? ''}', 'notify'),
+      // the session names the alert, as the status alerts do; a terminal title ("Claude Code") is only a fallback body
+      'notify' => Alert(sid, '${p['name'] ?? p['title'] ?? 'Notification'}',
+          '${(p['body'] as String?)?.isNotEmpty == true ? p['body'] : p['name'] != null && p['title'] != p['name'] ? p['title'] ?? '' : ''}', 'notify'),
       _ => null,
     };
   }
@@ -339,7 +341,7 @@ class AgtermModel extends ChangeNotifier {
   void _onEvent(Map<String, dynamic> e) {
     final a = Alert.of(e);
     if (a == null) return;
-    background ? Watch.show(a) : _alerts.add(a);
+    background ? Watch.show(a, session(a.sessionId)?.workspaceName ?? '') : _alerts.add(a);
   }
 
   @override

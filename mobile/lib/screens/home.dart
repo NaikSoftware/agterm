@@ -581,7 +581,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       key: Key('hiddenBlocked-${s.id}'),
                       margin: const EdgeInsets.only(left: 10), width: 7, height: 7, decoration: const BoxDecoration(color: C.blocked, shape: BoxShape.circle)),
                 ),
-              if (s.status.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 10), child: StatusShape(s.status, blink: s.blink)),
+              // idle shows no mark, as on the desktop
+              if (s.status.isNotEmpty && s.status != 'idle') Padding(padding: const EdgeInsets.only(left: 10), child: StatusShape(s.status, blink: s.blink)),
             ]),
           ),
         ),
@@ -634,8 +635,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       overflow: TextOverflow.ellipsis),
                 ]),
               ),
-              const SizedBox(width: 10),
-              Semantics(label: statusLabel(s.status), child: StatusShape(s.status, blink: s.blink)),
+              if (s.status != 'idle') ...[
+                const SizedBox(width: 10),
+                Semantics(label: statusLabel(s.status), child: StatusShape(s.status, blink: s.blink)),
+              ],
             ]),
             if (blocked && snippet.trim().isNotEmpty)
               Container(

@@ -1,4 +1,5 @@
-<!-- agterm-qt's mark: four outlined tiles (the desktop icon's art), centred in the adaptive icon's 66dp safe zone -->
+<!-- the home header mark: a ">_" prompt in C.indigo, centred in the adaptive icon's 66dp safe zone -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.9" android:fillColor="#00000000" android:pathData="M38.88,36.33h9.80a2.55,2.55 0,0 1,2.55,2.55v9.80a2.55,2.55 0,0 1,-2.55,2.55h-9.80a2.55,2.55 0,0 1,-2.55,-2.55v-9.80a2.55,2.55 0,0 1,2.55,-2.55zM38.88,56.78h9.80a2.55,2.55 0,0 1,2.55,2.55v9.80a2.55,2.55 0,0 1,-2.55,2.55h-9.80a2.55,2.55 0,0 1,-2.55,-2.55v-9.80a2.55,2.55 0,0 1,2.55,-2.55zM59.33,36.33h9.80a2.55,2.55 0,0 1,2.55,2.55v9.80a2.55,2.55 0,0 1,-2.55,2.55h-9.80a2.55,2.55 0,0 1,-2.55,-2.55v-9.80a2.55,2.55 0,0 1,2.55,-2.55zM59.33,56.78h9.80a2.55,2.55 0,0 1,2.55,2.55v9.80a2.55,2.55 0,0 1,-2.55,2.55h-9.80a2.55,2.55 0,0 1,-2.55,-2.55v-9.80a2.55,2.55 0,0 1,2.55,-2.55z"/>
+    <path android:strokeColor="#FF8B8CFF" android:strokeWidth="5" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"
+        android:pathData="M35,42L47,54L35,66M54,66H73"/>
 </vector>

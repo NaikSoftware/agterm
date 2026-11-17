@@ -43,6 +43,8 @@ void main() {
     expect(find.byKey(const Key('row-c2')), findsNothing);
     expect(find.byKey(const Key('hiddenBlocked-s3')), findsOneWidget);
     expect(find.byKey(const Key('hiddenBlocked-s1')), findsNothing);
+    expect(find.descendant(of: find.byKey(const Key('row-c1')), matching: find.byType(StatusShape)), findsNothing); // idle shows no mark
+    expect(find.descendant(of: find.byKey(const Key('row-s1')), matching: find.byType(StatusShape)), findsOneWidget);
     await t.tap(find.byKey(const Key('ws-w1')));
     await t.pump();
     expect(find.byKey(const Key('row-s1')), findsNothing);
