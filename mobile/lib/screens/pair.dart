@@ -74,10 +74,10 @@ class _PairScreenState extends State<PairScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            const Text('Pair with agterm-qt', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, height: 1.2)),
+            const Text('Pair with Agterm2', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, height: 1.2)),
             const SizedBox(height: 14),
             const Text(
-              'On your computer, open Settings ▸ Connect a Phone… in agterm-qt and switch it on, or run the command below in any terminal. Either shows a pairing code.',
+              'On your computer, open Settings ▸ Connect a Phone… in Agterm2 and switch it on, or run the command below in any terminal. Either shows a pairing code.',
               style: TextStyle(fontSize: 15, height: 1.5, color: C.muted),
             ),
             const SizedBox(height: 24),
