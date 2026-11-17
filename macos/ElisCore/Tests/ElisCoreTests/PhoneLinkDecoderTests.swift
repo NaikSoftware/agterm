@@ -74,6 +74,12 @@ import Testing
         }
     }
 
+    @Test func acceptsMaxPayload() throws {
+        var decoder = PhoneLinkDecoder()
+        let frame = PhoneLinkFrame.data(channel: 2, Data(repeating: 7, count: PhoneLinkFrame.maxPayload))
+        #expect(try decoder.feed(frame.encoded()) == [frame])
+    }
+
     @Test func staysFailedAfterError() {
         var decoder = PhoneLinkDecoder()
         #expect(throws: PhoneLinkError.unknownKind(0)) { try decoder.feed(Data(count: 9)) }

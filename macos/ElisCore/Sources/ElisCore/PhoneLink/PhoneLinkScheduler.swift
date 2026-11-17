@@ -2,7 +2,7 @@ import Foundation
 
 /// Per-link send queues. Channels 0 and 1 need no credit and are never capped; opened channels have both.
 public struct PhoneLinkScheduler: Sendable {
-    public enum Enqueue: Equatable, Sendable { case queued, overflowed }
+    public enum Enqueue: Equatable, Sendable { case queued, overflowed, closed }
 
     private let window: UInt32
     private let bufferLimit: Int
@@ -23,13 +23,21 @@ public struct PhoneLinkScheduler: Sendable {
             queues[channel, default: Data()].append(bytes)
             return .queued
         }
-        track(channel)
+        guard credits[channel] != nil else { return .closed }
         if queues[channel, default: Data()].count + bytes.count > bufferLimit {
             queues[channel] = Data()
             return .overflowed
         }
         queues[channel, default: Data()].append(bytes)
         return .queued
+    }
+
+    /// Starts the channel at the initial window; reopening resets its queue and credit.
+    public mutating func open(channel: UInt32) {
+        guard channel >= 2 else { return }
+        queues[channel] = nil
+        credits[channel] = window
+        if !opened.contains(channel) { opened.append(channel) }
     }
 
     public mutating func grant(channel: UInt32, bytes: UInt32) {
@@ -39,6 +47,7 @@ public struct PhoneLinkScheduler: Sendable {
     }
 
     public mutating func close(channel: UInt32) {
+        guard channel >= 2 else { return }
         queues[channel] = nil
         credits[channel] = nil
         if let index = opened.firstIndex(of: channel) {
@@ -63,12 +72,6 @@ public struct PhoneLinkScheduler: Sendable {
             }
         }
         return nil
-    }
-
-    private mutating func track(_ channel: UInt32) {
-        guard credits[channel] == nil else { return }
-        credits[channel] = window
-        opened.append(channel)
     }
 
     private mutating func take(channel: UInt32, limit: Int) -> PhoneLinkFrame? {

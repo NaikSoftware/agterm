@@ -49,6 +49,17 @@ public struct PhoneLinkFrame: Equatable, Sendable {
         PhoneLinkFrame(kind: .resync, channel: channel, payload: Data())
     }
 
+    public var creditBytes: UInt32? {
+        guard kind == .credit, payload.count == 4 else { return nil }
+        return payload.reduce(0) { $0 << 8 | UInt32($1) }
+    }
+
+    public var size: (cols: UInt16, rows: UInt16)? {
+        guard kind == .resize || kind == .grid, payload.count == 4 else { return nil }
+        let bytes = [UInt8](payload)
+        return (UInt16(bytes[0]) << 8 | UInt16(bytes[1]), UInt16(bytes[2]) << 8 | UInt16(bytes[3]))
+    }
+
     private static func be32(_ value: UInt32) -> [UInt8] {
         [UInt8(value >> 24), UInt8((value >> 16) & 0xff), UInt8((value >> 8) & 0xff), UInt8(value & 0xff)]
     }

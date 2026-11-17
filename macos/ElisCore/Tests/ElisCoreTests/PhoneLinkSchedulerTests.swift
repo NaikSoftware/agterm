@@ -7,6 +7,7 @@ import Testing
 
     @Test func controlBeforeEventsBeforeOpened() {
         var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 1000)
+        scheduler.open(channel: 2)
         _ = scheduler.enqueue(channel: 2, bytes(1))
         _ = scheduler.enqueue(channel: 1, bytes(1))
         _ = scheduler.enqueue(channel: 0, bytes(1))
@@ -18,6 +19,7 @@ import Testing
 
     @Test func noCreditDoesNotBlockControl() {
         var scheduler = PhoneLinkScheduler(window: 0, bufferLimit: 1000)
+        scheduler.open(channel: 2)
         _ = scheduler.enqueue(channel: 2, bytes(5))
         _ = scheduler.enqueue(channel: 0, bytes(3))
         #expect(scheduler.next(maxChunk: 10) == .data(channel: 0, bytes(3)))
@@ -27,6 +29,7 @@ import Testing
 
     @Test func chunkLimitedByCredit() {
         var scheduler = PhoneLinkScheduler(window: 10, bufferLimit: 1000)
+        scheduler.open(channel: 2)
         _ = scheduler.enqueue(channel: 2, bytes(25))
         #expect(scheduler.next(maxChunk: 100)?.payload.count == 10)
         #expect(scheduler.next(maxChunk: 100) == nil)
@@ -47,6 +50,8 @@ import Testing
 
     @Test func openedChannelsRoundRobin() {
         var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 1000)
+        scheduler.open(channel: 2)
+        scheduler.open(channel: 3)
         _ = scheduler.enqueue(channel: 2, bytes(4))
         _ = scheduler.enqueue(channel: 3, bytes(4))
         let order = (0..<4).compactMap { _ in scheduler.next(maxChunk: 2)?.channel }
@@ -56,6 +61,8 @@ import Testing
 
     @Test func overflowDropsOnlyThatChannel() {
         var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 8)
+        scheduler.open(channel: 2)
+        scheduler.open(channel: 3)
         #expect(scheduler.enqueue(channel: 3, bytes(4)) == .queued)
         #expect(scheduler.enqueue(channel: 0, bytes(4)) == .queued)
         #expect(scheduler.enqueue(channel: 2, bytes(9)) == .overflowed)
@@ -67,6 +74,7 @@ import Testing
 
     @Test func overflowEmptiesQueuedBytes() {
         var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 8)
+        scheduler.open(channel: 2)
         _ = scheduler.enqueue(channel: 2, bytes(6))
         #expect(scheduler.enqueue(channel: 2, bytes(3)) == .overflowed)
         #expect(scheduler.pendingBytes == 0)
@@ -74,6 +82,7 @@ import Testing
 
     @Test func grantClampsAtMax() {
         var scheduler = PhoneLinkScheduler(window: 2, bufferLimit: 100_000)
+        scheduler.open(channel: 2)
         _ = scheduler.enqueue(channel: 2, bytes(70000))
         scheduler.grant(channel: 2, bytes: .max)
         scheduler.grant(channel: 2, bytes: .max)
@@ -82,11 +91,76 @@ import Testing
 
     @Test func grantAfterCloseDoesNotResurrectChannel() {
         var scheduler = PhoneLinkScheduler(window: 10, bufferLimit: 1000)
+        scheduler.open(channel: 2)
         _ = scheduler.enqueue(channel: 2, bytes(1))
         scheduler.close(channel: 2)
         scheduler.grant(channel: 2, bytes: 100)
+        scheduler.open(channel: 2)
         _ = scheduler.enqueue(channel: 2, bytes(60))
         #expect(scheduler.next(maxChunk: 1000)?.payload.count == 10)
+    }
+
+    @Test func enqueueAfterCloseIsRefused() {
+        var scheduler = PhoneLinkScheduler(window: 10, bufferLimit: 1000)
+        scheduler.open(channel: 2)
+        scheduler.close(channel: 2)
+        #expect(scheduler.enqueue(channel: 2, bytes(5)) == .closed)
+        #expect(scheduler.enqueue(channel: 3, bytes(5)) == .closed)
+        #expect(scheduler.next(maxChunk: 1000) == nil)
+        #expect(scheduler.pendingBytes == 0)
+    }
+
+    @Test func creditBeforeFirstEnqueueIsKept() {
+        var scheduler = PhoneLinkScheduler(window: 10, bufferLimit: 1000)
+        scheduler.open(channel: 2)
+        scheduler.grant(channel: 2, bytes: 5)
+        _ = scheduler.enqueue(channel: 2, bytes(15))
+        #expect(scheduler.next(maxChunk: 1000)?.payload.count == 15)
+    }
+
+    @Test func reopenResetsQueueAndCredit() {
+        var scheduler = PhoneLinkScheduler(window: 10, bufferLimit: 1000)
+        scheduler.open(channel: 2)
+        _ = scheduler.enqueue(channel: 2, bytes(3))
+        scheduler.grant(channel: 2, bytes: 100)
+        scheduler.open(channel: 2)
+        #expect(scheduler.pendingBytes == 0)
+        _ = scheduler.enqueue(channel: 2, bytes(20))
+        #expect(scheduler.next(maxChunk: 1000)?.payload.count == 10)
+    }
+
+    @Test func closeIgnoresControlChannels() {
+        var scheduler = PhoneLinkScheduler(window: 10, bufferLimit: 1000)
+        _ = scheduler.enqueue(channel: 0, bytes(2))
+        _ = scheduler.enqueue(channel: 1, bytes(3))
+        scheduler.close(channel: 0)
+        scheduler.close(channel: 1)
+        #expect(scheduler.pendingBytes == 5)
+    }
+
+    @Test func closingAtCursorKeepsRoundRobin() {
+        var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 1000)
+        for channel: UInt32 in 2...4 {
+            scheduler.open(channel: channel)
+            _ = scheduler.enqueue(channel: channel, bytes(4))
+        }
+        #expect(scheduler.next(maxChunk: 2)?.channel == 2)
+        scheduler.close(channel: 3)
+        let order = (0..<3).compactMap { _ in scheduler.next(maxChunk: 2)?.channel }
+        #expect(order == [4, 2, 4])
+    }
+
+    @Test func closingBeforeCursorKeepsRoundRobin() {
+        var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 1000)
+        for channel: UInt32 in 2...4 {
+            scheduler.open(channel: channel)
+            _ = scheduler.enqueue(channel: channel, bytes(4))
+        }
+        #expect(scheduler.next(maxChunk: 2)?.channel == 2)
+        #expect(scheduler.next(maxChunk: 2)?.channel == 3)
+        scheduler.close(channel: 2)
+        let order = (0..<3).compactMap { _ in scheduler.next(maxChunk: 2)?.channel }
+        #expect(order == [4, 3, 4])
     }
 
     @Test func grantOnUnseenChannelIsIgnored() {
@@ -98,6 +172,7 @@ import Testing
 
     @Test func closeDropsQueue() {
         var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 1000)
+        scheduler.open(channel: 2)
         _ = scheduler.enqueue(channel: 2, bytes(5))
         scheduler.close(channel: 2)
         #expect(scheduler.pendingBytes == 0)

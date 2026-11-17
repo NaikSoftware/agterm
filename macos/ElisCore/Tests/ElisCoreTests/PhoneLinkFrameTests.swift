@@ -46,6 +46,24 @@ import Testing
         #expect(PhoneLinkFrame.data(channel: 0, Data([0x68, 0x69, 0x0a])).encoded() == byName["data hi"])
     }
 
+    @Test func payloadReadersMatchVectors() throws {
+        let byName = Dictionary(uniqueKeysWithValues: try Self.load().frames.map { ($0.name, Self.hex($0.hex)) })
+        func frame(_ name: String) throws -> PhoneLinkFrame {
+            let bytes = try #require(byName[name])
+            var decoder = PhoneLinkDecoder()
+            return try #require(try decoder.feed(bytes).first)
+        }
+        #expect(try frame("credit 16384").creditBytes == 16384)
+        #expect(try frame("credit 16384").size == nil)
+        let grid = try #require(try frame("grid 120x40").size)
+        #expect(grid.cols == 120 && grid.rows == 40)
+        let resize = try #require(try frame("resize 60x20").size)
+        #expect(resize.cols == 60 && resize.rows == 20)
+        #expect(try frame("resize 60x20").creditBytes == nil)
+        #expect(try frame("data hi").creditBytes == nil)
+        #expect(try frame("data hi").size == nil)
+    }
+
     @Test func kindsHaveSpecCodes() {
         #expect(PhoneLinkKind.allCases.map(\.rawValue) == Array(1...9))
     }

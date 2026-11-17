@@ -41,7 +41,7 @@ public struct PhoneLinkDecoder: Sendable {
         let fixed: Int? = switch kind {
         case .credit, .resize, .grid: 4
         case .resync: 0
-        default: nil
+        case .open, .opened, .data, .lead, .close: nil
         }
         if let fixed, fixed != Int(length) { throw .badPayload(kind, Int(length)) }
         offset = end - data.startIndex

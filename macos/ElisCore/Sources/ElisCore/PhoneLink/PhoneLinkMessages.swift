@@ -47,7 +47,7 @@ public extension PhoneLinkFrame {
     static func json<T: Encodable>(_ kind: PhoneLinkKind, channel: UInt32, _ value: T) -> PhoneLinkFrame {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        // shortcut: the payload types are plain Codable structs, so encoding cannot fail
+        // shortcut: encoding cannot fail for the PhoneLink payload types
         let payload = (try? encoder.encode(value)) ?? Data()
         return PhoneLinkFrame(kind: kind, channel: channel, payload: payload)
     }
