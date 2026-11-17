@@ -1,15 +1,15 @@
 ---
 paths:
-  - "agterm/Ghostty/GhosttySurfaceView*.swift"
-  - "agterm/Ghostty/GhosttyApp.swift"
-  - "agterm/Ghostty/GhosttyCallbacks.swift"
-  - "agterm/Ghostty/GhosttyResources.swift"
-  - "agterm/ContentView.swift"
-  - "agterm/Views/WindowContentView*.swift"
-  - "agterm/Views/SplitRatioAccessor.swift"
-  - "agterm/Views/TerminalView.swift"
-  - "agterm/Views/TerminalSearchBar.swift"
-  - "scripts/setup.sh"
+  - "macos/agterm/Ghostty/GhosttySurfaceView*.swift"
+  - "macos/agterm/Ghostty/GhosttyApp.swift"
+  - "macos/agterm/Ghostty/GhosttyCallbacks.swift"
+  - "macos/agterm/Ghostty/GhosttyResources.swift"
+  - "macos/agterm/ContentView.swift"
+  - "macos/agterm/Views/WindowContentView*.swift"
+  - "macos/agterm/Views/SplitRatioAccessor.swift"
+  - "macos/agterm/Views/TerminalView.swift"
+  - "macos/agterm/Views/TerminalSearchBar.swift"
+  - "macos/scripts/setup.sh"
 ---
 
 ## libghostty gotchas

@@ -1,7 +1,7 @@
 ---
 paths:
-  - "scripts/release.sh"
-  - "packaging/agterm.rb"
+  - "macos/scripts/release.sh"
+  - "macos/packaging/agterm.rb"
 ---
 
 ## Release (`scripts/release.sh`)

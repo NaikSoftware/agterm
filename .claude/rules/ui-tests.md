@@ -1,7 +1,7 @@
 ---
 paths:
-  - "agtermUITests/**/*.swift"
-  - "agtermTests/**/*.swift"
+  - "macos/agtermUITests/**/*.swift"
+  - "macos/agtermTests/**/*.swift"
 ---
 
 ## Application-hosted tests (`agtermTests/`)

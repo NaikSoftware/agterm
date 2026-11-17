@@ -1,9 +1,9 @@
 ---
 paths:
-  - "agterm/Views/Palette.swift"
-  - "agterm/SettingsModel.swift"
-  - "agterm/SettingsCatalog.swift"
-  - "agterm/AppActions*.swift"
+  - "macos/agterm/Views/Palette.swift"
+  - "macos/agterm/SettingsModel.swift"
+  - "macos/agterm/SettingsCatalog.swift"
+  - "macos/agterm/AppActions*.swift"
 ---
 
 ## Theme picker

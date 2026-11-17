@@ -80,7 +80,7 @@ Ready-made recipes are in the [cookbook](cookbook/).
 - [User guide](site/docs.html): workspaces, sessions, splits, overlays, keymap and settings.
 - [Command reference](site/commands.html): every `agtermctl` command.
 - [Troubleshooting](macos/docs/troubleshooting.md): logs and common problems.
-- [CONTRIBUTING.md](macos/CONTRIBUTING.md): build from source.
+- [CONTRIBUTING.md](CONTRIBUTING.md): build from source.
 - [ARCHITECTURE.md](macos/ARCHITECTURE.md): modules, surface ownership and the libghostty boundary.
 
 Report bugs in [Issues](https://github.com/NaikSoftware/agterm/issues).

@@ -5,8 +5,8 @@ Read `site/docs.html` for product behavior and `ARCHITECTURE.md` for modules, su
 C-boundary concurrency before changing the bridge.
 `README.md` is the product synopsis, not the reference.
 The macOS app lives in `macos/`: run every command there, and read every path below relative to it,
-except the repository-root `README.md`, `CLAUDE.md`, `.claude/`, `.github/`, `.claude-plugin/`, `.agents/`,
-`plugins/`, `cookbook/`, `site/` and `docs/screenshots/`.
+except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude/`, `.github/`,
+`.claude-plugin/`, `.agents/`, `plugins/`, `cookbook/`, `site/`, `docs/screenshots/` and `docs/superpowers/`.
 
 ## Working norms
 

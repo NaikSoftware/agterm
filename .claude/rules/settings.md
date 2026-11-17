@@ -1,15 +1,15 @@
 ---
 paths:
-  - "agterm/SettingsModel.swift"
-  - "agterm/Views/SettingsView.swift"
-  - "agterm/Views/AppearanceSettingsView.swift"
-  - "agterm/SettingsCatalog.swift"
-  - "agterm/Views/WindowAppearance.swift"
-  - "agterm/NSColor+AgtermHex.swift"
-  - "agtermCore/Sources/agtermCore/AppSettings.swift"
-  - "agtermCore/Sources/agtermCore/QuickTerminalMetrics.swift"
-  - "agtermCore/Sources/agtermCore/SettingsStore.swift"
-  - "agtermUITests/SettingsUITests.swift"
+  - "macos/agterm/SettingsModel.swift"
+  - "macos/agterm/Views/SettingsView.swift"
+  - "macos/agterm/Views/AppearanceSettingsView.swift"
+  - "macos/agterm/SettingsCatalog.swift"
+  - "macos/agterm/Views/WindowAppearance.swift"
+  - "macos/agterm/NSColor+AgtermHex.swift"
+  - "macos/agtermCore/Sources/agtermCore/AppSettings.swift"
+  - "macos/agtermCore/Sources/agtermCore/QuickTerminalMetrics.swift"
+  - "macos/agtermCore/Sources/agtermCore/SettingsStore.swift"
+  - "macos/agtermUITests/SettingsUITests.swift"
 ---
 
 ## Settings

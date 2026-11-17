@@ -1,8 +1,8 @@
 ---
 paths:
-  - "agterm/Notifications/NotificationManager.swift"
-  - "agtermCore/Sources/agtermCore/Notifications.swift"
-  - "agtermCore/Sources/agtermCore/AgentStatus.swift"
+  - "macos/agterm/Notifications/NotificationManager.swift"
+  - "macos/agtermCore/Sources/agtermCore/Notifications.swift"
+  - "macos/agtermCore/Sources/agtermCore/AgentStatus.swift"
 ---
 
 ## Notifications

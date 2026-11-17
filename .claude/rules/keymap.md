@@ -1,13 +1,13 @@
 ---
 paths:
-  - "agtermCore/Sources/agtermCore/Keybind.swift"
-  - "agtermCore/Sources/agtermCore/KeybindMatcher.swift"
-  - "agtermCore/Sources/agtermCore/Keymap.swift"
-  - "agtermCore/Sources/agtermCore/BuiltinAction.swift"
-  - "agtermCore/Sources/agtermCore/CustomCommand.swift"
-  - "agtermCore/Sources/agtermCore/ConfigPaths.swift"
-  - "agterm/Commands/CustomCommandRunner.swift"
-  - "agtermUITests/KeymapUITests.swift"
+  - "macos/agtermCore/Sources/agtermCore/Keybind.swift"
+  - "macos/agtermCore/Sources/agtermCore/KeybindMatcher.swift"
+  - "macos/agtermCore/Sources/agtermCore/Keymap.swift"
+  - "macos/agtermCore/Sources/agtermCore/BuiltinAction.swift"
+  - "macos/agtermCore/Sources/agtermCore/CustomCommand.swift"
+  - "macos/agtermCore/Sources/agtermCore/ConfigPaths.swift"
+  - "macos/agterm/Commands/CustomCommandRunner.swift"
+  - "macos/agtermUITests/KeymapUITests.swift"
 ---
 
 ## Keymap

@@ -4,7 +4,7 @@
 
 If this is your first pull request to agterm, open a [Discussion](https://github.com/umputun/agterm/discussions) describing what you plan to build and why, then wait for a reply before writing code. Some ideas do not fit the project's direction, and finding that out early costs less than finding it out after a finished PR.
 
-Check that what you want does not already exist: agterm carries a broad control API, custom commands you bind yourself in `keymap.conf`, and six Settings tabs, so a lot is reachable without new code. Look at `agtermctl --help`, the [README](../README.md), [agterm.com/docs](https://agterm.com/docs), and the bundled agent skill under `plugins/agterm/skills/agterm/` before proposing anything.
+Check that what you want does not already exist: agterm carries a broad control API, custom commands you bind yourself in `keymap.conf`, and six Settings tabs, so a lot is reachable without new code. Look at `agtermctl --help`, the [README](README.md), [agterm.com/docs](https://agterm.com/docs), and the bundled agent skill under `plugins/agterm/skills/agterm/` before proposing anything.
 
 Discussions are for ideas, questions, and anything open-ended. Issues are for concrete bugs and for features already agreed in a Discussion.
 
@@ -19,7 +19,7 @@ Weigh what a feature adds against the code it brings with it.
 
 ## Development setup
 
-Building needs macOS 14 or later, Xcode 26 with `xcodegen` on `PATH`, and Homebrew. `xcodegen` is not installed for you and nothing checks for it, but `make build`, `make run`, `make release` and `make test-app` all call it, so install it first (`brew install xcodegen`). Run the one-time setup next:
+Building needs macOS 14 or later, Xcode 26 with `xcodegen` on `PATH`, and Homebrew. `xcodegen` is not installed for you and nothing checks for it, but `make build`, `make run`, `make release` and `make test-app` all call it, so install it first (`brew install xcodegen`). Run every command below from `macos/`, starting with the one-time setup:
 
 ```
 scripts/setup.sh
@@ -113,4 +113,4 @@ A PR with no problem statement will be closed. If the problem is hard to articul
 
 `cookbook/` collects installable `agtermctl` workflows. A recipe is a shell script and a README rather than Swift, so it follows its own rules: a fixed README template, an index row, and a version pin.
 
-Read [cookbook/CONTRIBUTING.md](../cookbook/CONTRIBUTING.md) before sending one.
+Read [cookbook/CONTRIBUTING.md](cookbook/CONTRIBUTING.md) before sending one.

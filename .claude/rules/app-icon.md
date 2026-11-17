@@ -1,7 +1,7 @@
 ---
 paths:
-  - "agterm/AppIcon.icon/**"
-  - "project.yml"
+  - "macos/agterm/AppIcon.icon/**"
+  - "macos/project.yml"
 ---
 
 ## App icon

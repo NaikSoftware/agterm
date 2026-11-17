@@ -1,18 +1,18 @@
 ---
 paths:
-  - "agtermCore/Sources/agtermCore/WindowLibrary.swift"
-  - "agtermCore/Sources/agtermCore/WindowGeometry.swift"
-  - "agtermCore/Sources/agtermCore/QuitPrompt.swift"
-  - "agtermCore/Sources/agtermCore/QuitReason.swift"
-  - "agterm/WindowRegistry.swift"
-  - "agterm/AppDelegate.swift"
-  - "agterm/AppDelegate+DockMenu.swift"
-  - "agterm/Views/WindowAccessor.swift"
-  - "agterm/Views/WindowControlArea.swift"
-  - "agterm/Views/QuickTerminal.swift"
-  - "agtermUITests/MultiWindowUITests.swift"
-  - "agtermUITests/QuickTerminalUITests.swift"
-  - "agtermTests/DockMenuTests.swift"
+  - "macos/agtermCore/Sources/agtermCore/WindowLibrary.swift"
+  - "macos/agtermCore/Sources/agtermCore/WindowGeometry.swift"
+  - "macos/agtermCore/Sources/agtermCore/QuitPrompt.swift"
+  - "macos/agtermCore/Sources/agtermCore/QuitReason.swift"
+  - "macos/agterm/WindowRegistry.swift"
+  - "macos/agterm/AppDelegate.swift"
+  - "macos/agterm/AppDelegate+DockMenu.swift"
+  - "macos/agterm/Views/WindowAccessor.swift"
+  - "macos/agterm/Views/WindowControlArea.swift"
+  - "macos/agterm/Views/QuickTerminal.swift"
+  - "macos/agtermUITests/MultiWindowUITests.swift"
+  - "macos/agtermUITests/QuickTerminalUITests.swift"
+  - "macos/agtermTests/DockMenuTests.swift"
 ---
 
 ## Windows

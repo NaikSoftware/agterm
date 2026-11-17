@@ -1,16 +1,16 @@
 ---
 paths:
-  - "agterm/Views/WorkspaceSidebar*.swift"
-  - "agterm/Views/SidebarRowViews.swift"
-  - "agterm/Views/SidebarOutlineView.swift"
-  - "agterm/Views/SidebarRenameController.swift"
-  - "agtermCore/Sources/agtermCore/SidebarDrop.swift"
-  - "agtermCore/Sources/agtermCore/SidebarMode.swift"
-  - "agtermCore/Sources/agtermCore/Reorder.swift"
-  - "agtermUITests/SidebarUITests.swift"
-  - "agtermUITests/ReorderUITests.swift"
-  - "agtermUITests/FlaggedViewUITests.swift"
-  - "agtermUITests/FocusWorkspaceUITests.swift"
+  - "macos/agterm/Views/WorkspaceSidebar*.swift"
+  - "macos/agterm/Views/SidebarRowViews.swift"
+  - "macos/agterm/Views/SidebarOutlineView.swift"
+  - "macos/agterm/Views/SidebarRenameController.swift"
+  - "macos/agtermCore/Sources/agtermCore/SidebarDrop.swift"
+  - "macos/agtermCore/Sources/agtermCore/SidebarMode.swift"
+  - "macos/agtermCore/Sources/agtermCore/Reorder.swift"
+  - "macos/agtermUITests/SidebarUITests.swift"
+  - "macos/agtermUITests/ReorderUITests.swift"
+  - "macos/agtermUITests/FlaggedViewUITests.swift"
+  - "macos/agtermUITests/FocusWorkspaceUITests.swift"
 ---
 
 ## Sidebar
