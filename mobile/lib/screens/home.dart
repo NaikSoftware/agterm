@@ -436,7 +436,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: Row(children: [
               SizedBox(width: 20, child: Lucide(lucideSquareStack, color: tintColor(w.tint) ?? C.muted)),
               const SizedBox(width: 9),
-              Expanded(child: Text(w.name, style: const TextStyle(fontSize: 14, color: C.muted), maxLines: 1, overflow: TextOverflow.ellipsis)),
+              Expanded(child: Text(w.name, style: TextStyle(fontSize: 14, color: tintColor(w.tint) ?? C.muted), maxLines: 1, overflow: TextOverflow.ellipsis)),
             ]),
           ),
         ),
@@ -492,7 +492,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 const SizedBox(width: 10),
                 SizedBox(width: 20, child: Lucide(lucideSquareStack, color: tinted ? tint : C.muted)),
                 const SizedBox(width: 10),
-                Expanded(child: Text(w.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text(w.name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: tinted ? tint : null), maxLines: 1, overflow: TextOverflow.ellipsis)),
                 if (urgent != null) Padding(padding: const EdgeInsets.only(left: 8), child: StatusShape(urgent.status, blink: urgent.blink)),
               ]),
             ),
