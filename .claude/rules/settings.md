@@ -30,7 +30,8 @@ paths:
   Default-off nil fields include attention button, Dock bounce, global config inheritance, close
   confirmation, auto-follow, attention-includes-active, attention-across-windows, hidden inactive sidebars,
   and interface hiding.
-  `restoreMode` defaults to `none`; the legacy `restoreRunningCommand` boolean migrates to `rerun` or `none`.
+  A fresh install seeds `restoreMode` = `live`; an existing file without it means `none`.
+  The legacy `restoreRunningCommand` boolean migrates to `rerun` or `none`.
 - `newSessionPlacement` (nil = `end`) applies only to New Session: `AppActions.newSession()` and the
   workspace row's New Session and "+", through `AppActions.resolvedNewSessionIndex`. It inserts after the
   selection only when that lives in the destination workspace. Open Directory, folder drops, and

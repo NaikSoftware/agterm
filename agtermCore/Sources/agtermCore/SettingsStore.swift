@@ -26,8 +26,8 @@ public struct SettingsStore {
         return settings
     }
 
-    /// The defaults a fresh install starts from: `AppSettings()` with the app's default theme seeded.
-    private static var seededDefault: AppSettings { AppSettings(theme: AppSettings.defaultTheme) }
+    /// The defaults a fresh install starts from: `AppSettings()` with the default theme and Live sessions seeded.
+    private static var seededDefault: AppSettings { AppSettings(theme: AppSettings.defaultTheme, restoreMode: .live) }
 
     /// Writes the settings atomically, creating the directory if needed.
     public func save(_ settings: AppSettings) throws {
