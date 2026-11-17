@@ -34,6 +34,28 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   AgtermModel get m => widget.model;
 
+  // a closed session keeps its row, at its old place, while _Leave plays; keyed by window and filter so a
+  // switch of either, which replaces the whole list, plays nothing
+  final _prevRows = <String, List<Session>>{};
+  String? _rowsKey;
+
+  List<Session> _withLeaving(Workspace w, List<Session> shown) {
+    final ids = {for (final s in shown) s.id};
+    final out = [...shown];
+    final prev = _prevRows[w.id] ?? const <Session>[];
+    for (var i = 0; i < prev.length; i++) {
+      // a session still in the tree moved, folded or went to another workspace: only a closed one leaves
+      if (!ids.contains(prev[i].id) && m.session(prev[i].id) == null) out.insert(i.clamp(0, out.length), prev[i]);
+    }
+    return _prevRows[w.id] = out;
+  }
+
+  void _left(String workspaceId, String sessionId) {
+    if (mounted) setState(() => _prevRows[workspaceId]?.removeWhere((s) => s.id == sessionId));
+  }
+
+  bool _hasLeaving(Workspace w) => _prevRows[w.id]?.isNotEmpty == true;
+
   @override
   void initState() {
     super.initState();
@@ -371,6 +393,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       );
 
   List<Widget> _body(List<Session> all, List<Session> needs) {
+    if ('${m.windowId}|$filter' != _rowsKey) {
+      _rowsKey = '${m.windowId}|$filter';
+      _prevRows.clear();
+    }
     if (filter != 'all') {
       final list = all.where((s) => filter == 'flagged' ? s.flagged : s.status == filter).toList();
       final byId = {for (final w in m.workspaces) w.id: w};
@@ -407,8 +433,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 10),
         sliver: SliverList.list(children: [
-          for (final w in m.workspaces.where((w) => w.sessions.isNotEmpty)) Padding(padding: const EdgeInsets.only(bottom: 10), child: _group(w)),
-          if (m.workspaces.where((w) => w.sessions.isEmpty).toList() case final empty when empty.isNotEmpty)
+          for (final w in m.workspaces.where((w) => w.sessions.isNotEmpty || _hasLeaving(w)))
+            // its last session closing: the whole card leaves with it, and the workspace's tile takes its place
+            w.sessions.isEmpty
+                ? _Leave(key: ValueKey('leave-ws-${w.id}'), onDone: () => mounted ? setState(() => _prevRows.remove(w.id)) : null, child: _spaced(w))
+                : KeyedSubtree(key: ValueKey('card-${w.id}'), child: _spaced(w)),
+          if (m.workspaces.where((w) => w.sessions.isEmpty && !_hasLeaving(w)).toList() case final empty when empty.isNotEmpty)
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
@@ -452,12 +482,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return best;
   }
 
+  Widget _spaced(Workspace w) => Padding(padding: const EdgeInsets.only(bottom: 10), child: _group(w));
+
   Widget _group(Workspace w) {
     final own = tintColor(w.tint);
     final tint = own ?? C.active;
     final open = !collapsed.contains(w.id);
     final folded = {for (final s in w.sessions) if (s.collapsed) s.id};
-    final shown = [for (final s in w.sessions) if (s.parent.isEmpty || !folded.contains(s.parent)) s];
+    final live = [for (final s in w.sessions) if (s.parent.isEmpty || !folded.contains(s.parent)) s];
+    final shown = open ? _withLeaving(w, live) : (_prevRows[w.id] = live);
+    final ids = {for (final s in live) s.id};
+    Widget row(Session s) => s.parent.isEmpty
+        ? _row(s, w, tint: tint, indent: 22, chevronSlot: true, last: own != null && s == shown.last,
+            hiddenBlocked: s.collapsed && w.sessions.any((c) => c.parent == s.id && c.status == 'blocked'))
+        : _row(s, w, tint: tint, indent: 46, last: own != null && s == shown.last);
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: own == null
@@ -467,10 +505,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _workspaceRow(w, tint: tint, tinted: own != null, open: open),
         if (open)
           for (final s in shown)
-            s.parent.isEmpty
-                ? _row(s, w, tint: tint, indent: 22, chevronSlot: true, last: own != null && s == shown.last,
-                    hiddenBlocked: s.collapsed && w.sessions.any((c) => c.parent == s.id && c.status == 'blocked'))
-                : _row(s, w, tint: tint, indent: 46, last: own != null && s == shown.last),
+            ids.contains(s.id)
+                ? KeyedSubtree(key: ValueKey(s.id), child: row(s))
+                : _Leave(key: ValueKey('leave-${s.id}'), onDone: () => _left(w.id, s.id), child: row(s)),
       ]),
     );
   }
@@ -694,6 +731,49 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 }
 
 // agterm-qt's running-row wave: the tint, then the active blue, drifting one period (two row widths) every 4.8 s
+/// A closed session's row on its way out: it fades and drifts left, then the gap closes.
+class _Leave extends StatefulWidget {
+  const _Leave({super.key, required this.child, required this.onDone});
+  final Widget child;
+  final VoidCallback onDone;
+
+  @override
+  State<_Leave> createState() => _LeaveState();
+}
+
+class _LeaveState extends State<_Leave> with SingleTickerProviderStateMixin {
+  late final c = AnimationController(vsync: this, duration: const Duration(milliseconds: 360));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (c.isAnimating || c.isCompleted) return;
+    if (MediaQuery.disableAnimationsOf(context)) c.duration = Duration.zero;
+    c.forward().whenComplete(widget.onDone);
+  }
+
+  @override
+  void dispose() {
+    c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Animation<double> part(double a, double b, Curve curve) => CurvedAnimation(parent: c, curve: Interval(a, b, curve: curve));
+    return IgnorePointer(
+      child: SizeTransition(
+        sizeFactor: ReverseAnimation(part(0.35, 1, Curves.easeInOutCubic)),
+        alignment: Alignment.topCenter,
+        child: FadeTransition(
+          opacity: ReverseAnimation(part(0, 0.55, Curves.easeOut)),
+          child: SlideTransition(position: part(0, 0.55, Curves.easeIn).drive(Tween(begin: Offset.zero, end: const Offset(-0.06, 0))), child: widget.child),
+        ),
+      ),
+    );
+  }
+}
+
 class _WavePainter extends CustomPainter {
   _WavePainter(this.phase, this.tint) : super(repaint: phase);
   final Animation<double> phase;
