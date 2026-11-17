@@ -4,7 +4,7 @@ import XCTest
 /// Ctrl-Tab switcher. It opens a popover of attention, recent and recently closed sessions; clicking a row
 /// commits the switch. The pill is disabled while all three lists are empty.
 ///
-/// SCOPE NOTE: the row CLICK → session switch cannot be driven from XCUITest — a synthesized click (element
+/// SCOPE NOTE (the bell popover): the row CLICK → session switch cannot be driven from XCUITest — a synthesized click (element
 /// OR coordinate) on a SwiftUI `Button` inside an `NSPopover` does not fire the button's action (confirmed
 /// by instrumenting the row action: the marker never wrote), while a real mouse click does, because it makes
 /// the popover key. So these tests cover the enable/disable state and that the popover OPENS and LISTS the
@@ -65,9 +65,13 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
                        "the popover should list only the single other session, not the current one")
     }
 
-    func testControlPOpensTheSwitcherOverlayBesideThePill() throws {
-        XCTAssertTrue(app.buttons["recent-sessions-button"].waitForExistence(timeout: 10))
-        try assertControlPSwitches()
+    func testControlPOpensTheSwitcherOverlayUnderThePill() throws {
+        let pill = app.buttons["recent-sessions-button"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 10))
+        try assertControlPSwitches { field in
+            XCTAssertEqual(field.frame.midX, pill.frame.midX, accuracy: 40, "the switcher hangs centred under the pill")
+            XCTAssertEqual(field.frame.minY - pill.frame.maxY, 20, accuracy: 30, "the switcher hangs right under the pill")
+        }
     }
 
     func testControlPOpensTheSwitcherOverlayWithoutThePill() throws {
@@ -77,7 +81,7 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
     }
 
     /// ⌃P opens the switcher overlay with its field focused: the typed query filters the list and Return switches.
-    private func assertControlPSwitches() throws {
+    private func assertControlPSwitches(placement: (XCUIElement) -> Void = { _ in }) throws {
         let seeded = try activeSessionID()
         XCTAssertEqual(try sendCommand(#"{"cmd":"session.rename","target":"\#(seeded)","args":{"name":"zebrafish"}}"#)["ok"] as? Bool, true)
         // two other sessions, so the filtered list (one row) differs from the unfiltered Recent list (two)
@@ -93,7 +97,8 @@ final class RecentSessionsButtonUITests: ControlAPITestCase {
             _ = field.waitForExistence(timeout: 1)
         }
         XCTAssertTrue(field.exists, "⌃P should open the session switcher")
-        XCTAssertTrue(app.descendants(matching: .any)["switcher-scrim"].exists, "⌃P shows the overlay, not the popover")
+        XCTAssertTrue(app.descendants(matching: .any)["switcher-scrim"].exists, "⌃P shows the switcher overlay")
+        placement(field)
 
         let rows = app.buttons.matching(identifier: "recent-session-row")
         for key in "zebra" { app.typeKey(String(key), modifierFlags: []) }

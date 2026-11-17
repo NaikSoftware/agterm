@@ -16,14 +16,14 @@ extension WindowContentView {
         store.navigableRecentSessions(limit: SessionSwitcher.maxCandidates)
     }
 
-    /// The newest closed sessions the popover offers to reopen, below the open ones.
+    /// The newest closed sessions the switcher offers to reopen, below the open ones.
     private var recentClosedSessions: [RecentClosedItem] {
         Array(library.recentClosedItems.lazy.filter { $0.kind == .session }.prefix(15))
     }
 
-    /// The title-bar session switcher: a one-line pill naming the active session that opens one popover. The
-    /// label stays non-hittable on top and the button sits behind it, so a disabled button never dims the title.
-    /// Opening a popover is interactive-only, so it is control-API keep-in-sync exempt, like the bell.
+    /// The title-bar session switcher: a one-line pill naming the active session that opens the switcher overlay
+    /// under it. The label stays non-hittable on top and the button sits behind it, so a disabled button never
+    /// dims the title. Opening the switcher is interactive-only, so it is control-API keep-in-sync exempt.
     var switcherPill: some View {
         HStack(spacing: 9) {
             SwitcherPillLabel(store: store, library: library, windowID: windowID, chromeText: chromeText,
@@ -42,8 +42,8 @@ extension WindowContentView {
         .frame(height: toolbarMode == .normal ? 34 : 26)
         .allowsHitTesting(false)
         .background { recentSessionsButton }
-        // hiding the pill (Interface toggle, hidden toolbar) with the popover open must not leave it marked shown.
-        .onDisappear { recentSessionsShown = false }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { switcherPillFrame = $0 }
+        .onDisappear { switcherPillFrame = nil }
     }
 
     /// The theme background moved 7% toward white on a dark theme, toward black on a light one.
@@ -55,10 +55,10 @@ extension WindowContentView {
 
     private var recentSessionsButton: some View {
         Button {
-            guard !pick.modalPending else { return }
-            recentSessionsShown.toggle()
+            actions.toggleSessionPalette()
         } label: {
-            SwitcherPillChrome(chromeText: chromeText, openFill: popoverBackground, open: recentSessionsShown)
+            SwitcherPillChrome(chromeText: chromeText, openFill: popoverBackground,
+                               open: isFrontmost && palette.mode == .switcher)
         }
         .buttonStyle(.plain)
         .toolTip(helpHint("Session switcher", .sessionPalette), isShown: titlebarTipsShown)
@@ -67,35 +67,28 @@ extension WindowContentView {
         .allowsHitTesting(!pick.modalPending)
         .accessibilityLabel("Session switcher")
         .accessibilityIdentifier("recent-sessions-button")
-        .popover(isPresented: $recentSessionsShown, arrowEdge: .bottom) {
-            // a `.popover` keeps the system arrow, radius and shadow; only the fill is ours.
-            switcherPanel
-                .background(popoverBackground)
-                .presentationBackground(popoverBackground)
-                // suppress this window's auto-follow while the popover is open so an armed idle jump can't
-                // reshuffle the rows under the pointer. Bracketed on the content's own lifetime, so it stays
-                // balanced however the popover goes away, the pill unmounting included.
-                .onAppear { store.suppressAutoFollow() }
-                .onDisappear { store.resumeAutoFollow() }
-        }
     }
 
-    /// Answers `PaletteController.requestSwitcher` (⌃P, Navigate ▸ Go to Session, `keymap.run session_palette`) in
-    /// the frontmost window with the `.switcher` overlay, never the pill's popover: a popover opened from a key
-    /// equivalent hands the keyboard back to the terminal within half a second (AppKit, no agterm caller), so
-    /// typing would miss its field.
+    /// Answers `PaletteController.requestSwitcher` (the pill, ⌃P, Navigate ▸ Go to Session, `keymap.run
+    /// session_palette`) in the frontmost window. Every opener shows the one `.switcher` overlay: a system popover
+    /// opened from a key equivalent hands the keyboard back to the terminal within half a second (AppKit, no agterm
+    /// caller), and it cannot draw the design's radius, outline and shadow without an arrow.
     func toggleSwitcher() {
         guard isFrontmost, !pick.modalPending else { return }
-        recentSessionsShown = false
         palette.toggle(.switcher)
     }
 
-    /// The switcher opened from the keyboard or menu: the panel the pill's popover shows, centred over the terminal
-    /// area near the top of the window, with the spec's own radius, outline and shadow. A click on the scrim, Esc or
-    /// a commit closes it; the palette bracket restores focus and auto-follow.
+    /// The session switcher: hung 6pt under the title pill and centred on it, or, with no pill, centred over the
+    /// terminal area near the top of the window. A click on the scrim, Esc or a commit closes it; the palette
+    /// bracket restores focus and auto-follow.
     var switcherOverlay: some View {
         GeometryReader { geo in
-            ZStack(alignment: .top) {
+            let width = GhosttyApp.shared.interfaceMetrics.scaled(472)
+            let origin = geo.frame(in: .global).origin
+            let anchor = switcherPillFrame.map { CGPoint(x: $0.midX - origin.x, y: $0.maxY + 6 - origin.y) }
+            let x = anchor.map { min(max($0.x - width / 2, 8), geo.size.width - width - 8) }
+                ?? (geo.size.width - width) / 2 + terminalAreaInset / 2
+            ZStack(alignment: .topLeading) {
                 Color.black.opacity(0.2)
                     .contentShape(Rectangle())
                     .onTapGesture { palette.close() }
@@ -107,15 +100,12 @@ extension WindowContentView {
                     .overlay(RoundedRectangle(cornerRadius: 12)
                         .strokeBorder((GhosttyApp.shared.terminalThemeIsDark ? Color.white : Color.black).opacity(0.10)))
                     .shadow(color: .black.opacity(0.5), radius: 24, y: 18)
-                    .padding(.top, geo.size.height * 0.12)
-                    .offset(x: terminalAreaInset / 2)
+                    .offset(x: x, y: anchor.map { max($0.y, 0) } ?? geo.size.height * 0.12)
             }
         }
     }
 
-    /// Closes whichever host shows the switcher.
     private func closeSwitcher() {
-        recentSessionsShown = false
         if palette.mode == .switcher { palette.close() }
     }
 
@@ -169,7 +159,7 @@ extension WindowContentView {
         return library.openIDs().count > 1 ? "\(entry.window.name) · \(workspace)" : workspace
     }
 
-    /// The popover closes first and the reopen runs on the next turn, since it may raise another window.
+    /// The switcher closes first and the reopen runs on the next turn, since it may raise another window.
     private func reopenRecentClosed(_ id: RecentClosedItem.ID) {
         guard !pick.modalPending else { return }
         closeSwitcher()
@@ -250,8 +240,8 @@ extension WindowContentView {
         return chromeText.opacity(0.2)
     }
 
-    /// Commit a popover row click: note activity (so auto-follow can't pull the selection back), select the
-    /// session, focus it, and close the popover — the mouse twin of the Ctrl-Tab release commit.
+    /// Commit a switcher row: note activity (so auto-follow can't pull the selection back), select the
+    /// session, focus it, and close the switcher — the twin of the Ctrl-Tab release commit.
     private func selectRecent(_ id: UUID) {
         guard !pick.modalPending else { return }
         store.noteUserActivity()
@@ -307,7 +297,7 @@ extension WindowContentView {
             attentionPopover
         }
         .onChange(of: attentionPopoverShown) { _, shown in
-            // same as the switcher popover: suppress auto-follow while open (counted, so it stays balanced).
+            // suppress auto-follow while open (counted, so it stays balanced).
             if shown { store.suppressAutoFollow() } else { store.resumeAutoFollow() }
         }
         .onChange(of: empty) { _, isEmpty in

@@ -326,27 +326,28 @@ paths:
 - Keep the session switcher and the bell popover in `WindowContentView+RecentSessions` so
   `WindowContentView.swift` remains below 1000 lines. Both use `SessionPopoverRow`: trailing status glyph,
   hover selection color, full-row hit target, chrome text.
-- The session switcher is one body (`SwitcherPopover`) with two hosts: a click on the title pill opens it in the
-  pill's popover, and every keyboard or menu opener (⌃P `session_palette`, Navigate ▸ Go to Session,
-  `keymap.run`) shows it as the `.switcher` `PaletteMode`, centred over the terminal area in `windowOverlayLayer`,
-  so the palette bracket gives it focus restore and auto-follow suppression. `.switcher` never renders a
-  `CommandPalette`. The openers call `AppActions.toggleSessionPalette`, which bumps
-  `PaletteController.requestSwitcher`, answered by the frontmost window's `toggleSwitcher`. Never route them to
-  the popover: one opened from a key equivalent is key at first, then AppKit hands the keyboard back to the
-  terminal within half a second with no agterm caller, so typing misses its field. The pill's hint and tooltip
-  show the opener's binding.
+- The session switcher (`SwitcherPopover`) has one host for every opener (the title pill, ⌃P `session_palette`,
+  Navigate ▸ Go to Session, `keymap.run`): the `.switcher` `PaletteMode` in `windowOverlayLayer`, so the palette
+  bracket gives it focus restore and auto-follow suppression. `.switcher` never renders a `CommandPalette`.
+  With the pill shown it hangs 6pt under the pill's measured frame (`switcherPillFrame`), centred on it; with no
+  pill it sits centred over the terminal area near the top. The openers call `AppActions.toggleSessionPalette`,
+  which bumps `PaletteController.requestSwitcher`, answered by the frontmost window's `toggleSwitcher`.
+  Never host it in a SwiftUI `.popover`: one opened from a key equivalent hands the keyboard back to the terminal
+  within half a second (AppKit, no agterm caller), and a popover cannot drop its arrow or draw the design's
+  radius, outline and shadow. The pill shows its open ring while the overlay is up; its hint and tooltip show the
+  opener's binding.
 - The search field owns the keyboard from the moment the switcher opens. An empty query shows Needs you (every
   window's attention entries), Recent (`navigableRecentSessions`, excluding active) and Recently closed (up to
   15 session entries); a query swaps them for one Sessions list over `listOrdered(navigableSessions)` plus
   the closed entries, ranked by `fuzzyRank` over `paletteSearchKeys` (name, then "workspace · detail").
   ↑/↓ move one highlight over every visible row, first by default; Return commits it as a click does; Esc,
-  a scrim click or a commit closes either host.
+  a scrim click, a second pill click or a commit closes it.
 - A commit records activity, selects, focuses and reveals a captured blocked pane;
   a closed row runs `openRecentClosed`, which types a recorded Claude resume line once
   (`Session.pendingResumeLine`, a create-only payload under Live); a Needs you row goes through
   `selectAttention`.
 - Bell lists all non-idle sessions across open windows, current included. Selection uses the same
   pane-aware reveal as the palette; see [[notifications]] for the cross-window raise.
-- Popover and switcher opens are keep-in-sync exempt. Synthesized XCUITest clicks inside `NSPopover` do not fire
-  the SwiftUI button, though real clicks do; keystrokes into the switcher's field do arrive
-  (pill-click popover and ⌃P overlay), so its tests type a query and press Return.
+- Popover and switcher opens are keep-in-sync exempt. Synthesized XCUITest clicks inside the bell's `NSPopover` do
+  not fire the SwiftUI button, though real clicks do; the switcher is in-window, and keystrokes into its field
+  arrive, so its tests type a query and press Return.

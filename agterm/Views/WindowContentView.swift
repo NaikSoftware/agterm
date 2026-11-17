@@ -83,9 +83,9 @@ struct WindowContentView: View {
     @State var attentionButtonEnabled: Bool = WindowContentView.resolvedAttentionButtonEnabled()
     /// The title-bar / sidebar-footer chrome the user hid in Settings ▸ Interface, read by `shows(_:)`.
     @State var hiddenInterfaceElements: Set<InterfaceElement> = WindowContentView.resolvedHiddenInterfaceElements()
-    /// Whether the session switcher popover (the mouse form of the Ctrl-Tab switcher) is shown, anchored on
-    /// the title pill. Non-private so `+RecentSessions`'s button/rows can toggle it.
-    @State var recentSessionsShown = false
+    /// The title pill's global frame while it is shown, which the session switcher overlay hangs under; nil
+    /// without a pill. Non-private so `+RecentSessions` can write and read it.
+    @State var switcherPillFrame: CGRect?
     /// Whether the attention popover (the mouse equivalent of the ⌃⇧I attention palette) is shown, anchored
     /// on the title-bar bell. Non-private so the `+RecentSessions` extension's bell/rows can toggle it.
     @State var attentionPopoverShown = false
@@ -213,7 +213,6 @@ struct WindowContentView: View {
                 // holds key, so the picker would open under it with neither the screen nor the keyboard.
                 // `canShow` stops the reverse order; this is the same class from the other direction.
                 QuickTerminalController.shared.hide()
-                recentSessionsShown = false
                 attentionPopoverShown = false
                 customCommandsShown = false
                 store.suppressAutoFollow()
