@@ -24,22 +24,22 @@ static QJsonObject fail(const QString &error)
 QString unsupportedReason(const QString &cmd)
 {
     static const QList<std::pair<QString, QString>> absent{
-        {"zmx", "agterm-qt's live sessions run on agterm-session-host, not zmx"},
-        {"session.restart", "it is not ported to agterm-qt's live sessions"},
-        {"session.lead", "pane leads belong to remote sessions, which agterm-qt does not have"},
-        {"browser", "agterm-qt has no built-in browser: page overlays need Qt WebEngine"},
-        {"session.companion.page", "page companions need Qt WebEngine, which agterm-qt does not have"},
-        {"session.overlay.reload", "page overlays need Qt WebEngine, which agterm-qt does not have"},
-        {"session.overlay.navigate", "page overlays need Qt WebEngine, which agterm-qt does not have"},
-        {"session.overlay.submit", "page overlays need Qt WebEngine, which agterm-qt does not have"},
-        {"session.overlay.copy", "page overlays need Qt WebEngine, which agterm-qt does not have"},
-        {"session.overlay.job.run", "remote overlay jobs need a remote viewer, which agterm-qt does not have"},
-        {"session.overlay.page.serve", "page overlays need Qt WebEngine, which agterm-qt does not have"},
-        {"quick", "agterm-qt has no quick terminal"},
-        {"session.scratch", "agterm-qt has no scratch terminal"},
+        {"zmx", "hangar's live sessions run on hangar-session-host, not zmx"},
+        {"session.restart", "it is not ported to hangar's live sessions"},
+        {"session.lead", "pane leads belong to remote sessions, which hangar does not have"},
+        {"browser", "hangar has no built-in browser: page overlays need Qt WebEngine"},
+        {"session.companion.page", "page companions need Qt WebEngine, which hangar does not have"},
+        {"session.overlay.reload", "page overlays need Qt WebEngine, which hangar does not have"},
+        {"session.overlay.navigate", "page overlays need Qt WebEngine, which hangar does not have"},
+        {"session.overlay.submit", "page overlays need Qt WebEngine, which hangar does not have"},
+        {"session.overlay.copy", "page overlays need Qt WebEngine, which hangar does not have"},
+        {"session.overlay.job.run", "remote overlay jobs need a remote viewer, which hangar does not have"},
+        {"session.overlay.page.serve", "page overlays need Qt WebEngine, which hangar does not have"},
+        {"quick", "hangar has no quick terminal"},
+        {"session.scratch", "hangar has no scratch terminal"},
         {"session.background", "Konsole takes a pane's background from its profile, not per session"},
         {"surface.cursor", "Konsole's terminal part does not expose the cursor position"},
-        {"config.reload", "agterm-qt has no Ghostty config; keymap reload and hooks reload re-read its own files"},
+        {"config.reload", "hangar has no Ghostty config; keymap reload and hooks reload re-read its own files"},
         {"debug.appearance", "it is a macOS UI-test hook"},
     };
     for (const auto &[name, why] : absent)
@@ -48,7 +48,7 @@ QString unsupportedReason(const QString &cmd)
     return {};
 }
 
-static const QStringList leftPane{"left", "top", "primary", "main"}, rightPane{"right", "bottom", "split"}; // main: AGTERM_PANE
+static const QStringList leftPane{"left", "top", "primary", "main"}, rightPane{"right", "bottom", "split"}; // main: HANGAR_PANE
 
 // workspace.go: the visible workspaces in order, wrapping; lands on the workspace's first session
 static QJsonObject workspaceGo(Store &store, const QJsonObject &args)

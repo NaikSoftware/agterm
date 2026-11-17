@@ -2,26 +2,26 @@
 # Sourced by subagent-hook.sh and subagent-pick.sh, never run.
 #
 # State, one small file per fact, so two subagents finishing at once never rewrite the same file. A
-# conversation is kept apart from the agterm session, because --resume can bring it back in another one:
-#   $AGT_SUBAGENT_STATE/<agterm session>/current                   the conversation the session shows
-#   $AGT_SUBAGENT_STATE/<agterm session>/agent.pid                 the claude process, the refresher's stop condition
+# conversation is kept apart from the hangar session, because --resume can bring it back in another one:
+#   $AGT_SUBAGENT_STATE/<hangar session>/current                   the conversation the session shows
+#   $AGT_SUBAGENT_STATE/<hangar session>/agent.pid                 the claude process, the refresher's stop condition
 #   $AGT_SUBAGENT_STATE/conversations/<conversation>/<id>.status   running | completed
 #   ...                                             /<id>.pid      the claude process that started it
 #   ...                                             /<id>.activity the tool call it ran last
 #   ...                                             /<id>.transcript its JSONL
 #   ...                                             /turn-ended    the parent's turn ended with subagents still running
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
-AGT_SUBAGENT_STATE=${AGT_SUBAGENT_STATE:-$HOME/.local/state/agterm-subagents}
+HANGARCTL=${HANGARCTL:-hangarctl}
+AGT_SUBAGENT_STATE=${AGT_SUBAGENT_STATE:-$HOME/.local/state/hangar-subagents}
 AGT_SUBAGENT_REFRESH=${AGT_SUBAGENT_REFRESH:-10}
 AGT_SUBAGENT_HIDE_AFTER=${AGT_SUBAGENT_HIDE_AFTER:-30}
 AGT_SUBAGENT_LINGER=${AGT_SUBAGENT_LINGER:-60}
 if [ -z "${AGT_STATUS_SCRIPT:-}" ]; then
-  AGT_STATUS_SCRIPT=$HOME/.config/agterm/agent-status/agterm-claude-status.sh
-  [ -x "$AGT_STATUS_SCRIPT" ] || AGT_STATUS_SCRIPT=$HOME/.config/agterm/agent-status/agterm-agent-status.sh
+  AGT_STATUS_SCRIPT=$HOME/.config/hangar/agent-status/hangar-claude-status.sh
+  [ -x "$AGT_STATUS_SCRIPT" ] || AGT_STATUS_SCRIPT=$HOME/.config/hangar/agent-status/hangar-agent-status.sh
 fi
 
-session_dir=$AGT_SUBAGENT_STATE/${AGTERM_SESSION_ID:-none}
+session_dir=$AGT_SUBAGENT_STATE/${HANGAR_SESSION_ID:-none}
 
 write_file() { printf '%s\n' "$2" > "$1.$$" && mv -f "$1.$$" "$1"; }
 read_file() { [ -r "$1" ] && head -n 1 "$1"; }
@@ -29,12 +29,12 @@ read_file() { [ -r "$1" ] && head -n 1 "$1"; }
 current_conversation() { read_file "$session_dir/current"; }
 conversation_dir() { printf '%s/conversations/%s' "$AGT_SUBAGENT_STATE" "$1"; }
 
-# post a status through the hooks package, or straight to agtermctl without it
+# post a status through the hooks package, or straight to hangarctl without it
 post_status() {
   if [ -x "$AGT_STATUS_SCRIPT" ]; then
     "$AGT_STATUS_SCRIPT" "$@" </dev/null >/dev/null 2>&1
   else
-    "$AGTERMCTL" session status "$@" --target "$AGTERM_SESSION_ID" >/dev/null 2>&1
+    "$HANGARCTL" session status "$@" --target "$HANGAR_SESSION_ID" >/dev/null 2>&1
   fi
 }
 
@@ -94,9 +94,9 @@ set_line() {
   running=$(count_status "$1" running)
   finished=$(count_status "$1" completed)
   if [ "$running" -eq 0 ] && [ "$finished" -eq 0 ]; then
-    "$AGTERMCTL" session info --clear --target "$AGTERM_SESSION_ID" >/dev/null 2>&1
+    "$HANGARCTL" session info --clear --target "$HANGAR_SESSION_ID" >/dev/null 2>&1
     return
   fi
-  "$AGTERMCTL" session info --markdown --hide-after "$2" --target "$AGTERM_SESSION_ID" \
+  "$HANGARCTL" session info --markdown --hide-after "$2" --target "$HANGAR_SESSION_ID" \
     "$(summary_line "$running" "$finished" "$(latest_activity "$1")")" >/dev/null 2>&1
 }

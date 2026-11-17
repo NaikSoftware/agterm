@@ -37,7 +37,7 @@ bool MainWindow::openDashboard(const QStringList &cells, const QString &fontMode
         DashCell c{ref, w, p.split, p.split->indexOf(w), !w->isHidden(), new QFrame, new QLabel, 0};
         if (QWidget *d = terminalDisplay(pane == QLatin1String("right") ? p.right : p.main)) {
             c.font = d->font().pointSizeF();
-            const double base = d->property("agtermBaseFont").toDouble() > 0 ? d->property("agtermBaseFont").toDouble() : c.font;
+            const double base = d->property("hangarBaseFont").toDouble() > 0 ? d->property("hangarBaseFont").toDouble() : c.font;
             if (fontMode == QLatin1String("auto"))
                 zoomFontTo(d, qMax(6.0, std::round(base * dashboardFontFactor(cols, rows))));
             else if (fontMode == QLatin1String("fixed"))

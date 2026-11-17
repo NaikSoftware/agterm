@@ -4,5 +4,5 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 dest="$root/resources/file-icons"
 mkdir -p "$dest"
-cp "$root"/../macos/agterm/Resources/file-icons/* "$dest/"
+cp "$root"/../macos/Hangar/Resources/file-icons/* "$dest/"
 ls -l "$dest"

@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: agtermTests/AppDelegateCaptureTests.swift:testExitCaptureReadsALiveListingSlowerThanAHundredMilliseconds
+where: HangarTests/AppDelegateCaptureTests.swift:testExitCaptureReadsALiveListingSlowerThanAHundredMilliseconds
 added: 2026-11-09
 ---
 # exit capture test misses a 120 ms listing in full hosted runs

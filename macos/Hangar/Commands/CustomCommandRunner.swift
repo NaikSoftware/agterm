@@ -1,0 +1,583 @@
+import HangarCore
+import AppKit
+import os
+
+private let logger = Logger(subsystem: "ua.naiksoftware.hangar", category: "CustomCommandRunner")
+
+/// How the runner shows a failed command: posts the panel and answers nil, or the reason it did not open,
+/// such as the slot holding a running program, which is never evicted for a message. Taking it down again
+/// is the panel's own auto-hide.
+struct FailureHud {
+    let open: (_ sessionID: String, _ spec: HudSpec, _ pane: OverlayPane?) -> String?
+}
+
+/// A command's stderr, captured to a temp file so a failure can say what it printed.
+///
+/// A FILE rather than a pipe: a pipe's read end lives only as long as hangar, so a background process a
+/// chord started would take SIGPIPE on its next write once the app quit, where inheriting `/dev/null` let it
+/// run on. A file also needs no reader, so nothing can block on a full buffer and nothing of ours outlives
+/// the command.
+private struct StderrFile: @unchecked Sendable {
+    let url: URL
+    let handle: FileHandle
+
+    /// Nil when the file cannot be created; the caller then sends stderr to `/dev/null` as before.
+    init?() {
+        url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hangar-command-\(UUID().uuidString).err")
+        guard FileManager.default.createFile(atPath: url.path, contents: nil),
+              let handle = try? FileHandle(forWritingTo: url) else { return nil }
+        self.handle = handle
+    }
+
+    /// The last `CommandFailure.tailLimit` bytes the command wrote, after which the file is removed. The cap
+    /// is on the READ: the file itself holds everything written to it, and a background descendant that
+    /// inherited it keeps growing the unlinked inode, whose space returns only when that process exits.
+    func consume() -> [UInt8] {
+        defer {
+            try? handle.close()
+            try? FileManager.default.removeItem(at: url)
+        }
+        guard let reader = try? FileHandle(forReadingFrom: url) else { return [] }
+        defer { try? reader.close() }
+        let size = (try? reader.seekToEnd()) ?? 0
+        // read the sampled interval, not to the end: a descendant appending between the two would otherwise
+        // hand back everything it wrote as well.
+        let wanted = min(size, UInt64(CommandFailure.tailLimit))
+        try? reader.seek(toOffset: size - wanted)
+        return [UInt8]((try? reader.read(upToCount: Int(wanted))) ?? Data())
+    }
+}
+
+/// Drives user-defined custom commands: an app-wide `NSEvent` local key monitor turns key presses into
+/// chords, a `CustomCommandEngine` resolves them (simple chords and leader sequences like `ctrl+a > g`), and
+/// a fired command runs detached as `/bin/sh -c` with the session's context in `{AGT_X}` tokens and `$AGT_X`
+/// environment. The same matcher also carries the built-in binds an `NSMenuItem` key equivalent cannot hold —
+/// a `map` line's alternatives beyond its first single chord — dispatched through `AppActions.perform(_:in:)`,
+/// plus two menu chords it matches itself: `toggle_fullscreen`, and `close_session` while an HTML page has focus.
+///
+/// Constructed once as `@State` in `hangarApp`. `start()`/`stop()` install/remove the monitor; `start()` is
+/// idempotent because the scene `.task` fires once per window, and the matcher rebuilds there and on
+/// `.hangarKeymapChanged`. Pure parsing/matching/expansion lives in HangarCore; this maps `NSEvent` → core
+/// types, owns the leader timer, resolves the surface's session via the host-free `WindowLibrary`, and spawns.
+@MainActor
+final class CustomCommandRunner {
+    private let library: WindowLibrary
+    private let settings: SettingsModel
+    private let actions: AppActions
+    private let socketProvider: () -> String
+    /// Posts the failure panel over the session a command fired in; the panel's own auto-hide takes it down.
+    /// Injected rather than reached for: the control server owns the HUD path, and a test supplies a recorder.
+    private let failureHud: FailureHud?
+
+    private var commandEngine = CustomCommandEngine(commands: [])
+
+    private var keyMonitor: Any?
+    private var leaderTimer: Timer?
+    private var keymapObserver: NSObjectProtocol?
+    private var menuActionObserver: NSObjectProtocol?
+    private var resignActiveObserver: NSObjectProtocol?
+    private var menuTrackingObserver: NSObjectProtocol?
+    private var resignKeyObserver: NSObjectProtocol?
+    private var consumedKeyCodes: Set<UInt16> = []
+    /// The fired `--repeat` tail still held down. Its window does not time out until release: macOS sends the
+    /// first autorepeat only after "Delay until repeat" (0.5 s by default, often longer).
+    private var heldRepeatKeyCode: UInt16?
+
+    /// How long a half-typed leader sequence waits for its next chord before abandoning (kitty-style).
+    private static let leaderTimeout: TimeInterval = 1.5
+    /// How long a `--repeat` sequence's prefix stays live after its tail is released; tmux's `repeat-time`.
+    private static let repeatTimeout: TimeInterval = 0.5
+
+    /// How long a failure panel stays up: long enough to read a line, short enough that a message about a
+    /// command that has already finished is not still sitting over the session minutes later.
+    static let failureHudSeconds: TimeInterval = 10
+
+    /// Run counts behind the title-bar popover's most-used section; every spawn path records into it.
+    let usage: CustomCommandUsageStore
+
+    init(library: WindowLibrary, settings: SettingsModel, actions: AppActions, usage: CustomCommandUsageStore,
+         socketProvider: @escaping () -> String, failureHud: FailureHud? = nil) {
+        self.library = library
+        self.settings = settings
+        self.actions = actions
+        self.usage = usage
+        self.socketProvider = socketProvider
+        self.failureHud = failureHud
+    }
+
+    /// Install the local key monitor (idempotent), build the keybind map, observe `.hangarKeymapChanged`.
+    func start() {
+        guard keyMonitor == nil else { return }
+        rebuild()
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            guard let self else { return event }
+            // returning nil consumes the event (it never reaches the terminal); event passes it through.
+            return self.handleKeyEvent(event, in: NSApp.keyWindow) ? nil : event
+        }
+        keymapObserver = NotificationCenter.default.addObserver(
+            forName: .hangarKeymapChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.rebuild() }
+        }
+        menuActionObserver = NotificationCenter.default.addObserver(
+            forName: NSMenu.willSendActionNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.recordMenuKeyPress(NSApp.currentEvent) }
+        }
+        // a keyUp outside the app never arrives, so a held tail must not keep its window open past deactivation.
+        resignActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.closeRepeatWindow() }
+        }
+        // a local monitor never sees a keyUp consumed by menu tracking.
+        menuTrackingObserver = NotificationCenter.default.addObserver(
+            forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.closeRepeatWindow() }
+        }
+        resignKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.windowDidResignKey(appIsActive: NSApp.isActive) }
+        }
+    }
+
+    /// Close an open repeat window and forget the held tail; a half-typed leader keeps its own timeout.
+    func closeRepeatWindow() {
+        heldRepeatKeyCode = nil
+        if commandEngine.isRepeating { resetMatcher() }
+    }
+
+    /// The quick terminal is key while hangar is inactive, so its focus loss posts no deactivation. A resign
+    /// inside the active app must not close the window, or `--repeat next_window` stops after one step.
+    func windowDidResignKey(appIsActive: Bool) {
+        if !appIsActive { closeRepeatWindow() }
+    }
+
+    /// Remove the key monitor, observers, and pending leader timer.
+    func stop() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
+        if let keymapObserver { NotificationCenter.default.removeObserver(keymapObserver) }
+        keymapObserver = nil
+        if let menuActionObserver { NotificationCenter.default.removeObserver(menuActionObserver) }
+        menuActionObserver = nil
+        if let resignActiveObserver { NotificationCenter.default.removeObserver(resignActiveObserver) }
+        resignActiveObserver = nil
+        if let menuTrackingObserver { NotificationCenter.default.removeObserver(menuTrackingObserver) }
+        menuTrackingObserver = nil
+        if let resignKeyObserver { NotificationCenter.default.removeObserver(resignKeyObserver) }
+        resignKeyObserver = nil
+        resetMatcher()
+        consumedKeyCodes.removeAll()
+    }
+
+    /// Rebuild the matcher from the current keymap — custom commands plus the built-in monitor binds — skipping
+    /// empty shortcuts (palette-only commands have none). `parseKeymap`'s cross-section validation already
+    /// empties the shortcut of a command colliding with a built-in or another custom one, so it drops out of
+    /// the matcher.
+    private func rebuild() {
+        let keymap = settings.keymap
+        commandEngine = CustomCommandEngine(commands: keymap.commands, builtinSequences: keymap.builtinSequences,
+                                            builtinRepeating: keymap.builtinRepeating)
+        resetMatcher()
+    }
+
+    /// The Esc virtual keycode the matcher treats specially (the leader abort); Return is bindable and goes
+    /// through `namedKey(forKeyCode:)`.
+    private static let escapeKeyCode: UInt16 = 53
+
+    /// Own an F-key only after AppKit chooses a menu action, without predicting from a stale keymap.
+    func recordMenuKeyPress(_ event: NSEvent?) {
+        guard let event, event.type == .keyDown, !event.isARepeat,
+              let key = namedKey(forKeyCode: event.keyCode), bindableFunctionKeys.contains(key) else { return }
+        consumedKeyCodes.insert(event.keyCode)
+    }
+
+    /// Feed one key event to the matcher; returns whether it was consumed (so the caller drops it). Esc while
+    /// armed resets, `.fired` runs a command, `.firedBuiltin` runs a built-in action, `.armed` arms the leader
+    /// timer, and `toggle_fullscreen`'s chord toggles full screen when nothing else claims it — all consumed;
+    /// `.unmatched` passes through.
+    ///
+    /// Acts when the key window's first responder is a terminal surface (context from that surface), or when
+    /// the key window is an hangar terminal window whose focus is NOT on a text field — including one emptied
+    /// to zero sessions. Passes through for a focused text field (Settings editor, inline rename, palette
+    /// search) so a bound chord never eats those keystrokes, and for an auxiliary window focused off a text
+    /// field. Repeats and releases of consumed presses stay consumed without firing again, except autorepeat
+    /// of a live `--repeat` tail, which fires like a fresh press.
+    func handleKeyEvent(_ event: NSEvent, in keyWindow: NSWindow?) -> Bool {
+        // ownership lasts through release, even if the action changes focus or a leader times out.
+        if event.type == .keyUp {
+            releaseRepeatTail(event.keyCode)
+            return consumedKeyCodes.remove(event.keyCode) != nil
+        }
+        guard event.type == .keyDown else { return false }
+        if event.isARepeat {
+            guard consumedKeyCodes.contains(event.keyCode) else { return false }
+            if let keyWindow, isLiveRepeatTail(event) { _ = handleKeyDown(event, in: keyWindow) }
+            return true
+        }
+        // a release may have occurred outside the app; a fresh press starts new ownership for this key.
+        consumedKeyCodes.remove(event.keyCode)
+        guard let keyWindow else { return false }
+        let consumed = handleKeyDown(event, in: keyWindow)
+        if consumed { consumedKeyCodes.insert(event.keyCode) }
+        return consumed
+    }
+
+    /// Dispatch a fresh press in a supplied window, also used by hosted tests whose window never becomes key.
+    func handleKeyDown(_ event: NSEvent, in keyWindow: NSWindow) -> Bool {
+        guard !event.isARepeat || isLiveRepeatTail(event) else { return false }
+        let responder = keyWindow.firstResponder
+        // a focused text field is the window's NSText field editor and must keep its keystrokes: drop the
+        // half-typed leader or open repeat window, pass through.
+        if responder is NSText {
+            if commandEngine.isArmed || commandEngine.isRepeating { resetMatcher() }
+            return false
+        }
+        let focusedSurface = responder as? GhosttySurfaceView
+        // with no focused surface, fire ONLY from an hangar terminal window (empty qualifies), never Settings.
+        guard focusedSurface != nil || WindowRegistry.shared.contains(keyWindow) else {
+            if commandEngine.isArmed || commandEngine.isRepeating { resetMatcher() }
+            return false
+        }
+        // esc abandons a half-typed leader (the call the timeout makes) and is not bindable, so it comes
+        // before the chord.
+        if event.keyCode == Self.escapeKeyCode {
+            // an open repeat window closes, but Esc still reaches the terminal: only a half-typed leader eats it.
+            let wasArmed = commandEngine.isArmed
+            resetMatcher()
+            return wasArmed
+        }
+        guard let chord = chord(from: event) else {
+            // a key with no usable base (e.g. a bare modifier) can't advance; while armed, keep waiting.
+            return false
+        }
+        // a repeat tail equal to the full screen or close session chord must repeat, so the chord goes to the
+        // matcher first.
+        let wasArmed = commandEngine.isArmed
+        switch commandEngine.advance(chord) {
+        case .fired(let command):
+            holdRepeatWindowOrCancel(for: event.keyCode)
+            if let focusedSurface {
+                // context from the surface that had focus at key-down, not the frontmost active session.
+                runFromKeybind(command, focusedSurface: focusedSurface)
+            } else {
+                // no fired-from surface: the active session if one exists, else the launcher path.
+                runNoSurface(command)
+            }
+            return true
+        case .firedBuiltin(let action):
+            holdRepeatWindowOrCancel(for: event.keyCode)
+            // no focusedSurface/runNoSurface split: a built-in acts on the active session and key window,
+            // like the palette row behind it. Consumed even when `perform` finds the action gated out: the
+            // gate lives inside each action, so this cannot see the outcome, and passing a leader's LAST chord
+            // through after swallowing its prefix would type a stray character into the terminal.
+            actions.perform(action, in: keyWindow)
+            return true
+        case .armed:
+            startLeaderTimer()
+            return true
+        case .unmatched:
+            cancelLeaderTimer()
+            // `toggle_fullscreen` is the one built-in with no menu item to carry its equivalent: AppKit appends
+            // the only full screen item there is, at menu-display time, and an item of hangar's own beside it
+            // is the duplicate this avoids. So the rebindable chord is matched here instead, and a half-typed
+            // leader sequence still wins, exactly as it does over a custom command sharing its first chord.
+            // Its MENU chord alone comes through here, ungated; an alternative of the same `map` line goes the
+            // ordinary `.firedBuiltin` route and so takes that route's modal rule.
+            guard !wasArmed else { return false }
+            if chord == settings.keymap.equivalent(for: .toggleFullscreen) {
+                keyWindow.toggleFullScreen(nil)
+                return true
+            }
+            // a focused page receives key equivalents before the menu, and one cancelling the keydown makes WebKit
+            // report it handled, so close_session's and toggle_overlay's menu chords never reach their items.
+            // Taken here while a page holds focus; the chords' other owners keep the menu path.
+            if Self.pageHoldsFocus(responder) {
+                for action in [BuiltinAction.closeSession, .toggleOverlay] where chord == settings.keymap.equivalent(for: action) {
+                    actions.perform(action, in: keyWindow)
+                    return true
+                }
+            }
+            return false
+        }
+    }
+
+    private static func pageHoldsFocus(_ responder: NSResponder?) -> Bool {
+        var view = responder as? NSView
+        while let current = view {
+            if current is HtmlOverlayWebView { return true }
+            view = current.superview
+        }
+        return false
+    }
+
+    private func isLiveRepeatTail(_ event: NSEvent) -> Bool {
+        commandEngine.isRepeating && chord(from: event).map(commandEngine.isRepeatTail) == true
+    }
+
+    private func chord(from event: NSEvent) -> Chord? {
+        // shift stays out so the base key comes back UNSHIFTED (shift+/ → "/"), matching how the keymap spells
+        // `shift+<base>`; `charactersIgnoringModifiers` keeps shift, and `.lowercased()` undoes that only for
+        // letters. Command goes in when held: a layout's Command table can differ from its plain one
+        // (Dvorak - QWERTY ⌘ types QWERTY, Lithuanian digits), and the menu matches through it, so without
+        // it a `cmd+` chord fires on another key than the same chord on a `map` line.
+        event.keymapChord(produced: event.characters(byApplyingModifiers: event.modifierFlags.intersection(.command))
+            ?? event.charactersIgnoringModifiers)
+    }
+
+    private func startLeaderTimer(_ interval: TimeInterval = CustomCommandRunner.leaderTimeout) {
+        cancelLeaderTimer()
+        leaderTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.commandEngine.reset()
+                self.leaderTimer = nil
+            }
+        }
+    }
+
+    private func cancelLeaderTimer() {
+        leaderTimer?.invalidate()
+        leaderTimer = nil
+    }
+
+    private func resetMatcher() {
+        commandEngine.reset()
+        cancelLeaderTimer()
+        heldRepeatKeyCode = nil
+    }
+
+    /// After a fire, an open repeat window waits for the tail's release instead of timing out.
+    private func holdRepeatWindowOrCancel(for keyCode: UInt16) {
+        cancelLeaderTimer()
+        heldRepeatKeyCode = commandEngine.isRepeating ? keyCode : nil
+    }
+
+    /// Releasing the held tail starts the repeat timeout, unless a key pressed meanwhile already closed the
+    /// window (a new leader keeps its own, longer timeout).
+    private func releaseRepeatTail(_ keyCode: UInt16) {
+        guard keyCode == heldRepeatKeyCode else { return }
+        heldRepeatKeyCode = nil
+        if commandEngine.isRepeating { startLeaderTimer(Self.repeatTimeout) }
+    }
+
+    /// Run a command fired from the PALETTE: context from the active session (the palette has no first
+    /// responder to key off). No-op with no window/session — a session-scoped command with silently-empty
+    /// tokens is unsafe (an empty `{AGT_SESSION_PWD}` turns `rm -rf …/*` into a root glob), so only the
+    /// deliberate empty-window KEYBIND path fires a session-free launcher.
+    func run(_ command: CustomCommand) {
+        guard let store = library.activeStore, let session = store.activeSession else {
+            logger.notice("custom command \"\(command.name, privacy: .public)\" fired with no active session; ignored")
+            return
+        }
+        run(command, session: session, in: store)
+    }
+
+    /// run starts `command` for `session`, the palette's context taken from that session instead of the
+    /// active one. Returns why the process did not start, nil once it has.
+    @discardableResult
+    func run(_ command: CustomCommand, session: Session, in store: AppStore) -> String? {
+        // the focus flag picks primary or split, gated on the split surface existing: right after
+        // `session split on` the flag is already true while `splitSurface` is still nil.
+        let onSplit = session.splitFocused && session.splitSurface != nil
+        let selectionSurface = (onSplit ? session.splitSurface : session.surface) as? GhosttySurfaceView
+        return spawn(command, for: session, in: store, selectionSurface: selectionSurface, pane: onSplit ? .right : .left)
+    }
+
+    /// Run a command fired by KEYBIND: context from the surface that had focus at key-down, so a chord from a
+    /// split/scratch (or during a window-switch race) runs against THAT surface's session/cwd/window and reads
+    /// its selection. A sessionless focused surface routes through `runFromSessionlessSurface`.
+    func runFromKeybind(_ command: CustomCommand, focusedSurface: GhosttySurfaceView) {
+        guard let session = focusedSurface.session, let store = store(owning: session) else {
+            runFromSessionlessSurface(command, focusedSurface: focusedSurface)
+            return
+        }
+        // the pane is the surface's identity, not the focus flag, so a chord reports the pane it was typed in
+        // even before the flag catches up.
+        let pane: CommandContext.Pane = (session.splitSurface as? GhosttySurfaceView) === focusedSurface ? .right : .left
+        spawn(command, for: session, in: store, selectionSurface: focusedSurface, pane: pane)
+    }
+
+    /// The open store holding `session` itself. Matched by object identity rather than through
+    /// `store(forSession:)`, which answers with the first window carrying that id and a snapshot written by
+    /// an older build can put one id in two windows.
+    private func store(owning session: Session) -> AppStore? {
+        for windowID in library.openIDs() {
+            guard let store = library.store(for: windowID) else { continue }
+            if store.workspaces.contains(where: { $0.sessions.contains { $0 === session } }) { return store }
+        }
+        return nil
+    }
+
+    /// Resolve the surface and its owning store together, since a session id can repeat across windows.
+    /// The quick terminal has no session owner and keeps the active-session fallback.
+    private func runFromSessionlessSurface(_ command: CustomCommand, focusedSurface: GhosttySurfaceView) {
+        for windowID in library.openIDs() {
+            guard let store = library.store(for: windowID) else { continue }
+            for session in store.workspaces.flatMap(\.sessions) {
+                guard let pane = sessionlessPane(of: focusedSurface, in: session) else { continue }
+                spawn(command, for: session, in: store, selectionSurface: focusedSurface, pane: pane)
+                return
+            }
+        }
+        runNoSurface(command)
+    }
+
+    /// Which pane `session`'s sessionless surface reports as `$AGT_PANE`, nil when the surface is not one of
+    /// them (the quick terminal). The scratch names itself; an overlay names the surface UNDERNEATH it, so a
+    /// note taken in it still pastes back through `session type --pane` — the overlay's own buffer is
+    /// `session overlay copy`/`text`, which `CommandContext.Pane` deliberately cannot spell.
+    private func sessionlessPane(of surface: GhosttySurfaceView, in session: Session) -> CommandContext.Pane? {
+        if (session.scratchSurface as? GhosttySurfaceView) === surface { return .scratch }
+        let overlayPane = session.paneOverlayRole(of: surface)
+        guard overlayPane != nil || (session.overlaySurface as? GhosttySurfaceView) === surface else {
+            return nil
+        }
+        // what is underneath is what `topmostSurface` resolves once this overlay closes, and that is the
+        // SCRATCH whenever one is up: a session-wide overlay sits above it, and it in turn covers a pane
+        // overlay. Naming a pane there routes the reply into a surface the user cannot see.
+        if session.scratchActive { return .scratch }
+        guard let overlayPane else { return session.focusedPane == .right ? .right : .left }
+        return overlayPane == .right ? .right : .left
+    }
+
+    /// Keybind fire with NO usable fired-from session — an emptied window, or focus off any surface. Uses the
+    /// active session's context when one exists, like the palette, else `spawnSessionless`.
+    private func runNoSurface(_ command: CustomCommand) {
+        if library.activeStore?.activeSession != nil {
+            run(command)
+        } else {
+            spawnSessionless(command)
+        }
+    }
+
+    /// Fire `command` with a session-free context (the empty-window launcher path) — UNLESS its body names
+    /// session-scoped tokens, which expand dangerously empty (an empty `{AGT_SESSION_PWD}` makes `rm -rf …/*`
+    /// a root glob, defeating even the quoted `$AGT_X` form); that NO-OPS with a notice. A launcher naming
+    /// only `AGT_SOCKET`/`AGT_WINDOW`/`AGT_PANE` still fires.
+    private func spawnSessionless(_ command: CustomCommand) {
+        guard !CommandContext.referencesSessionScopedContext(command.command) else {
+            logger.notice("custom command \"\(command.name, privacy: .public)\" references session context but no session is active; ignored")
+            return
+        }
+        spawn(command, context: sessionlessContext(), cwd: nil)
+    }
+
+    /// Spawn for a session pane: the context carries the pane's reported cwd raw, while the process starts
+    /// where `Session.localWorkingDirectory` says, or in HOME when that is not a directory here: a deleted
+    /// one, or a remote path reported through an `ssh` typed into a local session.
+    @discardableResult
+    private func spawn(_ command: CustomCommand, for session: Session, in store: AppStore,
+                       selectionSurface: GhosttySurfaceView?, pane: CommandContext.Pane) -> String? {
+        let context = self.context(for: session, in: store, selectionSurface: selectionSurface, pane: pane)
+        let home = NSHomeDirectory()
+        let cwd = session.localWorkingDirectory(reported: context.sessionPWD, homeDirectory: home)
+        var isDirectory: ObjCBool = false
+        let usable = FileManager.default.fileExists(atPath: cwd, isDirectory: &isDirectory) && isDirectory.boolValue
+        return spawn(command, context: context, cwd: usable ? cwd : home)
+    }
+
+    /// Resolve every `{AGT_X}` token for the given session: ids + cwd + remote host from the model, names
+    /// from the owning workspace/window, the selection from `selectionSurface`, the fired-from pane from the
+    /// caller (`left`|`right`|`scratch`) with the token of the surface in that slot, the socket from the
+    /// control server. The token is read from the slot, not from `selectionSurface`: for an overlay chord
+    /// that view is the overlay itself, which has no token, while `pane` names the terminal underneath.
+    func context(for session: Session, in store: AppStore, selectionSurface: GhosttySurfaceView?,
+                 pane: CommandContext.Pane) -> CommandContext {
+        let workspace = store.workspace(forSession: session.id)
+        let windowID = library.windowID(for: store)
+        let windowName = library.windowName(for: windowID)
+        return CommandContext(
+            sessionID: session.id.uuidString,
+            sessionName: session.displayName,
+            sessionPWD: session.cwd(for: pane),
+            sessionHost: TerminalText.sanitized(session.remoteHost(for: pane) ?? ""),
+            workspaceID: workspace?.id.uuidString ?? "",
+            workspaceName: workspace?.name ?? "",
+            windowID: windowID?.uuidString ?? "",
+            windowName: windowName,
+            pane: pane,
+            paneID: session.paneToken(for: pane),
+            selection: selectionSurface?.readSelection() ?? "",
+            socket: socketProvider()
+        )
+    }
+
+    /// A session-free `CommandContext` (an emptied window, or none open): every `{AGT_SESSION_*}`/
+    /// `{AGT_WORKSPACE_*}` token and the selection resolve empty, window id/name come from the frontmost
+    /// window if any, and the socket lets a launcher chord reach `hangarctl` for a fresh session.
+    private func sessionlessContext() -> CommandContext {
+        let windowID = library.activeWindowID
+        return CommandContext(windowID: windowID?.uuidString ?? "", windowName: library.windowName(for: windowID),
+                              socket: socketProvider())
+    }
+
+    /// Spawn the expanded command as a detached `/bin/sh -c`, exporting `$AGT_*` over the app environment and
+    /// running in `cwd` (nil for a sessionless launch, which inherits the app's). `PATH` is widened first
+    /// (`CommandPath`): the app's own is launchd's, and `sh -c` runs no profile, so a bare `hangarctl` would
+    /// exit 127. Only commands opting into failure panels capture stderr; a clean exit reports nothing.
+    @discardableResult
+    private func spawn(_ command: CustomCommand, context: CommandContext, cwd: String?) -> String? {
+        let line = context.expand(command.command)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", line]
+        var environment = ProcessInfo.processInfo.environment.merging(context.environment()) { _, new in new }
+        environment["PATH"] = CommandPath.widened(environment["PATH"],
+                                                  bundledCLIDirectory: CLIInstaller.bundledTool?
+                                                      .deletingLastPathComponent().path)
+        process.environment = environment
+        // detached commands must not inherit the app's launch-dependent stdio.
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        let capture = command.errorHud ? StderrFile() : nil
+        process.standardError = capture?.handle ?? FileHandle.nullDevice
+        if command.errorHud, capture == nil {
+            logger.error("custom command \"\(command.name, privacy: .public)\": stderr capture unavailable")
+        }
+        if let cwd, !cwd.isEmpty {
+            process.currentDirectoryURL = URL(fileURLWithPath: cwd, isDirectory: true)
+        }
+        let name = command.name
+        let sessionID = context.sessionID
+        process.terminationHandler = { proc in
+            let status = proc.terminationStatus
+            // read and remove the file whatever the status, or a successful command leaks one per run.
+            let detail = capture.map { CommandFailure.detail(fromTail: $0.consume()) } ?? nil
+            guard status != 0 else { return }
+            // the handler fires on an arbitrary queue; hop to the main actor to post.
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.report(command: command, reason: "exit \(status)", detail: detail, sessionID: sessionID)
+                }
+            }
+        }
+        do {
+            try process.run()
+            usage.record(command)
+            return nil
+        } catch {
+            _ = capture?.consume()
+            logger.error("custom command \"\(name, privacy: .public)\" failed to spawn: \(error.localizedDescription, privacy: .public)")
+            // a command that never started has no exit status and no output of its own, so the launch error
+            // is the whole diagnosis.
+            report(command: command, reason: error.localizedDescription, detail: nil, sessionID: sessionID)
+            return error.localizedDescription
+        }
+    }
+
+    /// Banners keep their notification preference; the panel is per-command opt-in.
+    private func report(command: CustomCommand, reason: String, detail: String?, sessionID: String) {
+        NotificationManager.shared.notifyCommandFailure(name: command.name, detail: reason)
+        guard command.errorHud, let failureHud, !sessionID.isEmpty else { return }
+        let spec = HudSpec(message: CommandFailure.message(name: command.name, reason: reason), detail: detail,
+                           position: command.errorPosition, hideAfter: Self.failureHudSeconds)
+        if let refusal = failureHud.open(sessionID, spec, command.errorPane) {
+            logger.notice("custom command \"\(command.name, privacy: .public)\" failed (\(reason, privacy: .public)); no failure panel: \(refusal, privacy: .public)")
+        }
+    }
+}

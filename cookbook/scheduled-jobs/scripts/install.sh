@@ -76,7 +76,7 @@ esac
 [ -f "$template" ] || die "missing $template; install.sh and cronn.plist.tmpl must sit in one directory"
 brew_bin="$(command -v brew)" || die "Homebrew not found, install it from https://brew.sh first"
 brew_prefix="$("$brew_bin" --prefix)"
-# /usr/local/bin is where agterm's Install Command Line Tool puts agtermctl
+# /usr/local/bin is where hangar's Install Command Line Tool puts hangarctl
 job_path="${CRONN_JOB_PATH:-$brew_prefix/bin:$brew_prefix/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
 # the opt path survives upgrades and cannot be shadowed by another cronn earlier on PATH
 cronn_bin="$brew_prefix/opt/cronn/bin/cronn"

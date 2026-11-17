@@ -11,7 +11,7 @@ selection and there is no select-all over the control channel.
 
 Shape (settled with umputun in the issue, plus the maintainer's `--pane` addition):
 
-- `agtermctl session text` — the **visible screen** by default
+- `hangarctl session text` — the **visible screen** by default
 - `--all` — the full screen + scrollback
 - `--lines N` — the last N lines of the full buffer
 - `--pane left|right` — which pane to read; **default = the focused pane**.
@@ -38,28 +38,28 @@ Shape (settled with umputun in the issue, plus the maintainer's `--pane` additio
 Modeled end-to-end on `session.copy`. The four (five, with the skill) keep-in-sync
 surfaces and their exact spots:
 
-- **Protocol** — `agtermCore/Sources/agtermCore/ControlProtocol.swift`
+- **Protocol** — `HangarCore/Sources/HangarCore/ControlProtocol.swift`
   - `Command` enum (line ~26, beside `case sessionCopy = "session.copy"`)
   - `ControlArgs` (line 57): already has `pane` (reused) and the result already has
     `text`; reuses the existing `pane` field (already `left|right|other` for
     `session.focus`); need two NEW fields `all: Bool?` and `lines: Int?` (+ init params).
-- **Server** — `agterm/Control/ControlServer.swift`
+- **Server** — `Hangar/Control/ControlServer.swift`
   - dispatch switch (line ~458, beside `case .sessionCopy`)
   - `copySelection(_:window:)` (line 921) is the template for the new arm.
-- **Surface reader** — `agterm/Ghostty/GhosttySurfaceView.swift`
+- **Surface reader** — `Hangar/Ghostty/GhosttySurfaceView.swift`
   - `readSelection()` (line 323) is the near-clone; new reader uses
     `ghostty_surface_read_text(surface, selection, &t)` with a `ghostty_selection_s`
     instead of `ghostty_surface_read_selection`. Same `ghostty_text_s` +
     `ghostty_surface_free_text` copy-out idiom.
-- **CLI** — `agtermCore/Sources/agtermctlKit/Commands.swift`
+- **CLI** — `HangarCore/Sources/hangarctlKit/Commands.swift`
   - `Session.subcommands` list (line 208) — register the new `Text` command
   - `struct Copy: RequestCommand` (line 361) is the template.
 - **Tests**
-  - round-trip: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift` (line ~44)
-  - CLI parse: `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift` (line ~213, the
+  - round-trip: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift` (line ~44)
+  - CLI parse: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift` (line ~213, the
     `sessionCopy*` cases)
-  - e2e: `agtermUITests/ControlAPIUITests.swift` (line ~415, `testSessionCopy*`)
-- **Agent skill (HARD keep-in-sync, 5th surface)** — `agterm/Resources/agent-skill/`
+  - e2e: `HangarUITests/ControlAPIUITests.swift` (line ~415, `testSessionCopy*`)
+- **Agent skill (HARD keep-in-sync, 5th surface)** — `Hangar/Resources/agent-skill/`
   - `SKILL.md` (command summary + the count, **46 → 47**)
   - `reference.md` (per-command detail), `examples.md` (a recipe)
 - **Rules note** — `.claude/rules/control-api.md` documents the catalog and the
@@ -86,20 +86,20 @@ libghostty C API (`GhosttyKit.../Headers/ghostty.h`):
   full wiring is covered by an XCUITest e2e (the only place a real surface exists).
 - The surface reader itself (`ghostty_surface_read_text`) is NOT host-free and is
   exercised only through the e2e, like `readSelection`/`session.copy` — there is no
-  unit test for the libghostty call, by design (`agtermCore` is GhosttyKit-free).
-- Complete each task fully; `swift test` (in `agtermCore`) must stay green before the
+  unit test for the libghostty call, by design (`HangarCore` is GhosttyKit-free).
+- Complete each task fully; `swift test` (in `HangarCore`) must stay green before the
   next task. The app must build.
 - Small, focused changes. Backward compatible — purely additive.
 
 ## Testing Strategy
 
-- **unit tests** (`agtermCore` `swift test`, host-free, run per task):
+- **unit tests** (`HangarCore` `swift test`, host-free, run per task):
   - `ControlProtocolTests` — `session.text` request encodes/decodes round-trip with
     `all`/`lines`/`pane` args.
   - `CommandsTests` — `session text` CLI parses to the right `ControlRequest`
     (defaults; `--all`; `--lines N`; `--pane left|right`; and the mutual-exclusion /
     bad-value `validate()` errors).
-- **e2e** (`agtermUITests/ControlAPIUITests.swift`, XCUITest — NOT run in CI, run
+- **e2e** (`HangarUITests/ControlAPIUITests.swift`, XCUITest — NOT run in CI, run
   locally): `testSessionText*` — create a session, `session.type` a known marker,
   then `session text` and assert the marker is in `result.text`; assert `--pane right`
   on a non-split session errors. Mirror the existing `testSessionCopy*` style.
@@ -170,21 +170,21 @@ Args reuse: `pane` (existing field, already `left|right|other`) carries `left|ri
 ### Task 1: Protocol — add the `session.text` command + args
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
 
 - [x] add `case sessionText = "session.text"` to the `Command` enum (beside `sessionCopy`)
 - [x] add `public var all: Bool?` and `public var lines: Int?` to `ControlArgs`, with doc comments, plus matching `init` params (default `nil`) and assignments
 - [x] extend the `pane` doc comment to note it also carries `left|right` for `session.text`
 - [x] write a round-trip test: `ControlRequest(cmd: .sessionText, target: "9f3c", args: ControlArgs(all: true, lines: 50, pane: "left"))` encodes → decodes equal (success case)
 - [x] write a round-trip test for the bare/default form (`session.text` with no args) and `lines`-only (edge cases)
-- [x] run `cd agtermCore && swift test` — must pass before Task 2
+- [x] run `cd HangarCore && swift test` — must pass before Task 2
 
 ### Task 2: CLI — `session text` subcommand
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermctlKit/Commands.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/Commands.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
 
 - [x] add `struct Text: RequestCommand` under `Session` (model on `Copy`), with `--all` flag, `--lines <n>` option, `--pane <left|right>` option, `TargetOptions`, `ClientOptions`, and an abstract help string
 - [x] implement `validate()`: error on `--all` + `--lines` together, on `--lines` ≤ 0, and on a `--pane` value not in `{left, right}`
@@ -192,12 +192,12 @@ Args reuse: `pane` (existing field, already `left|right|other`) carries `left|ri
 - [x] register `Text.self` in the `Session` `subcommands` array (line ~208)
 - [x] write CLI-parse tests: defaults (`session text` → target `active`, no args); `--all`; `--lines 50`; `--pane right`; mirror the `sessionCopyDefaultsActive`/`…WithTarget` style
 - [x] write CLI-parse tests for the `validate()` errors (all+lines, lines≤0, bad pane) — note: negative `--lines` (`-5`) is intercepted by ArgumentParser as a flag before `validate()`, so the CLI-reachable non-positive case is `0`
-- [x] run `cd agtermCore && swift test` — must pass before Task 3
+- [x] run `cd HangarCore && swift test` — must pass before Task 3
 
 ### Task 3: Surface reader — `readScreenText` on `GhosttySurfaceView`
 
 **Files:**
-- Modify: `agterm/Ghostty/GhosttySurfaceView.swift`
+- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift`
 
 - [x] add `func readScreenText(all: Bool, lines: Int?) -> String?` beside `readSelection()`, with a doc comment explaining the VIEWPORT-vs-SCREEN region and the copy-out/free idiom
 - [x] build the `ghostty_selection_s` (VIEWPORT top-left→bottom-right by default; SCREEN when `all || lines != nil`; `rectangle = false`), call `ghostty_surface_read_text`, copy `ghostty_text_s` → Swift `String`, `defer ghostty_surface_free_text`
@@ -209,7 +209,7 @@ Args reuse: `pane` (existing field, already `left|right|other`) carries `left|ri
 ### Task 4: Server — `.sessionText` dispatch arm
 
 **Files:**
-- Modify: `agterm/Control/ControlServer.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
 
 - [x] add `case .sessionText: return readText(request.target, window: request.args?.window, pane: request.args?.pane, all: request.args?.all ?? false, lines: request.args?.lines)` to the dispatch switch (beside `.sessionCopy`)
 - [x] add `private func readText(_ target:window:pane:all:lines:)` modeled on `copySelection`: `resolveSession`, pick the surface by `pane` (`left`→`surface`, `right`→`splitSurface` else `"session has no split pane"` error, default→`activeSurface`), `"session not realized"` if not a `GhosttySurfaceView`, call `readScreenText`, return `ControlResult(text: text ?? "")`
@@ -219,7 +219,7 @@ Args reuse: `pane` (existing field, already `left|right|other`) carries `left|ri
 ### Task 5: e2e test
 
 **Files:**
-- Modify: `agtermUITests/ControlAPIUITests.swift`
+- Modify: `HangarUITests/ControlAPIUITests.swift`
 
 - [x] add `testSessionTextReturnsBuffer`: create a session, `session.type` a unique marker string + Return, then `session.text` and assert `result.text` contains the marker (model on `testSessionCopyWithoutSelectionErrors` for the harness scaffolding)
 - [x] add `testSessionTextSplitPaneWithoutSplitErrors`: `session.text --pane right` on a non-split session returns `ok:false` (asserts the SERVER `"session has no split pane"` arm — `right` passes CLI `validate()`, so the request reaches the server, unlike an invalid pane value that would fail at parse)
@@ -228,24 +228,24 @@ Args reuse: `pane` (existing field, already `left|right|other`) carries `left|ri
 ### Task 6: Agent skill + rules doc (HARD keep-in-sync)
 
 **Files:**
-- Modify: `agterm/Resources/agent-skill/SKILL.md`
-- Modify: `agterm/Resources/agent-skill/reference.md`
-- Modify: `agterm/Resources/agent-skill/examples.md`
+- Modify: `Hangar/Resources/agent-skill/SKILL.md`
+- Modify: `Hangar/Resources/agent-skill/reference.md`
+- Modify: `Hangar/Resources/agent-skill/examples.md`
 - Modify: `.claude/rules/control-api.md`
 
 - [x] add `session.text` to the `SKILL.md` command summary and bump the count **46 → 47** at `SKILL.md` line ~91 ("(46 commands)")
 - [x] add the full per-command entry to `reference.md` (args: `--all`, `--lines N`, `--pane left|right`; returns `result.text`; plain text only; default = visible screen / focused pane; note it reads the focused pane by default and `--pane` has NO `other` value, unlike `session.focus`)
 - [x] add an `examples.md` recipe (e.g. extract URLs: `session text --all | grep -oE 'https?://...'`)
 - [x] update `.claude/rules/control-api.md`: add a `session.text` sentence to the command catalog, and bump ALL THREE count sites — line 28 "46-command summary", line 32 "catalog (46 commands)", line 32 "bumped to 46" → 47
-- [x] grep the skill + rules for the old `46` count (`grep -rn "46" agterm/Resources/agent-skill/ .claude/rules/control-api.md`) to confirm none remain (safety net beyond the four enumerated sites) — confirmed: no matches
-- [x] run `cd agtermCore && swift test` (no-op for docs, but confirms nothing broke) — 809 tests passed
+- [x] grep the skill + rules for the old `46` count (`grep -rn "46" Hangar/Resources/agent-skill/ .claude/rules/control-api.md`) to confirm none remain (safety net beyond the four enumerated sites) — confirmed: no matches
+- [x] run `cd HangarCore && swift test` (no-op for docs, but confirms nothing broke) — 809 tests passed
 
 ### Task 7: Verify acceptance criteria
 
 - [x] `session text` (default) returns the visible screen; `--all` returns more (scrollback); `--lines N` returns ≤ N lines
 - [x] `--pane left` and `--pane right` read the correct pane; `--pane right` on a non-split session errors
 - [x] `--all` + `--lines` together is rejected at the CLI; bad `--pane` rejected
-- [x] run full `cd agtermCore && swift test`; build the app; run the new XCUITests locally
+- [x] run full `cd HangarCore && swift test`; build the app; run the new XCUITests locally
 - [x] all four control surfaces present (Command case, server arm, CLI subcommand, tests) + the skill mirror updated
 
 ### Task 8: Final — docs + housekeeping
@@ -258,15 +258,15 @@ Args reuse: `pane` (existing field, already `left|right|other`) carries `left|ri
 
 **Manual verification:**
 - Smoke against an isolated dev instance: `make build`, launch with
-  `AGTERM_STATE_DIR`/`AGTERM_CONTROL_SOCKET` overrides, then
-  `agtermctl session text --socket <tmp>/agterm.sock` against a session with known
+  `HANGAR_STATE_DIR`/`HANGAR_CONTROL_SOCKET` overrides, then
+  `hangarctl session text --socket <tmp>/hangar.sock` against a session with known
   content; try `--all`, `--lines 5`, `--pane left|right`. Do NOT touch the deployed
   daily-driver instance.
 - Sanity-check the umputun use cases from the issue: pipe `session text --all` into
   `grep`/`fzf` to extract URLs / file paths.
 
 **External:**
-- Open the PR against `umputun/agterm` (branch `feat/session-text`) closing #34;
+- Open the PR against `NaikSoftware/hangar` (branch `feat/session-text`) closing #34;
   note in the PR that `--ansi` was intentionally dropped (plain text only, per the
   maintainer's comment) — link the upstream follow-up
   https://github.com/ghostty-org/ghostty/pull/12909 (`ghostty_surface_read_text_styled`,

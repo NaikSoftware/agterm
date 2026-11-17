@@ -2,11 +2,11 @@
 # fzf-insert.zsh files|dirs <session-id> - pick a path under the configured roots with fzf,
 # then type it into the session the keybinding was pressed in.
 #
-# Meant to run inside an agterm overlay. The session id has to be passed in: the keybinding's
+# Meant to run inside an hangar overlay. The session id has to be passed in: the keybinding's
 # $AGT_* values live in the custom command's own process, not in the overlay's fresh pty, so the
 # `session type` at the end needs an explicit --target.
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+HANGARCTL=${HANGARCTL:-hangarctl}
 
 mode=$1
 session=$2
@@ -45,4 +45,4 @@ esac
 
 # type the path into the session's main pane. Command substitution already stripped the trailing
 # newline, so the path arrives without a Return and the shell does not run it.
-"$AGTERMCTL" session type "$sel" --target "$session"
+"$HANGARCTL" session type "$sel" --target "$session"

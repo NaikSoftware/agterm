@@ -71,7 +71,7 @@ private Q_SLOTS:
     {
         QCOMPARE(configDirectory("/x", "/state", "/home/u"), QStringLiteral("/x"));
         QCOMPARE(configDirectory({}, "/state", "/home/u"), QStringLiteral("/state/config"));
-        QCOMPARE(configDirectory({}, {}, "/home/u"), QStringLiteral("/home/u/.config/agterm-qt"));
+        QCOMPARE(configDirectory({}, {}, "/home/u"), QStringLiteral("/home/u/.config/hangar"));
     }
 
     void chordsMapMacWordsByTheReadmeTable()
@@ -120,7 +120,7 @@ private Q_SLOTS:
             messages << QString::number(d.line) + ":" + d.message;
         const QString all = messages.join('\n');
         QVERIFY2(all.contains("3:chord 'Ctrl+Shift+N' conflicts with built-in 'new_session'"), qPrintable(all));
-        QVERIFY2(all.contains("4:action 'toggle_scratch' is not available in agterm-qt"), qPrintable(all));
+        QVERIFY2(all.contains("4:action 'toggle_scratch' is not available in hangar"), qPrintable(all));
         QVERIFY2(all.contains("5:unknown action 'bogus'"), qPrintable(all));
         QVERIFY2(all.contains("8:command 'Edit' is already defined"), qPrintable(all));
         QVERIFY2(all.contains("9:custom command 'Clash' shortcut 'Ctrl+Alt+L' conflicts with built-in 'toggle_split'"), qPrintable(all));
@@ -324,10 +324,10 @@ private Q_SLOTS:
             QFile::remove(log);
             QProcess p;
             QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-            env.insert("AGTERM_SESSION_ID", "s1");
-            env.insert("AGTERM_STATUS_WRAPPER", stub);
+            env.insert("HANGAR_SESSION_ID", "s1");
+            env.insert("HANGAR_STATUS_WRAPPER", stub);
             p.setProcessEnvironment(env);
-            p.start("bash", QStringList{QStringLiteral(AGTERM_SOURCE_SHARE "/agent-status/agterm-claude-status.sh")} + argv);
+            p.start("bash", QStringList{QStringLiteral(HANGAR_SOURCE_SHARE "/agent-status/hangar-claude-status.sh")} + argv);
             p.write(payload);
             p.closeWriteChannel();
             p.waitForFinished(5000);
@@ -807,7 +807,7 @@ private Q_SLOTS:
         const QString sock = Live::socket(state.path(), QStringLiteral("s1"), QStringLiteral("main"));
         Live::makeDir(state.path());
         QProcess first;
-        first.start(QStringLiteral(AGTERM_SESSION_HOST), {sock, "--", "/bin/sh", "-c", "printf 'first\\033[?2004h'; exec cat"});
+        first.start(QStringLiteral(HANGAR_SESSION_HOST), {sock, "--", "/bin/sh", "-c", "printf 'first\\033[?2004h'; exec cat"});
         QByteArray seen;
         QTRY_VERIFY((seen += first.readAllStandardOutput()).contains("first"));
         QTRY_VERIFY(Live::alive(sock));
@@ -817,7 +817,7 @@ private Q_SLOTS:
         QCOMPARE(Live::sockets(state.path()), QStringList{sock});
 
         QProcess second;
-        second.start(QStringLiteral(AGTERM_SESSION_HOST), {sock, "--", "/bin/sh", "-c", "echo second"});
+        second.start(QStringLiteral(HANGAR_SESSION_HOST), {sock, "--", "/bin/sh", "-c", "echo second"});
         seen.clear();
         QTRY_VERIFY((seen += second.readAllStandardOutput()).endsWith("\x1b[?2004h")); // the replay, then the modes in force
         QVERIFY(seen.startsWith("first") && !seen.contains("second"));
@@ -837,7 +837,7 @@ private Q_SLOTS:
         Live::makeDir(state.path());
         QProcess client;
         // set -m gives the job its own process group in front of the shell's, as an interactive shell does
-        client.start(QStringLiteral(AGTERM_SESSION_HOST),
+        client.start(QStringLiteral(HANGAR_SESSION_HOST),
                      {sock, "--", "/bin/bash", "-c", QStringLiteral("set -m; sh -c 'trap \"\" HUP; echo $$ > %1; exec sleep 60'; exit").arg(pidFile)});
         const auto readJob = [&] {
             QFile f(pidFile);
@@ -1113,10 +1113,10 @@ private Q_SLOTS:
     void agentHooksInstallerMergesAndIsIdempotent()
     {
         QTemporaryDir tmp;
-        const QString home = tmp.path(), bundle = QStringLiteral(AGTERM_SOURCE_SHARE "/agent-status"), pkg = Install::packageDir(home);
+        const QString home = tmp.path(), bundle = QStringLiteral(HANGAR_SOURCE_SHARE "/agent-status"), pkg = Install::packageDir(home);
         const QString settings = home + "/.claude/settings.json";
         spit(home + "/real-settings.json",
-             R"({"model":"opus","hooks":{"Stop":[{"hooks":[{"type":"command","command":"/old/share/agterm-qt/agent-status/agterm-claude-status.sh completed --auto-reset"}]}],)"
+             R"({"model":"opus","hooks":{"Stop":[{"hooks":[{"type":"command","command":"/old/share/hangar/agent-status/hangar-claude-status.sh completed --auto-reset"}]}],)"
              R"("PreCompact":[{"hooks":[{"type":"command","command":"mine"}]}]}})");
         QDir().mkpath(home + "/.claude");
         QVERIFY(QFile::link(home + "/real-settings.json", settings)); // a dotfiles-managed link
@@ -1130,7 +1130,7 @@ private Q_SLOTS:
         QCOMPARE(r.title, QStringLiteral("Agent Status Hooks Installed"));
         QVERIFY(QFileInfo(settings).isSymLink());
         const QJsonObject root = QJsonDocument::fromJson(slurp(settings).toUtf8()).object();
-        const QString adapter = Install::shellQuote(pkg + "/agterm-claude-status.sh");
+        const QString adapter = Install::shellQuote(pkg + "/hangar-claude-status.sh");
         QCOMPARE(root["model"].toString(), QStringLiteral("opus"));
         QCOMPARE(root["hooks"]["Stop"].toArray().size(), 1); // the older install's hook migrated, not duplicated
         QCOMPARE(root["hooks"]["Stop"][0]["hooks"][0]["command"].toString(), adapter + " completed --auto-reset");
@@ -1139,15 +1139,15 @@ private Q_SLOTS:
         QCOMPARE(root["hooks"]["PreCompact"][0]["hooks"][0]["command"].toString(), QStringLiteral("mine"));
         QVERIFY(root["env"]["CLAUDE_CODE_PLUGIN_DIRS"].toString().endsWith("/claude-mods/swarm-companion"));
         QVERIFY(slurp(settings + ".bak").contains("/old/share"));
-        QVERIFY(slurp(pkg + "/agterm-agent-status.sh").contains("AGTERMCTL=" + Install::shellQuote(QCoreApplication::applicationFilePath())));
-        QVERIFY(slurp(home + "/.bashrc").startsWith("export A=1\n\n# >>> agterm agent-status >>>\nsource "));
+        QVERIFY(slurp(pkg + "/hangar-agent-status.sh").contains("HANGARCTL=" + Install::shellQuote(QCoreApplication::applicationFilePath())));
+        QVERIFY(slurp(home + "/.bashrc").startsWith("export A=1\n\n# >>> hangar agent-status >>>\nsource "));
         QVERIFY(slurp(home + "/.zshrc").contains("integration.sh"));
         const QString toml = slurp(home + "/.codex/config.toml");
         QVERIFY(!toml.contains("codex-notify.sh"));
-        QVERIFY(toml.contains("[[hooks.Stop.hooks]]") && toml.contains("agterm-codex-status.sh' stop\""));
+        QVERIFY(toml.contains("[[hooks.Stop.hooks]]") && toml.contains("hangar-codex-status.sh' stop\""));
         QVERIFY(toml.contains("[profiles.a]"));
-        QVERIFY(QFileInfo::exists(home + "/.pi/agent/extensions/agterm-status.ts"));
-        QVERIFY(QFileInfo::exists(home + "/.config/opencode/plugins/agterm-status.js"));
+        QVERIFY(QFileInfo::exists(home + "/.pi/agent/extensions/hangar-status.ts"));
+        QVERIFY(QFileInfo::exists(home + "/.config/opencode/plugins/hangar-status.js"));
 
         const QString before = slurp(settings), rc = slurp(home + "/.bashrc");
         spit(home + "/.codex/config.toml", toml + ""); // unchanged
@@ -1161,7 +1161,7 @@ private Q_SLOTS:
         // v2 replaces the v1 plugin we own
         QDir().mkpath(home + "/oc2");
         r = Install::agentHooks(home, bundle, QCoreApplication::applicationFilePath(), {2, home + "/oc2"});
-        QVERIFY(QFileInfo::exists(home + "/oc2/plugins/agterm-v2/tui.js"));
+        QVERIFY(QFileInfo::exists(home + "/oc2/plugins/hangar-v2/tui.js"));
         QVERIFY(r.text().contains("OpenCode v2 status plugin installed"));
     }
 
@@ -1171,12 +1171,12 @@ private Q_SLOTS:
         const QString home = tmp.path();
         spit(home + "/.claude/settings.json", "[1, 2]");
         spit(home + "/.codex/config.toml", "[hooks]\nfoo = 1\n");
-        spit(home + "/.pi/agent/extensions/agterm-status.ts", "// my own\n");
-        const Install::Report r = Install::agentHooks(home, QStringLiteral(AGTERM_SOURCE_SHARE "/agent-status"), {}, {0, {}});
+        spit(home + "/.pi/agent/extensions/hangar-status.ts", "// my own\n");
+        const Install::Report r = Install::agentHooks(home, QStringLiteral(HANGAR_SOURCE_SHARE "/agent-status"), {}, {0, {}});
         QVERIFY(r.warning);
         QCOMPARE(slurp(home + "/.claude/settings.json"), QStringLiteral("[1, 2]"));
         QCOMPARE(slurp(home + "/.codex/config.toml"), QStringLiteral("[hooks]\nfoo = 1\n"));
-        QCOMPARE(slurp(home + "/.pi/agent/extensions/agterm-status.ts"), QStringLiteral("// my own\n"));
+        QCOMPARE(slurp(home + "/.pi/agent/extensions/hangar-status.ts"), QStringLiteral("// my own\n"));
         QVERIFY(r.text().contains("NOT added") && r.text().contains("already defines its own hooks") && r.text().contains("user-owned"));
         QVERIFY(r.text().contains("OpenCode status plugin installation was skipped."));
         QCOMPARE(Install::agentHooks(home, home + "/nowhere", {}, {}).error, QStringLiteral("The agent-status scripts are not bundled in this build."));
@@ -1187,29 +1187,29 @@ private Q_SLOTS:
         QTemporaryDir tmp;
         const QString home = tmp.path(), ctl = QCoreApplication::applicationFilePath();
         Install::Report r = Install::commandLineTool(home, ctl);
-        QCOMPARE(QFileInfo(home + "/.local/bin/agtermctl").symLinkTarget(), ctl);
+        QCOMPARE(QFileInfo(home + "/.local/bin/hangarctl").symLinkTarget(), ctl);
         r = Install::commandLineTool(home, ctl);
         QVERIFY(r.lines.first().contains("already"));
-        QFile::remove(home + "/.local/bin/agtermctl");
-        spit(home + "/.local/bin/agtermctl", "#!/bin/sh\n");
+        QFile::remove(home + "/.local/bin/hangarctl");
+        spit(home + "/.local/bin/hangarctl", "#!/bin/sh\n");
         r = Install::commandLineTool(home, ctl);
         QVERIFY(r.warning && r.lines.first().contains("left untouched"));
-        QCOMPARE(Install::commandLineTool(home, home + "/missing").error, QStringLiteral("agtermctl is not bundled in this build."));
+        QCOMPARE(Install::commandLineTool(home, home + "/missing").error, QStringLiteral("hangarctl is not bundled in this build."));
 
         const QString bundle = home + "/bundle";
-        spit(bundle + "/SKILL.md", "---\nname: agterm\n---\n<!-- agterm-skill -->\n");
+        spit(bundle + "/SKILL.md", "---\nname: hangar\n---\n<!-- hangar-skill -->\n");
         spit(bundle + "/reference.md", "ref\n");
         QDir().mkpath(home + "/.codex");
-        spit(home + "/.claude/skills/agterm/SKILL.md", "someone else's\n");
+        spit(home + "/.claude/skills/hangar/SKILL.md", "someone else's\n");
         r = Install::skill(home, bundle);
         QVERIFY(r.warning);
-        QCOMPARE(slurp(home + "/.claude/skills/agterm/SKILL.md"), QStringLiteral("someone else's\n"));
-        QCOMPARE(slurp(home + "/.codex/skills/agterm/reference.md"), QStringLiteral("ref\n"));
-        QVERIFY(r.text().contains("Codex: " + home + "/.codex/skills/agterm") && r.text().contains("left untouched"));
-        spit(home + "/.claude/skills/agterm/SKILL.md", "<!-- agterm-skill --> old\n"); // ours: replaced
+        QCOMPARE(slurp(home + "/.claude/skills/hangar/SKILL.md"), QStringLiteral("someone else's\n"));
+        QCOMPARE(slurp(home + "/.codex/skills/hangar/reference.md"), QStringLiteral("ref\n"));
+        QVERIFY(r.text().contains("Codex: " + home + "/.codex/skills/hangar") && r.text().contains("left untouched"));
+        spit(home + "/.claude/skills/hangar/SKILL.md", "<!-- hangar-skill --> old\n"); // ours: replaced
         r = Install::skill(home, bundle);
         QVERIFY(!r.warning);
-        QVERIFY(QFileInfo::exists(home + "/.claude/skills/agterm/reference.md"));
+        QVERIFY(QFileInfo::exists(home + "/.claude/skills/hangar/reference.md"));
         QCOMPARE(Install::skill(home, home + "/none").error, QStringLiteral("The agent skill is not bundled in this build."));
     }
 };

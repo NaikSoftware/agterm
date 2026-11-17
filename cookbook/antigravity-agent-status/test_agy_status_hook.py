@@ -57,23 +57,23 @@ class AgyStatusHookTest(unittest.TestCase):
         script_path = str(
             status_script if status_script is not None else self.status_script
         )
-        env.pop("AGTERM_STATUS_WRAPPER", None)
-        env.pop("AGTERM_STATUS_SCRIPT", None)
+        env.pop("HANGAR_STATUS_WRAPPER", None)
+        env.pop("HANGAR_STATUS_SCRIPT", None)
         env.update(
             {
                 "PYTHON_BIN": sys.executable,
                 "FAKE_STATUS_LOG": str(self.status_log),
-                "AGTERM_STATUS_WRAPPER"
+                "HANGAR_STATUS_WRAPPER"
                 if use_wrapper_var
-                else "AGTERM_STATUS_SCRIPT": script_path,
+                else "HANGAR_STATUS_SCRIPT": script_path,
                 "TEST_HOOK_SCRIPT": str(HOOK_SCRIPT),
                 "TEST_HOOK_ACTION": action,
             }
         )
         if session_id:
-            env["AGTERM_SESSION_ID"] = session_id
+            env["HANGAR_SESSION_ID"] = session_id
         else:
-            env.pop("AGTERM_SESSION_ID", None)
+            env.pop("HANGAR_SESSION_ID", None)
 
         if claude_code:
             env["CLAUDECODE"] = claude_code
@@ -124,7 +124,7 @@ class AgyStatusHookTest(unittest.TestCase):
         self.assertEqual({}, json.loads(stdout))
         self.assertEqual([["active", "--blink"]], calls)
 
-    def test_outside_agterm_prints_json_without_calling_status_script(self):
+    def test_outside_hangar_prints_json_without_calling_status_script(self):
         for action, expected in (
             ("invocation", {}),
             ("ask", {"decision": "allow"}),
@@ -195,8 +195,8 @@ class AgyStatusHookTest(unittest.TestCase):
     def test_hooks_json_is_valid_and_quotes_home(self):
         hooks_path = HERE / "agy-status-hooks.json"
         data = json.loads(hooks_path.read_text())
-        self.assertIn("agterm-status", data)
-        block = data["agterm-status"]
+        self.assertIn("hangar-status", data)
+        block = data["hangar-status"]
         for event in ("PreInvocation", "Stop"):
             self.assertTrue(block[event][0]["command"].startswith('"$HOME/'))
         for event in ("PreToolUse", "PostToolUse"):

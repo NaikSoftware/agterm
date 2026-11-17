@@ -47,7 +47,7 @@ public:
     QJsonObject list() const; // the hooks.list read-back
     QString path;
     QList<KeymapDiagnostic> diagnostics;
-    QString socket, pathPrefix; // AGT_SOCKET, and a directory put first on PATH so a bare agtermctl resolves
+    QString socket, pathPrefix; // AGT_SOCKET, and a directory put first on PATH so a bare hangarctl resolves
 
 Q_SIGNALS:
     void failed(const QString &hook, const QString &message); // once per hook until it next succeeds or a reload

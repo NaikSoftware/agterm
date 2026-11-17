@@ -3,7 +3,7 @@
 ## Overview
 
 A session attached from another Mac (`zmx.attach`) is an ssh pane running `zmx attach` on the origin.
-Programs in it run on the origin, carry the origin's `AGTERM_SESSION_ID`, and their `agtermctl` resolves
+Programs in it run on the origin, carry the origin's `HANGAR_SESSION_ID`, and their `hangarctl` resolves
 the origin's socket. So status, notifications, HUD panels, ask dialogs and overlays are drawn on the
 origin only; the attaching Mac receives terminal bytes and nothing else.
 
@@ -45,23 +45,23 @@ Decisions already taken:
 
 ## Context (from discovery)
 
-- `agterm/Control/ControlServer.swift:382-448` `handleConnection` is one request, one reply, close. It sets
+- `Hangar/Control/ControlServer.swift:382-448` `handleConnection` is one request, one reply, close. It sets
   `SO_RCVTIMEO` and `SO_SNDTIMEO` unconditionally (391-395), before the branch that hands
   `zmx.tree`/`zmx.attach` to a worker thread owning the descriptor. `writeResponse` checks its deadline only
   between writes (483-489). Every other request blocks the sole accept thread on
   `runBlocking { await server.dispatch(request) }` (434-437).
-- `agterm/Control/ControlServer+Zmx.swift:174-226` `attachRemoteSession` knows the remote session id and
+- `Hangar/Control/ControlServer+Zmx.swift:174-226` `attachRemoteSession` knows the remote session id and
   the per-role daemons, then keeps only `remoteHost` on the local `Session`. It runs `zmx.tree` against
   the origin first. `remoteTree(host:)` rebuilds the decoded answer to stamp `host`, copying only `endpoint`
   and `sessions` (122). `ControlRemoteTree` is declared in `ControlPayloads.swift:149-159` and exposes a
   daemon name per pane (97-109), which `ZmxSupport.swift:181-200` makes a deterministic encoding of the pane
   UUID. The viewer creates its own `Session` identities (`Session.swift:85-87`).
-- `agtermCore/Sources/agtermCore/RemoteSession.swift` builds the ssh argv (`BatchMode`, appended PATH
+- `HangarCore/Sources/HangarCore/RemoteSession.swift` builds the ssh argv (`BatchMode`, appended PATH
   chain, `/bin/sh -c` wrapping) that the stream's ssh reuses.
-- `agtermCore/Sources/agtermCore/ControlEvents.swift` is the public event ring: session, tree, pane,
+- `HangarCore/Sources/HangarCore/ControlEvents.swift` is the public event ring: session, tree, pane,
   remote-visibility, status and notify kinds, 4096 entries, cursor expiry. It is not the stream protocol.
 - `AppStore.recordNotificationEvent` (`AppStore+Events.swift:53-61`) receives identical arguments from the
-  OSC and the control producers in `agterm/Notifications/NotificationManager.swift`, so provenance has to
+  OSC and the control producers in `Hangar/Notifications/NotificationManager.swift`, so provenance has to
   be added at those two call sites. The OSC producer fires from the local surface with focus suppression
   (55-71); an explicit control notify deliberately gets none and records a `notify` event (`send`, 97-108).
 - HUD: `HudAutoHide` holds a revision and a task, no deadline (`ControlServer+Hud.swift:12-15`); the store
@@ -69,20 +69,20 @@ Decisions already taken:
   destroys the old HUD (`AppStore+Panes.swift:327`) and closes the new one when its body write fails
   (`ControlServer+Hud.swift:99-101`); the real discard seam is `Session.discardHudBody` (406-419), whose
   callback already cancels the timer. `ControlProjection.swift:31-69` projects the configured `hideAfter`.
-- `agtermCore/Sources/agtermCore/AppStore+Status.swift:29-37` `applyControlStatus` can refuse a clear
+- `HangarCore/Sources/HangarCore/AppStore+Status.swift:29-37` `applyControlStatus` can refuse a clear
   coming from a different pane, so mirrored state cannot be replayed through `session.status`.
 - Ask: `.terminal` is the default style (`Ask.swift:43`). `presentTerminalAsk` uses `session.openAsk` and an
   `AskRegistry` `.session` owner; `presentAsk` reserves the `PickController` window slot and requires the
   target visible on the origin (`ControlServer+Ask.swift:7-85`). `ask.cancel` and `Session.cancelAsk` retain
   a terminal canceled result (94-105); `softCloseSession` cancels before removing the row
-  (`AppStore+PendingClose.swift:91-94`); `agterm/Views/AskDialogView.swift:35-42,87-99` renders and resolves
+  (`AppStore+PendingClose.swift:91-94`); `Hangar/Views/AskDialogView.swift:35-42,87-99` renders and resolves
   whenever `askPending` is set and visible. Esc and Command-W resolve as the escaped outcome.
 - Overlay: dispatch is in `ControlDispatcher.swift:613-678` and `ControlActions` overlay operations are
   synchronous (92-96). `--block` polls `session.overlay.result` by session plus pane
-  (`agtermctlKit/SessionCommands.swift:579-610`, `ControlServer+SessionActions.swift:100-118`); the slot
+  (`hangarctlKit/SessionCommands.swift:579-610`, `ControlServer+SessionActions.swift:100-118`); the slot
   result is reset by the next open (`AppStore+Panes.swift:333`). Local completion flows only through
-  `agtermApp.swift:664-665,678-680` into that slot. The command contract is a shell string through
-  `AGTERM_OVL_CMD`; `OverlayCapture.shellLine` is `( eval "$AGTERM_OVL_CMD" ); echo $? > "$AGTERM_OVL_CODE"`
+  `hangarApp.swift:664-665,678-680` into that slot. The command contract is a shell string through
+  `HANGAR_OVL_CMD`; `OverlayCapture.shellLine` is `( eval "$HANGAR_OVL_CMD" ); echo $? > "$HANGAR_OVL_CODE"`
   (`OverlayCapture.swift:10`), so its shell returns the `echo` status and local overlays read the code file.
   `overlayActive` mounts the local surface (`WindowContentView+Detail.swift:301`) and
   `programOverlayActive` gates zoom, deck and focus (`TerminalZoom.swift:61,78-87`). Read-back today is
@@ -95,21 +95,21 @@ Decisions already taken:
   `Session` and calls `emitSessionCreated`, not `attachRemoteSession`
   (`AppStore+PendingClose.swift:399-416`); workspace restoration does the same.
 - `WindowLibrary.onControlEvent` is `HookController`'s single callback
-  (`agterm/Commands/HookController.swift:20`) and is not available to the stream.
-- `agtermctlKit/SocketClient.swift` reads one reply; `RemoteCommandProcessRunner` captures until exit or
+  (`Hangar/Commands/HookController.swift:20`) and is not available to the stream.
+- `hangarctlKit/SocketClient.swift` reads one reply; `RemoteCommandProcessRunner` captures until exit or
   deadline. Neither can stream.
-- An old installed `agtermctl` rejects an unknown `zmx present` subcommand in ArgumentParser
+- An old installed `hangarctl` rejects an unknown `zmx present` subcommand in ArgumentParser
   (`ZmxCommands.swift:18`) before any new code runs.
-- The launched app builds `ControlServer` with no runner (`agtermApp.swift:96-99`), so it gets the real
+- The launched app builds `ControlServer` with no runner (`hangarApp.swift:96-99`), so it gets the real
   default (`ControlServer.swift:175`); only hosted tests inject a fake.
 
 ## Development Approach
 
-- **testing approach**: TDD for the host-free state machines in `agtermCore` (frame codec, generation and
+- **testing approach**: TDD for the host-free state machines in `HangarCore` (frame codec, generation and
   revision ordering, presenter grant, job table, ask ownership). Regular, code then tests in the same
   task, for app-target adapters (stream owner, ssh process, overlay launch).
-- model, protocol, validation, routing and response shaping live in `agtermCore`; the app target stays a
-  side-effect adapter. `agtermCore` imports no AppKit or GhosttyKit.
+- model, protocol, validation, routing and response shaping live in `HangarCore`; the app target stays a
+  side-effect adapter. `HangarCore` imports no AppKit or GhosttyKit.
 - work in a native worktree forked from fetched `origin/master`; symlink the six build artifacts per
   CLAUDE.md.
 - start Swift tasks with the `swift-concurrency`, `swift-testing-expert` and, for UI, `swiftui-expert`
@@ -120,7 +120,7 @@ Decisions already taken:
 - the stream never takes `WindowLibrary.onControlEvent` and never changes the public event ring.
 - remote overlay execution is unreachable until Task 20 routes to it; Tasks 16 to 19 leave every overlay
   local.
-- `agtermctlKit/SessionCommands.swift` is 907 lines; if a task would push it past 1000, stop and ask before
+- `hangarctlKit/SessionCommands.swift` is 907 lines; if a task would push it past 1000, stop and ask before
   splitting it.
 - during a task run only its tests (`swift test --filter`, `-only-testing:`); the full gates run once per
   slice, in Tasks 11 and 23.
@@ -130,7 +130,7 @@ Decisions already taken:
 
 ## Testing Strategy
 
-- **package tests** (`cd agtermCore && swift test`): all protocol, ordering, grant, job and ask-ownership
+- **package tests** (`cd HangarCore && swift test`): all protocol, ordering, grant, job and ask-ownership
   logic, driven with fake clocks and fake transports.
 - **hosted tests** (`make test-app`): stream owner descriptor lifecycle against a real socket pair,
   `ControlServer` hand-off keeping the accept thread free, HUD publication and discard, the ask and overlay
@@ -165,7 +165,7 @@ a new CLI with an old running app alike, and keeps arbitrary ssh or protocol err
 `unsupported` classification.
 
 **Transport.** The viewer opens one non-PTY `ssh -T` per attached session and runs
-`agtermctl zmx present` on the origin. That CLI is a thin bridge: it opens the origin's control socket,
+`hangarctl zmx present` on the origin. That CLI is a thin bridge: it opens the origin's control socket,
 sends a `zmx.present` request, and then pumps newline-delimited JSON frames between its stdio and the
 socket. Its stdout carries frames and nothing else.
 
@@ -243,7 +243,7 @@ and an older client ignores the field.
 pane slot against a second open, and sends `overlay.request`. The reservation is separate from coverage:
 `programOverlayActive` stays false on the origin, no local surface is mounted, and zoom, deck and focus
 behave as drawn. The viewer opens a local overlay whose command is
-`ssh -tt <origin> agtermctl session overlay run-job <id>`. The helper's claim is the authoritative
+`ssh -tt <origin> hangarctl session overlay run-job <id>`. The helper's claim is the authoritative
 acceptance; `overlay.rejected` fails the job at once and the launch deadline covers silence. Claim and
 deadline expiry have one atomic winner: once the claim wins the deadline cannot fail the running job, and
 once expiry wins a late claim spawns nothing. A job is never rerun and never launched locally. With no
@@ -253,7 +253,7 @@ presenter, overlays behave as they do today.
 (`session.overlay.job.run`, handed off the accept thread like `zmx.present`), whose request is the claim,
 receives the shell command, cwd and environment, launches the command under the ssh pty, reports
 `started`, waits, and reports the exit. It evaluates the command with status-preserving shell semantics
-(`/bin/sh -c 'eval "$AGTERM_OVL_CMD"'`), not through `OverlayCapture.shellLine`; what is shared with a
+(`/bin/sh -c 'eval "$HANGAR_OVL_CMD"'`), not through `OverlayCapture.shellLine`; what is shared with a
 local launch is the command string and the environment. That connection is the helper's liveness: it
 stays open for the whole run and closes when the helper dies, the origin sends `cancel` over it, and it
 is independent of the presentation stream. Losing the pty or receiving SIGHUP or SIGTERM is a cancellation, the same as a
@@ -292,7 +292,7 @@ shown ask replica is dismissed without resolving. Retained outcomes, `unknown` i
 A held `--wait` surface therefore does not survive a disconnect.
 
 **Environment.** Nothing but the job id and render settings reaches the viewer. The origin resolves cwd
-and builds the launch environment with its own `AGTERM_*` identities, and the helper takes `TERM` from the
+and builds the launch environment with its own `HANGAR_*` identities, and the helper takes `TERM` from the
 ssh pty.
 
 ## Technical Details
@@ -301,8 +301,8 @@ ssh pty.
 
 | Command | CLI | Slice | Purpose |
 |---|---|---|---|
-| `zmx.present` | `agtermctl zmx present <session>` | 1 | presentation stream; streaming |
-| `session.overlay.job.run` | `agtermctl session overlay run-job <id>` | 2 | helper connection: claim, started, exit, cancel; streaming |
+| `zmx.present` | `hangarctl zmx present <session>` | 1 | presentation stream; streaming |
+| `session.overlay.job.run` | `hangarctl session overlay run-job <id>` | 2 | helper connection: claim, started, exit, cancel; streaming |
 
 `zmx.tree` gains the optional `presentation` version field.
 
@@ -355,8 +355,8 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 ### Task 1: Presentation frame model and codec
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/PresentationFrames.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/PresentationFramesTests.swift`
+- Create: `HangarCore/Sources/HangarCore/PresentationFrames.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/PresentationFramesTests.swift`
 
 - [x] write failing tests: round trip of every slice-1 frame, unknown kind tolerated, oversize line refused,
       malformed JSON reported with a diagnosable error, version negotiation picking the lower side
@@ -367,8 +367,8 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 ### Task 2: Origin hub with atomic snapshot and ordered deltas
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/PresentationHub.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/PresentationHubTests.swift`
+- Create: `HangarCore/Sources/HangarCore/PresentationHub.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/PresentationHubTests.swift`
 
 - [x] write failing tests: subscribe returns the snapshot before any delta; a change during subscribe lands
       after the snapshot; revisions are monotonic per generation; a second subscriber to one session gets
@@ -383,11 +383,11 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 ### Task 3: Publish status to the hub
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Status.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Create: `agtermCore/Sources/agtermCore/AppStore+Presentation.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreStatusTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStorePaneSwapTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Status.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Create: `HangarCore/Sources/HangarCore/AppStore+Presentation.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreStatusTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePaneSwapTests.swift`
 
 - [x] write failing tests: set, idle, clear and pane overrides each reach the hub as full state with owner
       pane and glyph overrides; a refused status change publishes nothing
@@ -397,10 +397,10 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 ### Task 4: Notification provenance and control-origin publication
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Events.swift`
-- Modify: `agterm/Notifications/NotificationManager.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Presentation.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreEventTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Events.swift`
+- Modify: `Hangar/Notifications/NotificationManager.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Presentation.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreEventTests.swift`
 
 - [x] write failing tests: a control notification reaches the hub with pane and source; an OSC one does
       not; the public `notify` event is identical for both
@@ -411,12 +411,12 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 ### Task 5: HUD expiry deadline, generation and publication
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Session.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Presentation.swift`
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agterm/Control/ControlServer+Hud.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreHudTests.swift`
-- Modify: `agtermTests/ControlServerHudAutoHideTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Presentation.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `Hangar/Control/ControlServer+Hud.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreHudTests.swift`
+- Modify: `HangarTests/ControlServerHudAutoHideTests.swift`
 
 - [x] write failing tests: every discard path publishes absence (close, auto-hide, replacement by an
       overlay); a stale HUD generation cannot close a replacement; a late subscriber gets the remaining
@@ -430,11 +430,11 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 ### Task 6: `zmx.tree` presentation capability
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlPayloads.swift`
-- Modify: `agtermCore/Sources/agtermCore/RemoteTree.swift`
-- Modify: `agterm/Control/ControlServer+Zmx.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/RemoteTreeTests.swift`
-- Modify: `agtermTests/ControlServerZmxTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlPayloads.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemoteTree.swift`
+- Modify: `Hangar/Control/ControlServer+Zmx.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/RemoteTreeTests.swift`
+- Modify: `HangarTests/ControlServerZmxTests.swift`
 
 - [x] add the optional `presentation` version to `ControlRemoteTree` and emit it from the bare `zmx.tree`
 - [x] preserve it where `remoteTree(host:)` rebuilds the decoded answer to stamp `host`
@@ -445,14 +445,14 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 ### Task 7: Stream owner and `zmx.present` hand-off in the control server
 
 **Files:**
-- Create: `agterm/Control/ControlStreamOwner.swift`
-- Create: `agterm/Control/ControlServer+Presentation.swift`
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Zmx.swift`
-- Create: `agtermTests/ControlStreamOwnerTests.swift`
-- Create: `agtermTests/ControlServerPresentationTests.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`, `agtermCore/Sources/agtermCore/ControlActionsDefaults.swift`
+- Create: `Hangar/Control/ControlStreamOwner.swift`
+- Create: `Hangar/Control/ControlServer+Presentation.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Zmx.swift`
+- Create: `HangarTests/ControlStreamOwnerTests.swift`
+- Create: `HangarTests/ControlServerPresentationTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`, `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
 
 - [x] add `zmxPresent` to `Command` with its arguments and validation (session must exist and be
       zmx-backed)
@@ -473,13 +473,13 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 - ➕ the server owns the hub and assigns it to every open store from `refreshWindowCache`, since
   `WindowLibrary.swift` sits at the 1000-line lint limit and creates the stores
 
-### Task 8: `agtermctl zmx present` bridge
+### Task 8: `hangarctl zmx present` bridge
 
 **Files:**
-- Create: `agtermCore/Sources/agtermctlKit/StreamBridge.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/ZmxCommands.swift`
-- Create: `agtermCore/Tests/agtermctlKitTests/StreamBridgeTests.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SocketClient.swift`, `agtermCore/Tests/agtermctlKitTests/ZmxCommandsTests.swift`
+- Create: `HangarCore/Sources/hangarctlKit/StreamBridge.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/ZmxCommands.swift`
+- Create: `HangarCore/Tests/hangarctlKitTests/StreamBridgeTests.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SocketClient.swift`, `HangarCore/Tests/hangarctlKitTests/ZmxCommandsTests.swift`
 
 - [x] implement a streaming socket connection separate from `SocketClient.send`
 - [x] pump stdin to the socket and the socket to stdout; nothing else is written to stdout; diagnostics go
@@ -493,17 +493,17 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 ### Task 9: Viewer model: remote binding and remote-owned presentation state
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Session.swift`
-- Create: `agtermCore/Sources/agtermCore/RemotePresentationState.swift`
-- Modify: `agtermCore/Sources/agtermCore/ZmxSupport.swift`
-- Create: `agterm/Control/ControlServer+RemotePresentation.swift`
-- Modify: `agterm/Control/ControlServer+Hud.swift`
-- Create: `agtermTests/ControlServerRemotePresentationTests.swift`
-- Create: `agtermCore/Sources/agtermCore/AppStore+RemotePresentation.swift`
-- Modify: `agterm/Control/ControlServer+Zmx.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/RemotePresentationStateTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStorePaneSwapTests.swift`
-- Modify: `agtermTests/ControlServerZmxTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift`
+- Create: `HangarCore/Sources/HangarCore/RemotePresentationState.swift`
+- Modify: `HangarCore/Sources/HangarCore/ZmxSupport.swift`
+- Create: `Hangar/Control/ControlServer+RemotePresentation.swift`
+- Modify: `Hangar/Control/ControlServer+Hud.swift`
+- Create: `HangarTests/ControlServerRemotePresentationTests.swift`
+- Create: `HangarCore/Sources/HangarCore/AppStore+RemotePresentation.swift`
+- Modify: `Hangar/Control/ControlServer+Zmx.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/RemotePresentationStateTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePaneSwapTests.swift`
+- Modify: `HangarTests/ControlServerZmxTests.swift`
 
 - [x] write failing tests: a mirrored clear from another pane is applied where `applyControlStatus` would
       refuse it; disconnect clears the bridge-owned status and HUD and leaves local status alone; a local
@@ -530,19 +530,19 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 ### Task 10: Viewer client, automatic start and row-visibility lifecycle
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/RemotePresentationClient.swift`
-- Modify: `agtermCore/Sources/agtermCore/RemoteSession.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Events.swift`
-- Create: `agterm/Control/RemotePresentationProcess.swift`
-- Modify: `agterm/Control/ControlServer+RemotePresentation.swift`, `agterm/Control/ControlServer+Presentation.swift`, `agterm/Control/ControlServer.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agtermTests/ControlServerRemotePresentationTests.swift`, `agtermTests/ControlServerZmxTests.swift`
-- Modify: `agterm/Control/ControlServer+Zmx.swift`
-- Modify: `agterm/Notifications/NotificationManager.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/RemotePresentationClientTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/RemoteSessionTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStorePendingCloseTests.swift`
-- Create: `agtermTests/RemotePresentationProcessTests.swift`
+- Create: `HangarCore/Sources/HangarCore/RemotePresentationClient.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemoteSession.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Events.swift`
+- Create: `Hangar/Control/RemotePresentationProcess.swift`
+- Modify: `Hangar/Control/ControlServer+RemotePresentation.swift`, `Hangar/Control/ControlServer+Presentation.swift`, `Hangar/Control/ControlServer.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `HangarTests/ControlServerRemotePresentationTests.swift`, `HangarTests/ControlServerZmxTests.swift`
+- Modify: `Hangar/Control/ControlServer+Zmx.swift`
+- Modify: `Hangar/Notifications/NotificationManager.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/RemotePresentationClientTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/RemoteSessionTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePendingCloseTests.swift`
+- Create: `HangarTests/RemotePresentationProcessTests.swift`
 
 - [x] write failing tests for the client state machine with a fake transport and clock: hello then
       snapshot then deltas; stale-generation frames ignored; missed ack marks the stream stale and
@@ -565,7 +565,7 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 - ➕ the client has no timer of its own; the server ticks every client once a second, which is what makes
   backoff and the stale check deterministic under a fake clock
 - ➕ the command is `RemoteSession.presentCommand(host:session:connectTimeout:)`. It takes no endpoint, since
-  the far side's `agtermctl` resolves its own socket, and no attachment id in slice 1
+  the far side's `hangarctl` resolves its own socket, and no attachment id in slice 1
 - ➕ the client tracks no acks: it answers the origin's ping and goes stale after 30 seconds without any
   frame. Ack tracking is the hub's. Nothing restores a remote session from disk, since one is never
   persisted; the hook's cases are soft close, session undo and workspace undo, each tested
@@ -577,12 +577,12 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 ### Task 11: Slice 1 read-back, end-to-end test and gates
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlPayloads.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SocketClient.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTreeProjectionTests.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/SocketClientTests.swift`
-- Modify: `agtermTests/ControlServerZmxTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlPayloads.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SocketClient.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTreeProjectionTests.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/SocketClientTests.swift`
+- Modify: `HangarTests/ControlServerZmxTests.swift`
 
 - [x] add `presentation` to the viewer session node and `presenters` with the mirror count to the origin
       session node, with CLI human output
@@ -590,9 +590,9 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 - [x] add one hosted end-to-end test with both roles in one process through the injected runner: attach,
       set status and open a HUD on the origin session, assert the viewer row renders both, close the stream,
       assert the mirrored status and HUD are both gone from the viewer
-- [x] run `cd agtermCore && swift test`, `make test-app`, `make lint` once; all green
-- ➕ the end-to-end test lives in `agtermTests/ControlServerRemotePresentationTests.swift`, beside the
-      viewer fixtures it reuses. Its injected transport launches the bundled `agtermctl zmx present`
+- [x] run `cd HangarCore && swift test`, `make test-app`, `make lint` once; all green
+- ➕ the end-to-end test lives in `HangarTests/ControlServerRemotePresentationTests.swift`, beside the
+      viewer fixtures it reuses. Its injected transport launches the bundled `hangarctl zmx present`
       against the test server's socket, so the real bridge and stream owner are in the path and only ssh
       is replaced. `ControlPayloads.swift` and `ControlServerZmxTests.swift` needed no change.
 - ⚠️ the end-to-end test asserts rendering at the deck's inputs, not on a painted surface: the viewer's
@@ -607,12 +607,12 @@ Frame size and the pending-output queue are bounded; the limits are constants be
 - Modify: `.claude/rules/control-api.md`
 - Modify: `ARCHITECTURE.md`
 - Modify: `site/docs.html`, `site/commands.html`, `site/llms.txt`
-- Modify: `plugins/agterm/skills/agterm/SKILL.md`, `plugins/agterm/skills/agterm/reference.md`,
-  `plugins/agterm/skills/agterm/examples.md`
+- Modify: `plugins/hangar/skills/hangar/SKILL.md`, `plugins/hangar/skills/hangar/reference.md`,
+  `plugins/hangar/skills/hangar/examples.md`
 
 - [x] document the stream and its meaning (presentation connected, not pane attached), unsynchronized HUD
       expiry, the OSC exclusion and its reason, one `notify` event on each app, the notification limitation
-      while disconnected, the reconnect policy, and the far-side `agtermctl` PATH precondition
+      while disconnected, the reconnect policy, and the far-side `hangarctl` PATH precondition
 - [x] rewrite the control-api.md statement that `zmx.tree` and `zmx.attach` are the only commands leaving
       the accept thread to describe streaming hand-off
 - [x] record the XCUITest exemption for the presentation commands in control-api.md
@@ -625,15 +625,15 @@ Slice 1 ends here and ships as its own PR.
 ### Task 13: Presenter grant, viewer acquisition and connection indicator
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/PresenterGrant.swift`
-- Modify: `agtermCore/Sources/agtermCore/PresentationFrames.swift`
-- Modify: `agtermCore/Sources/agtermCore/PresentationHub.swift`
-- Modify: `agtermCore/Sources/agtermCore/RemotePresentationClient.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agterm/Views/WorkspaceSidebar+RowRendering.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/PresenterGrantTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/RemotePresentationClientTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PresentationFramesTests.swift`
+- Create: `HangarCore/Sources/HangarCore/PresenterGrant.swift`
+- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`
+- Modify: `HangarCore/Sources/HangarCore/PresentationHub.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemotePresentationClient.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar+RowRendering.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/PresenterGrantTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/RemotePresentationClientTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PresentationFramesTests.swift`
 
 - [x] write failing tests, origin: acquire grants one connection per session; a second is refused and keeps
       mirroring; no preemption; a missed heartbeat or a closed stream revokes and bumps the generation;
@@ -658,15 +658,15 @@ Slice 1 ends here and ships as its own PR.
 ### Task 14: Ask ownership split on the origin
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Ask.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlAsk.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Ask.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agterm/Control/ControlServer+Ask.swift`
-- Modify: `agterm/Views/AskDialogView.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AskTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherAskTests.swift`
-- Modify: `agtermTests/ControlServerAskTests.swift`, `agtermTests/AskDialogViewTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Ask.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlAsk.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Ask.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `Hangar/Control/ControlServer+Ask.swift`
+- Modify: `Hangar/Views/AskDialogView.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AskTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherAskTests.swift`
+- Modify: `HangarTests/ControlServerAskTests.swift`, `HangarTests/AskDialogViewTests.swift`
 
 - [x] write failing tests for both styles, the default terminal ask (`session.openAsk`, `AskRegistry`
       `.session` owner) and the GUI ask (`PickController` reservation, origin visibility): with a presenter
@@ -680,7 +680,7 @@ Slice 1 ends here and ships as its own PR.
       and the unrelated pick is untouched
 - [x] add the optional `reason` to `ControlAskResult`; tests: it encodes as `reason: presentation-lost`
       beside `result: cancelled`, an ordinary cancel carries none, a payload without it decodes, and
-      `agtermctl ask` still exits 2 and prints the field under `--json`
+      `hangarctl ask` still exits 2 and prints the field under `--json`
 - [x] separate authoritative pending and result ownership from the local UI reservation
 - [x] route `ask.request` and `ask.dismiss` through the hub; untargeted GUI ask and `pick.open` stay local
 - [x] report a remotely presented ask on the origin's `ask` node with `remote: true`, with a projection test
@@ -696,12 +696,12 @@ Slice 1 ends here and ships as its own PR.
 ### Task 15: Ask presentation on the viewer
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/RemotePresentationClient.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+RemotePresentation.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agterm/Control/ControlServer+Ask.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/RemotePresentationClientTests.swift`
-- Modify: `agtermTests/ControlServerAskTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemotePresentationClient.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePresentation.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `Hangar/Control/ControlServer+Ask.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/RemotePresentationClientTests.swift`
+- Modify: `HangarTests/ControlServerAskTests.swift`
 
 - [x] write failing tests: the viewer answers `ask.accepted` only after its dialog is reserved; occupancy or
       a missing visible pane answers `ask.rejected`; `ask.dismiss` and a revoked generation hide the dialog
@@ -724,8 +724,8 @@ Slice 1 ends here and ships as its own PR.
 ### Task 16: Overlay dispatch split
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/ControlDispatcher+Overlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
+- Create: `HangarCore/Sources/HangarCore/ControlDispatcher+Overlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
 
 - [x] move the overlay dispatch block out of `ControlDispatcher.swift` into
       `ControlDispatcher+Overlay.swift` unchanged; `ControlDispatcherOverlayTests` still pass
@@ -736,12 +736,12 @@ Slice 1 ends here and ships as its own PR.
 ### Task 17: Overlay launch context built on the origin
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/OverlayCapture.swift`
-- Modify: `agterm/agtermApp.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/OverlayCaptureTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/OverlayCapture.swift`
+- Modify: `Hangar/hangarApp.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/OverlayCaptureTests.swift`
 
 - [x] build the job's launch context in one place shared with the local overlay launch: the
-      `AGTERM_OVL_CMD` command string, cwd resolved on the origin, the origin's `AGTERM_*` identities;
+      `HANGAR_OVL_CMD` command string, cwd resolved on the origin, the origin's `HANGAR_*` identities;
       `TERM` is left for the helper to take from its pty; the `shellLine` wrapper and its code file stay
       local-only
 - [x] write a test comparing the variables a local overlay launch receives with those the job context
@@ -755,12 +755,12 @@ Slice 1 ends here and ships as its own PR.
 ### Task 18: Origin helper connection and the claim-versus-expiry state machine
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/OverlayJobs.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Create: `agterm/Control/ControlServer+OverlayJobs.swift`
-- Modify: `agterm/Control/ControlServer.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/OverlayJobsTests.swift`
-- Create: `agtermTests/ControlServerOverlayJobsTests.swift`
+- Create: `HangarCore/Sources/HangarCore/OverlayJobs.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Create: `Hangar/Control/ControlServer+OverlayJobs.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/OverlayJobsTests.swift`
+- Create: `HangarTests/ControlServerOverlayJobsTests.swift`
 
 - [x] create `OverlayJobs`, private to the origin and holding remote jobs only: states unclaimed, claimed,
       running; outcomes exited, canceled, launch-failed, unknown; first terminal outcome wins and a report
@@ -787,11 +787,11 @@ Slice 1 ends here and ships as its own PR.
 ### Task 19: `run-job` supervising helper
 
 **Files:**
-- Create: `agtermCore/Sources/agtermctlKit/OverlayRunJob.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift`
-- Create: `agtermCore/Tests/agtermctlKitTests/OverlayRunJobTests.swift`
+- Create: `HangarCore/Sources/hangarctlKit/OverlayRunJob.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
+- Create: `HangarCore/Tests/hangarctlKitTests/OverlayRunJobTests.swift`
 
-- [x] implement `agtermctl session overlay run-job <id>`: connect, claim, spawn the shell command as a child
+- [x] implement `hangarctl session overlay run-job <id>`: connect, claim, spawn the shell command as a child
       under the inherited pty with foreground process-group handling, forward SIGWINCH, wait, report, exit
       with the program's status, evaluating the command with status-preserving semantics
 - [x] a `cancel` frame, pty loss, SIGHUP or SIGTERM terminates the child, escalates to SIGKILL after a grace
@@ -813,19 +813,19 @@ Slice 1 ends here and ships as its own PR.
 ### Task 20: Origin overlay routing, best-effort close and resize
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Overlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlActionsDefaults.swift`
-- Modify: `agtermCore/Sources/agtermCore/OverlayJobs.swift`
-- Modify: `agtermCore/Sources/agtermCore/PresentationHub.swift`
-- Modify: `agtermCore/Sources/agtermCore/Session.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agterm/Control/ControlServer+SessionActions.swift`
-- Modify: `agterm/Control/ControlServer+SurfaceIO.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherOverlayTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTreeProjectionTests.swift`
-- Modify: `agtermTests/ControlServerSessionActionsTests.swift`, `agtermTests/ControlServerTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Overlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
+- Modify: `HangarCore/Sources/HangarCore/OverlayJobs.swift`
+- Modify: `HangarCore/Sources/HangarCore/PresentationHub.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Modify: `Hangar/Control/ControlServer+SurfaceIO.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherOverlayTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTreeProjectionTests.swift`
+- Modify: `HangarTests/ControlServerSessionActionsTests.swift`, `HangarTests/ControlServerTests.swift`
 
 - [x] write failing tests: grant then open reserves the slot, sends `overlay.request`, mounts nothing
       locally, leaves `programOverlayActive` false, and zoom and deck on the origin behave as uncovered; a
@@ -869,10 +869,10 @@ Slice 1 ends here and ships as its own PR.
 ### Task 21: Presentation loss on the origin
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/PresentationHub.swift`
-- Modify: `agtermCore/Sources/agtermCore/OverlayJobs.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PresentationHubTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/OverlayJobsTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/PresentationHub.swift`
+- Modify: `HangarCore/Sources/HangarCore/OverlayJobs.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PresentationHubTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/OverlayJobsTests.swift`
 
 - [x] write failing tests: on loss of the presenter's stream an unclaimed job ends `canceled` and a late claim
       launches nothing; a finished and an `unknown` job release their reservation at once with outcomes
@@ -890,14 +890,14 @@ Slice 1 ends here and ships as its own PR.
 ### Task 22: Overlay presentation on the viewer
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/RemotePresentationClient.swift`
-- Modify: `agtermCore/Sources/agtermCore/RemoteSession.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+RemotePresentation.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agterm/Control/ControlServer+SessionActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/RemotePresentationClientTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/RemoteSessionTests.swift`
-- Modify: `agtermTests/ControlServerSessionActionsTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemotePresentationClient.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemoteSession.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePresentation.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/RemotePresentationClientTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/RemoteSessionTests.swift`
+- Modify: `HangarTests/ControlServerSessionActionsTests.swift`
 
 - [x] write failing tests: `overlay.request` opens a local overlay with the run-job ssh command on the
       mapped pane; occupancy answers `overlay.rejected`; the stream dropping while the job ssh lives leaves
@@ -913,7 +913,7 @@ Slice 1 ends here and ships as its own PR.
       `paneOverlays` only
 - [x] run the targeted tests - must pass before Task 23
 - ➕ `RemoteSession.runJobCommand(host:job:)` takes no endpoint: the helper is the origin's installed
-  `agtermctl`, reached through `cliPathPrefix` like the presentation bridge
+  `hangarctl`, reached through `cliPathPrefix` like the presentation bridge
 - ➕ a replica is an ordinary local overlay tagged with `OverlayReplica` on its slot (`PaneOverlay.replica`,
   `Session.overlayReplica`), so swap and promotion move it with the slot; every close path reports it once
   through `Session.onReplicaOverlayClosed`. A held `--wait` exit reaches the store through the surface's new
@@ -924,7 +924,7 @@ Slice 1 ends here and ships as its own PR.
 ### Task 23: Verify acceptance criteria
 
 **Files:**
-- Modify: `agtermTests/ControlServerZmxTests.swift`
+- Modify: `HangarTests/ControlServerZmxTests.swift`
 
 - [x] slice 1: status, control notifications and HUD for an attached session appear on the viewer;
       mirrored status and HUD clear on disconnect
@@ -938,7 +938,7 @@ Slice 1 ends here and ships as its own PR.
       completes the caller; an overlay job runs once, selects the viewer-only surface through the rendering
       gates, and returns its status. Like slice 1 it asserts rendering inputs, not painted pixels; on-screen
       rendering is confirmed by the two-Mac checks in Post-Completion
-- [x] run `cd agtermCore && swift test`, `make test-app`, `make lint` once; all green
+- [x] run `cd HangarCore && swift test`, `make test-app`, `make lint` once; all green
 - ➕ the slice 2 end-to-end case sits beside slice 1's in `ControlServerRemotePresentationTests`, sharing its
   real-bridge setup (`bridgedPair`); the program runs once under the bundle's `run-job` helper and its status
   becomes the origin's `session.overlay.result`. The test launches `run-job` itself with the job id it read
@@ -955,8 +955,8 @@ Slice 1 ends here and ships as its own PR.
 - Modify: `.claude/rules/control-api.md`
 - Modify: `ARCHITECTURE.md`, `README.md`
 - Modify: `site/docs.html`, `site/commands.html`, `site/llms.txt`, `site/index.html`
-- Modify: `plugins/agterm/skills/agterm/SKILL.md`, `plugins/agterm/skills/agterm/reference.md`,
-  `plugins/agterm/skills/agterm/examples.md`
+- Modify: `plugins/hangar/skills/hangar/SKILL.md`, `plugins/hangar/skills/hangar/reference.md`,
+  `plugins/hangar/skills/hangar/examples.md`
 
 - [x] extend control-api.md Remote sessions with the presenter, ask and overlay job contracts: the three
       ask transitions, the job outcomes, `launch-failed` in place of a local fallback, the uncovered origin,

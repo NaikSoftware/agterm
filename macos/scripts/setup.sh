@@ -23,20 +23,20 @@ ZMX_REV="8bab1f0173b07e79835ea372d749af3dbf0d0842"  # v0.8.1, 2026-09-05; Sessio
 ZMX_TARGET="aarch64-macos.14.0"
 # setup-zmx-linux.sh builds the same pin for a Linux target into its own stage dir and stamp. Unquoted, so
 # CI's `^ZMX_TARGET="` read of the line above matches it alone.
-ZMX_TARGET=${AGTERM_ZMX_TARGET:-$ZMX_TARGET}
+ZMX_TARGET=${HANGAR_ZMX_TARGET:-$ZMX_TARGET}
 # pin minor lines because the unversioned zig formula rolls; zmx stays on 0.16 independently.
 GHOSTTY_ZIG_FORMULA="zig@0.17"
 ZMX_ZIG_FORMULA="zig@0.16"
 XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # terminfo/ is the marker: it must extract as a SIBLING of ghostty/ so libghostty's
 # TERMINFO=dirname(GHOSTTY_RESOURCES_DIR)/terminfo derivation resolves xterm-ghostty.
-RESOURCES_MARKER="agterm/Resources/terminfo"
+RESOURCES_MARKER="Hangar/Resources/terminfo"
 STAMP_FILE=".ghostty-build-stamp"
 GHOSTTY_PATCH_DIR="scripts/ghostty-patches"
 GHOSTTY_PATCH_DIGEST="$(cat "$GHOSTTY_PATCH_DIR"/*.patch | shasum -a 256 | cut -c1-16)"
 GHOSTTY_STAMP="$GHOSTTY_REV $GHOSTTY_PATCH_DIGEST"
-ZMX_STAGE_DIR="${AGTERM_ZMX_STAGE_DIR:-agterm/Resources/zmx}"
-ZMX_STAMP_FILE="${AGTERM_ZMX_STAMP_FILE:-.zmx-build-stamp}"
+ZMX_STAGE_DIR="${HANGAR_ZMX_STAGE_DIR:-hangar/Resources/zmx}"
+ZMX_STAMP_FILE="${HANGAR_ZMX_STAMP_FILE:-.zmx-build-stamp}"
 # applied in name order over the plain pin; scripts/zmx-patches/README.md says what each one is for.
 # The stamp carries their digest, so editing a patch rebuilds zmx exactly as a ZMX_REV change does.
 ZMX_PATCH_DIR="scripts/zmx-patches"
@@ -45,13 +45,13 @@ ZMX_GHOSTTY_PATCH_DIR="$ZMX_PATCH_DIR/ghostty"
 ZMX_PATCH_DIGEST="$(cat "$ZMX_PATCH_DIR"/*.patch "$ZMX_GHOSTTY_PATCH_DIR"/*.patch | shasum -a 256 | cut -c1-16)"
 ZMX_STAMP="$ZMX_REV $ZMX_TARGET $ZMX_PATCH_DIGEST"
 
-# stage agterm's own bundled theme(s) from the committed source into the (gitignored,
+# stage hangar's own bundled theme(s) from the committed source into the (gitignored,
 # setup-regenerated) ghostty themes dir. idempotent and called on both the cached and the
 # fresh-build path so the theme survives a themes-dir wipe and shows in the Appearance picker.
 stage_custom_themes() {
-  local dst="agterm/Resources/ghostty/themes"
+  local dst="Hangar/Resources/ghostty/themes"
   [[ -d "$dst" ]] || return 0
-  cp agterm/Resources/custom-themes/* "$dst/"
+  cp Hangar/Resources/custom-themes/* "$dst/"
 }
 
 need_xc=true
@@ -92,8 +92,8 @@ zig_for() {
   local formula="$1" want="${1#zig@}" zig ver
   zig="$(brew --prefix "$formula" 2>/dev/null || true)/bin/zig"
   # a Linux CI job has no Homebrew; it names the zig it unpacked, held to the same version check
-  if [[ "$formula" == "$ZMX_ZIG_FORMULA" && -n "${AGTERM_ZMX_ZIG:-}" ]]; then
-    zig="$AGTERM_ZMX_ZIG"
+  if [[ "$formula" == "$ZMX_ZIG_FORMULA" && -n "${HANGAR_ZMX_ZIG:-}" ]]; then
+    zig="$HANGAR_ZMX_ZIG"
   elif [[ ! -x "$zig" ]]; then
     echo "installing $formula..." >&2
     brew install "$formula" >&2 || return 1
@@ -115,7 +115,7 @@ zig_for() {
 # dependency path does not, which is why only the zmx build needs this. A shim for the two macros, not a
 # backport of LLVM 22's header split: remove it once ZMX_ZIG_FORMULA resolves to a release carrying zig's own
 # fix, which 0.17.0 does.
-SHIM_MARK='Local patch (agterm scripts/setup.sh)'
+SHIM_MARK='Local patch (hangar scripts/setup.sh)'
 patch_zig_float_h() {
   local zig_lib float_h source tmp
   zig_lib="$("$ZMX_ZIG" env | sed -n 's/.*lib_dir"\{0,1\} *[=:] *"\([^"]*\)".*/\1/p')"
@@ -141,7 +141,7 @@ patch_zig_float_h() {
     source="$float_h.orig"
   fi
   tmp="$(mktemp "$float_h.XXXXXX")"
-  perl -0pe 's|^#ifndef __CLANG_FLOAT_H\n#define __CLANG_FLOAT_H\n|/* Local patch (agterm scripts/setup.sh): honor the macOS 27 SDK\n * __need_infinity_nan protocol (LLVM PR #164348). */\n#if defined(__need_infinity_nan)\n#  undef INFINITY\n#  undef NAN\n#  define INFINITY (__builtin_inff())\n#  define NAN (__builtin_nanf(""))\n#  undef __need_infinity_nan\n#else\n\n#ifndef __CLANG_FLOAT_H\n#define __CLANG_FLOAT_H\n|m' "$source" > "$tmp"
+  perl -0pe 's|^#ifndef __CLANG_FLOAT_H\n#define __CLANG_FLOAT_H\n|/* Local patch (hangar scripts/setup.sh): honor the macOS 27 SDK\n * __need_infinity_nan protocol (LLVM PR #164348). */\n#if defined(__need_infinity_nan)\n#  undef INFINITY\n#  undef NAN\n#  define INFINITY (__builtin_inff())\n#  define NAN (__builtin_nanf(""))\n#  undef __need_infinity_nan\n#else\n\n#ifndef __CLANG_FLOAT_H\n#define __CLANG_FLOAT_H\n|m' "$source" > "$tmp"
   printf '#endif /* __need_infinity_nan */\n' >> "$tmp"
   # publish only a header that got the whole transformation: the substitution is silent when the guard
   # lines are spaced differently, and appending the closing #endif alone would corrupt the header
@@ -186,7 +186,7 @@ if $need_xc || $need_res; then
   # before staging, so a red test never leaves artifacts under a stamp that marks them current
   echo "testing the libghostty patches..."
   ( cd "$ghostty_build" && "$GHOSTTY_ZIG" build test -Dtest-filter=teardown -Dtest-filter="url regex" \
-      -Dtest-filter="agterm session link" -Demit-macos-app=false )
+      -Dtest-filter="hangar session link" -Demit-macos-app=false )
 
   if $need_xc; then
     echo "staging GhosttyKit.xcframework..."
@@ -196,11 +196,11 @@ if $need_xc || $need_res; then
 
   if $need_res; then
     echo "staging ghostty resources..."
-    rm -rf agterm/Resources/ghostty agterm/Resources/terminfo
-    mkdir -p agterm/Resources/ghostty
-    cp -R "$ghostty_build/zig-out/share/ghostty/shell-integration" agterm/Resources/ghostty/
-    cp -R "$ghostty_build/zig-out/share/ghostty/themes" agterm/Resources/ghostty/
-    cp -R "$ghostty_build/zig-out/share/terminfo" agterm/Resources/terminfo
+    rm -rf Hangar/Resources/ghostty Hangar/Resources/terminfo
+    mkdir -p Hangar/Resources/ghostty
+    cp -R "$ghostty_build/zig-out/share/ghostty/shell-integration" Hangar/Resources/ghostty/
+    cp -R "$ghostty_build/zig-out/share/ghostty/themes" Hangar/Resources/ghostty/
+    cp -R "$ghostty_build/zig-out/share/terminfo" Hangar/Resources/terminfo
   fi
   printf '%s\n' "$GHOSTTY_STAMP" > "$STAMP_FILE"
 fi

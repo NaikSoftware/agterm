@@ -16,9 +16,9 @@
 ## Context (from discovery)
 - Program overlay handoff, the model to mirror: `AppStore+RemoteOverlay.swift` (origin reservation, placement
   rule, presenter loss), `AppStore+RemotePresentation.swift` and `OverlayReplica.swift` (viewer replica slots in
-  agtermCore: present, close, resize, orphan on stream loss), `ControlServer+OverlayJobs.swift` (claim, stream
+  HangarCore: present, close, resize, orphan on stream loss), `ControlServer+OverlayJobs.swift` (claim, stream
   adoption), `ControlServer.swift:460-471` (claim handoff with the failed-reply-write guard), `OverlayJobs.swift`,
-  `agtermctlKit/OverlayRunJob.swift` and `StreamBridge.swift` (CLI side), `RemoteSession.swift`
+  `hangarctlKit/OverlayRunJob.swift` and `StreamBridge.swift` (CLI side), `RemoteSession.swift`
   (`presentCommand` uses `ssh -T`, `runJobCommand` uses `-tt`).
 - `job.run` plumbing to copy for the new claim command: `ControlDispatcher.swift` (command arm, `ControlActions`
   requirement), `ControlDispatcher+Overlay.swift`, `ControlActionsDefaults.swift` (public unsupported default for
@@ -46,7 +46,7 @@
 - Test seam: `ControlServerRemotePresentationTests.bridgedPair()` replaces ssh with `server.remoteTransport` and
   runs both roles in one process.
 - Rules: `.claude/rules/control-api.md` (Overlay and Remote sessions sections), `libghostty.md` (overlays),
-  `ui-tests.md`. `agtermCore` is consumed by `agterm-linux`: add public API, never narrow existing fields; a new
+  `ui-tests.md`. `HangarCore` is consumed by `agterm-linux`: add public API, never narrow existing fields; a new
   case on a public enum breaks its exhaustive switches, the cost already accepted for a new `Command` case
   (control-api.md, `sidebar.width` bullet).
 
@@ -64,17 +64,17 @@
   - tests cover both success and error scenarios
 - **CRITICAL: all tests must pass before starting next task** - no exceptions
 - **CRITICAL: update this plan file when scope changes during implementation**
-- model, routing, validation and response shaping go in agtermCore with host-free tests; the app target stays
+- model, routing, validation and response shaping go in HangarCore with host-free tests; the app target stays
   the side-effect adapter (CLAUDE.md)
-- per task, run only the tests that cover it: `cd agtermCore && swift test --filter <Suite>` and
+- per task, run only the tests that cover it: `cd HangarCore && swift test --filter <Suite>` and
   `-only-testing:<Target>/<Class>` for hosted tests. The full gates (`swift test`, `make test-app`,
   `make lint`) run once, in the acceptance task, per CLAUDE.md
 - maintain backward compatibility: an older presenter or origin keeps today's behavior
 
 ## Testing Strategy
-- **unit tests**: `agtermCore` tests for frames, codecs, reservation and replica state, placement, refusal rules
+- **unit tests**: `HangarCore` tests for frames, codecs, reservation and replica state, placement, refusal rules
   and grant resolution
-- **hosted tests**: `agtermTests` for the app adapters, the claimed stream, the scheme handler and the bridge
+- **hosted tests**: `HangarTests` for the app adapters, the claimed stream, the scheme handler and the bridge
   relay. The end-to-end page cases follow `ControlServerRemotePresentationTests`, with an injected page-serve
   launcher in place of ssh
 - **XCUITest exemption**: like `zmx.present`, the remote path needs a second app as its peer. The viewer's page
@@ -95,7 +95,7 @@
   `overlay result --page` and `--html --block` are unchanged. Persistent storage, rendering and `--follow` happen on
   the viewer, never on the origin.
 - **File pages use a dedicated channel.** The presenter's open frame carries a single-use claim token. The viewer
-  starts `ssh -T <origin> agtermctl session overlay page-serve <token>`, a thin byte bridge into an app stream the
+  starts `ssh -T <origin> hangarctl session overlay page-serve <token>`, a thin byte bridge into an app stream the
   origin adopts after the claim (the job claim/adopt shape, with its own lifecycle). Through it the origin app
   serves the document and, only with `--cwd`, files inside the grant, off the main actor, in bounded
   demand-driven chunks. It also dispatches relayed bridge requests after checking the live page association and
@@ -103,7 +103,7 @@
   presentation queue.
 - **Viewer replica page.** The viewer shows a page of a third source kind, `HtmlSource.replica`, carrying the
   origin page id, the origin's logical path and whether a grant exists. The compiler then finds every site that
-  switches on the source. The navigation policy allows only `agterm-page://<this replica's id>/` for it and opens
+  switches on the source. The navigation policy allows only `hangar-page://<this replica's id>/` for it and opens
   web links externally, as for a file page. The replica has its OWN local page id, mapped to the origin id, so a
   submit on the viewer can reach the origin's ledger only through the page channel. The viewer's `htmlOverlays`
   reports it with `replica: true` and the origin's logical path as `file`.
@@ -161,10 +161,10 @@
   control request) answered by `reply`. Chunk size is bounded well under the frame cap; the origin produces the
   next chunk only when the writer drained the last, and a bridge reply is never queued behind a whole asset.
   Oversize requests and replies are refused with an error frame, never by dropping the channel.
-- **Grant resolution** is host-free in agtermCore beside `HtmlOverlay.contains`: decode, standardize, resolve
+- **Grant resolution** is host-free in HangarCore beside `HtmlOverlay.contains`: decode, standardize, resolve
   symlinks, refuse a path that escapes the grant; a request is the absolute origin path the scheme URL carries,
   decoded at the scheme boundary; no grant serves the page's own file alone.
-- **Custom scheme**: `agterm-page://<replica page id>/<path>` through a `WKURLSchemeHandler`; `<path>` maps to an
+- **Custom scheme**: `hangar-page://<replica page id>/<path>` through a `WKURLSchemeHandler`; `<path>` maps to an
   origin logical path. The scheme URL never reaches read-back, which reports the origin's logical path.
 - **Tree**: `ControlHtmlOverlayNode` gains optional `remote` and `replica` (true only when set); `zoom` is omitted
   for a remote page. `ControlRemoteOverlayNode` gains optional `pageID`. New init parameters are trailing and
@@ -181,10 +181,10 @@
 ### Task 1: Prove WebKit custom-scheme loading for pages
 
 **Files:**
-- Create: `agterm/Views/HtmlPageSchemeHandler.swift`
-- Create: `agtermTests/HtmlPageSchemeHandlerTests.swift`
+- Create: `Hangar/Views/HtmlPageSchemeHandler.swift`
+- Create: `HangarTests/HtmlPageSchemeHandlerTests.swift`
 
-- [x] add a `WKURLSchemeHandler` serving `agterm-page://<page-id>/<path>` from an injected async byte source,
+- [x] add a `WKURLSchemeHandler` serving `hangar-page://<page-id>/<path>` from an injected async byte source,
       with request cancellation when WebKit stops a task
 - [x] hosted test: a page with a relative stylesheet, image and ES module loads fully through the handler
 - [x] hosted test: `fetch` of a relative path, `history.pushState` and back/forward behave as on a file page
@@ -195,32 +195,32 @@
 ### Task 2: Protocol types, the claim command and the replica source
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/PresentationFrames.swift`
-- Create: `agtermCore/Sources/agtermCore/PageServeFrames.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Overlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlActionsDefaults.swift`
-- Modify: `agtermCore/Sources/agtermCore/RemotePresentationClient.swift`
-- Modify: `agtermCore/Sources/agtermCore/HtmlBridge.swift`
-- Modify: `agtermCore/Sources/agtermCore/HtmlOverlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+HtmlOverlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agterm/Views/HtmlOverlayRegistry.swift`
-- Modify: `agterm/Views/HtmlOverlayView.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PresentationFramesTests.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/PageServeFramesTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/HtmlBridgeTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherOverlayTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/HtmlOverlayTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`
+- Create: `HangarCore/Sources/HangarCore/PageServeFrames.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Overlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemotePresentationClient.swift`
+- Modify: `HangarCore/Sources/HangarCore/HtmlBridge.swift`
+- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`
+- Modify: `Hangar/Views/HtmlOverlayView.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PresentationFramesTests.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/PageServeFramesTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HtmlBridgeTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherOverlayTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HtmlOverlayTests.swift`
 
 - [x] add the shared-stream page kinds with the typed full source and background color; unknown kinds stay skippable
 - [x] add page channel frames with bounded chunk and request/reply sizes, and the load revision field
 - [x] add `session.overlay.page.serve`: catalog entry, dispatcher arm validating the token format, a
       `ControlActions` requirement with a public unsupported default, `HtmlBridge` refusal
 - [x] add `HtmlSource.replica` (origin page id, logical path, grant flag); the navigation policy allows only its own
-      `agterm-page://` origin and opens web links externally; every switch on the source handles it
+      `hangar-page://` origin and opens web links externally; every switch on the source handles it
       (`AppStore+HtmlOverlay` node builder, `HtmlOverlayRegistry`, `HtmlOverlayView`), with replica loading left to
       Task 6
 - [x] update the remaining exhaustive consumers (`RemotePresentationClient`, `ControlServer`'s fallback); the client
@@ -232,23 +232,23 @@
       an older decoder skipping the new kinds, the dispatcher arm and its unsupported default, bridge refusal,
       the replica navigation policy (own origin allowed, another page id and `file` refused, web link external),
       nil omission of the new tree fields
-- [x] run `swift test --filter` for the touched suites and `-only-testing:agtermTests/HtmlOverlayRegistryTests`
+- [x] run `swift test --filter` for the touched suites and `-only-testing:HangarTests/HtmlOverlayRegistryTests`
       - must pass before task 3
 
 ### Task 3: Origin reservation, routing and lifecycle for remote pages
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/AppStore+RemotePage.swift`
-- Create: `agtermCore/Sources/agtermCore/RemotePageResources.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+HtmlOverlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+RemoteOverlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/RemoteOverlays.swift`
-- Modify: `agtermCore/Sources/agtermCore/Session+OverlayVisibility.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+OverlayVisibility.swift`
-- Modify: `agtermCore/Sources/agtermCore/PresentationHub.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/AppStoreRemotePageTests.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/RemotePageResourcesTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/HtmlOverlayTests.swift`
+- Create: `HangarCore/Sources/HangarCore/AppStore+RemotePage.swift`
+- Create: `HangarCore/Sources/HangarCore/RemotePageResources.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+RemoteOverlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemoteOverlays.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session+OverlayVisibility.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+OverlayVisibility.swift`
+- Modify: `HangarCore/Sources/HangarCore/PresentationHub.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/AppStoreRemotePageTests.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/RemotePageResourcesTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HtmlOverlayTests.swift`
 
 - [x] route a page open through the program overlay placement rule; refuse a loopback URL and keep the old refusal
       for a presenter whose hello lacks the page kinds, preserving missing-pane and slot-taken errors
@@ -277,14 +277,14 @@
 ### Task 4: Origin app wiring and page service over a claimed stream
 
 **Files:**
-- Create: `agterm/Control/ControlServer+PageServe.swift`
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agterm/Control/ControlServer+SessionActions.swift`
-- Modify: `agterm/Control/ControlServer+Presentation.swift`
-- Modify: `agterm/Control/ControlServer+Ask.swift`
-- Modify: `agterm/Control/ControlStreamOwner.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+RemotePage.swift`
-- Create: `agtermTests/ControlServerPageServeTests.swift`
+- Create: `Hangar/Control/ControlServer+PageServe.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Modify: `Hangar/Control/ControlServer+Presentation.swift`
+- Modify: `Hangar/Control/ControlServer+Ask.swift`
+- Modify: `Hangar/Control/ControlStreamOwner.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePage.swift`
+- Create: `HangarTests/ControlServerPageServeTests.swift`
 
 - [x] `openHtmlOverlay` tries the remote route first; a remote page skips the persistent store check, the eager
       page build and local `--follow`, which happen on the viewer
@@ -301,17 +301,17 @@
       channel, a large file in chunks, cancel, a relayed submit recorded (its channel closes with the page), bridge
       for an ended page refused, token reuse refused, failed claim reply ends the page, helper loss keeps the
       presenter, presenter loss ends the page
-- [x] run `-only-testing:agtermTests/ControlServerPageServeTests` - must pass before task 5
+- [x] run `-only-testing:HangarTests/ControlServerPageServeTests` - must pass before task 5
 
-### Task 5: `agtermctl session overlay page-serve` bridge and its ssh command
+### Task 5: `hangarctl session overlay page-serve` bridge and its ssh command
 
 **Files:**
-- Create: `agtermCore/Sources/agtermctlKit/OverlayPageServe.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift`
-- Modify: `agtermCore/Sources/agtermCore/RemoteSession.swift`
-- Create: `agtermCore/Tests/agtermctlKitTests/OverlayPageServeTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/RemoteSessionTests.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/SocketClientTests.swift`
+- Create: `HangarCore/Sources/hangarctlKit/OverlayPageServe.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemoteSession.swift`
+- Create: `HangarCore/Tests/hangarctlKitTests/OverlayPageServeTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/RemoteSessionTests.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/SocketClientTests.swift`
 
 - [x] the CLI subcommand claims with the token and pumps bytes both ways with `StreamBridge`, handling partial
       writes; it reads no files and interprets no frames
@@ -323,23 +323,23 @@
 ### Task 6: Viewer replica page
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/AppStore+ReplicaPage.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/AppStoreReplicaPageTests.swift`
-- Create: `agterm/Control/ControlServer+RemotePage.swift`
-- Create: `agterm/Control/RemotePageChannel.swift`
-- Modify: `agterm/Control/ControlServer+RemotePresentation.swift`
-- Modify: `agtermCore/Sources/agtermCore/RemotePresentationClient.swift`
-- Modify: `agterm/Views/HtmlOverlayRegistry.swift`
-- Modify: `agterm/Views/HtmlOverlayBridge.swift`
-- Modify: `agtermCore/Sources/agtermCore/HtmlOverlay.swift` (replica release signal)
-- Modify: `agtermCore/Sources/agtermCore/AppStore+HtmlOverlay.swift`, `AppStore+OverlayVisibility.swift`,
+- Create: `HangarCore/Sources/HangarCore/AppStore+ReplicaPage.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/AppStoreReplicaPageTests.swift`
+- Create: `Hangar/Control/ControlServer+RemotePage.swift`
+- Create: `Hangar/Control/RemotePageChannel.swift`
+- Modify: `Hangar/Control/ControlServer+RemotePresentation.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemotePresentationClient.swift`
+- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`
+- Modify: `Hangar/Views/HtmlOverlayBridge.swift`
+- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift` (replica release signal)
+- Modify: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift`, `AppStore+OverlayVisibility.swift`,
   `AppStore+RemoteOverlay.swift`, `AppStore+RemotePresentation.swift`, `AppStore.swift`, `ControlProtocol.swift`
-- Modify: `agterm/Control/ControlServer.swift`, `agterm/Control/ControlServer+Presentation.swift`
-- Create: `agtermTests/ControlServerRemotePageTests.swift`, `agtermTests/RemotePageChannelTests.swift`,
-  `agtermTests/RemotePageFakes.swift` (one test file per source file, so the plan's single
+- Modify: `Hangar/Control/ControlServer.swift`, `Hangar/Control/ControlServer+Presentation.swift`
+- Create: `HangarTests/ControlServerRemotePageTests.swift`, `HangarTests/RemotePageChannelTests.swift`,
+  `HangarTests/RemotePageFakes.swift` (one test file per source file, so the plan's single
   `RemotePageReplicaTests.swift` became the first two)
 
-- [x] agtermCore: present a replica page into the target slot with its own local page id mapped to the origin id
+- [x] HangarCore: present a replica page into the target slot with its own local page id mapped to the origin id
       (pane mapping as `presentReplicaOverlay`), close it, apply resize and hide/show, and orphan it on stream loss;
       a refused present answers `pageRejected` with the reason
 - [x] app: a file replica starts the page-serve helper through an injectable launcher (ssh by default, like
@@ -350,33 +350,33 @@
       revision are dropped; at most `pageServeResourceLimit` resource requests are in flight, the rest wait
       locally, and a request's slot is freed only by its terminal frame (`end` or `failure`, which a cancel
       also produces), while bridge calls do not share those slots
-- [x] relay the `data-agterm` adapter and `agterm.request` through `bridge` frames with correlation ids; keep the
+- [x] relay the `data-hangar` adapter and `hangar.request` through `bridge` frames with correlation ids; keep the
       main-frame restriction and URL pages bridge-free
 - [x] audit every `if case .file`/`.url` predicate and early return in the page code (`drawsBackground`, `themed`,
       which gates the bridge handler and the adapter scripts, `textLoaded`, `pageURL`'s raw `webView.url` return)
-      so a file replica is themed, bridged and reports its logical path, never the `agterm-page://` URL
+      so a file replica is themed, bridged and reports its logical path, never the `hangar-page://` URL
 - [x] mirror coalesced `pageState` with the last applied command sequence; apply `pageCommand`; refuse Finder and
       Open in Browser for a file replica; Copy Link stays local; the viewer's `htmlOverlays` reports `replica: true`
       with the origin's logical path
 - [x] the viewer's socket `overlay.submit` on a replica is refused and leaves it open
 - [x] presenter loss, helper exit, `pageClose` and local close tear the page down once and report `pageClosed`
 - [x] tests: host-free present/close/orphan/refusal and id mapping; hosted file replica loading an asset over an
-      injected channel, bridge relay correlation through an injected dispatch for both `agterm.request` and a JS-off
-      `data-agterm` tag, logical-path read-back, URL page without helper, refused Finder/browser on a file replica,
+      injected channel, bridge relay correlation through an injected dispatch for both `hangar.request` and a JS-off
+      `data-hangar` tag, logical-path read-back, URL page without helper, refused Finder/browser on a file replica,
       browser on a URL replica, a refused socket submit leaving the replica and the origin pending, teardown on each
       trigger, state coalescing
-- [x] run `swift test --filter AppStoreReplicaPage` and `-only-testing:agtermTests/ControlServerRemotePageTests`, `RemotePageChannelTests` - must
+- [x] run `swift test --filter AppStoreReplicaPage` and `-only-testing:HangarTests/ControlServerRemotePageTests`, `RemotePageChannelTests` - must
       pass before task 7
 
 ### Task 7: Origin control actions on a remote page
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore+RemotePage.swift` (routing: `navigateRemotePage`, `reloadRemotePage`)
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift` (`OverlayHtmlError.remotePage`)
-- Modify: `agterm/Control/ControlServer+SessionActions.swift`
-- Modify: `agterm/Control/ControlServer+SurfaceIO.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreRemotePageTests.swift`
-- Modify: `agtermTests/ControlServerPageServeTests.swift` (`ControlServerSessionActionsTests.swift` is at the 2000-line
+- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePage.swift` (routing: `navigateRemotePage`, `reloadRemotePage`)
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift` (`OverlayHtmlError.remotePage`)
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Modify: `Hangar/Control/ControlServer+SurfaceIO.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreRemotePageTests.swift`
+- Modify: `HangarTests/ControlServerPageServeTests.swift` (`ControlServerSessionActionsTests.swift` is at the 2000-line
   test cap, and parsing is unchanged, so the dispatcher and its tests need no edit)
 
 - [x] implement the per-command answers in Solution Overview: close, resize, reload, back/forward and hide/show/toggle
@@ -390,7 +390,7 @@
 ### Task 8: End-to-end page handoff over the real bridge
 
 **Files:**
-- Modify: `agtermTests/ControlServerRemotePresentationTests.swift`
+- Modify: `HangarTests/ControlServerRemotePresentationTests.swift`
 
 - [x] both roles in one process with the page-serve launcher set to
       `[cli, "session", "overlay", "page-serve", <token>, "--socket", path]`: a `--js --cwd` file page with a relative
@@ -400,13 +400,13 @@
 - [x] the origin's `htmlOverlays` lists the page with `remote: true` and the viewer's live `page` and `title`
 - [x] an older presenter (hello without the page kinds) gets today's refusal
 - [x] presenter loss mid-page finishes the page `dismissed`
-- [x] run `-only-testing:agtermTests/ControlServerRemotePresentationTests` - must pass before task 9
+- [x] run `-only-testing:HangarTests/ControlServerRemotePresentationTests` - must pass before task 9
 
 ### Task 9: Verify acceptance criteria
 - [x] verify every Overview and Solution Overview point is implemented
 - [x] verify edge cases: placement with mixed roles, loopback refusal, grant escape, helper loss, token reuse
-- [x] run the full gates once: `cd agtermCore && swift test`, `make test-app`, `make lint`
-- [x] after the hosted run, check `lsappinfo list | grep -A4 agterm.debug` for leaked test processes
+- [x] run the full gates once: `cd HangarCore && swift test`, `make test-app`, `make lint`
+- [x] after the hosted run, check `lsappinfo list | grep -A4 hangar.debug` for leaked test processes
 
 ### Task 10: [Final] Update documentation
 - [x] `.claude/rules/control-api.md`: replace the "a page never takes the remote program-job path" bullet; add the
@@ -415,7 +415,7 @@
       remote-overlay commands bullet with the per-command answers
 - [x] `site/docs.html` and `site/commands.html`: remote page behavior, `page-serve`, `htmlOverlays[].remote` and
       `.replica`, `remoteOverlays[].pageID`, the per-command answers, the `pageRejected` difference
-- [x] bundled skill `plugins/agterm/skills/agterm/`: reference (including the HtmlBridge refused list mirror) and a
+- [x] bundled skill `plugins/hangar/skills/hangar/`: reference (including the HtmlBridge refused list mirror) and a
       SKILL.md pointer
 - [x] `ARCHITECTURE.md`: name the new modules beside the remote-presentation ones
 - [x] move this plan to `docs/plans/completed/`
@@ -427,6 +427,6 @@
 - two Macs, both on this build: attach a Live session, run webrev on the origin, annotate and submit on the
   presenting Mac, and confirm the origin receives the annotations
 - a URL page and a chromeless loopback URL page (refused) on a presented session
-- an older agterm on the presenting Mac keeps the refusal
+- an older hangar on the presenting Mac keeps the refusal
 
 Smells pre-check: skipped — non-Go project

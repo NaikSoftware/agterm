@@ -16,29 +16,29 @@ capture semantics, `restore.clear`, and the deck's constant shape are unchanged.
 
 ## Context (from discovery)
 
-- `agterm/Views/WindowContentView+Detail.swift:29` mounts EVERY session's detail in one `ZStack`; switching
+- `Hangar/Views/WindowContentView+Detail.swift:29` mounts EVERY session's detail in one `ZStack`; switching
   is a visibility flip, so all panes realize at launch by design. Constant-shape rule at `:41-50`.
-- `agterm/Views/TerminalView.swift:46-68`: `makeNSView` calls the factory and `updateNSView` calls
+- `Hangar/Views/TerminalView.swift:46-68`: `makeNSView` calls the factory and `updateNSView` calls
   `createSurface()` synchronously ("a deferred next-tick create races the layout").
-- `agterm/Ghostty/GhosttySurfaceView.swift:569`: `createSurface()` is the single choke point behind four
+- `Hangar/Ghostty/GhosttySurfaceView.swift:569`: `createSurface()` is the single choke point behind four
   entry paths (`TerminalView.updateNSView`, `viewDidMoveToWindow` at `:857`, the `setFrameSize` retry via
   `pendingSurfaceCreation` at `:876`, the 1 s retry at `:369`). It already defers itself on a zero size.
   `deinit` is nonisolated and cannot call main-actor methods (`:162-165`).
-- `agterm/agtermApp.swift:294` and `:500`: the factories take `session.takePendingForegroundCommand` and
+- `Hangar/hangarApp.swift:294` and `:500`: the factories take `session.takePendingForegroundCommand` and
   `takePendingRestoreOverride` at CONSTRUCTION, for `.wrapped` inside `ZmxLaunch.surfaceSeed` and for
   `.ordinary` through `CommandRestore.restorePlan`, and bake the result into immutable `view.command` /
   `view.initialInput`. `RestoredRuntime` (`:230`) already carries the library, resolver and zmx client.
-- `agterm/Control/ControlServer.swift:512-526` `clearRestoreCommands`: disarms the PENDING slots because the
+- `Hangar/Control/ControlServer.swift:512-526` `clearRestoreCommands`: disarms the PENDING slots because the
   socket binds before later windows' decks mount; a clear in that gap must stop the command from running.
   Pacing widens that gap from milliseconds to seconds.
-- `agterm/AppDelegate.swift:368` `captureForegroundCommands(preserveUnconsumedPending:)`: a clean quit keeps
+- `Hangar/AppDelegate.swift:368` `captureForegroundCommands(preserveUnconsumedPending:)`: a clean quit keeps
   an UNCONSUMED pending seed; an on-demand `restore.capture` must never persist an armed copy.
-- `agterm/Control/ControlServer+Zmx.swift:155` `applyKilledPaneExit` needs the wrapper (`surface as?
+- `Hangar/Control/ControlServer+Zmx.swift:155` `applyKilledPaneExit` needs the wrapper (`surface as?
   GhosttySurfaceView`, `backedByZmx`, `claimProcessExit()`); `backedByZmx` is set in `init` (`:340`) and
   `claimProcessExit` is a pure latch, so an eager unspawned wrapper satisfies it.
-- `agterm/Ghostty/ZmxClient.swift:42` `reap` runs one synchronous `zmx list`, parses it, and returns a
+- `Hangar/Ghostty/ZmxClient.swift:42` `reap` runs one synchronous `zmx list`, parses it, and returns a
   bare `Bool`, discarding the observed session set.
-- `agtermCore/Sources/agtermCore/WindowLibrary.swift:141` `prepareLaunchPaneInventory()` claims/reaps
+- `HangarCore/Sources/HangarCore/WindowLibrary.swift:141` `prepareLaunchPaneInventory()` claims/reaps
   before SwiftUI mounts and never reads `session.surface`; pacing cannot change which daemons are claimed.
 - A restored HIDDEN split keeps its identity and pin with no right host until shown
   (`.claude/rules/control-api.md`, Restore commands). `session.type` on an unrealized main pane
@@ -55,20 +55,20 @@ Code startup issues 3 `ps` of which one is full-table; 69 sessions, 14 split, 83
   recorder, watch them fail, then implement
 - complete each task fully before moving to the next; small focused changes
 - **CRITICAL: every task includes new/updated tests** as separate checklist items; success and error paths
-- **CRITICAL: all tests pass before the next task**: `cd agtermCore && swift test`, `make test-app`, `make lint`
+- **CRITICAL: all tests pass before the next task**: `cd HangarCore && swift test`, `make test-app`, `make lint`
 - run each full gate ONCE at the end; scope in-task runs with `--filter` / `-only-testing:`
 - **CRITICAL: update this plan when scope changes**
 - no user-facing setting: pacing constants are code; a preference needs separate approval
-- `agtermCore` is a published library consumed by agterm-linux: no public signature changes there beyond
+- `HangarCore` is a published library consumed by agterm-linux: no public signature changes there beyond
   the new `SpawnPacer` type; `ControlActions` signatures stay synchronous
 
 ## Testing Strategy
 
-- **unit tests**: host-free scheduler model in `agtermCore` (`swift test`); hosted `GhosttySurfaceView`,
-  factory, capture and launch behavior in `agtermTests` (`make test-app`), following
+- **unit tests**: host-free scheduler model in `HangarCore` (`swift test`); hosted `GhosttySurfaceView`,
+  factory, capture and launch behavior in `HangarTests` (`make test-app`), following
   `GhosttySurfaceViewTrackingTests` and `AppDelegateCaptureTests` structure
 - **e2e**: no XCUITest additions; `ControlAPIUITests` is not re-run for this change
-- one test file per source file; Swift Testing in `agtermCore`, XCTest in `agtermTests`
+- one test file per source file; Swift Testing in `HangarCore`, XCTest in `HangarTests`
 - every timing assertion uses an injected clock and a spawn recorder; nothing sleeps
 - **required regressions** (each lives in the task that makes it pass):
   N replaying panes record N spawns each `interval` apart and go red when the gate is deleted; a late
@@ -101,7 +101,7 @@ Code startup issues 3 `ps` of which one is full-table; 69 sessions, 14 split, 83
   `SurfaceFactorySeedTests` - a hidden split is never armed; `ZmxClientTests` - an `err=` row is not a
   survivor; `SpawnPacerTests` - a window mounting after the first drained spaces its follower. Claim and
   reap before any grant has no unit test: the sink runs inside `WindowLibrary.init` and arm follows it in
-  `agtermApp.init`, verified by reading.
+  `hangarApp.init`, verified by reading.
 
 ## Progress Tracking
 
@@ -179,7 +179,7 @@ a correctness input; an in-flight concurrency cap (no truthful child-ready edge)
 **`SpawnKey`**: the pane identity UUID (`paneIdentity` / `splitPaneIdentity`), stable across the
 wrapper's lifetime and already the daemon-name input.
 
-**`SpawnPacer` (agtermCore, host-free, `@MainActor`, injected monotonic clock and timer):**
+**`SpawnPacer` (HangarCore, host-free, `@MainActor`, injected monotonic clock and timer):**
 - `request(_ key: SpawnKey) -> Bool`: true = granted now; false = queued
 - `expedite(_ key: SpawnKey)`: grant one queued key immediately, consume the next token, reset the
   deadline; no-op for a granted, unknown or already-expedited key
@@ -219,7 +219,7 @@ will read, since the three dispositions honor different slots:
   future-rerun policy, not a live opt-out) and it stays pending; a daemon name in `runningNames` forces
   unpaced because attaching runs no program
 - `.fallback` (live requested, unavailable): never paced; the factories pass `restoreOverride: nil`
-  (`agtermApp.swift:349`, `:546`), take no pending slot, and the provider resolves WITHOUT consuming,
+  (`hangarApp.swift:349`, `:546`), take no pending slot, and the provider resolves WITHOUT consuming,
   so pin and capture stay pending exactly as today
 - explicit `none` mode: never paced, but it is the `.ordinary` disposition with
   `restoreEnabled == false`, which takes BOTH pending slots and drops them; the provider keeps that
@@ -254,7 +254,7 @@ anything. `session.swap` needs eager wrapper slots, not a spawned surface, and i
 `err=` row and `ZmxInventory` classifies that `.unreadable`, so a stale or unreadable socket must be
 paced like an absent daemon, not attached unpaced as a survivor. It is nil only when `zmx list` failed
 or did not parse; an orphan-kill failure with a good list leaves it populated. The existing synchronous
-inventory sink captures it into a `LaunchSpawnContext` on `RestoredRuntime`; `agtermApp` arms the pacer
+inventory sink captures it into a `LaunchSpawnContext` on `RestoredRuntime`; `hangarApp` arms the pacer
 after `WindowLibrary` returns, when model order is available, and hands the context to the factories,
 which set `shouldPace` when building each provider.
 
@@ -267,7 +267,7 @@ identity rides along and is ignored as a key outside the order; a view torn down
 harmlessly; undo or re-show returns as a key outside the order and spawns synchronously. Owners:
 `AppStoreTests`, `AppStorePendingCloseTests`, `AppStorePaneTests`, `WindowLibraryTests`.
 
-**Read-back:** none new. `realized == false` and `agtermctl tree`'s `(not realized)` already describe a
+**Read-back:** none new. `realized == false` and `hangarctl tree`'s `(not realized)` already describe a
 session whose MAIN pane awaits its permit; both read `session.surface` only, so a queued right pane shows
 nothing and an empty tree is no proof the queue drained. The pacer's `onDrain` debug log is the drain
 signal. No command sets this state, so the read-back rule for state-setting commands does not apply.
@@ -282,8 +282,8 @@ signal. No command sets this state, so the read-back rule for state-setting comm
 ### Task 1: Host-free `SpawnPacer` model
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/SpawnPacer.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/SpawnPacerTests.swift`
+- Create: `HangarCore/Sources/HangarCore/SpawnPacer.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/SpawnPacerTests.swift`
 
 - [x] write tests first: arm with no requests emits nothing even after the clock advances; N keys requested
       late, in any order, yield N grants each `interval` apart in expected order, timed from the actual
@@ -298,21 +298,21 @@ signal. No command sets this state, so the read-back rule for state-setting comm
       `discard`, `arm(order:burst:)` (records expectations only), `isPassthrough`, `interval`, injected
       clock/timer, and `onGrant`
 - [x] leaky-bucket deadline computed from the actual previous grant; no catch-up
-- [x] run `cd agtermCore && swift test --filter SpawnPacerTests` - must pass before Task 2
+- [x] run `cd HangarCore && swift test --filter SpawnPacerTests` - must pass before Task 2
 
 ### Task 2: Late seed: `LaunchSeedProvider` on the view, consumed at spawn
 
 **Files:**
-- Create: `agterm/Ghostty/LaunchSeed.swift` (`LaunchSeed`, `LaunchSeedProvider`, `LaunchSeedPolicy` and the
+- Create: `Hangar/Ghostty/LaunchSeed.swift` (`LaunchSeed`, `LaunchSeedProvider`, `LaunchSeedPolicy` and the
   classifier live here, not in `GhosttySurfaceView.swift`, which sits at 996 of the 1000-line cap and
   Task 3 must still grow)
-- Create: `agtermTests/LaunchSeedTests.swift`
-- Modify: `agterm/Ghostty/GhosttySurfaceView.swift`
-- Modify: `agterm/agtermApp.swift` (both factories)
-- Modify: `agterm/AppDelegate.swift` (`captureForegroundCommands`, if the unconsumed-pending path needs a
+- Create: `HangarTests/LaunchSeedTests.swift`
+- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift`
+- Modify: `Hangar/hangarApp.swift` (both factories)
+- Modify: `Hangar/AppDelegate.swift` (`captureForegroundCommands`, if the unconsumed-pending path needs a
   wrapper-aware read)
-- Modify: `agtermTests/AppDelegateCaptureTests.swift`
-- Modify: `agtermTests/GhosttySurfaceViewTrackingTests.swift` (or the file owning surface lifecycle tests)
+- Modify: `HangarTests/AppDelegateCaptureTests.swift`
+- Modify: `HangarTests/GhosttySurfaceViewTrackingTests.swift` (or the file owning surface lifecycle tests)
 
 - [x] write tests first: a mounted-but-unspawned restored pane leaves `pendingForegroundCommand` and
       `pendingRestoreOverride` on the `Session`; a clean quit at that point persists the same argv for
@@ -341,13 +341,13 @@ signal. No command sets this state, so the read-back rule for state-setting comm
 ### Task 3: Gate `createSurface()` on the pacer with weak grant routing
 
 **Files:**
-- Modify: `agterm/Ghostty/GhosttySurfaceView.swift`
-- Create: `agterm/Ghostty/SpawnRegistry.swift`
-- Create: `agterm/Ghostty/GhosttySurfaceView+FirstResponder.swift` (first-responder overrides moved verbatim to keep the view file under the 1000-line limit)
-- Modify: `agterm/agtermApp.swift` (owns the pacer and registry; injects them into every factory)
-- Create: `agtermTests/SpawnRegistryTests.swift`
-- Modify: `agtermTests/GhosttySurfaceViewTrackingTests.swift`
-- Modify: `agtermTests/SurfaceFactorySeedTests.swift`
+- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift`
+- Create: `Hangar/Ghostty/SpawnRegistry.swift`
+- Create: `Hangar/Ghostty/GhosttySurfaceView+FirstResponder.swift` (first-responder overrides moved verbatim to keep the view file under the 1000-line limit)
+- Modify: `Hangar/hangarApp.swift` (owns the pacer and registry; injects them into every factory)
+- Create: `HangarTests/SpawnRegistryTests.swift`
+- Modify: `HangarTests/GhosttySurfaceViewTrackingTests.swift`
+- Modify: `HangarTests/SurfaceFactorySeedTests.swift`
 
 - [x] write tests first: a denied view creates no surface and creates one on grant against current bounds;
       every entry path reaches the same gate and a denied one creates nothing (`TerminalView.updateNSView`,
@@ -367,13 +367,13 @@ signal. No command sets this state, so the read-back rule for state-setting comm
 ### Task 4: Expedite and prioritize from selection, hosts and control
 
 **Files:**
-- Modify: `agterm/Ghostty/GhosttySurfaceView.swift` (`deckVisible` didSet)
-- Modify: `agterm/Views/DashboardView.swift` (the zoom host already sets `deckVisible`, so it needs no change)
-- Create: `agtermTests/DashboardViewTests.swift`
-- Modify: `agterm/Control/ControlServer+SurfaceIO.swift` (`injectText` for `session.type`, `searchSession`,
+- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift` (`deckVisible` didSet)
+- Modify: `Hangar/Views/DashboardView.swift` (the zoom host already sets `deckVisible`, so it needs no change)
+- Create: `HangarTests/DashboardViewTests.swift`
+- Modify: `Hangar/Control/ControlServer+SurfaceIO.swift` (`injectText` for `session.type`, `searchSession`,
   `pasteSession`, `selectAllSession`, `font`)
-- `agterm/Control/ControlServer+Zmx.swift` unchanged: teardown cancels the key, so `applyKilledPaneExit` needs no `discard`
-- Modify: the corresponding `agtermTests` files and the dispatcher/protocol tests those commands own
+- `Hangar/Control/ControlServer+Zmx.swift` unchanged: teardown cancels the key, so `applyKilledPaneExit` needs no `discard`
+- Modify: the corresponding `HangarTests` files and the dispatcher/protocol tests those commands own
 
 - [x] write tests first: with a paced launch the selected pane of each window is granted synchronously on
       its first request after arm; selecting a queued session grants it before the queue reaches it;
@@ -396,17 +396,17 @@ signal. No command sets this state, so the read-back rule for state-setting comm
 ### Task 5: Arm from the launch inventory with the survivor hint; drain to passthrough
 
 **Files:**
-- Modify: `agterm/Ghostty/ZmxClient.swift` (`reap` returns `ReapOutcome`)
-- Modify: `agterm/agtermApp.swift` (`LaunchSpawnContext` on `RestoredRuntime`; arm after `WindowLibrary`
+- Modify: `Hangar/Ghostty/ZmxClient.swift` (`reap` returns `ReapOutcome`)
+- Modify: `Hangar/hangarApp.swift` (`LaunchSpawnContext` on `RestoredRuntime`; arm after `WindowLibrary`
   returns; classification in the factories' providers)
-- Modify: `agtermTests/ZmxClientTests.swift` (owns `reap`: the `ReapOutcome` `err=` row and kill-result
+- Modify: `HangarTests/ZmxClientTests.swift` (owns `reap`: the `ReapOutcome` `err=` row and kill-result
   cases live here)
-- Create: `agtermCore/Sources/agtermCore/LaunchSpawnPlan.swift` (model order and burst)
-- Create: `agtermCore/Tests/agtermCoreTests/LaunchSpawnPlanTests.swift`
-- Modify: `agtermCore/Sources/agtermCore/SpawnPacer.swift` (`onDrain`)
-- Modify: `agtermCore/Tests/agtermCoreTests/SpawnPacerTests.swift` (drain; late second window)
-- Modify: `agtermTests/SpawnRegistryTests.swift` (launch pipeline with injected clock)
-- Modify: `agtermTests/SurfaceFactorySeedTests.swift` (hidden split; policy carries the reap's names)
+- Create: `HangarCore/Sources/HangarCore/LaunchSpawnPlan.swift` (model order and burst)
+- Create: `HangarCore/Tests/HangarCoreTests/LaunchSpawnPlanTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/SpawnPacer.swift` (`onDrain`)
+- Modify: `HangarCore/Tests/HangarCoreTests/SpawnPacerTests.swift` (drain; late second window)
+- Modify: `HangarTests/SpawnRegistryTests.swift` (launch pipeline with injected clock)
+- Modify: `HangarTests/SurfaceFactorySeedTests.swift` (hidden split; policy carries the reap's names)
 - Disposition classification was pinned by `LaunchSeedTests` in Task 2
 
 - [x] write tests first (injected clock, spawn recorder): a launch restore of N replaying sessions records
@@ -434,8 +434,8 @@ signal. No command sets this state, so the read-back rule for state-setting comm
 
 ### Task 6: Verify acceptance criteria
 - [x] verify every required regression in Testing Strategy exists and names the task that owns it
-- [x] run full gates once: `cd agtermCore && swift test`, `make test-app`, `make lint`
-- [x] confirm `realized` read-back and `agtermctl tree` `(not realized)` describe a queued MAIN pane correctly
+- [x] run full gates once: `cd HangarCore && swift test`, `make test-app`, `make lint`
+- [x] confirm `realized` read-back and `hangarctl tree` `(not realized)` describe a queued MAIN pane correctly
       (a queued right pane shows nothing on either)
 
 ### Task 7: Update documentation
@@ -447,10 +447,10 @@ signal. No command sets this state, so the read-back rule for state-setting comm
 - [x] `.claude/rules/control-api.md`: which commands expedite a queued pane and which reads never do
 - [x] `site/docs.html` restore section: one sentence that a launch which replays commands brings panes up
       over several seconds, the visible panes first
-- [x] `plugins/agterm/skills/agterm/troubleshooting.md`: `(not realized)` right after a replaying launch
+- [x] `plugins/hangar/skills/hangar/troubleshooting.md`: `(not realized)` right after a replaying launch
       is pacing, not a fault
 - [x] move this plan to `docs/plans/completed/`
-- [x] ➕ `plugins/agterm/skills/agterm/reference.md` and `SKILL.md`: their `realized` sentences said `session type`
+- [x] ➕ `plugins/hangar/skills/hangar/reference.md` and `SKILL.md`: their `realized` sentences said `session type`
       answers `session not realized` for an unrealized pane, which the expedite makes untrue for a paced one
 
 ## Post-Completion
@@ -458,12 +458,12 @@ signal. No command sets this state, so the read-back rule for state-setting comm
 **Interval selection:** 120 ms ships as the explicit product starting value. It is NOT tuned on the
 user's live setup: producing samples at several intervals would mean repeatedly killing his daemons and
 agents to force replaying launches, which nothing authorizes, and a natural reboot yields one sample. If
-tuning is wanted, do it in an isolated instance (`AGTERM_STATE_DIR`, own socket) seeded with N sessions
+tuning is wanted, do it in an isolated instance (`HANGAR_STATE_DIR`, own socket) seeded with N sessions
 carrying a cheap captured command, at 80, 120 and 200 ms, recording peak CPU, time to first prompt in
 the selected pane and time to full drain; record the numbers in the commit that changes the constant.
 
 **Manual verification, next NATURAL replaying launch only:** no simultaneous `ps` burst and no CPU pin
-(each paced Claude startup still runs its own `ps`), selected panes usable immediately, `agtermctl tree`
+(each paced Claude startup still runs its own `ps`), selected panes usable immediately, `hangarctl tree`
 `(not realized)` clearing from the queued main panes over the drain, and the `onDrain` debug log line as
 the proof the whole queue drained, since the tag never covers a right pane.
 

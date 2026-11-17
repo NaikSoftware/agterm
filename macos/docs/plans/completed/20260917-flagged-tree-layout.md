@@ -12,17 +12,17 @@ an unchanged selection can leave the active session hidden under a collapsed wor
 
 ## Context (from discovery)
 
-- `SidebarMode` (`agtermCore/Sources/agtermCore/SidebarMode.swift`) stays `tree | flagged`. About fifteen
-  `sidebarMode == .flagged` checks in `agtermCore` mean "the flagged set is what is visible"; the layout is
+- `SidebarMode` (`HangarCore/Sources/HangarCore/SidebarMode.swift`) stays `tree | flagged`. About fifteen
+  `sidebarMode == .flagged` checks in `HangarCore` mean "the flagged set is what is visible"; the layout is
   an orthogonal axis so none of them change meaning.
 - `AppStore.flaggedSessions` is `workspaces.flatMap(\.sessions).filter(\.flagged)`, already in tree order.
-- Rendering lives in `agterm/Views/WorkspaceSidebar.swift`: `currentShape` (417), `rebuildAndReload` (493),
+- Rendering lives in `Hangar/Views/WorkspaceSidebar.swift`: `currentShape` (417), `rebuildAndReload` (493),
   `rowContent(forWorkspace:)` (473), `syncSelection` (651), `appearanceChanged` (268),
   `applySidebarFontSizeIfChanged` (289, the tracked-global precedent); labels in
   `WorkspaceSidebar+RowRendering.swift`.
 - Global settings follow `AppSettings` raw `String?` plus `effectiveX` (`effectiveToolbarMode`,
   `AppSettings.swift:414`), `SettingsModel.persistAndApply`, a `GhosttyApp.shared` mirror, and an
-  object-nil `.agtermAppearanceChanged` post that every sidebar Coordinator observes.
+  object-nil `.hangarAppearanceChanged` post that every sidebar Coordinator observes.
 - Workspace-row gates that stop being true once flagged mode can render workspace rows:
   `WorkspaceSidebar.swift` 321, 340, 600; `AppActions.swift:521`; `AppActions+Palette.swift:27` feeding
   `PaletteCatalog.swift:171-175`; the `expandSidebar` doc in `ControlServer+AppCommands.swift`;
@@ -30,33 +30,33 @@ an unchanged selection can leave the active session hidden under a collapsed wor
 - `Workspace.unseenCount` (`Workspace.swift:30`) sums every session, flagged or not.
 - `sidebar.mode` is the wiring template: `ControlProtocol.swift:58`, `ControlModes.swift:62`,
   `ControlDispatcher.swift:78,204,720`, `ControlServer.swift:539`, `ControlServer+AppCommands.swift:35`,
-  `agtermctlKit/MiscCommands.swift:641`. `ControlServer` already holds `settingsModel`.
+  `hangarctlKit/MiscCommands.swift:641`. `ControlServer` already holds `settingsModel`.
 
 ## Development Approach
 
 - **testing approach**: regular (code, then tests) per task; Task 5 is a defect fix and is TDD: write the
   failing regression tests first and confirm they fail before the fix.
 - complete each task fully before the next; every task ends with its tests passing
-- scope test runs to what changed: `swift test --filter <Suite>` in `agtermCore`, and
+- scope test runs to what changed: `swift test --filter <Suite>` in `HangarCore`, and
   `-only-testing:<Target>/<Class>/<test>` for hosted and UI tests. The full gates run once, in Task 9.
 - start Swift work with the `swiftui-expert`, `swift-testing-expert` and `swift-concurrency` skills as relevant
 - update this plan when scope changes
 
 ## Testing Strategy
 
-- **host-free** (`agtermCore/Tests/agtermCoreTests`): setting decode and resolution, palette predicates,
+- **host-free** (`HangarCore/Tests/HangarCoreTests`): setting decode and resolution, palette predicates,
   control parse and dispatch, `ControlTree` encoding.
-- **agtermctl** (`agtermCore/Tests/agtermctlKitTests/CommandsTests.swift`): the new subcommand's request.
-- **hosted** (`agtermTests`): sidebar Coordinator structure, badge sum, reveal rule, multi-window update,
+- **hangarctl** (`HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`): the new subcommand's request.
+- **hosted** (`HangarTests`): sidebar Coordinator structure, badge sum, reveal rule, multi-window update,
   late-mounted sidebar, control server setter.
-- **XCUITest** (`agtermUITests/FlaggedViewUITests.swift`): one end-to-end case through the control socket.
+- **XCUITest** (`HangarUITests/FlaggedViewUITests.swift`): one end-to-end case through the control socket.
 
 ## Solution Overview
 
 - The layout is global app state, not window state: no `Snapshot` field, no `AppStore` field, no View-menu
-  item. `agtermCore` never reads `GhosttyApp`; the app target passes the layout in where core needs it
+  item. `HangarCore` never reads `GhosttyApp`; the app target passes the layout in where core needs it
   (`PaletteContext`), and the badge and shape builders already live in the app target.
-- A layout change reaches open sidebars through the existing `.agtermAppearanceChanged` reconcile. Only a
+- A layout change reaches open sidebars through the existing `.hangarAppearanceChanged` reconcile. Only a
   sidebar currently in flagged mode rebuilds; an ordinary-tree sidebar's structure is unchanged, and it reads
   the current value whenever it next enters flagged mode or mounts.
 - Collapse state is shared with the ordinary tree through `Workspace.isExpanded`. Collapsing a flagged group
@@ -95,11 +95,11 @@ an unchanged selection can leave the active session hidden under a collapsed wor
 ### Task 1: Add the global flagged-view layout setting
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppSettings.swift`
-- Modify: `agterm/SettingsModel.swift`
-- Modify: `agterm/Ghostty/GhosttyApp.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppSettingsTests.swift`
-- Create: `agtermTests/SettingsModelTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppSettings.swift`
+- Modify: `Hangar/SettingsModel.swift`
+- Modify: `Hangar/Ghostty/GhosttyApp.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppSettingsTests.swift`
+- Create: `HangarTests/SettingsModelTests.swift`
 
 - [x] add `FlaggedViewLayout` beside `ToolbarMode` in `AppSettings.swift` (the file's convention for
       raw-stored mode enums) and `AppSettings.flaggedViewLayout` with `effectiveFlaggedViewLayout`,
@@ -109,17 +109,17 @@ an unchanged selection can leave the active session hidden under a collapsed wor
 - [x] add `GhosttyApp.shared.flaggedViewLayout` (`private(set)`) and its setter
 - [x] write host-free tests: missing, `flat`, `tree` and unknown raw values resolve as specified; round-trip
 - [x] write a hosted `SettingsModel` test on a temporary `SettingsStore` (the model lives in the app target):
-      the setter persists, updates the effective mirror, posts `.agtermAppearanceChanged`, and an unchanged
+      the setter persists, updates the effective mirror, posts `.hangarAppearanceChanged`, and an unchanged
       value does none of those
-- [x] run `swift test --filter AppSettingsTests` and `-only-testing:agtermTests/SettingsModelTests`
+- [x] run `swift test --filter AppSettingsTests` and `-only-testing:HangarTests/SettingsModelTests`
 
 ### Task 2: Render the flagged tree in the sidebar
 
 **Files:**
-- Modify: `agterm/Views/WorkspaceSidebar.swift`
-- Modify: `agterm/Views/WorkspaceSidebar+RowRendering.swift`
-- Create: `agterm/Views/WorkspaceSidebar+FlaggedLayout.swift`
-- Create: `agtermTests/SidebarFlaggedLayoutTests.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar+RowRendering.swift`
+- Create: `Hangar/Views/WorkspaceSidebar+FlaggedLayout.swift`
+- Create: `HangarTests/SidebarFlaggedLayoutTests.swift`
 
 - [x] branch `currentShape` and `rebuildAndReload` on the layout in flagged mode: workspace parents with a
       flagged session, flagged children only, no `soleFocusedWorkspaceID` force-expansion. `nodeCache` holds
@@ -142,14 +142,14 @@ an unchanged selection can leave the active session hidden under a collapsed wor
       change under the ordinary tree causes no rebuild, a sidebar mounted after the change reads the current
       value, a group disappearing when its last flag is removed and returning when reflagged. Restore the
       global `GhosttyApp` mirror and tear down observers after each test
-- [x] run the new class with `-only-testing:agtermTests/SidebarFlaggedLayoutTests`
+- [x] run the new class with `-only-testing:HangarTests/SidebarFlaggedLayoutTests`
 
 ### Task 3: Sum only flagged children in the flagged-tree workspace badge
 
 **Files:**
-- Modify: `agterm/Views/WorkspaceSidebar.swift`
-- Modify: `agterm/Views/WorkspaceSidebar+RowRendering.swift`
-- Modify: `agtermTests/SidebarFlaggedLayoutTests.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar+RowRendering.swift`
+- Modify: `HangarTests/SidebarFlaggedLayoutTests.swift`
 
 - [x] add one Coordinator method returning a workspace row's displayed unseen count (flagged children in
       flagged tree, `workspace.unseenCount` otherwise) and use it in `rowContent(forWorkspace:)` and the
@@ -163,16 +163,16 @@ an unchanged selection can leave the active session hidden under a collapsed wor
 ### Task 4: Enable workspace collapse in the flagged tree
 
 **Files:**
-- Modify: `agterm/Views/WorkspaceSidebar.swift`
-- Modify: `agterm/AppActions.swift`
-- Modify: `agterm/AppActions+Palette.swift`
-- Modify: `agterm/agtermApp+Menus.swift`
-- Modify: `agtermCore/Sources/agtermCore/PaletteCatalog.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Focus.swift`
-- Modify: `agterm/Control/ControlServer+AppCommands.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PaletteCatalogTests.swift`
-- Modify: `agtermTests/AppActionsPaletteTests.swift`
-- Modify: `agtermTests/SidebarFlaggedLayoutTests.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar.swift`
+- Modify: `Hangar/AppActions.swift`
+- Modify: `Hangar/AppActions+Palette.swift`
+- Modify: `Hangar/hangarApp+Menus.swift`
+- Modify: `HangarCore/Sources/HangarCore/PaletteCatalog.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Focus.swift`
+- Modify: `Hangar/Control/ControlServer+AppCommands.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PaletteCatalogTests.swift`
+- Modify: `HangarTests/AppActionsPaletteTests.swift`
+- Modify: `HangarTests/SidebarFlaggedLayoutTests.swift`
 
 - [x] replace the tree-mode guards in `expandWorkspacesNotified`, `setWorkspaceExpandedNotified`,
       `collapseOthers` and `toggleActiveWorkspaceCollapse` with the "renders workspace rows" predicate
@@ -184,7 +184,7 @@ an unchanged selection can leave the active session hidden under a collapsed wor
 - [x] correct every comment this task makes false, not only the control docs: `expandSidebar`/
       `collapseSidebar` in `ControlServer+AppCommands.swift`; `AppActions.swift` 493, 506, 515;
       `WorkspaceSidebar.swift` 318-319 and 597-598; `PaletteCatalog.swift` 172-174;
-      `agtermApp+Menus.swift` 239-240
+      `hangarApp+Menus.swift` 239-240
 - [x] audit the workspace-row context menu and hover add button in flagged tree; Delete Workspace keeps
       whole-workspace behaviour and its confirmation
 - [x] keep Expand All / Collapse Others at their existing all-workspace persistence scope: they write every
@@ -197,12 +197,12 @@ an unchanged selection can leave the active session hidden under a collapsed wor
 ### Task 5: Reveal the selected session after a sidebar structure switch (TDD)
 
 **Files:**
-- Modify: `agterm/Views/WorkspaceSidebar.swift`
-- Modify: `agtermTests/SidebarFlaggedLayoutTests.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar.swift`
+- Modify: `HangarTests/SidebarFlaggedLayoutTests.swift`
 
 - [x] write failing regression tests first, driven through the REAL entry paths (the store mutation plus
       `updateNSView`'s reconcile-then-sync for the view toggle; the `SettingsModel` setter and its
-      `.agtermAppearanceChanged` post for the layout switch), never a hand-placed `syncSelection` call that
+      `.hangarAppearanceChanged` post for the layout switch), never a hand-placed `syncSelection` call that
       would hide its absence: flagged to tree view toggle with the active session under a collapsed
       workspace; flat to tree layout switch in the same state; confirm both fail
 - [x] in `reconcile`, compute the transition against the previously RENDERED mode and effective layout before
@@ -223,7 +223,7 @@ an unchanged selection can leave the active session hidden under a collapsed wor
 ### Task 6: Add the Settings picker
 
 **Files:**
-- Modify: `agterm/Views/SettingsView.swift`
+- Modify: `Hangar/Views/SettingsView.swift`
 
 - [x] add a full-width "Flagged view layout" picker (Flat list / Workspace tree) inside the Interface tab's
       existing Sidebar section, below the two-column toggle rows, extracting the row builder from
@@ -236,24 +236,24 @@ an unchanged selection can leave the active session hidden under a collapsed wor
 ### Task 7: Add the `sidebar.flagged-layout` control command and read-back
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlModes.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlActionsDefaults.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agterm/Control/ControlServer+AppCommands.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/MiscCommands.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/MockControlActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlModesTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherSidebarTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift`
-- Create: `agtermTests/ControlServerFlaggedLayoutTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTreeProjectionTests.swift`
-- Modify: `agtermUITests/ControlSidebarStatusUITests.swift`
-- Modify: `agtermUITests/SettingsUITests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlModes.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `Hangar/Control/ControlServer+AppCommands.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/MiscCommands.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlModesTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherSidebarTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
+- Create: `HangarTests/ControlServerFlaggedLayoutTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTreeProjectionTests.swift`
+- Modify: `HangarUITests/ControlSidebarStatusUITests.swift`
+- Modify: `HangarUITests/SettingsUITests.swift`
 
 - [x] add the command case, `ControlFlaggedLayoutMode.parse`, the dispatcher branch and the
       `ControlActions.setFlaggedViewLayout` requirement; route it in `ControlServer`'s command lists
@@ -263,7 +263,7 @@ an unchanged selection can leave the active session hidden under a collapsed wor
       `AppStore.swift:351`) takes the effective layout as a parameter like the other app-wide facts, never
       as `AppStore` state, and `ControlServer.buildTree` passes it; rewrite the workspace-row visibility doc at
       `ControlProjection.swift:327` to the predicate in Technical Details
-- [x] add `agtermctl sidebar flagged-layout [flat|tree|toggle]` with validation and no `--window`
+- [x] add `hangarctl sidebar flagged-layout [flat|tree|toggle]` with validation and no `--window`
 - [x] record the new requirement in `MockControlActions`; correct the `setSidebarViewMode` doc's "the flat
       flagged list"; if `ControlDispatcher.swift` (992 lines) would pass 1000, put the branch's handler in a
       `ControlDispatcher+*.swift` extension as the file's siblings do
@@ -272,7 +272,7 @@ an unchanged selection can leave the active session hidden under a collapsed wor
       the server in BOTH ordinary-tree and flagged modes (an encoding test cannot catch an omitted server
       argument); one XCUITest driving the command and asserting the actual accessibility workspace and
       session rows as well as the read-back, since the unfiltered tree response cannot show what the GUI draws
-- [x] run the affected suites; the XCUITest via `-only-testing:agtermUITests/FlaggedViewUITests/<test>`
+- [x] run the affected suites; the XCUITest via `-only-testing:HangarUITests/FlaggedViewUITests/<test>`
 
 ### Task 8: Update documentation
 
@@ -280,7 +280,7 @@ an unchanged selection can leave the active session hidden under a collapsed wor
       / Collapse Others still write every workspace
 - [x] `site/commands.html`: `sidebar.flagged-layout`, its arguments, `sidebarFlaggedLayout` read-back, the
       revised workspace-row visibility predicate; no command total anywhere
-- [x] `plugins/agterm/skills/agterm/`: the command and read-back in `SKILL.md` and `reference.md`, and every
+- [x] `plugins/hangar/skills/hangar/`: the command and read-back in `SKILL.md` and `reference.md`, and every
       existing flat-only or "no-op in flagged mode" claim in `reference.md` and `examples.md` corrected
 - [x] `.claude/rules/sidebar.md`, `control-api.md`, `settings.md`, `menu-actions.md` (line 77's "disabled
       outside tree mode"): the layout axis, the reveal rule, the
@@ -291,14 +291,14 @@ an unchanged selection can leave the active session hidden under a collapsed wor
 
 - [x] every decision in Overview, Solution Overview and Technical Details is implemented
 - [x] `make build` (Release)
-- [x] `cd agtermCore && swift test`
+- [x] `cd HangarCore && swift test`
 - [x] `make test-app`
 - [x] `make lint`, zero findings
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
-**Manual verification**: isolated Debug instance (`AGTERM_STATE_DIR` under `/tmp`, `windows/` marker
+**Manual verification**: isolated Debug instance (`HANGAR_STATE_DIR` under `/tmp`, `windows/` marker
 pre-created): flip the picker with two flagged-mode windows open; collapse a group in flagged tree and check
 the ordinary tree; switch flat to tree with the active session under a collapsed workspace.
 

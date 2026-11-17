@@ -8,7 +8,7 @@ library of windows (e.g. "work", "personal"), opens one per on-screen window, an
 that was open at quit reopens on next launch.
 
 - **Problem it solves:** today everything lives in one window with one `AppStore` created
-  once in `agtermApp.init`. There is no way to keep separate work/personal setups side by side.
+  once in `hangarApp.init`. There is no way to keep separate work/personal setups side by side.
 - **Scope (locked in brainstorm):** *area = window content*, named "window". Strict 1:1 — a
   window's bundle shows in exactly one on-screen window, never two windows for one bundle,
   never two bundles in one window. **Reopen-all** on launch (every window open at quit comes
@@ -22,33 +22,33 @@ that was open at quit reopens on next launch.
 
 ## Context (from discovery)
 
-- **Project:** native macOS SwiftUI terminal on libghostty. Two modules: host-free `agtermCore`
+- **Project:** native macOS SwiftUI terminal on libghostty. Two modules: host-free `HangarCore`
   (Foundation/Observation only, `swift test`) + an app target (SwiftUI + libghostty/AppKit
-  bridge). Pattern to mirror: pure model/logic in `agtermCore`, all SwiftUI/AppKit/libghostty in
+  bridge). Pattern to mirror: pure model/logic in `HangarCore`, all SwiftUI/AppKit/libghostty in
   the app target. Deployment target **macOS 14.0** (`project.yml`).
 - **The single-store assumption is everywhere.** Confirmed (read from source):
-  - `AppStore` (`agtermCore/Sources/agtermCore/AppStore.swift`) = `workspaces: [Workspace]` +
+  - `AppStore` (`HangarCore/Sources/HangarCore/AppStore.swift`) = `workspaces: [Workspace]` +
     `selectedSessionID` + `sessionRecency`, with a `PersistenceStore`. `snapshot()` →
     `Snapshot{version, selectedSessionID, workspaces}`; `restore(from:)` rebuilds it. This whole
     class is exactly one window's content.
-  - `agtermApp.init` (`agterm/agtermApp.swift`) builds **one** `store` via `restoredStore()` and hands the
+  - `hangarApp.init` (`Hangar/hangarApp.swift`) builds **one** `store` via `restoredStore()` and hands the
     same instance to `ContentView`, `AppActions`, `ControlServer`, `SessionSwitcher`,
-    `SettingsModel`, and `AppDelegate.store`. The scene is a single `Window("agterm", id: "main")`.
-  - `AppActions` (`agterm/AppActions.swift:13`) holds `private let store: AppStore` (a fixed
+    `SettingsModel`, and `AppDelegate.store`. The scene is a single `Window("hangar", id: "main")`.
+  - `AppActions` (`Hangar/AppActions.swift:13`) holds `private let store: AppStore` (a fixed
     instance); `focusedSurface()` is `private` (`:218`); `focusSplitPane(_:wantSplit:attempt:)`
     (`:193`); `toggleSplit()` (`:161`) acts on `store.activeSession` only; `paletteActions()`
     (`:115`).
-- **Persistence:** `PersistenceStore` (`agtermCore/.../PersistenceStore.swift`) writes
-  `workspaces.json` in `defaultDirectory` (`~/Library/Application Support/agterm`), honoring
-  `AGTERM_STATE_DIR`. `load()` recovers an empty `Snapshot` on any failure (missing/corrupt/version
+- **Persistence:** `PersistenceStore` (`HangarCore/.../PersistenceStore.swift`) writes
+  `workspaces.json` in `defaultDirectory` (`~/Library/Application Support/hangar`), honoring
+  `HANGAR_STATE_DIR`. `load()` recovers an empty `Snapshot` on any failure (missing/corrupt/version
   mismatch) — never throws. `Snapshot.currentVersion = 1`.
-- **TitleProbeView** (`agterm/ContentView.swift:323`, an `NSViewRepresentable`) already grabs the
+- **TitleProbeView** (`Hangar/ContentView.swift:323`, an `NSViewRepresentable`) already grabs the
   hosting `NSWindow` and observes `NSWindow.didBecomeKeyNotification` /
   `didBecomeMainNotification` / `didExitFullScreenNotification` to re-apply window appearance.
   This is the hook to extend for per-window frontmost tracking + window-close.
-- **Quick terminal** (`agterm/Views/QuickTerminal.swift`): `QuickTerminalController.shared`
+- **Quick terminal** (`Hangar/Views/QuickTerminal.swift`): `QuickTerminalController.shared`
   (app-global singleton, `static let shared`) with `toggle()`/`show()`/`hide()`/`isVisible`/
-  `currentSurface()`/`cwdProvider`. `agtermApp` `.task` sets `cwdProvider` to the active session's
+  `currentSurface()`/`cwdProvider`. `hangarApp` `.task` sets `cwdProvider` to the active session's
   cwd. This is the one singleton that must split per window.
 - **Surface env injection is available.** `ghostty_surface_config_s` carries `env_vars:
   ghostty_env_var_s*` (`{const char* key; const char* value}`) + `env_var_count: size_t`
@@ -57,32 +57,32 @@ that was open at quit reopens on next launch.
   `nonisolated(unsafe) configCStrings` array, freed in `destroySurface()`/`deinit`. Env key/value
   buffers join the same lifetime. `init(workingDirectory:fontSize:command:waitAfterCommand:
   autoFocus:)` is the surface constructor; `weak var session` ties a surface to its session.
-- **Surface factories** in `agtermApp.swift` (`makeSurface`/`makeSplitSurface`/`makeOverlaySurface`)
+- **Surface factories** in `hangarApp.swift` (`makeSurface`/`makeSplitSurface`/`makeOverlaySurface`)
   build each `GhosttySurfaceView`; they take `store` today and will take the owning window id +
   ids for env.
-- **Control API** (`agtermCore/.../ControlProtocol.swift`, `ControlResolve.swift`; app
-  `agterm/Control/ControlServer.swift`; CLI `agtermCore/Sources/agtermctlKit`). `Command` enum (19 cases),
+- **Control API** (`HangarCore/.../ControlProtocol.swift`, `ControlResolve.swift`; app
+  `Hangar/Control/ControlServer.swift`; CLI `HangarCore/Sources/hangarctlKit`). `Command` enum (19 cases),
   `ControlArgs` (optional bag), `ControlResult{id,tree,text}`. `ControlResolve.resolve(_:
   candidates:active:)` is the pure target resolver (active / exact uuid / unique prefix /
   ambiguous / not-found); reused as-is for window targets. `ControlServer` dispatches onto
   `AppActions`/`AppStore`; it is constructed with the single `store`+`actions` today and must
-  dispatch onto `WindowLibrary` instead. The XCUITest seam is `AGTERM_STATE_DIR` + an
-  `AGTERM_CONTROL_SOCKET` override, asserting via file-polling and the write-to-file trick.
+  dispatch onto `WindowLibrary` instead. The XCUITest seam is `HANGAR_STATE_DIR` + an
+  `HANGAR_CONTROL_SOCKET` override, asserting via file-polling and the write-to-file trick.
 
 ## Development Approach
 
 - **Risk-first.** The one real unknown is the `WindowGroup(for:)` multi-window scene +
   restoration on this toolchain/deployment target (like the opacity-surface de-risk in the
   settings plan). Task 0 proves it end-to-end before any model refactor.
-- **testing approach:** TDD where practical — the pure `agtermCore` pieces (`WindowLibrary`,
+- **testing approach:** TDD where practical — the pure `HangarCore` pieces (`WindowLibrary`,
   persistence round-trip, migration, the window-target resolver, protocol codecs) get tests
   first; the scene/window lifecycle, env injection, and control dispatch are covered by
   XCUITests.
 - complete each task fully before the next; small, focused changes.
 - **CRITICAL: every task MUST include new/updated tests** (success + error scenarios).
 - **CRITICAL: all tests must pass before starting the next task.** Gate per task:
-  `cd agtermCore && swift test` (host-free) and, for app-target tasks, the relevant `xcodebuild
-  test … -only-testing:agtermUITests/<Suite>` case(s). The app must build.
+  `cd HangarCore && swift test` (host-free) and, for app-target tasks, the relevant `xcodebuild
+  test … -only-testing:HangarUITests/<Suite>` case(s). The app must build.
 - **CRITICAL: update this plan file when scope changes during implementation** (➕ for added
   scope, ⚠️ for blockers).
 - maintain backward compatibility: migration wraps the legacy single tree into one window; a
@@ -93,17 +93,17 @@ that was open at quit reopens on next launch.
 Every new user action added to `AppActions`/`WindowLibrary` is not "done" until it is drivable
 from the control socket. Shipping a new window action requires all four of:
 
-1. a `Command` case (+ any args) in `agtermCore`'s control protocol,
+1. a `Command` case (+ any args) in `HangarCore`'s control protocol,
 2. a dispatch arm in `ControlServer`,
-3. an `agtermctl` subcommand,
+3. an `hangarctl` subcommand,
 4. protocol round-trip + end-to-end tests for it.
 
 This plan adds six window actions (new/list/select/close/rename/delete); each must satisfy all
-four points (protocol Task 6, ControlServer Task 7, agtermctl Task 8, verified in Task 10).
+four points (protocol Task 6, ControlServer Task 7, hangarctl Task 8, verified in Task 10).
 
 ## Testing Strategy
 
-- **unit tests (`agtermCore`, host-free, `swift test`):** `WindowLibrary` add/list/rename/delete
+- **unit tests (`HangarCore`, host-free, `swift test`):** `WindowLibrary` add/list/rename/delete
   (keep-at-least-one), open-set + frontmost tracking, lazy store load, migration from legacy
   `workspaces.json`, the recovery matrix (corrupt/mismatched index → migrate/seed; missing/corrupt
   per-window file → empty window), persistence round-trip (per-window file + `windows.json` index);
@@ -111,11 +111,11 @@ four points (protocol Task 6, ControlServer Task 7, agtermctl Task 8, verified i
   round-trip for `window.*` + the new `window` arg + `ControlWindowNode`. `WindowLibrary` is
   `@MainActor` (like `AppStore`), so its tests are `@MainActor` and inject a temp directory the way
   the existing `PersistenceStore`/`AppStore` tests do.
-- **end-to-end (XCUITest):** a new `MultiWindowUITests` suite — seed `AGTERM_STATE_DIR` with a
+- **end-to-end (XCUITest):** a new `MultiWindowUITests` suite — seed `HANGAR_STATE_DIR` with a
   `windows.json` index + two per-window files, assert both windows open on launch; create a
   window via the menu, close one, reopen it; env injection verified with the write-to-file trick
-  (`session.type 'echo "$AGTERM_WINDOW_ID" > FILE\n'`, read FILE, assert it equals the window id,
-  the split-test idiom). Control coverage extends `ControlAPIUITests` (`agtermctl window new/list`,
+  (`session.type 'echo "$HANGAR_WINDOW_ID" > FILE\n'`, read FILE, assert it equals the window id,
+  the split-test idiom). Control coverage extends `ControlAPIUITests` (`hangarctl window new/list`,
   `--window` targeting, closed-window error).
 
 ## Progress Tracking
@@ -128,7 +128,7 @@ four points (protocol Task 6, ControlServer Task 7, agtermctl Task 8, verified i
 
 Three concentric layers, placed to match the core/app split:
 
-1. **`agtermCore` model + persistence + protocol** (Foundation/Observation only): `WindowInfo`
+1. **`HangarCore` model + persistence + protocol** (Foundation/Observation only): `WindowInfo`
    (`{id: UUID, name: String}` metadata — NOT named `Window`, to avoid the SwiftUI/AppKit
    clash), `WindowLibrary` (`@Observable @MainActor`, owns the ordered `[WindowInfo]`, live
    `stores: [UUID: AppStore]`, the open-set, frontmost id, and per-window + index persistence),
@@ -139,7 +139,7 @@ Three concentric layers, placed to match the core/app split:
    `TitleProbeView` reports frontmost + close; `AppActions` resolves the frontmost store; per-
    window quick terminal; global services span all open windows.
 3. **Control + env + UX:** `ControlServer` dispatches onto `WindowLibrary` with a `--window`
-   selector; `agtermctl` gains a `window` subcommand group; five `AGTERM_*` env vars are injected per
+   selector; `hangarctl` gains a `window` subcommand group; five `HANGAR_*` env vars are injected per
    surface; the File menu + ⌃⇧P palette gain window new/open/rename/delete.
 
 Key design decisions:
@@ -161,7 +161,7 @@ Key design decisions:
 ### Persistence layout
 
 ```
-~/Library/Application Support/agterm/   (or $AGTERM_STATE_DIR)
+~/Library/Application Support/hangar/   (or $HANGAR_STATE_DIR)
   windows.json                 # index: { version, frontmost: UUID?, windows: [{id, name, isOpen}] }
   windows/<uuid>.json          # per window: today's Snapshot (selectedSessionID + workspaces)
   workspaces.json              # legacy; left dormant after migration
@@ -184,7 +184,7 @@ Key design decisions:
   default workspace + session instead of failing the launch. Net: the app always reaches a valid,
   non-empty window set. This is a Task 1 unit-test matrix.
 
-### `WindowLibrary` (agtermCore, `@Observable @MainActor`)
+### `WindowLibrary` (HangarCore, `@Observable @MainActor`)
 
 ```
 @Observable @MainActor final class WindowLibrary {
@@ -192,7 +192,7 @@ Key design decisions:
     var frontmostWindowID: UUID?
     // open-set + live stores live together: a window is "open" iff stores[id] != nil
     @ObservationIgnored private var stores: [UUID: AppStore]
-    @ObservationIgnored private let directory: URL  // state dir (AGTERM_STATE_DIR-aware)
+    @ObservationIgnored private let directory: URL  // state dir (HANGAR_STATE_DIR-aware)
 
     func store(for id: UUID?) -> AppStore?           // live store of an open window
     func isOpen(_ id: UUID) -> Bool
@@ -223,13 +223,13 @@ Key design decisions:
   is macOS 15+, so gate with `#available(macOS 15, *)`; on macOS 14 neutralize duplicates by
   deduping on `WindowInfo.ID` (the library refuses a second window for an already-open id and just
   focuses the existing `NSWindow`). **Task 0 confirms which mechanism actually fires.**
-- **Frame restoration:** in `TitleProbeView` set `window.setFrameAutosaveName("agterm-window-\(id)")`
+- **Frame restoration:** in `TitleProbeView` set `window.setFrameAutosaveName("hangar-window-\(id)")`
   so AppKit persists/restores geometry per window, independent of `windows.json`.
 - **Frontmost + close (extend `TitleProbeView`):** on `didBecomeKey/Main` →
   `library.frontmostWindowID = id` + `library.saveIndex()`. On `NSWindow.willCloseNotification`
   → tear down that window's sessions' surfaces (its store), then `library.closeWindow(id)`.
 - **Quit-time flush (replaces the dropped `AppDelegate.store.save()`):** today
-  `AppDelegate.applicationWillTerminate` calls the single `store?.save()` (`agtermApp.swift:250`).
+  `AppDelegate.applicationWillTerminate` calls the single `store?.save()` (`hangarApp.swift:250`).
   `AppStore` does NOT save on a live `cd` (only on quit/structural change — ARCHITECTURE.md), so
   the terminate flush is load-bearing. With per-window stores, terminate must iterate **every open
   store** (`library` exposes them) and `save()` each, then `library.saveIndex()`. `AppDelegate`
@@ -238,7 +238,7 @@ Key design decisions:
 - **`AppActions` takes the `WindowLibrary`, not a fixed store:** it resolves the frontmost store
   via `library.store(for: library.frontmostWindowID)` for its mutating methods (each early-returns
   when nil). Two consequences the plan makes explicit: (1) the app-global menu/palette builders
-  read state at *build* time (`agtermApp.swift:79-83` disables items off `store.activeSession`;
+  read state at *build* time (`hangarApp.swift:79-83` disables items off `store.activeSession`;
   `paletteActions()` reads `store.canRemoveWorkspace`/`workspaces`) — these must read through the
   same frontmost accessor, which is reactive because `WindowLibrary` is `@Observable`; (2)
   `reveal(sessionID:pane:)` (the notification click entry, `AppActions.swift:208`) currently does
@@ -262,20 +262,20 @@ Key design decisions:
   array lifetime wrong is the same class of bug as ARCHITECTURE.md's strdup fragile-point — call
   it out as its own checkbox.
 - The factories pass the env: main/split/overlay surfaces get
-  `{AGTERM_ENABLED:"1", AGTERM_WINDOW_ID:<window>, AGTERM_WORKSPACE_ID:<ws>, AGTERM_SESSION_ID:<session>,
-  AGTERM_SOCKET:<bound socket path>}`. Split/overlay inherit the parent session's window/workspace/
-  session ids. The quick terminal gets `{AGTERM_ENABLED, AGTERM_WINDOW_ID, AGTERM_SOCKET}` only (scratch,
+  `{HANGAR_ENABLED:"1", HANGAR_WINDOW_ID:<window>, HANGAR_WORKSPACE_ID:<ws>, HANGAR_SESSION_ID:<session>,
+  HANGAR_SOCKET:<bound socket path>}`. Split/overlay inherit the parent session's window/workspace/
+  session ids. The quick terminal gets `{HANGAR_ENABLED, HANGAR_WINDOW_ID, HANGAR_SOCKET}` only (scratch,
   not in the tree). Each env value is baked into the `ghostty_surface_config_s` at surface creation
   and stable for the surface's life (no cross-window moves); a fresh surface on the next launch is
-  built with freshly-resolved values. `AGTERM_WINDOW_ID` resolves via `library.windowID(forSession:)`,
+  built with freshly-resolved values. `HANGAR_WINDOW_ID` resolves via `library.windowID(forSession:)`,
   which searches only OPEN stores, so a surface realized before its window's store is registered
-  simply omits `AGTERM_WINDOW_ID` (handled gracefully — the env var is just absent, not empty).
-- **`AGTERM_SOCKET` uses the path `ControlServer` actually bound**, not a re-derivation:
-  `ControlServer.defaultSocketPath()` honors the `AGTERM_CONTROL_SOCKET` override (and the ~104-byte
+  simply omits `HANGAR_WINDOW_ID` (handled gracefully — the env var is just absent, not empty).
+- **`HANGAR_SOCKET` uses the path `ControlServer` actually bound**, not a re-derivation:
+  `ControlServer.defaultSocketPath()` honors the `HANGAR_CONTROL_SOCKET` override (and the ~104-byte
   cap) used by XCUITests, so the factories read the live bound path off `ControlServer` — otherwise
   a test-overridden socket and the injected env disagree.
 
-### Control protocol additions (agtermCore)
+### Control protocol additions (HangarCore)
 
 ```
 // Command: add
@@ -293,7 +293,7 @@ struct ControlWindowNode: Codable, Sendable, Equatable { let id, name: String; l
 - **Resolution — two distinct pieces:**
   - *Window-id resolution* reuses the pure `ControlResolve.resolve(target, candidates: <window
     ids>, active: <frontmost id>)` unchanged (active=frontmost / exact / prefix / ambiguous /
-    not-found). This is the only part that's a clean reuse — unit-tested in agtermCore.
+    not-found). This is the only part that's a clean reuse — unit-tested in HangarCore.
   - *Cross-window session targeting is NEW `ControlServer` logic, not a `resolve` reuse.*
     `ControlResolve.resolve` returns a bare `UUID` with no owning-window info, and the current
     `ControlServer` builds candidates from a single `store.workspaces`. For id/prefix targeting
@@ -309,9 +309,9 @@ struct ControlWindowNode: Codable, Sendable, Equatable { let id, name: String; l
 - `window.delete` honors `canRemoveWindow` (keep-at-least-one), returns an error instead of any
   GUI confirm.
 
-### CLI (`agtermctlKit`)
+### CLI (`hangarctlKit`)
 
-- New `window` subcommand group: `agtermctl window new [name]`, `window list`, `window select <id>`,
+- New `window` subcommand group: `hangarctl window new [name]`, `window list`, `window select <id>`,
   `window close <id>`, `window rename <id> <name>`, `window delete <id>`.
 - A global `--window <id>` option added to the session/workspace subcommands (maps to
   `args.window`). `window list` prints `id  name  [open]  [active]` (raw with `--json`).
@@ -324,9 +324,9 @@ struct ControlWindowNode: Codable, Sendable, Equatable { let id, name: String; l
   open it, an open → focus it.
 - **Rename Window…** opens a minimal standard `NSAlert` with an accessory `NSTextField`
   pre-filled with the current name (OK/Cancel). The app has no generic inline-prompt affordance
-  (inline rename is sidebar-row-only, routed through `.agtermBeginRename*` to the `NSOutlineView`
+  (inline rename is sidebar-row-only, routed through `.hangarBeginRename*` to the `NSOutlineView`
   Coordinator), and a window has no sidebar row — so a one-shot `NSAlert` is the standard, minimal
-  fit. The rename itself flows through `library.renameWindow` (also reachable via `agtermctl window
+  fit. The rename itself flows through `library.renameWindow` (also reachable via `hangarctl window
   rename` / the palette), so the behavior is testable on the control path without driving the
   alert in XCUI. **Delete Window** (confirm when it still has sessions; `canRemoveWindow` gates
   the last one).
@@ -343,7 +343,7 @@ struct ControlWindowNode: Codable, Sendable, Equatable { let id, name: String; l
 ### Task 0: De-risk the multi-window scene + restoration
 
 **Files:**
-- Modify (temporarily): `agterm/agtermApp.swift`
+- Modify (temporarily): `Hangar/hangarApp.swift`
 
 - [x] stand up a throwaway `WindowGroup(for: UUID.self)` scene rendering a trivial per-id view
       (a label showing the id), alongside or replacing the current `Window` scene behind a flag
@@ -398,12 +398,12 @@ scaffolding (`git status` left only this plan file):
   visual quit/relaunch confirmation is the manual gate above (Post-Completion). The compile-time facts
   alone settle the mechanism choice (dedup-by-id), which is what Task 1+ depend on.
 
-### Task 1: agtermCore WindowLibrary, per-window persistence, migration
+### Task 1: HangarCore WindowLibrary, per-window persistence, migration
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/WindowLibrary.swift` (WindowInfo, WindowsIndex, WindowEntry, WindowLibrary)
-- Modify: `agtermCore/Sources/agtermCore/PersistenceStore.swift` (optional `fileName:` init param)
-- Create: `agtermCore/Tests/agtermCoreTests/WindowLibraryTests.swift`
+- Create: `HangarCore/Sources/HangarCore/WindowLibrary.swift` (WindowInfo, WindowsIndex, WindowEntry, WindowLibrary)
+- Modify: `HangarCore/Sources/HangarCore/PersistenceStore.swift` (optional `fileName:` init param)
+- Create: `HangarCore/Tests/HangarCoreTests/WindowLibraryTests.swift`
 
 - [x] add `WindowInfo {id: UUID, name: String}` (`Codable, Sendable, Identifiable`) and the
       `WindowsIndex`/`WindowEntry` Codables (the index carries its own `version`, deliberately
@@ -419,7 +419,7 @@ scaffolding (`git status` left only this plan file):
       (host-free, unit-testable — this is the tested primitive findings #2/#3 need)
 - [x] move the default-window seeding (`restoredStore()`'s "workspace 1" + one `$HOME` session)
       into `WindowLibrary.newWindow`. (the seed now lives in `WindowLibrary.newWindow`; the actual
-      removal of `agtermApp.restoredStore()` happens in Task 2's agtermApp rewire — left in place here so
+      removal of `hangarApp.restoredStore()` happens in Task 2's hangarApp rewire — left in place here so
       the app target still builds without touching it)
 - [x] implement migration: legacy `workspaces.json` → one window; none → seed one empty window;
       existing `windows.json` → load
@@ -430,19 +430,19 @@ scaffolding (`git status` left only this plan file):
       from a per-window file; `store(forSession:)`/`windowID(forSession:)` across open windows
       (hit + miss); migration (legacy present, neither present, index present); the recovery matrix
       (corrupt index, version-mismatch index, missing per-window file, corrupt per-window file);
-      persistence round-trip (index + per-window file) via an `AGTERM_STATE_DIR`-style temp dir.
+      persistence round-trip (index + per-window file) via an `HANGAR_STATE_DIR`-style temp dir.
       `WindowLibrary` is `@MainActor`, so the tests are `@MainActor` with an injected temp dir
-- [x] run `cd agtermCore && swift test` — must pass before Task 2
+- [x] run `cd HangarCore && swift test` — must pass before Task 2
 
 ### Task 2: Scene refactor to WindowGroup + per-window store wiring
 
 **Files:**
-- Modify: `agterm/agtermApp.swift` (scene, store construction, factories, terminate flush)
-- Modify: `agterm/ContentView.swift` (windowID/library inputs, TitleProbeView frontmost + close + frameAutosave)
-- Modify: `agterm/AppActions.swift` (resolve the frontmost store via the library)
-- Create: `agtermUITests/MultiWindowUITests.swift`
+- Modify: `Hangar/hangarApp.swift` (scene, store construction, factories, terminate flush)
+- Modify: `Hangar/ContentView.swift` (windowID/library inputs, TitleProbeView frontmost + close + frameAutosave)
+- Modify: `Hangar/AppActions.swift` (resolve the frontmost store via the library)
+- Create: `HangarUITests/MultiWindowUITests.swift`
 
-- [x] construct one app-global `WindowLibrary` in `agtermApp.init` (AGTERM_STATE_DIR-aware); drop the
+- [x] construct one app-global `WindowLibrary` in `hangarApp.init` (HANGAR_STATE_DIR-aware); drop the
       single `restoredStore()` store; hand the `WindowLibrary` to `AppDelegate` (the same hand-off
       the single `store` used)
 - [x] change the scene to a window group; `ContentView` resolves its `AppStore` from the library
@@ -463,7 +463,7 @@ scaffolding (`git status` left only this plan file):
       `applicationWillTerminate` sets `library.isTerminating` (so the per-window `willClose`
       close-reporting can't zero the open-set as windows tear down on quit), then calls
       `library.saveAllOpen()` + `library.saveIndex()`
-- [x] extend `TitleProbeView`: set `frameAutosaveName("agterm-window-<id>")`, report frontmost
+- [x] extend `TitleProbeView`: set `frameAutosaveName("hangar-window-<id>")`, report frontmost
       (`didBecomeKey/Main` → `library.frontmostWindowID` + `saveIndex()`), report close
       (`willClose` → tear down that window's surfaces + `library.closeWindow`, captured by value not
       `self` so it fires as the view deallocates); register the `NSWindow` in an app-side
@@ -474,12 +474,12 @@ scaffolding (`git status` left only this plan file):
       via `@Observable`). `ControlServer`/`SettingsModel`/`SessionSwitcher` likewise rewired to the
       library's frontmost store (minimal — full multi-window behavior is later tasks). (reveal's
       cross-window lookup lands in Task 4)
-- [x] `MultiWindowUITests`: seed `AGTERM_STATE_DIR` with an index + two per-window files; assert both
+- [x] `MultiWindowUITests`: seed `HANGAR_STATE_DIR` with an index + two per-window files; assert both
       windows open (≥2 on-screen + at least one seeded workspace renders + the `windows.json` index
       records both open). Close one → exactly one window marked closed in the index, the other open.
       Per Task 0, per-window sidebar content across BOTH windows isn't asserted (the force-sidebar
       fixup reliably expands only the key window), so the index file is the authoritative oracle
-- [x] run `cd agtermCore && swift test` + `xcodebuild test … -only-testing:agtermUITests/MultiWindowUITests`
+- [x] run `cd HangarCore && swift test` + `xcodebuild test … -only-testing:HangarUITests/MultiWindowUITests`
       (Task 2 cases) — must pass before Task 3
 
 ➕ **Task 2 added scope — existing XCUITest file oracle moved.** Per-window state now lives in
@@ -487,14 +487,14 @@ scaffolding (`git status` left only this plan file):
 `workspaces.json` (Sidebar/Menu/Palette/FontSize/SessionSwitcher/ControlAPI) was failing against the
 stale path. Added a shared `URL.windowSnapshotFile()` helper (the single per-window file, legacy
 fallback) and repointed those readers at it; `ControlAPIUITests.relaunch(withSnapshot:)` now writes
-the per-window file the existing `windows.json` references. Full `agtermUITests` suite verified green.
+the per-window file the existing `windows.json` references. Full `HangarUITests` suite verified green.
 
 ### Task 3: Per-window quick terminal
 
 **Files:**
-- Modify: `agterm/Views/QuickTerminal.swift` (instance, not singleton)
-- Modify: `agterm/ContentView.swift` (own a per-window QuickTerminalController)
-- Modify: `agterm/AppActions.swift`, `agterm/agtermApp.swift`, `agterm/Control/ControlServer.swift` (the `.shared` call sites)
+- Modify: `Hangar/Views/QuickTerminal.swift` (instance, not singleton)
+- Modify: `Hangar/ContentView.swift` (own a per-window QuickTerminalController)
+- Modify: `Hangar/AppActions.swift`, `Hangar/hangarApp.swift`, `Hangar/Control/ControlServer.swift` (the `.shared` call sites)
 
 - [x] convert `QuickTerminalController` from a `static let shared` singleton to a per-window
       instance owned by `WindowContentView`; its `cwdProvider` binds to that window's active session.
@@ -503,7 +503,7 @@ the per-window file the existing `windows.json` references. Full `agtermUITests`
       per-window controller. Frontmost-window resolution rides a new host-free `WindowLibrary.activeWindowID`
       — the same frontmost-or-first-open resolution `activeStore` uses, factored out + unit-tested.)
 - [x] update every `QuickTerminalController.shared` call site to "the frontmost window's quick
-      terminal": removed the `agtermApp` `.task` cwdProvider wiring (now per-window in `WindowContentView`);
+      terminal": removed the `hangarApp` `.task` cwdProvider wiring (now per-window in `WindowContentView`);
       the `⌃\`` / View-menu toggle goes through new `AppActions.toggleQuickTerminal()`; `AppActions`
       `focusActiveSession` consults `frontmostQuickTerminal?.isVisible` (`focusedSurface()` never used the
       singleton — it reads the key window's first responder); the palette "Quick Terminal" item routes
@@ -517,17 +517,17 @@ the per-window file the existing `windows.json` references. Full `agtermUITests`
       `quick-terminal` element appears (not both), then `quick hide` clears it. The existing single-window
       `ControlAPIUITests.testQuickTerminalToggle`/`testInvalidQuickModeErrors` + `QuickTerminalUITests`
       still pass (no regression).
-- [x] run `cd agtermCore && swift test` + the relevant `MultiWindowUITests`/`ControlAPIUITests` case
-      — must pass before Task 4 (agtermCore 218 tests green; `MultiWindowUITests` quick + structural,
+- [x] run `cd HangarCore && swift test` + the relevant `MultiWindowUITests`/`ControlAPIUITests` case
+      — must pass before Task 4 (HangarCore 218 tests green; `MultiWindowUITests` quick + structural,
       `ControlAPIUITests` quick, `QuickTerminalUITests` all green)
 
 ### Task 4: Global services span windows (settings broadcast + notification reveal)
 
 **Files:**
-- Modify: `agterm/SettingsModel.swift` (liveSurfaces across all open windows)
-- Modify: `agterm/Notifications/NotificationManager.swift`, `agterm/AppActions.swift` (reveal cross-window + reopen closed)
-- Modify: `agtermCore/Sources/agtermCore/Notifications.swift` (identity carries windowID)
-- Modify: `agtermCore/Tests/agtermCoreTests/NotificationsTests.swift`
+- Modify: `Hangar/SettingsModel.swift` (liveSurfaces across all open windows)
+- Modify: `Hangar/Notifications/NotificationManager.swift`, `Hangar/AppActions.swift` (reveal cross-window + reopen closed)
+- Modify: `HangarCore/Sources/HangarCore/Notifications.swift` (identity carries windowID)
+- Modify: `HangarCore/Tests/HangarCoreTests/NotificationsTests.swift`
 
 - [x] `SettingsModel.liveSurfaces()` iterates **all** open windows' stores (via the library) +
       each window's quick terminal, so a config reload broadcasts everywhere; `WindowAppearance.sync`
@@ -540,23 +540,23 @@ the per-window file the existing `windows.json` references. Full `agtermUITests`
       window via `library.windowID(forSession:)`
 - [x] `AppActions.reveal(windowID:sessionID:pane:)` (the notification entry): use
       `library.store(forSession:)`; if the owning window is closed, reopen it (the `openWindow`
-      closure `agtermApp` wires to `WindowRegistry.raise` ?? `enqueueClaim` + `openWindow(id:)`), then
+      closure `hangarApp` wires to `WindowRegistry.raise` ?? `enqueueClaim` + `openWindow(id:)`), then
       poll for its store to load, `selectSession` + focus the pane; stale-safe (unknown window/session
       → just activate). **[x] manual (not automatable in headless exec) — see Post-Completion** for the
       `NSApp.activate`/`openWindow` reveal click path; the code path compiles and is wired
-- [x] tests: agtermCore identity round-trip with `windowID` (host-free, extended `NotificationsTests`);
+- [x] tests: HangarCore identity round-trip with `windowID` (host-free, extended `NotificationsTests`);
       `store(forSession:)` hit/miss already covered in Task 1. The `NSApp.activate`/`openWindow` reveal
       wiring + settings-broadcast-to-two-windows are **[x] manual (not automatable in headless exec) —
       see Post-Completion**
-- [x] run `cd agtermCore && swift test` + the app build — must pass before Task 5 (218 agtermCore tests
+- [x] run `cd HangarCore && swift test` + the app build — must pass before Task 5 (218 HangarCore tests
       green incl. the windowID identity round-trip; Debug app build SUCCEEDED)
 
 ### Task 5: Spawned-shell environment injection
 
 **Files:**
-- Modify: `agterm/Ghostty/GhosttySurfaceView.swift` (env param + config build + the struct-array field)
-- Modify: `agterm/agtermApp.swift` (factories pass the env dict)
-- Modify: `agtermUITests/MultiWindowUITests.swift`
+- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift` (env param + config build + the struct-array field)
+- Modify: `Hangar/hangarApp.swift` (factories pass the env dict)
+- Modify: `HangarUITests/MultiWindowUITests.swift`
 
 - [x] add `env: [String:String]` to `GhosttySurfaceView.init`; strdup key/value into
       `configCStrings`; **add a `nonisolated(unsafe) var envVars: [ghostty_env_var_s]` field** built
@@ -566,29 +566,29 @@ the per-window file the existing `windows.json` references. Full `agtermUITests`
       taken via `envVars.withUnsafeMutableBufferPointer` with `ghostty_surface_new` called *inside*
       the same closure (no env → plain path), so the buffer pointer is never used past the call — no
       escaping-pointer UB; the char* buffers join `configCStrings`' free in destroy/deinit.
-- [x] factories inject `AGTERM_ENABLED=1`, `AGTERM_WINDOW_ID`, `AGTERM_WORKSPACE_ID`, `AGTERM_SESSION_ID`,
-      `AGTERM_SOCKET` (split/overlay inherit the parent session's ids; quick terminal gets only
-      ENABLED + WINDOW_ID + SOCKET). `AGTERM_SOCKET` reads the path `ControlServer` actually bound (new
+- [x] factories inject `HANGAR_ENABLED=1`, `HANGAR_WINDOW_ID`, `HANGAR_WORKSPACE_ID`, `HANGAR_SESSION_ID`,
+      `HANGAR_SOCKET` (split/overlay inherit the parent session's ids; quick terminal gets only
+      ENABLED + WINDOW_ID + SOCKET). `HANGAR_SOCKET` reads the path `ControlServer` actually bound (new
       `ControlServer.boundSocketPath`, nil before bind → the var is omitted), so a test-overridden
-      `AGTERM_CONTROL_SOCKET` and the env agree. `agtermApp.surfaceEnv(for:)` resolves window via
+      `HANGAR_CONTROL_SOCKET` and the env agree. `hangarApp.surfaceEnv(for:)` resolves window via
       `library.windowID(forSession:)` + workspace via `store.workspace(forSession:)`;
       `quickTerminalEnv(for:)` threads down through `ContentView` → `WindowContentView` to bind the
       quick terminal's new `envProvider` (mirroring `cwdProvider`).
 - [x] e2e (write-to-file trick): `MultiWindowUITests.testSpawnedShellSeesWindowAndSessionEnv` —
       `session.new` (so the surface realizes after the socket bound) then `session.type
-      'echo "$AGTERM_WINDOW_ID" > FILE\n'` / `'echo "$AGTERM_SESSION_ID" > FILE\n'` → read FILE → assert
-      `AGTERM_WINDOW_ID` equals the frontmost window's id (from `windows.json`) and `AGTERM_SESSION_ID` the
+      'echo "$HANGAR_WINDOW_ID" > FILE\n'` / `'echo "$HANGAR_SESSION_ID" > FILE\n'` → read FILE → assert
+      `HANGAR_WINDOW_ID` equals the frontmost window's id (from `windows.json`) and `HANGAR_SESSION_ID` the
       new session's id. Verified with a negative-control run (the shell wrote the real session UUID,
       proving the probe genuinely executes).
-- [x] run `cd agtermCore && swift test` + the relevant `MultiWindowUITests` case — must pass before Task 6
-      (agtermCore 218 tests green; Debug app build SUCCEEDED; all 4 `MultiWindowUITests` green)
+- [x] run `cd HangarCore && swift test` + the relevant `MultiWindowUITests` case — must pass before Task 6
+      (HangarCore 218 tests green; Debug app build SUCCEEDED; all 4 `MultiWindowUITests` green)
 
-### Task 6: Control protocol — window.* commands + window arg (agtermCore)
+### Task 6: Control protocol — window.* commands + window arg (HangarCore)
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlResolveTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlResolveTests.swift`
 
 - [x] add the six `window.*` `Command` cases; add `ControlArgs.window`; add
       `ControlResult.windows` + `ControlWindowNode`
@@ -597,14 +597,14 @@ the per-window file the existing `windows.json` references. Full `agtermUITests`
 - [x] resolver tests for the **window-id** target only (reuse `ControlResolve.resolve`:
       active=frontmost, exact, prefix, ambiguous, not-found) — this is the clean reuse. The
       cross-window session→store mapping is NOT here; it's app-side `ControlServer` logic (Task 7)
-- [x] run `cd agtermCore && swift test` — must pass before Task 7
+- [x] run `cd HangarCore && swift test` — must pass before Task 7
 
 ### Task 7: ControlServer dispatch onto WindowLibrary
 
 **Files:**
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agterm/agtermApp.swift` (construct ControlServer with the library)
-- Modify: `agtermUITests/ControlAPIUITests.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `Hangar/hangarApp.swift` (construct ControlServer with the library)
+- Modify: `HangarUITests/ControlAPIUITests.swift`
 
 - [x] construct `ControlServer` with `WindowLibrary` (+ `AppActions`) instead of a single store
       (already wired in Task 2; this task adds the dispatch arms onto it)
@@ -628,15 +628,15 @@ the per-window file the existing `windows.json` references. Full `agtermUITests`
       --window B` → the `window not open` error); `testWindowTargetingRoutesToTheRightTree` (`--window`
       routes `session.new`/`tree` to the right tree); `testCapturedIDResolvesWhileAnotherWindowFrontmost`
       (a B-session id resolves with no `--window` while window A is frontmost). All four green
-- [x] run `cd agtermCore && swift test` + the relevant `ControlAPIUITests` cases — must pass before Task 8
-      (agtermCore 227 tests green; full `ControlAPIUITests` 30 tests green — 26 existing unchanged + 4 new)
+- [x] run `cd HangarCore && swift test` + the relevant `ControlAPIUITests` cases — must pass before Task 8
+      (HangarCore 227 tests green; full `ControlAPIUITests` 30 tests green — 26 existing unchanged + 4 new)
 
-### Task 8: agtermctl window subcommands + global --window option
+### Task 8: hangarctl window subcommands + global --window option
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermctlKit/Commands.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift`
-- Modify: `agtermUITests/ControlAPIUITests.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/Commands.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
+- Modify: `HangarUITests/ControlAPIUITests.swift`
 
 - [x] add the `window` subcommand group (new/list/select/close/rename/delete) mapping to
       `ControlRequest`s; add a global `--window` option on session/workspace subcommands
@@ -650,23 +650,23 @@ the per-window file the existing `windows.json` references. Full `agtermUITests`
 - [x] `CommandsTests`: each new subcommand parses to the expected request; `--window` populates
       `args.window`; an invalid-args case (`window rename` with only one positional). Added
       `SocketClientTests.formatResponseWindows` covering the open/active/closed column rendering
-- [x] e2e: the existing `ControlAPIUITests` speak the socket directly (never shell `agtermctl`), so per the
+- [x] e2e: the existing `ControlAPIUITests` speak the socket directly (never shell `hangarctl`), so per the
       task split the CLI parse correctness is covered by `CommandsTests` and the `window.*` + `--window`
       routing by the already-present Task 7 socket e2e (`testWindowNewAndList`,
       `testWindowTargetingRoutesToTheRightTree`, `testClosedWindowTargetingErrors`,
       `testCapturedIDResolvesWhileAnotherWindowFrontmost`) — all four green across both full runs
-- [x] run `cd agtermCore && swift test` + the relevant `ControlAPIUITests` cases — must pass before Task 9
-      (agtermCore 243 tests green; Debug build SUCCEEDED; the four window e2e tests pass consistently. Two
+- [x] run `cd HangarCore && swift test` + the relevant `ControlAPIUITests` cases — must pass before Task 9
+      (HangarCore 243 tests green; Debug build SUCCEEDED; the four window e2e tests pass consistently. Two
       unrelated session-type Metal-injection tests flaked under full-suite load — `testSessionType{Into
       ActiveSession,SelectRealizesNeverShownSession}`, a different one each run — and both pass in
-      isolation; the change is confined to the host-free `agtermctlKit` library)
+      isolation; the change is confined to the host-free `hangarctlKit` library)
 
 ### Task 9: UX — File menu + palette window actions
 
 **Files:**
-- Modify: `agterm/agtermApp.swift` (File menu: New Window, Open Window ▸, Rename/Delete Window)
-- Modify: `agterm/AppActions.swift` (newWindow/openWindow/renameWindow/deleteWindow + paletteActions + the rename NSAlert)
-- Modify: `agtermUITests/MultiWindowUITests.swift`
+- Modify: `Hangar/hangarApp.swift` (File menu: New Window, Open Window ▸, Rename/Delete Window)
+- Modify: `Hangar/AppActions.swift` (newWindow/openWindow/renameWindow/deleteWindow + paletteActions + the rename NSAlert)
+- Modify: `HangarUITests/MultiWindowUITests.swift`
 
 - [x] File menu: **New Window** (creates + opens a fresh window via `actions.newWindow`),
       **Open Window ▸** submenu (library windows, checkmark = open, pick to open/focus via
@@ -680,8 +680,8 @@ the per-window file the existing `windows.json` references. Full `agtermUITests`
       `testDeleteWindowMenuRemovesExtraWindow` (menu + confirm → back to one window),
       `testDeleteWindowMenuDisabledForLastWindow` (last window's menu item disabled), and
       `testRenameWindowViaControlUpdatesIndex` (rename via the control path, not the alert)
-- [x] run `cd agtermCore && swift test` + the relevant `MultiWindowUITests` cases — must pass before Task 10
-      (agtermCore 243 tests green; all 4 new Task 9 `MultiWindowUITests` green + the other structural cases.
+- [x] run `cd HangarCore && swift test` + the relevant `MultiWindowUITests` cases — must pass before Task 10
+      (HangarCore 243 tests green; all 4 new Task 9 `MultiWindowUITests` green + the other structural cases.
       `testSpawnedShellSeesWindowAndSessionEnv` is the documented pre-existing Metal-injection flake —
       passes in isolation both with and without these changes, flakes under full-suite load; unrelated
       to the menu/palette additions, which don't touch the env-injection path)
@@ -689,7 +689,7 @@ the per-window file the existing `windows.json` references. Full `agtermUITests`
 ### Task 10: Verify acceptance + keep-in-sync check
 
 **Files:**
-- Modify: `agtermUITests/MultiWindowUITests.swift`, `agtermUITests/ControlAPIUITests.swift`
+- Modify: `HangarUITests/MultiWindowUITests.swift`, `HangarUITests/ControlAPIUITests.swift`
 
 - [x] integration coverage not already gated: reopen-all after a simulated quit (relaunch with the
       seeded index) restores the open-set + selection
@@ -699,16 +699,16 @@ the per-window file the existing `windows.json` references. Full `agtermUITests`
       window's `selectedSessionID` survives. The per-window snapshot file is the selection oracle, the
       index `isOpen` flags the open-set oracle.)
 - [x] keep-in-sync four-point check for all six window commands: `Command` case + `ControlServer`
-      arm + `agtermctl` subcommand + test — record the audit result here (catalog is now 25 commands)
-- [x] run the full gate: `cd agtermCore && swift test` + all `agtermUITests` — must pass before Task 11
-      (agtermCore 243 tests green — Task 10 adds XCUITest coverage only; full `agtermUITests` suite green
+      arm + `hangarctl` subcommand + test — record the audit result here (catalog is now 25 commands)
+- [x] run the full gate: `cd HangarCore && swift test` + all `HangarUITests` — must pass before Task 11
+      (HangarCore 243 tests green — Task 10 adds XCUITest coverage only; full `HangarUITests` suite green
       after the three full-suite-gate fixes below — first full run flagged the Palette breakage + the
       two load flakes, then confirmed green across consecutive full runs)
 
 ➕ **Task 10 keep-in-sync audit (six `window.*` commands × four points).** Catalog is now **25 commands**
 (19 original + 6 window). Each window command satisfies all four points of the keep-in-sync convention:
 
-| command | (1) `Command` case (agtermCore) | (2) `ControlServer` arm | (3) `agtermctl` subcommand | (4) test |
+| command | (1) `Command` case (HangarCore) | (2) `ControlServer` arm | (3) `hangarctl` subcommand | (4) test |
 |---|---|---|---|---|
 | `window.new` | `windowNew = "window.new"` | `.windowNew → windowNew(name:)` | `Window.New` | `CommandsTests.windowNew{WithName,WithoutName}` + e2e `testWindowNewAndList` |
 | `window.list` | `windowList = "window.list"` | `.windowList → buildWindowList()` | `Window.List` | `CommandsTests.windowList` + `SocketClientTests.formatResponseWindows` + e2e `testWindowNewAndList` |
@@ -722,7 +722,7 @@ commands; covered by `CommandsTests.{sessionNew,sessionSelect,workspaceNew,tree}
 `treeWithoutWindowOmitsArgs`, and e2e by `testWindowTargetingRoutesToTheRightTree` /
 `testClosedWindowTargetingErrors` / `testCapturedIDResolvesWhileAnotherWindowFrontmost`.
 
-➕ **Task 10 full-suite-gate findings + fixes.** The full `agtermUITests` gate (which Tasks 2–9 never ran in
+➕ **Task 10 full-suite-gate findings + fixes.** The full `HangarUITests` gate (which Tasks 2–9 never ran in
 full — each ran only its own `-only-testing` subset) surfaced three issues, all fixed (all test-layer only,
 no production code changed):
 
@@ -758,7 +758,7 @@ no production code changed):
    tests don't close a window).
 
 **Verification:** confirmed by the targeted subset (the 6 affected cases all green in isolation) plus
-consecutive full `agtermUITests` runs green.
+consecutive full `HangarUITests` runs green.
 
 ### Task 11: Documentation
 
@@ -768,11 +768,11 @@ consecutive full `agtermUITests` runs green.
 - [x] `CLAUDE.md`: a "Windows (multi-window)" section — the `WindowLibrary`/`WindowInfo` model,
       per-window `AppStore`, persistence layout + migration + recovery contract, the
       scene/restoration approach, the frontmost-store resolution + quit-flush, per-window quick
-      terminal, cross-window reveal (windowID-bearing identity), the `AGTERM_*` env vars, and the
+      terminal, cross-window reveal (windowID-bearing identity), the `HANGAR_*` env vars, and the
       `window.*` control additions; update the Control API catalog from **19 commands to 25**
       (enumerate the six `window.*`), not just the number
-- [x] `README.md`: features list (named windows, reopen-all) + a "Scripting agterm" note for `agtermctl
-      window …`, `--window`, and the `AGTERM_WINDOW_ID`/`AGTERM_SESSION_ID`/`AGTERM_SOCKET` env vars
+- [x] `README.md`: features list (named windows, reopen-all) + a "Scripting hangar" note for `hangarctl
+      window …`, `--window`, and the `HANGAR_WINDOW_ID`/`HANGAR_SESSION_ID`/`HANGAR_SOCKET` env vars
 - [x] `ARCHITECTURE.md`: the new top-level `WindowLibrary` owner and the per-window store split
 - [x] move this plan to `docs/plans/completed/` (physical move performed by the exec completion step after reviews)
 
@@ -787,7 +787,7 @@ consecutive full `agtermUITests` runs green.
   cwd and they don't cross-talk.
 - a settings change (font/theme/opacity) with two windows open updates both live.
 - notification banner click into a *closed* window reopens the right window + pane.
-- the `AGTERM_*` env in a real shell: `agtermctl session … --window "$AGTERM_WINDOW_ID"` from inside a
+- the `HANGAR_*` env in a real shell: `hangarctl session … --window "$HANGAR_WINDOW_ID"` from inside a
   session round-trips.
 
 **Future / explicitly deferred (out of scope):**

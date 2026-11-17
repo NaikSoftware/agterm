@@ -17,7 +17,7 @@ DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lights-common.sh
 . "$DIR/lights-common.sh"
 
-[ -n "${AGTERM_SESSION_ID:-}" ] || exit 0
+[ -n "${HANGAR_SESSION_ID:-}" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 # the payload arrives on stdin; run by hand from a terminal there is none, and
 # the read below would block forever — which for a PreToolUse hook means a

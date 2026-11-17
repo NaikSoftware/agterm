@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: agtermCore/Sources/agtermCore/AppStore+Status.swift:applyControlStatus
+where: HangarCore/Sources/HangarCore/AppStore+Status.swift:applyControlStatus
 added: 2026-11-16
 ---
 # a local active replaces the origin's status on an attached row

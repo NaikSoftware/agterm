@@ -1,6 +1,6 @@
 ---
 worth: later
-where: agterm/agtermApp.swift:makeOverlaySurface
+where: Hangar/hangarApp.swift:makeOverlaySurface
 added: 2026-11-16
 ---
 # a running program overlay stays behind when the lead moves

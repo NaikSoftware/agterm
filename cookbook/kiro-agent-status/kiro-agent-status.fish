@@ -10,13 +10,13 @@
 # because fish expands an abbreviation into the command line before it looks up what to run.
 #
 # The poller owns all three per-turn states (active, blocked, completed); this file owns only its
-# lifetime and the final `idle`. Alternative to agterm's shipped shell/integration.fish, whose default
-# AGTERM_AGENT_RE does not list kiro — do not add kiro to that regex on top of this, since for a REPL
+# lifetime and the final `idle`. Alternative to hangar's shipped shell/integration.fish, whose default
+# HANGAR_AGENT_RE does not list kiro — do not add kiro to that regex on top of this, since for a REPL
 # it pins one `active` across the whole session, which is what this recipe exists to avoid.
 #
 # zsh/bash users want kiro-agent-status.zsh instead.
 
-if not set -q AGTERM_SESSION_ID
+if not set -q HANGAR_SESSION_ID
     return 0 2>/dev/null
 end
 
@@ -25,8 +25,8 @@ set -l _kas_dir (dirname (status filename))
 if not set -q KIRO_STATUS_DETECTOR
     set -g KIRO_STATUS_DETECTOR "$_kas_dir/kiro-status-detector.sh"
 end
-if not set -q AGTERM_STATUS_WRAPPER
-    set -g AGTERM_STATUS_WRAPPER "$HOME/.config/agterm/agent-status/agterm-agent-status.sh"
+if not set -q HANGAR_STATUS_WRAPPER
+    set -g HANGAR_STATUS_WRAPPER "$HOME/.config/hangar/agent-status/hangar-agent-status.sh"
 end
 
 # Is that pid still our detector? The poller has stop conditions of its own — a hard-killed app takes
@@ -76,7 +76,7 @@ function _kas_run
         # a zombie behind either, so there is nothing here to reap.
         # The sleep is not cosmetic: killing the poller does not cancel a status write it had already
         # spawned, and that grandchild would otherwise land after the idle below and leave the row
-        # showing a turn that is over. One poll interval outlasts that single agtermctl call.
+        # showing a turn that is over. One poll interval outlasts that single hangarctl call.
         sleep (test -n "$KIRO_STATUS_INTERVAL"; and echo $KIRO_STATUS_INTERVAL; or echo 0.5) 2>/dev/null
     end
     # The session is over, so nothing about it is worth flagging: `idle` clears the row unconditionally,
@@ -88,8 +88,8 @@ function _kas_run
     # BEFORE the redirection applies — so a missing hooks package would put that on the user's screen
     # after every single kiro-cli. zsh's `command not found` is silenced by the redirection; fish's
     # is not.
-    if test -x "$AGTERM_STATUS_WRAPPER"
-        $AGTERM_STATUS_WRAPPER idle >/dev/null 2>&1
+    if test -x "$HANGAR_STATUS_WRAPPER"
+        $HANGAR_STATUS_WRAPPER idle >/dev/null 2>&1
     end
     return $rc
 end

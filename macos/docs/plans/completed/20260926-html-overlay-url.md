@@ -1,7 +1,7 @@
 # HTML overlay URL mode
 
 ## Overview
-- `agtermctl session overlay open --url URL` shows a web page by URL in the same overlay slots as
+- `hangarctl session overlay open --url URL` shows a web page by URL in the same overlay slots as
   `--html FILE`: session-wide (full or `--size-percent`) or one split pane. The main use is an agent's
   running dev server (`http://localhost:5173`) or a docs page, next to the terminal that drives it.
 - It reuses everything `--html` built: slot rules, close/resize/Command-W, reload and navigate twins,
@@ -11,37 +11,37 @@
   leaves `loading` forever.
 
 ## Context (from discovery)
-- Model and policy: `agtermCore/Sources/agtermCore/HtmlOverlay.swift` (`HtmlOverlay.file/grantRoot`,
+- Model and policy: `HangarCore/Sources/HangarCore/HtmlOverlay.swift` (`HtmlOverlay.file/grantRoot`,
   `grantError`, `HtmlNavigationPolicy.decide`, `HtmlNavigationAction`). These types exist only on this
   unmerged branch, so their shape is free to change; program-overlay APIs stay compatible.
 - Store: `AppStore+HtmlOverlay.swift` (`openHtmlOverlay`, reload, load state, page info, nodes).
 - Control: `ControlProtocol.swift` (`ControlArgs.html`, `OverlayHtmlError`), `ControlDispatcher+Overlay.swift`
   (open validation, `grantError` at :113), `ControlProjection.swift` (`ControlHtmlOverlayNode`, `file`
-  non-optional today), CLI `agtermctlKit/SessionCommands.swift:550-610` and `OverlayPageCommands.swift`.
-- App: `agterm/Views/HtmlOverlayRegistry.swift` (`HtmlOverlayPage` builds `WKWebView` with a default
+  non-optional today), CLI `hangarctlKit/SessionCommands.swift:550-610` and `OverlayPageCommands.swift`.
+- App: `Hangar/Views/HtmlOverlayRegistry.swift` (`HtmlOverlayPage` builds `WKWebView` with a default
   `WKWebViewConfiguration`, `loadOriginal` at :193, `apply` gates `--current` on `grantRoot`,
   `decidePolicyFor` at :213, `reportFailure` at :252 ignores cancellation and WebKit 102),
-  `agterm/Views/HtmlOverlayView.swift` (no error presentation), `agterm/Control/ControlServer+SessionActions.swift`
+  `Hangar/Views/HtmlOverlayView.swift` (no error presentation), `Hangar/Control/ControlServer+SessionActions.swift`
   (`openSessionOverlay` branches only on `options.html` at :31, its helper builds `HtmlOverlay(file:)` at :66).
-- `agterm/Info.plist` has no `NSAppTransportSecurity` keys.
-- Tests: `agtermCore/Tests/agtermCoreTests/{HtmlOverlayTests,ControlDispatcherOverlayTests,
-  AppStoreTreeProjectionTests}.swift`, `agtermctlKitTests/OverlayCommandsTests.swift`,
-  hosted `agtermTests/HtmlOverlayRegistryTests.swift`, XCUITest `agtermUITests/ControlHtmlOverlayUITests.swift`.
+- `Hangar/Info.plist` has no `NSAppTransportSecurity` keys.
+- Tests: `HangarCore/Tests/HangarCoreTests/{HtmlOverlayTests,ControlDispatcherOverlayTests,
+  AppStoreTreeProjectionTests}.swift`, `hangarctlKitTests/OverlayCommandsTests.swift`,
+  hosted `HangarTests/HtmlOverlayRegistryTests.swift`, XCUITest `HangarUITests/ControlHtmlOverlayUITests.swift`.
 
 ## Development Approach
-- **testing approach**: TDD for everything host-free in `agtermCore` (source model, origin rule, policy,
+- **testing approach**: TDD for everything host-free in `HangarCore` (source model, origin rule, policy,
   dispatcher, projection, CLI); the WebKit adapter gets hosted tests against an in-process HTTP listener,
   plus one XCUITest.
 - run only the tests a task touches; full gates (`make build`, `swift test`, `make test-app`, `make lint`)
   run once, in the verification task.
-- `agtermCore` stays free of WebKit/AppKit.
+- `HangarCore` stays free of WebKit/AppKit.
 - **CRITICAL: update this plan file when scope changes during implementation**
 
 ## Testing Strategy
 - **unit tests**: source parsing and validation, origin equality (scheme/host case, default ports), policy
   rows for URL pages beside the unchanged file-page rows, dispatcher refusals, projection (`file` xor `url`,
   `cwd` only for files), CLI flag conflicts.
-- **hosted tests** (`agtermTests`, local `NWListener` in the test process): URL page loads; same-origin
+- **hosted tests** (`HangarTests`, local `NWListener` in the test process): URL page loads; same-origin
   redirect loads; cross-origin redirect on the first load ends `failed` with an error instead of `loading`;
   connection refused ends `failed`; `localhost`, `127.0.0.1` and `::1` load over plain http; a cookie or
   `localStorage` value survives reload but not close plus a new overlay; the error panel is shown for a
@@ -101,14 +101,14 @@
 
 ## Implementation Steps
 
-### Task 1: URL source, origin rule, policy and control surface in agtermCore
+### Task 1: URL source, origin rule, policy and control surface in HangarCore
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/HtmlOverlay.swift`, `AppStore+HtmlOverlay.swift`,
+- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`, `AppStore+HtmlOverlay.swift`,
   `ControlProtocol.swift`, `ControlDispatcher+Overlay.swift`, `ControlDispatcherOptions.swift`,
-  `ControlProjection.swift`, `agtermctlKit/SessionCommands.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/{HtmlOverlayTests,ControlDispatcherOverlayTests,
-  AppStoreTreeProjectionTests}.swift`, `agtermctlKitTests/OverlayCommandsTests.swift`,
+  `ControlProjection.swift`, `hangarctlKit/SessionCommands.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/{HtmlOverlayTests,ControlDispatcherOverlayTests,
+  AppStoreTreeProjectionTests}.swift`, `hangarctlKitTests/OverlayCommandsTests.swift`,
   `MockControlActions.swift` if the action signature changes
 
 - [x] failing tests first: source/origin equality (case, default ports), URL policy rows (same origin
@@ -128,9 +128,9 @@
 ### Task 2: WebKit adapter: URL loading, per-page storage, failure reporting and error panel
 
 **Files:**
-- Modify: `agterm/Views/HtmlOverlayRegistry.swift`, `agterm/Views/HtmlOverlayView.swift`,
-  `agterm/Control/ControlServer+SessionActions.swift`, `agterm/Info.plist`
-- Modify: `agtermTests/HtmlOverlayRegistryTests.swift`, `agtermUITests/ControlHtmlOverlayUITests.swift`
+- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`, `Hangar/Views/HtmlOverlayView.swift`,
+  `Hangar/Control/ControlServer+SessionActions.swift`, `Hangar/Info.plist`
+- Modify: `HangarTests/HtmlOverlayRegistryTests.swift`, `HangarUITests/ControlHtmlOverlayUITests.swift`
 
 - [x] `openSessionOverlay` routes a URL source through the page path (reservation checks, follow,
       presenter refusal) before any program or remote-job handling (done in Task 1)
@@ -141,7 +141,7 @@
       that attempt as `failed` with the blocked destination; a clicked link sent to the browser leaves
       the loaded page alone
 - [x] themed error panel in `HtmlOverlayView` for a `failed` page, cleared by reload
-- [x] declare `NSAllowsLocalNetworking` in `agterm/Info.plist`
+- [x] declare `NSAllowsLocalNetworking` in `Hangar/Info.plist`
 - [x] hosted tests with an in-process listener: load, same-origin redirect, blocked cross-origin
       redirect on open ends failed, a loaded page whose reload is redirected off-origin ends failed,
       connection refused ends failed, `/a` -> `/b` then `--current` stays on `/b` and bare reload returns
@@ -159,7 +159,7 @@
       nothing committed yet loads the source again; hosted tests for both, failing without the fix
 
 ### Task 3: Documentation
-- [x] `plugins/agterm/skills/agterm/`: the description's HTML phrase becomes a compact "preview HTML
+- [x] `plugins/hangar/skills/hangar/`: the description's HTML phrase becomes a compact "preview HTML
       files, URLs or dev servers" trigger, shortening other wording to stay within 1024; `when_to_use`
       adds a dev-server preview phrase; the HTML artifact section and command summary gain `--url` with
       the reachable-from-this-Mac note; `reference.md` entry and read-back fields
@@ -172,24 +172,24 @@ Every page gets the terminal theme as CSS custom properties, so a page an agent 
 theme instead of its own palette; `--url` pages render like a browser.
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/HtmlOverlay.swift`, `agterm/Ghostty/GhosttyApp.swift`,
-  `agterm/Views/HtmlOverlayRegistry.swift`, docs as in Task 3
-- Modify: `agtermCore/Tests/agtermCoreTests/HtmlOverlayTests.swift`, `agtermTests/HtmlOverlayRegistryTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`, `Hangar/Ghostty/GhosttyApp.swift`,
+  `Hangar/Views/HtmlOverlayRegistry.swift`, docs as in Task 3
+- Modify: `HangarCore/Tests/HangarCoreTests/HtmlOverlayTests.swift`, `HangarTests/HtmlOverlayRegistryTests.swift`
 
-- [x] failing core tests: the themed rule carries `color-scheme`, `color`, `--agterm-background`,
-      `--agterm-foreground` and `--agterm-color-0..15`; the unthemed rule carries only the variables; an
+- [x] failing core tests: the themed rule carries `color-scheme`, `color`, `--hangar-background`,
+      `--hangar-foreground` and `--hangar-color-0..15`; the unthemed rule carries only the variables; an
       invalid palette entry omits its own slot, a palette of the wrong size omits all slots
 - [x] `HtmlOverlayTheme` gains `palette` and `script(themed:)`; no dark flag
 - [x] `GhosttyApp` reads `palette` from the config `resolveThemeColors` uses and keeps the first 16 as hex
 - [x] a file page keeps the themed script, the transparent canvas and the painted backing; a URL page gets
       the unthemed script and keeps the browser's opaque canvas, and no re-theme touches its
       `underPageBackgroundColor`
-- [x] hosted tests: a file page reads `--agterm-color-N` equal to the app palette and follows `applyTheme`;
+- [x] hosted tests: a file page reads `--hangar-color-N` equal to the app palette and follows `applyTheme`;
       a URL page with `body { color: #333 }` and no background keeps an opaque browser canvas before and
       after `applyTheme` (pixel check) while still exposing the variables; `GhosttyApp` reports 16 entries
 - [x] skill: the description gains "create and show HTML explainers or reports", `when_to_use`
       HTML-specific phrases; the HTML section teaches use-site fallbacks, page-owned aliases, palette slots
-      for accents, never declaring `--agterm-*` on `:root`, a user-requested palette wins, and URL pages keep
+      for accents, never declaring `--hangar-*` on `:root`, a user-requested palette wins, and URL pages keep
       browser styling; reference, site pages and control-api updated
 
 - [x] ➕ revmux round 2 (major): a 102 no policy cancel reported (an undisplayable response) restores
@@ -199,7 +199,7 @@ theme instead of its own palette; `--url` pages render like a browser.
 
 ### Task 5: Verify acceptance criteria
 - [x] every Overview and Solution Overview item implemented
-- [x] full gates once: `make build`, `cd agtermCore && swift test`, `make test-app`, `make lint`
+- [x] full gates once: `make build`, `cd HangarCore && swift test`, `make test-app`, `make lint`
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion

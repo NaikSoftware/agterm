@@ -1,0 +1,561 @@
+import AppKit
+import HangarCore
+import Foundation
+import HangarResponsibility
+import Darwin
+import os
+
+/// The `zmx` command group: the daemon inventory and, later, the actions over it. Every command needs a
+/// running instance by design — only one can join the live stores, the pending-close records, the checked
+/// closed-window snapshots and the observed daemons into a single answer.
+extension ControlServer {
+    func liveAttributions(in sessions: [Session], leaders: [String: pid_t]?) -> [UUID: SessionHost.Placement] {
+        let identities = Set(sessions.filter { $0.remoteHost == nil }.flatMap { session -> [UUID] in
+            var ids = session.surface?.backedByZmx == true ? [session.paneIdentity] : []
+            if session.hasSplit, session.splitSurface?.backedByZmx == true, let split = session.splitPaneIdentity { ids.append(split) }
+            return ids
+        })
+        guard !identities.isEmpty, let leaders else { return [:] }
+        let place = liveAttributionProbe.placer(endpoint: zmxClient?.endpoint)
+        let unread = SessionHost.Placement(attribution: .unknown, staleHost: false)
+        return Dictionary(uniqueKeysWithValues: identities.map { identity in
+            let name = ZmxSupport.daemonName(for: identity)
+            return (identity, leaders[name].map { place(name, $0) } ?? unread)
+        })
+    }
+
+    /// The reset's read-back for the tree top level and the `zmx list` header: nil when nothing is pending
+    /// and no launch consumed a marker, so an untouched instance shows no field at all.
+    func liveResetReadback() -> ControlLiveResetReadback? {
+        let pending = liveReset?.pending.map(\.targets.count)
+        let last = liveResetOutcome()
+        guard pending != nil || last != nil else { return nil }
+        return ControlLiveResetReadback(pending: pending, last: last)
+    }
+
+    /// `zmx.reset`: the dialog's confirm path without the dialog. The quit is not requested here; the
+    /// connection thread requests it once this reply is written.
+    func resetLiveSessions() -> ControlResponse {
+        guard let liveReset else {
+            return ControlResponse(ok: false, error: ControlActionsUnsupported.message("zmx.reset"))
+        }
+        switch liveReset.request(confirmed: true) {
+        case .refused(let refusal):
+            return ControlResponse(ok: false, error: refusal.message)
+        case .cancelled:
+            return ControlResponse(ok: false, error: "zmx.reset was cancelled")
+        case .confirmed(let selection):
+            let outdated = selection.outdatedSessionCount
+            let stale = selection.staleHostSessionCount
+            let status = ControlLiveResetStatus(sessions: selection.sessionCount, panes: selection.targets.count, pending: true,
+                                                outdated: outdated > 0 ? outdated : nil, staleHost: stale > 0 ? stale : nil)
+            let text = LiveReset.dialogText(sessionCount: selection.sessionCount, outdatedSessions: outdated,
+                                            staleHostSessions: stale).body
+            return ControlResponse(ok: true, result: ControlResult(text: text, liveReset: status))
+        }
+    }
+
+    /// liveResetSelection covers open and saved panes; nil when the listing failed, which refuses the action.
+    func liveResetSelection() -> LiveReset.Selection? {
+        guard let zmxClient, let records = zmxClient.sessionRecords() else { return nil }
+        return LiveReset.select(claims: library.paneClaims(), records: records, outdatedBefore: zmxOutdatedBefore,
+                                place: liveAttributionProbe.placer(endpoint: zmxClient.endpoint))
+    }
+
+    /// Observed daemons joined against the panes that claim them, with the restore status as a header.
+    ///
+    /// A failed listing is an error rather than an empty inventory: an empty namespace is a real answer and
+    /// must not be indistinguishable from not having looked.
+    func listZmxDaemons() -> ControlResponse {
+        guard let client = zmxClient else {
+            return ControlResponse(ok: false, error: ControlZmxError.unavailable)
+        }
+        guard let observed = client.listSessions() else {
+            return ControlResponse(ok: false, error: "could not read the zmx session list")
+        }
+        let walk = library.paneClaims()
+        let result = ZmxInventory.join(observed: observed, claims: walk.claims,
+                                       inventoryComplete: walk.complete)
+        let inventory = ControlZmxInventory(restore: restoreStatus(), result: result, endpoint: client.endpoint,
+                                            liveReset: liveResetReadback(), outdatedBefore: zmxOutdatedBefore)
+        return ControlResponse(ok: true, result: ControlResult(zmx: inventory))
+    }
+
+    /// readZmxScreen answers `zmx.screen` at the daemon's last leader's grid; it attaches nothing.
+    func readZmxScreen(name: String, fullBuffer: Bool, lines: Int?) -> ControlResponse {
+        guard let client = zmxClient else {
+            return ControlResponse(ok: false, error: ControlZmxError.unavailable)
+        }
+        guard let screen = client.screen(name: name, all: fullBuffer) else {
+            return ControlResponse(ok: false, error: "could not read the zmx screen of \(name)")
+        }
+        return ControlResponse(ok: true, result: ControlResult(text: lines.map(screen.lastLines) ?? screen.text))
+    }
+}
+
+extension ControlServer {
+    /// Attachable sessions: this app's own when `host` is nil, another machine's when it is not.
+    ///
+    /// The remote form runs the BARE form over ssh, so the far side does the whole join in one walk of its
+    /// own windows and answers with a single document. Nothing is composed across two remote calls, so
+    /// there is no framing and no window where the far side's topology can move between reads.
+    func remoteTree(host: String?) async -> ControlResponse {
+        await remoteTree(host: host, deadline: Self.remoteTreeDeadline)
+    }
+
+    func remoteTree(host: String?, deadline: TimeInterval) async -> ControlResponse {
+        guard let host else { return localAttachableSessions() }
+        let argv: [String]
+        do {
+            argv = try RemoteSession.treeCommand(host: host)
+        } catch {
+            // the host is NOT echoed: reaching here means validation rejected it, and it is rejected for
+            // carrying control characters, which hangarctl would print to a terminal after JSON decoding
+            return ControlResponse(ok: false, error: "invalid host")
+        }
+        let result = await remoteRunner.run(argv, deadline: deadline)
+        guard result.status == 0 else {
+            // stdout first: the remote's hangarctl prints a not-ok response there and exits nonzero, so
+            // its own sentence never reaches stderr. ssh's own failures do. An ok-looking payload from a
+            // nonzero process is never accepted, which is why the status is read before the output.
+            let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let detail = RemoteTreeMerger.remoteError(stdout: result.stdout) ?? (stderr.isEmpty ? nil : stderr)
+            return ControlResponse(ok: false, error: detail ?? "the remote command failed on \(host)")
+        }
+        do {
+            let remote = try RemoteTreeMerger.decode(stdout: result.stdout)
+            // the far side cannot know which name reached it, so the destination we were given is stamped
+            // here rather than self-reported there
+            return ControlResponse(ok: true, result: ControlResult(remote: remote.stamped(host: host)))
+        } catch let error as RemoteTreeMerger.MergeError {
+            return ControlResponse(ok: false, error: error.message)
+        } catch {
+            return ControlResponse(ok: false, error: "the remote answer could not be read")
+        }
+    }
+
+    /// This app's own attachable sessions, across every OPEN window. An empty list is a successful answer
+    /// and does not distinguish "not running live" from "live with nothing eligible"; `zmx list` is the
+    /// restore-mode diagnostic.
+    private func localAttachableSessions() -> ControlResponse {
+        guard let client = zmxClient else {
+            return ControlResponse(ok: false, error: ControlZmxError.unavailable)
+        }
+        guard let observed = client.listSessions() else {
+            return ControlResponse(ok: false, error: "could not read the zmx session list")
+        }
+        let walk = library.paneClaims()
+        let inventory = ControlZmxInventory(restore: restoreStatus(),
+                                            result: ZmxInventory.join(observed: observed,
+                                                                      claims: walk.claims,
+                                                                      inventoryComplete: walk.complete),
+                                            endpoint: client.endpoint, liveReset: liveResetReadback(),
+                                            outdatedBefore: zmxOutdatedBefore)
+        // a live store IS the open-window test, the same one `openCounts` uses: a closed window has no
+        // store, and its panes are not attachable from here anyway
+        let windows = library.windows.compactMap { entry in
+            library.store(for: entry.id).map {
+                RemoteWindowProjection(id: entry.id.uuidString, name: entry.name, tree: buildTree(in: $0))
+            }
+        }
+        do {
+            let tree = try RemoteTreeMerger.candidates(windows: windows, inventory: inventory)
+            return ControlResponse(ok: true, result: ControlResult(remote: tree))
+        } catch let error as RemoteTreeMerger.MergeError {
+            return ControlResponse(ok: false, error: error.message)
+        } catch {
+            return ControlResponse(ok: false, error: "the session list could not be built")
+        }
+    }
+
+    func attachRemoteSession(host: String, session: String) async -> ControlResponse {
+        await attachRemoteSession(host: host, session: session, window: nil)
+    }
+
+    /// Create a local session attached to one of `host`'s.
+    ///
+    /// The remote is resolved again here rather than trusted from whatever the caller last saw: a picker's
+    /// answer can be minutes old, and a daemon that has gone since would otherwise be CREATED by the
+    /// attach, handing back a fresh shell wearing the session's name. Everything that can fail is checked
+    /// before the model is touched, so a refusal leaves no half-built row behind.
+    func attachRemoteSession(host: String, session: String, window: String?) async -> ControlResponse {
+        let discovery = await remoteTree(host: host)
+        guard discovery.ok, let tree = discovery.result?.remote else { return discovery }
+        // by id only: remote session names are mutable and deliberately non-unique across workspaces, and
+        // `zmx tree` prints the id for exactly this hand-off
+        guard let remote = tree.sessions.first(where: { $0.id == session }) else {
+            return ControlResponse(ok: false, error: "no attachable session \(session) on \(host)")
+        }
+        let store: AppStore
+        switch resolveOpenWindow(window) {
+        case .failure(let response): return response
+        case .success(let (_, resolved)): store = resolved
+        }
+        if remote.content == "page" { return await attachRemotePageRow(remote, tree: tree, host: host, in: store) }
+        // a companion joins its parent's group when exactly one row here shows that parent, else it stands alone
+        let parents = remote.parent == nil ? [] : attachedParentRows(of: remote, tree: tree, host: host, in: store)
+        if parents.count == 1, let parent = parents.first, let workspace = store.workspace(forSession: parent.id)?.id {
+            return attach(remote, from: tree, host: host,
+                          placement: RemotePlacement(store: store, workspace: workspace, parent: parent.id))
+        }
+        guard let workspace = store.currentWorkspaceID else {
+            return ControlResponse(ok: false, error: "no window to attach into")
+        }
+        return attach(remote, from: tree, host: host, placement: RemotePlacement(store: store, workspace: workspace))
+    }
+
+    /// RemotePlacement is where an attached row goes: a workspace, or under `parent`, a remote row of the same host.
+    struct RemotePlacement {
+        let store: AppStore
+        let workspace: UUID
+        var parent: UUID?
+        var select = true
+        /// index is the row's place in the workspace; nil appends it.
+        var index: Int?
+    }
+
+    /// attach creates the local row for `remote`, one session of `tree`, and binds its panes. Everything that can
+    /// fail is checked before the model is touched.
+    func attach(_ remote: ControlRemoteSession, from tree: ControlRemoteTree, host: String,
+                placement: RemotePlacement) -> ControlResponse {
+        // by role, never by position: a payload with two lefts or no left must fail rather than quietly
+        // become one pane, or the wrong one
+        let byRole = Dictionary(remote.panes.map { (ZmxPaneRole(controlName: $0.pane), $0.daemon) },
+                                uniquingKeysWith: { first, _ in first })
+        guard byRole.count == remote.panes.count, let left = byRole[.left] else {
+            return ControlResponse(ok: false, error: "\(host) reported panes hangar cannot address")
+        }
+        let right = byRole[.right]
+        let primary: String
+        let split: String?
+        // attaching is the user asking for the session HERE, so every pane claims the lead at once
+        let leads = (left: ZmxLeadAttachment(claim: true), right: ZmxLeadAttachment(claim: true))
+        do {
+            primary = try RemoteSession.attachPaneCommand(host: host, endpoint: tree.endpoint, daemon: left,
+                                                          session: remote.name, pane: .left, lead: leads.left)
+            split = try right.map {
+                try RemoteSession.attachPaneCommand(host: host, endpoint: tree.endpoint, daemon: $0,
+                                                    session: remote.name, pane: .right, lead: leads.right)
+            }
+        } catch {
+            return ControlResponse(ok: false, error: "\(host) reported a session hangar cannot address")
+        }
+        let store = placement.store
+        // the LOCAL working directory, not the remote one: libghostty chdirs the ssh process here, and a
+        // path that exists on the far side may not exist on this Mac. The attached shell reports its real
+        // cwd through the terminal stream anyway.
+        guard let created = store.addSession(toWorkspace: placement.workspace, cwd: NSHomeDirectory(),
+                                             command: primary, name: remote.name, wait: true, at: placement.index,
+                                             select: placement.select, remoteHost: host, remoteSessionID: remote.id,
+                                             parentID: placement.parent) else {
+            return ControlResponse(ok: false, error: "could not create the session")
+        }
+        if let split {
+            created.splitInitialCommand = split
+            created.splitCommandWait = true
+            store.setSplitVisibility(created.id, shown: true,
+                                     axis: remote.splitAxis.flatMap(SplitAxis.init(rawValue:)) ?? .leftRight)
+            // a new split focuses its right pane; an attached session opens on its left one
+            created.splitFocused = false
+        }
+        var daemons = [created.paneIdentity: left]
+        ZmxLeadBook.shared.begin(leads.left, pane: created.paneIdentity)
+        if let right, let local = created.splitPaneIdentity {
+            daemons[local] = right
+            ZmxLeadBook.shared.begin(leads.right, pane: local)
+        }
+        let origin = RemoteBinding.Origin(host: host, endpoint: tree.endpoint, sessionName: remote.name)
+        store.bindRemote(RemoteBinding(remoteSessionID: remote.id, daemonsByLocalPane: daemons,
+                                       presentationVersion: tree.presentation, origin: origin,
+                                       originHeadless: tree.headless == true),
+                         forSession: created.id)
+        // the row's created event fired inside `addSession`, before the binding existed
+        startRemotePresentation(for: created)
+        // a FIXED target, never `focusActiveSession`: it follows `splitFocused`, which the new split's deck
+        // re-render can clear from under it through `onFocusChange`.
+        if placement.select { actions.focusSplitPane(created, wantSplit: created.splitFocused) }
+        return ControlResponse(ok: true, result: ControlResult(id: created.id.uuidString, parent: placement.parent?.uuidString))
+    }
+
+    /// Kill the daemons the inventory shows as unclaimed and detached.
+    ///
+    /// The gate is checked and revalidated, never atomic: pinned zmx has no kill-if-detached, so this
+    /// re-lists immediately before mutating and drops any candidate that gained a client in between. What
+    /// remains is a client attaching from outside hangar inside that gap, which the docs state plainly.
+    /// Model resolution stays on this actor, so hangar's own claims cannot move underneath the operation.
+    func pruneZmxDaemons() -> ControlResponse {
+        guard let client = zmxClient else {
+            return ControlResponse(ok: false, error: ControlZmxError.unavailable)
+        }
+        guard let observed = client.listSessions() else {
+            return ControlResponse(ok: false, error: "could not read the zmx session list")
+        }
+        let walk = library.paneClaims()
+        let inventory = ZmxInventory.join(observed: observed, claims: walk.claims,
+                                          inventoryComplete: walk.complete)
+        guard let candidates = ZmxPrunePolicy.namesToPrune(inventory) else {
+            return ControlResponse(ok: false, error: ControlZmxError.incompleteInventory)
+        }
+        guard !candidates.isEmpty else {
+            return ControlResponse(ok: true, result: ControlResult(text: "no orphan daemons", affected: 0))
+        }
+
+        guard let recheck = client.listSessions() else {
+            return ControlResponse(ok: false, error: "could not re-read the zmx session list before pruning")
+        }
+        let stillDetached = Set(recheck.filter { $0.clients == 0 }.map(\.name))
+        let names = candidates.filter { stillDetached.contains($0) }
+        guard !names.isEmpty else {
+            return ControlResponse(ok: true, result: ControlResult(text: "no orphan daemons left to prune",
+                                                                   affected: 0))
+        }
+
+        let outcomes = client.killObservedOrphan(names: names)
+        let killed = outcomes.filter { $0.value == .killed }.keys.sorted()
+        return ControlResponse(ok: true, result: ControlResult(text: pruneReport(outcomes),
+                                                               affected: killed.count))
+    }
+
+    /// Reports per daemon rather than a bare count: a stale-socket cleanup is not a kill, and a caller that
+    /// cannot tell the two apart would believe a live unresponsive daemon had gone.
+    private func pruneReport(_ outcomes: [String: ZmxKillOutcome]) -> String {
+        outcomes.keys.sorted().map { name in
+            switch outcomes[name] {
+            case .killed: return "killed \(name)"
+            case .staleSocket: return "\(name): cleaned up a stale socket, the daemon may still be running"
+            case .failed(let reason): return "\(name): not killed (\(reason))"
+            case nil: return "\(name): no result"
+            }
+        }
+        .joined(separator: "; ")
+    }
+}
+
+extension ControlServer {
+    /// Destroy one pane's daemon, then drive the same model transition the pane's own exit would have.
+    ///
+    /// Resolution runs against the INVENTORY rather than `ControlTargetResolver`, which searches open
+    /// stores only: this command deliberately reaches closed and unindexed claims no window shows.
+    func killZmxDaemon(target: String, window: String?, pane: ZmxPaneRole) -> ControlResponse {
+        killZmxDaemon(target: target, window: window, pane: pane, pinned: nil)
+    }
+
+    func killZmxPane(target: String, window: String?, pane: ZmxPaneRole, paneID: String) -> ControlResponse {
+        killZmxDaemon(target: target, window: window, pane: pane, pinned: paneID)
+    }
+
+    private func killZmxDaemon(target: String, window: String?, pane: ZmxPaneRole, pinned: String?) -> ControlResponse {
+        guard let client = zmxClient else {
+            return ControlResponse(ok: false, error: ControlZmxError.unavailable)
+        }
+        guard let observed = client.listSessions() else {
+            return ControlResponse(ok: false, error: "could not read the zmx session list")
+        }
+        let walk = library.paneClaims()
+        let inventory = ZmxInventory.join(observed: observed, claims: walk.claims,
+                                          inventoryComplete: walk.complete)
+
+        // `active` is refused on BOTH selectors rather than resolved: the contract is that nothing about
+        // this destruction falls back to whatever is in front of the user, and a window selector that
+        // silently means "frontmost" would reintroduce exactly that
+        guard target != "active" else {
+            return ControlResponse(ok: false, error: "zmx.kill needs a session id; 'active' is not accepted")
+        }
+        guard window != "active" else {
+            return ControlResponse(ok: false, error: "zmx.kill needs a window id; 'active' is not accepted")
+        }
+
+        // an explicit --window scopes the claims BEFORE the session resolves, so a prefix ambiguous across
+        // windows can be disambiguated and an exact id in another window is not killed regardless
+        let windowIDs = Array(Set(inventory.rows.compactMap { $0.claim?.windowID }))
+        var owned = inventory.rows.filter { $0.claim?.pane == pane }
+        if let window, !window.isEmpty {
+            guard case .resolved(let windowID) = ControlResolve.resolve(window, candidates: windowIDs,
+                                                                        active: nil) else {
+                return ControlResponse(ok: false, error: "no such window: \(window)")
+            }
+            owned = owned.filter { $0.claim?.windowID == windowID }
+        }
+        let candidates = owned.compactMap { $0.claim?.sessionID }
+        guard case .resolved(let sessionID) = ControlResolve.resolve(target, candidates: candidates,
+                                                                     active: nil),
+              let row = owned.first(where: { $0.claim?.sessionID == sessionID }), let claim = row.claim else {
+            return ControlResponse(ok: false, error: "no \(pane.rawValue) pane daemon for session \(target)")
+        }
+        if let refusal = ControlZmxError.killRefusal(row) {
+            return ControlResponse(ok: false, error: refusal)
+        }
+        if let pinned, let refusal = ZmxPaneRole.pinRefusal(pinned, identity: claim.paneIdentity, pane: pane) {
+            return ControlResponse(ok: false, error: refusal)
+        }
+
+        // only an exact confirmation may close a live pane. zmx exits zero after unlinking a socket it
+        // could not reach, so trusting the status would let this report a kill, tear the pane down, and
+        // leave the daemon running and unreachable by name.
+        switch client.killConfirmed(name: row.daemon) {
+        case .killed:
+            break
+        case .staleSocket:
+            return ControlResponse(ok: false, error: "\(row.daemon) did not confirm the kill; zmx cleaned "
+                + "up a stale socket and the daemon may still be running")
+        case .failed(let reason):
+            return ControlResponse(ok: false, error: "could not kill \(row.daemon): \(reason)")
+        }
+        applyKilledPaneExit(claim)
+        return ControlResponse(ok: true, result: ControlResult(id: claim.sessionID.uuidString,
+                                                               text: "killed \(row.daemon)",
+                                                               pane: claim.pane.rawValue))
+    }
+
+    /// Runs the pane's exit transition for a daemon this command has already destroyed.
+    ///
+    /// Marks the surface's exit handled FIRST — after the kill, never before, so a failed kill leaves the
+    /// natural path working — then drives `handlePaneExit`, which owns the model transition plus the
+    /// promoted survivor's font callback, its dashboard membership and the refocus. A store-only
+    /// transition would skip those three. The already-killed identity is excluded from the finalizer, or
+    /// the teardown would ask zmx to kill a name that is gone and, on a session close, reach the sibling.
+    private func applyKilledPaneExit(_ claim: ZmxPaneClaim) {
+        guard let store = library.store(for: claim.windowID),
+              let session = store.session(withID: claim.sessionID) else { return }
+        let surface = claim.pane == .left ? session.surface : session.splitSurface
+        // `backedByZmx` is what makes this surface a CLIENT of the daemon just killed. On a requested-live
+        // fallback the launch reap preserves claimed daemons while the pane gets a fresh plain shell, so
+        // without this the kill would close a live pane that never attached to the thing it destroyed.
+        guard let view = surface as? GhosttySurfaceView, view.backedByZmx,
+              view.claimProcessExit() else { return }
+        hangarApp.handlePaneExit(view, store: store, sessionID: claim.sessionID, library: library,
+                                 alreadyFinalized: claim.paneIdentity)
+    }
+}
+
+/// Error strings shared by the zmx commands, so the CLI and the server cannot word the same refusal
+/// differently.
+public enum ControlZmxError {
+    /// Why a row may not be killed, nil when it may. `absent` has nothing to kill, and `unreadable` is
+    /// refused in v1 because a forced kill there can unlink a live daemon's socket and still exit zero,
+    /// leaving the process running and unreachable by name.
+    static func killRefusal(_ row: ZmxInventoryRow) -> String? {
+        switch row.observation {
+        case .absent: return "\(row.daemon) is not running"
+        case .unreadable: return "\(row.daemon) is unreadable; killing it could orphan a live daemon"
+        case .running: break
+        }
+        switch row.state {
+        case .claimed: return nil
+        case .pendingClose: return "\(row.daemon) belongs to a session waiting out its undo window"
+        case .unknown, .conflicted: return incompleteInventory
+        case .orphan, .foreign: return "\(row.daemon) is not claimed by that pane"
+        }
+    }
+
+    public static let unavailable = "zmx is unavailable in this instance"
+    public static let incompleteInventory =
+        "the pane inventory is incomplete or has conflicting owners, so no daemon can be safely pruned"
+}
+
+struct LiveAttributionProbe {
+    /// Hosts is every host endpoint's published pid by endpoint name, and the current key's endpoint name,
+    /// nil when the helper's key could not be read.
+    struct Hosts: Equatable {
+        var pids: [String: pid_t] = [:]
+        var current: String?
+    }
+
+    var responsible: (pid_t) -> SessionHost.ResponsibleProcess = LiveAttributionProbe.lookup
+    var hosts: (ControlZmxEndpoint) -> Hosts = LiveAttributionProbe.publishedHosts
+    var appPID: pid_t = getpid()
+
+    /// placer places daemon leaders against this endpoint's hosts. A published host counts only while it is its
+    /// own responsible process, which disclaiming it at spawn made it.
+    func placer(endpoint: ControlZmxEndpoint?) -> (String, Int32) -> SessionHost.Placement {
+        var probes: [pid_t: SessionHost.ResponsibleProcess] = [:]
+        func probed(_ pid: pid_t) -> SessionHost.ResponsibleProcess {
+            if let cached = probes[pid] { return cached }
+            let result = responsible(pid)
+            probes[pid] = result
+            return result
+        }
+        let published = endpoint.map(hosts) ?? Hosts()
+        let live = published.pids.filter { probed($0.value) == .live($0.value) }
+        let current: SessionHost.Roots.Current = published.current.map { live[$0].map { .running($0) } ?? .absent } ?? .unknown
+        let roots = SessionHost.Roots(hosts: Set(live.values), current: current)
+        return { _, leader in
+            SessionHost.place(leader: leader, responsible: probed(leader), roots: roots, appPid: appPID)
+        }
+    }
+
+    private static func lookup(_ leader: pid_t) -> SessionHost.ResponsibleProcess {
+        guard Responsibility.system.isAvailable, let pid = Responsibility.system.responsibleProcess(of: leader) else { return .unknown }
+        if kill(pid, 0) == 0 || errno == EPERM { return .live(pid) }
+        return errno == ESRCH ? .dead : .unknown
+    }
+
+    static func publishedHosts(_ endpoint: ControlZmxEndpoint) -> Hosts {
+        var result = Hosts()
+        for name in (try? FileManager.default.contentsOfDirectory(atPath: endpoint.socketDirectory)) ?? []
+        where SessionHost.isEndpointName(name) {
+            guard let paths = try? SessionHost.paths(socketDirectory: endpoint.socketDirectory, endpoint: name),
+                  let pid = publishedHost(pidfile: paths.pidfile) else { continue }
+            result.pids[name] = pid
+        }
+        result.current = HelperEndpointKey.shared.key(helper: ZmxLaunch.sessionHostPath).flatMap { try? SessionHost.endpointName(key: $0) }
+        return result
+    }
+
+    /// publishedHost is the pidfile's pid when that process started no later than the file was last written.
+    /// A host writes the file after it starts and touches it while it runs, so a pid reused after a host crash
+    /// started later. The executable path is no test: an update deletes or moves the old host's image.
+    static func publishedHost(pidfile: String) -> pid_t? {
+        let fd = open(pidfile, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        var status = stat()
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let count = read(fd, &bytes, bytes.count)
+        guard fstat(fd, &status) == 0, count > 0,
+              let pid = pid_t(String(decoding: bytes.prefix(count), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)),
+              pid > 0 else { return nil }
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        let started = Double(info.pbi_start_tvsec) + Double(info.pbi_start_tvusec) / 1e6
+        let written = Double(status.st_mtimespec.tv_sec) + Double(status.st_mtimespec.tv_nsec) / 1e9
+        return started <= written ? pid : nil
+    }
+}
+
+/// HelperEndpointKey runs the bundled helper's `key` once per helper file, keyed by device, inode and
+/// modification time because an update replaces the file under the running app. A failed run is not cached.
+final class HelperEndpointKey: Sendable {
+    static let shared = HelperEndpointKey()
+
+    private struct FileIdentity: Hashable {
+        let device: dev_t
+        let inode: ino_t
+        let modified: Int
+    }
+
+    private let cache = OSAllocatedUnfairLock<[String: (identity: FileIdentity, key: String)]>(initialState: [:])
+    private let run: @Sendable (String) -> String?
+
+    init(run: @escaping @Sendable (String) -> String? = HelperEndpointKey.runHelper) {
+        self.run = run
+    }
+
+    func key(helper: String) -> String? {
+        var status = stat()
+        guard stat(helper, &status) == 0 else { return nil }
+        let identity = FileIdentity(device: status.st_dev, inode: status.st_ino,
+                                    modified: status.st_mtimespec.tv_sec * 1_000_000_000 + status.st_mtimespec.tv_nsec)
+        if let cached = cache.withLock({ $0[helper] }), cached.identity == identity { return cached.key }
+        guard let key = run(helper), (try? SessionHost.endpointName(key: key)) != nil else { return nil }
+        cache.withLock { $0[helper] = (identity, key) }
+        return key
+    }
+
+    private static func runHelper(_ helper: String) -> String? {
+        let invocation = ZmxClient.Invocation(executablePath: helper, arguments: ["key"], environment: [:],
+                                              timeout: 2, mergesStderr: false)
+        return (try? ZmxClient.run(invocation))?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}

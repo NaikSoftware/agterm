@@ -20,12 +20,12 @@ struct OpenCode {
     QString v2Dir;
 };
 
-// copies the shipped agent-status package to <home>/.config/agterm-qt/agent-status, bakes agtermctl's path into the
+// copies the shipped agent-status package to <home>/.config/hangar/agent-status, bakes hangarctl's path into the
 // wrappers, merges Claude Code hooks, sources the shell integration, and adds the Codex, Pi and OpenCode hooks
-Report agentHooks(const QString &home, const QString &bundle, const QString &agtermctl, const OpenCode &openCode);
-// links <home>/.local/bin/agtermctl to agtermctl; an agtermctl already there is left alone
-Report commandLineTool(const QString &home, const QString &agtermctl);
-// copies the skill into <home>/.claude/skills/agterm and <home>/.codex/skills/agterm (whichever agents exist)
+Report agentHooks(const QString &home, const QString &bundle, const QString &hangarctl, const OpenCode &openCode);
+// links <home>/.local/bin/hangarctl to hangarctl; an hangarctl already there is left alone
+Report commandLineTool(const QString &home, const QString &hangarctl);
+// copies the skill into <home>/.claude/skills/hangar and <home>/.codex/skills/hangar (whichever agents exist)
 Report skill(const QString &home, const QString &bundle);
 
 QString packageDir(const QString &home);

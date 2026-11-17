@@ -1,6 +1,6 @@
-# agterm cookbook
+# hangar cookbook
 
-Installable `agtermctl` workflows. Each recipe is a directory holding a README and, where it needs one, its scripts: what it does, what it needs, how to set it up, and where it stops. They are written to be copied into your own setup and edited, not only read.
+Installable `hangarctl` workflows. Each recipe is a directory holding a README and, where it needs one, its scripts: what it does, what it needs, how to set it up, and where it stops. They are written to be copied into your own setup and edited, not only read.
 
 Recipes come from other people as well as the maintainer. Every one is reviewed before it is accepted, but they are scripts you run on your own machine against your own sessions, and several close sessions or delete workspaces, so read a recipe before you run it.
 
@@ -16,7 +16,7 @@ its *needs* column, so searching this page for `claude` or `kiro` finds those di
 | [new-session-in-workspace](new-session-in-workspace/) | pick a workspace with fzf and start a session in it | 0.8.0, jq, fzf | [@skripalschikov](https://github.com/skripalschikov) |
 | [park-and-resume](park-and-resume/) | close a project's workspaces, bring them back later | 0.16.0, jq, zsh | [@umputun](https://github.com/umputun) |
 | [project-launcher](project-launcher/) | pick a project anywhere — or type "project + prompt" — and get a session in its workspace | 0.19.0, jq | [@x9x9x9x9x9x91](https://github.com/x9x9x9x9x9x91) |
-| [project-session-picker](project-session-picker/) | pick an agterm session or zoxide folder with Television, reusing the folder's session | 0.39.0, zsh, jq, zoxide, Television | [@sysradium](https://github.com/sysradium) |
+| [project-session-picker](project-session-picker/) | pick an hangar session or zoxide folder with Television, reusing the folder's session | 0.39.0, zsh, jq, zoxide, Television | [@sysradium](https://github.com/sysradium) |
 | [project-switcher](project-switcher/) | show only one project's workspaces in the sidebar | 0.18.0, jq | [@umputun](https://github.com/umputun) |
 | [session-snapshot](session-snapshot/) | snapshot every open session into a browsable page, close them, and restore any one later with its own Claude conversation | 0.7.1, jq, python3 | [@ne0r0mancer](https://github.com/ne0r0mancer) |
 | [window-per-project](window-per-project/) | park every other window in the Dock and raise one | 0.17.1, jq | [@umputun](https://github.com/umputun) |
@@ -60,7 +60,7 @@ its *needs* column, so searching this page for `claude` or `kiro` finds those di
 | [multi-agent-git-info](multi-agent-git-info/) | combine Claude Code and Codex Git state on one sidebar line | 0.40.0, python3, git, Claude Code and/or Codex | [@megabyde](https://github.com/megabyde) |
 | [named-companion](named-companion/) | one chord duplicates the session as a tinted companion named from a dialog, or by its Claude Code when left blank | 0.39.0, python3 | [@umputun](https://github.com/umputun) |
 | [remote-claude-session](remote-claude-session/) | one chord runs Claude Code in a tmux session on a remote host, reconnecting and reporting status onto its own tab | 0.22.0, jq, ssh, tmux, Claude Code | [@andr81](https://github.com/andr81) |
-| [scheduled-jobs](scheduled-jobs/) | an agent installs cronn, schedules and reports on jobs, and jobs can open agterm sessions running an agent on a prompt | 0.37.0, Homebrew, jq, Claude Code | [@umputun](https://github.com/umputun) |
+| [scheduled-jobs](scheduled-jobs/) | an agent installs cronn, schedules and reports on jobs, and jobs can open hangar sessions running an agent on a prompt | 0.37.0, Homebrew, jq, Claude Code | [@umputun](https://github.com/umputun) |
 | [session-context-nudge](session-context-nudge/) | Claude Code keeps the title bar saying what the session is working on | 0.26.0, jq, Claude Code | [@umputun](https://github.com/umputun) |
 | [status-announcer](status-announcer/) | demo: speak agent status changes from a dedicated session | 0.16.0, jq | [@umputun](https://github.com/umputun) |
 | [subagent-status](subagent-status/) | the row counts a Claude Code session's subagents, stays active until the last one finishes, and a chord pages one's transcript | 0.40.0, Claude Code | [@bubakanov](https://github.com/bubakanov) |
@@ -84,10 +84,10 @@ its *needs* column, so searching this page for `claude` or `kiro` finds those di
 | [same-dir](same-dir/) | sync working directory to target split pane | 0.10.0, jq, zsh | [@vladislav-yevtushenko](https://github.com/vladislav-yevtushenko) |
 | [sqlite-browser](sqlite-browser/) | pick one of the repo's SQLite databases and browse it in an overlay | 0.22.0, python3, tabiew | [@umputun](https://github.com/umputun) |
 
-Most recipes need `agtermctl` on your PATH; **Help ▸ Install Command Line Tool…** puts it there. Three of the five session-resume recipes are shell functions that read the environment agterm gives a session and never call the CLI; the Kimi and Antigravity ones use lifecycle hooks that pin the pane's restore command through `agtermctl`. Some recipes also need `jq`, `fzf`, or a particular shell, and each recipe's *Requirements* section says which, along with the minimum agterm version it needs. Recipes are snapshots rather than a maintained surface: the control API grows by addition, so they rarely break. Who fixes one that does depends on its author; see [Bugs and improvements](CONTRIBUTING.md#bugs-and-improvements).
+Most recipes need `hangarctl` on your PATH; **Help ▸ Install Command Line Tool…** puts it there. Three of the five session-resume recipes are shell functions that read the environment hangar gives a session and never call the CLI; the Kimi and Antigravity ones use lifecycle hooks that pin the pane's restore command through `hangarctl`. Some recipes also need `jq`, `fzf`, or a particular shell, and each recipe's *Requirements* section says which, along with the minimum hangar version it needs. Recipes are snapshots rather than a maintained surface: the control API grows by addition, so they rarely break. Who fixes one that does depends on its author; see [Bugs and improvements](CONTRIBUTING.md#bugs-and-improvements).
 
 ## Contributing a recipe
 
 [CONTRIBUTING.md](CONTRIBUTING.md) in this directory has the rules: ship a workflow you actually run, one kebab-case directory, the six-heading README template with its Author line, and an index row in the same pull request.
 
-For the command surface itself, the [command reference](https://agterm.com/commands) documents every `agtermctl` command with its arguments and return shape. The bundled agent skill teaches that surface to a coding agent instead of a reader, and carries its own worked examples in [`plugins/agterm/skills/agterm/examples.md`](../plugins/agterm/skills/agterm/examples.md); install it from **Help ▸ Install Agent Skill…** or as a plugin (`claude plugin marketplace add umputun/agterm`).
+For the command surface itself, the [command reference](https://naiksoftware.github.io/hangar/commands) documents every `hangarctl` command with its arguments and return shape. The bundled agent skill teaches that surface to a coding agent instead of a reader, and carries its own worked examples in [`plugins/hangar/skills/hangar/examples.md`](../plugins/hangar/skills/hangar/examples.md); install it from **Help ▸ Install Agent Skill…** or as a plugin (`claude plugin marketplace add NaikSoftware/hangar`).

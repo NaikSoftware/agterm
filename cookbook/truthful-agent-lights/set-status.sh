@@ -7,8 +7,8 @@
 #   set-status.sh active --color '#4A9EFF' --shape square
 #   set-status.sh completed --auto-reset
 #
-# Every argument is forwarded verbatim to `agtermctl session status`. Outside
-# agterm this is a silent no-op, and it always exits 0: a hook that fails must
+# Every argument is forwarded verbatim to `hangarctl session status`. Outside
+# hangar this is a silent no-op, and it always exits 0: a hook that fails must
 # never block the agent's turn.
 set -u
 DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -16,12 +16,12 @@ DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lights-common.sh
 . "$DIR/lights-common.sh"
 
-[ -n "${AGTERM_SESSION_ID:-}" ] || exit 0
+[ -n "${HANGAR_SESSION_ID:-}" ] || exit 0
 [ "$#" -gt 0 ] || exit 0
 
 # heartbeat: every status post marks this session as alive
 hb=$(agt_state_dir hb)
-touch "$hb/$AGTERM_SESSION_ID" 2>/dev/null || true
+touch "$hb/$HANGAR_SESSION_ID" 2>/dev/null || true
 
 # prefer the stock script the hooks package installs — socket, pane and
 # pane-id handling then stay upstream's, and extra flags pass through. On
@@ -36,10 +36,10 @@ fi
 state=$1
 shift
 args=()
-[ -n "${AGTERM_PANE:-}" ] && args+=(--pane "$AGTERM_PANE")
-[ -n "${AGTERM_PANE_ID:-}" ] && args+=(--pane-id "$AGTERM_PANE_ID")
-[ -n "${AGTERM_SOCKET:-}" ] && args+=(--socket "$AGTERM_SOCKET")
+[ -n "${HANGAR_PANE:-}" ] && args+=(--pane "$HANGAR_PANE")
+[ -n "${HANGAR_PANE_ID:-}" ] && args+=(--pane-id "$HANGAR_PANE_ID")
+[ -n "${HANGAR_SOCKET:-}" ] && args+=(--socket "$HANGAR_SOCKET")
 
-"$AGTERMCTL" session status "$state" --target "$AGTERM_SESSION_ID" \
+"$HANGARCTL" session status "$state" --target "$HANGAR_SESSION_ID" \
   "${args[@]+"${args[@]}"}" "$@" >/dev/null 2>&1 || true
 exit 0

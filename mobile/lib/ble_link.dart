@@ -31,7 +31,7 @@ class BleIds {
 
   /// The UUID the Mac advertises during [epoch] (unix seconds / [epochSeconds]): it rotates so nobody can track the Mac.
   static String serviceUuid(String token, int epoch) {
-    final b = _hmac(utf8.encode(token), utf8.encode('agterm-ble-adv:$epoch')).sublist(0, 16);
+    final b = _hmac(utf8.encode(token), utf8.encode('hangar-ble-adv:$epoch')).sublist(0, 16);
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
     final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
@@ -44,7 +44,7 @@ class BleIds {
     return [for (var i = e - 1; i <= e + 1; i++) serviceUuid(token, i)];
   }
 
-  static Uint8List psk(String token) => _hkdf(const [], utf8.encode(token), utf8.encode('agterm-ble-psk'), 1)[0];
+  static Uint8List psk(String token) => _hkdf(const [], utf8.encode(token), utf8.encode('hangar-ble-psk'), 1)[0];
 }
 
 const _x25519 = DartX25519();
@@ -124,7 +124,7 @@ class BleInitiator {
   }
 
   static final _random = Random.secure();
-  static final _prologue = Uint8List.fromList(utf8.encode('agterm-ble-1'));
+  static final _prologue = Uint8List.fromList(utf8.encode('hangar-ble-1'));
   final Uint8List _e;
   late Uint8List _ck, _h;
   late NoiseCipher _cipher;

@@ -10,7 +10,7 @@
 
 ## Context (from discovery)
 - Measured: with `WKWebpagePreferences.allowsContentJavaScript = false` a page's inline script and inline
-  event handler do not run, while document-start `WKUserScript`s (the `agterm-theme` world and the page
+  event handler do not run, while document-start `WKUserScript`s (the `hangar-theme` world and the page
   world) still run, so the theme survives. Native `evaluateJavaScript` also still runs, so a test cannot use
   it to show page script ran.
 - The flag follows `navigation`: `HtmlOverlay` field, `ControlArgs`, dispatcher, CLI, tree node
@@ -18,7 +18,7 @@
 - A form submission is not a link activation: an off-origin main-frame submission stays cancelled.
 
 ## Development Approach
-- Claude writes inline, codex reviews each commit; TDD in `agtermCore`, hosted tests for the WebKit setting.
+- Claude writes inline, codex reviews each commit; TDD in `HangarCore`, hosted tests for the WebKit setting.
 - Full gates once at the end; the HTML UI class runs only with Eugene's go-ahead.
 
 ## Implementation Steps

@@ -1,31 +1,31 @@
 # Troubleshooting
 
-A guide to checking what agterm is doing, the most common problems, and how to report one that turns out to be a bug.
+A guide to checking what hangar is doing, the most common problems, and how to report one that turns out to be a bug.
 
 ## Where things live
 
-Paths assume the defaults. When `AGTERM_STATE_DIR` is set, the state files move under that directory instead of `~/Library/Application Support/agterm`.
+Paths assume the defaults. When `HANGAR_STATE_DIR` is set, the state files move under that directory instead of `~/Library/Application Support/hangar`.
 
-- **Keymap**: `~/.config/agterm/keymap.conf` (or `$AGTERM_STATE_DIR/config/keymap.conf`, or a custom directory set in Settings ▸ Key Mapping).
-- **Ghostty config**: `~/.config/agterm/ghostty.conf` (same directory as the keymap), an agterm-scoped ghostty config that overrides the bundled defaults and your global `~/.config/ghostty/config`.
-- **Settings**: `~/Library/Application Support/agterm/settings.json`.
-- **Window and session state**: `~/Library/Application Support/agterm/windows.json` plus one `windows/<id>.json` per window.
-- **Control socket**: `~/Library/Application Support/agterm/agterm.sock` (or `$AGTERM_CONTROL_SOCKET` when set). A spawned shell sees the bound path in `$AGTERM_SOCKET`.
-- **Logs**: the macOS unified logging system, under the subsystem `com.umputun.agterm`.
+- **Keymap**: `~/.config/hangar/keymap.conf` (or `$HANGAR_STATE_DIR/config/keymap.conf`, or a custom directory set in Settings ▸ Key Mapping).
+- **Ghostty config**: `~/.config/hangar/ghostty.conf` (same directory as the keymap), an hangar-scoped ghostty config that overrides the bundled defaults and your global `~/.config/ghostty/config`.
+- **Settings**: `~/Library/Application Support/hangar/settings.json`.
+- **Window and session state**: `~/Library/Application Support/hangar/windows.json` plus one `windows/<id>.json` per window.
+- **Control socket**: `~/Library/Application Support/hangar/hangar.sock` (or `$HANGAR_CONTROL_SOCKET` when set). A spawned shell sees the bound path in `$HANGAR_SOCKET`.
+- **Logs**: the macOS unified logging system, under the subsystem `ua.naiksoftware.hangar`.
 
 ## Reading the logs
 
-agterm logs to the unified logging system, so use `log` or Console:
+hangar logs to the unified logging system, so use `log` or Console:
 
 ```bash
 # the last 30 minutes, all categories
-log show --predicate 'subsystem == "com.umputun.agterm"' --info --last 30m
+log show --predicate 'subsystem == "ua.naiksoftware.hangar"' --info --last 30m
 
 # follow live while you reproduce the problem
-log stream --predicate 'subsystem == "com.umputun.agterm"' --info
+log stream --predicate 'subsystem == "ua.naiksoftware.hangar"' --info
 
 # narrow to one area
-log show --predicate 'subsystem == "com.umputun.agterm" && category == "CustomCommandRunner"' --info --last 30m
+log show --predicate 'subsystem == "ua.naiksoftware.hangar" && category == "CustomCommandRunner"' --info --last 30m
 ```
 
 The categories are `GhosttyApp`, `GhosttySurfaceView`, `WatermarkRenderer`, `NotificationManager`, `SettingsView`, `SettingsModel`, `CustomCommandRunner`, and `ControlServer`. In Console.app, filter on the same subsystem.
@@ -36,12 +36,12 @@ After editing `keymap.conf`, nothing changes until you reload it.
 
 - **Settings ▸ Key Mapping** shows a read-only list of parse problems (a malformed line, a dropped binding, a conflict). This is the first place to look when a binding does not behave.
 - **File ▸ Reload Keymap** re-reads the file. A reload that found problems posts a banner with the count.
-- **`agtermctl keymap reload`** does the same from the command line and prints the diagnostic count (`0` means a clean reload).
-- **`agtermctl keymap list`** shows what is actually bound: every built-in with the chord it resolved to, the custom commands, each diagnostic in full rather than just a count, and the key equivalents the menu bar is really carrying.
+- **`hangarctl keymap reload`** does the same from the command line and prints the diagnostic count (`0` means a clean reload).
+- **`hangarctl keymap list`** shows what is actually bound: every built-in with the chord it resolved to, the custom commands, each diagnostic in full rather than just a count, and the key equivalents the menu bar is really carrying.
 
 ## A keybinding does not fire
 
-Run `agtermctl keymap list` and compare its two lists. If the action's chord is what you expect but no menu entry carries it (or a different item does), the keymap is fine and the menu is stale: agterm rebuilds the menu when the app next becomes active, so switch to another app and back, and relaunch if it persists.
+Run `hangarctl keymap list` and compare its two lists. If the action's chord is what you expect but no menu entry carries it (or a different item does), the keymap is fine and the menu is stale: hangar rebuilds the menu when the app next becomes active, so switch to another app and back, and relaunch if it persists.
 
 One built-in is legitimately missing from the menu list: `undo_close` (⌘Z) is delivered by a key monitor rather than a menu item, so that native text undo keeps working in the rename, palette and Settings fields. Its absence there is expected.
 
@@ -73,39 +73,39 @@ Work down this list:
 5. **Focus.** A custom chord fires only while a terminal pane holds keyboard focus. When the sidebar, the inline rename field, a Settings field, or a palette has focus, the chord passes through. Click into the terminal first.
 6. **The command runs in a plain `/bin/sh -c`, not your login shell.** It does not load `~/.zshrc` or `~/.bashrc`, so shell aliases and functions are not available and `PATH` may be shorter than in your terminal. Use absolute paths, or wrap the body in `$SHELL -lc '…'`.
 7. **Exit status.** A non-zero exit posts a failure banner with the code. No banner and no effect usually means the chord never fired (causes above). A banner means it ran and failed, which points at the command itself, its `PATH`, or its arguments.
-8. **Token quoting.** `{AGT_SELECTION}` and the other `{AGT_*}` tokens expand raw into the shell line. For content that may contain shell metacharacters, use the `$AGT_SELECTION` environment form, which is already quoted. The token list is in the [keymap section of the documentation](https://agterm.com/docs#keymap).
+8. **Token quoting.** `{AGT_SELECTION}` and the other `{AGT_*}` tokens expand raw into the shell line. For content that may contain shell metacharacters, use the `$AGT_SELECTION` environment form, which is already quoted. The token list is in the [keymap section of the documentation](https://naiksoftware.github.io/hangar/docs#keymap).
 
-Reload after every edit (File ▸ Reload Keymap, or `agtermctl keymap reload`). Edits are not applied until you do.
+Reload after every edit (File ▸ Reload Keymap, or `hangarctl keymap reload`). Edits are not applied until you do.
 
 ## Changing ghostty settings
 
-Most terminal behavior comes from ghostty. Use agterm's Settings for its built-in controls and a config file for other ghostty keys such as `macos-option-as-alt`, `keybind`, and `window-padding-*`.
+Most terminal behavior comes from ghostty. Use hangar's Settings for its built-in controls and a config file for other ghostty keys such as `macos-option-as-alt`, `keybind`, and `window-padding-*`.
 
-agterm reads four config sources, each overriding the one before it:
+hangar reads four config sources, each overriding the one before it:
 
 ```
-ghostty's bundled defaults  →  ~/.config/ghostty/config  →  <config dir>/ghostty.conf  →  agterm Settings
-       (lowest)                    (your global config)         (agterm-scoped)             (UI wins)
+ghostty's bundled defaults  →  ~/.config/ghostty/config  →  <config dir>/ghostty.conf  →  hangar Settings
+       (lowest)                    (your global config)         (hangar-scoped)             (UI wins)
 ```
 
-- `<config dir>/ghostty.conf` (default `~/.config/agterm/ghostty.conf`, next to `keymap.conf`) is scoped to agterm only; the standalone Ghostty.app never reads it. Use it for keys you want in agterm but not everywhere.
+- `<config dir>/ghostty.conf` (default `~/.config/hangar/ghostty.conf`, next to `keymap.conf`) is scoped to hangar only; the standalone Ghostty.app never reads it. Use it for keys you want in hangar but not everywhere.
 - `~/.config/ghostty/config` is your global ghostty config, shared with Ghostty.app, and already in the chain.
-- Values agterm emits from Settings load last and win over matching values in `ghostty.conf`. The [Ghostty config guide](https://agterm.com/docs#ghostty) lists the keys. Put everything else in `ghostty.conf`.
+- Values hangar emits from Settings load last and win over matching values in `ghostty.conf`. The [Ghostty config guide](https://naiksoftware.github.io/hangar/docs#ghostty) lists the keys. Put everything else in `ghostty.conf`.
 
-Edit `ghostty.conf` with **File ▸ Edit ghostty.conf…** (or the ⌃⇧P palette), which opens it in `$EDITOR` and reloads on exit, the same as Edit Keymap. After editing it elsewhere, apply it with **File ▸ Reload Config**, the action palette, or `agtermctl config reload`. A malformed line is skipped while the good ones still apply. The diagnostic count (shown in a banner and printed by `config.reload`, where `0` means a clean reload) covers every ghostty config source, not just `ghostty.conf`, because the diagnostics do not record which file they came from. Check the Console log for the offending line.
+Edit `ghostty.conf` with **File ▸ Edit ghostty.conf…** (or the ⌃⇧P palette), which opens it in `$EDITOR` and reloads on exit, the same as Edit Keymap. After editing it elsewhere, apply it with **File ▸ Reload Config**, the action palette, or `hangarctl config reload`. A malformed line is skipped while the good ones still apply. The diagnostic count (shown in a banner and printed by `config.reload`, where `0` means a clean reload) covers every ghostty config source, not just `ghostty.conf`, because the diagnostics do not record which file they came from. Check the Console log for the offending line.
 
 A reload applies most keys to your open terminals right away — colors, theme, `cursor-style`, `macos-option-as-alt`, and the mouse and clipboard keys all take effect on the visible pane. Two kinds of key cannot change for a terminal that is already running, though:
 
 - **Layout keys** — `window-padding-x`, `window-padding-y`, and other size-affecting keys — do not re-apply to an open pane. libghostty re-derives a surface's padding only when it is first laid out, so a reload (and even resizing the window) leaves existing panes on their old padding. Open a new session or new window to pick up the change; the panes that were already open need a relaunch.
 - **Spawn-time keys** — `term` and `shell-integration-features` — are read once when the shell starts, so a reload cannot change them for a shell that is already running. Open a new session, whose shell is spawned fresh, to apply them.
 
-The full ghostty key reference is at <https://ghostty.org/docs/config>. One pair of values in it does not apply to agterm: the `ssh-env` and `ssh-terminfo` values of `shell-integration-features`. Ghostty implements both by replacing your `ssh` with a wrapper that calls the `ghostty` command-line tool absent from agterm's bundle, so in agterm the wrapper would fail on every connection. agterm forces those two values back off and keeps the rest of your `shell-integration-features` flags, so `ssh` stays the real `ssh`. If you need agterm's terminfo entry on a remote host, install it there once with `agtermctl terminfo install <host>`, which dumps the bundled entry and compiles it into that account's `~/.terminfo` over one interactive ssh connection; `-p`, `-i`, `-J` and `-F` are passed through, other connection settings belong in `~/.ssh/config` under a host alias, and the settings that decide how the command runs (no pty, stdin kept, no `RemoteCommand`) are the installer's own.
+The full ghostty key reference is at <https://ghostty.org/docs/config>. One pair of values in it does not apply to hangar: the `ssh-env` and `ssh-terminfo` values of `shell-integration-features`. Ghostty implements both by replacing your `ssh` with a wrapper that calls the `ghostty` command-line tool absent from hangar's bundle, so in hangar the wrapper would fail on every connection. hangar forces those two values back off and keeps the rest of your `shell-integration-features` flags, so `ssh` stays the real `ssh`. If you need hangar's terminfo entry on a remote host, install it there once with `hangarctl terminfo install <host>`, which dumps the bundled entry and compiles it into that account's `~/.terminfo` over one interactive ssh connection; `-p`, `-i`, `-J` and `-F` are passed through, other connection settings belong in `~/.ssh/config` under a host alias, and the settings that decide how the command runs (no pty, stdin kept, no `RemoteCommand`) are the installer's own.
 
 ## Copy/paste and shortcuts on a non-Latin or alternative layout
 
-⌘C and ⌘V copy and paste on any keyboard layout, non-Latin ones (Russian, Greek, and so on) included, because agterm binds them to the physical key positions rather than to the character a layout prints. The physical C and V keys then work no matter what those keys produce in the active layout.
+⌘C and ⌘V copy and paste on any keyboard layout, non-Latin ones (Russian, Greek, and so on) included, because hangar binds them to the physical key positions rather than to the character a layout prints. The physical C and V keys then work no matter what those keys produce in the active layout.
 
-The reason is that ghostty's own copy/paste binds match the produced character: on a Russian layout the physical V key yields `м`, so the built-in `super+v` bind never fires. The bundled agterm defaults add physical-key binds (`super+key_c`, `super+key_v`) that match by position instead.
+The reason is that ghostty's own copy/paste binds match the produced character: on a Russian layout the physical V key yields `м`, so the built-in `super+v` bind never fires. The bundled hangar defaults add physical-key binds (`super+key_c`, `super+key_v`) that match by position instead.
 
 Those binds always consume the key, even when there is nothing to act on: ⌘C with no selection does nothing at all, rather than reaching the running program. That is deliberate. The Edit menu disables Copy without a selection and Paste without pasteable content — on every layout — so those presses fall to the terminal's own bind, and a bind that declined them would let the chord through to key encoding. A plain shell shows nothing either way, but under the kitty keyboard protocol, which Claude Code and other TUIs turn on, the program receives the chord as a key report and renders it as text — a stray `с` or `^[[1089;9u` in the prompt. If you rebind copy or paste yourself, do not add ghostty's `performable:` prefix for the same reason.
 
@@ -114,7 +114,7 @@ The same distinction lets you remap any shortcut for your layout:
 - A physical key name (`key_c`, `key_v`, `key_a`, and so on) matches the key's position, whatever character it prints.
 - A bare letter (`c`, `v`) matches the character the active layout produces at that key.
 
-If you use a Latin alternative layout (Dvorak, Colemak, AZERTY) and want ⌘C/⌘V at your layout's own C and V letters instead of the QWERTY physical positions, override them in `~/.config/agterm/ghostty.conf` with character-based binds, and unbind the physical defaults so the QWERTY positions are freed:
+If you use a Latin alternative layout (Dvorak, Colemak, AZERTY) and want ⌘C/⌘V at your layout's own C and V letters instead of the QWERTY physical positions, override them in `~/.config/hangar/ghostty.conf` with character-based binds, and unbind the physical defaults so the QWERTY positions are freed:
 
 ```
 keybind = super+key_c=unbind
@@ -123,27 +123,27 @@ keybind = super+c=copy_to_clipboard
 keybind = super+v=paste_from_clipboard
 ```
 
-Reload with **File ▸ Reload Config** or `agtermctl config reload`. The keybind syntax is at <https://ghostty.org/docs/config/keybind/reference>.
+Reload with **File ▸ Reload Config** or `hangarctl config reload`. The keybind syntax is at <https://ghostty.org/docs/config/keybind/reference>.
 
 ## Other common issues
 
-- **`agtermctl: command not found`.** Launching agterm links it into `/usr/local/bin`. You can also call it by its full path inside the app bundle: `agterm.app/Contents/MacOS/agtermctl`.
-- **No desktop notifications.** Check **Settings ▸ Notifications ▸ Show notification banners** first — when it is off, `agtermctl notify` still reports success and the unseen-count badge still tracks, but nothing is posted to macOS. Since agterm 0.17.0 the command says so, answering `badge updated, but "Show notification banners" is off, so no banner was posted` instead of a bare `ok`. macOS must also have granted permission (System Settings ▸ Notifications ▸ agterm), and Do Not Disturb / a Focus mode suppresses banners system-wide.
+- **`hangarctl: command not found`.** Launching hangar links it into `/usr/local/bin`. You can also call it by its full path inside the app bundle: `Hangar.app/Contents/MacOS/hangarctl`.
+- **No desktop notifications.** Check **Settings ▸ Notifications ▸ Show notification banners** first — when it is off, `hangarctl notify` still reports success and the unseen-count badge still tracks, but nothing is posted to macOS. Since hangar 0.17.0 the command says so, answering `badge updated, but "Show notification banners" is off, so no banner was posted` instead of a bare `ok`. macOS must also have granted permission (System Settings ▸ Notifications ▸ hangar), and Do Not Disturb / a Focus mode suppresses banners system-wide.
 
-  To tell "never posted" from "posted but not shown", run `agtermctl notify "test"` and check two things: `agtermctl tree --json` — a rising `unseen` on the target session proves the command reached the notification path — and the log below, which now records every posted and every suppressed notification.
-- **A permission prompt carrying agterm's name, or a tool that cannot get one.** Command-line tools request Automation, Camera, Microphone, Contacts, Calendars, Reminders, Photos, Location, Bluetooth, local network, speech recognition, system administration and system audio recording *through* agterm, so the prompt names agterm rather than the tool. A dismissed prompt is not re-offered, the tool just keeps failing (`osascript` reports "Not authorized to send Apple events"). See [Why agterm asks for camera, microphone and the rest](#why-agterm-asks-for-camera-microphone-and-the-rest) for why, what a grant then covers, and where to change your answer.
-- **A command cannot read `~/Downloads`, `~/Desktop` or `~/Documents`.** Those folders are protected by macOS itself, separately from the services above, and the grant is per application — another terminal reading them says nothing about agterm. See [A command cannot read ~/Downloads, ~/Desktop or ~/Documents](#a-command-cannot-read-downloads-desktop-or-documents).
-- **Agent-status glyph does not update.** agterm installs the hooks on the first launch after each update. For shell-integrated agents, start a fresh shell so the `source` line added to your shell rc takes effect. For Pi, restart it or run `/reload` so it loads `~/.pi/agent/extensions/agterm-status.ts`; Pi status is only installed when `~/.pi/agent` already exists. For OpenCode, after switching majors the next agterm update reinstalls the plugin; then restart OpenCode. V1 uses `~/.config/opencode`; v2 respects the login shell's `OPENCODE_CONFIG_DIR` and `XDG_CONFIG_HOME`. See the [OpenCode installation guide](https://agterm.com/docs#status) for paths, version selection, and v1 cleanup. The v2 plugin reports the CLI's selected session and its descendants, not background tabs or headless runs. The hooks call `agtermctl session status`, so `agtermctl` must resolve first (see above).
-- **Agent-status glyph updates the wrong session.** One session's glyph blinks while the work happens in another — typically when agents run inside tmux (or a tmux-backed session manager such as agent-deck). The working process inherited another session's `AGTERM_SESSION_ID`: the status hooks target whatever id is in their environment, and a long-lived daemon started from inside an agterm session (a tmux server is the usual carrier) captures that session's `AGTERM_*` variables into its global environment and passes them to every child it ever creates. Check `tmux show-environment -g | grep AGTERM` — if present, clear them with `tmux set-environment -g -r AGTERM_SESSION_ID` (and the other `AGTERM_*` names), then restart the affected panes. To avoid it, start such daemons with the variables scrubbed (`env -u AGTERM_SESSION_ID … <command>`) or from a terminal outside agterm.
-- **Codex status lands on another session, or on none.** By default, Codex 0.160.1 CLI sessions share a background app-server daemon, started by the first `codex` that needs it. The server launches hooks using its inherited environment, so every daemon-backed session reports to the session that started the server, or to none when the server was started outside agterm or that session has since closed. Scrubbing the variables prevents wrong-session updates but does not restore status reporting. Run `codex --no-daemon` to keep the session and its hooks in its own process; that running session is unavailable for control through the shared server from the Codex desktop or mobile app. To make that the default for plain `codex`, run `codex features disable daemon_auto_start` once, then `codex app-server daemon stop`; later plain launches start no shared daemon and report to their own session. Disabling auto-start alone still joins a daemon that is already running, and stopping it disconnects the CLI sessions attached to it. A daemon-backed conversation can stay locked after its TUI exits: if `codex --no-daemon resume <id>` shows "This conversation is open in another app", stop the shared daemon and press R to retry. agterm has no automatic mapping from the hook payload's Codex session id to the pane displaying it.
-- **Claude Code background sessions have no status.** A session started with `claude --bg` runs under Claude Code's supervisor, which does not pass the launching pane's `AGTERM_*` variables, so its status hooks find no session and exit quietly. `--settings` carries over into a background session and its hooks inherit the `env` block, so pass the variables there. With the hooks installed, launch from the pane that should show the status:
+  To tell "never posted" from "posted but not shown", run `hangarctl notify "test"` and check two things: `hangarctl tree --json` — a rising `unseen` on the target session proves the command reached the notification path — and the log below, which now records every posted and every suppressed notification.
+- **A permission prompt carrying hangar's name, or a tool that cannot get one.** Command-line tools request Automation, Camera, Microphone, Contacts, Calendars, Reminders, Photos, Location, Bluetooth, local network, speech recognition, system administration and system audio recording *through* hangar, so the prompt names hangar rather than the tool. A dismissed prompt is not re-offered, the tool just keeps failing (`osascript` reports "Not authorized to send Apple events"). See [Why hangar asks for camera, microphone and the rest](#why-hangar-asks-for-camera-microphone-and-the-rest) for why, what a grant then covers, and where to change your answer.
+- **A command cannot read `~/Downloads`, `~/Desktop` or `~/Documents`.** Those folders are protected by macOS itself, separately from the services above, and the grant is per application — another terminal reading them says nothing about hangar. See [A command cannot read ~/Downloads, ~/Desktop or ~/Documents](#a-command-cannot-read-downloads-desktop-or-documents).
+- **Agent-status glyph does not update.** hangar installs the hooks on the first launch after each update. For shell-integrated agents, start a fresh shell so the `source` line added to your shell rc takes effect. For Pi, restart it or run `/reload` so it loads `~/.pi/agent/extensions/hangar-status.ts`; Pi status is only installed when `~/.pi/agent` already exists. For OpenCode, after switching majors the next hangar update reinstalls the plugin; then restart OpenCode. V1 uses `~/.config/opencode`; v2 respects the login shell's `OPENCODE_CONFIG_DIR` and `XDG_CONFIG_HOME`. See the [OpenCode installation guide](https://naiksoftware.github.io/hangar/docs#status) for paths, version selection, and v1 cleanup. The v2 plugin reports the CLI's selected session and its descendants, not background tabs or headless runs. The hooks call `hangarctl session status`, so `hangarctl` must resolve first (see above).
+- **Agent-status glyph updates the wrong session.** One session's glyph blinks while the work happens in another — typically when agents run inside tmux (or a tmux-backed session manager such as agent-deck). The working process inherited another session's `HANGAR_SESSION_ID`: the status hooks target whatever id is in their environment, and a long-lived daemon started from inside an hangar session (a tmux server is the usual carrier) captures that session's `HANGAR_*` variables into its global environment and passes them to every child it ever creates. Check `tmux show-environment -g | grep HANGAR` — if present, clear them with `tmux set-environment -g -r HANGAR_SESSION_ID` (and the other `HANGAR_*` names), then restart the affected panes. To avoid it, start such daemons with the variables scrubbed (`env -u HANGAR_SESSION_ID … <command>`) or from a terminal outside hangar.
+- **Codex status lands on another session, or on none.** By default, Codex 0.160.1 CLI sessions share a background app-server daemon, started by the first `codex` that needs it. The server launches hooks using its inherited environment, so every daemon-backed session reports to the session that started the server, or to none when the server was started outside hangar or that session has since closed. Scrubbing the variables prevents wrong-session updates but does not restore status reporting. Run `codex --no-daemon` to keep the session and its hooks in its own process; that running session is unavailable for control through the shared server from the Codex desktop or mobile app. To make that the default for plain `codex`, run `codex features disable daemon_auto_start` once, then `codex app-server daemon stop`; later plain launches start no shared daemon and report to their own session. Disabling auto-start alone still joins a daemon that is already running, and stopping it disconnects the CLI sessions attached to it. A daemon-backed conversation can stay locked after its TUI exits: if `codex --no-daemon resume <id>` shows "This conversation is open in another app", stop the shared daemon and press R to retry. hangar has no automatic mapping from the hook payload's Codex session id to the pane displaying it.
+- **Claude Code background sessions have no status.** A session started with `claude --bg` runs under Claude Code's supervisor, which does not pass the launching pane's `HANGAR_*` variables, so its status hooks find no session and exit quietly. `--settings` carries over into a background session and its hooks inherit the `env` block, so pass the variables there. With the hooks installed, launch from the pane that should show the status:
 
   ```bash
   cbg() {
     claude --bg --settings "$(jq -cn \
-      --arg s "$AGTERM_SESSION_ID" --arg k "$AGTERM_SOCKET" \
-      --arg p "$AGTERM_PANE" --arg i "$AGTERM_PANE_ID" \
-      '{env:{AGTERM_SESSION_ID:$s,AGTERM_SOCKET:$k,AGTERM_PANE:$p,AGTERM_PANE_ID:$i}}')" "$@"
+      --arg s "$HANGAR_SESSION_ID" --arg k "$HANGAR_SOCKET" \
+      --arg p "$HANGAR_PANE" --arg i "$HANGAR_PANE_ID" \
+      '{env:{HANGAR_SESSION_ID:$s,HANGAR_SOCKET:$k,HANGAR_PANE:$p,HANGAR_PANE_ID:$i}}')" "$@"
   }
   cbg "your prompt"
   ```
@@ -156,13 +156,13 @@ Sessions come back in the directory they were opened in rather than the one you 
 shown under the session name never follows a `cd`, `session reveal` opens the wrong folder, and
 `{AGT_SESSION_PWD}` in a custom command expands to the creation directory.
 
-agterm learns a session's working directory only from OSC 7, which Ghostty's shell integration reports.
-That integration is injected into the shell agterm spawns and does not survive that shell replacing itself.
+hangar learns a session's working directory only from OSC 7, which Ghostty's shell integration reports.
+That integration is injected into the shell hangar spawns and does not survive that shell replacing itself.
 A startup file that `exec`s another shell replaces it before it ever reaches a prompt, so the directory is
 never reported at all and every consumer falls back to the one the session started in. Shell-wrapper
 installers do exactly this: Amazon Q CLI, Kiro CLI and Fig add an `exec` block at the top of `.zshrc`.
 
-To confirm it, `cd` somewhere in the session and run `agtermctl tree --json`: if the session's `cwd` does
+To confirm it, `cd` somewhere in the session and run `hangarctl tree --json`: if the session's `cwd` does
 not follow the `cd`, nothing is reporting it.
 
 The fix is Ghostty's own recipe — load the integration explicitly, below the block that replaced your
@@ -185,15 +185,15 @@ Three neighbouring cases share the cause, and the block above covers all but the
 - **`sudo -E zsh` or any other nested shell** is a child rather than a replacement: the directory stays
   frozen while it runs, then the outer shell resumes reporting at its next prompt.
 - **A shell running inside tmux** needs the block *and* a tmux setting. tmux is a terminal emulator rather
-  than a passthrough, so the pane shell's report goes to tmux, which forwards it to agterm only with its
+  than a passthrough, so the pane shell's report goes to tmux, which forwards it to hangar only with its
   `osc7` terminal feature on — and its default `terminal-features` does not grant that to `xterm-ghostty`.
   Add `set -as terminal-features ',xterm-ghostty:osc7'` to `~/.tmux.conf` as well, then restart the tmux
   server.
 
 Restoring a running command has its own limit, unrelated to the block above: with **Restore running
 commands on restart** on, a pane behind a wrapper does not come back running what it was running. The
-program is on a second terminal the wrapper owns, which agterm cannot see into, so the capture never
-reaches it. Pin what such a pane should re-run with `agtermctl session restore '<command>'`, which is read
+program is on a second terminal the wrapper owns, which hangar cannot see into, so the capture never
+reaches it. Pin what such a pane should re-run with `hangarctl session restore '<command>'`, which is read
 back on `tree` and wins over the capture.
 
 ## ⌘-hover does not underline links inside tmux or vim
@@ -210,7 +210,7 @@ leaves links working normally.
 
 Hold shift as well — ⌘⇧-hover and ⌘⇧-click — to bypass the capture without changing any setting. A program
 can claim shift for itself with `XTSHIFTESCAPE`, in which case add `mouse-shift-capture = never` to
-`~/.config/agterm/ghostty.conf` so shift always wins.
+`~/.config/hangar/ghostty.conf` so shift always wins.
 
 To turn mouse reporting off for every program instead, set `mouse-reporting = false` in the same file.
 Selection then always works, at the cost of mouse support inside programs that wanted it — mouse
@@ -222,49 +222,49 @@ needs ⌘⇧.
 
 While Claude Code shows an interactive prompt (a question menu or a permission dialog), switching to another app and back can leave that prompt unresponsive to the keyboard: the arrow keys and Return do nothing. The regular Claude Code prompt and the shell are unaffected, so you can still type there.
 
-This is a Claude Code bug, not an agterm bug. When a window regains focus, agterm sends the standard terminal focus-in report (`ESC[I`, DEC private mode 1004), which any terminal does once an application turns focus reporting on. Claude Code's dialog input handler consumes that report instead of treating it as focus state, which wedges the prompt. It is tracked upstream as [anthropics/claude-code#72188](https://github.com/anthropics/claude-code/issues/72188); the mouse-click variant is [#72273](https://github.com/anthropics/claude-code/issues/72273).
+This is a Claude Code bug, not an hangar bug. When a window regains focus, hangar sends the standard terminal focus-in report (`ESC[I`, DEC private mode 1004), which any terminal does once an application turns focus reporting on. Claude Code's dialog input handler consumes that report instead of treating it as focus state, which wedges the prompt. It is tracked upstream as [anthropics/claude-code#72188](https://github.com/anthropics/claude-code/issues/72188); the mouse-click variant is [#72273](https://github.com/anthropics/claude-code/issues/72273).
 
-agterm is behaving correctly: it emits paired focus-in and focus-out reports with nothing stray, and it follows the macOS focus-first convention, so a click that refocuses the window only focuses it and is not forwarded into the terminal. The trigger is the focus report itself, so any terminal with focus reporting on is affected the same way.
+hangar is behaving correctly: it emits paired focus-in and focus-out reports with nothing stray, and it follows the macOS focus-first convention, so a click that refocuses the window only focuses it and is not forwarded into the terminal. The trigger is the focus report itself, so any terminal with focus reporting on is affected the same way.
 
 Workaround until the upstream fix: answer the prompt before switching away, or if you have already returned to a stuck prompt, press `Esc` to dismiss it and let Claude Code re-ask.
 
 ## Claude Code prints links as plain text instead of clickable labels
 
-Inside agterm, Claude Code prints a link as `label (https://…)` rather than as an OSC 8 hyperlink, so a list of ticket or PR links becomes a wall of URLs.
+Inside hangar, Claude Code prints a link as `label (https://…)` rather than as an OSC 8 hyperlink, so a list of ticket or PR links becomes a wall of URLs.
 
-agterm identifies itself to spawned shells as `TERM_PROGRAM=agterm`, with `TERM_PROGRAM_VERSION` carrying agterm's version, in place of the `ghostty` pair embedded libghostty would set ([#201](https://github.com/umputun/agterm/issues/201), [#203](https://github.com/umputun/agterm/pull/203)). Claude Code decides hyperlink support from a list of terminal names that does not include `agterm`, so it prints the URL. agterm renders OSC 8 links and ⌘-click opens them; only the detection is off.
+hangar identifies itself to spawned shells as `TERM_PROGRAM=hangar`, with `TERM_PROGRAM_VERSION` carrying hangar's version, in place of the `ghostty` pair embedded libghostty would set ([#201](https://github.com/umputun/agterm/issues/201), [#203](https://github.com/umputun/agterm/pull/203)). Claude Code decides hyperlink support from a list of terminal names that does not include `hangar`, so it prints the URL. hangar renders OSC 8 links and ⌘-click opens them; only the detection is off.
 
-Workaround: set `FORCE_HYPERLINK=1` for the tool. Claude Code reads it before any terminal check. Per command, `FORCE_HYPERLINK=1 claude` or an alias. For every new shell, add `env = FORCE_HYPERLINK=1` to `~/.config/agterm/ghostty.conf`, reload the config (File ▸ Reload Config) and open a new session; that form also forces links into redirected output, because the variable skips the tty check as well.
+Workaround: set `FORCE_HYPERLINK=1` for the tool. Claude Code reads it before any terminal check. Per command, `FORCE_HYPERLINK=1 claude` or an alias. For every new shell, add `env = FORCE_HYPERLINK=1` to `~/.config/hangar/ghostty.conf`, reload the config (File ▸ Reload Config) and open a new session; that form also forces links into redirected output, because the variable skips the tty check as well.
 
-`env = TERM_PROGRAM=ghostty` in that file does nothing: agterm applies its identity after the config file. The durable fix is upstream, Claude Code recognizing `agterm` or `TERM=xterm-ghostty`. Reported in [discussion #583](https://github.com/umputun/agterm/discussions/583).
+`env = TERM_PROGRAM=ghostty` in that file does nothing: hangar applies its identity after the config file. The durable fix is upstream, Claude Code recognizing `hangar` or `TERM=xterm-ghostty`. Reported in [discussion #583](https://github.com/umputun/agterm/discussions/583).
 
-## Why agterm asks for camera, microphone and the rest
+## Why hangar asks for camera, microphone and the rest
 
-agterm's code signature carries seven resource-access entitlements: Automation (Apple Events), camera,
-microphone, contacts, calendars, location and photos. agterm never touches any of them itself, and the
+hangar's code signature carries seven resource-access entitlements: Automation (Apple Events), camera,
+microphone, contacts, calendars, location and photos. hangar never touches any of them itself, and the
 `NSxxxUsageDescription` strings in `Info.plist` say so.
 
 They are there for the programs you run inside a session. When macOS attributes a command-line tool to
-agterm, its permission requests are charged to agterm.
-The [Live pane diagnosis below](#agterm-would-like-to-access-data-from-other-apps-keeps-coming-back)
+hangar, its permission requests are charged to hangar.
+The [Live pane diagnosis below](#hangar-would-like-to-access-data-from-other-apps-keeps-coming-back)
 explains when that attribution can be lost. This is attribution, not inheritance: the entitlement has to
-sit on agterm precisely because the child does not get one of its own. Under hardened runtime, which
-agterm is signed with, a missing entitlement does not
-produce a denial. `tccd` refuses to prompt at all, records nothing, and agterm never appears in the matching
+sit on hangar precisely because the child does not get one of its own. Under hardened runtime, which
+hangar is signed with, a missing entitlement does not
+produce a denial. `tccd` refuses to prompt at all, records nothing, and hangar never appears in the matching
 Privacy pane, so there is no way to approve it by hand either. The tool just fails, with nothing pointing at
 the cause. Ghostty, kitty, iTerm2 and Macterm ship the same seven; WezTerm ships those plus Bluetooth.
 
 **They grant nothing on their own.** An entitlement only makes the request possible. Every service is still
 off until you approve it, and the first request raises the standard macOS prompt.
 
-**What a grant gives away.** The answer is recorded against agterm, not against the command that asked for
+**What a grant gives away.** The answer is recorded against hangar, not against the command that asked for
 it. Approve the camera once and every program in every session can use it from then on, with no further
-prompt and no identity of its own, for as long as macOS attributes it to agterm. Code running as a
-compromised agterm has the same access. That is the trade for running arbitrary tools in a terminal that can
+prompt and no identity of its own, for as long as macOS attributes it to hangar. Code running as a
+compromised hangar has the same access. That is the trade for running arbitrary tools in a terminal that can
 obtain permissions at all, and it is worth knowing before approving something you only meant for one tool.
 
 **Changing your mind.** Grants and denials both live in System Settings ▸ Privacy & Security under the
-matching service, listed as agterm, for example Automation ▸ agterm. A dismissed prompt is not re-offered,
+matching service, listed as hangar, for example Automation ▸ hangar. A dismissed prompt is not re-offered,
 so if a tool keeps failing after you dismissed one, that is where to fix it.
 
 ## A command cannot read ~/Downloads, ~/Desktop or ~/Documents
@@ -273,16 +273,16 @@ so if a tool keeps failing after you dismissed one, that is where to fix it.
 without complaint.
 
 Those three folders, along with removable and network volumes, are protected by macOS directly. It is a
-different mechanism from the section above: agterm is not sandboxed, and unlike the services listed there no
+different mechanism from the section above: hangar is not sandboxed, and unlike the services listed there no
 missing entitlement can suppress this family's prompt. macOS defines an optional usage-description string per
-folder and agterm ships one for each, so the prompt carries agterm's wording. What matters is
+folder and hangar ships one for each, so the prompt carries hangar's wording. What matters is
 that the answer is recorded against the application macOS holds responsible. Approving kitty or
-Terminal says nothing about agterm, so a Mac where every other terminal reads the folder can still refuse
+Terminal says nothing about hangar, so a Mac where every other terminal reads the folder can still refuse
 this one, and as with the services above a dismissed prompt is not re-offered and the command just keeps
 failing.
 
-Grant it in System Settings ▸ Privacy & Security ▸ Files & Folders, where agterm appears with a switch per
-folder once something in a session has asked. Full Disk Access covers all of them at once and accepts agterm
+Grant it in System Settings ▸ Privacy & Security ▸ Files & Folders, where hangar appears with a switch per
+folder once something in a session has asked. Full Disk Access covers all of them at once and accepts hangar
 from the + button without waiting for a request, at the cost of giving every program you ever run in a
 session that same reach — the section above covers what a grant gives away.
 
@@ -297,19 +297,19 @@ Dropping the macOS screenshot thumbnail into a Live pane inserts the path of its
 `TemporaryItems/NSIRD_screencaptureui_*`, but a tool that opens the file fails. Claude Code drops the image
 without a message, and `head -c 8 <path>` in the same pane reports `Operation not permitted`.
 
-In the reported case ([#903](https://github.com/umputun/agterm/issues/903)) agterm had no Full Disk Access,
-and the `com.apple.TCC` log showed nothing at the denial. Granting agterm Full Disk Access made the same read
+In the reported case ([#903](https://github.com/umputun/agterm/issues/903)) hangar had no Full Disk Access,
+and the `com.apple.TCC` log showed nothing at the denial. Granting hangar Full Disk Access made the same read
 of the same file from the same pane succeed at once, with no restart, and dropped screenshots reached Claude
 Code again. The [folder-access section](#a-command-cannot-read-downloads-desktop-or-documents) covers what
 that grant gives away.
 
 ## An Accessibility permission you granted stops working after an update
 
-A tool that needs Accessibility is denied in a session, while agterm's toggle in System Settings ▸ Privacy
+A tool that needs Accessibility is denied in a session, while hangar's toggle in System Settings ▸ Privacy
 & Security ▸ Accessibility still shows it enabled. It can follow an update, or granting the permission to a
 copy you built yourself.
 
-macOS stores each grant with a code requirement the app must satisfy. When agterm was granted while signed
+macOS stores each grant with a code requirement the app must satisfy. When hangar was granted while signed
 ad-hoc, that requirement is a bare code hash, so the grant is frozen to that one build; a different build,
 or an installed release, has another hash and no longer satisfies it. The row stays and the toggle stays
 on, but macOS matches the running app against the stored requirement, finds no match, and denies it with
@@ -319,41 +319,41 @@ instead, which later releases keep satisfying.
 To recover the Accessibility grant, remove the stale row and grant the installed release fresh:
 
 ```
-tccutil reset Accessibility ua.naiksoftware.agterm2
+tccutil reset Accessibility ua.naiksoftware.hangar
 ```
 
-Then open System Settings ▸ Privacy & Security ▸ Accessibility, remove any lingering agterm entry with the
-minus button, add `/Applications/agterm.app` with the plus button, and switch it on. Grant the release you
+Then open System Settings ▸ Privacy & Security ▸ Accessibility, remove any lingering hangar entry with the
+minus button, add `/Applications/Hangar.app` with the plus button, and switch it on. Grant the release you
 run, so the stored requirement is its Developer-ID signature and later updates satisfy the same requirement.
 
-## "agterm would like to access data from other apps" keeps coming back
+## "hangar would like to access data from other apps" keeps coming back
 
 macOS App Data consent belongs to a running process and has no separate entry in System Settings.
 If a Live pane loses its responsible process, commands in it can become responsible for themselves and
 repeat the consent request.
 
-Read `liveAttribution` and `splitLiveAttribution` in `agtermctl tree --json`;
-the [tree reference](https://agterm.com/commands#tree) defines the values.
-A pane marked `supervisor` keeps microphone requests attributed to agterm after you quit and relaunch
-agterm. App Data is expected to behave the same, but has not been checked.
+Read `liveAttribution` and `splitLiveAttribution` in `hangarctl tree --json`;
+the [tree reference](https://naiksoftware.github.io/hangar/commands#tree) defines the values.
+A pane marked `supervisor` keeps microphone requests attributed to hangar after you quit and relaunch
+hangar. App Data is expected to behave the same, but has not been checked.
 
-A pane reads `app` when its daemon was created without the session host, either by an older agterm or
-because the host could not start; it remains attributed to the running agterm. When that agterm quits,
+A pane reads `app` when its daemon was created without the session host, either by an older hangar or
+because the host could not start; it remains attributed to the running hangar. When that hangar quits,
 the pane becomes `orphaned`; the same happens to panes whose session host dies. Commands in an
-`orphaned` pane remain responsible for themselves until the pane is replaced. Restarting agterm does not
+`orphaned` pane remain responsible for themselves until the pane is replaced. Restarting hangar does not
 repair this.
 
-Agterm ▸ Reset Live Sessions… replaces every `orphaned` and `app` pane at once, every pane whose daemon
+Hangar ▸ Reset Live Sessions… replaces every `orphaned` and `app` pane at once, every pane whose daemon
 was created before the recorded first launch with this zmx build, whatever its attribution, and every
-`supervisor` pane whose session host is from an earlier agterm build or login. The dialog says how many
-live sessions it resets; on Reset, agterm quits, ends those sessions' processes at the next launch and
+`supervisor` pane whose session host is from an earlier hangar build or login. The dialog says how many
+live sessions it resets; on Reset, hangar quits, ends those sessions' processes at the next launch and
 reopens itself with the same sessions and layout, starting each captured command again where possible.
 Other work running in those sessions stops, and agent conversations may need to be resumed by hand.
 Other `supervisor` sessions are left alone. A notification afterwards says how many sessions
 the reset covered; a session whose old process could not be confirmed gone gets no command restarted,
-and the reset can be run again. `agtermctl zmx reset --force` does the same without the dialog.
+and the reset can be run again. `hangarctl zmx reset --force` does the same without the dialog.
 
-For App Data prompts in `orphaned` or `app` panes, grant agterm Full Disk Access under
+For App Data prompts in `orphaned` or `app` panes, grant hangar Full Disk Access under
 System Settings ▸ Privacy & Security ▸ Full Disk Access; the
 [folder-access section](#a-command-cannot-read-downloads-desktop-or-documents) explains the scope of that grant.
 Full Disk Access does not grant the microphone. Its permission is controlled separately under
@@ -371,31 +371,31 @@ a changed helper build or a new login gets its own host, so new sessions always 
 one; a session that was already running keeps its earlier host, because macOS cannot move a running
 process to another.
 
-`agtermctl tree --json` marks such a pane with `liveHostStale` (or `splitLiveHostStale`). Agterm ▸ Reset
+`hangarctl tree --json` marks such a pane with `liveHostStale` (or `splitLiveHostStale`). Hangar ▸ Reset
 Live Sessions… moves those sessions to the current host, as described in the previous section. At every
-launch agterm asks each earlier host to stop, and one stops once no live session runs under it. The single
-shared host that agterm used before #971 counts as an earlier host.
+launch hangar asks each earlier host to stop, and one stops once no live session runs under it. The single
+shared host that hangar used before #971 counts as an earlier host.
 
 ## Live sessions close when macOS force-quits a program started in one
 
 About 30 seconds after a GUI program starts from a live session, macOS force-quits it, and live sessions
 close with it. This happens when the program is switched off in the Allow in the Background list under
-System Settings ▸ General ▸ Login Items, and agterm was quit and opened again since those sessions started.
+System Settings ▸ General ▸ Login Items, and hangar was quit and opened again since those sessions started.
 
 macOS ends such a program together with the group of processes it was started in. A session host started
-from an earlier run of agterm put its sessions in that run's group
-([#985](https://github.com/umputun/agterm/issues/985)). On macOS 27 and later agterm starts the session host
+from an earlier run of hangar put its sessions in that run's group
+([#985](https://github.com/umputun/agterm/issues/985)). On macOS 27 and later hangar starts the session host
 as its own background job, so the force-quit reaches only the program. Sessions under a host started by an
-earlier agterm build stay exposed until Agterm ▸ Reset Live Sessions… moves them. When macOS refuses to start
-the host as a job, agterm starts it the earlier way and logs `session host job ... failed` under the
-`com.umputun.agterm` subsystem; sessions under that host stay exposed, and a reset does not move them.
+earlier hangar build stay exposed until Hangar ▸ Reset Live Sessions… moves them. When macOS refuses to start
+the host as a job, hangar starts it the earlier way and logs `session host job ... failed` under the
+`ua.naiksoftware.hangar` subsystem; sessions under that host stay exposed, and a reset does not move them.
 Switching the program on in Allow in the Background stops the force-quit in every case.
 
 ## Reporting a problem
 
 Collect this before filing:
 
-- agterm version (Agterm ▸ About Agterm).
+- hangar version (Hangar ▸ About Hangar).
 - macOS version.
 - The exact steps, what you expected, and what happened instead.
 - A log excerpt from the `log show` command above, covering the moment you reproduced it.
@@ -403,9 +403,9 @@ Collect this before filing:
 
 Scrub anything private (tokens, internal hostnames, usernames embedded in paths) before sharing.
 
-If you run a coding agent inside agterm (Claude Code or Codex with the agterm skill installed), it can help you write and file the report: it drafts an issue for a bug, or a Discussion for a feature request or question, shows it to you first, and never posts without your go-ahead.
+If you run a coding agent inside hangar (Claude Code or Codex with the hangar skill installed), it can help you write and file the report: it drafts an issue for a bug, or a Discussion for a feature request or question, shows it to you first, and never posts without your go-ahead.
 
 Otherwise open one directly:
 
-- Bug: <https://github.com/umputun/agterm/issues/new>
-- Idea or question: <https://github.com/umputun/agterm/discussions/new>
+- Bug: <https://github.com/NaikSoftware/hangar/issues/new>
+- Idea or question: <https://github.com/NaikSoftware/hangar/discussions/new>

@@ -1,0 +1,247 @@
+// adapted from thdxg/macterm (MIT)
+
+import HangarCore
+import AppKit
+import GhosttyKit
+
+/// `GhosttySurfaceView` I/O and binding actions — type/paste into the pty, read selection / buffer /
+/// foreground pid / font size, drive font-size and search binds. Methods only, split out for file size.
+extension GhosttySurfaceView {
+    /// Types `text` into this surface's pty (`session.type`) as literal keystrokes via the keyboard's own path
+    /// (`ghostty_surface_key` with `.text` set), NOT `ghostty_surface_text`, whose bracketed-paste wrapping
+    /// suppresses command execution and leaks `\e[200~`/`\e[201~` markers when fired rapidly. Every line ending
+    /// (`\n`, `\r`, `\r\n`) becomes a real Return keypress, so a trailing newline submits and a multi-line
+    /// payload runs line by line; the final Return after text waits `KeystrokeSegments.submitGap`.
+    /// `withCString` means no buffer outlives the call. Returns `false` when the
+    /// surface is not created yet, so a caller injecting into a pane with no realize path
+    /// (`right`/`scratch`) reports `session not realized`, not a false ok; the main pane instead feeds this
+    /// false return into a bounded poll, selecting only when `select` was passed.
+    @discardableResult
+    func inject(text: String) -> Bool {
+        guard let surface else { return false }
+        // automation must not type underneath a live IME composition: it would survive the injected
+        // keystrokes and re-commit on the user's next one, landing their half-typed word after the
+        // injected text. No-op unless THIS pane is composing (see `commitOrDiscardComposition`).
+        commitOrDiscardComposition()
+        let paced = KeystrokeSegments.paced(text)
+        for segment in paced.head {
+            switch segment {
+            case let .text(segment):
+                segment.withCString { ptr in
+                    var ke = ghostty_input_key_s()
+                    ke.action = GHOSTTY_ACTION_PRESS
+                    ke.text = ptr
+                    _ = ghostty_surface_key(surface, ke)
+                }
+            case .returnKey:
+                sendReturn(to: surface)
+            }
+        }
+        if paced.pacedReturn {
+            // blocking, not scheduled: a deferred Return could be overtaken by another injection or a keystroke
+            Thread.sleep(forTimeInterval: KeystrokeSegments.submitGap)
+            sendReturn(to: surface)
+        }
+        return true
+    }
+
+    /// `inject` plus the pane-scoped status clear `keyDown` fires, for `session.type`: the input a blocked
+    /// agent was waiting for has arrived, so the glyph must not outlive it. The text classifies as a submit
+    /// when it carries a newline and plain typing otherwise, never as the Escape/Ctrl-C interrupt that clears
+    /// an ACTIVE glyph, like the AX insert. It deliberately
+    /// does NOT fire `onUserInput`, unlike dictation: that stamps the user as present and holds off auto-follow,
+    /// which a script typing into a background pane must not do. Empty text queues no keystrokes yet still
+    /// returns true, so it clears nothing.
+    @discardableResult
+    func injectAsUserInput(text: String) -> Bool {
+        guard inject(text: text) else { return false }
+        if !text.isEmpty { onUserInputClearsStatus?(InterruptKeystroke.classify(text: text)) }
+        return true
+    }
+
+    /// Inserts `text` as a bracketed paste — the drag-drop path. Unlike `inject(text:)`, this routes through
+    /// `ghostty_surface_text`, whose bracketed-paste wrapping makes the program treat the whole payload as
+    /// literal text, so a dropped multi-line selection lands at the cursor without auto-submitting — like ⌘V,
+    /// with ⌘V's caveat that a raw prompt with mode 2004 off still submits. A drop must behave like a paste,
+    /// not like typing; `session.type` keeps `inject` because automation DOES want newline→Return. Bytes are
+    /// copied synchronously; a no-op when the surface is not created yet.
+    func insertPasted(text: String) {
+        guard let surface, !text.isEmpty else { return }
+        // same reason as `inject`: a drop (or an AX control-character insert) landing under a live
+        // composition leaves it to re-commit on the next keystroke. Committing first is what AppKit does
+        // when a field gives up a composition. No-op unless THIS pane is composing.
+        commitOrDiscardComposition()
+        text.withCString { ghostty_surface_text(surface, $0, UInt(text.utf8.count)) }
+    }
+
+    /// This surface's current selection text (`session.copy`), nil with no selection or an uncreated surface.
+    /// Selection is surface terminal state, independent of focus, so any realized session can be read. The
+    /// libghostty buffer is copied into a Swift `String` and freed with `ghostty_surface_free_text`.
+    func readSelection() -> String? {
+        guard let surface, ghostty_surface_has_selection(surface) else { return nil }
+        var t = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &t) else { return nil }
+        defer { ghostty_surface_free_text(surface, &t) }
+        guard let ptr = t.text, t.text_len > 0 else { return nil }
+        return String(decoding: UnsafeRawBufferPointer(start: ptr, count: Int(t.text_len)), as: UTF8.self)
+    }
+
+    /// This surface's terminal buffer as plain text (`session.text`). nil ONLY on a FAILED read (no surface
+    /// yet, or `ghostty_surface_read_text` fails), so a caller can tell that from a genuinely blank screen,
+    /// which reads as an empty string. Region: the visible screen by default, the whole screen plus scrollback
+    /// when `all` or `lines` is set; `lines` keeps the last N CONTENT lines (trailing blank grid rows trimmed).
+    /// Ignores focus and copies-then-frees the buffer like `readSelection`; UTF-8 only, no per-cell color or
+    /// SGR. Covered by the `session.text` XCUITest e2e, which needs a live surface.
+    func readScreenText(all: Bool, lines: Int?) -> String? {
+        guard let surface else { return nil }
+        // a zero-init ghostty_point_s is GHOSTTY_POINT_ACTIVE / GHOSTTY_POINT_COORD_EXACT (both enum 0), not
+        // viewport/top-left, so set tag and coord on both endpoints.
+        let tag = (all || lines != nil) ? GHOSTTY_POINT_SCREEN : GHOSTTY_POINT_VIEWPORT
+        var sel = ghostty_selection_s()
+        sel.top_left = ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0)
+        sel.bottom_right = ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0)
+        sel.rectangle = false
+        var t = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, sel, &t) else { return nil }
+        defer { ghostty_surface_free_text(surface, &t) }
+        // a blank screen reads as no bytes — an empty string, NOT a failure; nil is reserved for the guards
+        // above so `readText` can report a real read failure as an error.
+        guard let ptr = t.text, t.text_len > 0 else { return "" }
+        let full = String(decoding: UnsafeRawBufferPointer(start: ptr, count: Int(t.text_len)), as: UTF8.self)
+        guard let n = lines, n > 0 else { return full }
+        // drop trailing whitespace-only grid rows so `--lines N` returns the last N CONTENT lines, not padding
+        var rows = full.components(separatedBy: "\n")
+        while let last = rows.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
+            rows.removeLast()
+        }
+        return rows.suffix(n).joined(separator: "\n")
+    }
+
+    /// This surface's zero-based cursor COLUMN (`surface.cursor`), nil when the surface is not created or
+    /// the geometry cannot be trusted. Row is deliberately absent: see the type comment on `ControlCursor`.
+    ///
+    /// libghostty exports no cursor accessor, so the column is solved for. `ghostty_surface_ime_point`
+    /// reports the cursor cell's horizontal MIDPOINT as
+    /// `(column * cellWidth + paddingLeft + cellWidth / 2) / contentScale`, and the padding term is the
+    /// unknown — `ghostty_surface_size` carries no padding, hangar's default comes from
+    /// `Resources/ghostty-defaults.conf`, and a user `ghostty.conf` may override it untracked (the same
+    /// hazard `Hud.swift` documents for its own column math). Reading the viewport's top-left cell MEASURES
+    /// it instead: `ghostty_text_s.tl_px_x` is `(column * cellWidth + paddingLeft) / contentScale` for the
+    /// selected cell, so at column zero it is exactly the padding term in the same units, and subtracting
+    /// leaves `column + 0.5` cells. That holds under asymmetric padding and every padding-balance mode
+    /// because neither side is derived.
+    ///
+    /// The libghostty calls each take the renderer lock separately, so geometry changing between them —
+    /// a font-size change or a resize — would mix two coordinate systems. The grid is re-read afterwards and
+    /// a change abandons the reading. Padding is not re-checked because it cannot move under a live surface:
+    /// libghostty derives it at first layout only, which is why `window-padding-*` needs a new pane. This is
+    /// still an instantaneous sample, not a lock over the three calls.
+    func readCursorColumn() -> Int? {
+        guard let surface else { return nil }
+        var sel = ghostty_selection_s()
+        let origin = ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: 0)
+        sel.top_left = origin
+        sel.bottom_right = origin
+        sel.rectangle = false
+        var probe = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, sel, &probe) else { return nil }
+        let columnZeroX = probe.tl_px_x
+        ghostty_surface_free_text(surface, &probe)
+        // libghostty reports -1 for a cell it could not place; the viewport's own top-left should always
+        // resolve, so treat it as a failed calibration rather than clamping to a padding of zero.
+        guard columnZeroX >= 0 else { return nil }
+
+        let size = ghostty_surface_size(surface)
+        guard size.cell_width_px > 0, size.cell_height_px > 0, size.columns > 0 else { return nil }
+
+        var x = 0.0, y = 0.0, w = 0.0, h = 0.0
+        ghostty_surface_ime_point(surface, &x, &y, &w, &h)
+        let after = ghostty_surface_size(surface)
+        guard after.cell_width_px == size.cell_width_px, after.cell_height_px == size.cell_height_px,
+              after.columns == size.columns else { return nil }
+        // `h` is one cell height over the content scale libghostty retains, the divisor behind `x` and `tl_px_x`
+        // too. hangar hands it equal X/Y scales, so `h` recovers the logical cell width without a window.
+        guard h > 0, h.isFinite else { return nil }
+        let cellWidth = h * Double(size.cell_width_px) / Double(size.cell_height_px)
+        let column = Int(((x - columnZeroX) / cellWidth).rounded(.down))
+        guard column >= 0, column < Int(size.columns) else { return nil }
+        return column
+    }
+
+    /// This surface's real cell in points, nil when the surface is not created or reports no grid. The
+    /// height is what `ghostty_surface_ime_point` returns over the content scale, and the width follows from
+    /// the pixel ratio, as `readCursorColumn` derives it.
+    func cellSize() -> (width: Double, height: Double)? {
+        guard let surface else { return nil }
+        let size = ghostty_surface_size(surface)
+        guard size.cell_width_px > 0, size.cell_height_px > 0 else { return nil }
+        var x = 0.0, y = 0.0, w = 0.0, h = 0.0
+        ghostty_surface_ime_point(surface, &x, &y, &w, &h)
+        guard h > 0, h.isFinite else { return nil }
+        return (width: h * Double(size.cell_width_px) / Double(size.cell_height_px), height: h)
+    }
+
+    /// This surface's foreground process pid (`ghostty_surface_foreground_pid`), nil when the surface is not
+    /// created or the call returns 0. Read at quit by the restore-running-command capture; not focus-dependent.
+    func foregroundPid() -> pid_t? {
+        guard let surface else { return nil }
+        let pid = ghostty_surface_foreground_pid(surface)
+        return pid > 0 ? pid_t(pid) : nil
+    }
+
+    /// Synthesizes a Return keypress (press + release) via the keyboard's own key path, so the shell treats it
+    /// as Enter. Keycode 36 is the macOS virtual keycode for Return.
+    private func sendReturn(to surface: ghostty_surface_t) {
+        var ke = ghostty_input_key_s()
+        ke.keycode = 36
+        ke.mods = GHOSTTY_MODS_NONE
+        ke.consumed_mods = GHOSTTY_MODS_NONE
+        ke.composing = false
+        ke.text = nil
+        ke.unshifted_codepoint = 0
+        ke.action = GHOSTTY_ACTION_PRESS
+        _ = ghostty_surface_key(surface, ke)
+        ke.action = GHOSTTY_ACTION_RELEASE
+        _ = ghostty_surface_key(surface, ke)
+    }
+
+    /// Triggers a libghostty keybind action on this surface (`increase_font_size:1`, `reset_font_size`, …), so
+    /// a menu item drives the same behavior as the built-in keybind; a font change rides the usual CELL_SIZE →
+    /// persist path. `false` when the libghostty surface isn't realized (the view exists, its inner `surface`
+    /// is nil), so a control caller reports `session not realized` instead of a false ok.
+    @discardableResult
+    func performBindingAction(_ action: String) -> Bool {
+        guard let surface else { return false }
+        _ = ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+        return true
+    }
+
+    /// The direction `navigateSearch` steps the selection; the enum and its libghostty mapping are host-free
+    /// in `HangarCore`, and this alias keeps the existing call sites unchanged.
+    typealias SearchDirection = HangarCore.SearchDirection
+
+    /// Enters search mode; libghostty replies with a START_SEARCH action carrying the current needle, and a
+    /// repeat while search is active closes it.
+    func startSearch() { performBindingAction("start_search") }
+
+    /// Sets the search query; libghostty replies with SEARCH_TOTAL and SEARCH_SELECTED for the new match set.
+    func sendSearchQuery(_ needle: String) { performBindingAction("search:\(needle)") }
+
+    /// Steps the selection one match. `SearchDirection.ghosttyAction` INVERTS the hangar direction into
+    /// libghostty's `navigate_search`, so DOWN/Enter/`--next` move visually down and UP/Shift-Enter/`--prev` up.
+    func navigateSearch(_ direction: SearchDirection) {
+        performBindingAction(direction.ghosttyAction)
+    }
+
+    /// Exits search mode; libghostty replies with an END_SEARCH action.
+    func endSearch() { performBindingAction("end_search") }
+
+    /// The surface's live font size in points (post cmd +/-) from `inherited_config`; nil when the libghostty
+    /// surface isn't realized or hasn't resolved a size. The read side of `font.*`: the control `tree` reads it
+    /// per pane, since split/scratch pane sizes are live-only and otherwise unobservable.
+    func currentFontSize() -> Double? {
+        guard let surface else { return nil }
+        let size = Double(ghostty_surface_inherited_config(surface, GHOSTTY_SURFACE_CONTEXT_WINDOW).font_size)
+        return size > 0 ? size : nil
+    }
+}

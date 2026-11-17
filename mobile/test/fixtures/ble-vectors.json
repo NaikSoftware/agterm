@@ -1,10 +1,10 @@
 {
   "about" : [
-    "Shared byte-exact test vectors for agterm Mobile's Bluetooth link. Every binary value is lowercase hex. Strings are UTF-8.",
-    "token: the pairing token. psk = HKDF-SHA256(ikm: UTF-8 token, salt: empty, info: 'agterm-ble-psk', length 32).",
-    "serviceUUID: first 16 bytes of HMAC-SHA256(key: UTF-8 token, msg: 'agterm-ble-adv') with b[6] = (b[6] & 0x0F) | 0x40 and b[8] = (b[8] & 0x3F) | 0x80, written as a lowercase hyphenated UUID (compare case-insensitively). psmCharacteristicUUID is fixed; its value is the PSM as 2 bytes little-endian.",
-    "rotatingServiceUUIDs: the UUID the Mac advertises, which rotates every 15 minutes. epoch = floor(unix_seconds / 900); the UUID is derived as serviceUUID is, with msg 'agterm-ble-adv:' + decimal(epoch). The phone scans for epochs e-1, e, e+1. serviceUUID above is the unrotated form, kept for reference.",
-    "handshake: Noise_NNpsk0_25519_ChaChaPoly_SHA256, prologue ASCII 'agterm-ble-1', phone = initiator, Mac = responder, empty payloads. The *EphemeralPrivate fields are raw 32-byte X25519 PRIVATE keys; the *EphemeralPublic fields are their public keys. message1 = initiator e.pub (32) || 16-byte tag; message2 = responder e.pub (32) || 16-byte tag. handshakeHash is the final Noise h.",
+    "Shared byte-exact test vectors for hangar Mobile's Bluetooth link. Every binary value is lowercase hex. Strings are UTF-8.",
+    "token: the pairing token. psk = HKDF-SHA256(ikm: UTF-8 token, salt: empty, info: 'hangar-ble-psk', length 32).",
+    "serviceUUID: first 16 bytes of HMAC-SHA256(key: UTF-8 token, msg: 'hangar-ble-adv') with b[6] = (b[6] & 0x0F) | 0x40 and b[8] = (b[8] & 0x3F) | 0x80, written as a lowercase hyphenated UUID (compare case-insensitively). psmCharacteristicUUID is fixed; its value is the PSM as 2 bytes little-endian.",
+    "rotatingServiceUUIDs: the UUID the Mac advertises, which rotates every 15 minutes. epoch = floor(unix_seconds / 900); the UUID is derived as serviceUUID is, with msg 'hangar-ble-adv:' + decimal(epoch). The phone scans for epochs e-1, e, e+1. serviceUUID above is the unrotated form, kept for reference.",
+    "handshake: Noise_NNpsk0_25519_ChaChaPoly_SHA256, prologue ASCII 'hangar-ble-1', phone = initiator, Mac = responder, empty payloads. The *EphemeralPrivate fields are raw 32-byte X25519 PRIVATE keys; the *EphemeralPublic fields are their public keys. message1 = initiator e.pub (32) || 16-byte tag; message2 = responder e.pub (32) || 16-byte tag. handshakeHash is the final Noise h.",
     "framing: every message on the L2CAP stream, handshake included, is u16 big-endian length || body. message1Wire is message1 framed that way. A rejection is one frame of length 1: 0x01 wrong key, 0x02 busy.",
     "frames: transport messages in the order sent; each direction has its own counter, both starting at 0. Nonce = 4 zero bytes || u64 little-endian counter; associated data is empty. Split(): the first key carries phone-to-mac, the second mac-to-phone. plaintext is the line-stream chunk; deflated is its raw DEFLATE (RFC 1951, no zlib header) as Apple Compression produced it; frame = ChaChaPoly(deflated) = ciphertext || 16-byte tag. Deflate encoders differ in output bytes, so check encrypt(deflated) == frame, inflate(deflated) == plaintext and decrypt-then-inflate(frame) == plaintext; never compare your own deflate output with 'deflated'. encoder names who made 'deflated': apple-compression (Mac) or zlib (Python zlib.compressobj(wbits=-15) + flush(), as the phone's ZLibCodec(raw: true) does).",
     "chunks: each plaintext chunk is 1...4096 bytes of the line stream, each frame independent; a longer line is split across frames. Each chunk is a complete raw DEFLATE stream ending with a final block (one-shot encode, not sync flush): Apple's inflate refuses a Z_SYNC_FLUSH chunk.",
@@ -16,7 +16,7 @@
       "direction" : "phone-to-mac",
       "encoder" : "apple-compression",
       "frame" : "bd9c1084c30be694cd9df6fdd8d46726f9b0d734a03084ea8349ca8b33c4518b6d797cc72f06d98ca0677319923964bb11272615a383423820f59e00",
-      "plaintext" : "{\"auth\":\"agterm-ble-vector-token\",\"id\":1}\n"
+      "plaintext" : "{\"auth\":\"hangar-ble-vector-token\",\"id\":1}\n"
     },
     {
       "deflated" : "ab56ca4c51b232d451cacf56b22a292a4dade50200",
@@ -37,7 +37,7 @@
       "direction" : "mac-to-phone",
       "encoder" : "apple-compression",
       "frame" : "5d86db85f195bcbb290f8ba9e079b3121d1eff64962f0abdfee95f5cf4a275f1324e61b2cdb58bb264320cd60653b6c709d67d3e36cf9ec58b46762a941a969e5dd823d0b3df89c03722fa58534d51f42f18d946a06a1fc804f434e5a597d548",
-      "plaintext" : "{\"id\":2,\"ok\":true,\"result\":{\"text\":\"$ ls\\nREADME.md  agtermCore  scripts\\n$ ls\\nREADME.md  agtermCore  scripts\\n\"}}\n"
+      "plaintext" : "{\"id\":2,\"ok\":true,\"result\":{\"text\":\"$ ls\\nREADME.md  HangarCore  scripts\\n$ ls\\nREADME.md  HangarCore  scripts\\n\"}}\n"
     },
     {
       "deflated" : "ab564ace4d51b2522a294a4d55d251ca04b28d6bb900",
@@ -54,7 +54,7 @@
     "message1" : "07a37cbc142093c8b755dc1b10e86cb426374ad16aa853ed0bdfc0b2b86d1c7c44675a8bd26d05247f9fb742c5ffaf63",
     "message1Wire" : "003007a37cbc142093c8b755dc1b10e86cb426374ad16aa853ed0bdfc0b2b86d1c7c44675a8bd26d05247f9fb742c5ffaf63",
     "message2" : "5869aff450549732cbaaed5e5df9b30a6da31cb0e5742bad5ad4a1a768f1a67b31fd96c3cf655616dfc0701bd39a9bba",
-    "prologue" : "agterm-ble-1",
+    "prologue" : "hangar-ble-1",
     "responderEphemeralPrivate" : "2122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40",
     "responderEphemeralPublic" : "5869aff450549732cbaaed5e5df9b30a6da31cb0e5742bad5ad4a1a768f1a67b"
   },
@@ -106,5 +106,5 @@
     }
   ],
   "serviceUUID" : "1f7c66b5-71dd-479a-be1b-e12c22abb5ab",
-  "token" : "agterm-ble-vector-token"
+  "token" : "hangar-ble-vector-token"
 }

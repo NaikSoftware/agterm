@@ -9,17 +9,17 @@
 - One rule for users: a question or page opens on the Mac where you are leading that pane. A session-wide one
   opens where you lead the primary (left) pane. A page from a link you click opens on the Mac you clicked on.
   One already open stays where it opened.
-- Works the same for a Mac origin and an agterm-server origin, which share `PresentationHub` in `agtermCore`.
+- Works the same for a Mac origin and an hangar-server origin, which share `PresentationHub` in `HangarCore`.
 - Older Macs keep today's behavior: they never report a lead, so the presenter grant and `presenter.vacant`
   remain the fallback.
 - Security: the new untrusted input is a `lead.report` (and the clicks and clears it now allows) from any
   subscriber of the origin's presentation stream. It can steer new work for a session to that subscriber. That
   is bounded: every subscriber already reaches the stream through ssh as the origin's user, who can run
-  `agtermctl` there directly, and a frame line stays capped as today. No new file, network or command
+  `hangarctl` there directly, and a frame line stays capped as today. No new file, network or command
   capability is added.
 
 ## Context (from discovery)
-- Hub and grant: `agtermCore/Sources/agtermCore/PresentationHub.swift` (`sendToPresenter`, `batchToPresenter`,
+- Hub and grant: `HangarCore/Sources/HangarCore/PresentationHub.swift` (`sendToPresenter`, `batchToPresenter`,
   `receive` drops answer frames from any viewer but the holder, `release` → `onPresenterLost`,
   `announceVacancy`), `PresenterGrant.swift` (one holder per session, generation per session).
 - Frames: `PresentationFrames.swift`, `PresentationFrame+Codable.swift`; `PresentationLayout.panes`/`primary`
@@ -28,21 +28,21 @@
   every pane to follow for session-wide work; `AppStore.presentsRemotely`, always true when headless).
 - Viewer pane mapping: `RemotePresentationState.swift` (`RemoteBinding.localPane(forRemote:)`,
   `remotePane(forLocal:)`, :61-79); layout application `AppStore+RemoteLayout.swift`; viewer client
-  `RemotePresentationClient.swift`; app side `agterm/Control/ControlServer+RemotePresentation.swift`.
+  `RemotePresentationClient.swift`; app side `Hangar/Control/ControlServer+RemotePresentation.swift`.
 - Viewer gates: `AppStore+LinkClickRequest.swift:11-12` and `AppStore+RemotePresentation.swift:82-84`
   (`sendToOrigin`) refuse unless `mode == .presenter`.
 - Work bound to the presenter generation (`owner`): `AppStore+RemoteAsk.swift`, `SessionPick.swift`,
   `AppStore+RemoteOverlay.swift`, `AppStore+RemotePage.swift`, `AppStore+RemoteTextPage.swift`,
   `AppStore+Interactions.swift`, `AppStore+Presentation.swift` (sound), `AppStore+Status.swift` (clear/seen),
-  `agterm/Control/ControlServer+Ask.swift`, `+Pick.swift`, `+ForwardedClick.swift`, `+ImagePage.swift`,
+  `Hangar/Control/ControlServer+Ask.swift`, `+Pick.swift`, `+ForwardedClick.swift`, `+ImagePage.swift`,
   `+MarkdownPage.swift`, `+DocumentPage.swift`, `+TextPage.swift`, `+PageServe.swift`, `+Detach.swift`,
-  `RemotePageChannel.swift`, `AgtermServerKit/ServerStreams.swift`, `ServerActions+Overlay.swift`.
+  `RemotePageChannel.swift`, `HangarServerKit/ServerStreams.swift`, `ServerActions+Overlay.swift`.
 - Read-back: `ControlProjection.swift` (`ControlPresentersNode { mirrors, presenter }`, per-surface `lead`),
-  `AppStore+RemotePresentation.swift` (`presentersNode`), CLI `agtermctlKit/SocketClient.swift:591`
+  `AppStore+RemotePresentation.swift` (`presentersNode`), CLI `hangarctlKit/SocketClient.swift:591`
   ("mirrored by: N").
 - Contracts: `.claude/rules/control-api.md` (58 "presenter" mentions), `site/docs.html#remote-sessions-present`,
-  `site/commands.html` (19), `plugins/agterm/skills/agterm/reference.md` (37) and `SKILL.md`, `ARCHITECTURE.md`.
-- Downstream: `agtermCore` is a library consumed by the agterm-linux fork, so a changed `public` symbol may break
+  `site/commands.html` (19), `plugins/hangar/skills/hangar/reference.md` (37) and `SKILL.md`, `ARCHITECTURE.md`.
+- Downstream: `HangarCore` is a library consumed by the agterm-linux fork, so a changed `public` symbol may break
   that build.
 
 ## Development Approach
@@ -64,9 +64,9 @@
 - maintain backward compatibility with viewers and origins that predate the lead report
 
 ## Testing Strategy
-- **unit tests**: host-free `agtermCore` tests for the claims and routing, the frame codec, ownership and loss
-  per owner, the viewer's report and gates; `AgtermServerTests` for the headless origin with two real streams.
-- **hosted tests**: `agtermTests` presenter fixtures for the Mac origin's ask, overlay, page, click and sound
+- **unit tests**: host-free `HangarCore` tests for the claims and routing, the frame codec, ownership and loss
+  per owner, the viewer's report and gates; `HangarServerTests` for the headless origin with two real streams.
+- **hosted tests**: `HangarTests` presenter fixtures for the Mac origin's ask, overlay, page, click and sound
   routing, the gate, and fallback to the grant.
 - no UI e2e suite covers this; two-Mac behavior stays a manual check (Post-Completion).
 
@@ -175,15 +175,15 @@ later changes in #661 and #1008.
 ### Task 1: Lead report frame, claims and routing in the hub
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/PresentationFrames.swift`, `PresentationFrame+Codable.swift`,
+- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`, `PresentationFrame+Codable.swift`,
   `PresentationHub.swift`, `RemotePresentationClient.swift` (switch case only, ignored until Task 3)
-- Modify: `agtermCore/Tests/agtermCoreTests/PresentationFramesTests.swift`, `PresentationHubTests.swift`,
+- Modify: `HangarCore/Tests/HangarCoreTests/PresentationFramesTests.swift`, `PresentationHubTests.swift`,
   `PresenterGrantTests.swift`
 
 - [x] check the agterm-linux fork for uses of `PresentationFrame.Body` exhaustive switches and of every public
       hub symbol this plan changes (GitHub code search with `fork:true`, or a shallow clone under `/tmp`); record
       the result here
-      - melonamin/agterm-linux (pushed 2026-11-08), `agterm-linux/` consumes `../agtermCore` by path. Its one
+      - melonamin/agterm-linux (pushed 2026-11-08), `agterm-linux/` consumes `../HangarCore` by path. Its one
         `Body` switch has a `default`, so the new case is safe. It calls `onPresenterLost`, the two-argument
         `onPresenterFrame`, `presenterGeneration(session:)`, `hasPresenter`, and the store's
         `takeBackRemoteAsk(forSession:)`, `remoteOverlayPresenterLost(forSession:)`,
@@ -201,18 +201,18 @@ later changes in #661 and #1008.
 ### Task 2: Per-owner booking, follow-ups, answers, loss and the session-wide gate
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/PresentationHub.swift`, `ZmxLead.swift` (`followsRemotely`)
-- Modify: `agtermCore/Sources/agtermCore/AppStore+RemoteAsk.swift`, `SessionPick.swift`,
+- Modify: `HangarCore/Sources/HangarCore/PresentationHub.swift`, `ZmxLead.swift` (`followsRemotely`)
+- Modify: `HangarCore/Sources/HangarCore/AppStore+RemoteAsk.swift`, `SessionPick.swift`,
   `AppStore+RemoteOverlay.swift`, `AppStore+RemotePage.swift`, `AppStore+RemoteTextPage.swift`,
   `AppStore+Interactions.swift`, `AppStore+Presentation.swift`, `AppStore+Status.swift`
-- Modify: `agterm/Control/ControlServer+Presentation.swift`, `ControlServer+Ask.swift`, `ControlServer+Pick.swift`,
+- Modify: `Hangar/Control/ControlServer+Presentation.swift`, `ControlServer+Ask.swift`, `ControlServer+Pick.swift`,
   `ControlServer+ForwardedClick.swift`, `ControlServer+ImagePage.swift`, `ControlServer+MarkdownPage.swift`,
   `ControlServer+DocumentPage.swift`, `ControlServer+TextPage.swift`, `ControlServer+PageServe.swift`,
   `ControlServer+Detach.swift`
-- Modify: `agtermCore/Sources/AgtermServerKit/ServerStreams.swift`, `ServerActions+Overlay.swift`
-- Modify tests: `agtermCore/Tests/agtermCoreTests/AppStoreRemoteAskTests.swift`, `SessionPickTests.swift`,
+- Modify: `HangarCore/Sources/HangarServerKit/ServerStreams.swift`, `ServerActions+Overlay.swift`
+- Modify tests: `HangarCore/Tests/HangarCoreTests/AppStoreRemoteAskTests.swift`, `SessionPickTests.swift`,
   `AppStoreRemotePageTests.swift`, `AppStoreRemoteOverlayTests.swift`, `PresentationHubTests.swift`,
-  `agtermCore/Tests/AgtermServerTests/ServerStreamsTests.swift`, `agtermTests/ControlServerPresentationTests.swift`,
+  `HangarCore/Tests/HangarServerTests/ServerStreamsTests.swift`, `HangarTests/ControlServerPresentationTests.swift`,
   `ControlServerRemotePresentationTests.swift`, `ControlServerForwardedClickTests.swift`,
   `ControlServerPageServeTests.swift`, `ControlServerStatusSoundTests.swift`
 
@@ -244,13 +244,13 @@ later changes in #661 and #1008.
 ### Task 3: Viewer reports its leads; viewer-side gates
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/RemotePresentationClient.swift`, `RemotePresentationState.swift`,
+- Modify: `HangarCore/Sources/HangarCore/RemotePresentationClient.swift`, `RemotePresentationState.swift`,
   `AppStore+RemoteLayout.swift`, `AppStore+LinkClickRequest.swift`, `AppStore+RemotePresentation.swift`
   (`sendToOrigin`)
-- Modify: `agterm/Control/ControlServer+RemotePresentation.swift`
-- Modify tests: `agtermCore/Tests/agtermCoreTests/RemotePresentationClientTests.swift`,
+- Modify: `Hangar/Control/ControlServer+RemotePresentation.swift`
+- Modify tests: `HangarCore/Tests/HangarCoreTests/RemotePresentationClientTests.swift`,
   `AppStoreRemoteLayoutTests.swift`, `RemotePresentationStateTests.swift`, `AppStoreForwardedClickTests.swift`,
-  `agtermTests/ControlServerRemoteLinkClickTests.swift`
+  `HangarTests/ControlServerRemoteLinkClickTests.swift`
 
 - [x] write failing tests: the client sends a report only after a hello answer listing `lead.report`; the
       computed set maps local panes to origin pane ids and skips panes with no binding; the set re-sends on a
@@ -268,15 +268,15 @@ later changes in #661 and #1008.
 ### Task 4: Headless pending per recipient, read-back, docs and gates
 
 **Files:**
-- Modify: `agtermCore/Sources/AgtermServerKit/ServerStreams.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Interactions.swift`, `AppStore+RemoteAsk.swift`,
+- Modify: `HangarCore/Sources/HangarServerKit/ServerStreams.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Interactions.swift`, `AppStore+RemoteAsk.swift`,
   `AppStore+RemotePage.swift`, `AppStore+RemoteOverlay.swift`, `SessionPick.swift` (the offer functions),
   `ControlProjection.swift`, `AppStore+RemotePresentation.swift` (`presentersNode`, surface `remote`)
-- Modify: `agtermCore/Sources/agtermctlKit/SocketClient.swift`
-- Modify tests: `agtermCore/Tests/AgtermServerTests/ServerStreamsTests.swift`, `RemotePresentationStateTests.swift`,
-  `agtermCore/Tests/agtermctlKitTests/SocketClientTests.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SocketClient.swift`
+- Modify tests: `HangarCore/Tests/HangarServerTests/ServerStreamsTests.swift`, `RemotePresentationStateTests.swift`,
+  `HangarCore/Tests/hangarctlKitTests/SocketClientTests.swift`
 - Modify docs: `.claude/rules/control-api.md`, `site/docs.html`, `site/commands.html`,
-  `plugins/agterm/skills/agterm/reference.md`, `plugins/agterm/skills/agterm/SKILL.md`, `ARCHITECTURE.md`
+  `plugins/hangar/skills/hangar/reference.md`, `plugins/hangar/skills/hangar/SKILL.md`, `ARCHITECTURE.md`
 
 - [x] write failing tests: a pending ask on pane A reaches the viewer that claims A once its report arrives, not
       the viewer claiming B; pending left and right overlays/pages go to two viewers in separate batches, each
@@ -292,7 +292,7 @@ later changes in #661 and #1008.
       `docs.html` and `ARCHITECTURE.md`: state the routing rule, the session-wide gate, click and clear rules, the
       new read-back and the older-Mac fallback once each, in their owning surface
 - [x] verify every Overview requirement on both origins and with an older viewer beside a current one
-- [x] run the gates once: `cd agtermCore && swift test`, `make test-app`, `make lint`
+- [x] run the gates once: `cd HangarCore && swift test`, `make test-app`, `make lint`
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
@@ -305,8 +305,8 @@ later changes in #661 and #1008.
 - split session with the left pane led by A and the right by B: a pane-targeted ask opens on that pane's Mac,
   a session-wide one on A; with the origin leading the right pane, a session-wide one still opens on A.
 - click a file link on B while A holds the grant: the page opens on B.
-- the same cases against an agterm-server origin.
-- one viewer on an older agterm next to a current one: work for panes the older Mac leads goes to the grant
+- the same cases against an hangar-server origin.
+- one viewer on an older hangar next to a current one: work for panes the older Mac leads goes to the grant
   holder as today.
 
 Smells pre-check: skipped — non-Go project

@@ -20,7 +20,7 @@ QString dir(const QString &stateDir)
     if (base.isEmpty())
         base = QDir::tempPath();
     const QByteArray hash = QCryptographicHash::hash(QDir::cleanPath(stateDir).toUtf8(), QCryptographicHash::Sha1).toHex().left(8);
-    return base + QStringLiteral("/agterm-qt-") + QString::fromLatin1(hash);
+    return base + QStringLiteral("/hangar-") + QString::fromLatin1(hash);
 }
 
 QString socket(const QString &stateDir, const QString &sessionId, const QString &pane)

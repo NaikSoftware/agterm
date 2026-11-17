@@ -1,7 +1,7 @@
-// agterm-session-host <socket> -- <argv...>: attach to the pane daemon at <socket>, starting one that runs argv when none
+// hangar-session-host <socket> -- <argv...>: attach to the pane daemon at <socket>, starting one that runs argv when none
 // answers. The daemon owns the pane's pty and outlives the app, so a later launch reattaches to the same shell (live
 // restore mode, master's zmx). On attach it replays the recent output plus the DEC modes in force, then makes the
-// foreground program redraw by nudging the width one column and back. agterm-session-host --kill <socket> ends that daemon and its shell.
+// foreground program redraw by nudging the width one column and back. hangar-session-host --kill <socket> ends that daemon and its shell.
 //
 // Client -> daemon frames: a type byte, a little-endian u32 length, the payload. 'd' input, 'w' rows+cols (u16 each), 'k' kill.
 // Daemon -> client: the pty's raw output.

@@ -33,23 +33,23 @@ inherits the set for free.
 
 **Files/components involved** — every referencing site, verified by grep, not assumed:
 
-- Model (`agtermCore`): `AppStore.swift`, `AppStore+PendingClose.swift`, `AppStore+RecentClosed.swift`,
+- Model (`HangarCore`): `AppStore.swift`, `AppStore+PendingClose.swift`, `AppStore+RecentClosed.swift`,
   `AppStore+CloseReselection.swift` (doc comment only), `Snapshot.swift`, `SidebarDrop.swift`.
-- Control (`agtermCore`): `ControlProtocol.swift`, `ControlModes.swift`, `ControlDispatcher.swift`,
-  `PaletteCatalog.swift`; CLI in `agtermctlKit/WorkspaceCommands.swift`.
-- App target: `agterm/Control/ControlServer+WorkspaceCommands.swift`, `agterm/AppActions.swift`,
-  `agterm/AppActions+Palette.swift`, `agterm/agtermApp+Menus.swift` (TWO sites, lines 242 and 250),
-  `agterm/Views/WorkspaceSidebar.swift` (lines 122, 551), `WorkspaceSidebar+ContextMenu.swift` (line 141),
+- Control (`HangarCore`): `ControlProtocol.swift`, `ControlModes.swift`, `ControlDispatcher.swift`,
+  `PaletteCatalog.swift`; CLI in `hangarctlKit/WorkspaceCommands.swift`.
+- App target: `Hangar/Control/ControlServer+WorkspaceCommands.swift`, `Hangar/AppActions.swift`,
+  `Hangar/AppActions+Palette.swift`, `Hangar/hangarApp+Menus.swift` (TWO sites, lines 242 and 250),
+  `Hangar/Views/WorkspaceSidebar.swift` (lines 122, 551), `WorkspaceSidebar+ContextMenu.swift` (line 141),
   `WorkspaceSidebar+DragDrop.swift` (line 160), `WindowContentView.swift` (line 781).
 - Tests: `AppStoreTests.swift`, `AppStoreOrganizationTests.swift` (incl. a direct field WRITE at line 330),
   `AppStoreCloseReselectionTests.swift`, `AppStoreNavigationTests.swift`, `PersistenceTests.swift`,
   `SnapshotRoundTripTests.swift`, `SidebarDropTests.swift`, `ControlProtocolTests.swift`,
   `ControlDispatcherTests.swift`, `ControlModesTests.swift`, `MockControlActions.swift`,
-  `PaletteCatalogTests.swift`, `CommandsTests.swift`, `agtermUITests/FocusWorkspaceUITests.swift`,
-  `agtermUITests/ControlSidebarStatusUITests.swift` (incl. a stale comment at lines 171-173).
+  `PaletteCatalogTests.swift`, `CommandsTests.swift`, `HangarUITests/FocusWorkspaceUITests.swift`,
+  `HangarUITests/ControlSidebarStatusUITests.swift` (incl. a stale comment at lines 171-173).
 - Docs: `.claude/rules/sidebar.md`, `.claude/rules/control-api.md`, `.claude/rules/menu-actions.md`
   (line 255 names the renamed helper), `README.md`, `site/docs.html`, `site/commands.html`,
-  `agterm/Resources/agent-skill/{SKILL.md,reference.md,examples.md}`.
+  `Hangar/Resources/agent-skill/{SKILL.md,reference.md,examples.md}`.
 
 **Related patterns found**
 
@@ -79,14 +79,14 @@ and `--strict` turns the warning into a failure:
 
 | File | Lines | Cap | Headroom |
 |---|---|---|---|
-| `agtermCore/Sources/agtermCore/AppStore.swift` | **1000** | 1000 | **0** |
-| `agtermCore/Tests/agtermCoreTests/AppStoreTests.swift` | 1969 | 2000 | 31 |
-| `agtermCore/Tests/agtermCoreTests/ControlDispatcherTests.swift` | 1960 | 2000 | 40 |
-| `agterm/AppActions.swift` | 960 | 1000 | 40 |
+| `HangarCore/Sources/HangarCore/AppStore.swift` | **1000** | 1000 | **0** |
+| `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift` | 1969 | 2000 | 31 |
+| `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift` | 1960 | 2000 | 40 |
+| `Hangar/AppActions.swift` | 960 | 1000 | 40 |
 
 All four are too tight for this feature, so Task 1 splits the focus code out into its own files FIRST. Every
 other touched file has room: `WorkspaceSidebar.swift` 885, `WindowContentView.swift` 832,
-`ControlProtocol.swift` 773, `ControlDispatcher.swift` 773, `AppSettings.swift` 526, `agtermApp+Menus.swift`
+`ControlProtocol.swift` 773, `ControlDispatcher.swift` 773, `AppSettings.swift` 526, `hangarApp+Menus.swift`
 375, `AppActions+Palette.swift` 346, `MockControlActions.swift` 457, `ControlProtocolTests.swift` 1442,
 `CommandsTests.swift` 1403, `AppStoreOrganizationTests.swift` 749, `ControlSidebarStatusUITests.swift` 839.
 
@@ -98,7 +98,7 @@ other touched file has room: `WorkspaceSidebar.swift` 885, `WindowContentView.sw
 2. Create the worktree with Claude Code's native support ("work in a worktree" / `EnterWorktree`), never a
    manual `git worktree add`.
 3. Symlink the three gitignored build artifacts before building, using ABSOLUTE targets for the two under
-   `Resources/`: `GhosttyKit.xcframework`, `agterm/Resources/ghostty`, `agterm/Resources/terminfo`. With them
+   `Resources/`: `GhosttyKit.xcframework`, `Hangar/Resources/ghostty`, `Hangar/Resources/terminfo`. With them
    in place `scripts/setup.sh` prints "GhosttyKit and resources already present" and skips the multi-minute
    libghostty rebuild.
 4. After the PR merges, remove the worktree from the MAIN checkout (never switch the main checkout's branch).
@@ -123,9 +123,9 @@ this is a deliberate, documented gap, not a skipped gate. Every task from 4 onwa
 - **CRITICAL: update this plan file when scope changes during implementation**
 - maintain backward compatibility: on-disk snapshots written by the current release must still load
 
-**Per-task gate (agterm-specific):**
+**Per-task gate (hangar-specific):**
 
-1. `cd agtermCore && swift test` passes.
+1. `cd HangarCore && swift test` passes.
 2. The app builds (`make build`) — Tasks 4 onward only, per the documented gap above.
 3. `make lint` passes (`swiftlint lint --strict`, zero findings — warnings are failures).
 4. `make test-app` passes when the task touched app-target code.
@@ -134,11 +134,11 @@ this is a deliberate, documented gap, not a skipped gate. Every task from 4 onwa
 
 ## Testing Strategy
 
-- **unit tests (`swift test`)**: required for every task touching `agtermCore` — the set mutators, the
+- **unit tests (`swift test`)**: required for every task touching `HangarCore` — the set mutators, the
   visibility rules, snapshot round-trip and legacy migration, the drop fallback, dispatcher validation and
   routing, protocol round-trip and omit-when-nil, palette catalog arms, and CLI argument mapping.
-- **app-hosted tests (`make test-app`)**: for AppKit-level changes where an isolated `agtermTests` case fits.
-- **e2e (XCUITest, `agtermUITests/`)**: treated with the same rigor as unit tests and written in the same
+- **app-hosted tests (`make test-app`)**: for AppKit-level changes where an isolated `HangarTests` case fits.
+- **e2e (XCUITest, `HangarUITests/`)**: treated with the same rigor as unit tests and written in the same
   task as the UI code. Two suites are affected:
   - `FocusWorkspaceUITests` — the three `focus-pill` assertions are re-pointed at `workspace-row` visibility
     (the filtering itself, which the pill was only ever a proxy for) plus the new toggle's
@@ -326,14 +326,14 @@ Nothing in this task changes behavior, so every existing test must pass UNMODIFI
 move was clean.
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/AppStore+Focus.swift`
-- Create: `agterm/AppActions+WorkspaceFocus.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/AppStoreFocusTests.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/ControlDispatcherWorkspaceTests.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agterm/AppActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreOrganizationTests.swift`
+- Create: `HangarCore/Sources/HangarCore/AppStore+Focus.swift`
+- Create: `Hangar/AppActions+WorkspaceFocus.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/AppStoreFocusTests.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/ControlDispatcherWorkspaceTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `Hangar/AppActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreOrganizationTests.swift`
 
 - [x] move `visibleWorkspaces`, `navigableSessions`, `focusedWorkspace`, `setFocusedWorkspace`, and
       `autoUnfocusIfOutsideFocus` from `AppStore.swift` into a new `AppStore+Focus.swift` extension, verbatim
@@ -361,14 +361,14 @@ move was clean.
 ### Task 2: Add the focus set and enabled flag to AppStore
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift` (the two stored properties only)
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Focus.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+PendingClose.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreFocusTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreOrganizationTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreCloseReselectionTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreNavigationTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PersistenceTests.swift` (⚠️ missing from the original list — it
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (the two stored properties only)
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Focus.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+PendingClose.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreFocusTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreOrganizationTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreCloseReselectionTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreNavigationTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PersistenceTests.swift` (⚠️ missing from the original list — it
   holds three `AppStore.focusedWorkspaceID` READS that must compile; its `Snapshot` reads are Task 5's)
 
 - [x] replace `focusedWorkspaceID: UUID?` with `focusedWorkspaceIDs: Set<UUID>` + `focusEnabled: Bool`, both
@@ -399,17 +399,17 @@ move was clean.
 ### Task 3: Generalize the lifecycle rules (remove, create, cross-set select)
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Focus.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift` (`removeWorkspace`, `addWorkspace`/`ensureWorkspace`)
-- Modify: `agtermCore/Sources/agtermCore/AppStore+PendingClose.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+RecentClosed.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+CloseReselection.swift` (doc comment naming the helper)
-- Modify: `agterm/Control/ControlServer+SessionActions.swift` (⚠️ missing from the original list — it holds
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Focus.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (`removeWorkspace`, `addWorkspace`/`ensureWorkspace`)
+- Modify: `HangarCore/Sources/HangarCore/AppStore+PendingClose.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+RecentClosed.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+CloseReselection.swift` (doc comment naming the helper)
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift` (⚠️ missing from the original list — it holds
   the only app-target `clearFocus:` caller, renamed here so Task 4's sweep finds it consistent)
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreFocusTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreOrganizationTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreCloseReselectionTests.swift`
-- ~~`agtermCore/Tests/agtermCoreTests/AppStoreNavigationTests.swift`~~ — ⚠️ NOT modified: its two focus
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreFocusTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreOrganizationTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreCloseReselectionTests.swift`
+- ~~`HangarCore/Tests/HangarCoreTests/AppStoreNavigationTests.swift`~~ — ⚠️ NOT modified: its two focus
   assertions already match the new contract (see the migration checkbox below)
 
 - [x] rename `autoUnfocusIfOutsideFocus` to `disableFocusIfSelectionOutsideSet` and update ALL call sites —
@@ -425,7 +425,7 @@ move was clean.
       instead of clearing focus, so it is visible and the filter survives
 - [x] rename the `clearFocus: Bool = true` parameter to `revealNewWorkspace: Bool = true` — after this change
       the old name states the opposite of what it does; update its callers in `AppStore.swift` and
-      `agterm/Control/ControlServer+SessionActions.swift` (the `session.new --no-select` path, which must
+      `Hangar/Control/ControlServer+SessionActions.swift` (the `session.new --no-select` path, which must
       still NOT widen the set)
 - [x] MIGRATE the existing auto-unfocus assertions from "focus cleared" to "set preserved, `focusEnabled`
       false". ⚠️ the plan mislocated these: of the five lines it named, only
@@ -450,21 +450,21 @@ today's observable behavior. The real UX work happens in Tasks 11-14, which rewr
 again; that small churn is the price of a continuously-building tree.
 
 **Files:**
-- Modify: `agterm/AppActions+WorkspaceFocus.swift`
-- Modify: `agterm/AppActions+Palette.swift` (line 29)
-- Modify: `agterm/agtermApp+Menus.swift` (lines 242 AND 250 — two distinct sites)
-- Modify: `agterm/Views/WorkspaceSidebar.swift` (lines 122, 551)
-- Modify: `agterm/Views/WorkspaceSidebar+ContextMenu.swift` (line 141)
-- Modify: `agterm/Views/WorkspaceSidebar+DragDrop.swift` (line 160)
-- Modify: `agterm/Views/WindowContentView.swift` (line 781)
-- Modify: `agterm/Control/ControlServer+WorkspaceCommands.swift`
+- Modify: `Hangar/AppActions+WorkspaceFocus.swift`
+- Modify: `Hangar/AppActions+Palette.swift` (line 29)
+- Modify: `Hangar/hangarApp+Menus.swift` (lines 242 AND 250 — two distinct sites)
+- Modify: `Hangar/Views/WorkspaceSidebar.swift` (lines 122, 551)
+- Modify: `Hangar/Views/WorkspaceSidebar+ContextMenu.swift` (line 141)
+- Modify: `Hangar/Views/WorkspaceSidebar+DragDrop.swift` (line 160)
+- Modify: `Hangar/Views/WindowContentView.swift` (line 781)
+- Modify: `Hangar/Control/ControlServer+WorkspaceCommands.swift`
 
 - [x] rewrite `AppActions.focusWorkspace`'s body (was
       `store.setFocusedWorkspace(store.focusedWorkspaceID == id ? nil : id)`) as the replace-toggle against
       the set, and `AppActions.clearFocus`'s guard (was `store.focusedWorkspaceID != nil`) as a
       non-empty-set-or-enabled check
 - [x] update `AppActions+Palette.swift:29`'s `hasFocusedWorkspace` to `!focusedWorkspaceIDs.isEmpty`
-- [x] update BOTH `agtermApp+Menus.swift` sites: line 242's `focusedWorkspace?.id` comparison and line 250's
+- [x] update BOTH `hangarApp+Menus.swift` sites: line 242's `focusedWorkspace?.id` comparison and line 250's
       `focusedWorkspaceID == nil` disabled-check
 - [x] update `WorkspaceSidebar.swift:122` (the `updateNSView` observation read — now reads BOTH fields, which
       Task 11 only has to verify) and `:551` (the `rebuildAndReload` force-expand) to the set;
@@ -483,12 +483,12 @@ again; that small churn is the price of a continuously-building tree.
 ### Task 5: Persist the set and flag, with legacy migration
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Snapshot.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift` (`snapshot()`, line ~799)
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Focus.swift` (the restore-time prune)
-- Modify: `agtermCore/Tests/agtermCoreTests/SnapshotRoundTripTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PersistenceTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreFocusTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Snapshot.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (`snapshot()`, line ~799)
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Focus.swift` (the restore-time prune)
+- Modify: `HangarCore/Tests/HangarCoreTests/SnapshotRoundTripTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PersistenceTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreFocusTests.swift`
 
 - [x] add `focusedWorkspaceIDs: [UUID]?` and `focusEnabled: Bool?` to `Snapshot` (Optional, no
       `currentVersion` bump), keeping `focusedWorkspaceID` decodable but removing it from the memberwise init
@@ -522,9 +522,9 @@ new logic must include the `focusEnabled` term — with one member marked and th
 showing, so an empty-space drop must NOT land in the marked workspace.
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Focus.swift`
-- Modify: `agterm/Views/WorkspaceSidebar+DragDrop.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreFocusTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Focus.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar+DragDrop.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreFocusTests.swift`
 
 - [x] add `public var dropFallbackWorkspaceID: UUID?` returning
       `focusEnabled && focusedWorkspaceIDs.count == 1 ? that member : nil` (host-free, so it is unit-testable
@@ -542,14 +542,14 @@ showing, so an empty-space drop must NOT land in the marked workspace.
 ### Task 7: Extend the control protocol (mode enum, new command, tree read-back)
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlModes.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift` (⚠️ missing from the original list — its
+- Modify: `HangarCore/Sources/HangarCore/ControlModes.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift` (⚠️ missing from the original list — its
   top-level `dispatch(_:)` switch is EXHAUSTIVE over `Command`, so a new case breaks the build)
-- Modify: `agterm/Control/ControlServer.swift` (⚠️ same reason — its post-dispatcher fallthrough switch is
+- Modify: `Hangar/Control/ControlServer.swift` (⚠️ same reason — its post-dispatcher fallthrough switch is
   exhaustive too)
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlModesTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlModesTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
 
 - [x] add `WorkspaceFocusMode: String, CaseIterable, Sendable` with cases `on`, `off`, `toggle`, `add`, plus
       a `validNamesList`-style derived description for the error message (the `StatusShape` precedent).
@@ -578,14 +578,14 @@ showing, so an empty-space drop must NOT land in the marked workspace.
 ### Task 8: Hoist focus-mode validation into the dispatcher and route workspace.filter
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agterm/Control/ControlServer+WorkspaceCommands.swift` (⚠️ missing from the original list — a
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `Hangar/Control/ControlServer+WorkspaceCommands.swift` (⚠️ missing from the original list — a
   changed/added `ControlActions` requirement breaks `ControlServer`'s conformance, so the app-side arms
   must move in the SAME task or `make build` cannot pass)
-- Modify: `agtermCore/Tests/agtermCoreTests/MockControlActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherTests.swift` (⚠️ missing from the original
+- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift` (⚠️ missing from the original
   list — it held the old raw-string routing assertion, migrated into the workspace suite here)
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherWorkspaceTests.swift` (created in Task 1)
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherWorkspaceTests.swift` (created in Task 1)
 
 - [x] change `ControlActions.focusWorkspace` from `mode: String?` to `mode: WorkspaceFocusMode` and parse the
       raw string in the dispatcher's `.workspaceFocus` arm, defaulting to `toggle` when absent
@@ -610,12 +610,12 @@ showing, so an empty-space drop must NOT land in the marked workspace.
 ### Task 9: Wire the ControlServer arms and the tree read-back
 
 **Files:**
-- Modify: `agterm/Control/ControlServer+WorkspaceCommands.swift` (the `workspace.*` adapter home, per
+- Modify: `Hangar/Control/ControlServer+WorkspaceCommands.swift` (the `workspace.*` adapter home, per
   `.claude/rules/control-api.md` — NOT `+AppCommands.swift`)
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift` (`controlTree`)
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreFocusTests.swift` (the focus read-back tests moved
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (`controlTree`)
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreFocusTests.swift` (the focus read-back tests moved
   here in Task 1)
-- Modify: `agtermCore/Tests/agtermCoreTests/MockControlActions.swift` (⚠️ missing from the original list —
+- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift` (⚠️ missing from the original list —
   the empty-set test must drive the REAL command path, so the mock's `setWorkspaceFilter` gained an opt-in
   `filterStore` that applies the parsed mode to a live `AppStore` the way the app-side arm does)
 
@@ -640,11 +640,11 @@ showing, so an empty-space drop must NOT land in the marked workspace.
       action, so the mode parse and `setFocusEnabled`'s refusal are both exercised, not the mutator alone
 - [x] run the full gate — must pass before Task 10
 
-### Task 10: Extend the agtermctl CLI
+### Task 10: Extend the hangarctl CLI
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermctlKit/WorkspaceCommands.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/WorkspaceCommands.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
 
 - [x] extend `Workspace.Focus`: accept `add` in `validate()` and in the `@Argument` help text, deriving both
       from `WorkspaceFocusMode.allCases` so the CLI list cannot drift from the dispatcher's. The `validate()`
@@ -673,8 +673,8 @@ showing, so an empty-space drop must NOT land in the marked workspace.
 Not accessibility-observable, so its regression coverage is Task 15's e2e; this task gates on build + lint.
 
 **Files:**
-- Modify: `agterm/Views/WorkspaceSidebar.swift`
-- Modify: `agterm/Views/WorkspaceSidebar+RowRendering.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar+RowRendering.swift`
 
 - [x] add a lazily-cached `focusedWorkspaceIcon = Self.rowIcon("square.grid.2x2.fill")` beside
       `flaggedSessionIcon`
@@ -703,8 +703,8 @@ Not accessibility-observable, so its regression coverage is Task 15's e2e; this 
 Menu behavior is covered by Task 15's e2e.
 
 **Files:**
-- Modify: `agterm/Views/WorkspaceSidebar+ContextMenu.swift`
-- Modify: `agterm/AppActions+WorkspaceFocus.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar+ContextMenu.swift`
+- Modify: `Hangar/AppActions+WorkspaceFocus.swift`
 
 - [x] add `AppActions.setFocusMembership(_ id: UUID, member: Bool)` delegating to the store mutator —
       guarded like its `focusWorkspace` sibling (`uiActionsEnabled` + an unknown-id no-op)
@@ -727,10 +727,10 @@ Menu behavior is covered by Task 15's e2e.
 ### Task 13: Replace the focus pill with the bottom-bar filter toggle
 
 **Files:**
-- Modify: `agterm/Views/WindowContentView.swift`
-- Modify: `agterm/AppActions+WorkspaceFocus.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppSettings.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppSettingsTests.swift`
+- Modify: `Hangar/Views/WindowContentView.swift`
+- Modify: `Hangar/AppActions+WorkspaceFocus.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppSettings.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppSettingsTests.swift`
 
 - [x] delete the `focus-pill` Button (kept alive mechanically by Task 4) and its store binding
 - [x] add `AppActions.toggleFocusFilter()` flipping `focusEnabled` on the active store
@@ -760,15 +760,15 @@ Menu behavior is covered by Task 15's e2e.
 ### Task 14: Add the menu, palette, and keymap surfaces
 
 **Files:**
-- Modify: `agterm/agtermApp+Menus.swift`
-- Modify: `agterm/AppActions+WorkspaceFocus.swift`
-- Modify: `agterm/AppActions+Palette.swift`
-- Modify: `agtermCore/Sources/agtermCore/PaletteCatalog.swift`
-- Modify: `agtermCore/Sources/agtermCore/BuiltinAction.swift`
-- Modify: `agterm/Views/WindowContentView.swift` (the Task 13 carry-over `helpHint` upgrade)
+- Modify: `Hangar/hangarApp+Menus.swift`
+- Modify: `Hangar/AppActions+WorkspaceFocus.swift`
+- Modify: `Hangar/AppActions+Palette.swift`
+- Modify: `HangarCore/Sources/HangarCore/PaletteCatalog.swift`
+- Modify: `HangarCore/Sources/HangarCore/BuiltinAction.swift`
+- Modify: `Hangar/Views/WindowContentView.swift` (the Task 13 carry-over `helpHint` upgrade)
 - Modify: `.claude/rules/menu-actions.md` (the `helpHint` button count this task falsifies)
-- Modify: `agtermCore/Tests/agtermCoreTests/PaletteCatalogTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/BuiltinActionTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PaletteCatalogTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/BuiltinActionTests.swift`
 
 - [x] add `AppActions.addActiveWorkspaceToFocus()` (targets `currentWorkspaceID`, the sibling of
       `focusActiveWorkspace`)
@@ -808,8 +808,8 @@ Menu behavior is covered by Task 15's e2e.
 ### Task 15: Rewrite and extend the end-to-end tests
 
 **Files:**
-- Modify: `agtermUITests/FocusWorkspaceUITests.swift`
-- Modify: `agtermUITests/ControlSidebarStatusUITests.swift`
+- Modify: `HangarUITests/FocusWorkspaceUITests.swift`
+- Modify: `HangarUITests/ControlSidebarStatusUITests.swift`
 
 - [x] re-point the three `focus-pill` assertions at `workspace-row` visibility (assert the OTHER workspaces'
       rows disappear when focused and return when cleared) plus the `focus-filter-toggle` accessibilityValue;
@@ -846,9 +846,9 @@ Menu behavior is covered by Task 15's e2e.
       still applied AND the background-created workspace is NOT a member — the Task 3 `revealNewWorkspace`
       contract had no e2e at all
 - [x] run `make test-app` and the UI suite — must pass before Task 16. ⚠️ `make test-app` runs the
-      `agtermTests` scheme, which does NOT include `agtermUITests/`; the two suites here run with
-      `xcodebuild test -project agterm.xcodeproj -scheme agterm -destination 'platform=macOS'
-      -derivedDataPath build/DerivedData -only-testing:agtermUITests/<Class>[/<method>]`. Both were RUN:
+      `HangarTests` scheme, which does NOT include `HangarUITests/`; the two suites here run with
+      `xcodebuild test -project Hangar.xcodeproj -scheme hangar -destination 'platform=macOS'
+      -derivedDataPath build/DerivedData -only-testing:HangarUITests/<Class>[/<method>]`. Both were RUN:
       all 4 `FocusWorkspaceUITests` (68.8 s) and the 4 affected `ControlSidebarStatusUITests` methods (17.6 s)
       passed
 
@@ -860,7 +860,7 @@ marking add which also enabled the filter made a multi-workspace set cost one to
 preserves whatever the filter state was and only removing can disable (as the set empties). `Focus` /
 `workspace.focus on|toggle` are UNCHANGED and still enable immediately. Implemented across
 `AppStore+Focus.swift`, the `add`-mode doc comments (`ControlModes.swift`,
-`ControlServer+WorkspaceCommands.swift`, `agtermctlKit/WorkspaceCommands.swift`,
+`ControlServer+WorkspaceCommands.swift`, `hangarctlKit/WorkspaceCommands.swift`,
 `AppActions+WorkspaceFocus.swift`), the migrated unit tests (`AppStoreFocusTests`, `SnapshotRoundTripTests`)
 with a new `addingToTheSetNeverTurnsTheFilterOn` case, and both e2e suites. **Tasks 16, 17 and 18 must
 document THIS semantic** — `add` = "insert X into the marked set", never "insert X, enable".
@@ -868,13 +868,13 @@ document THIS semantic** — `add` = "insert X into the marked set", never "inse
 ### Task 16: Update the product documentation surfaces
 
 **Files:**
-- Modify: `agterm/Resources/agent-skill/SKILL.md`
-- Modify: `agterm/Resources/agent-skill/reference.md`
-- Modify: `agterm/Resources/agent-skill/examples.md`
+- Modify: `Hangar/Resources/agent-skill/SKILL.md`
+- Modify: `Hangar/Resources/agent-skill/reference.md`
+- Modify: `Hangar/Resources/agent-skill/examples.md`
 - Modify: `site/commands.html`
 - Modify: `site/docs.html`
 - Modify: `README.md`
-- Modify: `agtermCore/Tests/agtermCoreTests/SkillInstallTests.swift` (⚠️ missing from the original list —
+- Modify: `HangarCore/Tests/HangarCoreTests/SkillInstallTests.swift` (⚠️ missing from the original list —
   `bundledSkillDocumentsEventSubscriptionCommand` PINS the bundled skill's command count, so the 66 → 67
   bump fails `swift test` until the assertion moves with it)
 
@@ -913,8 +913,8 @@ document THIS semantic** — `add` = "insert X into the marked set", never "inse
       on a marked row, the bottom-bar toggle replacing the pill (with its empty-set disabled state), the
       new Settings ▸ Interface "Workspace filter" entry (placed after flagged-view, matching
       `InterfaceElement`'s declared order), and the two lifecycle rules
-- [x] edit ONLY `agterm/Resources/agent-skill/` — never the installed copies under `~/.claude/skills/agterm/`
-      or `~/.codex/skills/agterm/`, which are regenerated install outputs
+- [x] edit ONLY `Hangar/Resources/agent-skill/` — never the installed copies under `~/.claude/skills/hangar/`
+      or `~/.codex/skills/hangar/`, which are regenerated install outputs
 - [x] do NOT touch `CHANGELOG.md` — release-only
 - ➕ discovered, NOT fixed here (out of this task's product-doc scope — for Task 18 / the maintainer to
       decide): (1) `.claude/rules/keymap.md:38` calls `BuiltinAction` "the 36 rebindable actions"; the real
@@ -988,7 +988,7 @@ document THIS semantic** — `add` = "insert X into the marked set", never "inse
       `PersistenceTests.legacySnapshotWithoutFocusedWorkspaceDecodesUnfocused` pinning the no-key case.
       The all-gone case is `AppStoreFocusTests.restorePrunesAnAllStaleSetToEmptyAndDisabled`; the partial
       case `restoreKeepsTheSurvivorsOfAPartiallyStaleSet`. Verified entirely against test fixtures — the
-      real `~/Library/Application Support/agterm/` state was never read or touched
+      real `~/Library/Application Support/hangar/` state was never read or touched
 - [x] a drop on empty sidebar space lands in the marked workspace only when exactly one is marked AND the
       filter is on — the four `AppStoreFocusTests.dropFallback*` cases (empty → nil; one member enabled →
       that member; one member DISABLED → nil; two members enabled → nil) against `AppStore+Focus.swift:110-113`,
@@ -1003,7 +1003,7 @@ document THIS semantic** — `add` = "insert X into the marked set", never "inse
       `navigableSessionsReflectsFlaggedFocusAndUnfocused`) only ever drives a set of ONE, so no test walks
       nav across a 2-member set. Left as-is rather than fixed: the plan's Solution Overview lists this as
       "FREE — do not fix", and a strengthening test is a maintainer call, not an acceptance fix
-- [x] `agtermctl workspace focus add`, `workspace filter on|off|toggle`, and the `tree` read-backs all work
+- [x] `hangarctl workspace focus add`, `workspace filter on|off|toggle`, and the `tree` read-backs all work
       and are idempotent — CLI mapping by `CommandsTests.workspaceFocusAddWithTarget` +
       `workspaceFocusRejectsBadMode`/`workspaceFocusHelpListsEveryMode` and the six `workspaceFilter*` cases;
       dispatcher routing/validation by the nine `ControlDispatcherWorkspaceTests` cases; the read-backs by
@@ -1012,7 +1012,7 @@ document THIS semantic** — `add` = "insert X into the marked set", never "inse
       IDEMPOTENCY: the store mutators are delta-guarded (`focusSettersAreNoOpWritesWhenUnchanged` +
       `setFocusEnabledOnAnEmptySetIsANoOpWrite` assert no file is even written), and the e2e
       `testWorkspaceFocusAddBuildsAMultiWorkspaceSet` drives an explicit repeat-`add` end to end
-- [x] run the full unit suite: `cd agtermCore && swift test` — **1860 tests in 75 suites, 0 failures**
+- [x] run the full unit suite: `cd HangarCore && swift test` — **1860 tests in 75 suites, 0 failures**
 - [x] run the app-hosted suite: `make test-app` — **22 tests, 0 failures** (`** TEST SUCCEEDED **`)
 - [x] run the linter: `make lint` (zero findings, `--strict`) — `swiftlint lint --strict --quiet` exited 0
       with NO output, i.e. zero violations
@@ -1024,7 +1024,7 @@ document THIS semantic** — `add` = "insert X into the marked set", never "inse
       `ControlSidebarStatusUITests.swift` 1008). `git diff origin/master...HEAD --name-only | grep -i swiftlint`
       is EMPTY — neither the root `.swiftlint.yml` nor the three nested test configs were touched on this branch
 - [x] ➕ the two e2e suites were re-run as part of this gate:
-      `xcodebuild test … -only-testing:agtermUITests/FocusWorkspaceUITests` → **4 tests, 0 failures (67.9 s)**,
+      `xcodebuild test … -only-testing:HangarUITests/FocusWorkspaceUITests` → **4 tests, 0 failures (67.9 s)**,
       and the four affected `ControlSidebarStatusUITests` methods
       (`testWorkspaceFocusHidesOtherWorkspaces`, `testWorkspaceFocusAddBuildsAMultiWorkspaceSet`,
       `testWorkspaceFilterTogglesWithoutLosingTheSet`, `testSessionNewNoSelectCreateWorkspacePreservesFocus`)
@@ -1042,7 +1042,7 @@ document THIS semantic** — `add` = "insert X into the marked set", never "inse
 - Modify: `.claude/rules/menu-actions.md`
 - Modify: `.claude/rules/keymap.md` (➕ carry-over 1 from Task 16)
 - Modify: `site/docs.html` (➕ carry-over 2 from Task 16)
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreNavigationTests.swift` (➕ carry-over 3 from Task 17)
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreNavigationTests.swift` (➕ carry-over 3 from Task 17)
 - ~~`CLAUDE.md`~~ — not modified; no new cross-cutting convention emerged (see the checkbox below)
 
 - [x] rewrite the sidebar rule's "Focus filter" bullet for the set + flag model, covering the two lifecycle
@@ -1114,13 +1114,13 @@ document THIS semantic** — `add` = "insert X into the marked set", never "inse
   terminal theme, and the swap causes no row layout shift.
 - The bottom-bar toggle's disabled 0.35 opacity reads as disabled against the themed sidebar background.
 - The tree narrow/widen animates cleanly through `splitRoot`'s `.animation(value:)` when the filter flips.
-- Verify on an ISOLATED dev instance (`open -n --env AGTERM_STATE_DIR=/tmp/<name> …` with a SHORT socket
-  path), never against the deployed `~/Applications/agterm.app` or the default socket — that is the live
+- Verify on an ISOLATED dev instance (`open -n --env HANGAR_STATE_DIR=/tmp/<name> …` with a SHORT socket
+  path), never against the deployed `~/Applications/Hangar.app` or the default socket — that is the live
   daily driver with real sessions.
 
 **Migration check on real data:**
 
-- Before merging, confirm a COPY of the real `~/Library/Application Support/agterm/windows/<id>.json`
+- Before merging, confirm a COPY of the real `~/Library/Application Support/hangar/windows/<id>.json`
   (copied into the isolated dev state dir, never the original) restores correctly through the legacy path.
 
 **PR and cleanup:**

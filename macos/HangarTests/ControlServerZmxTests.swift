@@ -1,0 +1,1327 @@
+import AppKit
+import XCTest
+@testable import Hangar
+import HangarCore
+import HangarResponsibility
+import os
+
+/// Hosted coverage for the zmx group's app arms: the join against the live claim walk, and the refusals
+/// that must not read as an empty inventory.
+@MainActor
+final class ControlServerZmxTests: XCTestCase {
+    func testEveryTreeSharesOneLeaderSnapshotAndProbesEachUniqueLeaderOnce() throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let workspace = try XCTUnwrap(store.workspaces.first)
+        let session = try XCTUnwrap(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = GhosttySurfaceView(workingDirectory: "/tmp", backedByZmx: true)
+        session.hasSplit = true
+        session.splitPaneIdentity = UUID()
+        session.splitSurface = GhosttySurfaceView(workingDirectory: "/tmp", backedByZmx: true)
+        let names = [session.paneIdentity, try XCTUnwrap(session.splitPaneIdentity)].map(ZmxSupport.daemonName)
+        var lists = 0
+        var foregroundLists = 0
+        var lookups: [Int32: Int] = [:]
+        var root: Int32 = 100
+        var failedList = false
+        let client = ZmxClient(executablePath: "/tmp/zmx", socketDirectory: "/tmp/zmx-dir", runner: { _ in
+            lists += 1
+            if failedList { throw ZmxClient.CommandError.timedOut }
+            return names.map { "name=\($0)\tpid=200\tclients=0" }.joined(separator: "\n")
+        })
+        let resolver = ZmxForegroundResolver(leaderProvider: { _ in foregroundLists += 1; return [:] }, leaderProbe: { .foreground($0) })
+        let probe = LiveAttributionProbe(responsible: { pid in
+            lookups[pid, default: 0] += 1
+            return .live(pid == 100 ? 100 : root)
+        }, hosts: { _ in .current(100) }, appPID: 300)
+        let server = ControlServer(library: library, actions: AppActions(library: library), settingsModel: settingsModel,
+                                   identity: AppIdentity(version: "test", commit: "test"), zmxForegroundResolver: resolver, zmxClient: client,
+                                   liveAttributionProbe: probe, socketPath: stateDir.appendingPathComponent("tree.sock").path)
+        let first = server.controlTree(window: nil)
+        let node = try XCTUnwrap(first.result?.tree?.workspaces.flatMap(\.sessions).first { $0.id == session.id.uuidString })
+        XCTAssertEqual(node.liveAttribution, "supervisor")
+        XCTAssertEqual(node.splitLiveAttribution, "supervisor")
+        XCTAssertEqual(lists, 1)
+        XCTAssertEqual(foregroundLists, 0)
+        XCTAssertEqual(lookups, [100: 1, 200: 1])
+        XCTAssertEqual(resolver.foregroundPID(sessionName: names[0]), 200)
+        root = 200
+        let next = server.controlTree(window: nil)
+        XCTAssertEqual(next.result?.tree?.workspaces.flatMap(\.sessions).first { $0.id == session.id.uuidString }?.liveAttribution, "orphaned")
+        XCTAssertEqual(lists, 2)
+        XCTAssertEqual(lookups, [100: 2, 200: 2])
+        failedList = true
+        let unknown = server.controlTree(window: nil)
+        XCTAssertEqual(unknown.result?.tree?.workspaces.flatMap(\.sessions).first { $0.id == session.id.uuidString }?.liveAttribution, "unknown")
+        XCTAssertNil(resolver.foregroundPID(sessionName: names[0]))
+        XCTAssertEqual(lists, 3)
+        XCTAssertEqual(foregroundLists, 0)
+        XCTAssertEqual(lookups, [100: 2, 200: 2])
+    }
+
+    func testRealClientPaneChangesFromSupervisorToOrphanedWhileBarePaneReadsApp() throws {
+        try XCTSkipUnless(Responsibility.system.isAvailable, "Required responsibility symbols are absent")
+        let fixture = try SessionHostClientTests.Fixture()
+        defer { fixture.cleanup() }
+        let store = try XCTUnwrap(library.activeStore)
+        let workspace = try XCTUnwrap(store.workspaces.first)
+        let supervised = try XCTUnwrap(store.addSession(toWorkspace: workspace.id, cwd: fixture.directory.path))
+        let bare = try XCTUnwrap(store.addSession(toWorkspace: workspace.id, cwd: fixture.directory.path))
+        supervised.paneIdentity = try XCTUnwrap(UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+        bare.paneIdentity = try XCTUnwrap(UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
+        for session in [supervised, bare] { session.surface = GhosttySurfaceView(workingDirectory: fixture.directory.path, backedByZmx: true) }
+        try fixture.startClient(name: fixture.names[0], terminal: true)
+        try fixture.startClient(name: fixture.names[1], terminal: true, mediated: false)
+        _ = try fixture.waitForLeaders(count: 2)
+        let host = try fixture.hostPID()
+        let baseline = try XCTUnwrap(Responsibility.system.responsibleProcess(of: getpid()))
+        let client = ZmxClient(executablePath: fixture.zmx.path, socketDirectory: try XCTUnwrap(fixture.environment["ZMX_DIR"]))
+        let probe = LiveAttributionProbe(appPID: baseline)
+        let endpoint = URL(fileURLWithPath: fixture.paths.pidfile).deletingLastPathComponent().lastPathComponent
+        XCTAssertEqual(LiveAttributionProbe.publishedHosts(client.endpoint), .init(pids: [endpoint: host], current: endpoint))
+        do {
+            defer { try? String(host).write(toFile: fixture.paths.pidfile, atomically: false, encoding: .utf8) }
+            try String(getpid()).write(toFile: fixture.paths.pidfile, atomically: false, encoding: .utf8)
+            var written = [timeval(tv_sec: 1000, tv_usec: 0), timeval(tv_sec: 1000, tv_usec: 0)]
+            XCTAssertEqual(utimes(fixture.paths.pidfile, &written), 0)
+            XCTAssertEqual(LiveAttributionProbe.publishedHosts(client.endpoint).pids, [:])
+        }
+        let server = ControlServer(library: library, actions: AppActions(library: library), settingsModel: settingsModel,
+                                   identity: AppIdentity(version: "test", commit: "test"), zmxClient: client,
+                                   liveAttributionProbe: probe, socketPath: stateDir.appendingPathComponent("real-tree.sock").path)
+        var nodes = server.buildTree(in: store).workspaces.flatMap(\.sessions)
+        XCTAssertEqual(nodes.first { $0.id == supervised.id.uuidString }?.liveAttribution, "supervisor")
+        XCTAssertNil(nodes.first { $0.id == supervised.id.uuidString }?.liveHostStale)
+        XCTAssertEqual(nodes.first { $0.id == bare.id.uuidString }?.liveAttribution, "app")
+        let keyed = URL(fileURLWithPath: fixture.paths.pidfile).deletingLastPathComponent()
+        let legacy = keyed.deletingLastPathComponent().appendingPathComponent(SessionHost.legacyEndpoint)
+        try FileManager.default.moveItem(at: keyed, to: legacy)
+        nodes = server.buildTree(in: store).workspaces.flatMap(\.sessions)
+        try FileManager.default.moveItem(at: legacy, to: keyed)
+        XCTAssertEqual(nodes.first { $0.id == supervised.id.uuidString }?.liveAttribution, "supervisor")
+        XCTAssertEqual(nodes.first { $0.id == supervised.id.uuidString }?.liveHostStale, true)
+        XCTAssertNil(nodes.first { $0.id == bare.id.uuidString }?.liveHostStale)
+        XCTAssertEqual(kill(host, SIGKILL), 0)
+        let deadline = Date().addingTimeInterval(3)
+        repeat {
+            nodes = server.buildTree(in: store).workspaces.flatMap(\.sessions)
+            if nodes.first(where: { $0.id == supervised.id.uuidString })?.liveAttribution == "orphaned" { break }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        } while Date() < deadline
+        XCTAssertEqual(nodes.first { $0.id == supervised.id.uuidString }?.liveAttribution, "orphaned")
+        XCTAssertEqual(nodes.first { $0.id == bare.id.uuidString }?.liveAttribution, "app")
+    }
+
+    func testTreeMarksAPaneOnAnotherHostStaleOnlyWhileTheCurrentKeyIsKnown() throws {
+        let store = try XCTUnwrap(library.activeStore)
+        let workspace = try XCTUnwrap(store.workspaces.first)
+        let session = try XCTUnwrap(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = GhosttySurfaceView(workingDirectory: "/tmp", backedByZmx: true)
+        let row = "name=\(ZmxSupport.daemonName(for: session.paneIdentity))\tpid=200\tclients=1"
+        let client = ZmxClient(executablePath: "/tmp/zmx", socketDirectory: "/tmp/zmx-dir", runner: { _ in row })
+        let resolver = ZmxForegroundResolver(leaderProvider: { _ in [:] }, leaderProbe: { .foreground($0) })
+        func node(current: String?) throws -> ControlSessionNode {
+            let probe = LiveAttributionProbe(responsible: { $0 == 200 ? .live(101) : .live($0) },
+                                             hosts: { _ in .init(pids: ["current": 100, "earlier": 101], current: current) },
+                                             appPID: 300)
+            let server = ControlServer(library: library, actions: AppActions(library: library), settingsModel: settingsModel,
+                                       identity: AppIdentity(version: "test", commit: "test"), zmxForegroundResolver: resolver,
+                                       zmxClient: client, liveAttributionProbe: probe,
+                                       socketPath: stateDir.appendingPathComponent("stale.sock").path)
+            return try XCTUnwrap(server.buildTree(in: store).workspaces.flatMap(\.sessions).first { $0.id == session.id.uuidString })
+        }
+        XCTAssertEqual(try node(current: "current").liveAttribution, "supervisor")
+        XCTAssertEqual(try node(current: "current").liveHostStale, true)
+        XCTAssertEqual(try node(current: "missing").liveHostStale, true)
+        XCTAssertEqual(try node(current: nil).liveAttribution, "supervisor")
+        XCTAssertNil(try node(current: nil).liveHostStale)
+    }
+
+    func testPublishedHostTakesAPidStartedBeforeThePidfileWasWritten() throws {
+        try FileManager.default.createDirectory(at: stateDir, withIntermediateDirectories: true)
+        let pidfile = stateDir.appendingPathComponent("pid").path
+        try "\(getpid())\n".write(toFile: pidfile, atomically: false, encoding: .utf8)
+        XCTAssertEqual(LiveAttributionProbe.publishedHost(pidfile: pidfile), getpid())
+        var written = [timeval(tv_sec: 1000, tv_usec: 0), timeval(tv_sec: 1000, tv_usec: 0)]
+        XCTAssertEqual(utimes(pidfile, &written), 0)
+        XCTAssertNil(LiveAttributionProbe.publishedHost(pidfile: pidfile))
+        for content in ["", "garbage", "0", "-5", "2147483647"] {
+            try content.write(toFile: pidfile, atomically: false, encoding: .utf8)
+            XCTAssertNil(LiveAttributionProbe.publishedHost(pidfile: pidfile), content)
+        }
+        XCTAssertNil(LiveAttributionProbe.publishedHost(pidfile: stateDir.appendingPathComponent("absent").path))
+    }
+
+    func testHelperEndpointKeyRunsOncePerHelperFileAndRetriesAFailure() throws {
+        try FileManager.default.createDirectory(at: stateDir, withIntermediateDirectories: true)
+        let helper = stateDir.appendingPathComponent("hangar-session-host")
+        try Data("one".utf8).write(to: helper)
+        let answers = OSAllocatedUnfairLock(initialState: ["0a1b2c3d4e5f-100003", "garbage", "0a1b2c3d4e5f-100004"])
+        let runs = OSAllocatedUnfairLock(initialState: 0)
+        let cache = HelperEndpointKey(run: { _ in
+            runs.withLock { $0 += 1 }
+            return answers.withLock { $0.removeFirst() }
+        })
+        XCTAssertEqual(cache.key(helper: helper.path), "0a1b2c3d4e5f-100003")
+        XCTAssertEqual(cache.key(helper: helper.path), "0a1b2c3d4e5f-100003")
+        XCTAssertEqual(runs.withLock { $0 }, 1)
+        try FileManager.default.removeItem(at: helper)
+        try Data("two".utf8).write(to: helper)
+        XCTAssertNil(cache.key(helper: helper.path))
+        XCTAssertEqual(cache.key(helper: helper.path), "0a1b2c3d4e5f-100004")
+        XCTAssertEqual(runs.withLock { $0 }, 3)
+        XCTAssertNil(cache.key(helper: stateDir.appendingPathComponent("absent").path))
+    }
+
+    private var stateDir: URL!
+    private var library: WindowLibrary!
+    private var settingsModel: SettingsModel!
+
+    override func setUp() async throws {
+        try await super.setUp()
+        await MainActor.run {
+            stateDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("hangar-zmx-tests-\(UUID().uuidString)", isDirectory: true)
+            library = WindowLibrary(directory: stateDir)
+            settingsModel = SettingsModel(library: library, settingsStore: SettingsStore(directory: stateDir))
+        }
+    }
+
+    override func tearDown() async throws {
+        await MainActor.run {
+            settingsModel = nil
+            library = nil
+            try? FileManager.default.removeItem(at: stateDir)
+        }
+        try await super.tearDown()
+    }
+
+    func testRemoteTreeReadsTheFarSidesAnswerInOneInvocation() async throws {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.projection, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+
+        let response = await server.remoteTree(host: "buildbox")
+
+        let remote = try XCTUnwrap(response.result?.remote)
+        XCTAssertEqual(remote.host, "buildbox", "the far side names no host; the caller stamps it")
+        XCTAssertEqual(remote.sessions.map(\.id), ["s1"])
+        XCTAssertEqual(remote.sessions.map(\.windowName), ["main"])
+        XCTAssertEqual(remote.endpoint.socketDirectory, "/tmp/hangar-zmx-abc")
+        XCTAssertEqual(runner.invocations.count, 1, "the far side does the whole join in one call")
+        XCTAssertEqual(runner.invocations.first?.first, "ssh")
+    }
+
+    func testTheFarSidesPresentationVersionSurvivesTheHostStamp() async throws {
+        let advertising = Self.projection.replacingOccurrences(of: #"{"remote":{"#,
+                                                               with: #"{"remote":{"presentation":1,"#)
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: advertising, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+
+        let response = await server.remoteTree(host: "buildbox")
+
+        let remote = try XCTUnwrap(response.result?.remote)
+        XCTAssertEqual(remote.presentation, 1)
+        XCTAssertEqual(remote.host, "buildbox")
+    }
+
+    func testAnOriginThatPredatesPresentationReportsNoVersion() async throws {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.projection, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+
+        let response = await server.remoteTree(host: "buildbox")
+
+        XCTAssertNil(try XCTUnwrap(response.result?.remote).presentation)
+    }
+
+    func testTheBareFormAnswersAboutThisAppWithoutSshingAnywhere() async throws {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: "", stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+
+        let response = await server.remoteTree(host: nil)
+
+        let remote = try XCTUnwrap(response.result?.remote)
+        XCTAssertTrue(response.ok)
+        XCTAssertNil(remote.host, "nothing was sshed to, so there is no destination to name")
+        XCTAssertTrue(runner.invocations.isEmpty, "the local form must never reach ssh")
+        XCTAssertEqual(remote.presentation, PresentationCodec.version)
+        // no pane in this fixture is zmx-backed, and an empty list is a successful answer rather than
+        // a refusal: it does not claim to tell "not live" apart from "live with nothing eligible"
+        XCTAssertTrue(remote.sessions.isEmpty)
+    }
+
+    func testRemoteTreeRefusesANonzeroExitBeforeParsing() async {
+        // an ssh that dies mid-write leaves output that may still parse; only the exit status separates a
+        // real answer from a truncated one, which is why it is read first
+        let truncated = String(Self.projection.dropLast(40))
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 255, stdout: truncated,
+                                                                 stderr: "Permission denied (publickey)."))
+        let server = makeServer(list: "", remoteRunner: runner)
+
+        let response = await server.remoteTree(host: "buildbox")
+
+        XCTAssertFalse(response.ok)
+        XCTAssertEqual(response.error, "Permission denied (publickey).")
+    }
+
+    func testAFailedRemoteReportsItsOwnReasonRatherThanAGenericOne() async {
+        // the remote's hangarctl prints its refusal to stdout and exits nonzero, leaving stderr empty
+        let refusal = #"{"ok":false,"error":"could not read the zmx session list"}"#
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 1, stdout: refusal, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+
+        let response = await server.remoteTree(host: "buildbox")
+
+        XCTAssertEqual(response.error, "could not read the zmx session list")
+    }
+
+    func testAnSshFailureStillFallsBackToStderr() async {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 255, stdout: "",
+                                                                  stderr: "ssh: Could not resolve hostname"))
+        let server = makeServer(list: "", remoteRunner: runner)
+
+        let response = await server.remoteTree(host: "buildbox")
+
+        XCTAssertEqual(response.error, "ssh: Could not resolve hostname")
+    }
+
+    func testRemoteTreeRejectsAHostileHostWithoutRunningAnything() async {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: "", stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+
+        let response = await server.remoteTree(host: "-oProxyCommand=touch /tmp/pwned")
+
+        XCTAssertFalse(response.ok)
+        XCTAssertTrue(runner.invocations.isEmpty, "a refused host must never reach a process")
+    }
+
+    // a rejected host is rejected for carrying control characters, so echoing it back would print them
+    // to a terminal once hangarctl decodes the response
+    func testRefusedHostIsNotEchoedIntoTheResponse() async {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: "", stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+
+        let response = await server.remoteTree(host: "buildbox\nrm -rf /\u{1B}[31mRED")
+
+        XCTAssertEqual(response.error, "invalid host")
+        XCTAssertFalse(response.error?.contains("\n") ?? true)
+        XCTAssertFalse(response.error?.contains("\u{1B}") ?? true)
+        XCTAssertFalse(response.error?.contains("rm -rf") ?? true)
+    }
+
+    func testAttachTargetsABackgroundWindowWithoutChangingTheActiveWindow() async throws {
+        let front = try XCTUnwrap(library.activeWindowID)
+        let frontStore = try XCTUnwrap(library.activeStore)
+        let destination = library.newWindow(name: "other").id
+        let destinationStore = try XCTUnwrap(library.loadStore(for: destination))
+        library.frontmostWindowID = front
+        let originalCount = frontStore.workspaces.flatMap(\.sessions).count
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.splitProjection, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+        let dispatched = await ControlDispatcher(actions: server).dispatch(ControlRequest(cmd: .zmxAttach, target: "s1",
+            args: ControlArgs(host: "buildbox", window: String(destination.uuidString.prefix(8)))))
+        let response = try XCTUnwrap(dispatched)
+        XCTAssertTrue(response.ok)
+        let id = try XCTUnwrap(response.result?.id)
+        let tree = try XCTUnwrap(server.controlTree(window: destination.uuidString).result?.tree)
+        let node = try XCTUnwrap(tree.workspaces.flatMap(\.sessions).first { $0.id == id })
+        XCTAssertEqual(node.remoteHost, "buildbox")
+        XCTAssertEqual(node.hasSplit, true)
+        XCTAssertEqual(destinationStore.selectedSessionID?.uuidString, id)
+        XCTAssertEqual(frontStore.workspaces.flatMap(\.sessions).count, originalCount)
+        XCTAssertEqual(library.activeWindowID, front)
+    }
+
+    func testAnAttachIntoABackgroundWindowIsOnDiskWhenItReturns() async throws {
+        let front = try XCTUnwrap(library.activeWindowID)
+        let destination = library.newWindow(name: "other").id
+        _ = try XCTUnwrap(library.loadStore(for: destination))
+        library.frontmostWindowID = front
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.splitProjection, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+
+        let dispatched = await ControlDispatcher(actions: server).dispatch(ControlRequest(cmd: .zmxAttach, target: "s1",
+            args: ControlArgs(host: "buildbox", window: destination.uuidString)))
+
+        let id = try XCTUnwrap(dispatched?.result?.id)
+        let saved = PersistenceStore(directory: stateDir.appendingPathComponent("windows"), fileName: "\(destination.uuidString).json").load()
+        let attached = try XCTUnwrap(saved.workspaces.flatMap { $0.attached ?? [] }.first)
+        XCTAssertEqual(attached.session.id.uuidString, id)
+        XCTAssertEqual(attached.origin.host, "buildbox")
+        XCTAssertEqual(attached.origin.panes.count, 2)
+    }
+
+    func testAttachRefusesAClosedOrUnknownDestination() async throws {
+        let front = try XCTUnwrap(library.activeWindowID)
+        let destination = library.newWindow(name: "closed").id
+        _ = library.loadStore(for: destination)
+        library.frontmostWindowID = front
+        library.closeWindow(destination)
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.projection, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+        for target in [destination.uuidString, "missing-window"] {
+            let dispatched = await ControlDispatcher(actions: server).dispatch(ControlRequest(cmd: .zmxAttach, target: "s1",
+                args: ControlArgs(host: "buildbox", window: target)))
+            let response = try XCTUnwrap(dispatched)
+            XCTAssertFalse(response.ok)
+            XCTAssertNil(library.activeStore?.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+        }
+    }
+
+    func testAttachRefusesADestinationClosedDuringDiscovery() async throws {
+        let front = try XCTUnwrap(library.activeWindowID)
+        let destination = library.newWindow(name: "closing").id
+        let destinationStore = try XCTUnwrap(library.loadStore(for: destination))
+        library.frontmostWindowID = front
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.projection, stderr: ""), beforeReturn: {
+            self.library.closeWindow(destination)
+        })
+        let server = makeServer(list: "", remoteRunner: runner)
+        let dispatched = await ControlDispatcher(actions: server).dispatch(ControlRequest(cmd: .zmxAttach, target: "s1",
+            args: ControlArgs(host: "buildbox", window: destination.uuidString)))
+        let response = try XCTUnwrap(dispatched)
+        XCTAssertFalse(response.ok)
+        XCTAssertNil(destinationStore.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+        XCTAssertNil(library.activeStore?.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+    }
+
+    func testAttachRefusesAnAmbiguousWindowPrefix() async throws {
+        let directory = stateDir.appendingPathComponent("ambiguous")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let first = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-0000-0000-0000-000000000001"))
+        let second = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-0000-0000-0000-000000000002"))
+        let index = WindowsIndex(frontmost: first, windows: [
+            WindowEntry(id: first, name: "one", isOpen: true), WindowEntry(id: second, name: "two", isOpen: true),
+        ])
+        try JSONEncoder().encode(index).write(to: directory.appendingPathComponent("windows.json"))
+        let windows = WindowLibrary(directory: directory)
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.projection, stderr: ""))
+        let server = ControlServer(library: windows, actions: AppActions(library: windows),
+            settingsModel: SettingsModel(library: windows, settingsStore: SettingsStore(directory: directory)),
+            identity: AppIdentity(version: "test", commit: "test"), remoteRunner: runner,
+            socketPath: directory.appendingPathComponent("control.sock").path)
+        let dispatched = await ControlDispatcher(actions: server).dispatch(ControlRequest(cmd: .zmxAttach, target: "s1",
+            args: ControlArgs(host: "buildbox", window: "AAAAAAAA")))
+        let response = try XCTUnwrap(dispatched)
+        XCTAssertFalse(response.ok)
+        XCTAssertTrue(response.error?.contains("ambiguous") == true)
+        XCTAssertNil(windows.activeStore?.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+    }
+
+    func testUntargetedAttachUsesTheActiveWindowAfterDiscovery() async throws {
+        let destination = library.newWindow(name: "selected during discovery").id
+        let destinationStore = try XCTUnwrap(library.loadStore(for: destination))
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.projection, stderr: ""), beforeReturn: {
+            self.library.frontmostWindowID = destination
+        })
+        let server = makeServer(list: "", remoteRunner: runner)
+        let response = await server.attachRemoteSession(host: "buildbox", session: "s1")
+        XCTAssertTrue(response.ok)
+        XCTAssertEqual(destinationStore.activeSession?.remoteHost, "buildbox")
+    }
+
+    func testAttachCreatesARemoteSessionWithAHoldingSshPane() async throws {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.projection, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+        let store = try XCTUnwrap(library.activeStore)
+
+        let response = await server.attachRemoteSession(host: "buildbox", session: "s1")
+
+        XCTAssertTrue(response.ok)
+        let created = try XCTUnwrap(store.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+        XCTAssertEqual(created.remoteHost, "buildbox")
+        XCTAssertEqual(created.customName, "build")
+        XCTAssertTrue(created.commandWait, "the pane must hold so the disconnect line can be read")
+        let command = try XCTUnwrap(created.initialCommand)
+        XCTAssertTrue(command.contains("ssh"))
+        XCTAssertTrue(command.contains("hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"))
+        XCTAssertFalse(created.hasSplit)
+    }
+
+    func testAttachResolvesTheRemoteAgainRatherThanTrustingTheCaller() async {
+        // the daemon has gone since the picker listed it, so the far side's own eligibility walk no longer
+        // offers the session at all; attaching would CREATE the daemon and hand back a fresh shell
+        // wearing the session's name
+        let vanished = """
+        {"ok":true,"result":{"remote":{\
+        "endpoint":{"executable":"/Applications/Hangar.app/zmx","socketDirectory":"/tmp/hangar-zmx-abc"},\
+        "sessions":[]}}}
+        """
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: vanished, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+        let store = library.activeStore
+
+        let response = await server.attachRemoteSession(host: "buildbox", session: "s1")
+
+        XCTAssertFalse(response.ok)
+        XCTAssertEqual(response.error, "no attachable session s1 on buildbox")
+        XCTAssertEqual(runner.invocations.count, 1, "it re-reads before touching the model")
+        XCTAssertNil(store?.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil },
+                     "a refused attach must leave no half-built row")
+    }
+
+    func testAFailedDiscoveryCreatesNothingAndKeepsItsReason() async {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 255, stdout: "",
+                                                                  stderr: "Permission denied (publickey)."))
+        let server = makeServer(list: "", remoteRunner: runner)
+        let store = library.activeStore
+
+        let response = await server.attachRemoteSession(host: "buildbox", session: "s1")
+
+        XCTAssertEqual(response.error, "Permission denied (publickey).")
+        XCTAssertNil(store?.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+    }
+
+    func testAttachTakesTheSessionIdOnlyNotItsName() async {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.projection, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+
+        // remote names are mutable and non-unique across workspaces, so only the id can address one
+        let response = await server.attachRemoteSession(host: "buildbox", session: "build")
+
+        XCTAssertFalse(response.ok)
+        XCTAssertEqual(response.error, "no attachable session build on buildbox")
+    }
+
+    func testAttachUsesALocalWorkingDirectoryNotTheRemoteOne() async throws {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.projection, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+        let store = try XCTUnwrap(library.activeStore)
+
+        _ = await server.attachRemoteSession(host: "buildbox", session: "s1")
+
+        let created = try XCTUnwrap(store.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+        // libghostty chdirs the local ssh process here; /repo exists on buildbox, not necessarily here
+        XCTAssertNotEqual(created.initialCwd, "/repo")
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: created.initialCwd, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue)
+    }
+
+    func testACompanionAttachedAloneJoinsItsAttachedParentInThatParentsWorkspace() async throws {
+        let server = makeServer(list: "", remoteRunner: FakeRemoteRunner(result: Self.groupProjection))
+        let store = try XCTUnwrap(library.activeStore)
+        let parentReply = await server.attachRemoteSession(host: "buildbox", session: "s1")
+        let parent = try XCTUnwrap(parentReply.result?.id.flatMap(UUID.init(uuidString:)))
+        let home = try XCTUnwrap(store.workspace(forSession: parent)?.id)
+        let other = store.addWorkspace(name: "other").id
+        XCTAssertEqual(store.currentWorkspaceID, other)
+
+        let reply = await server.attachRemoteSession(host: "buildbox", session: "c1")
+
+        XCTAssertTrue(reply.ok, reply.error ?? "")
+        XCTAssertEqual(reply.result?.parent, parent.uuidString)
+        let companion = try XCTUnwrap(reply.result?.id.flatMap(UUID.init(uuidString:)))
+        XCTAssertEqual(store.session(withID: companion)?.parentID, parent)
+        XCTAssertEqual(store.workspace(forSession: companion)?.id, home)
+    }
+
+    func testEveryAttachedRowReportsItsOriginSessionIdInTheTreeAndItsEdges() async throws {
+        let server = makeServer(list: "", remoteRunner: FakeRemoteRunner(result: Self.groupProjection))
+        let store = try XCTUnwrap(library.activeStore)
+        let anchor = try XCTUnwrap(library.readEvents(ControlEventReadOptions(cursor: nil, kinds: nil, limit: 100)).result?.events)
+
+        let parentReply = await server.attachRemoteSession(host: "buildbox", session: "s1")
+        let companionReply = await server.attachRemoteSession(host: "buildbox", session: "c1")
+        let parent = try XCTUnwrap(parentReply.result?.id)
+        let companion = try XCTUnwrap(companionReply.result?.id)
+        let tree = try XCTUnwrap(server.controlTree(window: nil).result?.tree)
+        let nodes = tree.workspaces.flatMap(\.sessions)
+        XCTAssertEqual(nodes.first { $0.id == parent }?.remoteSessionID, "s1")
+        XCTAssertEqual(nodes.first { $0.id == companion }?.remoteSessionID, "c1")
+        XCTAssertTrue(nodes.filter { $0.remoteHost == nil }.allSatisfy { $0.remoteSessionID == nil })
+        store.closeSession(try XCTUnwrap(UUID(uuidString: companion)))
+
+        let edges = try XCTUnwrap(library.readEvents(ControlEventReadOptions(
+            cursor: ControlEventCursor(run: anchor.run, after: anchor.next), kinds: [.remoteOpened, .remoteClosed], limit: 100
+        )).result?.events).items
+        XCTAssertEqual(edges.map(\.kind), [.remoteOpened, .remoteOpened, .remoteClosed])
+        XCTAssertEqual(edges.map(\.session), [parent, companion, companion])
+        XCTAssertEqual(edges.map(\.payload.remoteSessionID), ["s1", "c1", "c1"])
+    }
+
+    func testACompanionWithNoAttachedParentStandsAlone() async throws {
+        let server = makeServer(list: "", remoteRunner: FakeRemoteRunner(result: Self.groupProjection))
+
+        let reply = await server.attachRemoteSession(host: "buildbox", session: "c1")
+
+        XCTAssertTrue(reply.ok, reply.error ?? "")
+        XCTAssertNil(reply.result?.parent)
+        let store = try XCTUnwrap(library.activeStore)
+        XCTAssertNil(store.session(withID: try XCTUnwrap(reply.result?.id.flatMap(UUID.init(uuidString:))))?.parentID)
+    }
+
+    func testACompanionStandsAloneWhenTwoRowsShowItsParent() async throws {
+        let server = makeServer(list: "", remoteRunner: FakeRemoteRunner(result: Self.groupProjection))
+        _ = await server.attachRemoteSession(host: "buildbox", session: "s1")
+        _ = await server.attachRemoteSession(host: "buildbox", session: "s1")
+
+        let reply = await server.attachRemoteSession(host: "buildbox", session: "c1")
+
+        XCTAssertTrue(reply.ok, reply.error ?? "")
+        XCTAssertNil(reply.result?.parent, "two candidate parents name no single group to join")
+    }
+
+    func testACompanionIgnoresAParentRowFromAnotherHostOrEndpoint() async throws {
+        let server = makeServer(list: "", remoteRunner: FakeRemoteRunner(result: Self.groupProjection))
+        let store = try XCTUnwrap(library.activeStore)
+        let workspace = try XCTUnwrap(store.currentWorkspaceID)
+        let elsewhere = ControlZmxEndpoint(executable: "/Applications/Hangar.app/zmx", socketDirectory: "/tmp/hangar-zmx-other")
+        let current = ControlZmxEndpoint(executable: "/Applications/Hangar.app/zmx", socketDirectory: "/tmp/hangar-zmx-abc")
+        for (host, endpoint) in [("otherbox", current), ("buildbox", elsewhere)] {
+            let row = try XCTUnwrap(store.addSession(toWorkspace: workspace, cwd: NSHomeDirectory(), remoteHost: host))
+            store.bindRemote(RemoteBinding(remoteSessionID: "s1", daemonsByLocalPane: [:], presentationVersion: nil,
+                                           origin: RemoteBinding.Origin(host: host, endpoint: endpoint, sessionName: "build")),
+                             forSession: row.id)
+        }
+
+        let reply = await server.attachRemoteSession(host: "buildbox", session: "c1")
+
+        XCTAssertTrue(reply.ok, reply.error ?? "")
+        XCTAssertNil(reply.result?.parent)
+    }
+
+    func testAttachBringsBothPanesOfARemoteSplit() async throws {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.splitProjection,
+                                                                  stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+        let store = try XCTUnwrap(library.activeStore)
+
+        let response = await server.attachRemoteSession(host: "buildbox", session: "s1")
+
+        XCTAssertTrue(response.ok)
+        let created = try XCTUnwrap(store.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+        XCTAssertTrue(created.hasSplit)
+        XCTAssertEqual(created.splitAxis, .topBottom, "the split arrives arranged as it is over there")
+        XCTAssertTrue(created.splitCommandWait)
+        XCTAssertTrue(try XCTUnwrap(created.splitInitialCommand).contains("hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2"))
+    }
+
+    func testAttachRecordsWhichLocalPaneStandsForEachOfTheOriginsPanes() async throws {
+        let advertising = Self.splitProjection.replacingOccurrences(of: #"{"remote":{"#,
+                                                                    with: #"{"remote":{"presentation":1,"#)
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: advertising, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+        let transport = RecordingTransport()
+        server.remoteTransport = transport
+        let store = try XCTUnwrap(library.activeStore)
+
+        let response = await server.attachRemoteSession(host: "buildbox", session: "s1")
+
+        XCTAssertTrue(response.ok)
+        let created = try XCTUnwrap(store.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+        XCTAssertEqual(transport.launches.count, 1, "the attach opens the presentation stream itself")
+        XCTAssertEqual(transport.launches.first?.prefix(2), ["ssh", "-T"])
+        let state = try XCTUnwrap(created.remotePresentation)
+        let remoteLeft = try XCTUnwrap(UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"))
+        let remoteRight = try XCTUnwrap(UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2"))
+        XCTAssertEqual(state.binding.remoteSessionID, "s1")
+        XCTAssertEqual(state.binding.localPane(forRemote: remoteLeft), created.paneIdentity)
+        XCTAssertEqual(state.binding.localPane(forRemote: remoteRight), created.splitPaneIdentity)
+        XCTAssertNotNil(created.splitPaneIdentity)
+        XCTAssertEqual(state.connection, .connecting)
+        XCTAssertFalse(state.binding.originHeadless)
+    }
+
+    func testAttachingToAHeadlessOriginMarksTheRowsBinding() async throws {
+        let advertising = Self.splitProjection.replacingOccurrences(of: #"{"remote":{"#,
+                                                                    with: #"{"remote":{"presentation":1,"headless":true,"#)
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: advertising, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+        server.remoteTransport = RecordingTransport()
+        let store = try XCTUnwrap(library.activeStore)
+
+        let response = await server.attachRemoteSession(host: "buildbox", session: "s1")
+
+        XCTAssertTrue(response.ok)
+        let created = try XCTUnwrap(store.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+        XCTAssertFalse(store.catalogMirrored)
+        XCTAssertEqual(created.remotePresentation?.binding.originHeadless, true)
+    }
+
+    func testAttachingToAnOriginThatPredatesPresentationReadsUnsupported() async throws {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.projection, stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+        let transport = RecordingTransport()
+        server.remoteTransport = transport
+        let store = try XCTUnwrap(library.activeStore)
+
+        let response = await server.attachRemoteSession(host: "buildbox", session: "s1")
+
+        XCTAssertTrue(response.ok)
+        let created = try XCTUnwrap(store.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+        XCTAssertEqual(created.remotePresentation?.connection, .unsupported)
+        XCTAssertTrue(transport.launches.isEmpty, "an origin without the capability never gets a stream ssh")
+    }
+
+    // attach shipped with no focus call, so a teleported session opened with the keyboard still elsewhere
+    func testAttachFocusesThePrimaryPaneOnceItsSurfacesMaterialize() async throws {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.splitProjection,
+                                                                  stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+        let store = try XCTUnwrap(library.activeStore)
+        // `NSWindow` defaults isReleasedWhenClosed to true; see the hosted-test rule in ui-tests.md.
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+                              styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.orderOut(nil) }
+        let primary = GhosttySurfaceView(workingDirectory: NSTemporaryDirectory())
+        let split = GhosttySurfaceView(workingDirectory: NSTemporaryDirectory())
+        window.contentView?.addSubview(primary)
+        window.contentView?.addSubview(split)
+
+        let response = await server.attachRemoteSession(host: "buildbox", session: "s1")
+
+        XCTAssertTrue(response.ok)
+        let created = try XCTUnwrap(store.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+        let realize = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 60_000_000)
+            created.surface = primary
+            created.splitSurface = split
+        }
+        for _ in 0..<20 where window.firstResponder !== primary {
+            try? await Task.sleep(nanoseconds: 30_000_000)
+        }
+        await realize.value
+
+        XCTAssertTrue(window.firstResponder === primary)
+        XCTAssertFalse(created.splitFocused)
+    }
+
+    func testAnUnselectedAttachStoresThePrimaryPaneAsFocused() async throws {
+        let runner = FakeRemoteRunner(result: RemoteCommandResult(status: 0, stdout: Self.splitProjection,
+                                                                  stderr: ""))
+        let server = makeServer(list: "", remoteRunner: runner)
+        let store = try XCTUnwrap(library.activeStore)
+        let listing = await server.remoteTree(host: "buildbox")
+        let tree = try XCTUnwrap(listing.result?.remote)
+        let remote = try XCTUnwrap(tree.sessions.first { $0.id == "s1" })
+        let workspace = try XCTUnwrap(store.currentWorkspaceID)
+
+        let response = server.attach(remote, from: tree, host: "buildbox",
+                                     placement: ControlServer.RemotePlacement(store: store, workspace: workspace,
+                                                                              select: false))
+
+        XCTAssertTrue(response.ok)
+        let created = try XCTUnwrap(store.workspaces.flatMap(\.sessions).first { $0.remoteHost != nil })
+        XCTAssertTrue(created.hasSplit)
+        XCTAssertFalse(created.splitFocused)
+    }
+
+    func testListReportsTheEndpointOfTheInjectedClient() throws {
+        let server = makeServer(list: "")
+
+        let inventory = try XCTUnwrap(server.listZmxDaemons().result?.zmx)
+
+        let endpoint = try XCTUnwrap(inventory.endpoint)
+        XCTAssertEqual(endpoint.executable, "/tmp/zmx")
+        XCTAssertEqual(endpoint.socketDirectory, "/tmp/zmx-dir")
+    }
+
+    func testListJoinsObservedDaemonsAgainstTheLivePanes() throws {
+        let live = try XCTUnwrap(library.allOpenSessions().first)
+        let orphan = "hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        let server = makeServer(list: """
+        name=\(ZmxSupport.daemonName(for: live.paneIdentity))\tpid=1\tclients=1\tcreated=1
+        name=\(orphan)\tpid=2\tclients=0\tcreated=1
+        name=notes\tpid=3\tclients=0\tcreated=1
+        """)
+
+        let response = server.listZmxDaemons()
+
+        XCTAssertTrue(response.ok)
+        let inventory = try XCTUnwrap(response.result?.zmx)
+        XCTAssertTrue(inventory.inventoryComplete)
+        XCTAssertEqual(inventory.restore.active, GhosttyApp.shared.launchRestoreMode.rawValue)
+
+        let claimed = try XCTUnwrap(inventory.entries.first { $0.sessionID == live.id.uuidString })
+        XCTAssertEqual(claimed.state, "claimed")
+        XCTAssertEqual(claimed.clients, 1)
+        XCTAssertEqual(claimed.pane, "left")
+
+        XCTAssertEqual(inventory.entries.first { $0.daemon == orphan }?.state, "orphan")
+        XCTAssertEqual(inventory.entries.first { $0.daemon == "notes" }?.state, "foreign")
+    }
+
+    func testAnEmptyNamespaceIsASuccessfulEmptyInventory() throws {
+        let response = makeServer(list: "").listZmxDaemons()
+
+        XCTAssertTrue(response.ok, "no daemons is an answer, not a failure")
+        let inventory = try XCTUnwrap(response.result?.zmx)
+        XCTAssertTrue(inventory.entries.allSatisfy { $0.observation == "absent" },
+                      "only the panes' own claims remain, each with no daemon behind it")
+    }
+
+    func testAFailedListingIsAnErrorRatherThanAnEmptyInventory() {
+        let response = makeServer(list: nil).listZmxDaemons()
+
+        XCTAssertFalse(response.ok, "not having looked must not read as nothing to see")
+        XCTAssertEqual(response.error, "could not read the zmx session list")
+        XCTAssertNil(response.result?.zmx)
+    }
+
+    func testScreenReadsTheNamedDaemonAndKeepsTheLastLines() throws {
+        var invocations: [[String]] = []
+        let server = makeServer(runner: {
+            invocations.append($0.arguments)
+            return "3 80 24 0 2 0\none\ntwo\nthree\n\n"
+        })
+
+        XCTAssertEqual(server.readZmxScreen(name: "hangar-a", fullBuffer: false, lines: nil).result?.text,
+                       "one\ntwo\nthree\n\n")
+        XCTAssertEqual(server.readZmxScreen(name: "hangar-a", fullBuffer: true, lines: 2).result?.text, "two\nthree")
+        XCTAssertEqual(invocations, [["screen", "hangar-a"], ["screen", "hangar-a", "--all"]])
+    }
+
+    func testScreenOfADaemonZmxCannotReadIsAnError() {
+        let server = makeServer(runner: { _ in throw ZmxClient.CommandError.failed(1, "error: no such session") })
+
+        let response = server.readZmxScreen(name: "gone", fullBuffer: false, lines: nil)
+
+        XCTAssertFalse(response.ok)
+        XCTAssertEqual(response.error, "could not read the zmx screen of gone")
+    }
+
+    func testWithoutAClientTheCommandSaysZmxIsUnavailable() {
+        let server = ControlServer(
+            library: library, actions: AppActions(library: library), settingsModel: settingsModel,
+            identity: AppIdentity(version: "9.9.9", commit: "testsha"),
+            socketPath: stateDir.appendingPathComponent("control-\(UUID().uuidString).sock").path)
+
+        let response = server.listZmxDaemons()
+        XCTAssertFalse(response.ok)
+        XCTAssertEqual(response.error, ControlZmxError.unavailable)
+    }
+
+    func testPruneNeverPassesForceAndCountsOnlyAConfirmedKill() throws {
+        let orphan = "hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        var invocations: [[String]] = []
+        let server = makeServer(runner: { invocation in
+            invocations.append(invocation.arguments)
+            guard invocation.arguments.first == "kill" else {
+                return "name=\(orphan)\tpid=2\tclients=0\tcreated=1"
+            }
+            return "killed session \(orphan)\n"
+        })
+
+        let response = server.pruneZmxDaemons()
+
+        XCTAssertTrue(response.ok)
+        XCTAssertEqual(response.result?.affected, 1)
+        XCTAssertEqual(response.result?.text, "killed \(orphan)")
+        XCTAssertEqual(invocations, [["list"], ["list"], ["kill", orphan]],
+                       "prune lists, re-lists to revalidate, then kills unforced")
+    }
+
+    func testAStaleSocketCleanupIsNotCountedAsAKill() throws {
+        let orphan = "hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        let server = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "kill" else {
+                return "name=\(orphan)\tpid=2\tclients=0\tcreated=1"
+            }
+            return "cleaned up stale session \(orphan)\n"
+        })
+
+        let response = server.pruneZmxDaemons()
+
+        XCTAssertTrue(response.ok)
+        XCTAssertEqual(response.result?.affected, 0, "an unlinked socket may leave the daemon running")
+        XCTAssertEqual(response.result?.text,
+                       "\(orphan): cleaned up a stale socket, the daemon may still be running")
+    }
+
+    func testACandidateThatGainsAClientBeforeTheKillIsDropped() throws {
+        let orphan = "hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        var listings = 0
+        let server = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else {
+                XCTFail("a revalidated-away candidate must never be killed")
+                return ""
+            }
+            listings += 1
+            // someone attached between the two listings, which is the window zmx cannot close for us
+            return "name=\(orphan)\tpid=2\tclients=\(listings == 1 ? 0 : 1)\tcreated=1"
+        })
+
+        let response = server.pruneZmxDaemons()
+
+        XCTAssertTrue(response.ok)
+        XCTAssertEqual(response.result?.affected, 0)
+        XCTAssertEqual(response.result?.text, "no orphan daemons left to prune")
+    }
+
+    func testPruneRefusesAnIncompleteInventoryAndKillsNothing() throws {
+        let stray = UUID()
+        let snapshot = Snapshot(workspaces: [WorkspaceSnapshot(
+            id: UUID(), name: "workspace 1",
+            sessions: [SessionSnapshot(id: UUID(), paneIdentity: nil, customName: nil, cwd: "/tmp")])])
+        try PersistenceStore(directory: stateDir.appendingPathComponent("windows"),
+                             fileName: "\(stray.uuidString).json").save(snapshot)
+
+        let orphan = "hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        let server = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else {
+                XCTFail("nothing may be killed against an inventory that cannot account for every pane")
+                return ""
+            }
+            return "name=\(orphan)\tpid=2\tclients=0\tcreated=1"
+        })
+
+        let response = server.pruneZmxDaemons()
+
+        XCTAssertFalse(response.ok)
+        XCTAssertEqual(response.error, ControlZmxError.incompleteInventory)
+    }
+
+    func testPruneLeavesClaimedAndForeignDaemonsAlone() throws {
+        let live = try XCTUnwrap(library.allOpenSessions().first)
+        let server = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else {
+                XCTFail("a claimed pane's daemon and a foreign session are both off limits")
+                return ""
+            }
+            return """
+            name=\(ZmxSupport.daemonName(for: live.paneIdentity))\tpid=1\tclients=0\tcreated=1
+            name=notes\tpid=3\tclients=0\tcreated=1
+            """
+        })
+
+        let response = server.pruneZmxDaemons()
+
+        XCTAssertTrue(response.ok)
+        XCTAssertEqual(response.result?.affected, 0)
+        XCTAssertEqual(response.result?.text, "no orphan daemons")
+    }
+
+    func testPruneSpareASoftClosedPaneAndAnUnreadableRowWhileTakingTheOrphan() throws {
+        let store = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let pending = try XCTUnwrap(store.workspaces.first?.sessions.first)
+        XCTAssertTrue(store.softCloseSession(pending.id), "precondition: a live undo window")
+
+        let orphan = "hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        let unreadable = "hangar-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        var killed: [String] = []
+        let server = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else {
+                killed.append(invocation.arguments[1])
+                return "killed session \(invocation.arguments[1])\n"
+            }
+            return """
+            name=\(ZmxSupport.daemonName(for: pending.paneIdentity))\tpid=1\tclients=0\tcreated=1
+            name=\(orphan)\tpid=2\tclients=0\tcreated=1
+            name=\(unreadable)\terr=Timeout\tstatus=unreachable
+            """
+        })
+
+        let response = server.pruneZmxDaemons()
+
+        XCTAssertTrue(response.ok)
+        XCTAssertEqual(killed, [orphan],
+                       "a soft-closed pane still owns its daemon, and an unreadable row is not an orphan")
+        XCTAssertEqual(response.result?.affected, 1)
+    }
+
+    func testKillRefusesEveryRowItCannotSafelyDestroy() throws {
+        let store = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let session = try XCTUnwrap(store.workspaces.first?.sessions.first)
+        let absentServer = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else {
+                XCTFail("a daemon that is not running has nothing to kill")
+                return ""
+            }
+            return ""
+        })
+
+        let absent = absentServer.killZmxDaemon(target: session.id.uuidString, window: nil, pane: .left)
+        XCTAssertFalse(absent.ok)
+        XCTAssertEqual(absent.error, "\(ZmxSupport.daemonName(for: session.paneIdentity)) is not running")
+
+        let unreadableServer = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else {
+                XCTFail("an unreadable row must not be forced: the kill can orphan a live daemon")
+                return ""
+            }
+            return "name=\(ZmxSupport.daemonName(for: session.paneIdentity))\terr=Timeout\tstatus=unreachable"
+        })
+        let unreadable = unreadableServer.killZmxDaemon(target: session.id.uuidString, window: nil, pane: .left)
+        XCTAssertFalse(unreadable.ok)
+        XCTAssertTrue(try XCTUnwrap(unreadable.error).contains("unreadable"))
+    }
+
+    func testKillRefusesAPaneWaitingOutItsUndoWindow() throws {
+        let store = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let session = try XCTUnwrap(store.workspaces.first?.sessions.first)
+        XCTAssertTrue(store.softCloseSession(session.id))
+
+        let server = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else {
+                XCTFail("an undo window is still the user's session")
+                return ""
+            }
+            return "name=\(ZmxSupport.daemonName(for: session.paneIdentity))\tpid=1\tclients=1\tcreated=1"
+        })
+
+        let response = server.killZmxDaemon(target: session.id.uuidString, window: nil, pane: .left)
+        XCTAssertFalse(response.ok)
+        XCTAssertTrue(try XCTUnwrap(response.error).contains("undo window"))
+    }
+
+    func testKillRefusesAPaneTheTargetDoesNotOwn() throws {
+        let store = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let session = try XCTUnwrap(store.workspaces.first?.sessions.first)
+        let server = makeServer(runner: { _ in
+            "name=\(ZmxSupport.daemonName(for: session.paneIdentity))\tpid=1\tclients=1\tcreated=1"
+        })
+
+        let response = server.killZmxDaemon(target: session.id.uuidString, window: nil, pane: .right)
+        XCTAssertFalse(response.ok, "the session has no split, so no right pane daemon exists")
+        XCTAssertTrue(try XCTUnwrap(response.error).contains("no right pane daemon"))
+    }
+
+    func testKillingAnAttachedPrimaryPromotesItsSplitAndSuppressesTheQueuedCallback() throws {
+        let store = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let session = try XCTUnwrap(store.workspaces.first?.sessions.first)
+        store.setSplitVisibility(session.id, shown: true)
+        let splitIdentity = try XCTUnwrap(session.splitPaneIdentity)
+        // reconcile cannot tell a promotion from a split's own exit, so only this path rewrites the cell
+        let dashboard = DashboardController()
+        dashboard.open(members: [DashboardMember(session: session.id, surface: .split)])
+        DashboardControllerRegistry.shared.register(library.windows[0].id, controller: dashboard)
+        defer { DashboardControllerRegistry.shared.unregister(library.windows[0].id) }
+        let primary = attachSurface(to: session, pane: .left)
+        session.splitSurface = GhosttySurfaceView(workingDirectory: "/tmp", backedByZmx: true)
+
+        var killed: [[String]] = []
+        let server = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else {
+                killed.append(invocation.arguments)
+                return "killed session \(invocation.arguments[1])\n"
+            }
+            return "name=\(ZmxSupport.daemonName(for: session.paneIdentity))\tpid=1\tclients=1\tcreated=1"
+        })
+
+        let response = server.killZmxDaemon(target: session.id.uuidString, window: nil, pane: .left)
+
+        XCTAssertTrue(response.ok, response.error ?? "")
+        XCTAssertEqual(response.result?.pane, "left")
+        XCTAssertFalse(session.hasSplit, "the survivor is promoted into the primary slot")
+        XCTAssertEqual(session.paneIdentity, splitIdentity, "the survivor's identity moves up with it")
+        XCTAssertEqual(killed.count, 1, "the promoted survivor's daemon must not be finalized too")
+        // the follow-ups a store-only transition would have skipped
+        let promoted = try XCTUnwrap(session.surface as? GhosttySurfaceView)
+        XCTAssertNotNil(promoted.onFontSizeChange,
+                        "the survivor is the sole pane now and must persist its own font size")
+        XCTAssertFalse(promoted.isSplitPane, "promoteToPrimaryPane clears its split role")
+        XCTAssertEqual(dashboard.members, [DashboardMember(session: session.id, surface: .primary)],
+                       "the dashboard cell watching :right follows the survivor into the primary slot")
+
+        primary.handleProcessExit()
+        XCTAssertEqual(store.workspaces.first?.sessions.count, 1,
+                       "the queued callback must be a no-op after the kill already ran the transition")
+    }
+
+    func testKillingAnAttachedPrimaryWithNoSurvivorClosesTheSessionOnce() throws {
+        let store = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let session = try XCTUnwrap(store.workspaces.first?.sessions.first)
+        let daemon = ZmxSupport.daemonName(for: session.paneIdentity)
+        attachSurface(to: session, pane: .left)
+
+        var killed: [String] = []
+        let server = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else {
+                killed.append(invocation.arguments[1])
+                return "killed session \(invocation.arguments[1])\n"
+            }
+            return "name=\(daemon)\tpid=1\tclients=1\tcreated=1"
+        })
+
+        XCTAssertTrue(server.killZmxDaemon(target: session.id.uuidString, window: nil, pane: .left).ok)
+
+        XCTAssertTrue(store.workspaces.first?.sessions.isEmpty ?? false, "the session closes with its pane")
+        XCTAssertEqual(killed, [daemon], "the identity this command killed must not be finalized again")
+    }
+
+    /// A claimed pane still waiting its turn has no client yet. The kill runs the transition now, and the
+    /// teardown cancels its key, so no later grant can spawn a client that would recreate the daemon.
+    func testKillingAClaimedUnspawnedPaneRunsTheTransitionAndCancelsItsTurn() throws {
+        let store = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let session = try XCTUnwrap(store.workspaces.first?.sessions.first)
+        let daemon = ZmxSupport.daemonName(for: session.paneIdentity)
+        let view = attachSurface(to: session, pane: .left)
+        let registry = SpawnRegistry(pacer: SpawnPacer())
+        let key = UUID()
+        registry.pacer.arm(order: [key], burst: [])
+        registry.enqueue(view, key: key, provider: LaunchSeedProvider(shouldPace: true) { _ in
+            LaunchSeed(command: nil, initialInput: nil, waitAfterCommand: false)
+        })
+        XCTAssertFalse(view.requestSpawnPermit())
+        let server = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else { return "killed session \(invocation.arguments[1])\n" }
+            return "name=\(daemon)\tpid=1\tclients=0\tcreated=1"
+        })
+
+        let response = server.killZmxDaemon(target: session.id.uuidString, window: nil, pane: .left)
+
+        XCTAssertTrue(response.ok, response.error ?? "")
+        XCTAssertTrue(store.workspaces.first?.sessions.isEmpty ?? false, "the session closes with its pane")
+        XCTAssertTrue(registry.pacer.isPassthrough, "the teardown must cancel the pane's turn")
+        registry.pacer.expedite(key)
+        XCTAssertFalse(view.isRealized, "a cancelled key cannot be granted into a spawn")
+    }
+
+    func testAFallbackPaneIsNeverClosedByKillingThePreservedDaemon() throws {
+        let store = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let session = try XCTUnwrap(store.workspaces.first?.sessions.first)
+        // requested-live that fell back: the launch reap PRESERVES the claimed daemon while the pane comes
+        // up as a plain shell, so this surface never attached to the daemon the command destroys
+        let fresh = GhosttySurfaceView(workingDirectory: "/tmp", backedByZmx: false)
+        session.surface = fresh
+
+        let server = makeServer(runner: { invocation in
+            invocation.arguments.first == "list"
+                ? "name=\(ZmxSupport.daemonName(for: session.paneIdentity))\tpid=1\tclients=0\tcreated=1"
+                : "killed session \(invocation.arguments[1])\n"
+        })
+
+        XCTAssertTrue(server.killZmxDaemon(target: session.id.uuidString, window: nil, pane: .left).ok)
+
+        XCTAssertEqual(store.workspaces.first?.sessions.count, 1, "a pane that never attached must survive")
+        XCTAssertTrue(session.surface === fresh, "and keep the shell it actually has")
+    }
+
+    func testAFailedKillLeavesTheNaturalExitPathWorking() throws {
+        let store = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let session = try XCTUnwrap(store.workspaces.first?.sessions.first)
+        let view = attachSurface(to: session, pane: .left)
+
+        let server = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else { throw ZmxClient.CommandError.timedOut }
+            return "name=\(ZmxSupport.daemonName(for: session.paneIdentity))\tpid=1\tclients=1\tcreated=1"
+        })
+
+        XCTAssertFalse(server.killZmxDaemon(target: session.id.uuidString, window: nil, pane: .left).ok)
+        XCTAssertEqual(store.workspaces.first?.sessions.count, 1)
+
+        view.handleProcessExit()
+        XCTAssertTrue(store.workspaces.first?.sessions.isEmpty ?? false,
+                      "a failed kill must not have consumed the pane's own exit")
+    }
+
+    func testAnExplicitWindowScopesTheTargetToThatWindow() throws {
+        let first = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let firstSession = try XCTUnwrap(first.workspaces.first?.sessions.first)
+        let other = library.newWindow(name: "second")
+        let second = try XCTUnwrap(library.store(for: other.id))
+        let secondSession = try XCTUnwrap(second.workspaces.first?.sessions.first)
+
+        let server = makeServer(runner: { invocation in
+            invocation.arguments.first == "list"
+                ? """
+                  name=\(ZmxSupport.daemonName(for: firstSession.paneIdentity))\tpid=1\tclients=0\tcreated=1
+                  name=\(ZmxSupport.daemonName(for: secondSession.paneIdentity))\tpid=2\tclients=0\tcreated=1
+                  """
+                : "killed session \(invocation.arguments[1])\n"
+        })
+
+        let wrongWindow = server.killZmxDaemon(target: secondSession.id.uuidString,
+                                               window: library.windows[0].id.uuidString, pane: .left)
+        XCTAssertFalse(wrongWindow.ok, "an explicit window must not be ignored for an exact id elsewhere")
+
+        let unknown = server.killZmxDaemon(target: firstSession.id.uuidString, window: "nope", pane: .left)
+        XCTAssertFalse(unknown.ok)
+        XCTAssertEqual(unknown.error, "no such window: nope")
+
+        XCTAssertTrue(server.killZmxDaemon(target: secondSession.id.uuidString,
+                                           window: other.id.uuidString, pane: .left).ok)
+    }
+
+    func testKillReachesAClosedWindowsPaneThatNoStoreCanResolve() throws {
+        let closedWindowID = UUID()
+        let pane = UUID()
+        let session = UUID()
+        let snapshot = Snapshot(workspaces: [WorkspaceSnapshot(
+            id: UUID(), name: "workspace 1",
+            sessions: [SessionSnapshot(id: session, paneIdentity: pane, customName: "build", cwd: "/tmp")])])
+        try PersistenceStore(directory: stateDir.appendingPathComponent("windows"),
+                             fileName: "\(closedWindowID.uuidString).json").save(snapshot)
+
+        // no index entry, so the window is UNINDEXED: ControlTargetResolver cannot see it at all
+        var killed: [String] = []
+        let server = makeServer(runner: { invocation in
+            guard invocation.arguments.first == "list" else {
+                killed.append(invocation.arguments[1])
+                return "killed session \(invocation.arguments[1])\n"
+            }
+            return "name=\(ZmxSupport.daemonName(for: pane))\tpid=1\tclients=0\tcreated=1"
+        })
+
+        let response = server.killZmxDaemon(target: session.uuidString, window: nil, pane: .left)
+
+        XCTAssertTrue(response.ok, response.error ?? "")
+        XCTAssertEqual(killed, [ZmxSupport.daemonName(for: pane)])
+        XCTAssertEqual(response.result?.id, session.uuidString)
+    }
+
+    func testKillRefusesActiveOnEitherSelector() throws {
+        let server = makeServer(runner: { _ in "" })
+
+        let target = server.killZmxDaemon(target: "active", window: nil, pane: .left)
+        XCTAssertFalse(target.ok)
+        XCTAssertEqual(target.error, "zmx.kill needs a session id; 'active' is not accepted")
+
+        let window = server.killZmxDaemon(target: "abc", window: "active", pane: .left)
+        XCTAssertFalse(window.ok)
+        XCTAssertEqual(window.error, "zmx.kill needs a window id; 'active' is not accepted")
+    }
+
+    func testKillRefusesToCloseAPaneZmxDidNotConfirmKilling() throws {
+        let store = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let session = try XCTUnwrap(store.workspaces.first?.sessions.first)
+        let daemon = ZmxSupport.daemonName(for: session.paneIdentity)
+        let view = attachSurface(to: session, pane: .left)
+
+        // zmx exits ZERO here: it could not reach the daemon and only unlinked the socket, so the process
+        // may still be running. Closing the pane on that would strand it unreachable by name.
+        let server = makeServer(runner: { invocation in
+            invocation.arguments.first == "list"
+                ? "name=\(daemon)\tpid=1\tclients=1\tcreated=1"
+                : "cleaned up stale session \(daemon)\n"
+        })
+
+        let response = server.killZmxDaemon(target: session.id.uuidString, window: nil, pane: .left)
+
+        XCTAssertFalse(response.ok, "an unconfirmed kill must not report success")
+        XCTAssertEqual(response.error, "\(daemon) did not confirm the kill; zmx cleaned up a stale socket "
+            + "and the daemon may still be running")
+        XCTAssertEqual(store.workspaces.first?.sessions.count, 1, "the pane stays until the kill is confirmed")
+
+        view.handleProcessExit()
+        XCTAssertTrue(store.workspaces.first?.sessions.isEmpty ?? false,
+                      "and its own exit path is still armed")
+    }
+
+    func testKillRefusesOnEmptyOutputRatherThanAssumingSuccess() throws {
+        let store = try XCTUnwrap(library.store(for: library.windows[0].id))
+        let session = try XCTUnwrap(store.workspaces.first?.sessions.first)
+        attachSurface(to: session, pane: .left)
+
+        // a broken pipe after the kill was sent returns with nothing printed, which is not a confirmation
+        let server = makeServer(runner: { invocation in
+            invocation.arguments.first == "list"
+                ? "name=\(ZmxSupport.daemonName(for: session.paneIdentity))\tpid=1\tclients=1\tcreated=1"
+                : ""
+        })
+
+        let response = server.killZmxDaemon(target: session.id.uuidString, window: nil, pane: .left)
+
+        XCTAssertFalse(response.ok)
+        XCTAssertEqual(response.error, "could not kill \(ZmxSupport.daemonName(for: session.paneIdentity)): "
+            + "no output")
+        XCTAssertEqual(store.workspaces.first?.sessions.count, 1)
+    }
+
+    /// A zmx-backed surface for a pane, so the kill path sees a client of the daemon it destroys.
+    @discardableResult
+    private func attachSurface(to session: Session, pane: ZmxPaneRole) -> GhosttySurfaceView {
+        let view = GhosttySurfaceView(workingDirectory: "/tmp", backedByZmx: true)
+        view.session = session
+        let sessionID = session.id
+        let store = library.store(forSession: sessionID)
+        view.onExit = { [weak view] in
+            guard let view, let store else { return }
+            hangarApp.handlePaneExit(view, store: store, sessionID: sessionID, library: self.library)
+        }
+        if pane == .left { session.surface = view } else { session.splitSurface = view }
+        return view
+    }
+
+    /// A client whose runner returns `list` output, or throws when it is nil.
+    private func makeServer(list output: String?,
+                            remoteRunner: (any RemoteCommandRunner)? = nil) -> ControlServer {
+        makeServer(runner: { _ in
+            guard let output else { throw ZmxClient.CommandError.timedOut }
+            return output
+        }, remoteRunner: remoteRunner)
+    }
+
+    private func makeServer(runner: @escaping ZmxClient.Runner,
+                            remoteRunner: (any RemoteCommandRunner)? = nil) -> ControlServer {
+        ControlServer(
+            library: library, actions: AppActions(library: library), settingsModel: settingsModel,
+            identity: AppIdentity(version: "9.9.9", commit: "testsha"),
+            zmxClient: ZmxClient(executablePath: "/tmp/zmx", socketDirectory: "/tmp/zmx-dir", runner: runner),
+            remoteRunner: remoteRunner,
+            socketPath: stateDir.appendingPathComponent("control-\(UUID().uuidString).sock").path)
+    }
+
+    /// What the far side's own `zmx tree` prints: one document, one attachable session, and no `host` —
+    /// it cannot know which name reached it, so the requesting app stamps that on afterwards.
+    private static let projection = """
+    {"ok":true,"result":{"remote":{\
+    "endpoint":{"executable":"/Applications/Hangar.app/zmx","socketDirectory":"/tmp/hangar-zmx-abc"},\
+    "sessions":[{"id":"s1","name":"build","windowID":"w1","windowName":"main","workspaceID":"ws1",\
+    "workspaceName":"work","cwd":"/repo",\
+    "panes":[{"pane":"left","daemon":"hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"}]}]}}}
+    """
+
+    private static let groupProjection = RemoteCommandResult(status: 0, stdout: """
+    {"ok":true,"result":{"remote":{\
+    "endpoint":{"executable":"/Applications/Hangar.app/zmx","socketDirectory":"/tmp/hangar-zmx-abc"},\
+    "sessions":[{"id":"s1","name":"build","windowID":"w1","windowName":"main","workspaceID":"ws1",\
+    "workspaceName":"work","cwd":"/repo","companions":[{"id":"c1","name":"logs"}],\
+    "panes":[{"pane":"left","daemon":"hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"}]},\
+    {"id":"c1","name":"logs","windowID":"w1","windowName":"main","workspaceID":"ws1",\
+    "workspaceName":"work","cwd":"/repo","parent":"s1",\
+    "panes":[{"pane":"left","daemon":"hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2"}]}]}}}
+    """, stderr: "")
+
+    /// The same remote, whose session has a top/bottom split with both daemons live.
+    private static let splitProjection = """
+    {"ok":true,"result":{"remote":{\
+    "endpoint":{"executable":"/Applications/Hangar.app/zmx","socketDirectory":"/tmp/hangar-zmx-abc"},\
+    "sessions":[{"id":"s1","name":"build","windowID":"w1","windowName":"main","workspaceID":"ws1",\
+    "workspaceName":"work","cwd":"/repo","splitAxis":"horizontal",\
+    "panes":[{"pane":"left","daemon":"hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"},\
+    {"pane":"right","daemon":"hangar-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2"}]}]}}}
+    """
+}
+
+/// Records what it was asked to run and answers with a canned result, so the remote commands are covered
+/// without a second Mac.
+private final class FakeRemoteRunner: RemoteCommandRunner, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [[String]] = []
+    private let result: RemoteCommandResult
+    private let beforeReturn: (@MainActor @Sendable () -> Void)?
+
+    var invocations: [[String]] { lock.withLock { recorded } }
+
+    init(result: RemoteCommandResult, beforeReturn: (@MainActor @Sendable () -> Void)? = nil) {
+        self.beforeReturn = beforeReturn
+        self.result = result
+    }
+
+    func run(_ argv: [String], deadline _: TimeInterval) async -> RemoteCommandResult {
+        lock.withLock { recorded.append(argv) }
+        await beforeReturn?()
+        return result
+    }
+}
+
+@MainActor
+private final class RecordingTransport: RemotePresentationTransport {
+    final class Link: RemotePresentationLink {
+        func send(_ line: Data) {}
+        func stop() {}
+    }
+
+    var launches: [[String]] = []
+
+    func open(_ argv: [String], onLine: @escaping @MainActor (Data) -> Void,
+              onClose: @escaping @MainActor (String) -> Void) -> RemotePresentationLink {
+        launches.append(argv)
+        return Link()
+    }
+}
+
+extension LiveAttributionProbe.Hosts {
+    static func current(_ pid: pid_t) -> Self { .init(pids: ["current": pid], current: "current") }
+}

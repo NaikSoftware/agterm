@@ -82,7 +82,7 @@ struct Settings {
     bool notificationsEnabled = true, notificationBadgeEnabled = true;
     QString notificationSoundName;               // a freedesktop sound-theme name; "" = none
     QString dockBounce = QStringLiteral("off");   // the taskbar entry asks for attention: off | once | untilFocused
-    // Agent Status; "" = agterm's default colour / circle
+    // Agent Status; "" = hangar's default colour / circle
     QString activeStatusColorHex, blockedStatusColorHex, completedStatusColorHex;
     QString activeStatusShape, blockedStatusShape, completedStatusShape; // circle square triangle diamond capsule star
     QString blockedStatusSoundName;

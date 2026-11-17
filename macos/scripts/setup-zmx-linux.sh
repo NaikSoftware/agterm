@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# linux artifacts for agterm-server under build/linux, from the pins setup.sh holds: the patched zmx per
+# linux artifacts for hangar-server under build/linux, from the pins setup.sh holds: the patched zmx per
 # architecture (musl), ghostty's zsh, fish and bash integration at GHOSTTY_REV, and its terminfo.
 # --shell-integration stages only the integration, which needs no zig or Xcode.
 set -euo pipefail
@@ -35,9 +35,9 @@ if [[ "${1:-}" == --shell-integration ]]; then
 fi
 
 for arch in aarch64 x86_64; do
-  AGTERM_ZMX_TARGET="$arch-linux-musl" \
-    AGTERM_ZMX_STAGE_DIR="$OUT/$arch/zmx" \
-    AGTERM_ZMX_STAMP_FILE="$OUT/$arch/.zmx-build-stamp" \
+  HANGAR_ZMX_TARGET="$arch-linux-musl" \
+    HANGAR_ZMX_STAGE_DIR="$OUT/$arch/zmx" \
+    HANGAR_ZMX_STAMP_FILE="$OUT/$arch/.zmx-build-stamp" \
     scripts/setup.sh --zmx-only
 done
 stage_shell_integration
@@ -52,7 +52,7 @@ fi
 rm -rf "$OUT/terminfo"
 # linux ncurses looks an entry up under its first letter, macOS under its hex code
 mkdir -p "$OUT/terminfo/x" "$OUT/terminfo/g"
-cp agterm/Resources/terminfo/78/xterm-ghostty "$OUT/terminfo/x/xterm-ghostty"
-cp agterm/Resources/terminfo/67/ghostty "$OUT/terminfo/g/ghostty"
+cp Hangar/Resources/terminfo/78/xterm-ghostty "$OUT/terminfo/x/xterm-ghostty"
+cp Hangar/Resources/terminfo/67/ghostty "$OUT/terminfo/g/ghostty"
 cp .ghostty-build-stamp "$stamp_file"
 echo "linux terminfo staged in $OUT"

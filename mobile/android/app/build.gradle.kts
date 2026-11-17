@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "ua.naiksoftware.agterm2"
+    namespace = "ua.naiksoftware.hangar"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -17,7 +17,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "ua.naiksoftware.agterm2"
+        applicationId = "ua.naiksoftware.hangar"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // Android 15: the Bluetooth link's insecure L2CAP and its permissions; one floor for TLS too

@@ -1,6 +1,6 @@
-// agtermctl mobile: a TLS relay that lets the agterm Mobile app speak the control protocol over the network.
-// The phone sends the same {cmd, target, args} lines agtermctl sends, plus an "id" echoed on the answer; each line is
-// forwarded to the app's control socket. Nothing listens unless `agtermctl mobile serve` runs, by hand or as the app's
+// hangarctl mobile: a TLS relay that lets the hangar Mobile app speak the control protocol over the network.
+// The phone sends the same {cmd, target, args} lines hangarctl sends, plus an "id" echoed on the answer; each line is
+// forwarded to the app's control socket. Nothing listens unless `hangarctl mobile serve` runs, by hand or as the app's
 // child while Settings ▸ Connect a Phone is switched on (src/app/phone.cpp).
 #include "mobile.h"
 
@@ -47,7 +47,7 @@ bool ensurePrivateDir(QString *error)
 
 int fail(const QString &message)
 {
-    fprintf(stderr, "agtermctl: %s\n", qPrintable(message));
+    fprintf(stderr, "hangarctl: %s\n", qPrintable(message));
     return 1;
 }
 
@@ -96,7 +96,7 @@ bool ensureCertificate(QString *error)
         return true;
     QProcess p;
     p.start(QStringLiteral("openssl"), {"req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1", "-nodes", "-days", "3650",
-                                        "-subj", "/CN=agterm-qt", "-keyout", key, "-out", cert});
+                                        "-subj", "/CN=hangar", "-keyout", key, "-out", cert});
     if (!p.waitForFinished(30000) || p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) {
         QFile::remove(cert), QFile::remove(key);
         return *error = QStringLiteral("cannot create a certificate with openssl: %1").arg(QString::fromLocal8Bit(p.readAllStandardError()).trimmed()), false;
@@ -143,7 +143,7 @@ QStringList lanAddresses()
 
 QString pairLink(const QString &host, quint16 port, const QByteArray &token, const QByteArray &fingerprint)
 {
-    QUrl url(QStringLiteral("agterm://pair"));
+    QUrl url(QStringLiteral("hangar://pair"));
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("h"), host);
     q.addQueryItem(QStringLiteral("p"), QString::number(port));
@@ -159,7 +159,7 @@ void send(QSslSocket *s, const QJsonObject &o)
     s->write(QJsonDocument(o).toJson(QJsonDocument::Compact) + '\n');
 }
 
-// one control request on its own connection, as agtermctl does; the answer goes back tagged with the phone's id
+// one control request on its own connection, as hangarctl does; the answer goes back tagged with the phone's id
 void forward(const QString &socketPath, QPointer<QSslSocket> phone, QJsonObject request)
 {
     const QJsonValue id = request.take(QStringLiteral("id"));
@@ -182,7 +182,7 @@ void forward(const QString &socketPath, QPointer<QSslSocket> phone, QJsonObject 
     QObject::connect(local, &QLocalSocket::errorOccurred, local, [local, buffer, answer](QLocalSocket::LocalSocketError e) {
         if (e == QLocalSocket::PeerClosedError && !buffer->trimmed().isEmpty())
             return answer(QJsonDocument::fromJson(buffer->trimmed()).object());
-        answer({{"ok", false}, {"error", QStringLiteral("agterm-qt is not reachable: %1").arg(local->errorString())}});
+        answer({{"ok", false}, {"error", QStringLiteral("hangar is not reachable: %1").arg(local->errorString())}});
     });
     local->connectToServer(socketPath);
 }
@@ -228,15 +228,15 @@ int serve(const QString &socketPath, const QHash<QString, QString> &opt)
     const QString link = pairLink(hosts.first(), port, token, fingerprint);
     if (!opt.contains(QStringLiteral("no-qr")))
         printQr(link);
-    printf("\nScan the code in agterm Mobile, or paste the link:\n  %s\n", qPrintable(link));
+    printf("\nScan the code in hangar Mobile, or paste the link:\n  %s\n", qPrintable(link));
     for (const QString &h : hosts.mid(1))
         printf("  %s\n", qPrintable(pairLink(h, port, token, fingerprint)));
-    printf("\nListening on %s:%u. Anyone with the link controls your terminals; `agtermctl mobile reset` revokes it. Ctrl+C stops.\n",
+    printf("\nListening on %s:%u. Anyone with the link controls your terminals; `hangarctl mobile reset` revokes it. Ctrl+C stops.\n",
            qPrintable(bind.toString()), port);
     fflush(stdout);
 
     QObject::connect(server, &QSslServer::errorOccurred, server, [](QSslSocket *s, QAbstractSocket::SocketError) {
-        fprintf(stderr, "agtermctl: %s: %s\n", qPrintable(s->peerAddress().toString()), qPrintable(s->errorString()));
+        fprintf(stderr, "hangarctl: %s: %s\n", qPrintable(s->peerAddress().toString()), qPrintable(s->errorString()));
     });
     QObject::connect(server, &QSslServer::pendingConnectionAvailable, server, [server, socketPath] {
         while (auto *s = qobject_cast<QSslSocket *>(server->nextPendingConnection())) {
@@ -265,7 +265,7 @@ int serve(const QString &socketPath, const QHash<QString, QString> &opt)
                     }
                     const QByteArray offered = o.value(QStringLiteral("auth")).toString().toLatin1();
                     if (token.isEmpty() || !sameSecret(offered, token)) {
-                        fprintf(stderr, "agtermctl: refused %s: wrong token\n", qPrintable(peer));
+                        fprintf(stderr, "hangarctl: refused %s: wrong token\n", qPrintable(peer));
                         send(s, {{"ok", false}, {"id", o.value(QStringLiteral("id"))}, {"error", QStringLiteral("unauthorized")}});
                         QObject::disconnect(s, &QSslSocket::readyRead, nullptr, nullptr); // lines already sent are not more attempts
                         s->disconnectFromHost();
@@ -273,7 +273,7 @@ int serve(const QString &socketPath, const QHash<QString, QString> &opt)
                     }
                     s->setProperty("authed", true);
                     s->setProperty("token", offered);
-                    fprintf(stderr, "agtermctl: phone connected from %s\n", qPrintable(peer));
+                    fprintf(stderr, "hangarctl: phone connected from %s\n", qPrintable(peer));
                     send(s, {{"ok", true}, {"id", o.value(QStringLiteral("id"))}, {"result", QJsonObject{{"host", QHostInfo::localHostName()}, {"version", QLatin1String(appVersion)}}}});
                 }
                 if (s->bytesAvailable() > (s->property("authed").toBool() ? maxRequestBytes : 4096)) // the auth line is ~60 bytes
@@ -293,8 +293,8 @@ int mobileCommand(const QString &sub, const QString &socketPath, const QHash<QSt
         QString error;
         if (!ensurePrivateDir(&error) || loadToken(&error, true).isEmpty())
             return fail(error);
-        printf("Pairing revoked: paired phones are disconnected. Restart `agtermctl mobile serve` for the new code.\n");
+        printf("Pairing revoked: paired phones are disconnected. Restart `hangarctl mobile serve` for the new code.\n");
         return 0;
     }
-    return fail(QStringLiteral("usage: agtermctl mobile serve [--port N] [--bind ADDR] [--host NAME] [--no-qr] | reset"));
+    return fail(QStringLiteral("usage: hangarctl mobile serve [--port N] [--bind ADDR] [--host NAME] [--no-qr] | reset"));
 }

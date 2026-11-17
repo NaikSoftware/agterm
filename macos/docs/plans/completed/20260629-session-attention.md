@@ -12,28 +12,28 @@ Problem solved: recover the "what needs me right now" signal without the sidebar
 
 ## Context (from discovery)
 
-- **Status model** (`agtermCore/Sources/agtermCore/AgentStatus.swift`): `AgentStatus` enum (idle/active/completed/blocked) + `AgentIndicator{status,blink,autoReset}`. Ephemeral, control-driven only, never persisted. `needsAttention` = blocked||completed (drives the existing ⌃⌥↑/↓ attention-nav). The NEW list is broader — ALL non-idle.
-- **Sidebar glyph mapping** (`agterm/Views/WorkspaceSidebar.swift:162-164`, a private `StatusIconView: NSImageView`): active=`ellipsis.circle.fill`, blocked=`exclamationmark.circle.fill`, completed=`checkmark.circle.fill`, tinted with `GhosttyApp.shared.{active,blocked,completed}StatusColor` (defaults: muted lavender-grey / `.systemOrange` / `.systemGreen`).
-- **Palettes** (`agterm/Views/Palette.swift`): `PaletteMode`(.actions/.sessions/.themes/.customCommands) + `PaletteController` (toggle/open/close) + `CommandPalette` (fuzzy search, ↑/↓, Enter, Esc). `PaletteItem` has id/title/subtitle/shortcut/badge/onSelect/run — no status glyph today. `AppActions.paletteSessions()` (`agterm/AppActions.swift:555`) builds session rows (title=`displayName`, subtitle="`workspace` · `subtitleDetail`") from `store.navigableSessions`.
-- **Titlebar** (`agterm/ContentView.swift:629` `customTitlebar`): HStack — sidebarToggle, `titleLabel`, then a trailing cluster (scratch/split/divider/quick-terminal) tinted via `chromeText`. The titlebar is the only persistent chrome when the sidebar is hidden (the "bottomBar" is the sidebar's footer via `.safeAreaInset`, so it vanishes with the sidebar).
+- **Status model** (`HangarCore/Sources/HangarCore/AgentStatus.swift`): `AgentStatus` enum (idle/active/completed/blocked) + `AgentIndicator{status,blink,autoReset}`. Ephemeral, control-driven only, never persisted. `needsAttention` = blocked||completed (drives the existing ⌃⌥↑/↓ attention-nav). The NEW list is broader — ALL non-idle.
+- **Sidebar glyph mapping** (`Hangar/Views/WorkspaceSidebar.swift:162-164`, a private `StatusIconView: NSImageView`): active=`ellipsis.circle.fill`, blocked=`exclamationmark.circle.fill`, completed=`checkmark.circle.fill`, tinted with `GhosttyApp.shared.{active,blocked,completed}StatusColor` (defaults: muted lavender-grey / `.systemOrange` / `.systemGreen`).
+- **Palettes** (`Hangar/Views/Palette.swift`): `PaletteMode`(.actions/.sessions/.themes/.customCommands) + `PaletteController` (toggle/open/close) + `CommandPalette` (fuzzy search, ↑/↓, Enter, Esc). `PaletteItem` has id/title/subtitle/shortcut/badge/onSelect/run — no status glyph today. `AppActions.paletteSessions()` (`Hangar/AppActions.swift:555`) builds session rows (title=`displayName`, subtitle="`workspace` · `subtitleDetail`") from `store.navigableSessions`.
+- **Titlebar** (`Hangar/ContentView.swift:629` `customTitlebar`): HStack — sidebarToggle, `titleLabel`, then a trailing cluster (scratch/split/divider/quick-terminal) tinted via `chromeText`. The titlebar is the only persistent chrome when the sidebar is hidden (the "bottomBar" is the sidebar's footer via `.safeAreaInset`, so it vanishes with the sidebar).
 - **Per-window**: each window has its own `AppStore` (`WindowLibrary.activeStore`); the icon + list only ever see that window's sessions.
-- **Control** (`agterm/Control/ControlServer.swift:1049` `buildTree`): `ControlSessionNode` carries name/cwd/title/active/split/overlay/scratch/flagged/foreground — no status.
-- **Settings toggle pattern** (`agterm/Views/SettingsView.swift:58` + binding at `:122`): `Toggle("…", isOn: <Binding>)` over a `model.settings.<flag> ?? <default>` get/set; field declared in `AppSettings` (`agtermCore`).
-- **BuiltinAction** (`agtermCore/Sources/agtermCore/BuiltinAction.swift`): raw-name enum + `defaultChord: Chord?` switch; names mirror the menu items in `agtermApp`'s `.commands`.
+- **Control** (`Hangar/Control/ControlServer.swift:1049` `buildTree`): `ControlSessionNode` carries name/cwd/title/active/split/overlay/scratch/flagged/foreground — no status.
+- **Settings toggle pattern** (`Hangar/Views/SettingsView.swift:58` + binding at `:122`): `Toggle("…", isOn: <Binding>)` over a `model.settings.<flag> ?? <default>` get/set; field declared in `AppSettings` (`HangarCore`).
+- **BuiltinAction** (`HangarCore/Sources/HangarCore/BuiltinAction.swift`): raw-name enum + `defaultChord: Chord?` switch; names mirror the menu items in `hangarApp`'s `.commands`.
 
 ## Development Approach
 
-- **Testing approach**: **TDD (tests first)** for the host-free `agtermCore` pieces (statusChangedAt stamping, `attentionSessions` ordering, `ControlSessionNode.status` round-trip, `AppSettings` field) — write the failing test, then the code. App-target SwiftUI/AppKit + XCUITest pieces (titlebar icon, palette glyph rendering, e2e) are code-then-test (host-driven).
+- **Testing approach**: **TDD (tests first)** for the host-free `HangarCore` pieces (statusChangedAt stamping, `attentionSessions` ordering, `ControlSessionNode.status` round-trip, `AppSettings` field) — write the failing test, then the code. App-target SwiftUI/AppKit + XCUITest pieces (titlebar icon, palette glyph rendering, e2e) are code-then-test (host-driven).
 - Complete each task fully before the next; small focused changes.
 - **CRITICAL: every task includes new/updated tests** — listed as separate checklist items, both success and error/edge cases.
-- **CRITICAL: all tests pass before starting the next task** — `cd agtermCore && swift test` for core, the app must build (`make build`), XCUITests where noted.
-- Keep `agtermCore` host-free (no AppKit/GhosttyKit/Metal, no CoreGraphics geometry types).
+- **CRITICAL: all tests pass before starting the next task** — `cd HangarCore && swift test` for core, the app must build (`make build`), XCUITests where noted.
+- Keep `HangarCore` host-free (no AppKit/GhosttyKit/Metal, no CoreGraphics geometry types).
 - Honor the keep-in-sync conventions: the control surface (protocol/server/CLI/tests) AND the bundled agent-skill are first-class; update them in the same task that changes behavior.
 
 ## Testing Strategy
 
-- **Unit tests** (`agtermCore/Tests/agtermCoreTests/`, Swift Testing / XCTest as the file already uses): required every task for core logic — one test file per source file (e.g. `SessionTests.swift`, `AppStoreTests.swift`, `ControlProtocolTests.swift`, `AppSettingsTests.swift`, `AgentStatusTests.swift`).
-- **e2e / XCUITest** (`agtermUITests/`): the titlebar icon states, opening the palette (icon click + ⌃⇧I), row-select navigation, and the `tree`-reports-status e2e in `ControlAPIUITests`. Driven via `agtermctl session status` against an isolated `AGTERM_STATE_DIR`/socket instance. Treated with the same rigor as unit tests.
+- **Unit tests** (`HangarCore/Tests/HangarCoreTests/`, Swift Testing / XCTest as the file already uses): required every task for core logic — one test file per source file (e.g. `SessionTests.swift`, `AppStoreTests.swift`, `ControlProtocolTests.swift`, `AppSettingsTests.swift`, `AgentStatusTests.swift`).
+- **e2e / XCUITest** (`HangarUITests/`): the titlebar icon states, opening the palette (icon click + ⌃⇧I), row-select navigation, and the `tree`-reports-status e2e in `ControlAPIUITests`. Driven via `hangarctl session status` against an isolated `HANGAR_STATE_DIR`/socket instance. Treated with the same rigor as unit tests.
 
 ## Progress Tracking
 
@@ -44,7 +44,7 @@ Problem solved: recover the "what needs me right now" signal without the sidebar
 
 ## Solution Overview
 
-A single source of truth — `AppStore.attentionSessions` (host-free, per-window) — backs both the titlebar icon and the palette rows, so they can never disagree. The icon derives its three states from that set (empty→disabled, non-empty→enabled, contains-blocked→highlighted). The list is a thin new palette mode that reuses the existing `CommandPalette` view; the only view-layer addition is an optional status glyph on `PaletteItem`. Status sort order (blocked→active→completed) and the newest-first tie-break live in `agtermCore` as pure, tested logic. The status→symbol+color mapping is extracted into one shared helper so the new SwiftUI glyph and the existing AppKit `StatusIconView` stop duplicating it. Control gains a read path (`tree` reports status); opening the palette stays interactive-only (keep-in-sync exempt, like every other palette open).
+A single source of truth — `AppStore.attentionSessions` (host-free, per-window) — backs both the titlebar icon and the palette rows, so they can never disagree. The icon derives its three states from that set (empty→disabled, non-empty→enabled, contains-blocked→highlighted). The list is a thin new palette mode that reuses the existing `CommandPalette` view; the only view-layer addition is an optional status glyph on `PaletteItem`. Status sort order (blocked→active→completed) and the newest-first tie-break live in `HangarCore` as pure, tested logic. The status→symbol+color mapping is extracted into one shared helper so the new SwiftUI glyph and the existing AppKit `StatusIconView` stop duplicating it. Control gains a read path (`tree` reports status); opening the palette stays interactive-only (keep-in-sync exempt, like every other palette open).
 
 ## Technical Details
 
@@ -68,61 +68,61 @@ A single source of truth — `AppStore.attentionSessions` (host-free, per-window
 ### Task 1: Session status-change timestamp
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Session.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`
 
 - [x] write failing tests: `setAgentIndicator` to a non-idle status sets `statusChangedAt` (non-nil); to `.idle` clears it to nil; re-asserting a non-idle status updates it
 - [x] add `@ObservationIgnored var statusChangedAt: Date?` to `Session` (ephemeral; confirm `SessionSnapshot` does NOT capture it)
 - [x] in `AppStore.setAgentIndicator(_:forSession:)` stamp `Date()` when `indicator.status != .idle`, else nil
-- [x] run `cd agtermCore && swift test` — must pass before next task
+- [x] run `cd HangarCore && swift test` — must pass before next task
 
 ### Task 2: AgentStatus presentation + rank helpers
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AgentStatus.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AgentStatusTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AgentStatus.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AgentStatusTests.swift`
 
 - [x] write failing tests for `attentionRank` (blocked < active < completed) and `symbolName` (the three non-idle SF Symbol names; idle returns the empty string `""` — never rendered, idle is filtered before any glyph is built)
 - [x] add `var attentionRank: Int` and `var symbolName: String` to `AgentStatus` (pure, no AppKit — symbol names are plain strings); idle's `symbolName` returns `""`
-- [x] run `cd agtermCore && swift test` — must pass before next task
+- [x] run `cd HangarCore && swift test` — must pass before next task
 
 ### Task 3: AppStore.attentionSessions ordering
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`
 
 - [x] write failing tests: filters out idle; orders blocked→active→completed; within a status group orders by `statusChangedAt` newest-first (nil last); spans all workspaces ignoring focus/flagged filter; empty when all idle
 - [x] add `var attentionSessions: [Session]` to `AppStore` — `workspaces.flatMap(\.sessions)`, drop idle, sort by `(attentionRank, statusChangedAt desc)`
-- [x] run `cd agtermCore && swift test` — must pass before next task
+- [x] run `cd HangarCore && swift test` — must pass before next task
 
 ### Task 4: ControlSessionNode.status protocol field
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
 
 - [x] write failing round-trip tests: `ControlSessionNode` with a `status` encodes/decodes; nil `status` is omitted from JSON (matches the existing optional-field convention, e.g. `foreground`)
 - [x] add `status: String?` to `ControlSessionNode` (optional, omit-when-nil) and thread it through the initializer
-- [x] run `cd agtermCore && swift test` — must pass before next task
+- [x] run `cd HangarCore && swift test` — must pass before next task
 
 ### Task 5: Populate status in the tree builder
 
 **Files:**
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agtermUITests/ControlAPIUITests.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `HangarUITests/ControlAPIUITests.swift`
 
 - [x] in `buildTree`, set `status` from `session.agentIndicator.status` — nil when `.idle`, else `rawValue` (so idle sessions omit the field)
-- [x] add an e2e: set a session's status via `agtermctl session status blocked`, read `tree --json`, assert that session's node reports `status: "blocked"`; assert an idle session omits it
+- [x] add an e2e: set a session's status via `hangarctl session status blocked`, read `tree --json`, assert that session's node reports `status: "blocked"`; assert an idle session omits it
 - [x] build (`make build`) and run the new XCUITest — must pass before next task
 
 ### Task 6: Shared status→glyph mapping + SwiftUI StatusGlyph
 
 **Files:**
-- Modify: `agterm/Ghostty/GhosttyApp.swift`
-- Modify: `agterm/Views/WorkspaceSidebar.swift`
-- Create: `agterm/Views/StatusGlyph.swift`
+- Modify: `Hangar/Ghostty/GhosttyApp.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar.swift`
+- Create: `Hangar/Views/StatusGlyph.swift`
 
 - [x] add `func statusColor(for: AgentStatus) -> NSColor` to `GhosttyApp` (returns the configured active/blocked/completed tint)
 - [x] refactor `StatusIconView.apply` (`WorkspaceSidebar.swift:162-164`) to use `AgentStatus.symbolName` + `GhosttyApp.shared.statusColor(for:)` instead of the inline switch (no behavior change — same symbols/colors)
@@ -133,7 +133,7 @@ A single source of truth — `AppStore.attentionSessions` (host-free, per-window
 ### Task 7: PaletteItem status glyph capability
 
 **Files:**
-- Modify: `agterm/Views/Palette.swift`
+- Modify: `Hangar/Views/Palette.swift`
 
 - [x] add `status: AgentStatus?` (default nil) to `PaletteItem` and its initializer (existing call sites keep nil — no behavior change yet)
 - [x] in `CommandPalette.row`, render a leading `StatusGlyph(status:)` when `item.status != nil` (left of the title VStack)
@@ -144,8 +144,8 @@ A single source of truth — `AppStore.attentionSessions` (host-free, per-window
 ### Task 8: paletteAttention rows + .attention palette mode
 
 **Files:**
-- Modify: `agterm/AppActions.swift`
-- Modify: `agterm/Views/Palette.swift`
+- Modify: `Hangar/AppActions.swift`
+- Modify: `Hangar/Views/Palette.swift`
 
 - [x] add `func paletteAttention() -> [PaletteItem]` to `AppActions` — map `store.attentionSessions` to items (id=`uuidString`, title=`displayName`, subtitle="`workspace` · `subtitleDetail`", `status:` set from Task 7's field), `run` = `store.selectSession(id)` — mirroring `paletteSessions()`
 - [x] add `case attention` to `PaletteMode` with its `allItems` arm (`actions.paletteAttention()`) and `placeholder` ("Go to a session that needs attention…") in the SAME task, so the exhaustive switch and its provider land together
@@ -155,62 +155,62 @@ A single source of truth — `AppStore.attentionSessions` (host-free, per-window
 ### Task 9: Hotkey, menu, and launcher entry points
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/BuiltinAction.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/BuiltinActionTests.swift`
-- Modify: `agterm/AppActions.swift`
-- Modify: `agterm/agtermApp.swift`
+- Modify: `HangarCore/Sources/HangarCore/BuiltinAction.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/BuiltinActionTests.swift`
+- Modify: `Hangar/AppActions.swift`
+- Modify: `Hangar/hangarApp.swift`
 
 - [x] write failing test: `BuiltinAction.showAttention` exists with rawValue `show_attention` and `defaultChord` = ⌃⇧I (`Chord(mods:[.control,.shift], key:"i")`)
 - [x] update the EXISTING `BuiltinActionTests` assertions broken by the new case: bump `allCases.count == 34` → `35` (line 25) and add `.showAttention: Chord(mods:[.control,.shift], key:"i")` to the exhaustive `expected` map (so `expected.count == allCases.count` at line 72 holds and the per-action chord check passes)
 - [x] add the `showAttention` case + its `defaultChord` arm in `BuiltinAction`
 - [x] add `AppActions.toggleAttentionPalette()` → `palette.toggle(.attention)`; wire `showAttention` to it wherever `BuiltinAction`s dispatch
-- [x] add the Navigate menu item ("Go to Attention…", reading `equivalent(for: .showAttention)`) in `agtermApp`'s Navigate `CommandMenu`, plus a "Show Attention" entry in `AppActions.paletteActions()`
-- [x] run `cd agtermCore && swift test` and build (`make build`) — must pass before next task
+- [x] add the Navigate menu item ("Go to Attention…", reading `equivalent(for: .showAttention)`) in `hangarApp`'s Navigate `CommandMenu`, plus a "Show Attention" entry in `AppActions.paletteActions()`
+- [x] run `cd HangarCore && swift test` and build (`make build`) — must pass before next task
 
 **Note:** ⌃I alone is Tab, but ⌃⇧I is a distinct, parseable single-char chord (`key:"i"` + shift) swallowed by menu/keymap dispatch before the terminal, exactly like ⌃⇧P/⌃⇧O. Not a reserved monitor chord, so it passes `parseKeymap` validation.
 
 ### Task 10: AppSettings flag + General-tab toggle + GhosttyApp mirror
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppSettings.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppSettingsTests.swift`
-- Modify: `agterm/SettingsModel.swift`
-- Modify: `agterm/Ghostty/GhosttyApp.swift`
-- Modify: `agterm/Views/SettingsView.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppSettings.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppSettingsTests.swift`
+- Modify: `Hangar/SettingsModel.swift`
+- Modify: `Hangar/Ghostty/GhosttyApp.swift`
+- Modify: `Hangar/Views/SettingsView.swift`
 
 - [x] write failing test: `AppSettings` with `attentionButtonEnabled` set round-trips through encode/decode; absent decodes to nil (treated as false). Mirror the default-OFF precedent (`restoreRunningCommand`/`inheritGlobalGhosttyConfig`), NOT `notificationBadgeEnabled` (default-ON)
 - [x] add `var attentionButtonEnabled: Bool?` to `AppSettings` + its `init` parameter
 - [x] add `private(set) var attentionButtonEnabled: Bool = false` + `func setAttentionButtonEnabled(_:)` to `GhosttyApp` (the non-observable chrome mirror, like `setNotificationBadgeEnabled` at GhosttyApp.swift:141 / `compactToolbar`)
-- [x] add `SettingsModel.setAttentionButtonEnabled(_ value: Bool?)` (`settings.attentionButtonEnabled = value; persistAndApply()`) + an `applyAttentionButtonEnabled()` that pushes `settings.attentionButtonEnabled ?? false` into the `GhosttyApp` mirror, called from `persistAndApply`'s chrome-apply path (alongside `applyCompactToolbar`/`applyNotificationBadgeEnabled`, which posts `.agtermAppearanceChanged`). NOT a ghostty key — no surface reload
+- [x] add `SettingsModel.setAttentionButtonEnabled(_ value: Bool?)` (`settings.attentionButtonEnabled = value; persistAndApply()`) + an `applyAttentionButtonEnabled()` that pushes `settings.attentionButtonEnabled ?? false` into the `GhosttyApp` mirror, called from `persistAndApply`'s chrome-apply path (alongside `applyCompactToolbar`/`applyNotificationBadgeEnabled`, which posts `.hangarAppearanceChanged`). NOT a ghostty key — no surface reload
 - [x] add a General-tab `Toggle("Show attention button in the title bar", isOn:)` whose `Binding` uses get `model.settings.attentionButtonEnabled ?? false` and set `model.setAttentionButtonEnabled($0 ? true : nil)` — mirror the default-OFF binding at `SettingsView.swift:129-137` (restoreRunningCommand/inheritGlobalGhosttyConfig), NOT the default-ON one at `:122`
-- [x] run `cd agtermCore && swift test` and build — must pass before next task
+- [x] run `cd HangarCore && swift test` and build — must pass before next task
 
 **Keep-in-sync:** the settings toggle is GUI-only and keep-in-sync EXEMPT — only `theme.set`/`config.reload` touch settings over the control socket (same exemption as `restoreRunningCommand`/`inheritGlobalGhosttyConfig`).
 
 ### Task 11: Titlebar bell icon
 
 **Files:**
-- Modify: `agterm/ContentView.swift`
-- Modify: `agterm/Views/Palette.swift` (➕ focus fix — see note below)
-- Create: `agtermUITests/AttentionButtonUITests.swift`
+- Modify: `Hangar/ContentView.swift`
+- Modify: `Hangar/Views/Palette.swift` (➕ focus fix — see note below)
+- Create: `HangarUITests/AttentionButtonUITests.swift`
 
 - [x] add `@State private var attentionButtonEnabled` to `WindowContentView`, seeded by a `static func resolvedAttentionButtonEnabled() -> Bool` reading the `GhosttyApp.shared.attentionButtonEnabled` mirror (the `compactToolbar`/`resolvedCompactToolbar()` precedent at ContentView.swift:170/572) — do NOT read `model.settings` directly in the titlebar (WindowContentView mirrors chrome flags, not SettingsModel)
-- [x] refresh that `@State` in the existing `.agtermAppearanceChanged` `onReceive` (alongside `compactToolbar`/`terminalColor`), so flipping the Settings toggle re-renders the titlebar live
+- [x] refresh that `@State` in the existing `.hangarAppearanceChanged` `onReceive` (alongside `compactToolbar`/`terminalColor`), so flipping the Settings toggle re-renders the titlebar live
 - [x] add an `attentionButton` to `customTitlebar`, placed just after `titleLabel`, built only when `attentionButtonEnabled`
 - [x] derive state from `store.attentionSessions`: empty → `bell`, ~0.35 opacity, `.disabled(true)`; non-empty no-blocked → `bell`, `chromeText`, enabled; any `.blocked` → `bell.fill` tinted `Color(nsColor: GhosttyApp.shared.blockedStatusColor)`, enabled. No count, no pulse. Click → `actions.toggleAttentionPalette()`. Reading `attentionSessions` registers the `agentIndicator` observation dependencies, so the icon updates live on status change
 - [x] give it `.accessibilityIdentifier("attention-button")`, a `.help` string, AND an `.accessibilityValue` of `none`|`attention`|`blocked` (empty / non-empty-no-blocked / any-blocked) — mirroring `StatusIconView`'s state-name `accessibilityValue` (WorkspaceSidebar.swift) so XCUITest can read the otherwise-unobservable `bell`↔`bell.fill` highlight
-- [x] add XCUITest: with the toggle on, drive `agtermctl session status` to move a session idle→active→blocked and assert the button's `isEnabled` AND its `accessibilityValue` (`none`→`attention`→`blocked`) transitions; click it opens `command-palette` in attention mode; selecting a row selects the session; with the toggle off the button is absent
+- [x] add XCUITest: with the toggle on, drive `hangarctl session status` to move a session idle→active→blocked and assert the button's `isEnabled` AND its `accessibilityValue` (`none`→`attention`→`blocked`) transitions; click it opens `command-palette` in attention mode; selecting a row selects the session; with the toggle off the button is absent
 - [x] build + run the XCUITest — must pass before next task (3/3 AttentionButtonUITests + 8/8 PaletteUITests pass, no regression)
 
-➕ **Discovered + fixed: palette field focus on a button-open.** The new XCUITest surfaced a real bug — a palette opened from a title-bar button (the bell) mounts while that button still holds first responder, so `CommandPalette.onAppear`'s synchronous `fieldFocused = true` loses the race and the search field never takes the keyboard (Return/typing/arrows do nothing). Menu/hotkey/⌃P opens were unaffected (no competing responder). Fix in `agterm/Views/Palette.swift`: re-assert `fieldFocused = true` on the next runloop tick via `DispatchQueue.main.async` (a no-op for the already-focused menu/hotkey paths — verified by the 8/8 PaletteUITests, incl. the theme-picker auto-focus + session-palette select). Grounded in the SwiftUI focus pattern "onAppear focus may need a main-async kick."
+➕ **Discovered + fixed: palette field focus on a button-open.** The new XCUITest surfaced a real bug — a palette opened from a title-bar button (the bell) mounts while that button still holds first responder, so `CommandPalette.onAppear`'s synchronous `fieldFocused = true` loses the race and the search field never takes the keyboard (Return/typing/arrows do nothing). Menu/hotkey/⌃P opens were unaffected (no competing responder). Fix in `Hangar/Views/Palette.swift`: re-assert `fieldFocused = true` on the next runloop tick via `DispatchQueue.main.async` (a no-op for the already-focused menu/hotkey paths — verified by the 8/8 PaletteUITests, incl. the theme-picker auto-focus + session-palette select). Grounded in the SwiftUI focus pattern "onAppear focus may need a main-async kick."
 
 **Keep-in-sync:** the icon is pure visual chrome (it opens the already-controllable attention palette / `session.select`) — keep-in-sync EXEMPT, like the other titlebar buttons and the palette opens.
 
 ### Task 12: Keep-in-sync — agent-skill + rules + README/ARCHITECTURE
 
 **Files:**
-- Modify: `agterm/Resources/agent-skill/reference.md`
-- Modify: `agterm/Resources/agent-skill/SKILL.md` (only if the tree-output section needs it)
+- Modify: `Hangar/Resources/agent-skill/reference.md`
+- Modify: `Hangar/Resources/agent-skill/SKILL.md` (only if the tree-output section needs it)
 - Modify: `.claude/rules/menu-actions.md` (new palette mode + entry points) and/or `.claude/rules/notifications.md` (icon alongside the agent-status glyph)
 - Modify: `.claude/rules/keymap.md` (the rebindable-action counts)
 - Modify: `.claude/rules/settings.md` (the `attentionButtonEnabled` chrome flag, alongside `notificationBadgeEnabled`/`compactToolbar`)
@@ -220,13 +220,13 @@ A single source of truth — `AppStore.attentionSessions` (host-free, per-window
 - [x] bump the rebindable-action counts in `.claude/rules/keymap.md`: "the 34 rebindable actions" → 35 and "28 of the 34" → "29 of the 35" (the new `showAttention` is expressible/pure-`defaultChord`-driven, not an arrow exception)
 - [x] document the `.attention` palette mode + ⌃⇧I + the titlebar icon + the `attentionButtonEnabled` setting in the relevant `.claude/rules/*.md`
 - [x] update README/ARCHITECTURE where palette modes, titlebar chrome, or control tree fields are listed
-- [x] no test (docs only) — verify the agent-skill is edited ONLY under `agterm/Resources/agent-skill/` (never the installed copies)
+- [x] no test (docs only) — verify the agent-skill is edited ONLY under `Hangar/Resources/agent-skill/` (never the installed copies)
 
 ### Task 13: Verify acceptance criteria
 
 - [x] verify every Overview item is implemented: icon 3 states, opt-in toggle (off by default), list mode with glyphs + sort, ⌃⇧I + menu + launcher, `tree` reports status
 - [x] verify edge cases: all-idle window (icon disabled, list empty, hotkey opens an empty palette gracefully), blocked highlight clears when the session leaves blocked, sort tie-break newest-first, scope spans all workspaces ignoring focus/flagged filter — confirmed by unit tests `attentionSessionsFiltersOutIdle`/`...OrderBlockedActiveCompleted`/`...WithinRankOrderNewestFirstNilLast`/`...SpanAllWorkspacesIgnoringFocusAndFlagged`/`...EmptyWhenAllIdle` in `AppStoreTests`
-- [x] run full core suite: `cd agtermCore && swift test` — 784 tests in 32 suites passed
+- [x] run full core suite: `cd HangarCore && swift test` — 784 tests in 32 suites passed
 - [x] run the XCUITest suite for the new tests — satisfied by prior passing runs earlier this session: `ControlAPIUITests/testTreeExposesAgentStatus`, all 3 `AttentionButtonUITests`, and all 8 `PaletteUITests` (regression check after the shared CommandPalette focus fix); not re-run here to avoid hijacking the user's screen
 - [x] confirm `golangci`-equivalent is N/A (Swift); the app builds clean via `make build` — BUILD SUCCEEDED
 
@@ -240,9 +240,9 @@ A single source of truth — `AppStore.attentionSessions` (host-free, per-window
 
 *Items requiring manual intervention — no checkboxes, informational only.*
 
-**Manual verification** (maintainer-driven, isolated dev instance — never touch the deployed `~/Applications/agterm.app`):
-- Launch an isolated dev instance (`open -n --env AGTERM_STATE_DIR=<tmp> --env AGTERM_CONTROL_SOCKET=<tmp>/agterm.sock build/DerivedData/.../Debug/agterm.app`).
-- Turn on the Settings toggle; hide the sidebar; drive a session to `blocked`/`active`/`completed` via `agtermctl session status … --socket <tmp>/agterm.sock` and confirm the bell's dimmed→plain→filled-blocked transitions and that the list opens, shows the glyphs, sorts correctly, and jumps on Enter.
+**Manual verification** (maintainer-driven, isolated dev instance — never touch the deployed `~/Applications/Hangar.app`):
+- Launch an isolated dev instance (`open -n --env HANGAR_STATE_DIR=<tmp> --env HANGAR_CONTROL_SOCKET=<tmp>/hangar.sock build/DerivedData/.../Debug/Hangar.app`).
+- Turn on the Settings toggle; hide the sidebar; drive a session to `blocked`/`active`/`completed` via `hangarctl session status … --socket <tmp>/hangar.sock` and confirm the bell's dimmed→plain→filled-blocked transitions and that the list opens, shows the glyphs, sorts correctly, and jumps on Enter.
 - Confirm the sidebar glyphs are visually unchanged after the Task 6 `StatusIconView` refactor (no symbol/color regression).
 - Confirm the toggle defaults off for a fresh `settings.json` and that an existing install is unaffected.
 

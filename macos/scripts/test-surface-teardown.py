@@ -17,7 +17,7 @@ SNAPSHOT_LIMIT = 10
 
 
 def app_pids():
-    result = subprocess.run(["pgrep", "-x", "agterm"], capture_output=True, text=True, check=False)
+    result = subprocess.run(["pgrep", "-x", "hangar"], capture_output=True, text=True, check=False)
     if result.returncode not in (0, 1):
         raise RuntimeError(result.stderr)
     return {int(pid) for pid in result.stdout.split()}
@@ -93,7 +93,7 @@ def run_case(app, evidence, count, busy):
 
     before = app_pids()
     subprocess.run(
-        ["open", "-n", "-a", str(app), "--env", f"AGTERM_STATE_DIR={state}"],
+        ["open", "-n", "-a", str(app), "--env", f"HANGAR_STATE_DIR={state}"],
         check=True,
     )
     result["timeline"]["opened"] = since(time.monotonic())
@@ -109,7 +109,7 @@ def run_case(app, evidence, count, busy):
         raise RuntimeError(f"Cannot identify isolated app: {created}")
     pid = created.pop()
     result["timeline"]["pid"] = since(time.monotonic())
-    ctl = app / "Contents/MacOS/agtermctl"
+    ctl = app / "Contents/MacOS/hangarctl"
 
     def call(op, *args):
         nonlocal snapshot_taken
@@ -117,7 +117,7 @@ def run_case(app, evidence, count, busy):
         result["calls"].append(entry)
         begin = time.monotonic()
         proc = subprocess.Popen(
-            [str(ctl), *args, "--socket", str(state / "agterm.sock"), "--json"],
+            [str(ctl), *args, "--socket", str(state / "hangar.sock"), "--json"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         try:
@@ -143,7 +143,7 @@ def run_case(app, evidence, count, busy):
         return " ".join(f"{c['op']}={c.get('elapsed', '?')}" for c in result["calls"])
 
     try:
-        wait_for((state / "agterm.sock").exists, "the control socket did not appear")
+        wait_for((state / "hangar.sock").exists, "the control socket did not appear")
         result["timeline"]["socket"] = since(time.monotonic())
         result["version"] = call("version", "version")
         ids = []

@@ -7,11 +7,11 @@
 #   scripts/release.sh <version> --publish  # also: gh release + cask bump/push
 #
 # Signing identity: auto-detected from the keychain ("Developer ID Application"),
-# or override with AGTERM_SIGN_IDENTITY. With no identity it produces an AD-HOC
-# DMG (not notarized) — a dry run by default, but set AGTERM_ALLOW_UNSIGNED=1 to
+# or override with HANGAR_SIGN_IDENTITY. With no identity it produces an AD-HOC
+# DMG (not notarized) — a dry run by default, but set HANGAR_ALLOW_UNSIGNED=1 to
 # --publish it as an unsigned release. Notary creds come from a keychain profile created
-# with `xcrun notarytool store-credentials` (default name: agterm-notary,
-# override with AGTERM_NOTARY_PROFILE).
+# with `xcrun notarytool store-credentials` (default name: hangar-notary,
+# override with HANGAR_NOTARY_PROFILE).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
@@ -27,7 +27,7 @@ if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 TAG="v$VERSION"
-DMG="$BUILD_DIR/agterm-$VERSION.dmg"
+DMG="$BUILD_DIR/hangar-$VERSION.dmg"
 
 # ── plugin manifest version ───────────────────────────────────────────────────
 # The agent skill also ships as a Claude Code / Codex plugin, and both plugin
@@ -39,8 +39,8 @@ DMG="$BUILD_DIR/agterm-$VERSION.dmg"
 # and committed, rather than rewriting git history from inside a release script.
 REPO_ROOT="$(cd "$ROOT/.." && pwd)"
 PLUGIN_MANIFESTS=(
-  "$REPO_ROOT/plugins/agterm/.claude-plugin/plugin.json"
-  "$REPO_ROOT/plugins/agterm/.codex-plugin/plugin.json"
+  "$REPO_ROOT/plugins/hangar/.claude-plugin/plugin.json"
+  "$REPO_ROOT/plugins/hangar/.codex-plugin/plugin.json"
   "$REPO_ROOT/.claude-plugin/marketplace.json"
 )
 for manifest in "${PLUGIN_MANIFESTS[@]}"; do
@@ -65,13 +65,13 @@ if [ "$PUBLISH" = "1" ]; then
     fi
   done
 fi
-APP="$BUILD_DIR/DerivedData/Build/Products/Release/agterm.app"
-NOTARY_PROFILE="${AGTERM_NOTARY_PROFILE:-agterm-notary}"
+APP="$BUILD_DIR/DerivedData/Build/Products/Release/Hangar.app"
+NOTARY_PROFILE="${HANGAR_NOTARY_PROFILE:-hangar-notary}"
 TAP_REPO="umputun/homebrew-apps"
 
 # resolve the signing identity: explicit override, else the first Developer ID
 # Application identity in the keychain, else ad-hoc dry-run.
-SIGN_ID="${AGTERM_SIGN_IDENTITY:-}"
+SIGN_ID="${HANGAR_SIGN_IDENTITY:-}"
 if [ -z "$SIGN_ID" ]; then
   SIGN_ID="$(security find-identity -v -p codesigning | awk -F'"' '/Developer ID Application/{print $2; exit}')"
 fi
@@ -83,9 +83,9 @@ else
   echo "==> WARNING: no Developer ID Application identity found — building AD-HOC (dry-run, not notarized)"
 fi
 
-if [ "$PUBLISH" = "1" ] && [ "$SIGNED" = "0" ] && [ "${AGTERM_ALLOW_UNSIGNED:-0}" != "1" ]; then
+if [ "$PUBLISH" = "1" ] && [ "$SIGNED" = "0" ] && [ "${HANGAR_ALLOW_UNSIGNED:-0}" != "1" ]; then
   echo "refusing to --publish an ad-hoc (unsigned) build" >&2
-  echo "set AGTERM_ALLOW_UNSIGNED=1 to publish the interim unsigned build (CI does this)" >&2
+  echo "set HANGAR_ALLOW_UNSIGNED=1 to publish the interim unsigned build (CI does this)" >&2
   exit 1
 fi
 
@@ -125,7 +125,7 @@ release_notes() {
 Signed with a Developer ID certificate and notarized by Apple, so macOS Gatekeeper opens it with no extra steps. Apple Silicon (arm64) only, macOS 14 or later.
 
 - **Homebrew:** \`brew install --cask umputun/apps/agterm\`
-- **Direct download:** open the \`.dmg\` and drag \`agterm.app\` into \`/Applications\`.
+- **Direct download:** open the \`.dmg\` and drag \`Hangar.app\` into \`/Applications\`.
 EOF
 }
 
@@ -133,13 +133,13 @@ EOF
 "$ROOT/scripts/setup.sh"
 
 # the Linux server ships with each release, one tarball per architecture; the app carries their checksums, which
-# `agtermctl server install` checks a download against
-docker info >/dev/null 2>&1 || { echo "release needs Docker running to build agterm-server" >&2; exit 1; }
+# `hangarctl server install` checks a download against
+docker info >/dev/null 2>&1 || { echo "release needs Docker running to build hangar-server" >&2; exit 1; }
 "$ROOT/scripts/setup-zmx-linux.sh"
 SERVER_TARBALLS=()
 for arch in aarch64 x86_64; do
   "$ROOT/scripts/server-package.sh" "$arch" "$VERSION"
-  SERVER_TARBALLS+=("$BUILD_DIR/server/agterm-server-$VERSION-linux-$arch.tar.gz")
+  SERVER_TARBALLS+=("$BUILD_DIR/server/hangar-server-$VERSION-linux-$arch.tar.gz")
 done
 
 xcodegen generate >/dev/null
@@ -148,13 +148,13 @@ xcodegen generate >/dev/null
 # timestamp, so trying to inject Developer ID at build time is racy. Instead we
 # re-sign authoritatively below, AFTER xcodebuild returns.
 GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-xcodebuild -project agterm.xcodeproj -scheme agterm -configuration Release \
+xcodebuild -project Hangar.xcodeproj -scheme hangar -configuration Release \
   -derivedDataPath "$BUILD_DIR/DerivedData" \
   MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$VERSION" GIT_COMMIT="$GIT_COMMIT" \
   ARCHS=arm64 build
 [ -d "$APP" ] || { echo "expected app not found: $APP" >&2; exit 1; }
 # written before the seal below, which then covers it
-(cd "$BUILD_DIR/server" && shasum -a 256 "${SERVER_TARBALLS[@]##*/}") >"$APP/Contents/Resources/agterm-server.sha256"
+(cd "$BUILD_DIR/server" && shasum -a 256 "${SERVER_TARBALLS[@]##*/}") >"$APP/Contents/Resources/hangar-server.sha256"
 
 # authoritative Developer ID signing — AFTER xcodebuild so nothing clobbers it,
 # with a secure --timestamp on every Mach-O (notarization requires it). Sign the
@@ -163,13 +163,13 @@ xcodebuild -project agterm.xcodeproj -scheme agterm -configuration Release \
 # TCC grants onto standalone executables. Same constraint as the build-phase re-seal in project.yml.
 if [ "$SIGNED" = "1" ]; then
   echo "==> signing Developer ID (timestamped)"
-  for helper in agtermctl zmx agterm-session-host; do
+  for helper in hangarctl zmx hangar-session-host; do
     codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$APP/Contents/MacOS/$helper"
   done
   codesign --force --options runtime --timestamp \
-    --entitlements "$ROOT/agterm/agterm.entitlements" --sign "$SIGN_ID" "$APP"
+    --entitlements "$ROOT/Hangar/hangar.entitlements" --sign "$SIGN_ID" "$APP"
   codesign --verify --deep --strict "$APP"
-  for helper in agtermctl zmx agterm-session-host; do
+  for helper in hangarctl zmx hangar-session-host; do
     if codesign -d --entitlements - "$APP/Contents/MacOS/$helper" 2>/dev/null | grep -q 'com.apple.security'; then
       echo "$helper carries entitlements: --deep must not be used on the app sign above" >&2
       exit 1
@@ -177,13 +177,13 @@ if [ "$SIGNED" = "1" ]; then
   done
 else
   # the checksum file joined the bundle after the build sealed it; the helpers are untouched, so only the app re-seals
-  codesign --force --entitlements "$ROOT/agterm/agterm.entitlements" --sign - "$APP"
+  codesign --force --entitlements "$ROOT/Hangar/hangar.entitlements" --sign - "$APP"
   codesign --verify --deep --strict "$APP"
 fi
 
 # ── notarize + staple the app ─────────────────────────────────────────────────
 if [ "$SIGNED" = "1" ]; then
-  ZIP="$BUILD_DIR/agterm-$VERSION.zip"
+  ZIP="$BUILD_DIR/hangar-$VERSION.zip"
   ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
   notarize "$ZIP"
   rm -f "$ZIP"
@@ -198,7 +198,7 @@ rm -rf "$STAGING"; mkdir -p "$STAGING"
 cp -R "$APP" "$STAGING/"
 ln -s /Applications "$STAGING/Applications"
 rm -f "$DMG"
-hdiutil create -volname agterm -srcfolder "$STAGING" -ov -format UDZO "$DMG"
+hdiutil create -volname hangar -srcfolder "$STAGING" -ov -format UDZO "$DMG"
 rm -rf "$STAGING"
 
 # ── sign + notarize + staple the DMG ──────────────────────────────────────────
@@ -235,18 +235,18 @@ gh release upload "$TAG" "$DMG" "${SERVER_TARBALLS[@]}" --clobber
 SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
 TAP_DIR="$(mktemp -d)"
 gh repo clone "$TAP_REPO" "$TAP_DIR" -- --depth=1 >/dev/null
-CASK="$TAP_DIR/Casks/agterm.rb"
+CASK="$TAP_DIR/Casks/hangar.rb"
 if [ ! -f "$CASK" ]; then
   mkdir -p "$TAP_DIR/Casks"
-  cp "$ROOT/packaging/agterm.rb" "$CASK" # first publish: seed from the in-repo source of truth
+  cp "$ROOT/packaging/hangar.rb" "$CASK" # first publish: seed from the in-repo source of truth
 fi
 sed -i '' -E "s/^( *version )\".*\"/\1\"$VERSION\"/" "$CASK"
 sed -i '' -E "s/^( *sha256 )\".*\"/\1\"$SHA\"/" "$CASK"
-git -C "$TAP_DIR" add Casks/agterm.rb
+git -C "$TAP_DIR" add Casks/hangar.rb
 if git -C "$TAP_DIR" diff --cached --quiet; then
   echo "==> cask already at $VERSION, nothing to push"
 else
-  git -C "$TAP_DIR" commit -m "agterm $VERSION"
+  git -C "$TAP_DIR" commit -m "hangar $VERSION"
   git -C "$TAP_DIR" push
   echo "==> cask bumped to $VERSION"
 fi

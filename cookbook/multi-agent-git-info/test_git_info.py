@@ -26,7 +26,7 @@ SPEC.loader.exec_module(GI)
 
 
 def overlap_worker(settings, control):
-    os.environ["AGTERM_PANE_ID"] = settings["pane"]
+    os.environ["HANGAR_PANE_ID"] = settings["pane"]
     real_lock = GI.fcntl.flock
 
     def lock(file, operation):
@@ -45,7 +45,7 @@ def overlap_worker(settings, control):
     def run(args):
         if args[0] == "ps":
             return "codex" if args[2] == "101" else "claude"
-        if args[:3] != ["agtermctl", "session", "info"]:
+        if args[:3] != ["hangarctl", "session", "info"]:
             raise AssertionError(args)
         if settings["gate"] == "publish":
             control.send("publish")
@@ -81,7 +81,7 @@ def overlap_worker(settings, control):
 
 class GitInfoTest(unittest.TestCase):
     def test_both_agents_register_the_same_lifecycle_writer(self) -> None:
-        command = 'python3 "$HOME/.local/bin/agterm-git-info.py"'
+        command = 'python3 "$HOME/.local/bin/hangar-git-info.py"'
         claude = json.loads((ROOT / "claude-hooks.json").read_text())
         codex = tomllib.loads((ROOT / "codex-hooks.toml").read_text())
         for config in (claude, codex):
@@ -102,9 +102,9 @@ class GitInfoTest(unittest.TestCase):
         self.env = mock.patch.dict(
             os.environ,
             {
-                "AGTERM_SESSION_ID": "SESSION",
-                "AGTERM_PANE_ID": "LEFT",
-                "AGTERM_SOCKET": "/test/socket",
+                "HANGAR_SESSION_ID": "SESSION",
+                "HANGAR_PANE_ID": "LEFT",
+                "HANGAR_SOCKET": "/test/socket",
                 "GIT_CONFIG_GLOBAL": os.devnull,
                 "GIT_CONFIG_NOSYSTEM": "1",
                 "GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z",
@@ -180,7 +180,7 @@ class GitInfoTest(unittest.TestCase):
 
     def test_owner_rejects_nested_agents_and_unreadable_ancestry(self) -> None:
         with mock.patch.object(GI.os, "getppid", return_value=100):
-            with mock.patch.object(GI, "run", side_effect=["99 sh", "90 codex", "1 agterm"]):
+            with mock.patch.object(GI, "run", side_effect=["99 sh", "90 codex", "1 hangar"]):
                 self.assertEqual(GI.owner(), (99, "codex"))
             with mock.patch.object(
                 GI,
@@ -190,7 +190,7 @@ class GitInfoTest(unittest.TestCase):
                     "98 claude",
                     "97 sh",
                     "90 codex",
-                    "1 agterm",
+                    "1 hangar",
                 ],
             ):
                 self.assertIsNone(GI.owner())
@@ -209,7 +209,7 @@ class GitInfoTest(unittest.TestCase):
         def run(args):
             if args[0] == "ps":
                 return "codex"
-            if args[0] == "agtermctl":
+            if args[0] == "hangarctl":
                 published.append(args[3])
                 return "ok"
             return original_run(args)
@@ -241,7 +241,7 @@ class GitInfoTest(unittest.TestCase):
         def run(args):
             if args[0] == "ps":
                 return "codex" if args[2] == "101" else "claude"
-            if args[0] == "agtermctl":
+            if args[0] == "hangarctl":
                 published.append(args[3])
                 return "ok"
             if (
@@ -267,26 +267,26 @@ class GitInfoTest(unittest.TestCase):
                         "session_id": "left",
                         "cwd": str(self.repo),
                     }
-                    os.environ["AGTERM_PANE_ID"] = "LEFT"
+                    os.environ["HANGAR_PANE_ID"] = "LEFT"
                     GI.refresh(event, 101, "codex")
                     other = {**event, "session_id": "right", "cwd": str(peer)}
-                    os.environ["AGTERM_PANE_ID"] = "RIGHT"
+                    os.environ["HANGAR_PANE_ID"] = "RIGHT"
                     GI.refresh(other, 102, "claude")
                     slow = str(peer)
                     (self.repo / "file").write_text("changed\n")
-                    os.environ["AGTERM_PANE_ID"] = "LEFT"
+                    os.environ["HANGAR_PANE_ID"] = "LEFT"
                     GI.refresh(event, 101, "codex")
                     self.assertEqual(
                         published[-1], '**main** ^[● 1](color: "yellow") ^[local only](dim: true)'
                     )
                     slow = str(self.repo)
-                    os.environ["AGTERM_PANE_ID"] = "RIGHT"
+                    os.environ["HANGAR_PANE_ID"] = "RIGHT"
                     GI.refresh({**other, "hook_event_name": "SessionEnd"}, 102, "claude")
                     self.assertEqual(published[-1], "--clear")
-                    state = next((Path(directory) / f"agterm-git-info-{os.getuid()}").glob("*.json"))
+                    state = next((Path(directory) / f"hangar-git-info-{os.getuid()}").glob("*.json"))
                     self.assertEqual(set(json.loads(state.read_text())), {"LEFT"})
                     slow = None
-                    os.environ["AGTERM_PANE_ID"] = "LEFT"
+                    os.environ["HANGAR_PANE_ID"] = "LEFT"
                     GI.refresh(event, 101, "codex")
                     self.assertNotIn("peer", published[-1])
 
@@ -319,7 +319,7 @@ class GitInfoTest(unittest.TestCase):
         original_run = GI.run
 
         def run(args):
-            if args[0] == "agtermctl":
+            if args[0] == "hangarctl":
                 published.append(args[3])
                 return "ok"
             return original_run(args)
@@ -331,7 +331,7 @@ class GitInfoTest(unittest.TestCase):
         ):
             event = {"hook_event_name": "PostToolUse", "session_id": "left", "cwd": str(self.repo)}
             GI.refresh(event, processes[0].pid, names[0])
-            os.environ["AGTERM_PANE_ID"] = "RIGHT"
+            os.environ["HANGAR_PANE_ID"] = "RIGHT"
             other = {**event, "session_id": "right", "cwd": str(peer)}
             GI.refresh(other, processes[1].pid, names[1])
             self.assertIn("L repo:", published[-1])
@@ -342,7 +342,7 @@ class GitInfoTest(unittest.TestCase):
             self.assertEqual(
                 published[-1], '**peer** ^[✓ clean](color: "green") ^[local only](dim: true)'
             )
-            state = next((self.root / f"agterm-git-info-{os.getuid()}").glob("*.json"))
+            state = next((self.root / f"hangar-git-info-{os.getuid()}").glob("*.json"))
             self.assertEqual(set(json.loads(state.read_text())), {"RIGHT"})
 
     def test_overlapping_updates_keep_both_panes(self) -> None:
@@ -394,7 +394,7 @@ class GitInfoTest(unittest.TestCase):
             workers[1].start()
             connections[1][1].close()
             self.assertEqual(connections[1][0].recv(), "locking")
-            lock_path = next((directory / f"agterm-git-info-{os.getuid()}").glob("*.lock"))
+            lock_path = next((directory / f"hangar-git-info-{os.getuid()}").glob("*.lock"))
             with lock_path.open("a") as lock, self.assertRaises(BlockingIOError):
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             connections[0][0].send("release")
@@ -442,7 +442,7 @@ class GitInfoTest(unittest.TestCase):
         def run(args: list[str]) -> str:
             if args[0] == "ps":
                 return "codex" if args[2] == "101" else "claude"
-            if args[0] == "agtermctl":
+            if args[0] == "hangarctl":
                 published.append(args)
                 return "ok"
             return original_run(args)
@@ -454,7 +454,7 @@ class GitInfoTest(unittest.TestCase):
         ):
             event = {"hook_event_name": "PostToolUse", "session_id": "new", "cwd": str(self.repo)}
             GI.refresh(event, 101, "codex")
-            os.environ["AGTERM_PANE_ID"] = "RIGHT"
+            os.environ["HANGAR_PANE_ID"] = "RIGHT"
             peer_event = {**event, "cwd": str(peer)}
             GI.refresh(peer_event, 102, "claude")
             line = published[-1][3]
@@ -475,11 +475,11 @@ class GitInfoTest(unittest.TestCase):
                 "claude",
             )
             self.assertEqual(published[-1][3], line)
-            os.environ["AGTERM_PANE_ID"] = "LEFT"
+            os.environ["HANGAR_PANE_ID"] = "LEFT"
             GI.refresh({**event, "hook_event_name": "SessionEnd"}, 101, "codex")
             expected = other if different else main
             self.assertEqual(published[-1][3], expected)
-            os.environ["AGTERM_PANE_ID"] = "RIGHT"
+            os.environ["HANGAR_PANE_ID"] = "RIGHT"
             GI.refresh({**peer_event, "hook_event_name": "SessionEnd"}, 102, "claude")
             self.assertEqual(published[-1][3], "--clear")
             self.assertNotIn("--markdown", published[-1])

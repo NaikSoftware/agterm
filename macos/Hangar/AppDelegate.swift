@@ -1,0 +1,553 @@
+import HangarCore
+import AppKit
+import os
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    typealias ForegroundCommandReader = (GhosttySurfaceView, String?, ZmxForegroundResolver.Snapshot?) -> [String]?
+    typealias ExitCapture = @MainActor @Sendable ([Session]) -> Int
+
+    private static let logger = Logger(subsystem: "ua.naiksoftware.hangar", category: "AppDelegate")
+
+    // adds a nominal 150 ms for pane reads after the listing timeout and cleanup grace
+    static let exitCaptureBudget: Duration = .milliseconds(800)
+
+    /// App-global window library, set on scene appear; terminate flushes every window's state.
+    var library: WindowLibrary?
+
+    /// Control channel, set on scene appear; terminate stops the listener and unlinks the socket.
+    var controlServer: ControlServer?
+
+    /// The phone relay child, stopped at terminate so its port is free for the next launch.
+    var phoneRelay: PhoneRelay?
+
+    /// Custom-command key-monitor runner, set on scene appear; terminate removes its monitor + observer.
+    var customCommandRunner: CustomCommandRunner?
+
+    /// Settings model, set on scene appear; terminate flushes its pending debounced `settings.json` writes.
+    var settingsModel: SettingsModel?
+
+    /// Action hub, set on scene appear so `application(_:open:)` can open a session at an `open -a` path.
+    var actions: AppActions?
+
+    /// Injected exit policy; the configured mode is evaluated when the exit happens.
+    var captureOnExit: ExitCapture?
+
+    /// The one-shot marker store for a confirmed Live sessions reset, in the state directory; set on scene
+    /// appear. Nil leaves a pending reset unarmed, and the quit proceeds as an ordinary quit.
+    var liveResetMarkerStore: LiveResetMarkerStore?
+
+    /// Holds the confirmed reset between the dialog or `zmx.reset` and the quit; set on scene appear.
+    var liveReset: LiveResetCoordinator?
+
+    /// Strongly retains the current Dock menu's target objects so nil-sender dispatch never depends on
+    /// AppKit's target lifetime; replaced whenever the Dock asks for a fresh menu.
+    var dockMenuActionTargets: [DockMenuActionTarget] = []
+
+    /// Directories from `open -a hangar /path` not yet turned into sessions — queued until the frontmost
+    /// store resolves, so the new session lands in the last-active window.
+    private var pendingOpenDirectories: [String] = []
+
+    private var restoreObserver: NSObjectProtocol?
+    private var scheduledReconciliationReasons: Set<String> = []
+
+    func applicationWillFinishLaunching(_: Notification) {
+        // no native window tabs: this strips AppKit's injected "Show Tab Bar" / "Show All Tabs" / "Move Tab
+        // to New Window" items and the tab affordances. Must be set before any window is created.
+        NSWindow.allowsAutomaticWindowTabbing = false
+        applyUITestAppearanceOverride()
+        // do NOT set NSApp.applicationIconImage: the adaptive Icon Composer `AppIcon.icon` is rendered LIVE
+        // per appearance (light/dark/clear/tinted, Liquid Glass), and a STATIC NSImage would freeze the Dock
+        // to one flat rendering. The unseen badge draws over it via `UNUserNotificationCenter.setBadgeCount`.
+        restoreObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didFinishRestoringWindowsNotification,
+            object: NSApp,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.scheduleRestoredWindowReconciliation(reason: "did-finish-restoring")
+            }
+        }
+    }
+
+    func applicationDidFinishLaunching(_: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        if ContentView.isUITestLaunch {
+            scheduleUITestWindowActivationRetries()
+        } else if !hangarApp.isHostedUnitTest {
+            NSApp.activate()
+        }
+        // libghostty is already booted: `restoredRuntime` touches `GhosttyApp.shared` during App.init,
+        // before NSApp exists. This keeps the dependency explicit ahead of the re-side below.
+        _ = GhosttyApp.shared
+        // then re-side the config to the launch appearance, while NSApp exists and no scene has mounted —
+        // a dark launch otherwise strips the env, restore replay and command off every restored surface.
+        GhosttyApp.shared.syncLaunchColorScheme()
+        HtmlOverlayRegistry.shared.install()
+        scheduleRestoredWindowReconciliation(reason: "did-finish-launching")
+        NotificationCenter.default.addObserver(self, selector: #selector(menuBeganTracking),
+                                               name: NSMenu.didBeginTrackingNotification, object: nil)
+        // any SwiftUI menu rebuild can hand a stock item back a chord the keymap gave hangar, so reconcile
+        // after activation (async, once SwiftUI has rebuilt), on menu tracking, and on every keymap change.
+        NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive),
+                                               name: NSApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(keymapChanged),
+                                               name: .hangarKeymapChanged, object: nil)
+        reconcileStockMenuChords()
+    }
+
+    /// XCUITest-only seam: pin the LAUNCH appearance from `HANGAR_UITEST_FORCE_APPEARANCE` (`light`/`dark`).
+    ///
+    /// The dark-launch config re-siding (`GhosttyApp.syncLaunchColorScheme`) runs in
+    /// `applicationDidFinishLaunching`, so a test covering it must decide the side before that — and
+    /// XCUITest cannot: it inherits the machine's appearance, and `-AppleInterfaceStyle` would have to ride
+    /// launch ARGUMENTS, which hit FB11763863 here. `NSApp.appearance` moves `effectiveAppearance`, which is
+    /// what `currentIsDark()` reads. Ignored outside an isolated UI-test launch, like `debug.appearance`,
+    /// and exempt from the control keep-in-sync for the same reason: it is test scaffolding, not a feature.
+    private func applyUITestAppearanceOverride() {
+        guard ContentView.isUITestLaunch,
+              let side = ProcessInfo.processInfo.environment["HANGAR_UITEST_FORCE_APPEARANCE"],
+              side == "light" || side == "dark" else { return }
+        NSApp.appearance = NSAppearance(named: side == "dark" ? .darkAqua : .aqua)
+    }
+
+    @objc private func appDidBecomeActive(_: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                self?.reconcileStockMenuChords()
+            }
+        }
+    }
+
+    @objc private func keymapChanged(_: Notification) {
+        MainActor.assumeIsolated { reconcileStockMenuChords() }
+    }
+
+    @objc private func menuBeganTracking(_: Notification) {
+        MainActor.assumeIsolated {
+            reconcileStockMenuChords()
+        }
+    }
+
+    /// reconcileStockMenuChords reapplies `applyStockMenuChords`, since any SwiftUI menu rebuild can undo it.
+    private func reconcileStockMenuChords() {
+        guard let keymap = settingsModel?.keymap else { return }
+        AppDelegate.applyStockMenuChords(keymap, in: NSApp.mainMenu)
+    }
+
+    /// Split ⌘W between hangar's Close Session item and the stock `performClose:` one, following `keymap`.
+    /// Operates on whichever submenu holds `performClose:`; a menu without both items is left alone.
+    ///
+    /// The stock item may hold ⌘W only while NO built-in resolves to it — `close_session` alone is not
+    /// enough, since another action can legitimately own ⌘W (`parseKeymap` rejects a chord only when two
+    /// DISTINCT actions claim it), and arming the stock item there advertises the chord twice, letting
+    /// SwiftUI's next rebuild unbind hangar's own item.
+    ///
+    /// hangar's item is a SwiftUI closure button with no distinguishing selector, so it is matched by title.
+    private static func applyCloseSessionChord(_ keymap: Keymap, in mainMenu: NSMenu?) {
+        let closeSessionOwns = keymap.equivalent(for: .closeSession) == commandW
+        let anyBuiltinOwns = BuiltinAction.allCases.contains { keymap.equivalent(for: $0) == commandW }
+        let closeSelector = #selector(NSWindow.performClose(_:))
+        for topItem in mainMenu?.items ?? [] {
+            guard let submenu = topItem.submenu,
+                  let stockClose = submenu.items.first(where: { $0.action == closeSelector }),
+                  let ours = submenu.items.first(where: { $0.title == closeSessionItemTitle })
+            else { continue }
+            // clear a stale ⌘W on our item: SwiftUI rebuilds lazily, so right after a reload that rebound
+            // close_session away ours still advertises the chord the stock item takes.
+            if closeSessionOwns {
+                ours.keyEquivalent = "w"
+                ours.keyEquivalentModifierMask = .command
+            } else if hasCommandW(ours) {
+                ours.keyEquivalent = ""
+                ours.keyEquivalentModifierMask = []
+            }
+            stockClose.keyEquivalent = anyBuiltinOwns ? "" : "w"
+            stockClose.keyEquivalentModifierMask = anyBuiltinOwns ? [] : .command
+        }
+    }
+
+    /// StockMenuChord is one contested stock item, identified by selector plus modifier mask because several
+    /// stock items share a selector.
+    struct StockMenuChord {
+        let selector: Selector
+        let chord: Chord
+
+        var keyEquivalent: String { chord.key == "space" ? " " : chord.key }
+
+        var modifierMask: NSEvent.ModifierFlags {
+            var mask: NSEvent.ModifierFlags = []
+            if chord.mods.contains(.control) { mask.insert(.control) }
+            if chord.mods.contains(.command) { mask.insert(.command) }
+            if chord.mods.contains(.option) { mask.insert(.option) }
+            if chord.mods.contains(.shift) { mask.insert(.shift) }
+            return mask
+        }
+
+        // the mask is compared whole, so the fn-masked palette item never matches an entry
+        func matchesMask(of item: NSMenuItem) -> Bool {
+            item.keyEquivalentModifierMask.intersection([.control, .command, .option, .shift, .function]) == modifierMask
+        }
+    }
+
+    /// stockMenuChords lists the stock chords a keymap can spell; ⌘W's `performClose:` is `applyCloseSessionChord`'s.
+    static let stockMenuChords: [StockMenuChord] = [
+        StockMenuChord(selector: NSSelectorFromString("hide:"), chord: Chord(mods: [.command], key: "h")),
+        StockMenuChord(selector: NSSelectorFromString("hideOtherApplications:"), chord: Chord(mods: [.command, .option], key: "h")),
+        StockMenuChord(selector: NSSelectorFromString("terminate:"), chord: Chord(mods: [.command], key: "q")),
+        StockMenuChord(selector: NSSelectorFromString("terminate:"), chord: Chord(mods: [.command, .option], key: "q")),
+        StockMenuChord(selector: NSSelectorFromString("closeAll:"), chord: Chord(mods: [.command, .option], key: "w")),
+        StockMenuChord(selector: NSSelectorFromString("cut:"), chord: Chord(mods: [.command], key: "x")),
+        StockMenuChord(selector: NSSelectorFromString("copy:"), chord: Chord(mods: [.command], key: "c")),
+        StockMenuChord(selector: NSSelectorFromString("paste:"), chord: Chord(mods: [.command], key: "v")),
+        StockMenuChord(selector: NSSelectorFromString("selectAll:"), chord: Chord(mods: [.command], key: "a")),
+        StockMenuChord(selector: NSSelectorFromString("orderFrontCharacterPalette:"), chord: Chord(mods: [.command], key: "space")),
+        StockMenuChord(selector: NSSelectorFromString("orderFrontCharacterPalette:"), chord: Chord(mods: [.control, .command], key: "space")),
+        StockMenuChord(selector: NSSelectorFromString("performMiniaturize:"), chord: Chord(mods: [.command], key: "m")),
+        StockMenuChord(selector: NSSelectorFromString("miniaturizeAll:"), chord: Chord(mods: [.command, .option], key: "m")),
+    ]
+
+    /// applyStockMenuChords gives each contested stock chord to whichever side `keymap` says owns it.
+    static func applyStockMenuChords(_ keymap: Keymap, in mainMenu: NSMenu?) {
+        applyCloseSessionChord(keymap, in: mainMenu)
+        let claimed = Set(BuiltinAction.allCases.compactMap { keymap.equivalent(for: $0) })
+        let items = menuItems(in: mainMenu)
+        // stale own chords go before any restore, even with the stock item absent: AppKit adds some alternates lazily
+        for entry in stockMenuChords where !claimed.contains(entry.chord) {
+            for item in items where item.action == ownItemAction && item.keyEquivalent == entry.keyEquivalent
+                && entry.matchesMask(of: item) {
+                item.keyEquivalent = ""
+            }
+        }
+        // only the key is cleared; the kept mask finds the same item again on release
+        for item in items {
+            guard let entry = stockMenuChords.first(where: { $0.selector == item.action && $0.matchesMask(of: item) })
+            else { continue }
+            item.keyEquivalent = claimed.contains(entry.chord) ? "" : entry.keyEquivalent
+        }
+    }
+
+    /// ownItemAction is the selector every hangar SwiftUI menu item reports (see `ControlKeymapMenuItem.selector`).
+    private static let ownItemAction = NSSelectorFromString("menuAction:")
+
+    private static func menuItems(in menu: NSMenu?) -> [NSMenuItem] {
+        (menu?.items ?? []).flatMap { [$0] + menuItems(in: $0.submenu) }
+    }
+
+    private static func hasCommandW(_ item: NSMenuItem) -> Bool {
+        item.keyEquivalent == "w" && item.keyEquivalentModifierMask == .command
+    }
+
+    /// The File-menu title of hangar's own close-the-session item, matched by `applyCloseSessionChord`.
+    static let closeSessionItemTitle = "Close Session"
+    private static let commandW = Chord(mods: [.command], key: "w")
+
+    /// `open -a hangar /path` (the OS "open terminal here" integration): each URL resolves to a directory
+    /// (folder → itself, file → its parent, via `OpenPathResolver`), queued and drained into a new session
+    /// in the last-active window. WARM case only — a running instance already has a window to graft into.
+    func application(_: NSApplication, open urls: [URL]) {
+        let directories = urls.compactMap { OpenPathResolver.directory(for: $0) }
+        guard !directories.isEmpty else { return }
+        pendingOpenDirectories.append(contentsOf: directories)
+        drainPendingOpenDirectories()
+    }
+
+    /// Turn every queued `open -a` directory into a new session in the last-active window, dropping an
+    /// entry only once its session lands (a transient failure keeps it queued). Until the frontmost store
+    /// resolves, retries every 0.1 s, bounded so a folder can't wedge a stuck timer.
+    func drainPendingOpenDirectories(retry: Int = 0) {
+        guard !pendingOpenDirectories.isEmpty else { return }
+        guard let actions, library?.activeStore?.currentWorkspaceID != nil else {
+            guard retry < 50 else { pendingOpenDirectories.removeAll(); return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.drainPendingOpenDirectories(retry: retry + 1)
+            }
+            return
+        }
+        NSApp.activate()
+        let beforeCount = pendingOpenDirectories.count
+        while let directory = pendingOpenDirectories.first, actions.openSession(atDirectory: directory) {
+            pendingOpenDirectories.removeFirst()
+        }
+        // raise the window the session landed in: `NSApp.activate()` only fronts the app, so a minimized
+        // last-active window would stay in the Dock. `raise` deminiaturizes + makes key, a frontmost no-op.
+        if pendingOpenDirectories.count < beforeCount, let windowID = library?.activeWindowID {
+            WindowRegistry.shared.raise(windowID)
+        }
+        if !pendingOpenDirectories.isEmpty, retry < 50 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.drainPendingOpenDirectories(retry: retry + 1)
+            }
+        }
+    }
+
+    func scheduleUITestWindowActivationRetries() {
+        let delays: [TimeInterval] = [0, 0.1, 0.3, 0.6, 1.0, 1.5, 2.0]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.bringUITestWindowsForward()
+            }
+        }
+    }
+
+    /// On macOS 15+ a SwiftUI WindowGroup app launched by another process (XCUITest, launchd) often never
+    /// auto-presents its window (FB11763863): dock icon shows, no window appears, and the scene's
+    /// `.task`/`.onAppear` never fire. A reopen event (what a dock click sends) creates it — fire one once
+    /// when no real window exists.
+    private func bringUITestWindowsForward() {
+        if !didForceReopen, NSApp.windows.allSatisfy({ $0 is NSPanel }) {
+            didForceReopen = true
+            NSWorkspace.shared.open(Bundle.main.bundleURL)
+        }
+        NSApp.setActivationPolicy(.regular)
+        NSApp.unhide(nil)
+        // present the launch window ONCE (FB11763863), then latch off: the windows are isRestorable=false so
+        // they won't re-minimize, and re-fronting every tick oscillates the key window and fights a deliberate
+        // window.select (which made multi-window control tests flaky). A runtime window.new has its own retry.
+        guard !didPresentUITestWindow else { return }
+        NSApp.activate()
+        for window in NSApp.windows where window.canBecomeKey {
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.orderFrontRegardless()
+            window.makeKeyAndOrderFront(nil)
+            didPresentUITestWindow = true
+        }
+    }
+
+    /// One-shot latch: set once the launch UI-test window is presented, stopping the retry schedule.
+    private var didPresentUITestWindow = false
+
+    private var didForceReopen = false
+
+    /// SwiftUI/AppKit can restore stale plain-WindowGroup windows before `WindowLibrary`'s reopen pass ends,
+    /// and closing them from inside the stray view races that restoration machinery — so reconcile after
+    /// AppKit's restoration-complete notification and after the real windows register via `TitleProbeView`.
+    func scheduleRestoredWindowReconciliation(reason: String) {
+        guard scheduledReconciliationReasons.insert(reason).inserted else { return }
+        for delay in [0, 0.05, 0.15, 0.35, 0.7, 1.2, 2.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.closeExcessRestoredWindows(reason: reason)
+                }
+            }
+        }
+    }
+
+    private func closeExcessRestoredWindows(reason: String) {
+        guard let library else { return }
+        let expected = library.openIDs().count
+        guard expected > 0, WindowRegistry.shared.registeredCount >= expected else { return }
+
+        let extras = NSApp.windows.filter { window in
+            isTerminalWindowGroupWindow(window) && !WindowRegistry.shared.contains(window)
+        }
+        guard !extras.isEmpty else { return }
+
+        NSLog("window reconcile: closing %d stale restored window(s) (expected %d, total %d, reason %@)",
+              extras.count, expected, NSApp.windows.count, reason)
+        for window in extras {
+            closeRestoredStray(window)
+        }
+    }
+
+    private func isTerminalWindowGroupWindow(_ window: NSWindow) -> Bool {
+        if window.identifier?.rawValue.hasPrefix("terminal-AppWindow-") == true { return true }
+
+        let className = NSStringFromClass(type(of: window))
+        return className.contains("SwiftUI")
+            && window.title == "Hangar"
+            && window.styleMask.contains(.titled)
+            && window.canBecomeKey
+    }
+
+    private func closeRestoredStray(_ window: NSWindow) {
+        window.isRestorable = false
+        window.restorationClass = nil
+        window.disableSnapshotRestoration()
+        window.invalidateRestorableState()
+        window.close()
+        DispatchQueue.main.async { [weak window] in
+            guard let window else { return }
+            window.orderOut(nil)
+            window.close()
+        }
+    }
+
+    /// Confirm a user-initiated quit (menu Quit / ⌘Q) when windows are open. Skip system shutdown,
+    /// restart, logout, XCUITest, auto-quit after the last window closes, or an unwired library.
+    func applicationShouldTerminate(_: NSApplication) -> NSApplication.TerminateReply {
+        guard !ContentView.isUITestLaunch, let library else { return .terminateNow }
+        if QuitReason.isSystemQuit(NSAppleEventManager.shared().currentAppleEvent) { return .terminateNow }
+        if liveReset?.armablePending != nil { return .terminateNow }
+        let counts = library.openCounts()
+        guard counts.windows > 0 else { return .terminateNow }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Quit Hangar?"
+        alert.informativeText = QuitPrompt.message(windows: counts.windows, sessions: counts.sessions,
+                                                   mode: GhosttyApp.shared.restoreLaunchDecision.active)
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+    }
+
+    func applicationWillTerminate(_: Notification) {
+        // resolve in-memory pickers and asks before closing the socket: a client already polling may observe
+        // cancellation, but a later poll can still race socket teardown at process exit.
+        actions?.cancelAllPendingModals()
+        phoneRelay?.stopForQuit()
+        controlServer?.stop()
+        customCommandRunner?.stop()
+        TerminalInputSource.shared.stop()
+        // clear the OS-level Dock badge — it outlives the process while unseenCount is ephemeral, so a quit
+        // with unseen > 0 pins a stale count (the willClose refresh() can't: isTerminating no-ops closeWindow).
+        DockBadgeController.shared.clear()
+        // mark terminating so per-window willClose can't zero the open-set during quit — it must survive
+        // for the next launch's reopen-all.
+        library?.isTerminating = true
+        if let library {
+            // flush the stores + index: cwd changes since the last structural mutation aren't auto-persisted.
+            Self.exitFlush(pending: liveReset?.armablePending, steps: ExitFlushSteps(
+                capture: { _ = self.captureOnExit?(library.allOpenSessions()) },
+                finalize: { library.finalizeAllPendingCloses() },
+                save: { library.saveAllChecked() },
+                arm: { selection in
+                    guard let store = self.liveResetMarkerStore else { return false }
+                    return Self.armLiveReset(selection, store: store) {
+                        LiveResetRelauncher().spawn(pid: getpid(), bundle: Bundle.main.bundleURL,
+                                                    stateDirectory: ProcessInfo.processInfo.environment["HANGAR_STATE_DIR"])
+                    }
+                }))
+        }
+        // flush pending debounced settings writes (a keyboard-driven opacity/blur change holds a ~0.3s save
+        // no drag-end commit fires) so they survive ⌘Q.
+        settingsModel?.flushPendingSaves()
+    }
+
+    struct ExitFlushSteps {
+        let capture: () -> Void
+        let finalize: () -> Void
+        let save: () -> Bool
+        let arm: (LiveReset.Selection) -> Bool
+    }
+
+    /// exitFlush runs in a fixed order: capture, finalize pending closes, then save. A pending Live
+    /// sessions reset arms only when the save reports every snapshot and the index written; capture is
+    /// invoked, not judged, since its count is best effort. Returns whether a reset was armed.
+    @discardableResult
+    static func exitFlush(pending: LiveReset.Selection?, steps: ExitFlushSteps) -> Bool {
+        steps.capture()
+        steps.finalize()
+        let saved = steps.save()
+        guard let pending else { return false }
+        guard saved else {
+            logger.error("live sessions reset not armed: window state or the index did not save")
+            return false
+        }
+        return steps.arm(pending)
+    }
+
+    /// Writes the marker, then spawns the relauncher; a relauncher that cannot start takes the marker with
+    /// it, so a reset is never armed for a launch nobody triggers.
+    static func armLiveReset(_ selection: LiveReset.Selection, store: LiveResetMarkerStore, spawn: () -> Bool) -> Bool {
+        do {
+            try store.write(LiveReset.Marker(targets: selection.targets))
+        } catch {
+            logger.error("live sessions reset not armed: marker write failed: \(String(describing: error), privacy: .public)")
+            return false
+        }
+        guard spawn() else {
+            store.remove()
+            logger.error("live sessions reset not armed: the relauncher did not start")
+            return false
+        }
+        return true
+    }
+
+    /// Keep the exit policy live so a mode selected after launch governs the next launch.
+    static func makeExitCapture(settingsModel: SettingsModel,
+                                zmxResolver: ZmxForegroundResolver?) -> ExitCapture {
+        return { sessions in
+            guard GhosttyApp.capturesForegroundOnExit(mode: settingsModel.settings.effectiveRestoreMode) else {
+                for session in sessions { session.clearCapturedForegroundCommands() }
+                return 0
+            }
+            return captureForegroundCommands(sessions: sessions, zmxResolver: zmxResolver,
+                                             preserveUnconsumedPending: true)
+        }
+    }
+
+    /// Capture the given panes' foreground commands (main + split) into their `Session` fields for the
+    /// snapshot save. `ForegroundProcess` returns nil for a pane at its shell prompt, so plain shells stay
+    /// plain. Three callers on different edges: `applicationWillTerminate` passes every open session,
+    /// `WindowAccessor`'s `willClose` passes one closing window's — on a close-the-last-window exit the
+    /// quit-time capture runs after that teardown, too late to see any surface — and `restore.capture`
+    /// passes every open session on demand. All three sites and the launch-only replay gate are stated in
+    /// `.claude/rules/settings.md`.
+    ///
+    /// Returns how many slots it actually WROTE a command into, which is what an on-demand caller reports.
+    /// Counting the slots afterwards instead would include a value this call never touched: the split slot
+    /// of a session whose split is hidden or gone still holds whatever an earlier capture put there.
+    @MainActor
+    @discardableResult
+    /// `preserveUnconsumedPending` is EXIT-ONLY. On-demand `restore.capture` must leave an unconsumed slot
+    /// out of the persisted field: persisting it while the pending copy stays armed lets a later show consume
+    /// and replay it, and a crash before the next capture then replays the persisted copy a second time.
+    static func captureForegroundCommands(
+        sessions: [Session], zmxResolver: ZmxForegroundResolver? = nil,
+        preserveUnconsumedPending: Bool = false,
+        timeRemaining suppliedTimeRemaining: (() -> Bool)? = nil,
+        commandReader: ForegroundCommandReader = { view, shell, snapshot in
+            ForegroundProcess.command(for: view, shellBasename: shell, zmxSnapshot: snapshot)
+        }
+    ) -> Int {
+        // filtered here rather than at each caller, so quit and `restore.capture` get the same rule: a
+        // remote pane's foreground is an ssh client the save then drops, and reading it both inflates the
+        // reported count and spends the exit budget on a pane nothing will persist
+        let sessions = sessions.filter(\.isPersistable)
+        let shellBasename = ProcessInfo.processInfo.environment["SHELL"].map(CommandRestore.basename)
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: exitCaptureBudget)
+        let timeRemaining = suppliedTimeRemaining ?? { clock.now < deadline }
+        let hasWrappedPane = sessions.contains { session in
+            session.surface?.backedByZmx == true || session.splitSurface?.backedByZmx == true
+        }
+        let zmxSnapshot = hasWrappedPane
+            ? zmxResolver?.freshSnapshot(timeout: ZmxClient.captureInvocationTimeout)
+            : nil
+        var captured = 0
+        // `loadStore` moves the persisted argv into the pending slot and rewrites the file with nil, so this
+        // is the only thing that refills it: at exit, writing nil over a slot NO factory consumed destroys
+        // it. That happens on a fallback launch and on a restored hidden split never shown.
+        for session in sessions {
+            let pending = preserveUnconsumedPending ? session.pendingForegroundCommand : nil
+            let pendingSplit = preserveUnconsumedPending ? session.pendingSplitForegroundCommand : nil
+            if let view = session.surface as? GhosttySurfaceView {
+                let read = timeRemaining() && (!view.backedByZmx || zmxSnapshot != nil)
+                    ? commandReader(view, shellBasename, zmxSnapshot) : nil
+                if read != nil { captured += 1 }
+                session.foregroundCommand = read ?? pending
+            } else {
+                session.foregroundCommand = pending
+            }
+            if let split = session.splitSurface as? GhosttySurfaceView,
+               session.isSplit || split.backedByZmx {
+                let read = timeRemaining() && (!split.backedByZmx || zmxSnapshot != nil)
+                    ? commandReader(split, shellBasename, zmxSnapshot) : nil
+                if read != nil { captured += 1 }
+                session.splitForegroundCommand = read ?? pendingSplit
+            } else {
+                session.splitForegroundCommand = pendingSplit
+            }
+        }
+        return captured
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
+        // key termination off the model open-set, NOT AppKit's transient window count: a close or a re-render
+        // that briefly drops the surviving NSWindow leaves a momentary zero-window state while the library
+        // still has one open, and quitting there would kill the app and the control server mid-session.
+        guard let library else { return true }
+        return library.openIDs().isEmpty
+    }
+}

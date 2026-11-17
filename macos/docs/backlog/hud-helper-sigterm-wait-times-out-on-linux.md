@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: agtermCore/Tests/agtermCoreTests/HudHelperTests.swift:Run.stop
+where: HangarCore/Tests/HangarCoreTests/HudHelperTests.swift:Run.stop
 added: 2026-11-15
 ---
 # hud helper test reports an ignored SIGTERM on Linux CI
@@ -18,7 +18,7 @@ hud.sh ignored SIGTERM: pid 7339
 After `Run.stop`'s 2 s wait expired, the diagnostics showed the helper as a zombie. The neighbouring tests in
 that run all reported about 29 s, the Linux startup stall. [Inference] Exit observation may have been delayed
 during the stall; the cause is not established. A single failure; master's previous 15 runs were green, and
-the PR touched neither agtermCore nor `hud.sh`.
+the PR touched neither HangarCore nor `hud.sh`.
 
 Related: the pool-wait item fixed in #1001 (f30f8a06) moved these waits to `Task.sleep`; that fix did not
 remove the stall itself. A `docs/ci-flakes.md` entry is owed once the cause is understood.
@@ -27,5 +27,5 @@ Seen again in `theTextColorSitsBetweenTheEraseAndTheContent` at the same line: o
 (https://github.com/umputun/agterm/actions/runs/43828658402, job 133168431957, 36 s, helper a zombie in both
 snapshots) and on master at 5eee361e (https://github.com/umputun/agterm/actions/runs/43809867370, job 133108969684,
 42 s). [Inference] Related: after local `swift test` runs on 2026-11-16, six `hud.sh` helpers started from the
-checkout's `agterm/Resources/hud/hud.sh`, and one `while :; do sleep 0.2; done` loop, were still running orphaned
+checkout's `Hangar/Resources/hud/hud.sh`, and one `while :; do sleep 0.2; done` loop, were still running orphaned
 (parent pid 1) about 88 minutes later; they were stopped by pid. Which test spawned them was not established.

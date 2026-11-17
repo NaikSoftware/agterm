@@ -15,13 +15,13 @@ no TTL, no timestamps, no auto-clear on command exit.
 
 - Title bar line 1 is `titleText` (session name, plus `— window` for a custom window name), line 2 is
   `windowSubtitle` = `Session.subtitleDetail`, rendered only in `.normal` toolbar mode —
-  `agterm/Views/WindowContentView+Titlebar.swift`.
-- `ControlSessionNode` lives in `agtermCore/Sources/agtermCore/ControlProjection.swift:80` (it moved out of
+  `Hangar/Views/WindowContentView+Titlebar.swift`.
+- `ControlSessionNode` lives in `HangarCore/Sources/HangarCore/ControlProjection.swift:80` (it moved out of
   `ControlProtocol.swift` in #521).
 - `session.flag` is the shape to mirror: enum case in `ControlProtocol.swift:26`, validation in
   `ControlDispatcher.swift:331`, effect through a `ControlActions` method, app side in
-  `agterm/Control/ControlServer+SessionActions.swift`, CLI in `agtermctlKit/SessionCommands.swift:490`.
-- `SessionSnapshot` is `agtermCore/Sources/agtermCore/Snapshot.swift:138`, written in
+  `Hangar/Control/ControlServer+SessionActions.swift`, CLI in `hangarctlKit/SessionCommands.swift:490`.
+- `SessionSnapshot` is `HangarCore/Sources/HangarCore/Snapshot.swift:138`, written in
   `AppStore+Snapshot.swift:30` and read back at `:77`.
 - `AppStore+Duplicate.swift:8` documents that a duplicated session carries only the directory, so it does
   not inherit context for free — no work needed.
@@ -38,7 +38,7 @@ no TTL, no timestamps, no auto-clear on command exit.
 `Session.context: String?`, persisted, mutated only over the control channel, projected on
 `ControlSessionNode`, rendered by the title bar under a new Interface toggle.
 
-Validation lives in `agtermCore` so the app target stays an adapter. A set trims outer whitespace and is
+Validation lives in `HangarCore` so the app target stays an adapter. A set trims outer whitespace and is
 rejected when the result is empty, over 256 UTF-8 bytes, or contains a newline or control character. A
 rejected set leaves the previous value untouched. `--clear` is the ONLY clearing form — a blank set must
 not become a second, undocumented clear path.
@@ -87,8 +87,8 @@ needs hit testing and would cost those gestures.
 ### Task 1: Session.context and its validator
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Session.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/SessionTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/SessionTests.swift`
 
 - [x] add `public var context: String?` to `Session` with a short godoc naming the durable-purpose contract
 - [x] add `SessionContextValidation` and `Session.validateContext(_:)` per Technical Details
@@ -100,9 +100,9 @@ needs hit testing and would cost those gestures.
 ### Task 2: Persist context across restart and restore
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Snapshot.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Snapshot.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/SnapshotRoundTripTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Snapshot.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Snapshot.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/SnapshotRoundTripTests.swift`
 
 - [x] add optional `context` to `SessionSnapshot`, written in `sessionSnapshot` and read back alongside `flagged`
 - [x] drop an invalid context on decode (run it through `validateContext`) rather than failing the restore,
@@ -114,15 +114,15 @@ needs hit testing and would cost those gestures.
 ### Task 3: session.context protocol, dispatcher and read-back
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlActionsDefaults.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocolCompatibility.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocolCompatibility.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`
 
 - [x] add `case sessionContext = "session.context"` and its `text`/`clear` args
 - [x] dispatch it: `--clear` sets nil; otherwise run `validateContext` and return `ok: false` with the
@@ -131,7 +131,7 @@ needs hit testing and would cost those gestures.
       goes through the CLI, so parse-time exclusivity in task 7 is not enough on its own
 - [x] add `setSessionContext` to `ControlActions` with the default returning the unimplemented response
 - [x] add optional `context` to `ControlSessionNode`, a default in the compatibility initializer
-      (agtermCore is a `.library` consumed by the agterm-linux fork), and populate it at `AppStore.swift:283`
+      (HangarCore is a `.library` consumed by the agterm-linux fork), and populate it at `AppStore.swift:283`
       — `ControlProjection` owns only the DTO
 - [x] write dispatcher tests in `ControlDispatcherTests` against `MockControlActions`: set, clear, and every
       rejection path calling NO action at all
@@ -142,9 +142,9 @@ needs hit testing and would cost those gestures.
 ### Task 4: App-side effect, event and save
 
 **Files:**
-- Modify: `agterm/Control/ControlServer+SessionActions.swift`
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agtermTests/ControlServerSessionActionsTests.swift`
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `HangarTests/ControlServerSessionActionsTests.swift`
 
 - [x] implement `setSessionContext` against the resolved target session
 - [x] emit `tree.changed` and save immediately on a successful mutation
@@ -158,12 +158,12 @@ needs hit testing and would cost those gestures.
 ### Task 5: Host-free title composition
 
 `titleText` and `windowSubtitle` are private computed properties on a SwiftUI view extension with NO test
-coverage today, so the matrix cannot be pinned where they sit. Hoist the composition into `agtermCore`
+coverage today, so the matrix cannot be pinned where they sit. Hoist the composition into `HangarCore`
 first, following `InterfaceElement.titlebarGroupDividers` ("Host-free so it is unit-testable").
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/TitlebarComposition.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/TitlebarCompositionTests.swift`
+- Create: `HangarCore/Sources/HangarCore/TitlebarComposition.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/TitlebarCompositionTests.swift`
 
 **Design Contract:**
 
@@ -195,9 +195,9 @@ public struct TitlebarComposition: Sendable, Equatable {
 ### Task 6: Title bar rendering and the Interface toggle
 
 **Files:**
-- Modify: `agterm/Views/WindowContentView+Titlebar.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppSettings.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppSettingsTests.swift`
+- Modify: `Hangar/Views/WindowContentView+Titlebar.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppSettings.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppSettingsTests.swift`
 
 No Settings UI change: `SettingsView.swift:458` builds the Title Bar section from
 `InterfaceElement.allCases.filter { $0.section == .titleBar }`, so the new toggle appears on its own.
@@ -208,15 +208,15 @@ No Settings UI change: `SettingsView.swift:458` builds the Title Bar section fro
 - [x] apply `lineLimit(1)` and tail truncation to the title label
 - [x] confirm `windowTitle` (the OS window title) still bypasses the Interface toggles entirely
 - [x] write tests for the new `InterfaceElement` case (section, display name, hidden-set round trip)
-- [x] run `swift test --filter AppSettingsTests` AND a scoped `make test-app` run — the agtermCore filter
+- [x] run `swift test --filter AppSettingsTests` AND a scoped `make test-app` run — the HangarCore filter
       never compiles `WindowContentView`, so it cannot catch a break in the rewiring
 - [x] both must pass before task 7
 
-### Task 7: agtermctl session context
+### Task 7: hangarctl session context
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
 
 - [x] add `session context [TEXT] [--clear]` mirroring `session flag`, with target/window options
 - [x] reject `TEXT` and `--clear` together, and neither, at parse time with a clean usage error
@@ -229,8 +229,8 @@ No Settings UI change: `SettingsView.swift:458` builds the Title Bar section fro
 
 **Files:**
 - Modify: `.claude/rules/control-api.md`
-- Modify: `plugins/agterm/skills/agterm/SKILL.md`
-- Modify: `plugins/agterm/skills/agterm/reference.md`
+- Modify: `plugins/hangar/skills/hangar/SKILL.md`
+- Modify: `plugins/hangar/skills/hangar/reference.md`
 - Modify: `site/commands.html`
 - Modify: `site/docs.html`
 
@@ -246,8 +246,8 @@ No Settings UI change: `SettingsView.swift:458` builds the Title Bar section fro
 - [x] every row of the composition matrix behaves as pinned
 - [x] a rejected set leaves the previous context untouched, and `--clear` is the only clearing form
 - [x] context survives quit and relaunch, and a restored session shows it
-- [x] `agtermctl tree` reports the context; a node without one omits the field
-- [x] run `cd agtermCore && swift test`, `make test-app`, `make lint` — all clean
+- [x] `hangarctl tree` reports the context; a node without one omits the field
+- [x] run `cd HangarCore && swift test`, `make test-app`, `make lint` — all clean
 
 ### Task 10: [Final] Wrap up
 
@@ -257,7 +257,7 @@ No Settings UI change: `SettingsView.swift:458` builds the Title Bar section fro
 ## Post-Completion
 
 **Manual verification:**
-- Launch an isolated Debug instance, set a context from `agtermctl --socket`, and check all three toolbar
+- Launch an isolated Debug instance, set a context from `hangarctl --socket`, and check all three toolbar
   modes plus the Interface toggle by eye.
 - Confirm a long context truncates by tail without pushing the trailing button cluster.
 

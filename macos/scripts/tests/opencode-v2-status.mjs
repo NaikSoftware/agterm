@@ -4,18 +4,18 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setImmediate as nextTurn, setTimeout as delay } from "node:timers/promises";
-import plugin from "../../agterm/Resources/agent-status/opencode/agterm-v2/tui.js";
+import plugin from "../../Hangar/Resources/agent-status/opencode/hangar-v2/tui.js";
 
 async function fixture(run, { selected = "root", sessions, active = {}, env = {}, configure } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), "agterm-v2-"));
+  const directory = mkdtempSync(join(tmpdir(), "hangar-v2-"));
   const output = join(directory, "calls");
   const wrapper = join(directory, "wrapper");
   writeFileSync(output, "");
-  writeFileSync(wrapper, '#!/bin/sh\nprintf "%s|%s|%s|%s|%s\\n" "$AGTERM_SESSION_ID" "$AGTERM_PANE" "$AGTERM_PANE_ID" "$AGTERM_SOCKET" "$*" >> "$AGTERM_TEST_OUTPUT"\n', { mode: 0o755 });
+  writeFileSync(wrapper, '#!/bin/sh\nprintf "%s|%s|%s|%s|%s\\n" "$HANGAR_SESSION_ID" "$HANGAR_PANE" "$HANGAR_PANE_ID" "$HANGAR_SOCKET" "$*" >> "$HANGAR_TEST_OUTPUT"\n', { mode: 0o755 });
   const original = { ...process.env };
   Object.assign(process.env, {
-    AGTERM_SESSION_ID: "pane-a", AGTERM_PANE: "right", AGTERM_PANE_ID: "stable-a",
-    AGTERM_SOCKET: join(directory, "isolated.sock"), AGTERM_STATUS_WRAPPER: wrapper, AGTERM_TEST_OUTPUT: output,
+    HANGAR_SESSION_ID: "pane-a", HANGAR_PANE: "right", HANGAR_PANE_ID: "stable-a",
+    HANGAR_SOCKET: join(directory, "isolated.sock"), HANGAR_STATUS_WRAPPER: wrapper, HANGAR_TEST_OUTPUT: output,
     ...env,
   });
   const records = new Map((sessions ?? [{ id: "root" }, { id: "child", parentID: "root" }, { id: "other" }]).map(info => [info.id, info]));
@@ -503,15 +503,15 @@ test("two CLI clients observing the same events keep independent pane ownership"
       await second.waitFor("active --blink");
       assert.ok(first.calls().every(line => line.startsWith("pane-a|")));
       assert.ok(second.calls().every(line => line.startsWith("pane-b|")));
-    }, { selected: "other", env: { AGTERM_SESSION_ID: "pane-b" } });
+    }, { selected: "other", env: { HANGAR_SESSION_ID: "pane-b" } });
   });
 });
 
-test("outside agterm setup is a no-op", async () => {
+test("outside hangar setup is a no-op", async () => {
   await fixture(async ({ handlers, calls }) => {
     assert.equal(handlers.size, 0);
     assert.deepEqual(calls(), []);
-  }, { env: { AGTERM_SESSION_ID: "" } });
+  }, { env: { HANGAR_SESSION_ID: "" } });
 });
 
 test("reporting failures do not reject into OpenCode", async () => {
@@ -519,7 +519,7 @@ test("reporting failures do not reject into OpenCode", async () => {
     event("session.execution.started", { sessionID: "root" });
     await nextTurn();
     await assert.doesNotReject(dispose());
-  }, { env: { AGTERM_STATUS_WRAPPER: "/nonexistent/agterm-test-wrapper" } });
+  }, { env: { HANGAR_STATUS_WRAPPER: "/nonexistent/hangar-test-wrapper" } });
 });
 
 test("paginated descendants hydrate through the public client API", async () => {

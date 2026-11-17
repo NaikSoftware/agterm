@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # mac-to-linux attach gate; docs/remote-linux-gate.md says what each step checks.
 #
-# usage: AGTERM_STATE_DIR=/tmp/agg scripts/linux-origin-gate.sh HOST [SESSION]
+# usage: HANGAR_STATE_DIR=/tmp/agg scripts/linux-origin-gate.sh HOST [SESSION]
 #   HOST     an ssh destination the user's own ssh resolves with key auth (ssh://user@127.0.0.1:2222 works)
 #   SESSION  the origin session id from `zmx tree HOST`; the first one listed when omitted
-#   AGTERM_GATE_APP  the Debug bundle, default build/DerivedData/Build/Products/Debug/agterm.app
+#   HANGAR_GATE_APP  the Debug bundle, default build/DerivedData/Build/Products/Debug/Hangar.app
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP="${AGTERM_GATE_APP:-$ROOT/build/DerivedData/Build/Products/Debug/agterm.app}"
+APP="${HANGAR_GATE_APP:-$ROOT/build/DerivedData/Build/Products/Debug/Hangar.app}"
 DEADLINE=15
 CALL_LIMIT=20
 FAILED=0
@@ -23,29 +23,29 @@ die() { echo "linux-origin-gate: $*" >&2; exit 2; }
 # a state dir that is not a short throwaway under /tmp could be the live terminal's, whose socket this script
 # would then drive
 check_state_dir() {
-  local dir="${AGTERM_STATE_DIR:-}"
-  [[ -n "$dir" ]] || die "AGTERM_STATE_DIR is unset; export a short /tmp directory"
+  local dir="${HANGAR_STATE_DIR:-}"
+  [[ -n "$dir" ]] || die "HANGAR_STATE_DIR is unset; export a short /tmp directory"
   dir="${dir%/}"
   case "$dir" in
-    "$HOME/Library/Application Support/agterm" | "$HOME/Library/Application Support/agterm-debug")
-      die "AGTERM_STATE_DIR names a shared state dir ($dir)" ;;
+    "$HOME/Library/Application Support/hangar" | "$HOME/Library/Application Support/hangar-debug")
+      die "HANGAR_STATE_DIR names a shared state dir ($dir)" ;;
     /tmp/* | /private/tmp/*) ;;
-    *) die "AGTERM_STATE_DIR must be under /tmp, got $dir" ;;
+    *) die "HANGAR_STATE_DIR must be under /tmp, got $dir" ;;
   esac
   # unix socket paths cap near 104 bytes; a longer one launches the app with no control socket
-  (( ${#dir} + 12 <= 100 )) || die "AGTERM_STATE_DIR is too long for a control socket: $dir"
+  (( ${#dir} + 12 <= 100 )) || die "HANGAR_STATE_DIR is too long for a control socket: $dir"
   STATE="$dir"
-  SOCK="$STATE/agterm.sock"
+  SOCK="$STATE/hangar.sock"
   RESULTS="$STATE/gate-results.txt"
 }
 
 check_state_dir
-[[ $# -ge 1 && $# -le 2 ]] || die "usage: AGTERM_STATE_DIR=/tmp/agg $0 HOST [SESSION]"
+[[ $# -ge 1 && $# -le 2 ]] || die "usage: HANGAR_STATE_DIR=/tmp/agg $0 HOST [SESSION]"
 HOST="$1"
 SESSION="${2:-}"
 [[ "$HOST" != -* ]] || die "HOST must not start with '-'"
-[[ -x "$APP/Contents/MacOS/agtermctl" ]] || die "no Debug build at $APP; run make build or set AGTERM_GATE_APP"
-CTL="$APP/Contents/MacOS/agtermctl"
+[[ -x "$APP/Contents/MacOS/hangarctl" ]] || die "no Debug build at $APP; run make build or set HANGAR_GATE_APP"
+CTL="$APP/Contents/MacOS/hangarctl"
 SSH=(ssh -T -o BatchMode=yes -o ConnectTimeout=5 "$HOST")
 "${SSH[@]}" true </dev/null || die "ssh to $HOST failed with key auth"
 
@@ -98,7 +98,7 @@ rctl_shell() {
   return "$status"
 }
 
-rctl() { rctl_shell "$(remote_line agtermctl "$@")"; }
+rctl() { rctl_shell "$(remote_line hangarctl "$@")"; }
 
 node() { ctl tree --json | jq -c --arg s "$1" '[.. | objects | select(.id? == $s)][0] // empty'; }
 
@@ -127,7 +127,7 @@ check() {
   fi
 }
 
-app_pids() { ps -axo pid=,command= | awk -v bin="$APP/Contents/MacOS/agterm" '$2 == bin {print $1}'; }
+app_pids() { ps -axo pid=,command= | awk -v bin="$APP/Contents/MacOS/Hangar" '$2 == bin {print $1}'; }
 
 # only a pid that did not exist before this launch and runs on this state dir is ours: a reused dir can have
 # an owner, and the new instance then exits on the state lock while the owner stays running
@@ -135,13 +135,13 @@ launch() {
   [[ ! -S "$SOCK" ]] || ! ctl tree --json >/dev/null 2>&1 || die "another instance already serves $SOCK"
   local before vars pid end=$((SECONDS + 10))
   before=" $(app_pids | tr '\n' ' ') "
-  vars="$(env | sed -n 's/^\(\(CLAUDE\|AGTERM_\|GHOSTTY_\)[A-Za-z0-9_]*\)=.*/\1/p' | sed 's/^/-u /' | tr '\n' ' ')"
+  vars="$(env | sed -n 's/^\(\(CLAUDE\|HANGAR_\|GHOSTTY_\)[A-Za-z0-9_]*\)=.*/\1/p' | sed 's/^/-u /' | tr '\n' ' ')"
   # shellcheck disable=SC2086 # vars is a list of `-u NAME` words
-  env $vars open -n --env "AGTERM_STATE_DIR=$STATE" "$APP"
+  env $vars open -n --env "HANGAR_STATE_DIR=$STATE" "$APP"
   while [[ -z "$APP_PID" ]] && (( SECONDS < end )); do
     for pid in $(app_pids); do
       [[ "$before" != *" $pid "* ]] || continue
-      ps eww -o command= -p "$pid" | grep -qE "(^| )AGTERM_STATE_DIR=$STATE( |$)" && APP_PID="$pid"
+      ps eww -o command= -p "$pid" | grep -qE "(^| )HANGAR_STATE_DIR=$STATE( |$)" && APP_PID="$pid"
     done
     [[ -n "$APP_PID" ]] || sleep 1
   done
@@ -152,7 +152,7 @@ launch() {
   until ctl tree --json >/dev/null 2>&1; do
     if (( SECONDS >= end )) && [[ -z "$activated" ]]; then
       # shellcheck disable=SC2086
-      env $vars open --env "AGTERM_STATE_DIR=$STATE" "$APP" 2>/dev/null
+      env $vars open --env "HANGAR_STATE_DIR=$STATE" "$APP" 2>/dev/null
       activated=1
       end=$((SECONDS + 10))
     fi
@@ -176,8 +176,8 @@ cleanup() {
   [[ -z "$PAGE" ]] || rctl session overlay close --target "$SESSION" >/dev/null 2>&1 || true
   [[ -z "$PAGE" ]] || rctl_shell "rm -f $PAGE" >/dev/null 2>&1 || true
   stop_app
-  leftovers="$(lsappinfo list 2>/dev/null | grep -A4 'agterm.debug' || true)"
-  [[ -z "$leftovers" ]] || printf 'linux-origin-gate: lsappinfo still lists agterm.debug:\n%s\n' "$leftovers" >&2
+  leftovers="$(lsappinfo list 2>/dev/null | grep -A4 'hangar.debug' || true)"
+  [[ -z "$leftovers" ]] || printf 'linux-origin-gate: lsappinfo still lists hangar.debug:\n%s\n' "$leftovers" >&2
 }
 trap cleanup EXIT
 
@@ -259,7 +259,7 @@ check hud-open "$LOCAL" '.hud != null'
 rctl session hud close --target "$SESSION" >/dev/null
 check hud-close "$LOCAL" '.hud == null'
 
-start_remote "$STATE/ask.out" "$(remote_line agtermctl ask "gate ask" --button ok=OK --target "$SESSION")"
+start_remote "$STATE/ask.out" "$(remote_line hangarctl ask "gate ask" --button ok=OK --target "$SESSION")"
 ask_pid=$BG_PID
 ask_id=""
 if got="$(wait_for "$LOCAL" '.ask.replica == true')"; then
@@ -274,27 +274,27 @@ finish ask "$ask_pid" ask cancel "${ask_id:-none}"
 expect_exit ask-outcome 2
 
 start_remote "$STATE/overlay.out" \
-  "$(remote_line agtermctl session overlay open --block --target "$SESSION" 'sleep 3; exit 7')"
+  "$(remote_line hangarctl session overlay open --block --target "$SESSION" 'sleep 3; exit 7')"
 overlay_pid=$BG_PID
 check overlay-shown "$LOCAL" '.overlay == true'
 finish overlay "$overlay_pid" session overlay close --target "$SESSION"
 expect_exit overlay-outcome 7
 check overlay-closed "$LOCAL" '.overlay == false'
 
-PAGE="/tmp/agterm-gate-$RANDOM.html"
+PAGE="/tmp/hangar-gate-$RANDOM.html"
 rctl_shell "printf '<h1>gate</h1>\\n' > $PAGE" >/dev/null
 rctl session overlay open --html "$PAGE" --target "$SESSION" >/dev/null
 # a replica runs under a page id of the presenting Mac's own, so it is matched by the origin's file
 detach_during detach-page "[.htmlOverlays[]? | select(.replica == true and .file == \"$PAGE\")] | length == 1"
 rctl session overlay close --target "$SESSION" >/dev/null 2>&1 || true
 
-start_remote "$STATE/detach-ask.out" "$(remote_line agtermctl ask "gate detach ask" --button ok=OK --target "$SESSION")"
+start_remote "$STATE/detach-ask.out" "$(remote_line hangarctl ask "gate detach ask" --button ok=OK --target "$SESSION")"
 ask_pid=$BG_PID
 detach_during detach-ask '.ask.replica == true'
 finish detach-ask "$ask_pid" ask cancel "$(origin_node | jq -r '.ask.id // "none"')"
 
 start_remote "$STATE/detach-program.out" \
-  "$(remote_line agtermctl session overlay open --block --target "$SESSION" 'sleep 60')"
+  "$(remote_line hangarctl session overlay open --block --target "$SESSION" 'sleep 60')"
 overlay_pid=$BG_PID
 detach_during detach-program '.overlay == true'
 finish detach-program "$overlay_pid" session overlay close --target "$SESSION"

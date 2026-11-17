@@ -8,7 +8,7 @@
   Today a relative one is ignored and an absolute one asks Finder for a file that does not exist.
 - ⌘⌥-click on any local path, every type included, reveals it in Finder, so the reveal stays one chord away
   for files that now preview.
-- `agtermctl session overlay open --text FILE [--line N]` opens the same page from the control API, with
+- `hangarctl session overlay open --text FILE [--line N]` opens the same page from the control API, with
   tree read-back.
 - The file and the path both come from untrusted terminal output. Nothing in this feature may lead to code
   execution: the page runs no authored code, loads nothing, navigates nowhere, and no path in it opens or
@@ -17,27 +17,27 @@
 
 ## Context (from discovery)
 - The markdown page (#866, `docs/plans/completed/20261102-markdown-link-overlay.md`) is the model:
-  `agtermCore/Sources/agtermCore/MarkdownPage.swift`, `agterm/Views/MarkdownProbe.swift` (`check`, `load`,
-  `checkDetached` over `BoundedFile`), `agterm/Views/MarkdownAssets.swift`, `agterm/Resources/markdown/`
+  `HangarCore/Sources/HangarCore/MarkdownPage.swift`, `Hangar/Views/MarkdownProbe.swift` (`check`, `load`,
+  `checkDetached` over `BoundedFile`), `Hangar/Views/MarkdownAssets.swift`, `Hangar/Resources/markdown/`
   (`render.js`, `page.css`, bundled `highlight-11.11.1.min.js` with 37 languages),
-  `agterm/Control/ControlServer+MarkdownPage.swift` (`openMarkdownLink`, `markdownFileRefusal`).
-- Page hosting: `agterm/Views/HtmlOverlayRegistry.swift` (`markdownWorld` content world, `installScripts()`,
+  `Hangar/Control/ControlServer+MarkdownPage.swift` (`openMarkdownLink`, `markdownFileRefusal`).
+- Page hosting: `Hangar/Views/HtmlOverlayRegistry.swift` (`markdownWorld` content world, `installScripts()`,
   styling vs bridge eligibility at ~402-410, text-loaded sources at ~481-486, `loadOriginal` at ~523,
   `allowsContentJavaScript = overlay.javascript` at 267), `HtmlNavigationPolicy.decide` in
-  `agtermCore/Sources/agtermCore/HtmlOverlay.swift`.
-- Click routing: `LinkPolicy.disposition`/`localPath`/`route` (`agtermCore/Sources/agtermCore/LinkPolicy.swift`),
-  `agterm/Ghostty/LinkOpener.swift` (`reveal` is `activateFileViewerSelecting`), wiring in `agterm/agtermApp.swift`.
-- Raw link delivery: `GHOSTTY_ACTION_OPEN_URL` in `agterm/Ghostty/GhosttyCallbacks.swift:132-141` copies the
+  `HangarCore/Sources/HangarCore/HtmlOverlay.swift`.
+- Click routing: `LinkPolicy.disposition`/`localPath`/`route` (`HangarCore/Sources/HangarCore/LinkPolicy.swift`),
+  `Hangar/Ghostty/LinkOpener.swift` (`reveal` is `activateFileViewerSelecting`), wiring in `Hangar/hangarApp.swift`.
+- Raw link delivery: `GHOSTTY_ACTION_OPEN_URL` in `Hangar/Ghostty/GhosttyCallbacks.swift:132-141` copies the
   bytes unchanged and snapshots `releaseWantsBrowser` synchronously; `GhosttySurfaceView+Input.swift`
   (`linkMods` strips Shift for the ⌘⇧ browser click, `mouseDown`/`mouseUp`, `refreshLinkHover`).
-- HUD link clicks: `agterm/Ghostty/HudLinkClick.swift:38,71` accept exactly `.command`; `passivePointer` and
+- HUD link clicks: `Hangar/Ghostty/HudLinkClick.swift:38,71` accept exactly `.command`; `passivePointer` and
   `passiveClick` forward raw modifiers.
 - Pane cwd: `GHOSTTY_ACTION_PWD` → `GhosttySurfaceView.applyPwd` → `session.currentCwd` or `splitCwd`.
 - Ghostty at pin `683d8db` (`src/config/url.zig`, `src/Surface.zig`):
   - `path_chars` include `:`, so `/x/a.go:42:7` and `./a.go:42:7` arrive with the suffix; a slashless
     `a.go:42:7` is not a link at all (the bare relative branch needs a `dir/` prefix).
   - `resolvePathForOpening` makes a relative path absolute only when that exact path exists, so a relative
-    path with a suffix arrives raw; agterm then fails `isBarePath` and `URL(string:)` reads the first
+    path with a suffix arrives raw; hangar then fails `isBarePath` and `URL(string:)` reads the first
     segment as a scheme, and the click is ignored.
   - Links match only when the mouse mods equal exactly `ctrlOrSuper`.
   - On Darwin `isRectangleSelectState` is `mods.alt`, recomputed from the live mods on every drag
@@ -63,14 +63,14 @@
 - maintain backward compatibility
 
 ## Testing Strategy
-- **package tests**: `cd agtermCore && swift test --filter <Suite>` during tasks.
-- **hosted tests**: `xcodegen generate`, then `xcodebuild test -project agterm.xcodeproj -scheme agtermTests
-  -destination 'platform=macOS' -derivedDataPath build/DerivedData -only-testing:agtermTests/<Class>`.
+- **package tests**: `cd HangarCore && swift test --filter <Suite>` during tasks.
+- **hosted tests**: `xcodegen generate`, then `xcodebuild test -project Hangar.xcodeproj -scheme HangarTests
+  -destination 'platform=macOS' -derivedDataPath build/DerivedData -only-testing:HangarTests/<Class>`.
   Regenerate before every scoped run, since tasks add app and test files.
-- **UI test**: one new method, run with scheme `agterm` and
-  `-only-testing:agtermUITests/ControlHtmlOverlayUITests/<method>` after `xcodegen generate`. Approving
+- **UI test**: one new method, run with scheme `hangar` and
+  `-only-testing:HangarUITests/ControlHtmlOverlayUITests/<method>` after `xcodegen generate`. Approving
   this plan is the go-ahead for that one run.
-- After every hosted or UI run: `lsappinfo list | grep -A4 agterm.debug`, stopping leaked test processes
+- After every hosted or UI run: `lsappinfo list | grep -A4 hangar.debug`, stopping leaked test processes
   and reporting anything else.
 
 ## Progress Tracking
@@ -125,17 +125,17 @@ not an implementation detail.
   contain the fence). `white-space: pre`, no wrapping, so every line has one height: the line-number gutter
   and the target-line band are computed from the line count and line height, with no DOM splitting of
   highlighted spans.
-- Eligibility by extension and exact basename (agtermCore `TextPage`); an unlisted extension is revealed as
+- Eligibility by extension and exact basename (HangarCore `TextPage`); an unlisted extension is revealed as
   today. `.html`, `.htm` and `.svg` stay revealed: showing them as text would be safe, but a page author may
   expect them rendered, and that is a separate decision.
-- Line targeting: agtermCore parses `:line[:col]` purely; the app resolves candidates off-main, literal
+- Line targeting: HangarCore parses `:line[:col]` purely; the app resolves candidates off-main, literal
   first, and routes the existing path with the line. Column is parsed and dropped: the page scrolls to the
   line only.
 - Gestures: one click intent (`normal`, `browser`, `reveal`) replaces `releaseWantsBrowser`, normalized on
   the exact chord and never on a drag event.
 
 ## Technical Details
-- `TextPage` (agtermCore):
+- `TextPage` (HangarCore):
   - `maxBytes = 4 << 20`; `maxHighlightBytes = 256 << 10`, set by the Task 2 WebKit measurement; above it
     the page renders plain text.
   - `language(forFile:) -> String?` maps a lowercased extension, then an exact basename, to a bundled
@@ -169,7 +169,7 @@ not an implementation detail.
   `ControlHtmlOverlayNode.text: ControlTextOverlayNode?` with `file`, `language` (the mapped language,
   omitted when unmapped; a file over `maxHighlightBytes` still reports it and renders plain, since the
   host-free projection never sees the size) and `line` (requested, not the viewport).
-- Click intent: `LinkPolicy.ClickIntent { normal, browser, reveal }` in agtermCore with
+- Click intent: `LinkPolicy.ClickIntent { normal, browser, reveal }` in HangarCore with
   `LinkPolicy.clickIntent(modifiers:mode:origin:mouseCaptured:)`:
   - ⌘⇧ → `browser` (unchanged rules); ⌘⌥ → `reveal`; under mouse capture ⌘⌥⇧ → `reveal` unconditionally,
     and libghostty's own Shift bypass decides whether `OPEN_URL` fires: the app has no shift-capture state
@@ -177,7 +177,7 @@ not an implementation detail.
     libghostty can decide the bypass. Accepted limitation of the reserved chord: when the program captures
     Shift, no link matches and the program receives ⌘⇧ instead of ⌘⌥⇧, since the ALT strip is not undone
     (`mouseModsWithCapture` at `Surface.zig:4395`, the report at `:3955`). Restoring it would need new C API.
-  - `LinkPolicy.wantsBrowser` is public and `agtermCore` is consumed by the agterm-linux fork: check the fork
+  - `LinkPolicy.wantsBrowser` is public and `HangarCore` is consumed by the agterm-linux fork: check the fork
     for callers (`fork:true` code search or a clone) before removing it, and keep it as a wrapper over
     `clickIntent` if one exists.
   - `reveal` applies to local paths only and wins over image, markdown, text and the link-open mode; it
@@ -203,10 +203,10 @@ not an implementation detail.
 ### Task 1: Text page builder and file reader
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/TextPage.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/TextPageTests.swift`
-- Create: `agterm/Views/TextProbe.swift`
-- Create: `agtermTests/TextProbeTests.swift`
+- Create: `HangarCore/Sources/HangarCore/TextPage.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/TextPageTests.swift`
+- Create: `Hangar/Views/TextProbe.swift`
+- Create: `HangarTests/TextProbeTests.swift`
 
 - [x] `TextPage`: limits, `language(forFile:)`, `isEligible(file:)`, `validate`, and the HTML builder with
   the CSP, reusing `MarkdownPage.escaped`
@@ -224,27 +224,27 @@ not an implementation detail.
 Adds `HtmlSource.text` with every consumer, so the app builds at the end of the task.
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/HtmlOverlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift` (`OverlayHtmlError.textInOverlay`)
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+HtmlOverlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+RemotePage.swift`
-- Create: `agterm/Resources/markdown/text.js`, `agterm/Resources/markdown/text.css`
-- Modify: `agterm/Views/MarkdownAssets.swift`
-- Modify: `agterm/Views/HtmlOverlayRegistry.swift`
-- Modify: `agterm/Views/HtmlOverlayView.swift`
-- Modify: `agterm/Control/ControlServer+RemoteCompanions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/HtmlOverlayTests.swift`, `AppStoreTreeProjectionTests.swift`,
+- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift` (`OverlayHtmlError.textInOverlay`)
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePage.swift`
+- Create: `Hangar/Resources/markdown/text.js`, `Hangar/Resources/markdown/text.css`
+- Modify: `Hangar/Views/MarkdownAssets.swift`
+- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`
+- Modify: `Hangar/Views/HtmlOverlayView.swift`
+- Modify: `Hangar/Control/ControlServer+RemoteCompanions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HtmlOverlayTests.swift`, `AppStoreTreeProjectionTests.swift`,
   `AppStoreRemotePageTests.swift` (read-back round-trips go here: `ControlProtocolTests.swift` is at its
   2000-line limit)
-- Create: `agtermTests/MarkdownPageRenderingTests.swift`, `agtermTests/TextPageRenderingTests.swift`
-- Modify: `agtermTests/HtmlOverlayRegistryTests.swift` (1981 lines), `agtermTests/MarkdownAssetsTests.swift`
+- Create: `HangarTests/MarkdownPageRenderingTests.swift`, `HangarTests/TextPageRenderingTests.swift`
+- Modify: `HangarTests/HtmlOverlayRegistryTests.swift` (1981 lines), `HangarTests/MarkdownAssetsTests.swift`
 
 - [x] split first, approved: the markdown page tests move from `HtmlOverlayRegistryTests` to
   `MarkdownPageRenderingTests` unchanged, and the moved tests pass before any text code lands; text page
   tests go in `TextPageRenderingTests`
 
-- [x] agtermCore: `HtmlSource.text(path:line:)` with an accessor; `identity` names the file; the text arm
+- [x] HangarCore: `HtmlSource.text(path:line:)` with an accessor; `identity` names the file; the text arm
   of `HtmlNavigationPolicy.decide` runs before the shared new-window and `about` exits and allows only a
   main-frame `about:blank`; `presentationSource` nil; `ControlTextOverlayNode` read-back
 - [x] `MarkdownAssets` also serves the text renderer and stylesheet (highlight.js plus `text.js`, without
@@ -261,7 +261,7 @@ Adds `HtmlSource.text` with every consumer, so the app builds at the end of the 
   highlighted path is the only `innerHTML` sink): `<script>`, `onerror`, `<img src>`, `<link>`, `<iframe>`,
   `<meta http-equiv=refresh>`, `<a href>` and `javascript:` text stay text, with no element of those kinds in
   the rendered DOM and their side effect absent; no message handler; page JavaScript off; the installed text
-  renderer is in the `agterm-markdown` world; the page loads with no base URL and no file grant; no
+  renderer is in the `hangar-markdown` world; the page loads with no base URL and no file grant; no
   navigation and no browser hand-off occur; `navigate browser` and `navigate finder` refused
 - [x] hosted behavior tests: Swift and Go highlight; plain text for an unmapped plain extension and for a
   file over `maxHighlightBytes`; the requested line is scrolled to and marked; a source starting with a
@@ -279,17 +279,17 @@ Adds `HtmlSource.text` with every consumer, so the app builds at the end of the 
 ### Task 3: Control API open path
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Overlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Companions.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift`
-- Create: `agterm/Control/ControlServer+TextPage.swift`
-- Modify: `agterm/Control/ControlServer+SessionActions.swift` (995 lines: one call line, the refusal itself
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Overlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Companions.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
+- Create: `Hangar/Control/ControlServer+TextPage.swift`
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift` (995 lines: one call line, the refusal itself
   in `ControlServer+TextPage.swift`, as `markdownFileRefusal` does)
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherOverlayTests.swift` (request round-trips too),
-  `agtermCore/Tests/agtermctlKitTests/OverlayCommandsTests.swift`
-- Modify: `agtermTests/ControlServerLinkOverlayTests.swift`
-- Modify: `agtermUITests/ControlHtmlOverlayUITests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherOverlayTests.swift` (request round-trips too),
+  `HangarCore/Tests/hangarctlKitTests/OverlayCommandsTests.swift`
+- Modify: `HangarTests/ControlServerLinkOverlayTests.swift`
+- Modify: `HangarUITests/ControlHtmlOverlayUITests.swift`
 
 - [x] `ControlArgs.textFile` and `line`; dispatcher validation mirroring markdown (absolute path, eligible
   file, one source, `line` only with `textFile` and ≥ 1); companion refusal; `oneSource` names `--text`
@@ -310,13 +310,13 @@ Adds `HtmlSource.text` with every consumer, so the app builds at the end of the 
 ### Task 4: Click routing for text files and line suffixes
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/LinkPolicy.swift`
-- Modify: `agterm/Ghostty/LinkOpener.swift`
-- Modify: `agterm/Ghostty/GhosttySurfaceView+Input.swift` (cwd captured with the click)
-- Modify: `agterm/Control/ControlServer+TextPage.swift`
-- Modify: `agterm/agtermApp.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/LinkPolicyTests.swift`
-- Modify: `agtermTests/GhosttySurfaceViewInputTests.swift`, `agtermTests/ControlServerLinkOverlayTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/LinkPolicy.swift`
+- Modify: `Hangar/Ghostty/LinkOpener.swift`
+- Modify: `Hangar/Ghostty/GhosttySurfaceView+Input.swift` (cwd captured with the click)
+- Modify: `Hangar/Control/ControlServer+TextPage.swift`
+- Modify: `Hangar/hangarApp.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/LinkPolicyTests.swift`
+- Modify: `HangarTests/GhosttySurfaceViewInputTests.swift`, `HangarTests/ControlServerLinkOverlayTests.swift`
 
 - [x] failing tests first: an absolute `/x/a.go:42:7` routes to text at line 42 (today revealed with
   extension `go:42:7`); a relative `./a.go:42` with a cwd routes to text (today ignored)
@@ -345,14 +345,14 @@ Adds `HtmlSource.text` with every consumer, so the app builds at the end of the 
 ### Task 5: ⌘⌥ reveal chord
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/LinkPolicy.swift`
-- Modify: `agterm/Ghostty/GhosttySurfaceView+Input.swift`
-- Modify: `agterm/Ghostty/GhosttySurfaceView.swift`
-- Modify: `agterm/Ghostty/GhosttyCallbacks.swift`
-- Modify: `agterm/Ghostty/HudLinkClick.swift`
-- Modify: `agterm/Ghostty/LinkOpener.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/LinkPolicyTests.swift`
-- Modify: `agtermTests/GhosttySurfaceViewInputTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/LinkPolicy.swift`
+- Modify: `Hangar/Ghostty/GhosttySurfaceView+Input.swift`
+- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift`
+- Modify: `Hangar/Ghostty/GhosttyCallbacks.swift`
+- Modify: `Hangar/Ghostty/HudLinkClick.swift`
+- Modify: `Hangar/Ghostty/LinkOpener.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/LinkPolicyTests.swift`
+- Modify: `HangarTests/GhosttySurfaceViewInputTests.swift`
 
 - [x] fork check for public `LinkPolicy.wantsBrowser` callers in agterm-linux; remove it, or keep it as a
   wrapper over `clickIntent` when a caller exists
@@ -379,14 +379,14 @@ Adds `HtmlSource.text` with every consumer, so the app builds at the end of the 
 - [x] verify edge cases: remote pane, HUD, program overlay and quick origins; automount path; symlink to a
   FIFO; a 4 MB file; a literal colon path; `</pre>` in the source
 - [x] build: `scripts/build.sh`
-- [x] run `cd agtermCore && swift test`
+- [x] run `cd HangarCore && swift test`
 - [x] run `make test-app`, then the leak check
 - [x] run `make lint` with zero findings
 
 ### Task 7: [Final] Update documentation
 - [x] `site/docs.html`: the local-path ⌘-click paragraph covers text files, `path:line`, and ⌘⌥ reveal
 - [x] `site/commands.html`: `--text FILE`, `--line N` and the `text` read-back field
-- [x] `plugins/agterm/skills/agterm/SKILL.md` and `reference.md`: `--text` with a discovery trigger
+- [x] `plugins/hangar/skills/hangar/SKILL.md` and `reference.md`: `--text` with a discovery trigger
 - [x] `.claude/rules/control-api.md`: the text page bullet beside the markdown one, its security
   guarantees, the click-intent seam, the link-routing bullet's suffix and cwd rules, and the ⌘⌥ reveal
   chord's recorded exemption from a control twin (a gesture modifier over a click, with `overlay open

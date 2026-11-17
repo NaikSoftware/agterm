@@ -6,7 +6,7 @@ Author: [@umputun](https://github.com/umputun)
 
 ## What it does
 
-`agtermctl session context` puts a line in the title bar saying what a session is for — a ticket number, a bug, the thing you are actually doing. It is genuinely useful with a dozen sessions open and genuinely never set, because setting it is one more thing to remember at exactly the moment you are thinking about something else.
+`hangarctl session context` puts a line in the title bar saying what a session is for — a ticket number, a bug, the thing you are actually doing. It is genuinely useful with a dozen sessions open and genuinely never set, because setting it is one more thing to remember at exactly the moment you are thinking about something else.
 
 Handing the job to the agent runs into a harder problem: a hook cannot tell when one task ends and the next begins. Nothing in a prompt marks a boundary, and guessing produces a line that is wrong more often than it is right.
 
@@ -14,7 +14,7 @@ So this hook does not try. On every prompt it prints the line that is currently 
 
 ## Requirements
 
-- agterm 0.26.0 or later, which shipped `session context`
+- hangar 0.26.0 or later, which shipped `session context`
 - Claude Code
 - `jq`
 - bash, which macOS ships as `/bin/bash`
@@ -48,11 +48,11 @@ Register it as a `UserPromptSubmit` hook by adding an entry to `~/.claude/settin
 }
 ```
 
-The hook changes nothing in agterm itself. What it prints becomes context on the model's next turn, and the model runs `agtermctl session context` if it decides the line needs replacing. That means the command has to be permitted: if you run Claude Code with an allowlist, add `Bash(agtermctl session context:*)` to it. A denial is worse than no nudge, because the model abandons the write for the rest of the turn.
+The hook changes nothing in hangar itself. What it prints becomes context on the model's next turn, and the model runs `hangarctl session context` if it decides the line needs replacing. That means the command has to be permitted: if you run Claude Code with an allowlist, add `Bash(hangarctl session context:*)` to it. A denial is worse than no nudge, because the model abandons the write for the rest of the turn.
 
 Two settings, both optional:
 
-- `AGTERMCTL` — the CLI's full path, if yours sits somewhere unusual.
+- `HANGARCTL` — the CLI's full path, if yours sits somewhere unusual.
 - `CONTEXT_NUDGE_PANE` — the pane this agent is really in, `left`, `right`, or `scratch`. See *Limits*.
 
 ## Usage
@@ -62,35 +62,35 @@ Nothing to press. Start a task and the model sets the line once it knows what th
 Read the line back at any time, from the title bar or from the tree:
 
 ```sh
-agtermctl tree --json | jq -r '.result.tree.workspaces[].sessions[] | "\(.name)\t\(.context // "-")"'
+hangarctl tree --json | jq -r '.result.tree.workspaces[].sessions[] | "\(.name)\t\(.context // "-")"'
 ```
 
 ## How it works
 
-The hook reads the session's current `context` field out of `agtermctl tree --json` and prints one of two short blocks: "not set, here is how to set it" or "here is what it says, replace it if it no longer fits". Both blocks carry the exact command to run, with the session id already in it.
+The hook reads the session's current `context` field out of `hangarctl tree --json` and prints one of two short blocks: "not set, here is how to set it" or "here is what it says, replace it if it no longer fits". Both blocks carry the exact command to run, with the session id already in it.
 
-That literal id matters. A Claude Code permission rule cannot match a command containing `$AGTERM_SESSION_ID`, because the matcher refuses shell expansion, so a nudge that told the model to use the variable would be denied by an allowlist that was meant to permit it.
+That literal id matters. A Claude Code permission rule cannot match a command containing `$HANGAR_SESSION_ID`, because the matcher refuses shell expansion, so a nudge that told the model to use the variable would be denied by an allowlist that was meant to permit it.
 
 Four smaller things the script has to get right:
 
-- `tree` reports the frontmost window only, so a session in a background window reads as absent and the hook would go quiet — which is exactly the case the nudge exists for. It passes `--window "$AGTERM_WINDOW_ID"` when the session has one.
-- Absent and unset are different answers. A session that is not in the tree at all must produce silence, not "your context is not set", so the jq returns a control character for absent, which agterm can never store as a real value.
+- `tree` reports the frontmost window only, so a session in a background window reads as absent and the hook would go quiet — which is exactly the case the nudge exists for. It passes `--window "$HANGAR_WINDOW_ID"` when the session has one.
+- Absent and unset are different answers. A session that is not in the tree at all must produce silence, not "your context is not set", so the jq returns a control character for absent, which hangar can never store as a real value.
 - The context belongs to the session, not to a pane, so in a split only the main pane's agent writes it. Otherwise two agents in one session overwrite each other's line all day.
-- A headless `claude -p` inherits `AGTERM_*` from whoever spawned it and would write its spawner's line. Claude Code sets `CLAUDE_CODE_ENTRYPOINT` to `sdk-cli` for a headless run and `cli` for the agent in the pane, and the hook exits on anything but `cli`.
+- A headless `claude -p` inherits `HANGAR_*` from whoever spawned it and would write its spawner's line. Claude Code sets `CLAUDE_CODE_ENTRYPOINT` to `sdk-cli` for a headless run and `cli` for the agent in the pane, and the hook exits on anything but `cli`.
 
-The `agtermctl` it calls is resolved in three steps: `$AGTERMCTL` if you set it, then `$GHOSTTY_BIN_DIR/agtermctl` if that names an executable, then whatever is on `PATH`. The middle step is the one that earns its place: the running app points `GHOSTTY_BIN_DIR` at its own bundle, so it finds the CLI belonging to the app actually serving this session rather than a symlink left by a different install. Other terminals set that variable too, which is why the file has to exist and be executable before it is used.
+The `hangarctl` it calls is resolved in three steps: `$HANGARCTL` if you set it, then `$GHOSTTY_BIN_DIR/hangarctl` if that names an executable, then whatever is on `PATH`. The middle step is the one that earns its place: the running app points `GHOSTTY_BIN_DIR` at its own bundle, so it finds the CLI belonging to the app actually serving this session rather than a symlink left by a different install. Other terminals set that variable too, which is why the file has to exist and be executable before it is used.
 
-It also names companions made by the [named-companion](../named-companion/) recipe. A companion created with a blank name carries its parent's name and a marker file, `~/.cache/agterm/companion-names/<session id>`, holding that name. While the session's name still matches the marker, the nudge adds a request to rename the session to a short form of its context, 25 characters at most. Once the name differs, renamed by the model or by hand, the hook deletes the marker and the request stops. That rename is a second command the model runs, so an allowlist needs `Bash(agtermctl session rename:*)` too. Without that recipe no marker exists and this part never fires.
+It also names companions made by the [named-companion](../named-companion/) recipe. A companion created with a blank name carries its parent's name and a marker file, `~/.cache/hangar/companion-names/<session id>`, holding that name. While the session's name still matches the marker, the nudge adds a request to rename the session to a short form of its context, 25 characters at most. Once the name differs, renamed by the model or by hand, the hook deletes the marker and the request stops. That rename is a second command the model runs, so an allowlist needs `Bash(hangarctl session rename:*)` too. Without that recipe no marker exists and this part never fires.
 
-Everything fails open. A missing `agtermctl`, an unreadable tree, a session that has gone, a `jq` that is not installed: each of them exits silently. A quiet turn costs one stale line, and a stale line is cheaper than a wrong one.
+Everything fails open. A missing `hangarctl`, an unreadable tree, a session that has gone, a `jq` that is not installed: each of them exits silently. A quiet turn costs one stale line, and a stale line is cheaper than a wrong one.
 
 ## Limits
 
 It is a nudge, not a guarantee. The model decides whether the line still fits, so a line can stay stale for a turn or several, and a model that is deep in something will sometimes leave it alone when it should not. Nothing here detects that.
 
-It costs a hook run on every prompt you submit — one `agtermctl tree` call and one `jq`, plus a second `jq` while a companion marker exists. On a machine where `timeout` is available the tree call is bounded at two seconds; macOS ships no `timeout`, so without GNU coreutils on `PATH` a hung CLI would stall the prompt until Claude Code's own hook timeout fires.
+It costs a hook run on every prompt you submit — one `hangarctl tree` call and one `jq`, plus a second `jq` while a companion marker exists. On a machine where `timeout` is available the tree call is bounded at two seconds; macOS ships no `timeout`, so without GNU coreutils on `PATH` a hung CLI would stall the prompt until Claude Code's own hook timeout fires.
 
-The pane check reads `$AGTERM_PANE`, the shell's spawn role rather than its live position. After a pane promotion or an `agtermctl session swap`, an agent that is now in the main pane can still report `right` and will never write the line. Set `CONTEXT_NUDGE_PANE` in that session to correct it.
+The pane check reads `$HANGAR_PANE`, the shell's spawn role rather than its live position. After a pane promotion or an `hangarctl session swap`, an agent that is now in the main pane can still report `right` and will never write the line. Set `CONTEXT_NUDGE_PANE` in that session to correct it.
 
 The headless-run guard depends on `CLAUDE_CODE_ENTRYPOINT`. A Claude Code old enough not to set it makes the hook treat every headless run as the pane's agent, and a `claude -p` you spawn from a session will then overwrite that session's line with its own task.
 

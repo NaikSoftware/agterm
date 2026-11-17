@@ -10,13 +10,13 @@ import 'watch.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const AgtermApp());
+  runApp(const HangarApp());
 }
 
 /// The paired computers and the one on screen.
 class Computers extends ChangeNotifier {
   List<Pairing> all = [];
-  AgtermModel? current;
+  HangarModel? current;
   bool loaded = false;
 
   Future<void> load() async {
@@ -32,7 +32,7 @@ class Computers extends ChangeNotifier {
 
   void open(Pairing p) {
     current?.dispose();
-    current = AgtermModel(p)..start();
+    current = HangarModel(p)..start();
     Watch.check(ask: true);
     notifyListeners();
   }
@@ -55,14 +55,14 @@ class Computers extends ChangeNotifier {
   }
 }
 
-class AgtermApp extends StatefulWidget {
-  const AgtermApp({super.key});
+class HangarApp extends StatefulWidget {
+  const HangarApp({super.key});
 
   @override
-  State<AgtermApp> createState() => _AgtermAppState();
+  State<HangarApp> createState() => _HangarAppState();
 }
 
-class _AgtermAppState extends State<AgtermApp> {
+class _HangarAppState extends State<HangarApp> {
   final computers = Computers();
   final nav = GlobalKey<NavigatorState>();
 
@@ -96,7 +96,7 @@ class _AgtermAppState extends State<AgtermApp> {
   @override
   Widget build(BuildContext context) => MaterialApp(
         navigatorKey: nav,
-        title: 'Agterm2',
+        title: 'Hangar',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),
         home: ListenableBuilder(

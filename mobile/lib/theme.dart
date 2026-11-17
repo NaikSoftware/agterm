@@ -1,4 +1,4 @@
-// The look from the Agterm2 design: terminal-native dark, Inter for UI, JetBrains Mono for terminal text.
+// The look from the Hangar design: terminal-native dark, Inter for UI, JetBrains Mono for terminal text.
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -38,7 +38,7 @@ const monoFallback = ['NotoSansSymbols2'];
 // Claude Code's ⏺ and ⎿ have no glyph in either font; these look the same and keep the grid
 String withGridGlyphs(String text) => text.replaceAll('⏺', '●').replaceAll('⎿', '└');
 
-// agterm's seven tint names → swatches
+// hangar's seven tint names → swatches
 const tints = {
   'red': Color(0xFFFF6B6B),
   'orange': Color(0xFFFF9F0A),
@@ -278,7 +278,7 @@ Color agentColor(String agent) => switch (agent) {
       _ => C.text,
     };
 
-// the agent's logo from agterm-qt's launcher icons, or the terminal glyph for a plain shell
+// the agent's logo from hangar's launcher icons, or the terminal glyph for a plain shell
 class AgentLogo extends StatelessWidget {
   const AgentLogo(this.agent, {super.key, this.size = 16, this.color});
   final String agent;

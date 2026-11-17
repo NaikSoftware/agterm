@@ -1,8 +1,8 @@
-# agtermctl pick follow-ups (discussion #270)
+# hangarctl pick follow-ups (discussion #270)
 
 ## Overview
 
-Four follow-ups to the `agtermctl pick` control command shipped in 0.19.0, accepted from discussion #270
+Four follow-ups to the `hangarctl pick` control command shipped in 0.19.0, accepted from discussion #270
 after review. Two are behavior fixes to shipped defaults, two add new caller-facing arguments.
 
 1. **Subtitle matching removed for caller-supplied pickers.** Subtitles are currently fuzzy-search keys.
@@ -34,28 +34,28 @@ the workflow the reporter still hand-rolls as an ANSI overlay with a temp-file p
 
 Files involved:
 
-- `agterm/Views/Palette.swift` — `CommandPalette`; `updateFiltered()` (:126-145) and its doc comment
+- `Hangar/Views/Palette.swift` — `CommandPalette`; `updateFiltered()` (:126-145) and its doc comment
   (:124-125), the `.attention` order bypass (:128-135), the ranking call (:136-138), the custom-row block
   (:139-143), `@State query` (:93), `.onAppear { updateFiltered() }` (:207-209), row rendering (:299-311)
-- `agtermCore/Sources/agtermCore/Fuzzy.swift` — `fuzzyScore` / `fuzzyRank`; **not changing**. Its godoc
+- `HangarCore/Sources/HangarCore/Fuzzy.swift` — `fuzzyScore` / `fuzzyRank`; **not changing**. Its godoc
   already states an empty query is an alphabetical sort and that a caller needing input order should skip
   ranking. `Palette.swift:136` is its only caller repo-wide, so the blast radius is that one closure.
-- `agtermCore/Sources/agtermCore/PaletteCustomRow.swift` — precedent for a tiny host-free palette helper
-- `agtermCore/Sources/agtermCore/ControlPick.swift` — `ControlPickItem`, `ControlPickResult`
-- `agtermCore/Sources/agtermCore/Pick.swift` — `PendingPick`, `PickController`, `PickRegistry`
-- `agtermCore/Sources/agtermCore/ControlDispatcher+Pick.swift` — validation (:8 the empty-items guard,
+- `HangarCore/Sources/HangarCore/PaletteCustomRow.swift` — precedent for a tiny host-free palette helper
+- `HangarCore/Sources/HangarCore/ControlPick.swift` — `ControlPickItem`, `ControlPickResult`
+- `HangarCore/Sources/HangarCore/Pick.swift` — `PendingPick`, `PickController`, `PickRegistry`
+- `HangarCore/Sources/HangarCore/ControlDispatcher+Pick.swift` — validation (:8 the empty-items guard,
   :22-27 the control-character check)
-- `agtermCore/Sources/agtermCore/ControlProtocol.swift` — `ControlArgs` pick fields (:209-214) and the
+- `HangarCore/Sources/HangarCore/ControlProtocol.swift` — `ControlArgs` pick fields (:209-214) and the
   explicit public memberwise init (:256-295)
-- `agtermCore/Sources/agtermctlKit/MiscCommands.swift` — `// MARK: - pick` at :266, `struct Open` :277-411,
+- `HangarCore/Sources/hangarctlKit/MiscCommands.swift` — `// MARK: - pick` at :266, `struct Open` :277-411,
   `Result` :413, `Cancel` :463
-- `agterm/Views/WindowContentView.swift` — `pickPaletteOverlay` (:804-828), built-in palette mount (:796)
+- `Hangar/Views/WindowContentView.swift` — `pickPaletteOverlay` (:804-828), built-in palette mount (:796)
 
 Patterns found:
 
 - Host-free helpers for palette decisions already exist (`pickCustomRowLabel`, a 9-line file with one
   public function, one call site, and its own 4-test file). This is the precedent item 1 follows.
-- `agtermCore` tests use Swift Testing (`@Test`, `#expect`); `agtermTests` and `agtermUITests` use XCTest.
+- `HangarCore` tests use Swift Testing (`@Test`, `#expect`); `HangarTests` and `HangarUITests` use XCTest.
 - Existing coverage: `PickTests` (12), `ControlDispatcherPickTests` (9), `PickCustomRowTests` (4),
   `FuzzyTests` (17), `ControlServerPickTests` (15), `ControlPickUITests` (12).
 - **Coverage gap found during planning:** `CommandPalette.updateFiltered()`'s empty-query order bypass has
@@ -82,7 +82,7 @@ Each was checked against the code, not assumed. These are the facts the tasks be
 - **`ControlArgs` JSON round-trip distinguishes `nil` from `[]`, end to end.** `ControlArgs` declares no
   `CodingKeys` and no custom `encode(to:)`/`init(from:)`, so `Codable` is synthesized and uses
   `encodeIfPresent`/`decodeIfPresent`; both wire ends use a plain, unconfigured `JSONEncoder()`/
-  `JSONDecoder()` (`agtermctlKit/SocketClient.swift:32,40`; `agterm/Control/ControlServer.swift:248,289`).
+  `JSONDecoder()` (`hangarctlKit/SocketClient.swift:32,40`; `Hangar/Control/ControlServer.swift:248,289`).
   Measured on the same declaration shape: `nil` omits the key and decodes to `nil`; `[]` encodes as
   `"items":[]` and decodes to `[]`. **Item 4 needs no encoding change and is not gated.**
 - **After item 1, the query `no` matches *neither* row of a Confirm/Cancel pair.** `termScore`
@@ -91,8 +91,8 @@ Each was checked against the code, not assumed. These are the facts the tasks be
   **empty list**, not a surviving Cancel row. Enter on an empty list is already a no-op
   (`runSelected` guards `filtered.indices.contains`, `Palette.swift:261-264`). Task 1's oracle is written
   to this, not to the intuitive-but-false "Cancel survives".
-- **`make test-app` runs `-scheme agtermTests`** (`scripts/test-app.sh:10`), the hosted AppKit suite. It
-  does **not** run `agtermUITests`. UI cases need their own invocation (see Testing Strategy).
+- **`make test-app` runs `-scheme HangarTests`** (`scripts/test-app.sh:10`), the hosted AppKit suite. It
+  does **not** run `HangarUITests`. UI cases need their own invocation (see Testing Strategy).
 - `.onAppear` already calls `updateFiltered()` (`Palette.swift:207-209`), so a prefilled query filters on
   open with no extra wiring for item 3.
 - `ControlArgs` has no `query` field today, so item 3 adds one without a collision.
@@ -124,7 +124,7 @@ Each was checked against the code, not assumed. These are the facts the tasks be
   (see Verified above); if a test disagrees with the plan, re-read that block before touching the test.
 - maintain backward compatibility for items 3-4; items 1-2 deliberately change defaults
 
-Project gates (CLAUDE.md): every change must build and pass `cd agtermCore && swift test`, `make test-app`,
+Project gates (CLAUDE.md): every change must build and pass `cd HangarCore && swift test`, `make test-app`,
 and `make lint` with zero findings. Root SwiftLint limits are 200-column lines, 1000-line files, 800-line types.
 
 Comments follow the project rule: short, only non-obvious constraints or rejected alternatives. Test
@@ -132,15 +132,15 @@ comments are rare and one line; the one worth writing is the regression reason o
 
 ## Testing Strategy
 
-- **unit tests (host-free, `cd agtermCore && swift test`, ~0.2s)**: the search-key helper, dispatcher
+- **unit tests (host-free, `cd HangarCore && swift test`, ~0.2s)**: the search-key helper, dispatcher
   validation, protocol round-trip and nil-omission, CLI request building. Most coverage belongs here.
-- **hosted tests (`make test-app`, scheme `agtermTests`)**: only where AppKit is genuinely required.
-- **UI tests (`agtermUITests/ControlPickUITests.swift`)**: the two behavior flips have observable
+- **hosted tests (`make test-app`, scheme `HangarTests`)**: only where AppKit is genuinely required.
+- **UI tests (`HangarUITests/ControlPickUITests.swift`)**: the two behavior flips have observable
   end-to-end oracles. Per `.claude/rules/ui-tests.md`:
   - **ask before running XCUITest** — a class is ~75s, the full suite ~460s
   - after changing a test run `xcodebuild build-for-testing`; an app-only `build` leaves a stale bundle
     that reports `Executed 0 tests`
-  - target exact methods: `-only-testing:agtermUITests/ControlPickUITests/<method>`
+  - target exact methods: `-only-testing:HangarUITests/ControlPickUITests/<method>`
   - never run while the user is testing a handed-off build (they send real keyboard/mouse events)
   - palette identifiers propagate to text children; reuse `ControlPickUITests.clickPaletteRow` rather than
     a bare `firstMatch`
@@ -155,7 +155,7 @@ comments are rare and one line; the one worth writing is the regression reason o
 
 ## Solution Overview
 
-**Item 1** hoists the search-key decision into `agtermCore` as a small pure function next to
+**Item 1** hoists the search-key decision into `HangarCore` as a small pure function next to
 `pickCustomRowLabel`, rather than leaving a ternary inline in the view. This follows the #78 hoist series
 and turns a 75s XCUITest oracle into a 0.2s `swift test` one. The whole reason the item exists is that an
 untested inline closure in a view shipped a reachable wrong-result path.
@@ -179,7 +179,7 @@ Order matters: item 1 first because it is the safety fix, then item 2, then the 
 
 ## Technical Details
 
-New host-free helper (item 1), in `agtermCore`:
+New host-free helper (item 1), in `HangarCore`:
 
 ```swift
 /// Search keys for one palette row. Caller-supplied pickers match the label only, so a subtitle can carry
@@ -244,7 +244,7 @@ empty-without-allow-custom case. Both facts are Task 7 doc obligations.
 
 Behavior note to document: empty items + `--allow-custom` + no `--query` shows an empty panel until the
 user types (the custom row needs a non-empty query). Esc cancels. `--query` covers the case where a
-starting value exists. Also, `agtermctl pick` reads stdin unconditionally, so the no-items recipe needs
+starting value exists. Also, `hangarctl pick` reads stdin unconditionally, so the no-items recipe needs
 `< /dev/null` or it blocks.
 
 ## What Goes Where
@@ -254,11 +254,11 @@ starting value exists. Also, `agtermctl pick` reads stdin unconditionally, so th
 
 ## Implementation Steps
 
-### Task 1: Search-key helper in agtermCore (TDD)
+### Task 1: Search-key helper in HangarCore (TDD)
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/PaletteSearchKeys.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/PaletteSearchKeysTests.swift`
+- Create: `HangarCore/Sources/HangarCore/PaletteSearchKeys.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/PaletteSearchKeysTests.swift`
 
 - [x] start with `swift-testing-expert`
 - [x] create `paletteSearchKeys(title:subtitle:callerSupplied:)` returning the **current** rule for every
@@ -270,17 +270,17 @@ starting value exists. Also, `agtermctl pick` reads stdin unconditionally, so th
       preselected. One-line comment naming the defect it pins. Do **not** assert `Cancel` survives — it
       does not match `no` either (see Verified during planning)
 - [x] add a second case proving the label path still works: query `can` → only `Cancel`
-- [x] run `cd agtermCore && swift test`, confirm both FAIL on behavior
+- [x] run `cd HangarCore && swift test`, confirm both FAIL on behavior
 - [x] flip the implementation to return `[title]` when `callerSupplied`, and add the godoc
 - [x] write unit tests: caller-supplied returns label only; built-in returns label plus subtitle; built-in
       with nil subtitle returns label only
-- [x] re-run `cd agtermCore && swift test` — all pass before task 2
+- [x] re-run `cd HangarCore && swift test` — all pass before task 2
 
 ### Task 2: Wire the palette to the helper
 
 **Files:**
-- Modify: `agterm/Views/Palette.swift`
-- Modify: `agtermUITests/ControlPickUITests.swift`
+- Modify: `Hangar/Views/Palette.swift`
+- Modify: `HangarUITests/ControlPickUITests.swift`
 
 - [x] start with `swiftui-expert`
 - [x] replace the inline keys closure at `updateFiltered()` (:136-138) with `paletteSearchKeys(...)`
@@ -292,13 +292,13 @@ starting value exists. Also, `agtermctl pick` reads stdin unconditionally, so th
 - [x] add a UI test mirroring the Task 1 oracle: pick with a subtitled Confirm row plus Cancel, type `no`,
       assert no row is listed and Enter does nothing
 - [x] `xcodebuild build-for-testing`, then ask before running
-      `-only-testing:agtermUITests/ControlPickUITests/<method>` — must pass before task 3
+      `-only-testing:HangarUITests/ControlPickUITests/<method>` — must pass before task 3
 
 ### Task 3: Preserve caller-supplied order on an empty query (TDD)
 
 **Files:**
-- Modify: `agterm/Views/Palette.swift`
-- Modify: `agtermUITests/ControlPickUITests.swift`
+- Modify: `Hangar/Views/Palette.swift`
+- Modify: `HangarUITests/ControlPickUITests.swift`
 
 - [x] start with `swiftui-expert`
 - [x] write the failing UI test first: open a pick with items in non-alphabetical order (e.g. `zebra`,
@@ -316,12 +316,12 @@ starting value exists. Also, `agtermctl pick` reads stdin unconditionally, so th
 ### Task 4: Protocol and dispatcher for `--query`
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/Pick.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Pick.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherPickTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PickTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/Pick.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Pick.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherPickTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PickTests.swift`
 
 - [x] start with `swift-testing-expert`
 - [x] add `ControlArgs.query: String?` with a doc comment beside the other pick fields, **and to the
@@ -332,16 +332,16 @@ starting value exists. Also, `agtermctl pick` reads stdin unconditionally, so th
 - [x] write dispatcher tests: query reaches `PendingPick`; omitted query stays nil
 - [x] extend the existing `ControlProtocolTests.pickCommandsRoundTrip` rather than adding a parallel test,
       and add a nil-omission test for `query`
-- [x] run `cd agtermCore && swift test` — must pass before task 5
+- [x] run `cd HangarCore && swift test` — must pass before task 5
 
 ### Task 5: CLI flag and palette prefill for `--query`
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermctlKit/MiscCommands.swift`
-- Modify: `agterm/Views/Palette.swift`
-- Modify: `agterm/Views/WindowContentView.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift`
-- Modify: `agtermUITests/ControlPickUITests.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/MiscCommands.swift`
+- Modify: `Hangar/Views/Palette.swift`
+- Modify: `Hangar/Views/WindowContentView.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
+- Modify: `HangarUITests/ControlPickUITests.swift`
 
 - [x] start with `swiftui-expert` for the view half
 - [x] add `@Option(name: .long, help:) var query: String?` to `Pick.Open` and pass it into `ControlArgs`
@@ -354,10 +354,10 @@ starting value exists. Also, `agtermctl pick` reads stdin unconditionally, so th
 ### Task 6: Accept an empty item list with `--allow-custom`
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Pick.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherPickTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermUITests/ControlPickUITests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Pick.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherPickTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarUITests/ControlPickUITests.swift`
 
 - [x] start with `swift-testing-expert`
 - [x] **amend the existing test `openRejectsMissingAndEmptyItemsWithoutCallingHost`
@@ -376,9 +376,9 @@ starting value exists. Also, `agtermctl pick` reads stdin unconditionally, so th
 
 **Files:**
 - Modify: `README.md`
-- Modify: `plugins/agterm/skills/agterm/reference.md`
-- Modify: `plugins/agterm/skills/agterm/SKILL.md`
-- Modify: `plugins/agterm/skills/agterm/examples.md`
+- Modify: `plugins/hangar/skills/hangar/reference.md`
+- Modify: `plugins/hangar/skills/hangar/SKILL.md`
+- Modify: `plugins/hangar/skills/hangar/examples.md`
 - Modify: `site/commands.html`
 - Modify: `site/docs.html`
 
@@ -395,7 +395,7 @@ starting value exists. Also, `agtermctl pick` reads stdin unconditionally, so th
 - [x] `site/docs.html` (~:1194-1224): mirror the README changes
 - [x] note in README/reference that a prefilled `--query` re-ranks, so it does not preserve caller order
 - [x] confirm the command count is unchanged everywhere and `SkillInstallTests` still passes
-- [x] run `cd agtermCore && swift test` — must pass before task 8
+- [x] run `cd HangarCore && swift test` — must pass before task 8
 
 ### Task 8: Verify acceptance criteria
 
@@ -410,9 +410,9 @@ starting value exists. Also, `agtermctl pick` reads stdin unconditionally, so th
 - [x] empty items + `--allow-custom` + `--query` behaves as a rename prompt and returns a custom result
       (`ControlPickUITests.testEmptyItemsWithAllowCustomActAsAPrefilledPrompt`)
 - [x] none of the declined items crept in (no empty-answer commit, no message pane, no correlation tag)
-- [x] run `cd agtermCore && swift test` — 2074 tests, 83 suites, all pass
+- [x] run `cd HangarCore && swift test` — 2074 tests, 83 suites, all pass
 - [x] run `make test-app` — 87 tests, 0 failures
-- [x] `build-for-testing`, then ask before running the full `agtermUITests/ControlPickUITests` class —
+- [x] `build-for-testing`, then ask before running the full `HangarUITests/ControlPickUITests` class —
       18 tests, 0 failures
 - [x] run `make lint` — zero findings required
 

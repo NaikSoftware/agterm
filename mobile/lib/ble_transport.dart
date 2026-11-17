@@ -57,7 +57,7 @@ class BleTransport {
       close();
       throw switch (e) {
         BleLinkError.wrongKey => Revoked(),
-        BleLinkError.busy => AgtermError(busyMessage),
+        BleLinkError.busy => HangarError(busyMessage),
         _ => e,
       };
     }
@@ -73,7 +73,7 @@ class BleTransport {
   }
 }
 
-const _method = MethodChannel('agterm/ble');
+const _method = MethodChannel('hangar/ble');
 final _inputs = <int, StreamController<List<int>>>{};
 StreamSubscription? _events;
 int _nextId = 0;
@@ -91,9 +91,9 @@ const notAllowedMessage = 'Bluetooth needs the Nearby devices permission. Allow 
 /// Scans for the pairing's service UUID, opens its L2CAP channel and runs the handshake. Never asks for permissions:
 /// it may run in the background.
 Future<Link> openBle(Pairing p) async {
-  if (!await bluetoothGranted()) throw AgtermError(notAllowedMessage);
+  if (!await bluetoothGranted()) throw HangarError(notAllowedMessage);
   // one subscription for all links, alive before any connect, so no early bytes are dropped
-  _events ??= const EventChannel('agterm/ble/data').receiveBroadcastStream().listen((e) {
+  _events ??= const EventChannel('hangar/ble/data').receiveBroadcastStream().listen((e) {
     final m = e as Map;
     final input = _inputs[m['id']];
     if (m['data'] case final Uint8List data) return input?.add(data);
@@ -112,9 +112,9 @@ Future<Link> openBle(Pairing p) async {
     close();
     throw switch (e.code) {
       'notFound' => BleNotFound(),
-      'off' => AgtermError('Bluetooth is off.'),
-      'scanFailed' => AgtermError('Bluetooth scanning failed (${e.message}). Try again in a minute.'),
-      _ => AgtermError('Bluetooth connection failed: ${e.message ?? e.code}'),
+      'off' => HangarError('Bluetooth is off.'),
+      'scanFailed' => HangarError('Bluetooth scanning failed (${e.message}). Try again in a minute.'),
+      _ => HangarError('Bluetooth connection failed: ${e.message ?? e.code}'),
     };
   }
   final raw = Link(input.stream, (b) => _method.invokeMethod('write', {'id': id, 'data': Uint8List.fromList(b)}).catchError((_) => close()), close,

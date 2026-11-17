@@ -10,24 +10,24 @@
   There is no draft and no rollback.
 
 ## Context (from discovery)
-- Palette: `agterm/Views/Palette.swift` (`PaletteItem`, `PaletteMode`, `CommandPalette`, `PaletteRow`).
+- Palette: `Hangar/Views/Palette.swift` (`PaletteItem`, `PaletteMode`, `CommandPalette`, `PaletteRow`).
   `runItem` dismisses after any row runs; `filtered` is cached on appear, query and mode change;
   `PaletteItem.indicator`/`isEnabled` are live closures; a row click calls `runItem` without moving
   `selection`; the empty query skips ranking only for `.attention` and explicit picks.
-- Palette sources and dispatch: `agterm/AppActions+Palette.swift`. `dispatch(_:)` is an exhaustive switch
+- Palette sources and dispatch: `Hangar/AppActions+Palette.swift`. `dispatch(_:)` is an exhaustive switch
   over `PaletteCommand`, shared by the action-palette row and keymap `perform(_:in:)`, which applies
   `isEnabled(in:)` first. `.showAttention` dispatches to the next-runloop `openAttentionPalette()`, the
   pattern the editors copy. `paletteLessHandler` must stay disjoint from catalog commands
   (`AppActionsPaletteTests` partitions `BuiltinAction.allCases`).
-- Catalog and built-ins: `agtermCore/Sources/agtermCore/PaletteCatalog.swift` (`PaletteCommand`,
+- Catalog and built-ins: `HangarCore/Sources/HangarCore/PaletteCatalog.swift` (`PaletteCommand`,
   `PaletteContext`, `isVisible`/`isEnabled`/`title`/`builtinAction`), `BuiltinAction.swift` (keyless list).
 - Mutations: `AppStore.setFlag(_:forSession:)`, `AppStore.setFocusMembership(_:member:)` (marks only, never
   enables the filter, disables it when the last member leaves).
 - `addSession(select: false)` (`session.new --no-select`) leaves `selectedSessionID` untouched, so a window
   can hold sessions with none active; `currentWorkspaceID` falls back to `workspaces.last`.
-- Menus: `agterm/agtermApp+Menus.swift` View menu flagged/focus block (lines ~260-300).
+- Menus: `Hangar/hangarApp+Menus.swift` View menu flagged/focus block (lines ~260-300).
 - Flagged empty-state hint: `WorkspaceSidebar.Coordinator.installEmptyState` / `updateEmptyState`
-  (`agterm/Views/WorkspaceSidebar.swift`, 901 lines; the Coordinator holds `actions`). Marked workspace rows
+  (`Hangar/Views/WorkspaceSidebar.swift`, 901 lines; the Coordinator holds `actions`). Marked workspace rows
   use `square.grid.2x2` at `.black` weight (lines ~787-792).
 - Focus guard: `AppActions.focusActiveSession` returns while any palette mode is open, and
   `TerminalView.focusIfNeeded` yields to a field editor, so reselection behind an open editor does not steal
@@ -45,11 +45,11 @@
   gates (`swift test`, `make test-app`, `make lint`) run once, in the verification task
 
 ## Testing Strategy
-- **unit tests** (`agtermCore`, Swift Testing): catalog titles, visibility, enablement and built-in mapping;
+- **unit tests** (`HangarCore`, Swift Testing): catalog titles, visibility, enablement and built-in mapping;
   built-in raw names and keyless defaults.
-- **hosted tests** (`agtermTests`): editor item sources (order, scope, live mark, toggle effect, inert row
+- **hosted tests** (`HangarTests`): editor item sources (order, scope, live mark, toggle effect, inert row
   after removal, focus filter never enabled), the stay-open decision, the built-in partition.
-- **UI tests** (`agtermUITests`): open each editor, Return toggles and keeps the palette open, click then
+- **UI tests** (`HangarUITests`): open each editor, Return toggles and keeps the palette open, click then
   Return hit the clicked row, unflagging the active session keeps the editor and its search field working,
   Esc closes; the flagged empty-state link and View menu items open the editors.
 
@@ -122,16 +122,16 @@
 ### Task 1: Editor commands, palette modes and dispatch
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/BuiltinAction.swift`
-- Modify: `agtermCore/Sources/agtermCore/PaletteCatalog.swift`
-- Modify: `agterm/Views/Palette.swift`
-- Modify: `agterm/AppActions+Palette.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/BuiltinActionTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PaletteCatalogTests.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/SocketClientTests.swift`
-- Modify: `agtermTests/AppActionsPaletteTests.swift`
-- Modify: `agtermTests/PaletteTests.swift`
-- Modify: `agtermUITests/PaletteUITests.swift`
+- Modify: `HangarCore/Sources/HangarCore/BuiltinAction.swift`
+- Modify: `HangarCore/Sources/HangarCore/PaletteCatalog.swift`
+- Modify: `Hangar/Views/Palette.swift`
+- Modify: `Hangar/AppActions+Palette.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/BuiltinActionTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PaletteCatalogTests.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/SocketClientTests.swift`
+- Modify: `HangarTests/AppActionsPaletteTests.swift`
+- Modify: `HangarTests/PaletteTests.swift`
+- Modify: `HangarUITests/PaletteUITests.swift`
 
 - [x] `BuiltinAction.editFlaggedSessions = "edit_flagged_sessions"` and
       `.editFocusedWorkspaces = "edit_focused_workspaces"` exist in the keyless default-chord list
@@ -177,11 +177,11 @@
 ### Task 2: Menu items and flagged empty-state link
 
 **Files:**
-- Modify: `agterm/agtermApp+Menus.swift`
-- Modify: `agterm/Views/WorkspaceSidebar.swift`
-- Modify: `agtermTests/SidebarFlaggedLayoutTests.swift`
-- Modify: `agtermUITests/FlaggedViewUITests.swift`
-- Modify: `agtermUITests/FocusWorkspaceUITests.swift`
+- Modify: `Hangar/hangarApp+Menus.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar.swift`
+- Modify: `HangarTests/SidebarFlaggedLayoutTests.swift`
+- Modify: `HangarUITests/FlaggedViewUITests.swift`
+- Modify: `HangarUITests/FocusWorkspaceUITests.swift`
 
 - [x] View menu gains Edit Flagged Sessions… after Clear Flagged and Edit Focused Workspaces… after Clear
       Focus, each `.disabled(!PaletteCommand.….isEnabled(in: context))` and
@@ -204,15 +204,15 @@
 ### Task 3: Verify acceptance criteria
 - [x] every Overview requirement holds: in-place toggle, stays open, live marks, immediate effect, focus
       filter never enabled, all entry points
-- [x] `cd agtermCore && swift test`
+- [x] `cd HangarCore && swift test`
 - [x] `make test-app`
 - [x] `make lint` reports zero findings
-- [x] `lsappinfo list | grep -A4 agterm.debug` shows no leaked test instance
+- [x] `lsappinfo list | grep -A4 hangar.debug` shows no leaked test instance
 
 ### Task 4: [Final] Update documentation
 - [x] `site/docs.html`: both editors in the flagged-view and workspace-focus sections, built-in names in the
       keymap action list
-- [x] `plugins/agterm/skills/agterm/reference.md`: built-in names
+- [x] `plugins/hangar/skills/hangar/reference.md`: built-in names
 - [x] `.claude/rules/menu-actions.md`: the "empty query skips ranking in two cases" sentence gains the editor
       modes; the "`runIfEnabled` … only thing that dismisses" sentence gains the stay-open exception; the
       trailing-status-glyph session-list roster gains the session editor; the openers join the palette
@@ -228,7 +228,7 @@
 - larger interface font: the mark column and hint line do not truncate titles
 
 **Downstream:**
-- the `agterm-linux` fork consumes `agtermCore`; the new public `PaletteCommand` and `BuiltinAction` cases
+- the `agterm-linux` fork consumes `HangarCore`; the new public `PaletteCommand` and `BuiltinAction` cases
   break its exhaustive switches until it adds arms for them
 
 Smells pre-check: skipped — non-Go project

@@ -8,7 +8,7 @@
 
 class QWidget;
 
-// The phone relay without a terminal: the app runs `agtermctl mobile serve` as its child, one for all windows, and starts
+// The phone relay without a terminal: the app runs `hangarctl mobile serve` as its child, one for all windows, and starts
 // it again at launch while it is switched on. The switch, the port and the address the code shows live in
 // <state>/mobile/desktop.json.
 class PhoneRelay : public QObject

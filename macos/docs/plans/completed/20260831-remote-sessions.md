@@ -2,13 +2,13 @@
 
 ## Overview
 
-Attach a local agterm to a session running on another Mac that also runs agterm, so it appears in the
+Attach a local hangar to a session running on another Mac that also runs hangar, so it appears in the
 local sidebar as an ordinary session marked remote. One session at a time, including its split.
 Whole-workspace teleport is out of scope.
 
 Two new control commands:
 
-- `zmx tree <host>` — ssh to the host, ask its agterm what sessions exist in its frontmost window, and
+- `zmx tree <host>` — ssh to the host, ask its hangar what sessions exist in its frontmost window, and
   return each pane's daemon plus the endpoint metadata needed to attach.
 - `zmx attach <host> <session>` — create one local session whose panes run ssh into that remote
   session's daemons.
@@ -19,16 +19,16 @@ Everything runs on the current pinned zmx (`ZMX_REV fb1b6b6`). No upstream chang
 
 ## Context (from discovery)
 
-- `agtermCore/Sources/agtermCore/ControlProtocol.swift` — `ControlCommand`, `zmxList/zmxPrune/zmxKill`.
-- `agtermCore/Sources/agtermCore/ControlPayloads.swift` — `ControlZmxInventory`, `ControlZmxEntry`.
-- `agtermCore/Sources/agtermCore/ControlProjection.swift` — `ControlSessionNode` (no daemon name today).
-- `agtermCore/Sources/agtermCore/ControlDispatcher.swift` — `ControlActions`, the effect seam.
-- `agtermCore/Sources/agtermctlKit/ZmxCommands.swift` — the `zmx` CLI group.
-- `agterm/Ghostty/ZmxClient.swift` — holds the executable path and socket directory, both private.
-- `agterm/Ghostty/GhosttySurfaceView.swift:550` — `shouldCloseOnChildExitAction`.
-- `agterm/Ghostty/GhosttyCallbacks.swift:64` — `GHOSTTY_ACTION_SHOW_CHILD_EXITED`.
-- `agtermCore/Sources/agtermCore/AppStore+Snapshot.swift:41,78` — `initialCommand` persistence.
-- `agtermCore/Sources/agtermCore/AppStore+RecentClosed.swift` — the second persistence producer.
+- `HangarCore/Sources/HangarCore/ControlProtocol.swift` — `ControlCommand`, `zmxList/zmxPrune/zmxKill`.
+- `HangarCore/Sources/HangarCore/ControlPayloads.swift` — `ControlZmxInventory`, `ControlZmxEntry`.
+- `HangarCore/Sources/HangarCore/ControlProjection.swift` — `ControlSessionNode` (no daemon name today).
+- `HangarCore/Sources/HangarCore/ControlDispatcher.swift` — `ControlActions`, the effect seam.
+- `HangarCore/Sources/hangarctlKit/ZmxCommands.swift` — the `zmx` CLI group.
+- `Hangar/Ghostty/ZmxClient.swift` — holds the executable path and socket directory, both private.
+- `Hangar/Ghostty/GhosttySurfaceView.swift:550` — `shouldCloseOnChildExitAction`.
+- `Hangar/Ghostty/GhosttyCallbacks.swift:64` — `GHOSTTY_ACTION_SHOW_CHILD_EXITED`.
+- `HangarCore/Sources/HangarCore/AppStore+Snapshot.swift:41,78` — `initialCommand` persistence.
+- `HangarCore/Sources/HangarCore/AppStore+RecentClosed.swift` — the second persistence producer.
 
 ## Development Approach
 
@@ -40,10 +40,10 @@ Everything runs on the current pinned zmx (`ZMX_REV fb1b6b6`). No upstream chang
 ## Testing Strategy
 
 - Host-free logic — ssh argv construction, the tree merge, endpoint payloads, dispatcher
-  parsing/validation — is unit tested in `agtermCore` against fixtures and a fake ssh runner.
+  parsing/validation — is unit tested in `HangarCore` against fixtures and a fake ssh runner.
 - App-side lifecycle — surface routing, persistence exclusion, ownership claims — uses hosted tests in
-  `agtermTests`.
-- End-to-end coverage goes in `agtermUITests/ControlAPIUITests`, scoped with `-only-testing:`, driven by
+  `HangarTests`.
+- End-to-end coverage goes in `HangarUITests/ControlAPIUITests`, scoped with `-only-testing:`, driven by
   the injected fake runner so no second Mac is needed.
 - Anything that genuinely needs a second Mac lives in Post-Completion, never as a completion gate.
 
@@ -86,7 +86,7 @@ entry written to disk, not from the pending-close record that Reopen reads.
 
 ### Why local ownership needs its own projection
 
-`WindowLibrary.liveClaims` converts every live session's pane UUIDs into local `agterm-<uuid>` claims
+`WindowLibrary.liveClaims` converts every live session's pane UUIDs into local `hangar-<uuid>` claims
 unconditionally. Unfiltered, each remote pane shows up in `zmx list` as a fabricated claimed-but-absent
 local daemon, and the zmx ownership commands resolve a session they do not manage. Finalization derives
 names the same way, and `closeSplit` calls `paneFinalizer` directly rather than through
@@ -113,7 +113,7 @@ socket directory are private, and recomputing from the process environment insid
 would duplicate runtime selection and break hosted tests that inject a client. Expose them from
 `ZmxClient` and thread them through the restored runtime.
 
-Teleport therefore requires the remote agterm to be new enough to report endpoints. An older remote
+Teleport therefore requires the remote hangar to be new enough to report endpoints. An older remote
 returns a clear error rather than a partial attach.
 
 ### Scope: the remote's frontmost window
@@ -170,7 +170,7 @@ returns false without dispatching anything, Ghostty shows its own "press any key
 `close_surface_cb` runs today's `closePrimaryPane`/`closeSplitPane` after the key.
 
 The ssh wrapper prints one sanitized line before exiting: host, remote session, pane, exit status. It
-says nothing about reconnecting — the picker is a keymap custom command the user supplies, so agterm
+says nothing about reconnecting — the picker is a keymap custom command the user supplies, so hangar
 cannot name a path it does not own.
 
 **There is no timer, notification or session-wide coalescing.** An earlier draft had them, and they
@@ -228,15 +228,15 @@ displaced leader — would remove all three. It is **not** part of this work.
 ### Task 1: Endpoint metadata and the ssh invocations
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlPayloads.swift`
-- Create: `agtermCore/Sources/agtermCore/RemoteSession.swift`
-- Modify: `agterm/Ghostty/ZmxClient.swift`
-- Modify: `agterm/agtermApp.swift`
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agterm/Control/ControlServer+Zmx.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/RemoteSessionTests.swift`
-- Modify: `agtermTests/ControlServerZmxTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlPayloads.swift`
+- Create: `HangarCore/Sources/HangarCore/RemoteSession.swift`
+- Modify: `Hangar/Ghostty/ZmxClient.swift`
+- Modify: `Hangar/hangarApp.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `Hangar/Control/ControlServer+Zmx.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/RemoteSessionTests.swift`
+- Modify: `HangarTests/ControlServerZmxTests.swift`
 
 - [x] add the zmx executable path and `ZMX_DIR` to `ControlZmxInventory` as header fields, both optional
       on the wire so an older server still decodes
@@ -255,18 +255,18 @@ displaced leader — would remove all three. It is **not** part of this work.
 ### Task 2: Remote session model
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Session.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Snapshot.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+RecentClosed.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Panes.swift`
-- Modify: `agtermCore/Sources/agtermCore/WindowLibrary.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agterm/Views/WorkspaceSidebar.swift`
-- Modify: `agterm/Views/WorkspaceSidebar+RowRendering.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/SnapshotRoundTripTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/RecentClosedTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/WindowLibraryClaimsTests.swift`
-- Modify: `agtermTests/SidebarRowViewsTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Snapshot.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+RecentClosed.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`
+- Modify: `HangarCore/Sources/HangarCore/WindowLibrary.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar+RowRendering.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/SnapshotRoundTripTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/RecentClosedTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/WindowLibraryClaimsTests.swift`
+- Modify: `HangarTests/SidebarRowViewsTests.swift`
 
 - [x] add ephemeral `remoteHost: String?` to `Session`, not persisted
 - [x] add `locallyManagedPaneIdentities` — empty when `remoteHost != nil`, else primary plus existing split
@@ -286,18 +286,18 @@ displaced leader — would remove all three. It is **not** part of this work.
 ### Task 3: `zmx tree <host>`
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Zmx.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlActionsDefaults.swift`
-- Modify: `agtermCore/Sources/agtermCore/RemoteSession.swift`
-- Modify: `agterm/Control/ControlServer+Zmx.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/ZmxCommands.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SocketClient.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherZmxTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/MockControlActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/CommandsTests.swift`
-- Modify: `agtermUITests/ControlAPIUITests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Zmx.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemoteSession.swift`
+- Modify: `Hangar/Control/ControlServer+Zmx.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/ZmxCommands.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SocketClient.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherZmxTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/CommandsTests.swift`
+- Modify: `HangarUITests/ControlAPIUITests.swift`
 
 - [x] add the `zmxTree` command and its response: sessions with pane roles, split axis, per-pane daemon,
       remote executable and `ZMX_DIR`
@@ -317,18 +317,18 @@ displaced leader — would remove all three. It is **not** part of this work.
 ### Task 4: `zmx attach <host> <session>`
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Zmx.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlActionsDefaults.swift`
-- Modify: `agterm/Control/ControlServer+Zmx.swift`
-- Modify: `agterm/agtermApp.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/ZmxCommands.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherZmxTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/MockControlActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/CommandsTests.swift`
-- Modify: `agtermTests/ControlServerZmxTests.swift`
-- Modify: `agtermUITests/ControlAPIUITests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Zmx.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
+- Modify: `Hangar/Control/ControlServer+Zmx.swift`
+- Modify: `Hangar/hangarApp.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/ZmxCommands.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherZmxTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/CommandsTests.swift`
+- Modify: `HangarTests/ControlServerZmxTests.swift`
+- Modify: `HangarUITests/ControlAPIUITests.swift`
 
 - [x] add the `zmxAttach` command taking host and remote session
 - [x] re-run the remote resolution before inserting anything; an unresolvable session is a pre-model
@@ -353,7 +353,7 @@ displaced leader — would remove all three. It is **not** part of this work.
 ### Task 5: Update documentation
 
 - [x] update `site/docs.html` and `site/commands.html` with both commands and their read-back
-- [x] update `plugins/agterm/skills/agterm/` — the source for installed Claude/Codex copies
+- [x] update `plugins/hangar/skills/hangar/` — the source for installed Claude/Codex copies
 - [x] update `.claude/rules/control-api.md` with the remote-session contract, the endpoint-metadata
       requirement, the frontmost-window scope, and the create-only guard
 - [x] record the accepted v1 limitations where the contract lives, not scattered across surfaces
@@ -366,14 +366,14 @@ displaced leader — would remove all three. It is **not** part of this work.
 - [x] verify a vanished daemon fails visibly instead of creating a fresh remote shell
 - [x] verify an older remote without endpoint metadata fails with a clear message
 - [x] run `make build`
-- [x] run `cd agtermCore && swift test`
+- [x] run `cd HangarCore && swift test`
 - [x] run `make test-app`
 - [x] run `make lint` — zero findings required
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
-**Manual verification** (needs a second Mac running agterm):
+**Manual verification** (needs a second Mac running hangar):
 
 - attach to a live remote session and confirm the first keystroke reflows it
 - confirm the far side keeps working after a local close

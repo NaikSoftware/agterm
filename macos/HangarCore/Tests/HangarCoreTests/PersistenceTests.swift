@@ -1,0 +1,631 @@
+import Foundation
+import Testing
+@testable import HangarCore
+
+/// Class suite (reference type) so `init`/`deinit` create and tear down a unique
+/// temp directory around each test — no shared on-disk state, no Application
+/// Support pollution.
+@MainActor
+final class PersistenceTests {
+    private let directory: URL
+    private let store: PersistenceStore
+
+    init() throws {
+        directory = FileManager.default.temporaryDirectory.appendingPathComponent("hangar-persistence-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        store = PersistenceStore(directory: directory)
+    }
+
+    deinit {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    private var fileURL: URL { directory.appendingPathComponent("workspaces.json") }
+
+    @Test func snapshotRoundTripsThroughDisk() throws {
+        let original = Snapshot(selectedSessionID: UUID(), workspaces: [
+            WorkspaceSnapshot(id: UUID(), name: "work", sessions: [
+                SessionSnapshot(id: UUID(), customName: "build", cwd: "/Users/user/dev/foo"),
+                SessionSnapshot(id: UUID(), customName: nil, cwd: "/tmp"),
+            ]),
+            WorkspaceSnapshot(id: UUID(), name: "personal", sessions: []),
+        ])
+        try store.save(original)
+        let decoded = store.load()
+        #expect(decoded == original)
+    }
+
+    @Test func appStoreSnapshotCapturesTreeAndCwds() {
+        let app = AppStore(persistence: store)
+        let work = app.addWorkspace(name: "work")
+        let session = try! #require(app.addSession(toWorkspace: work.id, cwd: "/start"))
+        session.currentCwd = "/Users/user/dev/live"
+        app.renameSession(session.id, to: "build")
+        let other = try! #require(app.addSession(toWorkspace: work.id, cwd: "/tmp"))
+
+        let snapshot = app.snapshot()
+        #expect(snapshot.selectedSessionID == other.id)
+        #expect(snapshot.workspaces.count == 1)
+        let ws = try! #require(snapshot.workspaces.first)
+        #expect(ws.id == work.id)
+        #expect(ws.name == "work")
+        #expect(ws.sessions.map(\.id) == [session.id, other.id])
+        #expect(ws.sessions[0].customName == "build")
+        #expect(ws.sessions[0].cwd == "/Users/user/dev/live")
+        #expect(ws.sessions[1].cwd == "/tmp")
+    }
+
+    @Test func restoreRebuildsTreeNamesAndCwds() {
+        let selected = UUID()
+        let snapshot = Snapshot(selectedSessionID: selected, workspaces: [
+            WorkspaceSnapshot(id: UUID(), name: "work", sessions: [
+                SessionSnapshot(id: selected, customName: "build", cwd: "/Users/user/dev/foo"),
+                SessionSnapshot(id: UUID(), customName: nil, cwd: "/var/log"),
+            ]),
+            WorkspaceSnapshot(id: UUID(), name: "personal", sessions: [
+                SessionSnapshot(id: UUID(), customName: nil, cwd: "/"),
+            ]),
+        ])
+
+        let app = AppStore(persistence: store)
+        app.restore(from: snapshot)
+
+        #expect(app.selectedSessionID == selected)
+        #expect(app.workspaces.map(\.id) == snapshot.workspaces.map(\.id))
+        #expect(app.workspaces.map(\.name) == ["work", "personal"])
+
+        let first = app.workspaces[0]
+        #expect(first.sessions.map(\.id) == snapshot.workspaces[0].sessions.map(\.id))
+        #expect(first.sessions[0].customName == "build")
+        #expect(first.sessions[0].initialCwd == "/Users/user/dev/foo")
+        #expect(first.sessions[0].displayName == "build")
+        #expect(first.sessions[1].customName == nil)
+        #expect(first.sessions[1].initialCwd == "/var/log")
+        #expect(first.sessions[1].displayName == "log")
+        #expect(app.workspaces[1].sessions[0].displayName == "/")
+        // surfaces stay lazy until first display
+        #expect(first.sessions[0].surface == nil)
+        // only a live PWD report sets currentCwd; the persisted cwd becomes initialCwd.
+        #expect(first.sessions[0].currentCwd == nil)
+        #expect(first.sessions[1].currentCwd == nil)
+    }
+
+    @Test func restoreClearsDanglingSelection() {
+        let snapshot = Snapshot(selectedSessionID: UUID(), workspaces: [
+            WorkspaceSnapshot(id: UUID(), name: "work", sessions: [
+                SessionSnapshot(id: UUID(), customName: nil, cwd: "/a"),
+            ]),
+        ])
+        let app = AppStore(persistence: store)
+        app.restore(from: snapshot)
+        #expect(app.selectedSessionID == nil)
+        #expect(app.activeSession == nil)
+    }
+
+    @Test func restoreDoesNotWriteToDisk() {
+        #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+        let snapshot = Snapshot(workspaces: [
+            WorkspaceSnapshot(id: UUID(), name: "work", sessions: [
+                SessionSnapshot(id: UUID(), customName: nil, cwd: "/a"),
+            ]),
+        ])
+        let app = AppStore(persistence: store)
+        app.restore(from: snapshot)
+        #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+    }
+
+    @Test func snapshotRestoreRoundTripPreservesTree() {
+        let app = AppStore(persistence: store)
+        let work = app.addWorkspace(name: "work")
+        let personal = app.addWorkspace(name: "personal")
+        app.addSession(toWorkspace: work.id, cwd: "/a")
+        let b = try! #require(app.addSession(toWorkspace: personal.id, cwd: "/b"))
+        app.renameSession(b.id, to: "server")
+        app.selectSession(b.id)
+
+        let snapshot = app.snapshot()
+        let restored = AppStore(persistence: store)
+        restored.restore(from: snapshot)
+        #expect(restored.snapshot() == snapshot)
+    }
+
+    @Test func legacyFileWithRemovedKeysLoadsAndKeepsWorkspaces() throws {
+        // removed keys from an older build must be ignored, not fail the load and wipe the tree.
+        let id = UUID()
+        let json = #"{ "version": 1, "statusBarHidden": true, "titleBarHidden": true, "workspaces": [ { "id": "\#(id.uuidString)", "name": "work", "sessions": [] } ] }"#
+        try Data(json.utf8).write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded.workspaces.map(\.id) == [id])
+    }
+
+    @Test func sessionSplitStatePersistsAndRestores() {
+        let app = AppStore(persistence: store)
+        let work = app.addWorkspace(name: "work")
+        let session = try! #require(app.addSession(toWorkspace: work.id, cwd: "/a"))
+        app.toggleSplit(session.id)
+        #expect(store.load().workspaces[0].sessions[0].isSplit == true)
+
+        let restored = AppStore(persistence: store)
+        restored.restore(from: store.load())
+        #expect(restored.workspaces[0].sessions[0].isSplit == true)
+    }
+
+    @Test func sessionFlaggedStatePersistsAndRestores() {
+        let app = AppStore(persistence: store)
+        let work = app.addWorkspace(name: "work")
+        let flag = try! #require(app.addSession(toWorkspace: work.id, cwd: "/a"))
+        let plain = try! #require(app.addSession(toWorkspace: work.id, cwd: "/b"))
+        flag.flagged = true
+        app.save()
+        #expect(store.load().workspaces[0].sessions[0].flagged == true)
+        #expect(store.load().workspaces[0].sessions[1].flagged == false)
+
+        let restored = AppStore(persistence: store)
+        restored.restore(from: store.load())
+        #expect(restored.workspaces[0].sessions[0].flagged == true)
+        #expect(restored.workspaces[0].sessions[1].flagged == false)
+        _ = plain
+    }
+
+    @Test func legacySnapshotWithoutFlaggedDecodesUnflagged() throws {
+        // a file written before `flagged` existed has no key; it must decode rather than wipe the tree.
+        let ws = UUID()
+        let sid = UUID()
+        let json = #"{ "version": 1, "workspaces": [ { "id": "\#(ws.uuidString)", "name": "work", "sessions": [ { "id": "\#(sid.uuidString)", "customName": null, "cwd": "/a" } ] } ] }"#
+        try Data(json.utf8).write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded.workspaces.map(\.id) == [ws])
+        #expect(loaded.workspaces[0].sessions[0].flagged == nil)
+
+        let app = AppStore(persistence: store)
+        app.restore(from: loaded)
+        #expect(app.workspaces[0].sessions[0].flagged == false)
+    }
+
+    @Test func sidebarModePersistsAndRestores() {
+        let app = AppStore(persistence: store)
+        _ = app.addWorkspace(name: "work")
+        #expect(store.load().sidebarMode == .tree)
+        app.setSidebarMode(.flagged)
+        #expect(store.load().sidebarMode == .flagged)
+
+        let restored = AppStore(persistence: store)
+        restored.restore(from: store.load())
+        #expect(restored.sidebarMode == .flagged)
+
+        app.setSidebarMode(.tree)
+        let restoredTree = AppStore(persistence: store)
+        restoredTree.restore(from: store.load())
+        #expect(restoredTree.sidebarMode == .tree)
+    }
+
+    @Test func sidebarVisibilityPersistsAndRestoresThroughHelper() {
+        let app = AppStore(persistence: store)
+        _ = app.addWorkspace(name: "work")
+        #expect(store.load().sidebarVisible == true)
+        app.setSidebarVisible(false)
+        #expect(store.load().sidebarVisible == false)
+
+        let restored = AppStore(persistence: store)
+        restored.restore(from: store.load())
+        #expect(restored.sidebarVisible == false)
+
+        app.toggleSidebarVisible()
+        let restoredShown = AppStore(persistence: store)
+        restoredShown.restore(from: store.load())
+        #expect(restoredShown.sidebarVisible == true)
+    }
+
+    @Test func legacySnapshotWithoutSidebarModeDecodesTree() throws {
+        // a file written before `sidebarMode` existed has no key; it must decode rather than wipe the tree.
+        let ws = UUID()
+        let json = #"{ "version": 1, "workspaces": [ { "id": "\#(ws.uuidString)", "name": "work", "sessions": [] } ] }"#
+        try Data(json.utf8).write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded.workspaces.map(\.id) == [ws])
+        #expect(loaded.sidebarMode == nil)
+
+        let app = AppStore(persistence: store)
+        app.restore(from: loaded)
+        #expect(app.sidebarMode == .tree)
+    }
+
+    @Test func malformedSidebarModeDropsToNilKeepingTree() throws {
+        // an invalid sidebarMode (an unknown raw value from a newer build, a wrong JSON type) must drop
+        // to nil lossily, never fail the whole Snapshot decode and wipe the tree on the next save.
+        let ws = UUID()
+        let session = UUID()
+        let tree = #""selectedSessionID": "\#(session.uuidString)", "workspaces": "# +
+            #"[ { "id": "\#(ws.uuidString)", "name": "work", "sessions": [ { "id": "\#(session.uuidString)", "cwd": "/a" } ] } ]"#
+        for bad in [#""sidebarMode": "hologram""#, #""sidebarMode": 42"#] {
+            try Data(#"{ "version": 1, \#(bad), \#(tree) }"#.utf8).write(to: fileURL)
+            let loaded = store.load()
+            #expect(loaded.workspaces.map(\.id) == [ws])
+            #expect(loaded.selectedSessionID == session)
+            #expect(loaded.sidebarMode == nil)
+        }
+    }
+
+    @Test func focusedWorkspacePersistsAndRestores() {
+        let app = AppStore(persistence: store)
+        let work = app.addWorkspace(name: "work")
+        #expect(store.load().focusedWorkspaceIDs == nil)
+        app.setFocusedWorkspace(work.id)
+        #expect(store.load().focusedWorkspaceIDs == [work.id] && store.load().focusEnabled == true)
+
+        let restored = AppStore(persistence: store)
+        restored.restore(from: store.load())
+        #expect(restored.focusedWorkspaceIDs == [work.id] && restored.focusEnabled)
+
+        app.clearFocus()
+        let restoredCleared = AppStore(persistence: store)
+        restoredCleared.restore(from: store.load())
+        #expect(restoredCleared.focusedWorkspaceIDs.isEmpty && !restoredCleared.focusEnabled)
+    }
+
+    @Test func legacySnapshotWithoutFocusedWorkspaceDecodesUnfocused() throws {
+        // a file written before any focus key existed has neither; it must decode rather than wipe the tree.
+        let ws = UUID()
+        let json = #"{ "version": 1, "workspaces": [ { "id": "\#(ws.uuidString)", "name": "work", "sessions": [] } ] }"#
+        try Data(json.utf8).write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded.workspaces.map(\.id) == [ws])
+        #expect(loaded.focusedWorkspaceIDs == nil && loaded.focusEnabled == nil)
+
+        let app = AppStore(persistence: store)
+        app.restore(from: loaded)
+        #expect(app.focusedWorkspaceIDs.isEmpty && !app.focusEnabled)
+    }
+
+    @Test func legacySnapshotWithSingleFocusedWorkspaceMigratesToAnEnabledSet() throws {
+        // the release BEFORE the focus set wrote only `focusedWorkspaceID`; it must migrate to a one-member
+        // ENABLED set rather than losing the filter.
+        let ws = UUID()
+        let json = #"""
+        { "version": 1, "focusedWorkspaceID": "\#(ws.uuidString)",
+          "workspaces": [ { "id": "\#(ws.uuidString)", "name": "work", "sessions": [] } ] }
+        """#
+        try Data(json.utf8).write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded.focusedWorkspaceIDs == [ws] && loaded.focusEnabled == true)
+
+        let app = AppStore(persistence: store)
+        app.restore(from: loaded)
+        #expect(app.focusedWorkspaceIDs == [ws] && app.focusEnabled)
+        #expect(app.visibleWorkspaces.map(\.id) == [ws])
+    }
+
+    @Test func savedSnapshotStopsWritingTheLegacyFocusKey() throws {
+        // the legacy key is decode-only, so a multi-member filter cannot be silently narrowed to one
+        // member on the next load.
+        let app = AppStore(persistence: store)
+        let work = app.addWorkspace(name: "work")
+        let personal = app.addWorkspace(name: "personal")
+        app.setFocusMembership(work.id, member: true)
+        app.setFocusMembership(personal.id, member: true)
+        let written = try String(contentsOf: fileURL, encoding: .utf8)
+        #expect(!written.contains("\"focusedWorkspaceID\""))
+        #expect(store.load().focusedWorkspaceIDs == [work.id, personal.id])
+    }
+
+    @Test func sessionRecencyPersistsAndRestores() {
+        let app = AppStore(persistence: store)
+        let work = app.addWorkspace(name: "work")
+        let a = try! #require(app.addSession(toWorkspace: work.id, cwd: "/a"))
+        let b = try! #require(app.addSession(toWorkspace: work.id, cwd: "/b"))
+        let c = try! #require(app.addSession(toWorkspace: work.id, cwd: "/c"))
+        app.selectSession(a.id)
+        app.selectSession(b.id)
+        app.save() // selection saves are debounced; flush so the write lands before reading back
+        #expect(store.load().sessionRecency == [b.id, a.id, c.id])
+
+        let restored = AppStore(persistence: store)
+        restored.restore(from: store.load())
+        #expect(restored.sessionRecency.items == [b.id, a.id, c.id])
+    }
+
+    @Test func restoreDropsStaleRecencyIds() {
+        let id = UUID()
+        let stale = UUID()
+        let snapshot = Snapshot(selectedSessionID: id, workspaces: [
+            WorkspaceSnapshot(id: UUID(), name: "work", sessions: [
+                SessionSnapshot(id: id, customName: nil, cwd: "/a"),
+            ]),
+        ], sessionRecency: [stale, id])
+        let app = AppStore(persistence: store)
+        app.restore(from: snapshot)
+        #expect(app.sessionRecency.items == [id])
+    }
+
+    @Test func restoreFloatsSelectionToRecencyFront() {
+        let a = UUID()
+        let b = UUID()
+        // the persisted order is out of sync with the selection, as a hand-edited file can be.
+        let snapshot = Snapshot(selectedSessionID: b, workspaces: [
+            WorkspaceSnapshot(id: UUID(), name: "work", sessions: [
+                SessionSnapshot(id: a, customName: nil, cwd: "/a"),
+                SessionSnapshot(id: b, customName: nil, cwd: "/b"),
+            ]),
+        ], sessionRecency: [a, b])
+        let app = AppStore(persistence: store)
+        app.restore(from: snapshot)
+        #expect(app.sessionRecency.items == [b, a])
+    }
+
+    @Test func malformedRecencyDropsToNilKeepingTree() throws {
+        // an invalid sessionRecency must drop to nil lossily, never fail the whole Snapshot decode and
+        // wipe the tree on the next save.
+        let ws = UUID()
+        let session = UUID()
+        let tree = #""selectedSessionID": "\#(session.uuidString)", "workspaces": "# +
+            #"[ { "id": "\#(ws.uuidString)", "name": "work", "sessions": [ { "id": "\#(session.uuidString)", "cwd": "/a" } ] } ]"#
+        for bad in [#""sessionRecency": ["not-a-uuid"]"#, #""sessionRecency": 42"#] {
+            try Data(#"{ "version": 1, \#(bad), \#(tree) }"#.utf8).write(to: fileURL)
+            let loaded = store.load()
+            #expect(loaded.workspaces.map(\.id) == [ws])
+            #expect(loaded.selectedSessionID == session)
+            #expect(loaded.sessionRecency == nil)
+        }
+    }
+
+    @Test func malformedFocusedWorkspaceIDsDropsToNilKeepingTree() throws {
+        let ws = UUID()
+        let session = UUID()
+        let tree = #""selectedSessionID": "\#(session.uuidString)", "workspaces": "# +
+            #"[ { "id": "\#(ws.uuidString)", "name": "work", "sessions": [ { "id": "\#(session.uuidString)", "cwd": "/a" } ] } ]"#
+        for bad in [#""focusedWorkspaceIDs": ["not-a-uuid"]"#, #""focusedWorkspaceIDs": 42"#] {
+            try Data(#"{ "version": 1, \#(bad), \#(tree) }"#.utf8).write(to: fileURL)
+            let loaded = store.load()
+            #expect(loaded.workspaces.map(\.id) == [ws])
+            #expect(loaded.selectedSessionID == session)
+            #expect(loaded.focusedWorkspaceIDs == nil)
+        }
+    }
+
+    @Test func malformedOptionalScalarsDropToNilKeepingTree() throws {
+        let ws = UUID()
+        let session = UUID()
+        let tree = #""workspaces": "# +
+            #"[ { "id": "\#(ws.uuidString)", "name": "work", "sessions": [ { "id": "\#(session.uuidString)", "cwd": "/a" } ] } ]"#
+        // each bad value pairs with the field it must have nilled: a guard that recovered to a wrong
+        // non-nil default would keep the tree alive and pass a tree-only assertion.
+        let cases: [(bad: String, nilled: (Snapshot) -> Bool)] = [
+            (#""selectedSessionID": "not-a-uuid""#, { $0.selectedSessionID == nil }),
+            (#""sidebarWidth": "wide""#, { $0.sidebarWidth == nil }),
+            (#""sidebarVisible": "yes""#, { $0.sidebarVisible == nil }),
+            (#""focusedWorkspaceID": "not-a-uuid""#, { $0.focusedWorkspaceIDs == nil && $0.focusEnabled == nil }),
+            (#""focusEnabled": 42"#, { $0.focusEnabled == nil }),
+        ]
+        for (bad, nilled) in cases {
+            try Data(#"{ "version": 1, \#(bad), \#(tree) }"#.utf8).write(to: fileURL)
+            let loaded = store.load()
+            #expect(loaded.workspaces.map(\.id) == [ws], "\(bad) wiped the tree")
+            #expect(loaded.workspaces.first?.sessions.map(\.id) == [session], "\(bad) wiped the sessions")
+            #expect(nilled(loaded), "\(bad) did not drop its field to nil")
+        }
+    }
+
+    @Test func malformedSessionAndWorkspaceOptionalsDropToNilKeepingTree() throws {
+        let ws = UUID()
+        let session = UUID()
+        for bad in [#""fontSize": "12""#, #""isSplit": 1"#, #""splitRatio": "half""#, #""flagged": "true""#,
+                    #""foregroundCommand": "vim""#, #""commandWait": "no""#, #""customName": 7"#,
+                    #""restoreCommand": []"#, #""splitCwd": 3"#, #""splitForegroundCommand": "vim""#,
+                    #""initialCommand": ["vim"]"#, #""splitRestoreCommand": 0"#,
+                    #""backgroundWatermark": "none""#] {
+            let tree = #""workspaces": [ { "id": "\#(ws.uuidString)", "name": "work", "sessions": "# +
+                #"[ { "id": "\#(session.uuidString)", "cwd": "/a", \#(bad) } ] } ]"#
+            try Data(#"{ "version": 1, \#(tree) }"#.utf8).write(to: fileURL)
+            let loaded = store.load()
+            #expect(loaded.workspaces.first?.sessions.map(\.id) == [session], "\(bad) wiped the tree")
+        }
+        let tree = #""workspaces": [ { "id": "\#(ws.uuidString)", "name": "work", "collapsed": "yes", "# +
+            #""sessions": [ { "id": "\#(session.uuidString)", "cwd": "/a" } ] } ]"#
+        try Data(#"{ "version": 1, \#(tree) }"#.utf8).write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded.workspaces.map(\.id) == [ws])
+        #expect(loaded.workspaces.first?.collapsed == nil)
+    }
+
+    @Test func malformedFocusSetLeavesLegacyKeyUnmigrated() throws {
+        // a failed focusedWorkspaceIDs decode must not read as an absent key: migrating here would take
+        // the legacy id and force focus on, overriding the explicit focusEnabled: false in the same file.
+        let ws = UUID()
+        let session = UUID()
+        let legacy = UUID()
+        let tree = #""workspaces": "# +
+            #"[ { "id": "\#(ws.uuidString)", "name": "work", "sessions": [ { "id": "\#(session.uuidString)", "cwd": "/a" } ] } ]"#
+        let keys = #""focusedWorkspaceID": "\#(legacy.uuidString)", "focusedWorkspaceIDs": 42, "focusEnabled": false"#
+        try Data(#"{ "version": 1, \#(keys), \#(tree) }"#.utf8).write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded.workspaces.map(\.id) == [ws])
+        #expect(loaded.focusedWorkspaceIDs == nil)
+        #expect(loaded.focusEnabled == false)
+    }
+
+    @Test func restoreInsertsAbsentSelectionAtFront() {
+        let a = UUID()
+        let b = UUID()
+        let c = UUID()
+        let snapshot = Snapshot(selectedSessionID: c, workspaces: [
+            WorkspaceSnapshot(id: UUID(), name: "work", sessions: [
+                SessionSnapshot(id: a, customName: nil, cwd: "/a"),
+                SessionSnapshot(id: b, customName: nil, cwd: "/b"),
+                SessionSnapshot(id: c, customName: nil, cwd: "/c"),
+            ]),
+        ], sessionRecency: [a, b])
+        let app = AppStore(persistence: store)
+        app.restore(from: snapshot)
+        #expect(app.sessionRecency.items == [c, a, b])
+    }
+
+    @Test func legacySnapshotWithoutRecencyDecodesSelectionOnly() throws {
+        // a file written before `sessionRecency` existed has no key; it must decode rather than wipe the
+        // tree, leaving just the selection in the Ctrl-Tab order.
+        let ws = UUID()
+        let session = UUID()
+        let json = #"{ "version": 1, "selectedSessionID": "\#(session.uuidString)", "workspaces": "# +
+            #"[ { "id": "\#(ws.uuidString)", "name": "work", "sessions": [ { "id": "\#(session.uuidString)", "cwd": "/a" } ] } ] }"#
+        try Data(json.utf8).write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded.sessionRecency == nil)
+
+        let app = AppStore(persistence: store)
+        app.restore(from: loaded)
+        #expect(app.sessionRecency.items == [session])
+    }
+
+    @Test func sessionFontSizePersistsAndRestores() {
+        let app = AppStore(persistence: store)
+        let work = app.addWorkspace(name: "work")
+        let session = try! #require(app.addSession(toWorkspace: work.id, cwd: "/a"))
+        app.setFontSize(session.id, 17.5)
+        app.save() // font saves are debounced; flush so the write lands before reading back
+        #expect(store.load().workspaces[0].sessions[0].fontSize == 17.5)
+
+        let restored = AppStore(persistence: store)
+        restored.restore(from: store.load())
+        #expect(restored.workspaces[0].sessions[0].fontSize == 17.5)
+    }
+
+    @Test func workspaceCollapsePersistsAndRestores() {
+        let app = AppStore(persistence: store)
+        let a = app.addWorkspace(name: "a")
+        let b = app.addWorkspace(name: "b")
+        app.setWorkspacesExpanded([a.id]) // collapse b, keep a expanded
+        let disk = store.load()
+        #expect(disk.workspaces[0].collapsed == nil)  // expanded → omitted from the file
+        #expect(disk.workspaces[1].collapsed == true)
+
+        let restored = AppStore(persistence: store)
+        restored.restore(from: disk)
+        #expect(restored.workspaces[0].isExpanded)
+        #expect(!restored.workspaces[1].isExpanded)
+        _ = b
+    }
+
+    @Test func legacyWorkspaceWithoutCollapsedDecodesExpanded() throws {
+        // a file written before `collapsed` existed has no key; lack of the field means expanded.
+        let ws = UUID()
+        let session = UUID()
+        let json = #"{ "version": 1, "workspaces": "# +
+            #"[ { "id": "\#(ws.uuidString)", "name": "work", "sessions": [ { "id": "\#(session.uuidString)", "cwd": "/a" } ] } ] }"#
+        try Data(json.utf8).write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded.workspaces.map(\.id) == [ws])
+        #expect(loaded.workspaces[0].collapsed == nil)
+
+        let app = AppStore(persistence: store)
+        app.restore(from: loaded)
+        #expect(app.workspaces[0].isExpanded)
+    }
+
+    @Test func explicitCollapsedFalseDecodesExpanded() throws {
+        // an explicit `collapsed: false` (a hand-edit, or a future build that always writes the field)
+        // must decode to expanded, same as an absent key.
+        let ws = UUID()
+        let session = UUID()
+        let json = #"{ "version": 1, "workspaces": [ { "id": "\#(ws.uuidString)", "name": "work", "# +
+            #""collapsed": false, "sessions": [ { "id": "\#(session.uuidString)", "cwd": "/a" } ] } ] }"#
+        try Data(json.utf8).write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded.workspaces[0].collapsed == false)
+
+        let app = AppStore(persistence: store)
+        app.restore(from: loaded)
+        #expect(app.workspaces[0].isExpanded)
+    }
+
+    @Test func selectSessionPersistsSelectionToDisk() {
+        let app = AppStore(persistence: store)
+        let work = app.addWorkspace(name: "work")
+        let a = try! #require(app.addSession(toWorkspace: work.id, cwd: "/a"))
+        let b = try! #require(app.addSession(toWorkspace: work.id, cwd: "/b"))
+        // selection saves are debounced; flush via save() so the write lands before reading back.
+        app.selectSession(a.id)
+        app.save()
+        #expect(store.load().selectedSessionID == a.id)
+        app.selectSession(b.id)
+        app.save()
+        #expect(store.load().selectedSessionID == b.id)
+    }
+
+    @Test func selectSessionNilDeselectsAndPersists() {
+        let app = AppStore(persistence: store)
+        let work = app.addWorkspace(name: "work")
+        let a = try! #require(app.addSession(toWorkspace: work.id, cwd: "/a"))
+        // selection saves are debounced; flush via save() so the write lands before reading back.
+        app.selectSession(a.id)
+        app.save()
+        #expect(store.load().selectedSessionID == a.id)
+        app.selectSession(nil)
+        app.save()
+        #expect(app.selectedSessionID == nil)
+        #expect(store.load().selectedSessionID == nil)
+    }
+
+    @Test func loadMissingFileReturnsDefault() {
+        #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+        let loaded = store.load()
+        #expect(loaded == Snapshot())
+        #expect(loaded.workspaces.isEmpty)
+        #expect(loaded.selectedSessionID == nil)
+    }
+
+    @Test func loadCorruptFileReturnsDefault() throws {
+        try Data("{ not valid json ]".utf8).write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded == Snapshot())
+    }
+
+    @Test func loadVersionMismatchReturnsDefault() throws {
+        var future = Snapshot(workspaces: [WorkspaceSnapshot(id: UUID(), name: "work", sessions: [])])
+        future.version = Snapshot.currentVersion + 1
+        let data = try JSONEncoder().encode(future)
+        try data.write(to: fileURL)
+        let loaded = store.load()
+        #expect(loaded == Snapshot())
+        #expect(loaded.workspaces.isEmpty)
+    }
+
+    @Test func saveCreatesDirectoryWhenMissing() throws {
+        let nested = directory.appendingPathComponent("does/not/exist/yet")
+        let nestedStore = PersistenceStore(directory: nested)
+        let snapshot = Snapshot(workspaces: [WorkspaceSnapshot(id: UUID(), name: "work", sessions: [])])
+        try nestedStore.save(snapshot)
+        #expect(nestedStore.load() == snapshot)
+    }
+
+    private func blockWrites(to url: URL) throws {
+        try? FileManager.default.removeItem(at: url)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        try Data().write(to: url.appendingPathComponent("occupied"))
+    }
+
+    @Test func aFailedSnapshotSaveShowsInTheTreeUntilASaveLands() throws {
+        let app = AppStore(persistence: store)
+        #expect(app.controlTree(paneForeground: { _ in nil }).snapshotUnsaved == nil)
+        try blockWrites(to: fileURL)
+
+        #expect(!app.saveChecked())
+        let failed = app.controlTree(paneForeground: { _ in nil })
+        #expect(failed.snapshotUnsaved == true)
+        #expect(failed.indexUnsaved == nil)
+
+        try FileManager.default.removeItem(at: fileURL)
+        #expect(app.saveChecked())
+        #expect(app.controlTree(paneForeground: { _ in nil }).snapshotUnsaved == nil)
+    }
+
+    @Test func aFailedSnapshotSaveMarksOnlyItsOwnWindow() throws {
+        let failing = AppStore(persistence: PersistenceStore(directory: directory, fileName: "windows/a.json"))
+        let healthy = AppStore(persistence: PersistenceStore(directory: directory, fileName: "windows/b.json"))
+        try blockWrites(to: directory.appendingPathComponent("windows/a.json"))
+
+        #expect(!failing.saveChecked())
+        #expect(healthy.saveChecked())
+
+        #expect(failing.controlTree(paneForeground: { _ in nil }).snapshotUnsaved == true)
+        #expect(healthy.controlTree(paneForeground: { _ in nil }).snapshotUnsaved == nil)
+    }
+}

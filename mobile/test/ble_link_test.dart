@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:agterm_mobile/ble_link.dart';
+import 'package:hangar_mobile/ble_link.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Uint8List hex(String s) => Uint8List.fromList([for (var i = 0; i < s.length; i += 2) int.parse(s.substring(i, i + 2), radix: 16)]);
@@ -143,7 +143,7 @@ void main() {
   });
 
   test('deflate shrinks terminal text', () {
-    const row = '\x1b[32m~/dev/agterm\x1b[0m \$ ls -la Sources/agtermctlKit | grep Swift\n';
+    const row = '\x1b[32m~/dev/hangar\x1b[0m \$ ls -la Sources/hangarctlKit | grep Swift\n';
     final text = utf(row * (4096 ~/ row.length + 1)).sublist(0, 4096);
     expect(vectorPhone().seal(text).length, lessThan(text.length ~/ 4));
   });

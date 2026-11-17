@@ -1,11 +1,11 @@
 ---
 worth: maybe
-where: agtermCore/Sources/SessionHostRuntime/Host.swift:handle(ensure:)
+where: HangarCore/Sources/SessionHostRuntime/Host.swift:handle(ensure:)
 added: 2026-11-01
 ---
 # a fast Live --command loses its output in the session-host handoff
 
-A Live `--command` pane is created in two steps: `agterm-session-host` attaches with the full payload, waits
+A Live `--command` pane is created in two steps: `hangar-session-host` attaches with the full payload, waits
 for a leader, terminates its client and answers `.ok(.created)`; the pane's client then attaches again. zmx
 ends a daemon on PTY EOF whoever is attached (`loop.zig` `daemonLoop`), so a command that ends inside that gap
 is gone before the pane connects. The pane's attach carries a "session is gone" guard payload, so it ends with

@@ -15,25 +15,25 @@ keeps today's session-wide behavior unchanged.
 
 ## Context (from discovery)
 
-- `agtermCore/Sources/agtermCore/Session.swift:142-183` — the eight session-overlay fields and the
+- `HangarCore/Sources/HangarCore/Session.swift:142-183` — the eight session-overlay fields and the
   `fullOverlayActive` / `floatingOverlayActive` derivations.
-- `agtermCore/Sources/agtermCore/AppStore+Panes.swift` — `openOverlay` / `resizeOverlay` /
+- `HangarCore/Sources/HangarCore/AppStore+Panes.swift` — `openOverlay` / `resizeOverlay` /
   `recordOverlayExit` / `closeOverlay`, plus the split lifecycle (`closeSplit`, `closePrimaryPane`,
   `closeSplitPane`) whose promotion path already migrates `restoreCommand` / `splitRestoreCommand`
   (line 108) — the exact precedent for migrating a pane overlay.
-- `agterm/Views/WindowContentView.swift:429-557` — `sessionDetail` with its three render sites, and
+- `Hangar/Views/WindowContentView.swift:429-557` — `sessionDetail` with its three render sites, and
   `overlayPanel` (`:562`), the always-present-sibling pattern this feature copies. The boundary note
   about not perturbing the NSSplitView wrapper is at `:514-519`.
-- `agtermCore/Sources/agtermCore/ControlDispatcher.swift` — `protocol ControlActions` (`:66-70`),
+- `HangarCore/Sources/HangarCore/ControlDispatcher.swift` — `protocol ControlActions` (`:66-70`),
   `ControlSessionOverlayOpenOptions` (`:106`), and ALL host-free overlay validation (`:523-556`). Per
   `.claude/rules/control-api.md`, validation belongs here, never in the app-side fallback switch.
-- `agtermCore/Sources/agtermCore/ControlProtocol.swift:146-152` — `ControlArgs.pane` (reached as
+- `HangarCore/Sources/HangarCore/ControlProtocol.swift:146-152` — `ControlArgs.pane` (reached as
   `request.args?.pane`) already exists and is shared by `session.focus` / `text` / `type` / `status` /
   `restore`, so `--pane` on the overlay commands is zero protocol churn. Its doc comment enumerates the
   consuming commands and must be extended.
-- `agterm/agtermApp.swift:399-428` — `makeOverlaySurface`, which already mints a per-overlay temp
+- `Hangar/hangarApp.swift:399-428` — `makeOverlaySurface`, which already mints a per-overlay temp
   exit-code file, so per-pane exit capture needs no new mechanism. The factory closure is threaded
-  through `agterm/ContentView.swift:18,65` and consumed at `agterm/Views/WindowContentView+Zoom.swift:177`.
+  through `Hangar/ContentView.swift:18,65` and consumed at `Hangar/Views/WindowContentView+Zoom.swift:177`.
 
 **Overlay surfaces are torn down at FIVE sites** — all five must learn about pane overlays or a
 `GhosttySurfaceView` leaks with a live process, along with the store→session→surface→closure retain cycle
@@ -45,7 +45,7 @@ keeps today's session-wide behavior unchanged.
 | `AppStore.swift:425` | `closeSession` |
 | `AppStore.swift:459` | `removeWorkspace` |
 | `AppStore+PendingClose.swift:405` | `hardFinalizePendingSession` |
-| `agterm/Views/WindowAccessor.swift:151` | window close |
+| `Hangar/Views/WindowAccessor.swift:151` | window close |
 
 Related patterns to follow: paired pane fields (`surface`/`splitSurface`, `fontSize`/`splitFontSize`,
 `restoreCommand`/`splitRestoreCommand`); observed state vs `@ObservationIgnored` surfaces; constant-shape
@@ -54,7 +54,7 @@ ZStacks with swapped content.
 ## Development Approach
 
 - **testing approach**: Regular (code first, then tests) — matching how the surrounding store/protocol
-  work is structured, with host-free tests in `agtermCore` and hosted coverage in `agtermUITests`.
+  work is structured, with host-free tests in `HangarCore` and hosted coverage in `HangarUITests`.
 - complete each task fully before moving to the next
 - make small, focused changes
 - **CRITICAL: every task MUST include new/updated tests** for code changes in that task
@@ -75,7 +75,7 @@ keymap or menu trigger — so rendering built first would have no way to be exer
 
 Per project CLAUDE.md, each task is done only when all of these pass:
 
-- `cd agtermCore && swift test` (host-free)
+- `cd HangarCore && swift test` (host-free)
 - `make test-app` (hosted AppKit)
 - `make lint` (strict SwiftLint, zero findings — 200-col lines, 1000-line files, 800-line types)
 - the change builds
@@ -87,14 +87,14 @@ before splitting — do not raise the limit reflexively.
 
 - **unit tests**: required for every task, one test file per source file, in the module that can import
   the code under test:
-  - `agtermCore/Tests/agtermCoreTests/SessionTests.swift` — `Session` derivations and predicates
-  - `agtermCore/Tests/agtermCoreTests/AppStorePaneTests.swift` — overlay/split/scratch store lifecycle
-  - `agtermCore/Tests/agtermCoreTests/TerminalZoomTests.swift` — surface enum predicates, `TerminalSurfaceID`
-  - `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift` — request/response round-trips
-  - `agtermCore/Tests/agtermCoreTests/ControlDispatcherTests.swift` — host-free command validation
-  - `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift` — **CLI flag parsing lives here**, a separate
-    test target; `agtermCoreTests` does not import `agtermctlKit` and cannot test CLI flags
-- **hosted UI tests** (`agtermUITests/`): `ControlOverlaySplitUITests.swift` for overlay-plus-split
+  - `HangarCore/Tests/HangarCoreTests/SessionTests.swift` — `Session` derivations and predicates
+  - `HangarCore/Tests/HangarCoreTests/AppStorePaneTests.swift` — overlay/split/scratch store lifecycle
+  - `HangarCore/Tests/HangarCoreTests/TerminalZoomTests.swift` — surface enum predicates, `TerminalSurfaceID`
+  - `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift` — request/response round-trips
+  - `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift` — host-free command validation
+  - `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift` — **CLI flag parsing lives here**, a separate
+    test target; `HangarCoreTests` does not import `hangarctlKit` and cannot test CLI flags
+- **hosted UI tests** (`HangarUITests/`): `ControlOverlaySplitUITests.swift` for overlay-plus-split
   behavior, `ControlSurfaceZoomUITests.swift` for zoom addressing.
 - **manual verification**: rendering behavior with no automated oracle (titlebar overrun, cursor shape,
   translucency bleed) is verified by eye on an isolated Debug instance at Task 6.
@@ -127,9 +127,9 @@ subview, never in a modifier wrapping it.
    `--pane`.
 3. **Paired slots, not a dictionary** — consistent with the codebase, gives plain keyPaths for
    `TerminalView`, and preserves the observed/ignored split the current code deliberately maintains.
-4. **`--pane left` allowed on a non-split session** — a non-split session reports `AGTERM_PANE=left`
-   (`agtermApp.swift:76` passes `pane: .left` unconditionally), so an agent can pass
-   `--pane "$AGTERM_PANE"` without branching on split state.
+4. **`--pane left` allowed on a non-split session** — a non-split session reports `HANGAR_PANE=left`
+   (`hangarApp.swift:76` passes `pane: .left` unconditionally), so an agent can pass
+   `--pane "$HANGAR_PANE"` without branching on split state.
 5. **Opening on an unmounted pane is rejected** — surfaces defer creation until nonzero backing size
    (`pendingSurfaceCreation`), so accepting it would leave a dead state: slot active, no surface, program
    never started. Hiding the split AFTER opening is fine — the surface exists, unmounts, the program
@@ -174,7 +174,7 @@ overlay placed inside a pane ZStack is hidden by a full session overlay or the s
 
 ## Technical Details
 
-### New types (agtermCore)
+### New types (HangarCore)
 
 ```swift
 /// Which pane a pane-scoped overlay covers. Deliberately two cases rather than reusing `StatusPane`:
@@ -336,8 +336,8 @@ helper on `Open` so the `--pane` forwarding is assertable.
 ### Task 1: Add the OverlayPane / PaneOverlay model and Session slots
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Session.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/SessionTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/SessionTests.swift`
 
 - [x] add `OverlayPane` (with `init?(controlName:)`) and `PaneOverlay` to `Session.swift`
 - [x] add the six paired slots (`leftOverlay`/`rightOverlay`, their surfaces, their exit codes) with the
@@ -350,13 +350,13 @@ helper on `Open` so the `--pane` forwarding is assertable.
       case and a session with no split surface
 - [x] write tests for `focusedOverlayPane` (nil when the focused pane's slot is empty, `.right` only
       when `splitFocused` AND `splitSurface != nil`, `.left` after a promotion)
-- [x] run `cd agtermCore && swift test` — must pass before task 2
+- [x] run `cd HangarCore && swift test` — must pass before task 2
 
 ### Task 2: Add store open / close / exit-record for pane overlays
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Panes.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStorePaneTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePaneTests.swift`
 
 - [x] add `openPaneOverlay(_:pane:command:cwd:wait:backgroundColor:)` returning a typed failure reason
       (already open / pane not visible) rather than a bare `Bool`, so the caller can pick the error string
@@ -371,18 +371,18 @@ helper on `Open` so the `--pane` forwarding is assertable.
       `waitAfterCommand` and `--wait` is not silently dropped
 - [x] write a test that two pane overlays open at once hold INDEPENDENT `backgroundColor` and `cwd`
       values, so neither slot can shadow the other
-- [x] run `cd agtermCore && swift test` — must pass before task 3
+- [x] run `cd HangarCore && swift test` — must pass before task 3
 
 ### Task 3: Free pane overlays at every teardown site
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Session.swift` (➕ the shared `teardownPaneOverlay(_:)` /
+- Modify: `HangarCore/Sources/HangarCore/Session.swift` (➕ the shared `teardownPaneOverlay(_:)` /
   `teardownPaneOverlays()` / `promotePaneOverlay()` helpers the five sites call)
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Panes.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+PendingClose.swift`
-- Modify: `agterm/Views/WindowAccessor.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStorePaneTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+PendingClose.swift`
+- Modify: `Hangar/Views/WindowAccessor.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePaneTests.swift`
 
 - [x] `closeSplit` tears down the right pane overlay and clears its slot and exit code
 - [x] `closePrimaryPane` MIGRATES the right pane overlay (slot, surface, exit code) into the left slot
@@ -402,23 +402,23 @@ helper on `Open` so the `--pane` forwarding is assertable.
 - [x] write tests for promotion migrating a right overlay to left with its exit code intact
 - [x] write tests for `closeSplit` tearing down only the right overlay, leaving a left one alive
 - [x] write tests that session close, workspace removal, and pending-close finalization each free both slots
-- [x] run `cd agtermCore && swift test`, `make lint` — must pass before task 4
+- [x] run `cd HangarCore && swift test`, `make lint` — must pass before task 4
 
 ### Task 4: Extend the control protocol and dispatcher
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agtermCore/Sources/agtermCore/Session.swift` (➕ the `paneOverlayExitCode(_:)` accessor the
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift` (➕ the `paneOverlayExitCode(_:)` accessor the
   `overlay.result --pane` arm reads)
-- Modify: `agterm/Control/ControlServer+SessionActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/MockControlActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStorePaneTests.swift` (➕ the `controlTree` population test,
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePaneTests.swift` (➕ the `controlTree` population test,
   which needs a live store)
-- Add: `agtermCore/Tests/agtermCoreTests/ControlDispatcherOverlayTests.swift` (➕ `ControlDispatcherTests`
+- Add: `HangarCore/Tests/HangarCoreTests/ControlDispatcherOverlayTests.swift` (➕ `ControlDispatcherTests`
   was at 1960 of its 2000-line cap, so the `session.overlay.*` family moved out whole, following the
   existing `ControlDispatcherDashboardTests` / `…PickTests` / `…WorkspaceTests` carve-outs)
 
@@ -436,13 +436,13 @@ helper on `Open` so the `--pane` forwarding is assertable.
       `--pane` on `session.overlay.resize`
 - [x] write tests for `paneOverlays` read-back — omitted when none, both panes when both open
 - [x] write tests that omitting `--pane` still drives the session-wide overlay unchanged
-- [x] run `cd agtermCore && swift test`, `make lint` — must pass before task 5
+- [x] run `cd HangarCore && swift test`, `make lint` — must pass before task 5
 
-### Task 5: Add --pane to agtermctl
+### Task 5: Add --pane to hangarctl
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
 
 - [x] add `--pane` to `overlay open`, `overlay close`, and `overlay result` with help text stating pane
       overlays are always full-pane
@@ -456,7 +456,7 @@ helper on `Open` so the `--pane` forwarding is assertable.
 - [x] write a test that `--block` forwards `--pane` into the poll request — without it the poll queries
       the session-wide slot and blocks forever
 - [x] write a test that `--block` with `--wait` is still rejected at parse time when `--pane` is given
-- [x] run `cd agtermCore && swift test`, `make lint` — must pass before task 6
+- [x] run `cd HangarCore && swift test`, `make lint` — must pass before task 6
 - ➕ `Open.validate()` also rejects `--pane` with `--size-percent` at parse time, matching the file's
       convention of catching mutually-exclusive combos before the socket; the dispatcher still re-checks it
       for raw socket clients
@@ -464,12 +464,12 @@ helper on `Open` so the `--pane` forwarding is assertable.
 ### Task 6: Render pane overlays at all three sites
 
 **Files:**
-- Modify: `agterm/agtermApp.swift`
-- Modify: `agterm/ContentView.swift`
-- Modify: `agterm/Views/WindowContentView.swift`
-- Modify: `agterm/Views/WindowContentView+Zoom.swift`
-- Modify: `agtermUITests/ControlOverlaySplitUITests.swift`
-- Add: `agterm/Views/WindowContentView+Detail.swift` (➕ the detail deck — `detailPane`, `sessionDetail`,
+- Modify: `Hangar/hangarApp.swift`
+- Modify: `Hangar/ContentView.swift`
+- Modify: `Hangar/Views/WindowContentView.swift`
+- Modify: `Hangar/Views/WindowContentView+Zoom.swift`
+- Modify: `HangarUITests/ControlOverlaySplitUITests.swift`
+- Add: `Hangar/Views/WindowContentView+Detail.swift` (➕ the detail deck — `detailPane`, `sessionDetail`,
   `overlayPanel`, `paneOverlayPanel`, `paneDim` — moved out whole; the pane-overlay rendering pushed
   `WindowContentView.swift` to 1004 lines, past its 1000-line cap, so it follows the existing
   `+Zoom` / `+Dashboard` / `+Titlebar` / `+RecentSessions` carve-outs rather than raising the limit)
@@ -501,22 +501,22 @@ helper on `Open` so the `--pane` forwarding is assertable.
       An untouched pre-existing test (`testOverlayOpenRequiresCommand`) fails identically at the same
       point, so this is a host authorization gate, not a defect in the change. Run them after approving
       the prompt:
-      `xcodebuild test -project agterm.xcodeproj -scheme agterm -destination 'platform=macOS'
-      -only-testing:agtermUITests/ControlOverlaySplitUITests/testPaneOverlayOpenAndCloseKeepSplitRatio
-      -only-testing:agtermUITests/ControlOverlaySplitUITests/testPaneOverlayLeavesSiblingPaneInteractive`
+      `xcodebuild test -project Hangar.xcodeproj -scheme hangar -destination 'platform=macOS'
+      -only-testing:HangarUITests/ControlOverlaySplitUITests/testPaneOverlayOpenAndCloseKeepSplitRatio
+      -only-testing:HangarUITests/ControlOverlaySplitUITests/testPaneOverlayLeavesSiblingPaneInteractive`
 
 ### Task 7: Per-pane visibility, focus, and cover handling
 
 **Files:**
-- Modify: `agterm/Views/WindowContentView+Detail.swift` (➕ the detail deck moved here in Task 6, so the
+- Modify: `Hangar/Views/WindowContentView+Detail.swift` (➕ the detail deck moved here in Task 6, so the
   per-pane `deckVisible`/`isActive` work lands here rather than in `WindowContentView.swift`)
-- Modify: `agterm/AppActions.swift`
-- Modify: `agterm/AppActions+Focus.swift`
-- Modify: `agterm/Notifications/NotificationManager.swift`
-- Modify: `agterm/agtermApp.swift` (➕ the pane overlay's `onFocusChange`, which moves `splitFocused` the
+- Modify: `Hangar/AppActions.swift`
+- Modify: `Hangar/AppActions+Focus.swift`
+- Modify: `Hangar/Notifications/NotificationManager.swift`
+- Modify: `Hangar/hangarApp.swift` (➕ the pane overlay's `onFocusChange`, which moves `splitFocused` the
   way its pane's own surface does)
-- Modify: `agtermCore/Sources/agtermCore/Session.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/SessionTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/SessionTests.swift`
 
 - [x] make the pane's `deckVisible` and `isActive` each account for that pane's own overlay, so a
       covered pane registers no drag types and sets no mouse cursor (the issue #225 class)
@@ -535,7 +535,7 @@ helper on `Open` so the `--pane` forwarding is assertable.
 - [x] write tests for `topmostSurface` across the precedence matrix (session overlay, scratch, focused
       pane overlay, unfocused pane overlay, bare pane)
 - [x] write tests for focus routing with a pane overlay on the focused and unfocused pane
-- [x] run `cd agtermCore && swift test`, `make test-app`, `make lint` — must pass before task 8
+- [x] run `cd HangarCore && swift test`, `make test-app`, `make lint` — must pass before task 8
 - ➕ `focusSplitPane`'s cover routing moved into host-free `Session.focusTarget(wantSplit:)`, so the pane
       rung is testable in `SessionTests` (`AppStoreFocusTests` owns the sidebar focus FILTER, not pane focus)
 - ➕ a pane overlay's `onFocusChange` writes `splitFocused` like its pane's surface does; without it a
@@ -543,7 +543,7 @@ helper on `Open` so the `--pane` forwarding is assertable.
 - ⚠️ `make test-app` could NOT be executed: `automationmodetool` reports "Automation Mode is disabled.
       This device requires user authentication to enable Automation Mode", so testmanagerd refuses
       xcodebuild's `XCTestManager_IDEInterface` channel and the host hangs in
-      `-[XCTestDriver _prepareTestConfigurationAndIDESession]` (verified with `sample`: no agterm frames
+      `-[XCTestDriver _prepareTestConfigurationAndIDESession]` (verified with `sample`: no hangar frames
       on the stack) until `The test runner hung before establishing connection`. Reproduced twice; the
       gate engaged when Task 6's XCUITest run requested Automation Mode, minutes after the last passing
       `make test-app`. `swift test` (2151), `make build`, and `make lint` all pass. Re-run after
@@ -552,12 +552,12 @@ helper on `Open` so the `--pane` forwarding is assertable.
 ### Task 8: Add the zoom surface cases and restore predicate exclusivity
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/TerminalZoom.swift`
-- Modify: `agterm/Views/WindowContentView+Zoom.swift`
-- Modify: `agterm/Views/WindowContentView+Detail.swift` (➕ `paneOverlayPanel` is the CALLER that has to
+- Modify: `HangarCore/Sources/HangarCore/TerminalZoom.swift`
+- Modify: `Hangar/Views/WindowContentView+Zoom.swift`
+- Modify: `Hangar/Views/WindowContentView+Detail.swift` (➕ `paneOverlayPanel` is the CALLER that has to
   consult `deckHostsSurface` for the new slots; the predicate itself needed no change)
-- Modify: `agtermCore/Tests/agtermCoreTests/TerminalZoomTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/DashboardTargetTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/TerminalZoomTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/DashboardTargetTests.swift`
 
 - [x] add `overlayLeft` / `overlayRight` cases with their `controlName` spellings
 - [x] implement `isAvailable` / `isActive` / `isVisible` for both, and NARROW `.primary` / `.split` per
@@ -569,7 +569,7 @@ helper on `Open` so the `--pane` forwarding is assertable.
       on/off) — this is the exclusivity guarantee `resolveTarget` relies on
 - [x] write tests for `TerminalSurfaceID` round-tripping `surface:<uuid>:overlay-left` and `-right`
 - [x] write a regression test that `DashboardTarget` still refuses `overlay-left` / `overlay-right`
-- [x] run `cd agtermCore && swift test`, `make lint` — must pass before task 9
+- [x] run `cd HangarCore && swift test`, `make lint` — must pass before task 9
 - ➕ the exclusivity property test asserts EXACTLY one active case, not just at most one: the narrowed
       predicates stay total, which is what makes `resolveTarget`'s `?? .primary` fallback unreachable
 - ➕ `isVisible`'s four pane cases share a `paneVisible(_:in:)` helper so the pane and its overlay cannot
@@ -579,8 +579,8 @@ helper on `Open` so the `--pane` forwarding is assertable.
 ### Task 9: Hosted UI coverage
 
 **Files:**
-- Modify: `agtermUITests/ControlOverlaySplitUITests.swift`
-- Modify: `agtermUITests/ControlSurfaceZoomUITests.swift`
+- Modify: `HangarUITests/ControlOverlaySplitUITests.swift`
+- Modify: `HangarUITests/ControlSurfaceZoomUITests.swift`
 
 - [x] add a test opening both pane overlays simultaneously and closing them independently
 - [x] add a test asserting the rejection when the split is hidden
@@ -608,24 +608,24 @@ helper on `Open` so the `--pane` forwarding is assertable.
 ### Task 10: Update the synchronized documentation surfaces
 
 **Files:**
-- Modify: `plugins/agterm/skills/agterm/SKILL.md`
-- Modify: `plugins/agterm/skills/agterm/reference.md`
-- Modify: `plugins/agterm/skills/agterm/examples.md`
+- Modify: `plugins/hangar/skills/hangar/SKILL.md`
+- Modify: `plugins/hangar/skills/hangar/reference.md`
+- Modify: `plugins/hangar/skills/hangar/examples.md`
 - Modify: `README.md`
 - Modify: `site/commands.html`
 - Modify: `site/docs.html`
 
 - [x] document `--pane` on the three overlay commands and the always-full-pane rule in the skill
 - [x] document the `paneOverlays` tree field and the `overlay-left` / `overlay-right` surface ids
-- [x] add an examples.md recipe for the agent case (`--pane "$AGTERM_PANE"` against
-      `"$AGTERM_SESSION_ID"`)
+- [x] add an examples.md recipe for the agent case (`--pane "$HANGAR_PANE"` against
+      `"$HANGAR_SESSION_ID"`)
 - [x] mirror the command, its arguments, and the read-back field into `site/commands.html`, and the
       feature into `README.md` + `site/docs.html`
-- [x] confirm `plugins/agterm/skills/agterm/troubleshooting.md` needs no change (it mentions overlays)
+- [x] confirm `plugins/hangar/skills/hangar/troubleshooting.md` needs no change (it mentions overlays)
 - [x] do NOT bump any command count — this adds arguments, not commands, so `SkillInstallTests`'
       `Command summary (N commands)` assertion and the count mentions in `site/commands.html` stay put
 - [x] do NOT touch `CHANGELOG.md` (release-only) or `cookbook/` (not a synchronized surface)
-- [x] run `cd agtermCore && swift test`, `make lint` — must pass before task 11
+- [x] run `cd HangarCore && swift test`, `make lint` — must pass before task 11
 - ➕ `troubleshooting.md` confirmed unchanged: its overlay mentions are the Edit Keymap editor overlay
       and the exit-127 flash-and-vanish, neither of which pane scoping touches.
 - ➕ the skill's `paneOverlays` entry states it is reported independently of the session-wide `overlay`
@@ -635,7 +635,7 @@ helper on `Open` so the `--pane` forwarding is assertable.
 ### Task 11: Verify acceptance criteria
 
 **Files:**
-- Modify: `agtermUITests/ControlOverlaySplitUITests.swift` (➕ the two hosted tests closing the
+- Modify: `HangarUITests/ControlOverlaySplitUITests.swift` (➕ the two hosted tests closing the
   behavioral-equivalence coverage hole found by this verification)
 
 - [x] verify all requirements from Overview are implemented — pane scoping with a live sibling
@@ -654,7 +654,7 @@ helper on `Open` so the `--pane` forwarding is assertable.
       - no-pane dispatcher/app arms: `ControlDispatcher.swift:565-604` falls to the same `actions.*`
         calls, and `ControlServer+SessionActions.swift:24-99` keeps the original `openOverlay` /
         `closeOverlay` / `overlayActive` branches verbatim in the `else` arm;
-        `overlaySpec(for:pane: nil)` (`agtermApp.swift:459-464`) rebuilds the session-wide values and
+        `overlaySpec(for:pane: nil)` (`hangarApp.swift:459-464`) rebuilds the session-wide values and
         only a pane sets `onFocusChange`. `sessionOverlayCommandsStaySessionWideWithoutPane` pins it
       - size percent: rejected in `ControlDispatcher.swift:555-557` and again at parse time in
         `SessionCommands.swift:641-643`; `session.overlay.resize` refuses ANY `--pane`
@@ -683,7 +683,7 @@ helper on `Open` so the `--pane` forwarding is assertable.
       `teardownPaneOverlay(.left)` + `promotePaneOverlay()` in `closePrimaryPane` (`:128-129`);
       `closeSplitPane` needs no call of its own because both its branches delegate to `closeSession` or
       `closeSplit`
-- [x] run full host-free suite: `cd agtermCore && swift test` — 2156 tests in 84 suites, 0 failures
+- [x] run full host-free suite: `cd HangarCore && swift test` — 2156 tests in 84 suites, 0 failures
 - [x] run hosted suite: `make test-app` — 91 tests, 0 failures
 - [x] run `make lint` — zero findings
 - ➕ `make build` — BUILD SUCCEEDED. Both pane-overlay XCUITest classes ran whole:
@@ -739,10 +739,10 @@ Launch an isolated Debug instance — never the default socket, never the deploy
 
 ```bash
 mkdir -p /tmp/agt-po
-open -n build/DerivedData/Build/Products/Debug/agterm.app --env AGTERM_STATE_DIR=/tmp/agt-po
+open -n build/DerivedData/Build/Products/Debug/Hangar.app --env HANGAR_STATE_DIR=/tmp/agt-po
 ```
 
-Address its CLI with the Debug binary's full path and the same `AGTERM_STATE_DIR`. Then:
+Address its CLI with the Debug binary's full path and the same `HANGAR_STATE_DIR`. Then:
 
 - split a session, set a non-default divider (`session resize --split-ratio 0.3`), open a pane overlay on
   the right, and confirm the divider does not jump to center — the automated oracle covers this, but a
@@ -765,15 +765,15 @@ Address its CLI with the Debug binary's full path and the same `AGTERM_STATE_DIR
 ## Known issues (pre-existing, out of scope)
 
 **A failed `ghostty_surface_new` strands an overlay slot forever.**
-`GhosttySurfaceView.createSurface()` (`agterm/Ghostty/GhosttySurfaceView.swift:502`) ends its allocation with
+`GhosttySurfaceView.createSurface()` (`Hangar/Ghostty/GhosttySurfaceView.swift:502`) ends its allocation with
 `guard let surface else { return }`, returning silently after `TerminalView.makeNSView` has already parked
 the view in the session's overlay slot. Nothing reports the failure and nothing retires the slot, so it stays
 occupied with `isRealized == false` on a still-rendered pane: `session.overlay.result --pane` answers
 `overlay still running` for good and `--block` never returns. `dropUnrealizedPaneOverlays`
-(`agtermCore/Sources/agtermCore/Session.swift`) does not reach it — that slot's pane is still laid out, which
+(`HangarCore/Sources/HangarCore/Session.swift`) does not reach it — that slot's pane is still laid out, which
 is a legitimate host.
 This is not introduced by this branch. On `origin/master` `AppStore.openOverlay`
-(`agtermCore/Sources/agtermCore/AppStore+Panes.swift:159-171`) sets `session.overlayActive = true` the same
+(`HangarCore/Sources/HangarCore/AppStore+Panes.swift:159-171`) sets `session.overlayActive = true` the same
 way, `TerminalSurface.isRealized` does not exist there at all, and no test on master pins realization — so a
 failed allocation already strands the shipped SESSION-WIDE overlay identically. Fixing it for pane overlays
 alone would leave the two overlay kinds inconsistent; the real fix is to surface every surface kind's
@@ -786,5 +786,5 @@ outside this branch's scope.
 Smells pre-check: skipped — non-Go project
 
 Plan-review: NEEDS REVISION applied — added the four missed teardown sites, retargeted validation to
-`ControlDispatcher`, retargeted CLI tests to `agtermctlKitTests`, defined `focusedOverlayPane`, added the
+`ControlDispatcher`, retargeted CLI tests to `hangarctlKitTests`, defined `focusedOverlayPane`, added the
 ⌘W / focus / search / notification gaps, and resequenced so the control path precedes rendering.

@@ -1,8 +1,8 @@
-# agterm tasks — a thin front door over scripts/*.sh (the scripts stay the source of truth).
+# hangar tasks — a thin front door over scripts/*.sh (the scripts stay the source of truth).
 # Run `make` (or `make help`) to list targets.
 
 INSTALL_DIR := $(HOME)/Applications
-RELEASE_APP := build/DerivedData/Build/Products/Release/agterm.app
+RELEASE_APP := build/DerivedData/Build/Products/Release/Hangar.app
 
 .DEFAULT_GOAL := help
 .PHONY: help prep generate build run release deploy test test-app lint dist clean
@@ -14,11 +14,11 @@ help: ## list targets
 prep: ## build libghostty + ghostty resources (one-time, idempotent)
 	./scripts/setup.sh
 
-generate: prep ## regenerate agterm.xcodeproj from project.yml
+generate: prep ## regenerate Hangar.xcodeproj from project.yml
 	xcodegen generate
 
 build: generate ## debug build, no launch
-	xcodebuild -project agterm.xcodeproj -scheme agterm -configuration Debug \
+	xcodebuild -project Hangar.xcodeproj -scheme hangar -configuration Debug \
 	  -derivedDataPath build/DerivedData build
 
 run: ## debug build + launch (scripts/run.sh)
@@ -28,11 +28,11 @@ release: ## release build, no launch (scripts/build.sh)
 	./scripts/build.sh
 
 deploy: release ## release build + copy to ~/Applications
-	rm -rf "$(INSTALL_DIR)/agterm.app"
-	cp -R "$(RELEASE_APP)" "$(INSTALL_DIR)/agterm.app"
-	@echo "installed $(INSTALL_DIR)/agterm.app"
+	rm -rf "$(INSTALL_DIR)/Hangar.app"
+	cp -R "$(RELEASE_APP)" "$(INSTALL_DIR)/Hangar.app"
+	@echo "installed $(INSTALL_DIR)/Hangar.app"
 
-test: ## host-free agtermCore unit tests (scripts/test.sh)
+test: ## host-free HangarCore unit tests (scripts/test.sh)
 	./scripts/test.sh
 
 test-app: ## application-hosted AppKit unit tests (scripts/test-app.sh)

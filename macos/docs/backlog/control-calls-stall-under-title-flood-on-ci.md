@@ -1,12 +1,12 @@
 ---
 worth: later
-where: agterm/Control/ControlServer.swift, libghostty App.drainMailbox
+where: Hangar/Control/ControlServer.swift, libghostty App.drainMailbox
 added: 2026-11-11
 ---
 # control calls stall for seconds under an OSC title flood on 3-vCPU runners, cause unknown
 
 The surface teardown smoke's eight-producer case (`spam-8`) failed about 20 CI runs: with two to seven panes
-printing titles in a loop, one `agtermctl session new`, `tree` or `session close` got no reply for 5 to 125 s.
+printing titles in a loop, one `hangarctl session new`, `tree` or `session close` got no reply for 5 to 125 s.
 The case is retired; `docs/ci-flakes.md` lists every run and what was measured. The stall itself is not
 explained, and nothing in CI watches for it now.
 

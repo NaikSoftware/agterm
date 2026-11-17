@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Antigravity CLI (agy) SessionStart hook: pin this agterm pane's restore
-# command to `agy --conversation <conversationId>` so restarting agterm
+# Antigravity CLI (agy) SessionStart hook: pin this hangar pane's restore
+# command to `agy --conversation <conversationId>` so restarting hangar
 # reopens the pane's own conversation.
 
 set -u
@@ -8,9 +8,9 @@ set -u
 payload=$(cat)
 printf '{}\n'
 
-[ -n "${AGTERM_SESSION_ID:-}" ] || exit 0
-[ -n "${AGTERM_PANE_ID:-}" ] || exit 0
-[ -n "${AGTERM_SOCKET:-}" ] || exit 0
+[ -n "${HANGAR_SESSION_ID:-}" ] || exit 0
+[ -n "${HANGAR_PANE_ID:-}" ] || exit 0
+[ -n "${HANGAR_SOCKET:-}" ] || exit 0
 
 # An agy worker spawned inside a Claude Code session shares the pane with its
 # parent. The pane's restore pin belongs to the outer session, not the child.
@@ -58,20 +58,20 @@ case "$conversation_id" in
   ""|-*|*[!A-Za-z0-9_-]*) exit 0 ;;
 esac
 
-agtermctl_bin=${AGTERMCTL:-agtermctl}
-if ! command -v "$agtermctl_bin" >/dev/null 2>&1; then
-  if [ -z "${AGTERMCTL:-}" ] && [ -x "${HOME:-}/Applications/agterm.app/Contents/MacOS/agtermctl" ]; then
-    agtermctl_bin="${HOME:-}/Applications/agterm.app/Contents/MacOS/agtermctl"
-  elif [ -z "${AGTERMCTL:-}" ] && [ -x /Applications/agterm.app/Contents/MacOS/agtermctl ]; then
-    agtermctl_bin=/Applications/agterm.app/Contents/MacOS/agtermctl
+hangarctl_bin=${HANGARCTL:-hangarctl}
+if ! command -v "$hangarctl_bin" >/dev/null 2>&1; then
+  if [ -z "${HANGARCTL:-}" ] && [ -x "${HOME:-}/Applications/Hangar.app/Contents/MacOS/hangarctl" ]; then
+    hangarctl_bin="${HOME:-}/Applications/Hangar.app/Contents/MacOS/hangarctl"
+  elif [ -z "${HANGARCTL:-}" ] && [ -x /Applications/Hangar.app/Contents/MacOS/hangarctl ]; then
+    hangarctl_bin=/Applications/Hangar.app/Contents/MacOS/hangarctl
   else
     exit 0
   fi
 fi
 
-"$agtermctl_bin" session restore "agy --conversation $conversation_id" \
-  --target "$AGTERM_SESSION_ID" \
-  --pane-id "$AGTERM_PANE_ID" \
-  --socket "$AGTERM_SOCKET" >/dev/null 2>&1 || true
+"$hangarctl_bin" session restore "agy --conversation $conversation_id" \
+  --target "$HANGAR_SESSION_ID" \
+  --pane-id "$HANGAR_PANE_ID" \
+  --socket "$HANGAR_SOCKET" >/dev/null 2>&1 || true
 
 exit 0

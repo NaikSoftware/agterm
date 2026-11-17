@@ -1,0 +1,127 @@
+import Foundation
+import Testing
+@testable import HangarCore
+
+/// A store backed by a throwaway temp directory so mutation-time saves never
+/// touch the real Application Support path. PersistenceStore creates the
+/// directory lazily on first write.
+@MainActor func makeStore() -> AppStore {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("hangar-tests-\(UUID().uuidString)")
+    return AppStore(persistence: PersistenceStore(directory: dir))
+}
+
+@MainActor func makeHeadlessSession(split: Bool) -> (store: AppStore, session: Session) {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("hangar-tests-\(UUID().uuidString)")
+    let store = AppStore(persistence: PersistenceStore(directory: dir), paneFinalizer: nil, headless: true)
+    let workspace = store.addWorkspace(name: "server")
+    let session = store.addSession(toWorkspace: workspace.id, cwd: "/srv")!
+    session.daemonBackedPanes = [session.paneIdentity]
+    if split {
+        session.hasSplit = true
+        session.splitPaneIdentity = UUID()
+        session.daemonBackedPanes.insert(session.splitPaneIdentity!)
+    }
+    return (store, session)
+}
+
+/// The same throwaway store, plus the Open Recent store it records closes into and the persistence it
+/// writes through, for the paths that read back what a close or a restore persisted.
+@MainActor func makeStoreWithRecentClosed() -> (AppStore, RecentClosedStore, PersistenceStore) {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("hangar-tests-\(UUID().uuidString)")
+    let recentClosed = RecentClosedStore(directory: dir)
+    let persistence = PersistenceStore(directory: dir)
+    return (AppStore(persistence: persistence, recentClosedStore: recentClosed), recentClosed, persistence)
+}
+
+@MainActor func addPageRow(to store: AppStore, workspace: UUID, overlay: HtmlOverlay, cwd: String = "/page",
+                           backgroundColor: String? = nil) throws -> Session {
+    let page = try #require(store.addSession(toWorkspace: workspace, cwd: cwd, content: .page))
+    #expect(store.openHtmlOverlay(page.id, pane: nil, overlay: overlay, sizePercent: nil, backgroundColor: backgroundColor) == nil)
+    return page
+}
+
+@MainActor struct CompanionGroup {
+    let store: AppStore
+    let work: Workspace
+    let personal: Workspace
+    let parent: Session
+    let first: Session
+    let second: Session
+    let after: Session
+
+    init() throws {
+        store = makeStore()
+        work = store.addWorkspace(name: "work")
+        personal = store.addWorkspace(name: "personal")
+        guard let parent = store.addSession(toWorkspace: work.id, cwd: "/parent"),
+              let after = store.addSession(toWorkspace: work.id, cwd: "/after") else { throw CompanionGroupFailure.setup }
+        self.parent = parent
+        self.after = after
+        first = try store.addCompanion(to: parent.id, options: CompanionOptions(cwd: "/first")).get()
+        second = try store.addCompanion(to: parent.id, options: CompanionOptions(cwd: "/second")).get()
+    }
+
+    var order: [UUID] { store.workspaces[0].sessions.map(\.id) }
+}
+
+enum CompanionGroupFailure: Error {
+    case setup
+}
+
+@MainActor
+final class RecordingAttachLines: RemoteAttachLines {
+    var panes: [(daemon: String, local: UUID)] = []
+    var scratches: [String] = []
+    var scratchLocals: [UUID] = []
+
+    func paneAttach(_ origin: RemoteBinding.Origin, daemon: String, local: UUID) -> String {
+        panes.append((daemon, local))
+        return "attach-pane \(daemon)"
+    }
+
+    func scratchAttach(_ origin: RemoteBinding.Origin, daemon: String, local: UUID) -> String {
+        scratches.append(daemon)
+        scratchLocals.append(local)
+        return "attach-scratch \(daemon)"
+    }
+}
+
+final class SpySurface: PaneRoleMutableSurface {
+    var teardownCount = 0
+    var promotedCount = 0
+    var assignedRoles: [SwappablePaneRole] = []
+    var calls: [String] = []
+    var paneToken: String
+    var backedByZmx: Bool
+    /// Defaults to a live terminal, the state a surface parked in a session slot reaches a beat later; the
+    /// stranded-slot cases set it false.
+    var isRealized = true
+    init(paneToken: String = "", backedByZmx: Bool = false) {
+        self.paneToken = paneToken
+        self.backedByZmx = backedByZmx
+    }
+    func teardown() { teardownCount += 1; calls.append("teardown") }
+    func endForegroundJob() { calls.append("endForegroundJob") }
+    func promoteToPrimaryPane() { promotedCount += 1 }
+    func setPaneRole(_ role: SwappablePaneRole) { assignedRoles.append(role) }
+}
+
+let attachedEndpoint = ControlZmxEndpoint(executable: "/bin/zmx", socketDirectory: "/tmp/zmx")
+
+@MainActor func addAttachedRow(to store: AppStore, workspace: UUID, host: String = "box", origin: String = "o1",
+                               page: Bool = false, split: Bool = false, catalogOwned: Bool = false) throws -> Session {
+    let row = try #require(store.addSession(toWorkspace: workspace, cwd: "/a", remoteHost: host, remoteSessionID: origin,
+                                            content: page ? .page : .terminal))
+    var daemons: [UUID: String] = page ? [:] : [row.paneIdentity: ZmxSupport.daemonName(for: UUID())]
+    if split {
+        let splitPane = UUID()
+        row.hasSplit = true
+        row.splitPaneIdentity = splitPane
+        daemons[splitPane] = ZmxSupport.daemonName(for: UUID())
+    }
+    store.bindRemote(RemoteBinding(remoteSessionID: origin, daemonsByLocalPane: daemons, presentationVersion: 1,
+                                   origin: RemoteBinding.Origin(host: host, endpoint: attachedEndpoint, sessionName: origin),
+                                   catalogOwned: catalogOwned),
+                     forSession: row.id)
+    return row
+}

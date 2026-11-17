@@ -1,6 +1,6 @@
 ---
 worth: later
-where: agtermTests/SessionHostFishSeamTests.swift
+where: HangarTests/SessionHostFishSeamTests.swift
 added: 2026-10-25
 ---
 # fish seam payload tests time out intermittently, cause unknown

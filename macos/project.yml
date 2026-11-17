@@ -1,4 +1,4 @@
-name: agterm
+name: Hangar
 options:
   bundleIdPrefix: com.umputun
   deploymentTarget:
@@ -19,7 +19,7 @@ settings:
     ARCHS: arm64
     ONLY_ACTIVE_ARCH: NO
     SWIFT_STRICT_CONCURRENCY: complete
-    # The agtermTests scheme intentionally builds serially so the app's deep-sign
+    # The HangarTests scheme intentionally builds serially so the app's deep-sign
     # phase finishes before Xcode places its hosted test bundle inside the app.
     DISABLE_MANUAL_TARGET_ORDER_BUILD_WARNING: YES
     DEAD_CODE_STRIPPING: YES
@@ -36,19 +36,19 @@ settings:
       ONLY_ACTIVE_ARCH: NO
 
 packages:
-  agtermCore:
-    path: agtermCore
+  HangarCore:
+    path: HangarCore
 
 targets:
-  agterm:
+  Hangar:
     type: application
     platform: macOS
     sources:
-      - path: agterm
+      - path: Hangar
         excludes:
           - "Info.plist"
-          - "agterm.entitlements"
-          - "agterm-debug.entitlements"
+          - "hangar.entitlements"
+          - "hangar-debug.entitlements"
           - "Resources/ghostty"
           - "Resources/terminfo"
           - "Resources/zmx"
@@ -56,7 +56,7 @@ targets:
           - "Resources/hud"
           - "Resources/markdown"
           - "Resources/file-icons"
-          # committed SOURCE for agterm's own bundled theme(s); setup.sh stages it
+          # committed SOURCE for hangar's own bundled theme(s); setup.sh stages it
           # into Resources/ghostty/themes (above), so the source dir itself must not
           # be pulled into the project tree or the app bundle.
           - "Resources/custom-themes"
@@ -66,7 +66,7 @@ targets:
       # Contents/Resources/ghostty — GHOSTTY_RESOURCES_DIR points here, matching
       # a real Ghostty.app so libghostty resolves themes/shell-integration and
       # derives TERMINFO as ../terminfo (the sibling dir below).
-      - path: agterm/Resources/ghostty
+      - path: Hangar/Resources/ghostty
         type: folder
         buildPhase: resources
       # Compiled terminfo DB so TERM=xterm-ghostty resolves without a
@@ -74,49 +74,49 @@ targets:
       # (terminfo/78/xterm-ghostty) and extensionless files. MUST land at
       # Contents/Resources/terminfo — a SIBLING of ghostty/ — so libghostty's
       # dirname(GHOSTTY_RESOURCES_DIR)/terminfo derivation hits it.
-      - path: agterm/Resources/terminfo
+      - path: Hangar/Resources/terminfo
         type: folder
         buildPhase: resources
       # Agent-status hooks package (the generic wrapper, shell integration, and
       # agent-specific lifecycle adapters). Folder reference (not the default "group") so the
       # extensionless .sh files, the shell/ subdir, and the exec bit survive.
       # Lands at Contents/Resources/agent-status — the installer copies it from
-      # there to ~/.config/agterm/agent-status.
-      - path: agterm/Resources/agent-status
+      # there to ~/.config/hangar/agent-status.
+      - path: Hangar/Resources/agent-status
         type: folder
         buildPhase: resources
       # The session.hud panel painter. Folder reference (not the default "group") so hud.sh keeps its
       # exec bit. Lands at Contents/Resources/hud — ControlServer.helperCommand() resolves it there and
       # shell-escapes it into the overlay command.
-      - path: agterm/Resources/hud
+      - path: Hangar/Resources/hud
         type: folder
         buildPhase: resources
       # The markdown page renderer and stylesheet, with the vendored libraries' LICENSE files, which a group
       # would drop for having no extension. Lands at Contents/Resources/markdown; MarkdownAssets reads it.
-      - path: agterm/Resources/markdown
+      - path: Hangar/Resources/markdown
         type: folder
         buildPhase: resources
       # Atom file-icons TTF fonts with their LICENSE texts. Lands at Contents/Resources/file-icons;
       # FileIconRenderer registers the fonts from there.
-      - path: agterm/Resources/file-icons
+      - path: Hangar/Resources/file-icons
         type: folder
         buildPhase: resources
       # Agent skill package (SKILL.md + reference.md + examples.md + cookbook.md + troubleshooting.md
       # + scripts).
-      # It lives at plugins/agterm/skills/agterm so the SAME directory is also the skill source for
+      # It lives at plugins/hangar/skills/hangar so the SAME directory is also the skill source for
       # the Claude Code and Codex plugin manifests — one copy, three consumers. Folder reference so
-      # the whole dir copies verbatim to Contents/Resources/agterm; the installer copies it from
-      # there to ~/.claude/skills/agterm.
-      - path: ../plugins/agterm/skills/agterm
+      # the whole dir copies verbatim to Contents/Resources/hangar; the installer copies it from
+      # there to ~/.claude/skills/hangar.
+      - path: ../plugins/hangar/skills/hangar
         type: folder
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: ua.naiksoftware.agterm2
-        PRODUCT_NAME: agterm
-        INFOPLIST_FILE: agterm/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: ua.naiksoftware.hangar
+        PRODUCT_NAME: Hangar
+        INFOPLIST_FILE: Hangar/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CODE_SIGN_ENTITLEMENTS: agterm/agterm.entitlements
+        CODE_SIGN_ENTITLEMENTS: Hangar/hangar.entitlements
         MARKETING_VERSION: "0.0.0"
         CURRENT_PROJECT_VERSION: "0.0.0"
         GIT_COMMIT: ""
@@ -132,13 +132,13 @@ targets:
       configs:
         # Debug/dev builds get a DISTINCT bundle id. XCUITest terminates any running instance of the
         # app-under-test's bundle id before launching, so a shared id would kill the deployed Release
-        # app the user runs daily. Release keeps the real id (ua.naiksoftware.agterm2) — only Debug is
+        # app the user runs daily. Release keeps the real id (ua.naiksoftware.hangar) — only Debug is
         # isolated. State/socket are path-based, not bundle-id-derived: a Debug launch without
-        # AGTERM_STATE_DIR adopts its own agterm-debug directory (DebugStateDirectory).
+        # HANGAR_STATE_DIR adopts its own hangar-debug directory (DebugStateDirectory).
         Debug:
-          PRODUCT_BUNDLE_IDENTIFIER: ua.naiksoftware.agterm2.debug
+          PRODUCT_BUNDLE_IDENTIFIER: ua.naiksoftware.hangar.debug
           # Debug alone needs the three hardened-runtime exceptions; see the header of the file.
-          CODE_SIGN_ENTITLEMENTS: agterm/agterm-debug.entitlements
+          CODE_SIGN_ENTITLEMENTS: Hangar/hangar-debug.entitlements
     postBuildScripts:
       # Build the Swift helpers here; setup.sh stages the pinned zmx binary and license.
       - name: Bundle helper executables
@@ -151,18 +151,18 @@ targets:
           # placeholder grid (so it must not win over the compiled icon), and its source xattrs would
           # otherwise trip the re-seal below.
           rm -rf "$CODESIGNING_FOLDER_PATH/Contents/Resources/AppIcon.icon"
-          core="$SRCROOT/agtermCore"
-          # the embedded Info.plist gives a hand-run agtermctl its own TCC identity and Bluetooth usage string
-          swift build --package-path "$core" -c release --product agtermctl \
-            -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$core/Sources/agtermctl/Info.plist"
-          swift build --package-path "$core" -c release --product agterm-session-host
-          src="$(swift build --package-path "$core" -c release --product agtermctl --show-bin-path)/agtermctl"
-          host_src="$(dirname "$src")/agterm-session-host"
-          cli_dest="$CODESIGNING_FOLDER_PATH/Contents/MacOS/agtermctl"
-          host_dest="$CODESIGNING_FOLDER_PATH/Contents/MacOS/agterm-session-host"
-          zmx_src="$SRCROOT/agterm/Resources/zmx/zmx"
+          core="$SRCROOT/HangarCore"
+          # the embedded Info.plist gives a hand-run hangarctl its own TCC identity and Bluetooth usage string
+          swift build --package-path "$core" -c release --product hangarctl \
+            -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$core/Sources/hangarctl/Info.plist"
+          swift build --package-path "$core" -c release --product hangar-session-host
+          src="$(swift build --package-path "$core" -c release --product hangarctl --show-bin-path)/hangarctl"
+          host_src="$(dirname "$src")/hangar-session-host"
+          cli_dest="$CODESIGNING_FOLDER_PATH/Contents/MacOS/hangarctl"
+          host_dest="$CODESIGNING_FOLDER_PATH/Contents/MacOS/hangar-session-host"
+          zmx_src="$SRCROOT/Hangar/Resources/zmx/zmx"
           zmx_dest="$CODESIGNING_FOLDER_PATH/Contents/MacOS/zmx"
-          license_src="$SRCROOT/agterm/Resources/zmx/LICENSE"
+          license_src="$SRCROOT/Hangar/Resources/zmx/LICENSE"
           license_dest="$CODESIGNING_FOLDER_PATH/Contents/Resources/zmx/LICENSE"
           [ -x "$zmx_src" ] || { echo "staged zmx not found at $zmx_src" >&2; exit 1; }
           [ -f "$license_src" ] || { echo "zmx license not found at $license_src" >&2; exit 1; }
@@ -184,7 +184,7 @@ targets:
           codesign --force --options runtime --sign - "$zmx_dest"
           # re-seal the whole app: this phase can run AFTER Xcode's own code-sign on incremental
           # builds, so adding the helper would otherwise break the seal. --deep because a clean
-          # build can reach here before Xcode has signed agterm.debug.dylib. Entitlements come in a
+          # build can reach here before Xcode has signed hangar.debug.dylib. Entitlements come in a
           # SECOND pass instead: --deep applies them to every nested binary, and helpers carry no app
           # TCC entitlements.
           codesign --force --deep --options runtime --sign - "$CODESIGNING_FOLDER_PATH"
@@ -193,9 +193,9 @@ targets:
     dependencies:
       - framework: GhosttyKit.xcframework
         embed: false
-      - package: agtermCore
-      - package: agtermCore
-        product: AgtermResponsibility
+      - package: HangarCore
+      - package: HangarCore
+        product: HangarResponsibility
       - sdk: AppKit.framework
       # libghostty calls Text Input Source Services (TISCopyCurrentKeyboard…)
       # which live in Carbon; required to link the prebuilt xcframework.
@@ -208,41 +208,41 @@ targets:
       - sdk: MetalKit.framework
       - sdk: QuartzCore.framework
 
-  agtermUITests:
+  HangarUITests:
     type: bundle.ui-testing
     platform: macOS
     sources:
-      - agtermUITests
+      - HangarUITests
     dependencies:
-      - target: agterm
-      - package: agtermCore
+      - target: Hangar
+      - package: HangarCore
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.umputun.agtermUITests
-        TEST_TARGET_NAME: agterm
+        PRODUCT_BUNDLE_IDENTIFIER: ua.naiksoftware.hangarUITests
+        TEST_TARGET_NAME: Hangar
         CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
         # UI test code drives XCTest APIs that aren't Sendable-clean; the strict
-        # checking the app/agtermCore use isn't needed (and breaks) here.
+        # checking the app/HangarCore use isn't needed (and breaks) here.
         SWIFT_STRICT_CONCURRENCY: minimal
         # the runner is ad-hoc signed; hardened runtime on the test bundle causes
         # a Team-ID mismatch when the runner loads the xctest bundle.
         ENABLE_HARDENED_RUNTIME: NO
 
-  agtermTests:
+  HangarTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - agtermTests
+      - HangarTests
     dependencies:
-      - target: agterm
+      - target: Hangar
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.umputun.agtermTests
+        PRODUCT_BUNDLE_IDENTIFIER: ua.naiksoftware.hangarTests
         GENERATE_INFOPLIST_FILE: YES
         # XCTest instantiates it at bundle load; it makes every hosted window transparent.
         INFOPLIST_KEY_NSPrincipalClass: HostedWindowHider
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/agterm.app/Contents/MacOS/agterm"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Hangar.app/Contents/MacOS/Hangar"
         BUNDLE_LOADER: "$(TEST_HOST)"
         CODE_SIGN_IDENTITY: "-"
         # Hosted AppKit tests call isolated app code on the main actor; strict
@@ -252,11 +252,11 @@ targets:
         ENABLE_HARDENED_RUNTIME: NO
 
 schemes:
-  agterm:
+  Hangar:
     build:
       targets:
-        agterm: all
-        agtermUITests: [test]
+        Hangar: all
+        HangarUITests: [test]
     run:
       config: Debug
     test:
@@ -264,32 +264,32 @@ schemes:
       # recording blocks ~25s per method before setUp; screenshots costs 0.13s and still captures failures
       preferredScreenCaptureFormat: screenshots
       targets:
-        - agtermUITests
+        - HangarUITests
     archive:
       config: Release
 
-  agtermTests:
+  HangarTests:
     build:
       # The app-hosted test bundle and host must be built serially; otherwise the
       # app target's final deep-sign phase can observe a half-built xctest bundle.
       parallelizeBuild: false
       targets:
-        agterm: all
-        agtermTests: [test]
+        Hangar: all
+        HangarTests: [test]
     test:
       config: Debug
-      macroExpansion: agtermTests
+      macroExpansion: HangarTests
       environmentVariables:
-        # Application-hosted XCTest starts `agtermApp.init()` before test `setUp`.
+        # Application-hosted XCTest starts `hangarApp.init()` before test `setUp`.
         # Isolate every eager app dependency at process launch, and keep the
         # control socket short enough for sockaddr_un without touching the live app.
-        AGTERM_STATE_DIR: "$(TARGET_TEMP_DIR)/agtermTests-state"
-        AGTERM_CONTROL_SOCKET: "/tmp/agterm-hosted-tests-$(UID).sock"
-        AGTERM_HOSTED_TESTS: "1"
+        HANGAR_STATE_DIR: "$(TARGET_TEMP_DIR)/HangarTests-state"
+        HANGAR_CONTROL_SOCKET: "/tmp/hangar-hosted-tests-$(UID).sock"
+        HANGAR_HOSTED_TESTS: "1"
         # exercise startup normalization and preserve a non-C text locale
         # clear LC_ALL so inherited values cannot override the category fixtures
         LC_ALL: ""
         LC_NUMERIC: "ru_RU.UTF-8"
         LC_CTYPE: "ru_RU.UTF-8"
       targets:
-        - agtermTests
+        - HangarTests

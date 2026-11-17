@@ -27,25 +27,25 @@ Key benefits:
 
 Files/components involved:
 
-- `agtermCore/Sources/agtermCore/AgentStatus.swift` — `AgentStatus.symbolName`, `AgentIndicator`, `StatusPane`
-- `agtermCore/Sources/agtermCore/AppSettings.swift` — the three `*StatusColorHex` fields (~208-210) and the
+- `HangarCore/Sources/HangarCore/AgentStatus.swift` — `AgentStatus.symbolName`, `AgentIndicator`, `StatusPane`
+- `HangarCore/Sources/HangarCore/AppSettings.swift` — the three `*StatusColorHex` fields (~208-210) and the
   `effectiveDockBounce` tolerant-decode accessor (~395)
-- `agtermCore/Sources/agtermCore/ControlProtocol.swift` — `ControlArgs`, `ControlSessionNode` (`statusColor` ~417)
-- `agtermCore/Sources/agtermCore/ControlModes.swift` — `ControlSessionStatusUpdate` (~139-165); NOT in `ControlProtocol.swift`
-- `agtermCore/Sources/agtermCore/ControlEvents.swift` — `ControlEventPayload`, which carries `color` (~19)
-- `agtermCore/Sources/agtermCore/AppStore+Status.swift` — `setAgentIndicator` emitting the `.status` event with `color` (~43-54)
-- `agtermCore/Sources/agtermCore/ControlDispatcher.swift` — the `.sessionStatus` arm (~320), already dispatcher-owned
-- `agtermCore/Sources/agtermCore/AppStore.swift` — `controlTree` (~183), builds the node incl. `statusColor` (~226).
+- `HangarCore/Sources/HangarCore/ControlProtocol.swift` — `ControlArgs`, `ControlSessionNode` (`statusColor` ~417)
+- `HangarCore/Sources/HangarCore/ControlModes.swift` — `ControlSessionStatusUpdate` (~139-165); NOT in `ControlProtocol.swift`
+- `HangarCore/Sources/HangarCore/ControlEvents.swift` — `ControlEventPayload`, which carries `color` (~19)
+- `HangarCore/Sources/HangarCore/AppStore+Status.swift` — `setAgentIndicator` emitting the `.status` event with `color` (~43-54)
+- `HangarCore/Sources/HangarCore/ControlDispatcher.swift` — the `.sessionStatus` arm (~320), already dispatcher-owned
+- `HangarCore/Sources/HangarCore/AppStore.swift` — `controlTree` (~183), builds the node incl. `statusColor` (~226).
   **Currently 995 lines against the swiftlint 1000-line cap — 5 lines of headroom.**
-- `agtermCore/Sources/agtermctlKit/SessionCommands.swift` — `struct Status` (~345) with its `--color` option + `validate()`
-- `agterm/Control/ControlServer+SessionActions.swift` — `setSessionStatus` (~343)
-- `agterm/Ghostty/GhosttyApp.swift` — `setAgentStatusColors` (~246), `statusColor(for:override:)` (~268)
-- `agterm/Views/SidebarRowViews.swift` — `StatusIconView` (~150-215), AppKit render site
-- `agterm/Views/StatusGlyph.swift` — SwiftUI render site
-- `agterm/Views/Palette.swift`, `agterm/AppActions+Palette.swift`, `agterm/Views/SessionSwitcher.swift`,
-  `agterm/Views/WindowContentView+RecentSessions.swift` — the three item models feeding `StatusGlyph`
-- `agterm/SettingsModel.swift` — color setters (~278-280), reset (~410-412), `applyAgentStatusColors` (~763)
-- `agterm/Views/SettingsView.swift` — Agent Status tab Colors section (~542-560), bindings (~596-609)
+- `HangarCore/Sources/hangarctlKit/SessionCommands.swift` — `struct Status` (~345) with its `--color` option + `validate()`
+- `Hangar/Control/ControlServer+SessionActions.swift` — `setSessionStatus` (~343)
+- `Hangar/Ghostty/GhosttyApp.swift` — `setAgentStatusColors` (~246), `statusColor(for:override:)` (~268)
+- `Hangar/Views/SidebarRowViews.swift` — `StatusIconView` (~150-215), AppKit render site
+- `Hangar/Views/StatusGlyph.swift` — SwiftUI render site
+- `Hangar/Views/Palette.swift`, `Hangar/AppActions+Palette.swift`, `Hangar/Views/SessionSwitcher.swift`,
+  `Hangar/Views/WindowContentView+RecentSessions.swift` — the three item models feeding `StatusGlyph`
+- `Hangar/SettingsModel.swift` — color setters (~278-280), reset (~410-412), `applyAgentStatusColors` (~763)
+- `Hangar/Views/SettingsView.swift` — Agent Status tab Colors section (~542-560), bindings (~596-609)
 
 Related patterns found:
 
@@ -60,7 +60,7 @@ Related patterns found:
   `raw.flatMap(Enum.init(rawValue:)) ?? fallback`, so an unknown value never fails the read (`effectiveDockBounce`).
 - **Shared resolver against drift.** Both render sites already call one `GhosttyApp.statusColor(for:override:)`
   so the AppKit and SwiftUI glyphs cannot diverge; shape gets the same treatment.
-- **Live repaint exists.** The sidebar Coordinator observes `.agtermAppearanceChanged` and calls
+- **Live repaint exists.** The sidebar Coordinator observes `.hangarAppearanceChanged` and calls
   `reapplyStatusGlyphs()`, which already repaints every visible row on a settings change.
 
 Dependencies identified: none new. No new package, no new persisted session state, no new control command.
@@ -79,7 +79,7 @@ Discovery evidence (already performed, do not redo):
 - **work in an isolated git worktree**: `git fetch origin master` FIRST so the worktree forks the current
   remote tip, create it with Claude Code's native `EnterWorktree` (never a manual `git worktree add`),
   then symlink the gitignored prebuilt artifacts BEFORE building — `GhosttyKit.xcframework` and
-  `agterm/Resources/{ghostty,terminfo}` — using ABSOLUTE targets for the two Resources symlinks
+  `Hangar/Resources/{ghostty,terminfo}` — using ABSOLUTE targets for the two Resources symlinks
 - complete each task fully before moving to the next
 - make small, focused changes
 - **CRITICAL: every task MUST include new/updated tests** for code changes in that task
@@ -91,7 +91,7 @@ Discovery evidence (already performed, do not redo):
   - tests cover both success and error scenarios
 - **CRITICAL: all tests must pass before starting next task** - no exceptions
 - **CRITICAL: update this plan file when scope changes during implementation**
-- run `cd agtermCore && swift test` after each change; the app must build and `make lint` must pass
+- run `cd HangarCore && swift test` after each change; the app must build and `make lint` must pass
 - maintain wire/settings compatibility: an unset shape must stay valid and decode to nil, rendering the
   built-in default (now the plain circle)
 
@@ -128,12 +128,12 @@ Discovery evidence (already performed, do not redo):
 
 ## Testing Strategy
 
-- **unit tests**: required for every task, host-free in `agtermCore` wherever the logic allows
+- **unit tests**: required for every task, host-free in `HangarCore` wherever the logic allows
   (`swift test`, no app host). The precedence resolver, the settings accessor, the protocol round-trip,
   the dispatcher validation, the tree read-back and the CLI request building are ALL host-free.
-- **e2e tests**: this project has XCUITest e2e coverage under `agtermUITests/`.
-  - control-channel change → extend `agtermUITests/ControlSidebarStatusUITests.swift` in the same task
-  - Settings UI change → extend `agtermUITests/SettingsUITests.swift` in the same task
+- **e2e tests**: this project has XCUITest e2e coverage under `HangarUITests/`.
+  - control-channel change → extend `HangarUITests/ControlSidebarStatusUITests.swift` in the same task
+  - Settings UI change → extend `HangarUITests/SettingsUITests.swift` in the same task
   - treat e2e tests with the same rigor as unit tests (must pass before next task)
 - **App-target exemption, stated explicitly so no task silently skips its gate.** Tasks 6, 7 and 8 wire
   app-target render sites and the `GhosttyApp`/`SettingsModel` mirrors. The app target has NO unit-test
@@ -159,7 +159,7 @@ Discovery evidence (already performed, do not redo):
 
 ## Solution Overview
 
-A new host-free `StatusShape` enum in `agtermCore` names the six shapes; its raw value maps 1:1 to the
+A new host-free `StatusShape` enum in `HangarCore` names the six shapes; its raw value maps 1:1 to the
 SF Symbol base name, so `symbolName` is `"\(rawValue).fill"`.
 Adding a shape later is one line in the enum plus the doc sites that enumerate the set BY HAND — the
 `ControlArgs.shape` doc comment, `site/commands.html` and the agent skill — since only the dispatcher's
@@ -178,7 +178,7 @@ tolerant decode.
 
 The app target mirrors the settings into `GhosttyApp` (as it already does for colors) and exposes one
 `statusSymbolName(for:override:)` that both render sites call. `SettingsModel` pushes the mirror in
-`applyAgentStatusShapes()` next to `applyAgentStatusColors()`; the existing `.agtermAppearanceChanged`
+`applyAgentStatusShapes()` next to `applyAgentStatusColors()`; the existing `.hangarAppearanceChanged`
 → `reapplyStatusGlyphs()` path repaints live with no new notification.
 
 The control side adds one argument, one read-back field and one event-payload field — no new command.
@@ -189,7 +189,7 @@ Key design decisions and rationale:
 
 - **Enum on the indicator, raw `String?` in settings.** The dispatcher validates at the boundary, so the
   runtime value is always a valid case; settings must survive hand-editing, so they decode tolerantly.
-- **Resolver in `agtermCore`, not `GhosttyApp`.** Colors live in `GhosttyApp` only because `NSColor` is
+- **Resolver in `HangarCore`, not `GhosttyApp`.** Colors live in `GhosttyApp` only because `NSColor` is
   AppKit. Shapes are strings, so the whole precedence is host-free and testable without an app host —
   the standing "hoist host-free logic down" direction.
 - **Read-back reports the per-call override only.** `statusShape` is nil when the glyph uses the Settings
@@ -199,7 +199,7 @@ Key design decisions and rationale:
 
 ## Technical Details
 
-New type in `agtermCore/Sources/agtermCore/AgentStatus.swift`, beside `StatusPane`:
+New type in `HangarCore/Sources/HangarCore/AgentStatus.swift`, beside `StatusPane`:
 
 ```swift
 public enum StatusShape: String, Codable, Sendable, CaseIterable {
@@ -215,7 +215,7 @@ public enum StatusShape: String, Codable, Sendable, CaseIterable {
 `displayName` is the host-free picker label, read by the Settings options and the picker's accessibility
 value, so the six names have ONE definition.
 `validNamesList` (pipe-joined) builds the dispatcher's rejection message and `validNamesPhrase`
-(comma-joined) the `agtermctl --shape` help text and its local rejection — both derived from `allCases`,
+(comma-joined) the `hangarctl --shape` help text and its local rejection — both derived from `allCases`,
 the `WatermarkConfig.validFits` precedent.
 
 Resolver replacing the `AgentStatus.symbolName` property:
@@ -294,7 +294,7 @@ shape: indicator.shape?.rawValue
 
 Processing flow for a `session.status blocked --shape triangle`:
 
-1. `agtermctl` validates the raw string locally in `Status.validate()` and sends `args.shape`
+1. `hangarctl` validates the raw string locally in `Status.validate()` and sends `args.shape`
 2. `ControlDispatcher` parses it to `StatusShape`, rejects unknown values before any mutation
 3. `ControlServer.setSessionStatus` folds it into the new `AgentIndicator`
 4. `AppStore.setAgentIndicator` stores it and emits a `.status` control event carrying `shape: "triangle"`
@@ -314,10 +314,10 @@ Processing flow for a `session.status blocked --shape triangle`:
 ### Task 1: Add StatusShape enum and the symbolName resolver
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AgentStatus.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AgentStatusTests.swift`
-- Modify: `agterm/Views/SidebarRowViews.swift` (call-site fixup only)
-- Modify: `agterm/Views/StatusGlyph.swift` (call-site fixup only)
+- Modify: `HangarCore/Sources/HangarCore/AgentStatus.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AgentStatusTests.swift`
+- Modify: `Hangar/Views/SidebarRowViews.swift` (call-site fixup only)
+- Modify: `Hangar/Views/StatusGlyph.swift` (call-site fixup only)
 
 - [x] add `public enum StatusShape: String, Codable, Sendable, CaseIterable` with the six cases and
       `symbolName` returning `"\(rawValue).fill"`, placed next to `StatusPane`, with a godoc comment
@@ -329,21 +329,21 @@ Processing flow for a `session.status blocked --shape triangle`:
       next `session.status` without `--shape`, mirroring `color`) and extend its `init`
 - [x] rewrite the `AgentStatus.symbolName` godoc, which currently describes it as a property with a fixed
       mapping, to document the two-level precedence
-- [x] update every in-repo caller of the old property (`agterm/Views/SidebarRowViews.swift`,
-      `agterm/Views/StatusGlyph.swift`) to compile — full render wiring lands in Tasks 6 and 7
+- [x] update every in-repo caller of the old property (`Hangar/Views/SidebarRowViews.swift`,
+      `Hangar/Views/StatusGlyph.swift`) to compile — full render wiring lands in Tasks 6 and 7
 - [x] write tests for `StatusShape.symbolName` covering all six cases
 - [x] write tests for the resolver precedence: override wins over configured (including an explicit
       `circle` override), configured wins over default, both nil returns the plain `circle.fill` for all
       three states, `idle` returns the empty string in every combination
 - [x] update the existing `AgentStatusTests` assertions that call the old `symbolName` property
-- [x] run `cd agtermCore && swift test` - must pass before next task
+- [x] run `cd HangarCore && swift test` - must pass before next task
 - [x] run `make build` - this task edits app-target files, so the app must compile before next task
 
 ### Task 2: Add the three Settings shape fields
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppSettings.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppSettingsTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppSettings.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppSettingsTests.swift`
 
 - [x] add `activeStatusShape` / `blockedStatusShape` / `completedStatusShape` as `public var String?`
       beside the three `*StatusColorHex` fields, and extend the memberwise `init`
@@ -356,20 +356,20 @@ Processing flow for a `session.status blocked --shape triangle`:
 - [x] fix the stale godoc directly above the color fields (~205-206), which says the `active` default is
       blue — `GhosttyApp.defaultActiveStatusColor` is `#DBD9E6`, a muted lavender-grey, and `.systemBlue`
       is only an unreachable parse fallback
-- [x] run `cd agtermCore && swift test` - must pass before next task
+- [x] run `cd HangarCore && swift test` - must pass before next task
 
 ### Task 3: Add the wire fields, the tree read-back and the event payload
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift` (`ControlArgs`, `ControlSessionNode`)
-- Modify: `agtermCore/Sources/agtermCore/ControlModes.swift` (`ControlSessionStatusUpdate`)
-- Modify: `agtermCore/Sources/agtermCore/ControlEvents.swift` (`ControlEventPayload`)
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift` (`controlTree`)
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Status.swift` (`setAgentIndicator` event emission)
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlEventProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreEventTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift` (`ControlArgs`, `ControlSessionNode`)
+- Modify: `HangarCore/Sources/HangarCore/ControlModes.swift` (`ControlSessionStatusUpdate`)
+- Modify: `HangarCore/Sources/HangarCore/ControlEvents.swift` (`ControlEventPayload`)
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (`controlTree`)
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Status.swift` (`setAgentIndicator` event emission)
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlEventProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreEventTests.swift`
 
 - [x] add `shape: String?` to `ControlArgs` with a doc comment matching the `color` one
 - [x] add `shape: StatusShape? = nil` to `ControlSessionStatusUpdate` in `ControlModes.swift` — the init
@@ -392,14 +392,14 @@ Processing flow for a `session.status blocked --shape triangle`:
 - [x] extend `AppStoreEventTests.normalizedStatusChangesEmitCompletePayloadsAndIdleEdge` (which already
       asserts `payload.color`) to assert `payload.shape`, and add a case that a shape-only change emits an
       event carrying it
-- [x] run `cd agtermCore && swift test` - must pass before next task
+- [x] run `cd HangarCore && swift test` - must pass before next task
 
 ### Task 4: Validate and apply --shape in the control path
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agterm/Control/ControlServer+SessionActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift`
 
 - [x] add the shape parse/validate block to the `.sessionStatus` arm beside the color check, deriving
       the error message from `StatusShape.allCases`
@@ -410,15 +410,15 @@ Processing flow for a `session.status blocked --shape triangle`:
 - [x] write tests that an invalid shape is rejected with the `allCases`-derived message AND that no
       mutation reached the mock actions
 - [x] write a test that `--shape` alongside `status: idle` is accepted (and simply carries no glyph)
-- [x] run `cd agtermCore && swift test` - must pass before next task
-- [x] run `make build` - this task edits `agterm/Control/ControlServer+SessionActions.swift`, so the app
+- [x] run `cd HangarCore && swift test` - must pass before next task
+- [x] run `make build` - this task edits `Hangar/Control/ControlServer+SessionActions.swift`, so the app
       must compile before next task
 
-### Task 5: Add the agtermctl session status --shape option
+### Task 5: Add the hangarctl session status --shape option
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
 
 - [x] add the `--shape` `@Option` to `struct Status` beside `--color`, help text listing the six shapes
       and stating it reverts on the next status set without it
@@ -426,13 +426,13 @@ Processing flow for a `session.status blocked --shape triangle`:
 - [x] pass `shape` through `makeRequest()` into `ControlArgs`
 - [x] write a test that `session status blocked --shape triangle` builds a request carrying the shape
 - [x] write a test that an unknown shape fails `validate()` without a round-trip
-- [x] run `cd agtermCore && swift test` - must pass before next task
+- [x] run `cd HangarCore && swift test` - must pass before next task
 
 ### Task 6: Mirror shapes into GhosttyApp and render in the sidebar
 
 **Files:**
-- Modify: `agterm/Ghostty/GhosttyApp.swift`
-- Modify: `agterm/Views/SidebarRowViews.swift`
+- Modify: `Hangar/Ghostty/GhosttyApp.swift`
+- Modify: `Hangar/Views/SidebarRowViews.swift`
 
 - [x] add three `private(set) var …StatusShape: StatusShape?` properties and
       `setAgentStatusShapes(active:blocked:completed:)` beside the color equivalents
@@ -458,11 +458,11 @@ Processing flow for a `session.status blocked --shape triangle`:
 ### Task 7: Render shapes in the SwiftUI glyph and its three item models
 
 **Files:**
-- Modify: `agterm/Views/StatusGlyph.swift`
-- Modify: `agterm/Views/Palette.swift`
-- Modify: `agterm/AppActions+Palette.swift`
-- Modify: `agterm/Views/SessionSwitcher.swift`
-- Modify: `agterm/Views/WindowContentView+RecentSessions.swift`
+- Modify: `Hangar/Views/StatusGlyph.swift`
+- Modify: `Hangar/Views/Palette.swift`
+- Modify: `Hangar/AppActions+Palette.swift`
+- Modify: `Hangar/Views/SessionSwitcher.swift`
+- Modify: `Hangar/Views/WindowContentView+RecentSessions.swift`
 
 - [x] add `var shape: StatusShape?` to `StatusGlyph` beside `colorHex` and resolve through
       `GhosttyApp.statusSymbolName(for:override:)`
@@ -483,7 +483,7 @@ Processing flow for a `session.status blocked --shape triangle`:
 ### Task 8: Wire the Settings model
 
 **Files:**
-- Modify: `agterm/SettingsModel.swift`
+- Modify: `Hangar/SettingsModel.swift`
 
 - [x] add `setActiveStatusShape(_:)` / `setBlockedStatusShape(_:)` / `setCompletedStatusShape(_:)` beside
       the color hex setters, each calling `persistAndApply()`
@@ -491,7 +491,7 @@ Processing flow for a `session.status blocked --shape triangle`:
       call sites (init-time apply and the settings-changed apply)
 - [x] clear the three shape fields in the reset-to-defaults path alongside the color hexes, and update
       `resetAgentStatus()`'s doc comment, which currently enumerates only the three colors and the sound
-- [x] verify the existing `.agtermAppearanceChanged` → `reapplyStatusGlyphs()` path repaints the sidebar
+- [x] verify the existing `.hangarAppearanceChanged` → `reapplyStatusGlyphs()` path repaints the sidebar
       on a shape change with no new notification
 - [x] build the app (`make build`) - must succeed before next task
 - [x] no unit tests here by the app-target exemption stated in Testing Strategy; this task's behavior is
@@ -500,8 +500,8 @@ Processing flow for a `session.status blocked --shape triangle`:
 ### Task 9: Add the Settings Shapes pickers
 
 **Files:**
-- Modify: `agterm/Views/SettingsView.swift`
-- Modify: `agtermUITests/SettingsUITests.swift`
+- Modify: `Hangar/Views/SettingsView.swift`
+- Modify: `HangarUITests/SettingsUITests.swift`
 
 - [x] merge the Agent Status tab's Colors section into a **Colors and Shapes** section with ONE ROW PER
       STATUS (Active / Blocked / Completed) — a `LabeledContent` row whose trailing side carries that
@@ -536,7 +536,7 @@ Processing flow for a `session.status blocked --shape triangle`:
 ### Task 10: Add the control e2e coverage
 
 **Files:**
-- Modify: `agtermUITests/ControlSidebarStatusUITests.swift`
+- Modify: `HangarUITests/ControlSidebarStatusUITests.swift`
 
 - [x] add a test sending `session.status` with a valid `shape` and asserting `ok`
 - [x] assert the `agent-status` element still reports the state name (the silhouette itself is not
@@ -558,7 +558,7 @@ Processing flow for a `session.status blocked --shape triangle`:
       amber exclamation, `completed` a green check") to note the shapes are configurable, and document
       the Settings Agent Status shape pickers and the six-shape set. While rewriting that sentence, fix
       its stale "blue" — the `active` default is `#DBD9E6`, a muted lavender-grey
-- [x] add a `--shape` line to the `agtermctl session status … --color` example block in `README.md` (~448)
+- [x] add a `--shape` line to the `hangarctl session status … --color` example block in `README.md` (~448)
 - [x] mirror both into `site/docs.html` — the legend is a three-swatch visual block (~1794-1815), not
       prose, so it needs the same treatment in its own markup, including the same stale "blue ellipsis"
       label at ~1795
@@ -580,16 +580,16 @@ missing `events.read` entry were corrected on `site/commands.html`, `site/docs.h
 ### Task 12: Update the agent skill and the rule notes
 
 **Files:**
-- Modify: `agterm/Resources/agent-skill/SKILL.md`
-- Modify: `agterm/Resources/agent-skill/reference.md`
-- Modify: `agterm/Resources/agent-skill/examples.md`
+- Modify: `Hangar/Resources/agent-skill/SKILL.md`
+- Modify: `Hangar/Resources/agent-skill/reference.md`
+- Modify: `Hangar/Resources/agent-skill/examples.md`
 - Modify: `.claude/rules/notifications.md`
 - Modify: `.claude/rules/control-api.md`
 - Modify: `.claude/rules/settings.md`
 
 The agent skill is FOUR files, not one — `--color`/`statusColor` appear in three of them, and each site
-needs the shape twin. Edit ONLY `agterm/Resources/agent-skill/`; the installed copies under
-`~/.claude/skills/agterm/` are regenerated outputs and must never be touched.
+needs the shape twin. Edit ONLY `Hangar/Resources/agent-skill/`; the installed copies under
+`~/.claude/skills/hangar/` are regenerated outputs and must never be touched.
 
 - [x] `SKILL.md` (~157): add `statusShape` to the tree-field paragraph naming `statusBlink`/`statusColor`
 - [x] `SKILL.md` (~252): add `[--shape ...]` to the `session status` command-summary flag list
@@ -637,7 +637,7 @@ needs the shape twin. Edit ONLY `agterm/Resources/agent-skill/`; the installed c
       the next `session.status` without `--shape` falls back to the Settings shape — the resolver's
       `override ?? configured ?? .circle` is unit-covered in `AgentStatusTests`, and the e2e
       `testSessionStatusShapeValidatesAndReadsBack` asserts the per-call set plus the omit-clears-it leg
-- [x] verify an invalid shape is rejected by both `agtermctl` locally and the dispatcher remotely —
+- [x] verify an invalid shape is rejected by both `hangarctl` locally and the dispatcher remotely —
       CLI `Status.validate()` (`SessionCommands.swift` ~377) throws before any round-trip; the dispatcher
       (`ControlDispatcher.swift` ~327-335) rejects with the `allCases`-derived message before any mutation
 - [x] verify all five `--color` legs have a shape twin: indicator, dispatcher validation, `tree` read-back,
@@ -645,14 +645,14 @@ needs the shape twin. Edit ONLY `agterm/Resources/agent-skill/`; the installed c
       `AgentIndicator.shape`, the dispatcher parse block, `AppStore.controlTree` `statusShape:` (line 227,
       beside `statusColor`), `AppSettings.effectiveStatusShape(for:)` mirrored via
       `GhosttyApp.statusSymbolName(for:override:)`, and `AppStore+Status.swift` `shape:` (line 53)
-- [x] ➕ SIXTH leg found while auditing the five: `EventFormatter.human` (`agtermctlKit/EventCommands.swift`)
+- [x] ➕ SIXTH leg found while auditing the five: `EventFormatter.human` (`hangarctlKit/EventCommands.swift`)
       printed `color=` for a `status` event with no `shape=` twin, so the human-readable `events.read`
       output silently dropped the shape that `ControlEventPayload.shape` carries — this feature's own
       drift, not pre-existing. Emitted `shape=` beside `color=` following the neighbouring fields'
       convention, and extended `EventCommandsTests.formattersCoverEveryKindAndNDJSONIsOneBareEvent` with a
       both-present case (the existing shape-absent status event already covers the omitted leg)
-- [x] run the full host-free suite: `cd agtermCore && swift test` — 1765 tests in 73 suites passed
-- [x] run the e2e suite (`agtermUITests`), including the settings and control status tests — scoped to the
+- [x] run the full host-free suite: `cd HangarCore && swift test` — 1765 tests in 73 suites passed
+- [x] run the e2e suite (`HangarUITests`), including the settings and control status tests — scoped to the
       two methods this feature added, per the `.claude/rules/ui-tests.md` cadence rule (a full run
       re-executes 77 unrelated classes for ~460 s):
       `ControlSidebarStatusUITests/testSessionStatusShapeValidatesAndReadsBack` and
@@ -692,13 +692,13 @@ needs the shape twin. Edit ONLY `agterm/Resources/agent-skill/`; the installed c
       (`EventCommandsTests.formattersCoverEveryKindAndNDJSONIsOneBareEvent`)
 - [x] update `CLAUDE.md` only if a new cross-cutting pattern was discovered — yes, one: an argument whose
       value rides a control EVENT owes the CLI's human line, not just the payload field, because a
-      `ControlEventPayload` field with no `EventFormatter.human` arm is invisible in `agtermctl events`'
+      `ControlEventPayload` field with no `EventFormatter.human` arm is invisible in `hangarctl events`'
       default non-`--json` mode. Added as a keep-in-sync bullet with the six-vs-five miss as its evidence.
       Also fixed CLAUDE.md's own read-back list, which paired `session.status` with
       `statusBlink`/`statusColor` and had not gained `statusShape` for `--shape`
 - [ ] move this plan to `docs/plans/completed/` — performed by the orchestrator after the review phases,
       not by this task
-- [x] run the full suite one final time (`cd agtermCore && swift test`, `make lint`) - must pass —
+- [x] run the full suite one final time (`cd HangarCore && swift test`, `make lint`) - must pass —
       1765 tests in 73 suites passed; `make lint` clean under `--strict`
 
 ## Post-Completion
@@ -707,8 +707,8 @@ needs the shape twin. Edit ONLY `agterm/Resources/agent-skill/`; the installed c
 
 **Manual verification**:
 
-- launch an isolated dev instance (`open -n --env AGTERM_STATE_DIR=<tmp>` with a SHORT `/tmp` socket
-  path, never touching the deployed `~/Applications/agterm.app`) and confirm by eye that the six shapes
+- launch an isolated dev instance (`open -n --env HANGAR_STATE_DIR=<tmp>` with a SHORT `/tmp` socket
+  path, never touching the deployed `~/Applications/Hangar.app`) and confirm by eye that the six shapes
   read as distinct in the sidebar at the default and at an increased sidebar font size
 - confirm the shapes remain legible against both a light and a dark theme, and while blinking
 - confirm the SwiftUI glyph in the ⌃P attention palette, the Ctrl-Tab switcher and the attention-bell

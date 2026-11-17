@@ -1,8 +1,8 @@
 ---
 paths:
-  - "macos/agtermCore/Tests/**"
-  - "macos/agtermTests/**"
-  - "macos/agtermUITests/**"
+  - "macos/HangarCore/Tests/**"
+  - "macos/HangarTests/**"
+  - "macos/HangarUITests/**"
 ---
 
 ## Tests that do not flake

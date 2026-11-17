@@ -20,7 +20,7 @@ exists; the leak remains because `HostRetirement` excludes the current endpoint)
 
 ## Context (from discovery)
 
-- Codex source map for mail counts: `/tmp/agterm-pending-counts-source-map.md` (bb843406).
+- Codex source map for mail counts: `/tmp/hangar-pending-counts-source-map.md` (bb843406).
 - Mail: `MessageBus` (`@MainActor`, process-wide `shared`, four mutators), `AppStore+Messages.swift`
   (`publishMessageQueued`, `emitRemoteMessage`, `applyCatalogMail`, `pendingMessages(_:pane:token:)`,
   `scratchPendingMessages`), `Session.catalogMail`.
@@ -107,8 +107,8 @@ exists; the leak remains because `HostRetirement` excludes the current endpoint)
   of the host it left. The overlay is a modifier inside each arranged subview, which the constant-shape rule
   allows; no call site changes. `QuickTerminalPane` gets the same wrapper. Remote panes render through the local
   surface and get it unchanged.
-- Label text from a host-free function in agtermCore (`LinkHover.swift`): control and bidi-format scalars
-  neutralized, one line, middle-truncated to a fixed length, and for a resolving `agterm://session/<uuid>` link
+- Label text from a host-free function in HangarCore (`LinkHover.swift`): control and bidi-format scalars
+  neutralized, one line, middle-truncated to a fixed length, and for a resolving `hangar://session/<uuid>` link
   the target session's name. The input is terminal-controlled text drawn in chrome, and the feature's purpose is
   showing the real target of a mislabeled link, so spoofing through format characters is the defect to prevent.
   It grants no capability: the label is display only.
@@ -143,8 +143,8 @@ pinned to 4 CPUs, several runs each.
 ### Task 1: Spawn lock unlocks before close
 
 **Files:**
-- Modify: `agtermCore/Sources/SessionHostRuntime/ClientConnector.swift`
-- Modify: `agtermCore/Tests/SessionHostRuntimeTests/ClientConnectorTests.swift`
+- Modify: `HangarCore/Sources/SessionHostRuntime/ClientConnector.swift`
+- Modify: `HangarCore/Tests/SessionHostRuntimeTests/ClientConnectorTests.swift`
 
 - [x] write the failing regression: inside `Starter.spawnDisclaimed`, find the spawn-lock descriptor by comparing
   open fds against the `realpath` of `paths.spawnLock` (as `StateDirectoryLockTests` does) and `dup` it; after
@@ -156,8 +156,8 @@ pinned to 4 CPUs, several runs each.
 ### Task 2: Async test waits
 
 **Files:**
-- Modify: `agtermCore/Tests/agtermCoreTests/HudHelperTests.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/OverlayRunJobTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HudHelperTests.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/OverlayRunJobTests.swift`
 - Modify: `docs/ci-flakes.md`
 
 - [x] record the baseline: the startup stall (first trivial `@MainActor` test durations) in `swift:6.3.2-noble`
@@ -174,16 +174,16 @@ One task because the new `mail` frame case breaks `RemotePresentationClient.appl
 viewer handles it; no temporary ignore case.
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/PresentationFrames.swift`, `PresentationHub.swift`, `MessageBus.swift`,
+- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`, `PresentationHub.swift`, `MessageBus.swift`,
   `AppStore+Presentation.swift`, `AppStore+Messages.swift`, `RemotePresentationClient.swift`, `Session.swift`,
   `AppStore+RemotePresentation.swift`
-- Modify: `agterm/Control/ControlServer.swift`, `ControlServer+Presentation.swift`,
-  `ControlServer+RemotePresentation.swift`, `agtermCore/Sources/AgtermServerKit/ServerStreams.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PresentationFramesTests.swift`, `PresentationHubTests.swift`,
+- Modify: `Hangar/Control/ControlServer.swift`, `ControlServer+Presentation.swift`,
+  `ControlServer+RemotePresentation.swift`, `HangarCore/Sources/HangarServerKit/ServerStreams.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PresentationFramesTests.swift`, `PresentationHubTests.swift`,
   `AppStoreMessagesTests.swift`, `RemotePresentationClientTests.swift`,
-  `agtermCore/Tests/AgtermServerTests/ServerActionsMessagesTests.swift`
-- Modify: `agtermTests/ControlServerRemotePresentationTests.swift`, `agtermTests/ControlServerMessagesTests.swift`
-- Modify: `plugins/agterm/skills/agterm/reference.md`, `site/commands.html`, `.claude/rules/control-api.md`
+  `HangarCore/Tests/HangarServerTests/ServerActionsMessagesTests.swift`
+- Modify: `HangarTests/ControlServerRemotePresentationTests.swift`, `HangarTests/ControlServerMessagesTests.swift`
+- Modify: `plugins/hangar/skills/hangar/reference.md`, `site/commands.html`, `.claude/rules/control-api.md`
 
 Origin side:
 
@@ -210,27 +210,27 @@ Viewer side:
 - [x] hosted: count read-back through the real `remoteEffects` wiring; Mac-origin publication after ack
 - [x] docs: read-back notes in `reference.md` and `site/commands.html` (counts now on rows attached alone and
   from another Mac), the source rule in `control-api.md`; in the same `commands.html` paragraph, correct the
-  stale claim that `events read` is not served on agterm-server (`ServerEvents.swift` serves it)
+  stale claim that `events read` is not served on hangar-server (`ServerEvents.swift` serves it)
 - [x] run the touched suites; must pass
 
 ### Task 4: Link target on hover
 
 **Files:**
-- Modify: `agterm/Ghostty/GhosttyCallbacks.swift`, `agterm/Ghostty/GhosttySurfaceView.swift`,
-  `agterm/Views/TerminalView.swift`, `agterm/Views/QuickTerminal.swift`
-- Create: `agtermCore/Sources/agtermCore/LinkHover.swift`, `agtermCore/Tests/agtermCoreTests/LinkHoverTests.swift`
+- Modify: `Hangar/Ghostty/GhosttyCallbacks.swift`, `Hangar/Ghostty/GhosttySurfaceView.swift`,
+  `Hangar/Views/TerminalView.swift`, `Hangar/Views/QuickTerminal.swift`
+- Create: `HangarCore/Sources/HangarCore/LinkHover.swift`, `HangarCore/Tests/HangarCoreTests/LinkHoverTests.swift`
 - Modify: `site/docs.html`
 
 - [x] check whether libghostty at `83fb956` gates `MOUSE_OVER_LINK` on `link-previews`; record the answer here
   - answer: it does (`Surface.zig` cursor handling): OSC 8 unless `link-previews = false`, detected links only when
     `true`, only while ⌘ is held, and an empty url clears on leaving the link, including the -1,-1 exit and hide
-    reports; agterm adds no check of its own. A HUD's label goes to the bottom-left of the pane it floats over
+    reports; hangar adds no check of its own. A HUD's label goes to the bottom-left of the pane it floats over
     (Eugene, after the Debug look).
 - [x] handle `GHOSTTY_ACTION_MOUSE_OVER_LINK`; write the hovered link into the surface's hover model
 - [x] `TerminalView` wrapper with the `@Observable` hover model and the non-hit-testing bottom-leading label;
   `QuickTerminalPane` gets the same; clears on mouse exit, hide, host move and teardown
 - [x] `LinkHover` label text: neutralized control and bidi-format scalars, one line, middle truncation, session
-  name for a resolving `agterm://session/` link
+  name for a resolving `hangar://session/` link
 - [x] build and launch an isolated Debug instance and show Eugene the label (http link, session link, split pane,
   zoomed pane, scratch, quick terminal, HUD, remote pane) before writing tests
 - [x] `LinkHoverTests`: plain URL, session link resolving and not, each neutralized scalar class, truncation;
@@ -242,8 +242,8 @@ Viewer side:
 
 - [x] `git rm` the four fixed items; correct the two stale item texts
 - [x] verify every Overview item is implemented
-- [x] `cd agtermCore && swift test`, `make test-app`, `make lint`, each once
-- [x] `lsappinfo list | grep -A4 agterm.debug` after the hosted run
+- [x] `cd HangarCore && swift test`, `make test-app`, `make lint`, each once
+- [x] `lsappinfo list | grep -A4 hangar.debug` after the hosted run
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion

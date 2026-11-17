@@ -6,19 +6,19 @@
 - It follows the image click (#844): same origin rules, same fallbacks to reveal, same off-main read.
 - Local images the document references are embedded; remote images show their alt text. No file grant, no
   network, no control bridge, and the document's own JavaScript stays off.
-- `agtermctl session overlay open --markdown FILE` opens the same page from the control API, with tree
+- `hangarctl session overlay open --markdown FILE` opens the same page from the control API, with tree
   read-back.
 
 ## Context (from discovery)
-- Click routing: `agtermCore/Sources/agtermCore/LinkPolicy.swift` (`disposition`, `localPath`, `route`),
-  `agterm/Ghostty/LinkOpener.swift`, wiring in `agterm/agtermApp.swift`.
-- Image page as the model: `agterm/Control/ControlServer+ImagePage.swift`, `agterm/Views/ImageProbe.swift`,
-  `agtermCore/Sources/agtermCore/ImagePage.swift`, `HtmlSource.image` in `HtmlOverlay.swift`.
-- Page hosting: `agterm/Views/HtmlOverlayRegistry.swift` (`themed(_:linked:)` gates both the theme look and
+- Click routing: `HangarCore/Sources/HangarCore/LinkPolicy.swift` (`disposition`, `localPath`, `route`),
+  `Hangar/Ghostty/LinkOpener.swift`, wiring in `Hangar/hangarApp.swift`.
+- Image page as the model: `Hangar/Control/ControlServer+ImagePage.swift`, `Hangar/Views/ImageProbe.swift`,
+  `HangarCore/Sources/HangarCore/ImagePage.swift`, `HtmlSource.image` in `HtmlOverlay.swift`.
+- Page hosting: `Hangar/Views/HtmlOverlayRegistry.swift` (`themed(_:linked:)` gates both the theme look and
   the bridge install; `installScripts()` removes and reinstalls every user script as one set, and
   `applyTheme` reloads through it; `textLoaded`; `loadOriginal`; `imageLoad`, bumped by `close()`;
-  `browserURL`/`pageURL`; the `navigate` actions), `agterm/Views/HtmlOverlayView.swift` (toolbar switch,
-  `sourceText`), and in agtermCore `HtmlOverlay.identity`, `HtmlNavigationPolicy` (allows `about` before
+  `browserURL`/`pageURL`; the `navigate` actions), `Hangar/Views/HtmlOverlayView.swift` (toolbar switch,
+  `sourceText`), and in HangarCore `HtmlOverlay.identity`, `HtmlNavigationPolicy` (allows `about` before
   its source switch) and `presentationSource` (`AppStore+RemotePage.swift`).
 - Every switch over `HtmlSource` in the app target: the registry members above, `HtmlOverlayView`,
   `RemoteCompanionRequest.pageArguments` in `ControlServer+RemoteCompanions.swift`. `LinkOpener.follow`
@@ -29,13 +29,13 @@
   `ControlArgs.markdown` is already the HUD's `Bool?`; `OverlayHtmlError.oneSource`),
   `ControlProjection.swift` (`ControlHtmlOverlayNode.image`, manual CodingKeys), `AppStore+HtmlOverlay.swift`
   (projection), `SessionCommands.swift` (`overlay open --image`, its help and validation strings).
-- Symlink-resolved containment: `RemotePageResources.resolve` in agtermCore.
+- Symlink-resolved containment: `RemotePageResources.resolve` in HangarCore.
 - Vendored renderer: `cookbook/annotate-document/assets/markdown-it-14.1.0.min.js` and
   `highlight-11.11.1.min.js` with their LICENSE files; webrev's page CSS is the visual model.
 - Foundation's `.full` markdown parser reports `imageURL` for inline and reference-style images (probed).
 - `.md` is the existing tests' fixture for "a local file that is revealed" (`LinkPolicyTests`,
   `GhosttySurfaceViewInputTests`).
-- `project.yml` adds `agterm/` as a group and excludes each resource folder, which then gets its own
+- `project.yml` adds `hangar/` as a group and excludes each resource folder, which then gets its own
   folder-reference entry. `scripts/test-app.sh` runs `xcodegen generate` but forwards no arguments.
 
 ## Development Approach
@@ -55,14 +55,14 @@
 - maintain backward compatibility
 
 ## Testing Strategy
-- **package tests**: `cd agtermCore && swift test --filter <Suite>` during tasks.
-- **hosted tests**: `xcodegen generate`, then `xcodebuild test -project agterm.xcodeproj -scheme agtermTests
-  -destination 'platform=macOS' -derivedDataPath build/DerivedData -only-testing:agtermTests/<Class>`.
+- **package tests**: `cd HangarCore && swift test --filter <Suite>` during tasks.
+- **hosted tests**: `xcodegen generate`, then `xcodebuild test -project Hangar.xcodeproj -scheme HangarTests
+  -destination 'platform=macOS' -derivedDataPath build/DerivedData -only-testing:HangarTests/<Class>`.
   Regenerate before every scoped run, since tasks add app and test files.
-- **UI test**: one new method, run with scheme `agterm` and
-  `-only-testing:agtermUITests/ControlHtmlOverlayUITests/<method>` after `xcodegen generate`. Approving
+- **UI test**: one new method, run with scheme `hangar` and
+  `-only-testing:HangarUITests/ControlHtmlOverlayUITests/<method>` after `xcodegen generate`. Approving
   this plan is the go-ahead for that one run.
-- After every hosted or UI run: `lsappinfo list | grep -A4 agterm.debug`, stopping leaked test processes
+- After every hosted or UI run: `lsappinfo list | grep -A4 hangar.debug`, stopping leaked test processes
   and reporting anything else.
 
 ## Progress Tracking
@@ -79,10 +79,10 @@
   `installScripts()` with the theme set, as a `WKUserScript` in its own content world, so it works with page
   JavaScript off and survives a theme change. The markdown text and the image map reach it as inert
   escaped data, never interpolated into a script element.
-- The page takes the terminal theme through the existing `--agterm-*` variables. Theme styling and bridge
+- The page takes the terminal theme through the existing `--hangar-*` variables. Theme styling and bridge
   install are separated in `HtmlOverlayRegistry`, so a markdown page gets the first and never the second;
   `applyTheme` reloads on styling eligibility.
-- Images: agtermCore collects image URLs with Foundation's markdown parser and decides containment: the
+- Images: HangarCore collects image URLs with Foundation's markdown parser and decides containment: the
   markdown file's folder and each candidate resolved with symlinks before the check, canonical paths
   deduplicated. The app reads each resolved file through the shared descriptor read and `ImageProbe`'s
   checks and stops at the total byte and pixel budgets. Both sides key references by the percent-decoded
@@ -110,7 +110,7 @@
   messages name `--markdown`.
 - Read-back: `ControlHtmlOverlayNode.markdown: String?` (the path), exactly one source field set, omitted
   when nil.
-- Limits (`MarkdownPage` in agtermCore): a markdown byte cap, a total embedded-image byte cap and a total
+- Limits (`MarkdownPage` in HangarCore): a markdown byte cap, a total embedded-image byte cap and a total
   pixel cap; per-image checks reuse `ImagePage.maxBytes`, `maxPixels` and `mimeType(sniffing:)`. Exact
   values are set in Task 1 and pinned by tests.
 - Page CSP: `default-src 'none'; img-src data:; style-src 'unsafe-inline'`.
@@ -131,12 +131,12 @@
 No new enum cases yet, so the app builds unchanged around the new code.
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/MarkdownPage.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/MarkdownPageTests.swift`
-- Modify: `agterm/Views/ImageProbe.swift`
-- Modify: `agtermTests/ImageProbeTests.swift`
-- Create: `agterm/Views/MarkdownProbe.swift`
-- Create: `agtermTests/MarkdownProbeTests.swift`
+- Create: `HangarCore/Sources/HangarCore/MarkdownPage.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/MarkdownPageTests.swift`
+- Modify: `Hangar/Views/ImageProbe.swift`
+- Modify: `HangarTests/ImageProbeTests.swift`
+- Create: `Hangar/Views/MarkdownProbe.swift`
+- Create: `HangarTests/MarkdownProbeTests.swift`
 
 - [x] `MarkdownPage`: limits; image-reference extraction with Foundation's parser, keyed by the
   percent-decoded string; containment of each local candidate against the markdown file's folder with
@@ -162,28 +162,28 @@ No new enum cases yet, so the app builds unchanged around the new code.
 Adds `HtmlSource.markdown` together with every consumer, so the app builds at the end of the task.
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/HtmlOverlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+HtmlOverlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+RemotePage.swift`
-- Create: `agterm/Resources/markdown/` (`markdown-it-14.1.0.min.js`, `highlight-11.11.1.min.js`, both
+- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+HtmlOverlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePage.swift`
+- Create: `Hangar/Resources/markdown/` (`markdown-it-14.1.0.min.js`, `highlight-11.11.1.min.js`, both
   LICENSE files copied from `cookbook/annotate-document/assets/`, `render.js`, `page.css`)
 - Modify: `project.yml`
-- Modify: `agterm/Views/HtmlOverlayRegistry.swift`
-- Modify: `agterm/Views/HtmlOverlayView.swift`
-- Modify: `agterm/Control/ControlServer+RemoteCompanions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/HtmlOverlayTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTreeProjectionTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreRemotePageTests.swift`
-- Modify: `agtermTests/HtmlOverlayRegistryTests.swift`
-- ➕ Create: `agterm/Views/MarkdownAssets.swift`, `agtermTests/MarkdownAssetsTests.swift`
+- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`
+- Modify: `Hangar/Views/HtmlOverlayView.swift`
+- Modify: `Hangar/Control/ControlServer+RemoteCompanions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HtmlOverlayTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTreeProjectionTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreRemotePageTests.swift`
+- Modify: `HangarTests/HtmlOverlayRegistryTests.swift`
+- ➕ Create: `Hangar/Views/MarkdownAssets.swift`, `HangarTests/MarkdownAssetsTests.swift`
 
-- [x] agtermCore: `HtmlSource.markdown(path:)` with a `markdownPath` accessor; `HtmlOverlay.identity`
+- [x] HangarCore: `HtmlSource.markdown(path:)` with a `markdownPath` accessor; `HtmlOverlay.identity`
   names the file; navigation policy (http(s) user-activated opens external, everything else cancelled);
   `presentationSource` returns nil; `ControlHtmlOverlayNode.markdown` with CodingKeys, decoder and
   projection
-- [x] `project.yml`: `Resources/markdown` added to the `agterm` excludes and given its own folder-reference
+- [x] `project.yml`: `Resources/markdown` added to the `hangar` excludes and given its own folder-reference
   resource entry, like `Resources/hud`
 - [x] registry: split `themed(_:linked:)` into styling and bridge eligibility (markdown gets the look and
   transparent canvas, never the bridge); `applyTheme` reloads on styling eligibility; `installScripts()`
@@ -193,7 +193,7 @@ Adds `HtmlSource.markdown` together with every consumer, so the app builds at th
 - [x] `render.js`: `html: false`; highlight code blocks; GitHub-compatible heading slugs (lowercase,
   punctuation stripped, spaces to `-`, `-1`/`-2` for duplicates); images swapped for app-supplied data URIs
   or escaped alt text; `href` kept only on http(s) and bare `#fragment` links. `page.css` themes with
-  `--agterm-*` variables
+  `--hangar-*` variables
 - [x] `HtmlOverlayView` toolbar switch and `sourceText` handle markdown;
   `RemoteCompanionRequest.pageArguments` handles the case (companion creation stays refused)
 - [x] package tests: `HtmlOverlayTests` for `identity` and the navigation policy per scheme and
@@ -214,16 +214,16 @@ Adds `HtmlSource.markdown` together with every consumer, so the app builds at th
 ### Task 3: Control API open path
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Overlay.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Companions.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift`
-- Modify: `agterm/Control/ControlServer+SessionActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherOverlayTests.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/OverlayCommandsTests.swift`
-- Modify: `agtermTests/ControlServerLinkOverlayTests.swift`
-- Modify: `agtermUITests/ControlHtmlOverlayUITests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Overlay.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Companions.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherOverlayTests.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/OverlayCommandsTests.swift`
+- Modify: `HangarTests/ControlServerLinkOverlayTests.swift`
+- Modify: `HangarUITests/ControlHtmlOverlayUITests.swift`
 
 - [x] `ControlArgs.markdownFile`; dispatcher validation mirroring `imageContent`; `dispatchCompanionPage`
   refuses markdown with `companionNeedsPage`; `OverlayHtmlError.oneSource` names `--markdown`
@@ -240,19 +240,19 @@ Adds `HtmlSource.markdown` together with every consumer, so the app builds at th
 ### Task 4: Click path
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/LinkPolicy.swift`
-- Create: `agterm/Control/ControlServer+MarkdownPage.swift`
-- Modify: `agterm/Ghostty/LinkOpener.swift`
-- Modify: `agterm/agtermApp.swift`
-- ➕ Modify: `agterm/Views/MarkdownProbe.swift` (`checkDetached` for the click; the unused `loadDetached` removed)
-- Modify: `agtermCore/Tests/agtermCoreTests/LinkPolicyTests.swift`
-- Modify: `agtermTests/GhosttySurfaceViewInputTests.swift`
-- Modify: `agtermTests/ControlServerLinkOverlayTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/LinkPolicy.swift`
+- Create: `Hangar/Control/ControlServer+MarkdownPage.swift`
+- Modify: `Hangar/Ghostty/LinkOpener.swift`
+- Modify: `Hangar/hangarApp.swift`
+- ➕ Modify: `Hangar/Views/MarkdownProbe.swift` (`checkDetached` for the click; the unused `loadDetached` removed)
+- Modify: `HangarCore/Tests/HangarCoreTests/LinkPolicyTests.swift`
+- Modify: `HangarTests/GhosttySurfaceViewInputTests.swift`
+- Modify: `HangarTests/ControlServerLinkOverlayTests.swift`
 
 - [x] `LinkPolicy` classifies `.md`/`.markdown` local paths as `.markdown` and routes them with the image
   origin rules and the mode's size, ⌘⇧ included
 - [x] `LinkOpener.markdown(URL, UUID, Int?, completion)` and its `.markdown` route, revealing on refusal;
-  wired in `agtermApp`
+  wired in `hangarApp`
 - [x] `openMarkdownLink`: check `canShowLinkOverlay`, run the markdown descriptor check off-main, recheck
   HUD, zoom and slot after it, open at the routed size
 - [x] existing tests whose `.md` fixtures mean "a revealed file" move to `.txt`, keeping what each tests:
@@ -271,14 +271,14 @@ Adds `HtmlSource.markdown` together with every consumer, so the app builds at th
 - [x] verify every Overview point and the Technical Details rules are implemented
 - [x] verify edge cases: remote pane, HUD and quick origins, symlink escape, budgets, `</script>` in source
 - [x] build: `scripts/build.sh`
-- [x] run `cd agtermCore && swift test`
+- [x] run `cd HangarCore && swift test`
 - [x] run `make test-app`, then the leak check
 - [x] run `make lint` with zero findings
 
 ### Task 6: [Final] Update documentation
 - [x] `site/docs.html`: the local-path ⌘-click paragraph covers markdown files
 - [x] `site/commands.html`: `--markdown FILE` and the `markdown` read-back field
-- [x] `plugins/agterm/skills/agterm/SKILL.md` and `reference.md`: `--markdown` with a discovery trigger
+- [x] `plugins/hangar/skills/hangar/SKILL.md` and `reference.md`: `--markdown` with a discovery trigger
 - [x] `.claude/rules/control-api.md`: the markdown page bullet beside the image page one, and the
   theme/bridge split in the scripts-as-one-set bullet
 - [x] `ARCHITECTURE.md` if the theme/bridge split warrants a line (it does not: control-api.md owns the split)

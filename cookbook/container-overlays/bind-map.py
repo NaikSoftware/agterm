@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the bind map the container-side agtermctl wrapper translates paths with.
+"""Write the bind map the container-side hangarctl wrapper translates paths with.
 
 Usage: bind-map.py CONTAINER OUTPUT
 Reads the container's bind mounts from `docker inspect` and writes the JSON

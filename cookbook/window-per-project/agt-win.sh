@@ -2,7 +2,7 @@
 # agt-win.sh "Project A" - park every other open window in the Dock, then raise that one.
 set -e
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+HANGARCTL=${HANGARCTL:-hangarctl}
 
 n=$1
 if [ -z "$n" ]; then
@@ -10,7 +10,7 @@ if [ -z "$n" ]; then
 	exit 2
 fi
 
-t=$("$AGTERMCTL" window list --json)
+t=$("$HANGARCTL" window list --json)
 
 target=$(printf '%s' "$t" | jq -r --arg n "$n" '.result.windows[] | select(.name == $n) | .id' | head -n 1)
 if [ -z "$target" ]; then
@@ -22,7 +22,7 @@ fi
 # refused by design, so report it and keep going rather than stopping here
 printf '%s' "$t" | jq -r --arg n "$n" '.result.windows[] | select(.open and .name != $n) | .id' |
 	while read -r id; do
-		"$AGTERMCTL" window minimize "$id" on || echo "could not park window $id" >&2
+		"$HANGARCTL" window minimize "$id" on || echo "could not park window $id" >&2
 	done
 
-"$AGTERMCTL" window select "$target"
+"$HANGARCTL" window select "$target"

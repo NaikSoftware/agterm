@@ -24,15 +24,15 @@ DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lights-common.sh
 . "$DIR/lights-common.sh"
 
-[ -n "${AGTERM_SESSION_ID:-}" ] || exit 0
+[ -n "${HANGAR_SESSION_ID:-}" ] || exit 0
 
 # stamp the turn end: the sweeper compares this against the turn-start stamp to
 # tell a session that is producing from one that is merely holding a wait
-touch "$(agt_state_dir turnend)/$AGTERM_SESSION_ID" 2>/dev/null || true
+touch "$(agt_state_dir turnend)/$HANGAR_SESSION_ID" 2>/dev/null || true
 
 # find the agent process: walk up from the hook shell, fall back to the note
 agent_pid=$(agt_find_agent_pid "$PPID" || true)
-note="$AGT_LIGHTS_STATE/pid/$AGTERM_SESSION_ID"
+note="$AGT_LIGHTS_STATE/pid/$HANGAR_SESSION_ID"
 if [ -z "$agent_pid" ] && [ -f "$note" ] && agt_note_is_live "$note"; then
   # the note is believed only when that exact process — same pid, same start
   # time, still an agent — is running; a recycled pid would classify a stranger

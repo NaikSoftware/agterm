@@ -55,7 +55,7 @@ static void writeIfMissing(const QString &path, const QString &text)
 
 QString MainWindow::configDir() const
 {
-    return configDirectory(m_store.settings.configDirectory, qEnvironmentVariable("AGTERM_STATE_DIR"), QDir::homePath());
+    return configDirectory(m_store.settings.configDirectory, qEnvironmentVariable("HANGAR_STATE_DIR"), QDir::homePath());
 }
 
 void MainWindow::loadConfig()
@@ -63,7 +63,7 @@ void MainWindow::loadConfig()
     QDir().mkpath(configDir());
     writeIfMissing(configDir() + QStringLiteral("/keymap.conf"), starterKeymap(m_defaultKeys));
     writeIfMissing(configDir() + QStringLiteral("/hooks.conf"), starterHooks());
-    setProperty("agtermConfigDir", configDir());
+    setProperty("hangarConfigDir", configDir());
     reloadKeymap();
     reloadHooks();
 }
@@ -90,7 +90,7 @@ int MainWindow::reloadKeymap()
         auto *a = new QAction(c.name, this);
         a->setShortcuts(sequences(c.keys));
         a->setShortcutContext(Qt::WindowShortcut);
-        a->setProperty("agtermCustom", true);
+        a->setProperty("hangarCustom", true);
         connect(a, &QAction::triggered, this, [this, name = c.name] { runCustomCommand(name, m_store.selected); });
         addAction(a);
         m_customActions << a;
@@ -193,10 +193,10 @@ void MainWindow::applyAppearance(KParts::ReadOnlyPart *part)
                                      s.cursorBlink.isEmpty() ? look.blink : s.cursorBlink == QLatin1String("blink") ? QStringLiteral("true") : QStringLiteral("false"));
     // nothing to override until a setting or a preview asks; after that a revert goes back to the profile's values
     const bool overrides = !m_previewTheme.isEmpty() || !s.theme.isEmpty() || !s.cursorStyle.isEmpty() || !s.cursorBlink.isEmpty();
-    if (overrides || part->property("agtermLookOverridden").toBool())
+    if (overrides || part->property("hangarLookOverridden").toBool())
         if (QObject *ks = sessionOf(part)) {
             QMetaObject::invokeMethod(ks, "profileChangeCommandReceived", Q_ARG(QString, command));
-            part->setProperty("agtermLookOverridden", overrides);
+            part->setProperty("hangarLookOverridden", overrides);
         }
     // after the scheme: Konsole resets the view's opacity to the scheme's own whenever it applies one
     KonsolePrivate::setTerminalOpacity(terminalDisplay(part), 1 - qBound(0.0, s.windowTransparency, 90.0) / 100);
@@ -208,15 +208,15 @@ void MainWindow::applyAppearance(KParts::ReadOnlyPart *part)
             display = w;
     if (!display)
         return;
-    QFont font = display->property("agtermProfileFont").value<QFont>();
+    QFont font = display->property("hangarProfileFont").value<QFont>();
     if (!s.fontFamily.isEmpty())
         font.setFamily(s.fontFamily);
     if (s.fontSize > 0)
         font.setPointSizeF(s.fontSize);
     const double base = font.pointSizeF();
-    if (display->property("agtermBaseFont").toDouble() == base && display->font().family() == font.family())
+    if (display->property("hangarBaseFont").toDouble() == base && display->font().family() == font.family())
         return;
-    const bool zoomed = qAbs(display->font().pointSizeF() - display->property("agtermBaseFont").toDouble()) >= 0.5;
+    const bool zoomed = qAbs(display->font().pointSizeF() - display->property("hangarBaseFont").toDouble()) >= 0.5;
     const double zoom = display->font().pointSizeF();
     if (zoomed)
         font.setPointSizeF(zoom); // an explicit zoom keeps its size, in the new family
@@ -226,7 +226,7 @@ void MainWindow::applyAppearance(KParts::ReadOnlyPart *part)
         QWheelEvent wheel(at, display->mapToGlobal(at), {}, QPoint(0, delta), Qt::NoButton, Qt::ControlModifier, Qt::NoScrollPhase, false);
         QApplication::sendEvent(display, &wheel);
     }
-    display->setProperty("agtermBaseFont", base);
+    display->setProperty("hangarBaseFont", base);
 }
 
 void MainWindow::previewTheme(const QString &name)
@@ -358,7 +358,7 @@ void MainWindow::notifyFailure(const QString &title, const QString &body)
         statusBar()->showMessage(title + QStringLiteral(": ") + body, 5000);
         return;
     }
-    KNotification::event(KNotification::Error, title, body, QStringLiteral("agterm-qt"));
+    KNotification::event(KNotification::Error, title, body, QStringLiteral("hangar"));
 }
 
 void MainWindow::playSound(const QString &name) const
@@ -430,7 +430,7 @@ void MainWindow::applySettings()
         for (KParts::ReadOnlyPart *part : parts())
             applyAppearance(part);
     }
-    if (property("agtermConfigDir").isValid() && property("agtermConfigDir").toString() != configDir())
+    if (property("hangarConfigDir").isValid() && property("hangarConfigDir").toString() != configDir())
         loadConfig(); // a new config directory reloads both files
 }
 

@@ -10,7 +10,7 @@ dir="\${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)"
 p=$$
 while [ -n "$p" ] && [ "$p" -gt 1 ]; do
   if [ -S "$dir/claude-swarm-$p" ]; then
-    exec agtermctl session new --json --no-select --parent "$AGTERM_SESSION_ID" --name subagents --command "tmux -L claude-swarm-$p a"
+    exec hangarctl session new --json --no-select --parent "$HANGAR_SESSION_ID" --name subagents --command "tmux -L claude-swarm-$p a"
   fi
   p=$(ps -o ppid= -p "$p" | tr -d ' ')
 done
@@ -37,15 +37,15 @@ async function syncCompanion($: EngineInterface) {
     hasTried = false
     if (id !== null) {
       await update($, companionId, () => null)
-      await $.process.run(['agtermctl', 'session', 'close', '--target', id]) // an error just means it is already closed
+      await $.process.run(['hangarctl', 'session', 'close', '--target', id]) // an error just means it is already closed
     }
   }
 }
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    // agtermctl and AGTERM_SESSION_ID exist only inside an agterm pane
-    if ((await $.process.run(['sh', '-c', 'test -n "$AGTERM_SESSION_ID"'])).exitCode === 0) {
+    // hangarctl and HANGAR_SESSION_ID exist only inside an hangar pane
+    if ((await $.process.run(['sh', '-c', 'test -n "$HANGAR_SESSION_ID"'])).exitCode === 0) {
       $.clock.every(2000, () => void syncCompanion($).catch(() => {}))
     }
     return next(e)

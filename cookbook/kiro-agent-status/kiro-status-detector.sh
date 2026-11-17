@@ -7,7 +7,7 @@
 # ~/.kiro/agents/<name>.json with no global file, and its only pre-tool event fires identically for
 # an auto-approved tool and one waiting on a human, so it cannot mark blocked either way. This
 # polls the pane's own recent text through `session text` and calls the stock
-# `agterm-agent-status.sh`.
+# `hangar-agent-status.sh`.
 #
 # This loop owns all three states, because `kiro-cli chat` is a REPL: a turn ends when kiro returns
 # to its prompt, long before the process exits, so the wrapper function around it can only see the
@@ -19,10 +19,10 @@
 #   export KIRO_STATUS_APPROVAL_OPTION_RE='yes, single permission|trust, always allow|no \(tab to edit\)|esc to close'
 #   export KIRO_STATUS_WORKING_RE='kiro is working|esc to cancel'
 #
-# A no-op outside agterm (guarded by $AGTERM_SESSION_ID), so it does nothing if invoked by mistake.
+# A no-op outside hangar (guarded by $HANGAR_SESSION_ID), so it does nothing if invoked by mistake.
 set -u
 
-[ -n "${AGTERM_SESSION_ID:-}" ] || exit 0
+[ -n "${HANGAR_SESSION_ID:-}" ] || exit 0
 
 : "${KIRO_STATUS_APPROVAL_RE:=requires approval}"
 : "${KIRO_STATUS_APPROVAL_OPTION_RE:=yes, single permission|trust, always allow|no \(tab to edit\)|esc to close}"
@@ -41,13 +41,13 @@ set -u
 : "${KIRO_STATUS_DONE_FRAMES:=3}"
 
 # the pane this run started in (used only for the READ below), and the stock status script,
-# installed by Help ▸ Install Agent Status Hooks…. Delegating to it instead of calling agtermctl
-# directly gets its baked-in agtermctl path for free, the same way the installer's own adapters do.
-: "${AGTERM_PANE:=left}"
-: "${AGTERM_STATUS_WRAPPER:=$HOME/.config/agterm/agent-status/agterm-agent-status.sh}"
+# installed by Help ▸ Install Agent Status Hooks…. Delegating to it instead of calling hangarctl
+# directly gets its baked-in hangarctl path for free, the same way the installer's own adapters do.
+: "${HANGAR_PANE:=left}"
+: "${HANGAR_STATUS_WRAPPER:=$HOME/.config/hangar/agent-status/hangar-agent-status.sh}"
 
-# No --pane here: the stock wrapper already forwards both AGTERM_PANE and AGTERM_PANE_ID from the
-# environment, and AGTERM_PANE_ID is what overrides a stale baked role after a pane is promoted
+# No --pane here: the stock wrapper already forwards both HANGAR_PANE and HANGAR_PANE_ID from the
+# environment, and HANGAR_PANE_ID is what overrides a stale baked role after a pane is promoted
 # (#199). Passing our own --pane would duplicate the flag and throw that precedence away.
 #
 # Missing status script is the one failure worth noticing, because the caller must not then latch the
@@ -56,33 +56,33 @@ set -u
 # ends in `|| true; exit 0` so a hook can never break a turn — so the loop simply retries next tick
 # while the classification still holds, which costs one extra call and needs no read-back.
 report_status() {
-  [ -x "$AGTERM_STATUS_WRAPPER" ] || return 1
-  "$AGTERM_STATUS_WRAPPER" "$@" >/dev/null 2>&1
+  [ -x "$HANGAR_STATUS_WRAPPER" ] || return 1
+  "$HANGAR_STATUS_WRAPPER" "$@" >/dev/null 2>&1
 }
 
-# Resolve agtermctl for the READ. The stock wrapper cannot help here: the installer bakes its
+# Resolve hangarctl for the READ. The stock wrapper cannot help here: the installer bakes its
 # absolute CLI path into that script as a local default and never exports it, so a user who installed
-# only the hooks — exactly what Setup asks for — has a working status write and no `agtermctl` on
+# only the hooks — exactly what Setup asks for — has a working status write and no `hangarctl` on
 # PATH. Fall back to the bundled binary before giving up, and prefer an explicit override over both.
-if [ -z "${AGTERMCTL:-}" ] && ! command -v agtermctl >/dev/null 2>&1; then
-  for _kas_app in "$HOME/Applications/agterm.app" /Applications/agterm.app; do
-    if [ -x "$_kas_app/Contents/MacOS/agtermctl" ]; then
-      AGTERMCTL="$_kas_app/Contents/MacOS/agtermctl"
+if [ -z "${HANGARCTL:-}" ] && ! command -v hangarctl >/dev/null 2>&1; then
+  for _kas_app in "$HOME/Applications/Hangar.app" /Applications/Hangar.app; do
+    if [ -x "$_kas_app/Contents/MacOS/hangarctl" ]; then
+      HANGARCTL="$_kas_app/Contents/MacOS/hangarctl"
       break
     fi
   done
 fi
 
-# session text has no equivalent in the stock wrapper, so this talks to agtermctl directly.
+# session text has no equivalent in the stock wrapper, so this talks to hangarctl directly.
 # --pane is REQUIRED here, unlike on the status write above: session text with no --pane reads
 # whatever is currently on screen (the focused pane, or the scratch terminal if one is open over
 # it), not necessarily the pane this kiro-cli is actually running in.
-# Lowercasing is a separate step so a failing agtermctl is still visible in $?; through a pipe the
+# Lowercasing is a separate step so a failing hangarctl is still visible in $?; through a pipe the
 # status would be tr's, which succeeds on empty input.
 read_screen() {
   local raw
-  raw=$("${AGTERMCTL:-agtermctl}" session text --target "$AGTERM_SESSION_ID" --pane "$AGTERM_PANE" \
-    --lines "$KIRO_STATUS_TAIL_LINES" ${AGTERM_SOCKET:+--socket "$AGTERM_SOCKET"} 2>/dev/null) || return 1
+  raw=$("${HANGARCTL:-hangarctl}" session text --target "$HANGAR_SESSION_ID" --pane "$HANGAR_PANE" \
+    --lines "$KIRO_STATUS_TAIL_LINES" ${HANGAR_SOCKET:+--socket "$HANGAR_SOCKET"} 2>/dev/null) || return 1
   printf '%s' "$raw" | /usr/bin/tr '[:upper:]' '[:lower:]'
 }
 

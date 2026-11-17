@@ -3,15 +3,15 @@
 # The keymap passes {AGT_SESSION_ID}, the session the chord fired in.
 set -u
 [ -n "${1:-}" ] || { echo "usage: $0 SESSION_ID" >&2; exit 2; }
-export AGTERM_SESSION_ID=$1
+export HANGAR_SESSION_ID=$1
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=subagent-common.sh
 . "$script_dir/subagent-common.sh"
 
-# no subagents is an answer, not a failure: say so over the session and exit 0, or agterm reports a failed command
+# no subagents is an answer, not a failure: say so over the session and exit 0, or hangar reports a failed command
 nothing_to_pick() {
-  "$AGTERMCTL" session hud "No subagents in this conversation" --hide-after 3 --target "$AGTERM_SESSION_ID" \
+  "$HANGARCTL" session hud "No subagents in this conversation" --hide-after 3 --target "$HANGAR_SESSION_ID" \
     >/dev/null 2>&1
   exit 0
 }
@@ -71,7 +71,7 @@ for status_file in "$dir"/*.status; do
 done
 [ -n "$items" ] || nothing_to_pick
 
-result=$(printf '[%s]' "$items" | "$AGTERMCTL" pick --prompt "Subagent transcript") || exit 0
+result=$(printf '[%s]' "$items" | "$HANGARCTL" pick --prompt "Subagent transcript") || exit 0
 id=$(plutil -extract id raw -o - - <<<"$result" 2>/dev/null)
 [ -n "$id" ] || exit 0
 
@@ -80,8 +80,8 @@ title=$(description_of "$transcript")
 follow=
 [ "$(status_of "$dir/$id")" = running ] && follow=--follow
 # replace a transcript this picker opened, never another program's overlay
-[ -n "$viewer_pid" ] && "$AGTERMCTL" session overlay close --target "$AGTERM_SESSION_ID" >/dev/null 2>&1
+[ -n "$viewer_pid" ] && "$HANGARCTL" session overlay close --target "$HANGAR_SESSION_ID" >/dev/null 2>&1
 write_file "$viewer_agent_file" "$id"
 command=$(printf 'AGT_SUBAGENT_VIEWER_PID_FILE=%q %q %q %q %s' "$viewer_pid_file" "$script_dir/transcript-view.sh" \
   "$transcript" "${title:-$id}" "$follow")
-"$AGTERMCTL" session overlay open "$command" --target "$AGTERM_SESSION_ID"
+"$HANGARCTL" session overlay open "$command" --target "$HANGAR_SESSION_ID"

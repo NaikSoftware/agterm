@@ -1,19 +1,19 @@
 #!/bin/bash
-# kimi-code SessionStart hook: pin this agterm tab's restore command to
+# kimi-code SessionStart hook: pin this hangar tab's restore command to
 # `kimi -r <session_id>`, so restoring the terminal resumes the tab's own
 # conversation. Installed via a [[hooks]] block in ~/.kimi-code/config.toml;
-# see README.md. Outside agterm it is a silent no-op.
+# see README.md. Outside hangar it is a silent no-op.
 
-[ -n "$AGTERM_SESSION_ID" ] || exit 0
-[ -n "$AGTERM_SOCKET" ] || exit 0
+[ -n "$HANGAR_SESSION_ID" ] || exit 0
+[ -n "$HANGAR_SOCKET" ] || exit 0
 
 # A kimi run spawned by a Claude Code session (a worker inside an agent
 # pipeline) shares the pane with its parent: the pane's pin belongs to the
 # Claude conversation, not the child. Skip those.
 [ -n "$CLAUDE_CODE_SESSION_ID" ] && exit 0
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
-command -v "$AGTERMCTL" >/dev/null 2>&1 || exit 0
+HANGARCTL=${HANGARCTL:-hangarctl}
+command -v "$HANGARCTL" >/dev/null 2>&1 || exit 0
 
 # kimi hooks deliver JSON on stdin; SessionStart carries the session id.
 session_id=$(python3 -c 'import sys,json;print(json.load(sys.stdin).get("session_id",""))' 2>/dev/null)
@@ -43,10 +43,10 @@ for _ in 1 2 3 4 5 6; do
 done
 
 pane_flag=""
-[ -n "$AGTERM_PANE_ID" ] && pane_flag="--pane-id $AGTERM_PANE_ID"
+[ -n "$HANGAR_PANE_ID" ] && pane_flag="--pane-id $HANGAR_PANE_ID"
 
 # shellcheck disable=SC2086  # pane_flag is deliberately word-split
-"$AGTERMCTL" session restore "kimi${flags} -r $session_id" \
-  --target "$AGTERM_SESSION_ID" $pane_flag \
-  --socket "$AGTERM_SOCKET" >/dev/null 2>&1 || true
+"$HANGARCTL" session restore "kimi${flags} -r $session_id" \
+  --target "$HANGAR_SESSION_ID" $pane_flag \
+  --socket "$HANGAR_SOCKET" >/dev/null 2>&1 || true
 exit 0

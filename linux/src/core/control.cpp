@@ -524,7 +524,7 @@ QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &requ
         return ok(terminals.chromeState());
     }
     if (cmd == QLatin1String("version"))
-        return ok({{"text", QStringLiteral("agterm-qt %1").arg(QLatin1String(appVersion))}});
+        return ok({{"text", QStringLiteral("hangar %1").arg(QLatin1String(appVersion))}});
     if (cmd == QLatin1String("workspace.new")) {
         QString tint;
         QStringList tintOn;

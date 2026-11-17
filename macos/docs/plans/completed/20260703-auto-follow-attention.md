@@ -17,29 +17,29 @@ agent is waiting for input.
 ## Context (from discovery)
 
 Files/components involved:
-- `agtermCore/Sources/agtermCore/AppStore.swift` — per-window `@Observable @MainActor` store; owns
+- `HangarCore/Sources/HangarCore/AppStore.swift` — per-window `@Observable @MainActor` store; owns
   `selectSession` (:202), `attentionSessions` (:576, window-wide, non-idle, sorted attentionRank then
   `statusChangedAt` DESC), `setAgentIndicator` (:244), `controlTree` (:126).
-- `agtermCore/Sources/agtermCore/AgentStatus.swift` — `enum AgentStatus { idle, active, completed,
+- `HangarCore/Sources/HangarCore/AgentStatus.swift` — `enum AgentStatus { idle, active, completed,
   blocked }`; `attentionRank` blocked=0/active=1/completed=2/idle=3.
-- `agtermCore/Sources/agtermCore/Session.swift` — `Session.agentIndicator` (:44, ephemeral),
+- `HangarCore/Sources/HangarCore/Session.swift` — `Session.agentIndicator` (:44, ephemeral),
   `statusChangedAt` (:51, `@ObservationIgnored`, stamped on every non-idle set, nil on idle).
-- `agtermCore/Sources/agtermCore/Debouncer.swift` — `@MainActor` cancel-and-reschedule timer; reuse.
-- `agtermCore/Sources/agtermCore/AppSettings.swift` — all-optional `Codable` settings struct; nested
+- `HangarCore/Sources/HangarCore/Debouncer.swift` — `@MainActor` cancel-and-reschedule timer; reuse.
+- `HangarCore/Sources/HangarCore/AppSettings.swift` — all-optional `Codable` settings struct; nested
   `NewSessionDirectory` enum (:14) + field (:122) is the pattern to mirror.
-- `agtermCore/Sources/agtermCore/ControlProtocol.swift` — `ControlTree { workspaces }` (:283, single-window
+- `HangarCore/Sources/HangarCore/ControlProtocol.swift` — `ControlTree { workspaces }` (:283, single-window
   projection, NO window node), `ControlWindowNode { id,name,open,active }` (:293, the `window.list`
   element), `ControlResult` (:311).
-- `agterm/SettingsModel.swift` — app-target model; save-only setters (mirror `setNewSessionDirectory`
-  :117); appearance-flag fan-out via `.agtermAppearanceChanged`.
-- `agterm/Views/SettingsView.swift` — 5-tab scene (:15); `AgentStatusSettingsView` is the target tab;
+- `Hangar/SettingsModel.swift` — app-target model; save-only setters (mirror `setNewSessionDirectory`
+  :117); appearance-flag fan-out via `.hangarAppearanceChanged`.
+- `Hangar/Views/SettingsView.swift` — 5-tab scene (:15); `AgentStatusSettingsView` is the target tab;
   `newSessionDirectory` binding (:177) is the `.off -> nil` idiom to mirror.
-- `agterm/Ghostty/GhosttySurfaceView+Input.swift` — keystroke path (~:48 `clearedByKeystroke`) is where the
+- `Hangar/Ghostty/GhosttySurfaceView+Input.swift` — keystroke path (~:48 `clearedByKeystroke`) is where the
   activity hook goes.
-- `agterm/Control/ControlServer.swift` — `buildTree(in store:)` (:470); the `window.list` dispatch arm.
-- `agterm/AppActions.swift` — user-facing session-nav wrappers (`selectNextSession` etc.) + the notification
+- `Hangar/Control/ControlServer.swift` — `buildTree(in store:)` (:470); the `window.list` dispatch arm.
+- `Hangar/AppActions.swift` — user-facing session-nav wrappers (`selectNextSession` etc.) + the notification
   `reveal` path; `focusActiveSession` for terminal first-responder.
-- `agterm/Notifications/DockBadgeController.swift` — `withObservationTracking` re-arm pattern (:81) to
+- `Hangar/Notifications/DockBadgeController.swift` — `withObservationTracking` re-arm pattern (:81) to
   mirror for status-change arming.
 
 Related patterns found:
@@ -61,8 +61,8 @@ Dependencies identified:
 - **CRITICAL: every task MUST include new/updated tests** for its code changes (success + edge cases),
   listed as separate checklist items.
 - **CRITICAL: all tests must pass before starting the next task.**
-- after each change: `cd agtermCore && swift test` green, `make lint` (swiftlint `--strict`) clean, and for
-  app-target changes the app must build. `agtermCore` stays host-free (no AppKit/GhosttyKit/Metal/CoreGraphics).
+- after each change: `cd HangarCore && swift test` green, `make lint` (swiftlint `--strict`) clean, and for
+  app-target changes the app must build. `HangarCore` stays host-free (no AppKit/GhosttyKit/Metal/CoreGraphics).
 - test placement follows the codebase's existing concern-split, not a blanket one-file-per-source rule:
   `AppStore` tests already live across `AppStoreTests` / `AppStoreNavigationTests` / `AppStoreOrganizationTests`
   / `AppStorePaneTests` (+ `AppStoreTestFixtures`). Put the auto-follow tests in `AppStoreTests.swift` or a
@@ -76,7 +76,7 @@ Dependencies identified:
   new fields. These are the gate — CI runs `swift test` only.
 - **e2e (XCUITest, optional):** one test that sets a session `blocked` via the control socket, waits past a
   short timeout, and asserts the window's selection moved. CI does NOT run XCUITests, so this is a bonus,
-  not the gate. Use an isolated `AGTERM_STATE_DIR`/socket per the ui-tests rule.
+  not the gate. Use an isolated `HANGAR_STATE_DIR`/socket per the ui-tests rule.
 
 ## Progress Tracking
 
@@ -139,8 +139,8 @@ the timer, and the next idle fire picks the next blocked session. The "queue" is
 ### Task 1: AppSettings — AutoFollowAttention enum + fields
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppSettings.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppSettingsTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppSettings.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppSettingsTests.swift`
 
 - [x] add nested `enum AutoFollowAttention: String, CaseIterable, Sendable { case off, s5, s10, s30, s60, m5 }`
       with `var timeout: TimeInterval?` computed mapping (off->nil, s5->5, s10->10, s30->30, s60->60, m5->300)
@@ -150,15 +150,15 @@ the timer, and the next idle fire picks the next blocked session. The "queue" is
       each case maps to the correct `timeout`; `s5`/`m5` boundaries
 - [x] write tests: encoding an `AppSettings` with both fields nil omits them from JSON (default minimal);
       round-trip with each field set decodes back equal
-- [x] run `cd agtermCore && swift test` — must pass before Task 2
+- [x] run `cd HangarCore && swift test` — must pass before Task 2
 
 ### Task 2: AppStore — idle controller state, activity stamping, pure target function
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift` (stored `@Observable` state must live in the main
-  type body); put the methods in a new `agtermCore/Sources/agtermCore/AppStore+AutoFollow.swift` extension
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (stored `@Observable` state must live in the main
+  type body); put the methods in a new `HangarCore/Sources/HangarCore/AppStore+AutoFollow.swift` extension
   (AppStore is ~737 lines vs the 1000 cap; the codebase already uses extension-file splits)
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTests.swift` OR add `AppStoreAutoFollowTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift` OR add `AppStoreAutoFollowTests.swift`
   (follow the existing concern-split, not a one-file rule)
 
 - [x] add stored state on `AppStore`: `autoFollowTimeout: TimeInterval?`, `autoFollowStayOnActive: Bool`
@@ -181,13 +181,13 @@ the timer, and the next idle fire picks the next blocked session. The "queue" is
       next oldest)
 - [x] write tests: `noteUserActivity()` stamps `lastActivityAt`; `idleMs(asOf:)` with injected now returns
       expected ms; nil before any activity
-- [x] run `cd agtermCore && swift test` — must pass before Task 3
+- [x] run `cd HangarCore && swift test` — must pass before Task 3
 
 ### Task 3: AppStore — status-change arming + enable/disable lifecycle
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTests.swift`
 
 - [x] add a `withObservationTracking` re-arm observer (mirror `DockBadgeController.apply`) that arms the
       debouncer on ANY `agentIndicator`/`attentionSessions` change in the window while a timeout is set, and
@@ -204,13 +204,13 @@ the timer, and the next idle fire picks the next blocked session. The "queue" is
 - [x] write tests: enabling arms/observing; disabling cancels; a status change while enabled schedules a
       fire (assert via a seam that does not require real-time sleep — e.g. flush the debouncer or call the
       fire path directly). Keep timing deterministic; no `Task.sleep`-based flakiness
-- [x] run `cd agtermCore && swift test` — must pass before Task 4
+- [x] run `cd HangarCore && swift test` — must pass before Task 4
 
 ### Task 4: User-initiated selection counts as activity
 
 **Files:**
-- Modify: `agterm/AppActions.swift`
-- Modify: `agterm/Views/` sidebar selection handler (the row-click path that calls `selectSession`)
+- Modify: `Hangar/AppActions.swift`
+- Modify: `Hangar/Views/` sidebar selection handler (the row-click path that calls `selectSession`)
 - Modify: relevant app-target test if one exists; otherwise assert the non-note behavior via the Task 2/3
   host-free tests (auto-follow's own select does not stamp `lastActivityAt`)
 
@@ -226,21 +226,21 @@ the timer, and the next idle fire picks the next blocked session. The "queue" is
 ### Task 5: App-target wiring — keystroke hook + focus-on-follow bridge
 
 **Files:**
-- Modify: `agterm/Ghostty/GhosttySurfaceView.swift` (new callback property + `destroySurface` nil-out)
-- Modify: `agterm/Ghostty/GhosttySurfaceView+Input.swift` (fire the callback in `keyDown`)
-- Modify: `agterm/agtermApp.swift` (wire the callback at BOTH surface factory sites; observe the focus bridge)
+- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift` (new callback property + `destroySurface` nil-out)
+- Modify: `Hangar/Ghostty/GhosttySurfaceView+Input.swift` (fire the callback in `keyDown`)
+- Modify: `Hangar/hangarApp.swift` (wire the callback at BOTH surface factory sites; observe the focus bridge)
 
 - [x] add `var onUserInput: (() -> Void)?` to `GhosttySurfaceView` (sibling of `onUserInputClearsStatus`,
       :102) and nil it in `destroySurface()` alongside `onUserInputClearsStatus = nil` / `onFocusChange = nil`
       (:774) — REQUIRED to break the `store -> session -> surface -> closure -> store` retain cycle
-- [x] wire `onUserInput` at BOTH factory sites in `agtermApp.swift` (:205-212 and :307-313, next to the
+- [x] wire `onUserInput` at BOTH factory sites in `hangarApp.swift` (:205-212 and :307-313, next to the
       existing `onUserInputClearsStatus`), each capturing `store` + `sessionID` and calling
       `store.noteUserActivity()`. Do NOT reach into `WindowLibrary` from the view (it holds no library ref)
 - [x] call `onUserInput?()` on EVERY `keyDown`, UNCONDITIONALLY (right after `guard let surface`), OUTSIDE
       the `if ... clearedByKeystroke { }` branch at :47-50 — otherwise ordinary typing in an idle session
       wouldn't reset the idle timer and the user gets yanked mid-typing
-- [x] focus bridge (agtermCore cannot call the app-target `focusActiveSession`): `autoFollowFire()` posts a
-      `Notification.Name` (e.g. `.agtermAutoFollowed`) carrying the window id + session id; an app-side
+- [x] focus bridge (HangarCore cannot call the app-target `focusActiveSession`): `autoFollowFire()` posts a
+      `Notification.Name` (e.g. `.hangarAutoFollowed`) carrying the window id + session id; an app-side
       observer, only when that window is key, calls `focusActiveSession()` (AppActions.swift:600). Selection
       alone does NOT move first responder (eager deck keeps the old surface as responder), so this bridge is
       load-bearing. Non-key windows only change selection; they focus normally on becoming key. Session
@@ -251,24 +251,24 @@ the timer, and the next idle fire picks the next blocked session. The "queue" is
       feature gated by host-free Task 2/3 tests + the app build): set a session `blocked` via control, wait past a
       short timeout, assert the window's selection moved to it (isolated state dir + socket). NOTE: Tasks 4/5
       have NO host-free gating test — the gate is the Task 2/3 host-free assertions plus this optional e2e
-  - ➕ Task 7b: added `agtermUITests/AutoFollowUITests.swift` (idle-jump + suppress-when-parked), runs
+  - ➕ Task 7b: added `HangarUITests/AutoFollowUITests.swift` (idle-jump + suppress-when-parked), runs
         locally, reliably green — the earlier optional XCUITest, now implemented at maintainer request. Seeds
         `settings.json` with `autoFollowAttention: s5` and relaunches (new `ControlAPITestCase.relaunch(withSettings:)`
         helper), drives the session set/statuses over the socket (none count as activity), and asserts
         selection via the live `tree` `active` flag.
-- [x] build the app (Debug) and run `cd agtermCore && swift test` + `make lint` — must pass before Task 6
+- [x] build the app (Debug) and run `cd HangarCore && swift test` + `make lint` — must pass before Task 6
 
 ### Task 6: Settings model + Agent Status tab UI + fan-out
 
 **Files:**
-- Modify: `agterm/SettingsModel.swift`
-- Modify: `agterm/Views/SettingsView.swift`
+- Modify: `Hangar/SettingsModel.swift`
+- Modify: `Hangar/Views/SettingsView.swift`
 - Modify: app-target settings test if present
 
 - [x] add `SettingsModel.setAutoFollowAttention(_:)` and `setAutoFollowStayOnActive(_:)` — save-only
       (non-ghostty, no surface reload; mirror `setNewSessionDirectory`)
 - [x] on change, push the resolved `timeout` + `stayOnActive` into every open window's `AppStore` (reuse the
-      appearance-flag fan-out style / `.agtermAppearanceChanged`); ensure a newly created window reads the
+      appearance-flag fan-out style / `.hangarAppearanceChanged`); ensure a newly created window reads the
       current values at init
 - [x] in `AgentStatusSettingsView` add a `Picker` "Auto-follow blocked sessions"
       (Disabled/5s/10s/30s/60s/5m, default Disabled) with a binding mapping `.off -> nil` on set (mirror
@@ -281,13 +281,13 @@ the timer, and the next idle fire picks the next blocked session. The "queue" is
 ### Task 7: Control API — idleMs on tree (live), autoFollowMs on tree + window.list
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift` (fields on `ControlTree` + `ControlWindowNode`)
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift` (`controlTree` :126 populates `idleMs` + `autoFollowMs`)
-- Modify: `agtermCore/Sources/agtermCore/WindowLibrary.swift` (`controlWindowNodes()` :162 populates
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift` (fields on `ControlTree` + `ControlWindowNode`)
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (`controlTree` :126 populates `idleMs` + `autoFollowMs`)
+- Modify: `HangarCore/Sources/HangarCore/WindowLibrary.swift` (`controlWindowNodes()` :162 populates
   `autoFollowMs` per open window — this is the REAL `window.list` build site; `ControlServer.buildWindowList`
   just calls it. NOT `ControlServer.swift`)
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/WindowLibraryTests.swift` (extend `controlWindowNodesProjectListMetadata`)
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/WindowLibraryTests.swift` (extend `controlWindowNodesProjectListMetadata`)
 
 - [x] add `idleMs: Int?` + `autoFollowMs: Int?` to `ControlTree`; add ONLY `autoFollowMs: Int?` to
       `ControlWindowNode` (NOT `idleMs` — see below), threaded through their `init`s as additive optionals so
@@ -305,12 +305,12 @@ the timer, and the next idle fire picks the next blocked session. The "queue" is
 - [x] confirm NO new `Command` case, NO CLI mutation of the setting (settings stay GUI-only — documented as
       an explicit keep-in-sync exemption; consistent with `newSessionDirectory` / `attentionButtonEnabled` /
       `confirmCloseSession` etc.); command count unchanged
-- [x] run `cd agtermCore && swift test` + `make lint` — must pass before Task 8
+- [x] run `cd HangarCore && swift test` + `make lint` — must pass before Task 8
 
 ### Task 8: Documentation and keep-in-sync surfaces
 
 **Files:**
-- Modify: `agterm/Resources/agent-skill/reference.md`
+- Modify: `Hangar/Resources/agent-skill/reference.md`
 - Modify: `README.md`
 - Modify: `site/docs.html`
 
@@ -329,7 +329,7 @@ the timer, and the next idle fire picks the next blocked session. The "queue" is
       window-wide, FIFO, stay-on-active opt-in (default off), disabled by default
 - [x] verify edge cases: parked-on-blocked suppresses; active suppress only when opted in; advance after
       typing clears; empty blocked no-ops; multi-window independence
-- [x] run full suite: `cd agtermCore && swift test`
+- [x] run full suite: `cd HangarCore && swift test`
 - [x] `make lint` (swiftlint `--strict`) clean; app builds (Debug)
 - [x] optional: run the XCUITest e2e locally if wired in Task 5
 
@@ -346,14 +346,14 @@ the timer, and the next idle fire picks the next blocked session. The "queue" is
 *Items requiring manual intervention or external systems — informational only.*
 
 **Manual verification:**
-- run an isolated dev instance with several sessions; set some `blocked` via `agtermctl session.status`;
+- run an isolated dev instance with several sessions; set some `blocked` via `hangarctl session.status`;
   confirm idle-follow jumps to the oldest blocked, stays put while typing, advances after a reply, and (with
   the toggle on) does not leave an active session.
 - multi-window: confirm each window follows its own blocked set independently and a background window has
   already surfaced its blocked session when switched to.
-- confirm `agtermctl tree` (and `agtermctl tree --window <id>`) shows `idleMs` growing while idle and
+- confirm `hangarctl tree` (and `hangarctl tree --window <id>`) shows `idleMs` growing while idle and
   resetting on a keystroke — `idleMs` is `tree`-only (live). Confirm `autoFollowMs` reflects the setting
-  (null when Disabled) on both `tree` and `agtermctl window.list`; note the `window.list` value is "as of
+  (null when Disabled) on both `tree` and `hangarctl window.list`; note the `window.list` value is "as of
   last refresh" (cache-served fast path), so it may lag a just-changed setting until the next command.
 
 **External system updates:** none — the control setting is GUI-only by design; no consuming project or

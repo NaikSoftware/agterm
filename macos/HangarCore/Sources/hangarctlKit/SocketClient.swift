@@ -1,0 +1,628 @@
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
+import ArgumentParser
+import Foundation
+import HangarCore
+
+/// A failure talking to the control socket (connect/write/read/decode), distinct from a server-side
+/// `{"ok":false}` response (which is a valid decoded `ControlResponse`).
+struct SocketClientError: Error, CustomStringConvertible {
+    let description: String
+    /// The errno of a failed `connect`, nil for every other failure.
+    let connectErrno: Int32?
+    init(_ description: String, connectErrno: Int32? = nil) {
+        self.description = description
+        self.connectErrno = connectErrno
+    }
+}
+
+/// A server response beside the bytes it arrived as. `--json` prints `raw` unchanged, so a field this
+/// build of the CLI does not model still reaches the caller; the human path reads `response`.
+struct SocketReply {
+    let response: ControlResponse
+    /// The response line without its trailing newline.
+    let raw: Data
+
+    /// The line `--json` prints.
+    var line: String { String(decoding: raw, as: UTF8.self) }
+}
+
+/// A blocking, one-request-per-connection client for the hangar control socket: connect to a unix domain
+/// socket, write the request line, read the single response line, decode it.
+struct SocketClient {
+    let path: String
+
+    /// 64 MiB cap on a response line. Requests stay small; a `session.text --all` response carries the
+    /// whole scrollback and can reach several MiB. It comes from our own server, so the cap only guards
+    /// against a runaway read (ghostty scrollback tops out near 10 MiB).
+    private static let maxLineBytes = 64 << 20
+
+    /// Connect, send `request` as one newline-terminated JSON line, read the response line, decode it.
+    func send(_ request: ControlRequest) throws -> SocketReply {
+        let data = try JSONEncoder().encode(request)
+        // the server rejects a request line over the shared cap (newline excluded, matching this count)
+        // and closes the connection; check before writing so the caller gets this error instead of a
+        // write failure against the closing peer.
+        guard data.count <= ControlWire.maxRequestLineBytes else {
+            throw SocketClientError(
+                "request too large (\(data.count) bytes, cap \(ControlWire.maxRequestLineBytes)) — "
+                    + "split the input into smaller requests")
+        }
+        let line = try sendRaw(data)
+        do {
+            return SocketReply(response: try JSONDecoder().decode(ControlResponse.self, from: line), raw: line)
+        } catch {
+            throw SocketClientError("could not decode response: \(error.localizedDescription)")
+        }
+    }
+
+    /// Write one request line (newline excluded) and return the response line undecoded, so a relay passes through
+    /// commands and fields this build does not model.
+    func sendRaw(_ request: Data) throws -> Data {
+        let fd = try connect()
+        defer { close(fd) }
+        try Self.writeAll(fd, request + Data([UInt8(ascii: "\n")]))
+        guard let line = Self.readLine(fd) else { throw SocketClientError("no response from \(path)") }
+        return line
+    }
+
+    /// Open and connect a `AF_UNIX` stream socket to `path`. The caller owns the descriptor.
+    func connect() throws -> Int32 {
+        var addr = sockaddr_un()
+        let pathCapacity = MemoryLayout.size(ofValue: addr.sun_path)
+        guard path.utf8.count < pathCapacity else {
+            throw SocketClientError("socket path too long (\(path.utf8.count) bytes): \(path)")
+        }
+        let fd = socket(AF_UNIX, UnixSocket.streamType, 0)
+        guard fd >= 0 else { throw SocketClientError("socket() failed: \(String(cString: strerror(errno)))") }
+
+        // a write after the server closes the connection (e.g. it rejected an oversized request) would
+        // raise the default-fatal SIGPIPE and kill the process with no output; SO_NOSIGPIPE turns it into
+        // a normal EPIPE write error, mirroring the server side of the socket. Darwin-only — Glibc has no
+        // SO_NOSIGPIPE.
+        #if canImport(Darwin)
+        var noSigPipe: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+        #endif
+
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = path.utf8CString
+        withUnsafeMutablePointer(to: &addr.sun_path) { dst in
+            dst.withMemoryRebound(to: CChar.self, capacity: pathBytes.count) { buf in
+                pathBytes.withUnsafeBufferPointer { src in
+                    buf.update(from: src.baseAddress!, count: src.count)
+                }
+            }
+        }
+
+        let result = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                systemConnect(fd, sa, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        guard result == 0 else {
+            // close() and the hint's own probe may overwrite errno.
+            let failure = errno
+            let message = String(cString: strerror(failure))
+            close(fd)
+            throw SocketClientError("connect(\(path)) failed: \(message) — \(Self.hint(forConnect: failure, path: path))",
+                                    connectErrno: failure)
+        }
+        return fd
+    }
+
+    /// The sentence after a failed `connect`. A refusal and a missing socket are the two the ownership
+    /// lock narrows, and only to an owner being there: `ControlServer.start` keeps the lock after a failed
+    /// bind, so a held lock never says how the socket came to be unreachable.
+    private static func hint(forConnect failure: Int32, path: String) -> String {
+        guard failure == ECONNREFUSED || failure == ENOENT else { return "is hangar running?" }
+        if ownershipLockHeld(socketPath: path) == true {
+            return "the socket owner is present but not accepting connections"
+        }
+        return "hangar may be stopped or unable to accept connections"
+    }
+
+    /// Whether a process holds the server's ownership lock on `<socketPath>.lock`, nil when that cannot be
+    /// answered. Darwin's `F_GETLK` observes a `flock` without competing for it; taking a shared lock to
+    /// test instead would fail a starting instance's own `LOCK_EX|LOCK_NB`.
+    private static func ownershipLockHeld(socketPath: String) -> Bool? {
+        #if canImport(Darwin)
+        let fd = open(ControlResolve.ownershipLockPath(forSocket: socketPath), O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        var query = flock()
+        query.l_type = Int16(F_WRLCK)
+        query.l_whence = Int16(SEEK_SET)
+        query.l_start = 0
+        query.l_len = 0
+        let queried = withUnsafeMutablePointer(to: &query) { fcntl(fd, F_GETLK, $0) }
+        guard queried == 0 else { return nil }
+        return query.l_type != Int16(F_UNLCK)
+        #else
+        return nil
+        #endif
+    }
+
+    /// Write all of `data` to `fd`, looping over short writes.
+    private static func writeAll(_ fd: Int32, _ data: Data) throws {
+        try data.withUnsafeBytes { raw in
+            var offset = 0
+            let base = raw.bindMemory(to: UInt8.self).baseAddress!
+            while offset < data.count {
+                let n = UnixSocket.write(fd, base + offset, data.count - offset)
+                if n <= 0 { throw SocketClientError("write failed: \(String(cString: strerror(errno)))") }
+                offset += n
+            }
+        }
+    }
+
+    /// Read up to (and excluding) the first newline, capping at `maxLineBytes`. Returns nil on
+    /// EOF-before-newline, error, or cap exceeded. Reads in 64 KiB chunks so a multi-MB
+    /// `session.text --all` response takes a handful of syscalls instead of one per byte.
+    private static func readLine(_ fd: Int32) -> Data? {
+        var buffer = Data()
+        var chunk = [UInt8](repeating: 0, count: 64 * 1024)
+        while true {
+            let n = chunk.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
+            if n == 0 { return buffer.isEmpty ? nil : buffer }
+            if n < 0 { return nil }
+            if let idx = chunk[0..<n].firstIndex(of: UInt8(ascii: "\n")) {
+                buffer.append(contentsOf: chunk[0..<idx])
+                return buffer
+            }
+            buffer.append(contentsOf: chunk[0..<n])
+            if buffer.count > maxLineBytes { return nil }
+        }
+    }
+
+    /// Print a reply: the server's line unchanged with `json: true`, otherwise a human-readable summary. An
+    /// error response (`ok == false`, non-`--json`) goes to stderr; everything else to stdout.
+    static func printResponse(_ reply: SocketReply, json: Bool, echoID: Bool = false) {
+        if json {
+            print(reply.line)
+            return
+        }
+        if !reply.response.ok {
+            FileHandle.standardError.write(Data((formatResponse(reply.response) + "\n").utf8))
+            return
+        }
+        print(formatResponse(reply.response, echoID: echoID))
+    }
+
+    /// Render a pick or ask open response as the documented `{"id":"…"}` JSON object.
+    static func formatPickID(_ id: String) throws -> String {
+        String(decoding: try JSONEncoder().encode(ControlResult(id: id)), as: UTF8.self)
+    }
+
+    /// Render the nested `pick.result` payload itself, rather than the enclosing control response.
+    static func formatPickResult(_ result: ControlPickResult) throws -> String {
+        String(decoding: try JSONEncoder().encode(result), as: UTF8.self)
+    }
+
+    /// formatAskResult emits the nested ask payload without the control response wrapper.
+    static func formatAskResult(_ result: ControlAskResult) throws -> String {
+        String(decoding: try JSONEncoder().encode(result), as: UTF8.self)
+    }
+
+    /// askExitCode distinguishes user dismissal from administrative cancellation.
+    static func askExitCode(for outcome: ControlAskOutcome) -> ExitCode {
+        switch outcome {
+        case .answered: .success
+        case .escaped: ExitCode(rawValue: 3)
+        case .pending: .failure
+        case .cancelled: ExitCode(rawValue: 2)
+        }
+    }
+
+    /// Map every picker state to a process status. `pending` is non-terminal in the blocking loop; if
+    /// observed by the one-shot `pick result` verb it uses the generic failure status.
+    static func pickExitCode(for outcome: ControlPickOutcome) -> ExitCode {
+        switch outcome {
+        case .picked, .custom: .success
+        case .pending: .failure
+        case .cancelled: ExitCode(rawValue: 2)
+        }
+    }
+
+    /// pageExitCode matches pick: 0 answered, 2 dismissed; a one-shot read of a pending page is a failure.
+    static func pageExitCode(for outcome: ControlHtmlPageOutcomeState) -> ExitCode {
+        switch outcome {
+        case .submitted: .success
+        case .pending: .failure
+        case .dismissed: ExitCode(rawValue: 2)
+        }
+    }
+
+    /// Human choices may take minutes, so poll quickly only for the first second (ten 100 ms waits),
+    /// then back off to 500 ms rather than hammering the server's serial accept loop indefinitely.
+    static func pickPollDelay(afterPendingPoll poll: Int) -> TimeInterval {
+        poll <= 10 ? 0.1 : 0.5
+    }
+
+    /// Render a response as its human-readable summary (no trailing newline): an `error:` line, the tree
+    /// listing, the selected text, the affected id (only when `echoID`, i.e. for the create commands), or
+    /// a bare `ok`. Never JSON: `--json` prints the server's own line through `printResponse`, and a
+    /// re-encoding here would drop every field this build does not model. Pure so it can be unit-tested
+    /// directly; `printResponse` routes it to stdout/stderr.
+    /// The `version` reply: the running identity, the installed one when it differs, and a server's versions.
+    static func formatVersion(_ app: AppIdentity, result: ControlResult?) -> String {
+        var lines = [formatIdentity(app)]
+        if let installed = result?.installed, installed != app { lines.append("installed: \(formatIdentity(installed))") }
+        if let versions = result?.versions {
+            lines.append("server: \(versions.server), protocol: \(versions.protocolVersion), catalog: \(versions.catalog)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    static func formatResponse(_ response: ControlResponse, echoID: Bool = false) -> String {
+        if let receipt = response.result?.receipt { return formatResponse(response, receipt: receipt, echoID: echoID) }
+        if !response.ok {
+            return "error: " + (response.error ?? "unknown error")
+        }
+        if let tree = response.result?.tree {
+            return formatTree(tree)
+        }
+        if let windows = response.result?.windows {
+            return formatWindows(windows)
+        }
+        if let themes = response.result?.themes {
+            return formatThemes(themes, current: response.result?.theme, sync: response.result?.sync ?? false,
+                                light: response.result?.light, dark: response.result?.dark)
+        }
+        if let keymap = response.result?.keymap {
+            return formatKeymap(keymap)
+        }
+        if let hooks = response.result?.hooks {
+            return formatHooks(hooks)
+        }
+        if let phone = response.result?.phone {
+            return formatPhone(phone)
+        }
+        if let remote = response.result?.remote {
+            return formatRemoteTree(remote)
+        }
+        if let zmx = response.result?.zmx {
+            return formatZmx(zmx)
+        }
+        if let restore = response.result?.restore {
+            return formatRestoreStatus(restore)
+        }
+        if let recent = response.result?.recent {
+            return formatRecent(recent)
+        }
+        if let open = response.result?.recentOpen {
+            let reopened = "reopened \(open.item.kind) \(open.item.title)"
+            return open.complete ? reopened : reopened + " (incomplete: the entry stays in the list)"
+        }
+        if let app = response.result?.app {
+            return formatVersion(app, result: response.result)
+        }
+        if let text = response.result?.text {
+            return text
+        }
+        if let exitCode = response.result?.exitCode {
+            return "exit \(exitCode)"
+        }
+        if let undoable = response.result?.undoable {
+            let closed = response.result?.affected.map(formatAffected) ?? "ok"
+            return "\(closed) (\(undoable ? "undoable" : "not undoable"))"
+        }
+        if let affected = response.result?.affected {
+            return formatAffected(affected)
+        }
+        if let count = response.result?.count {
+            // keymap.reload reports its parse-diagnostic count; 0 reads as a clean reload.
+            return count == 0 ? "ok" : "\(count) diagnostic(s)"
+        }
+        if let cursor = response.result?.cursor {
+            // the bare column, scriptable as a command substitution. This stays one value even if the
+            // payload ever gains a row: a second field belongs under --json, not in a format callers parse.
+            return "\(cursor.column)"
+        }
+        if let width = response.result?.width, let height = response.result?.height {
+            return "\(width) \(height)"
+        }
+        if let ratio = response.result?.ratio {
+            // session.resize echoes the applied (clamped) primary-pane fraction, scriptable as a bare number.
+            return String(format: "%.3f", ratio)
+        }
+        if let sidebarWidth = response.result?.sidebarWidth {
+            // sidebar.width echoes the STORED (clamped) points, preserved without fixed-decimal rounding:
+            // a caller comparing its request against the echo reads a difference as a clamp, and rounding an
+            // honored 271.34 to 271.3 would report one that never happened. This is the Double's own
+            // description, so 300 comes back "300.0" - equivalent spellings differ and the comparison the
+            // docs ask for is NUMERIC, never string equality.
+            return String(sidebarWidth)
+        }
+        if let filePanelWidth = response.result?.filePanelWidth {
+            return String(filePanelWidth)
+        }
+        if echoID, let id = response.result?.id {
+            return id
+        }
+        return "ok"
+    }
+
+    static func formatAffected(_ affected: Int) -> String {
+        affected == 1 ? "1 session" : "\(affected) sessions"
+    }
+
+    /// formatResponse(_:receipt:echoID:) prints what the command itself prints, then its receipt; a refused or
+    /// fenced operation prints the receipt alone, which carries the error.
+    static func formatPhone(_ phone: ControlPhoneStatus) -> String {
+        let state = phone.listening ? ", listening on port \(phone.port)" : phone.on ? ", not listening" : ", port \(phone.port)"
+        var lines = ["on: \(phone.on ? "yes" : "no")\(state)"]
+        if !phone.host.isEmpty { lines.append("host: \(phone.host)") }
+        if let hosts = phone.hosts, !hosts.isEmpty { lines.append("hosts: \(hosts.joined(separator: ", "))") }
+        if let bluetooth = phone.bluetooth { lines.append("bluetooth: \(bluetooth)") }
+        if let last = phone.lastEvent { lines.append("last: \(last)") }
+        if let error = phone.error { lines.append("error: \(error)") }
+        if let link = phone.link { lines.append("link: \(link)") }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func formatResponse(_ response: ControlResponse, receipt: CatalogReceipt, echoID: Bool) -> String {
+        guard response.ok else { return "error: " + formatReceipt(receipt) }
+        var bare = response
+        bare.result?.receipt = nil
+        let base = formatResponse(bare, echoID: echoID)
+        return base == "ok" ? formatReceipt(receipt) : base + "\n" + formatReceipt(receipt)
+    }
+
+    /// formatReceipt names an operation's outcome and the catalog epoch it belongs to.
+    static func formatReceipt(_ receipt: CatalogReceipt) -> String {
+        let head = "operation \(receipt.opID):"
+        switch receipt.outcome {
+        case .applied:
+            guard let rev = receipt.rev else { return "\(head) applied in epoch \(receipt.epoch)" }
+            return "\(head) applied at rev \(rev) in epoch \(receipt.epoch)"
+        case .noop: return "\(head) no change in epoch \(receipt.epoch)"
+        case .refused: return "\(head) refused in epoch \(receipt.epoch): \(receipt.error ?? "no reason given")"
+        case .fenced: return "\(head) fenced in epoch \(receipt.epoch), so it will not run"
+        case .unknown: return "\(head) outcome unknown in epoch \(receipt.epoch); it will not run now"
+        }
+    }
+
+    static func formatIdentity(_ identity: AppIdentity) -> String {
+        guard let commit = identity.commit, !commit.isEmpty else { return identity.version }
+        return "\(identity.version) (\(commit))"
+    }
+
+    /// The restore policy as separate lines: "what the next launch will do" and "what this one did" are
+    /// different questions, and collapsing them is what leaves a caller wondering why nothing happened.
+    static func formatRestoreStatus(_ status: ControlRestoreStatus) -> String {
+        var lines = ["configured: \(status.configured) (next launch)",
+                     "this launch: requested \(status.requestedAtLaunch), active \(status.active)"]
+        if status.restartRequired { lines.append("restart hangar to apply the configured mode") }
+        if let reason = status.unavailableReason { lines.append("live unavailable: \(reason)") }
+        return lines.joined(separator: "\n")
+    }
+
+    /// formatRemoteGroup is a successful group attach: the parent's local id, then one `origin -> local` line
+    /// per companion.
+    static func formatRemoteGroup(parent: String?, group: ControlRemoteGroup?) -> String {
+        let members = group?.companions.map { "  \($0.origin) -> \($0.id ?? "-")" } ?? []
+        return ([parent ?? "ok"] + members).joined(separator: "\n")
+    }
+
+    static func remoteGroupNote(host: String) -> String {
+        "note: \(host) does not report group membership; unlisted companions cannot be detected"
+    }
+
+    /// A remote host's attachable sessions, one per line, carrying the session id `zmx attach` takes. An
+    /// empty answer says so rather than printing nothing, which a caller cannot tell from a failed read.
+    static func formatRemoteTree(_ tree: ControlRemoteTree) -> String {
+        let place = tree.host.map { " on \($0)" } ?? ""
+        guard !tree.sessions.isEmpty else { return "no attachable sessions\(place)" }
+        return tree.sessions.map { session in
+            let split = session.panes.count > 1 ? " (split\(session.splitAxis.map { " \($0)" } ?? ""))" : ""
+            // what the row is for, then where it is: the running command answers "attach to which one"
+            // more often than the path does, and the context line is the far side's own answer to it
+            let running = session.panes.compactMap { $0.foreground?.first.map { CommandRestore.basename($0) } }
+            let detail = [session.context, running.isEmpty ? nil : running.joined(separator: " | ")]
+                .compactMap { $0 }.joined(separator: "  ")
+            let tail = detail.isEmpty ? "" : "  \(detail)"
+            let at = "\(session.windowName)/\(session.workspaceName)/\(session.name)"
+            return "  \(at)\(split)  [\(session.id)]  \(session.cwd)\(tail)"
+        }.joined(separator: "\n")
+    }
+
+    /// The daemon inventory under the restore header. Owner window state is its own column rather than
+    /// left to the client count: a closed window's panes sit at zero clients normally, and a reader given
+    /// only the count would read that as a leak.
+    static func formatZmx(_ inventory: ControlZmxInventory) -> String {
+        var lines = [formatRestoreStatus(inventory.restore)]
+        if !inventory.inventoryComplete {
+            lines.append("inventory incomplete: some pane is unaccounted for, so nothing can be pruned")
+        }
+        guard !inventory.entries.isEmpty else { return (lines + ["no daemons"]).joined(separator: "\n") }
+        return (lines + [""] + inventory.entries.map(zmxRow)).joined(separator: "\n")
+    }
+
+    /// Carries the ids `zmx kill` needs, not just names: a closed or unindexed row may not appear in `tree`
+    /// at all, and kill resolves a session by id or prefix, never by name — so a table of names alone
+    /// cannot get the user to the next command. Observation stays its OWN column beside the client count,
+    /// which only exists for a running daemon.
+    private static func zmxRow(_ entry: ControlZmxEntry) -> String {
+        let clients = entry.clients.map { "\($0) client\($0 == 1 ? "" : "s")" } ?? "-"
+        var owner = "-"
+        if let sessionID = entry.sessionID {
+            // the full window/workspace/session/pane path: one session name can appear in two workspaces,
+            // and the daemon name alone says nothing about which
+            let window = entry.windowName ?? entry.windowState ?? "?"
+            let path = [window, entry.workspaceName ?? "?", entry.sessionName ?? "?"].joined(separator: " / ")
+            let pane = entry.pane.map { " (\($0))" } ?? ""
+            let windowID = entry.windowID.map { " win \(shortID($0))" } ?? ""
+            owner = "\(shortID(sessionID)) \(path)\(pane)\(windowID)"
+        }
+        let state = entry.windowState.map { "\(entry.state) [\($0) window]" } ?? entry.state
+        let observation = entry.outdated == true ? "\(entry.observation) outdated" : entry.observation
+        return "\(entry.daemon)  \(state)  \(observation)  \(clients)  \(owner)"
+    }
+
+    /// The prefix a caller pastes into `--target`/`--window`. Eight hex digits is not GUARANTEED unique,
+    /// so an ambiguous one is refused by the resolver rather than resolved wrongly; `--json` carries the
+    /// full ids for that case.
+    private static func shortID(_ id: String) -> String { String(id.prefix(8)) }
+
+    /// Render the `theme.list` payload as one theme name per line (no trailing newline), the active
+    /// theme(s) marked `* `, with a leading "default ghostty" entry for the no-theme (ghostty built-in)
+    /// case. With `sync` on, both the light and dark themes are marked under a header naming the
+    /// appearance pair; otherwise the single `current` theme is marked.
+    static func formatThemes(_ themes: [String], current: String?, sync: Bool = false,
+                             light: String? = nil, dark: String? = nil) -> String {
+        let active: (String?) -> Bool = sync ? { $0 != nil && ($0 == light || $0 == dark) } : { $0 == current }
+        func line(_ name: String?, _ label: String) -> String { (active(name) ? "* " : "  ") + label }
+        let body = ([line(nil, "default ghostty")] + themes.map { line($0, $0) }).joined(separator: "\n")
+        guard sync else { return body }
+        let header = "syncing with macOS appearance — light: \(light ?? "default ghostty"), dark: \(dark ?? "default ghostty")"
+        return header + "\n" + body
+    }
+
+    /// Render `recent.list` one entry per row with its full id, which `recent open` takes as is.
+    static func formatRecent(_ items: [ControlRecentItem]) -> String {
+        guard !items.isEmpty else { return RecentClosedTarget.emptyError }
+        return items.map { item in
+            let subtitle = item.subtitle.map { " (\($0))" } ?? ""
+            let companions = item.kind == "session" && item.sessionIDs.count > 1
+                ? " +\(item.sessionIDs.count - 1) companion(s)" : ""
+            let tags = [item.agent, item.resume.map { _ in "resumable" }].compactMap(\.self)
+            let agent = tags.isEmpty ? "" : "  [\(tags.joined(separator: ", "))]"
+            return "\(item.id)  \(item.kind)  \(item.title)\(subtitle)\(companions)\(agent)"
+        }.joined(separator: "\n")
+    }
+
+    /// Render the `hooks.list` payload: one row per hook in file order, then parse diagnostics.
+    static func formatHooks(_ hooks: ControlHooks) -> String {
+        var lines = ["hooks: \(hooks.path)"]
+        if hooks.hooks.isEmpty {
+            lines.append("  (no hooks)")
+        }
+        for hook in hooks.hooks {
+            var row = "  line \(hook.line): on \(hook.kind) \(hook.command)"
+            if let pid = hook.runningPid {
+                row += "  running pid \(pid)"
+                if let elapsed = hook.elapsedSeconds { row += " for \(Int(elapsed))s" }
+            }
+            if hook.pending > 0 { row += "  pending \(hook.pending)" }
+            if hook.dropped > 0 { row += "  dropped \(hook.dropped)" }
+            if let failure = hook.lastFailure { row += "  last failure: \(failure)" }
+            if hook.retired == true { row += "  (retired, removed from the file)" }
+            lines.append(row)
+        }
+        if !hooks.diagnostics.isEmpty {
+            lines.append(contentsOf: ["", "diagnostics:"])
+            lines.append(contentsOf: hooks.diagnostics.map { "    line \($0.line): \($0.message)" })
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Render the `keymap.list` payload as sections: the resolved built-ins, then custom commands, parse
+    /// diagnostics, and the live menu key equivalents (no trailing newline). An overridden built-in is
+    /// marked `*`, a keyless one prints `-` rather than being dropped, so the listing is the full action set.
+    /// The chord column carries the whole binding set joined with `|`: the menu key equivalent first, then the
+    /// monitor-bound alternatives, each in canonical kitty syntax rather than the file's own spelling.
+    ///
+    /// The menu section is the point of the command: comparing it against the actions above is what shows
+    /// a chord the keymap resolved but the menu is not carrying. Menu items print in menu-bar order.
+    static func formatKeymap(_ keymap: ControlKeymap) -> String {
+        var lines = ["keymap: \(keymap.path)", "", "actions:"]
+        let width = keymap.actions.map(\.action.count).max() ?? 0
+        for action in keymap.actions {
+            let mark = action.overridden == true ? "*" : " "
+            let name = action.action.padding(toLength: max(width, action.action.count), withPad: " ", startingAt: 0)
+            let binds = ((action.chord.map { [$0] } ?? []) + (action.alternates ?? [])).joined(separator: "|")
+            lines.append("  \(mark) \(name)  \(binds.isEmpty ? "-" : binds)\(action.repeats == true ? "  --repeat" : "")")
+        }
+        if !keymap.commands.isEmpty {
+            lines.append(contentsOf: ["", "commands:"])
+            lines.append(contentsOf: keymap.commands.map { command in
+                var row = "    \(command.name)  \(command.shortcut ?? "(palette only)")"
+                if command.repeats { row += "  --repeat" }
+                if command.errorHud {
+                    row += "  --error-hud --error-position \(command.errorPosition.rawValue)"
+                    if let pane = command.errorPane { row += " --error-pane \(pane.rawValue)" }
+                }
+                return row
+            })
+        }
+        if !keymap.diagnostics.isEmpty {
+            lines.append(contentsOf: ["", "diagnostics:"])
+            // line 0 is the whole-file / cross-section sentinel, not a real line — drop the number
+            // rather than sending the reader looking for it, matching SettingsView.diagnosticLine.
+            lines.append(contentsOf: keymap.diagnostics.map {
+                $0.line > 0 ? "    line \($0.line): \($0.message)" : "    \($0.message)"
+            })
+        }
+        if let menu = keymap.menu {
+            lines.append(contentsOf: ["", "menu:"])
+            // mark a disabled item: its chord is inert (AppKit consumes the key and fires nothing, not
+            // even a same-chord sibling), and the default non-JSON output is the documented human
+            // workflow — an unmarked row reads as a live binding.
+            lines.append(contentsOf: menu.map {
+                "    \($0.chord)  \($0.menu) ▸ \($0.title)" + ($0.enabled == false ? "  (disabled)" : "")
+            })
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Render the `window.list` payload as one `id  name  [open]  [active]` line per window (no trailing
+    /// newline). Closed/inactive windows still list, with the bracket tag absent.
+    static func formatWindows(_ windows: [ControlWindowNode]) -> String {
+        windows.map { window in
+            let tags = (window.open ? " [open]" : "") + (window.active ? " [active]" : "")
+            return "\(window.id)  \(window.name)\(tags)"
+        }.joined(separator: "\n")
+    }
+
+    /// Render a tree as an indented workspace → session listing (no trailing newline).
+    private static func formatTree(_ tree: ControlTree) -> String {
+        var lines: [String] = []
+        for workspace in tree.workspaces {
+            let mark = workspace.active ? "*" : " "
+            lines.append("\(mark) \(workspace.name)  [\(workspace.id)]")
+            for session in workspace.sessions {
+                let smark = session.active ? "*" : " "
+                // a hidden split still owns a live pane, so it needs a tag of its own: without one it
+                // reads exactly like a session that has no split at all.
+                let splitTag = session.split ? " (split)" : (session.hasSplit == true ? " (split hidden)" : "")
+                // a session whose main pane has no terminal looks identical to a working one here, which is
+                // the whole complaint in #416 — it is listed, named, and does nothing.
+                let realizedTag = session.realized == false ? " (not realized)" : ""
+                let overlayHidden = session.hiddenOverlays?.contains("session") == true
+                let overlayTag = session.overlay ? (overlayHidden ? " (overlay hidden)" : " (overlay)") : ""
+                let pendingTag = session.pending.map { $0 == "unknown" ? " (outcome unknown)" : " (pending)" } ?? ""
+                let interactionTag = session.interactions.map { " (\($0.count) interaction\($0.count == 1 ? "" : "s"))" } ?? ""
+                let tags = splitTag + realizedTag + overlayTag
+                    + (session.scratch ? " (scratch)" : "") + pendingTag + interactionTag
+                let splitCwdSuffix = session.splitCwd.map { $0 == session.cwd ? "" : "  split cwd: \($0)" } ?? ""
+                let scratchCwdSuffix = session.scratchCwd.map { $0 == session.cwd ? "" : "  scratch cwd: \($0)" } ?? ""
+                let titleSuffix = session.title.map { "  title: \($0)" } ?? ""
+                let earlier = " (earlier helper)"
+                let attribution = session.liveAttribution.map {
+                    "  live attribution: \($0)" + (session.liveHostStale == true ? earlier : "")
+                } ?? ""
+                let splitAttribution = session.splitLiveAttribution.map {
+                    "  split live attribution: \($0)" + (session.splitLiveHostStale == true ? earlier : "")
+                } ?? ""
+                let presentation = session.presentation.map {
+                    "  presentation: \($0.state)" + ($0.mode == "presenter" ? ", presenter" : "")
+                        + ($0.error.map { " (\($0))" } ?? "")
+                } ?? ""
+                let presenters = session.presenters.map { $0.viewedBy > 0 ? "  viewed by: \($0.viewedBy)" : "" } ?? ""
+                let cwds = session.cwd + splitCwdSuffix + scratchCwdSuffix
+                lines.append("  \(smark) \(session.name)\(tags)  [\(session.id)]  \(cwds)\(titleSuffix)\(attribution)\(splitAttribution)\(presentation)\(presenters)")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+}
+
+private func systemConnect(_ fd: Int32, _ addr: UnsafePointer<sockaddr>, _ len: socklen_t) -> Int32 {
+    UnixSocket.connect(fd, addr, len)
+}

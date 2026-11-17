@@ -1,14 +1,14 @@
 {
-  "name": "agterm",
+  "name": "hangar",
   "interface": {
-    "displayName": "agterm"
+    "displayName": "hangar"
   },
   "plugins": [
     {
-      "name": "agterm",
+      "name": "hangar",
       "source": {
         "source": "local",
-        "path": "./plugins/agterm"
+        "path": "./plugins/hangar"
       },
       "policy": {
         "installation": "AVAILABLE"

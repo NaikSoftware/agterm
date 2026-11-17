@@ -8,7 +8,7 @@ These rules cover recipes. The project-wide rules for everything else are in [CO
 
 ## Layout
 
-One directory per recipe, kebab-case, named after what the recipe does rather than after its script (`park-and-resume`, not `agt-park`). It holds a `README.md` and the supporting files listed below, and nothing more. A recipe that is only instructions, a set of `agtermctl` commands or `keymap.conf` lines the reader types in, is a README alone. Anything else it needs is one of these:
+One directory per recipe, kebab-case, named after what the recipe does rather than after its script (`park-and-resume`, not `agt-park`). It holds a `README.md` and the supporting files listed below, and nothing more. A recipe that is only instructions, a set of `hangarctl` commands or `keymap.conf` lines the reader types in, is a README alone. Anything else it needs is one of these:
 
 - **Scripts**, named by language as described below.
 - **A config file** the reader copies into place, named for its purpose, when the recipe is configuration rather than code. It spares the reader retyping a block out of the README, where a brace lost in transcription kills every hook silently. Nothing lints it, so say in the pull request what reads it, the same as a script in an extension CI does not know.
@@ -48,7 +48,7 @@ Author: [@<login>](https://github.com/<login>)
 ## Limits
 ```
 
-**Requirements** names the minimum agterm version the recipe needs, written as "X or later", plus any external tool it calls. Work out that minimum from the commands and flags the recipe uses rather than naming the version you happen to run, and say in the same line what shipped in it.
+**Requirements** names the minimum hangar version the recipe needs, written as "X or later", plus any external tool it calls. Work out that minimum from the commands and flags the recipe uses rather than naming the version you happen to run, and say in the same line what shipped in it.
 
 **Setup** is the exact steps, including where the file goes and how it is invoked or sourced. Anything machine-specific is a variable the reader sets, named and explained here.
 
@@ -81,7 +81,7 @@ CI compares the directory set against the index in both directions, so a directo
 
 ## Rules for the scripts
 
-Call the CLI through an overridable variable, `AGTERMCTL=${AGTERMCTL:-agtermctl}`, so a reader whose binary sits somewhere unusual can point at it without editing the script. A hardcoded path works on your machine and nowhere else. The exception is a recipe made of `keymap.conf` lines: those are copied into the reader's own config, which has no variable indirection, so they use bare command names.
+Call the CLI through an overridable variable, `HANGARCTL=${HANGARCTL:-hangarctl}`, so a reader whose binary sits somewhere unusual can point at it without editing the script. A hardcoded path works on your machine and nowhere else. The exception is a recipe made of `keymap.conf` lines: those are copied into the reader's own config, which has no variable indirection, so they use bare command names.
 
 Nothing personal reaches a committed file. No absolute paths under a home directory, no host names, IP addresses, user names, or internal project and service names carried over from wherever the script came from. Replace each with a variable the reader sets, documented in *Setup*, with a neutral default. This applies to comments and example output as much as to code.
 
@@ -95,7 +95,7 @@ Expect questions on all three. A recipe that is correct but silent about closing
 
 ## Bugs and improvements
 
-Each recipe names its author. Bugs in @umputun's recipes can be reported as issues. For recipes by other authors, @umputun does not provide fixes or improvements from issue reports: submit a pull request, or a new recipe for a different workflow. Issues requesting fixes or changes to those recipes are closed with a pointer here. A bug in agterm itself that a recipe exposes is an issue like any other. A recipe that stays broken and nobody fixes is dropped.
+Each recipe names its author. Bugs in @umputun's recipes can be reported as issues. For recipes by other authors, @umputun does not provide fixes or improvements from issue reports: submit a pull request, or a new recipe for a different workflow. Issues requesting fixes or changes to those recipes are closed with a pointer here. A bug in hangar itself that a recipe exposes is an issue like any other. A recipe that stays broken and nobody fixes is dropped.
 
 ## License
 

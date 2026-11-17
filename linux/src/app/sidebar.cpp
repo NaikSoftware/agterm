@@ -20,7 +20,7 @@ using namespace SidebarRole;
 
 QColor statusColor(const Settings &settings, const QString &status)
 {
-    // agterm's defaults: active #DBD9E6, blocked system orange, completed system green
+    // hangar's defaults: active #DBD9E6, blocked system orange, completed system green
     const QHash<QString, std::pair<QString, QColor>> table{{QStringLiteral("active"), {settings.activeStatusColorHex, QColor(0xDB, 0xD9, 0xE6)}},
                                                            {QStringLiteral("blocked"), {settings.blockedStatusColorHex, QColor(0xFF, 0x9F, 0x0A)}},
                                                            {QStringLiteral("completed"), {settings.completedStatusColorHex, QColor(0x30, 0xD1, 0x58)}}};
@@ -61,8 +61,8 @@ static int attentionRank(const QString &status)
     return status == QLatin1String("blocked") ? 0 : status == QLatin1String("active") ? 1 : 2;
 }
 
-static const char *sessionsMime = "application/x-agterm-sessions";
-static const char *workspaceMime = "application/x-agterm-workspace";
+static const char *sessionsMime = "application/x-hangar-sessions";
+static const char *workspaceMime = "application/x-hangar-workspace";
 
 namespace {
 QColor textColor()
@@ -91,7 +91,7 @@ void drawTerminalGlyph(QPainter *p, const QRectF &r, const QColor &c, bool fille
 
 void drawGridGlyph(QPainter *p, const QRectF &r, const QColor &c, bool heavy = false)
 {
-    // heavy: agterm draws a workspace in the focus set at black weight
+    // heavy: hangar draws a workspace in the focus set at black weight
     const qreal g = 2, s = (r.width() - g) / 2;
     p->setPen(QPen(c, heavy ? 2.2 : 1.1));
     p->setBrush(Qt::NoBrush);
@@ -185,7 +185,7 @@ QIcon chromeIcon(const QString &name, const QColor &color)
         return QIcon(pm);
     }
     if (name == QLatin1String("filepanel")) {
-        // agterm's "folder" symbol: a tab on the left of the lid
+        // hangar's "folder" symbol: a tab on the left of the lid
         QPainterPath folder;
         folder.moveTo(2.5, 15);
         folder.lineTo(2.5, 5.5);
@@ -381,7 +381,7 @@ void SidebarDelegate::paint(QPainter *p, const QStyleOptionViewItem &opt, const 
             const qreal w = qMax<qreal>(18, QFontMetricsF(f).horizontalAdvance(n) + 10);
             const QRectF pill(right - w, cy - 9, w, 18);
             p->setPen(Qt::NoPen);
-            p->setBrush(QColor(0xFF, 0x45, 0x3A)); // the system red of agterm's count badge
+            p->setBrush(QColor(0xFF, 0x45, 0x3A)); // the system red of hangar's count badge
             p->drawRoundedRect(pill, 9, 9);
             p->setPen(Qt::white);
             p->setFont(f);
@@ -727,7 +727,7 @@ void Sidebar::mousePressEvent(QMouseEvent *event)
             Q_EMIT repeatRequested(id);
             return;
         }
-        // a click on the row folds or unfolds it, as agterm's default does; with that off only the chevron does
+        // a click on the row folds or unfolds it, as hangar's default does; with that off only the chevron does
         if (!m_store.settings.workspaceRowClickExpands && pos.x() > row.left() + 24)
             return QTreeWidget::mousePressEvent(event);
         m_store.collapsed.contains(id) ? m_store.collapsed.remove(id) : (m_store.collapsed.insert(id), true);
@@ -778,7 +778,7 @@ void Sidebar::mouseDoubleClickEvent(QMouseEvent *event)
             return;
         if (isCloseButton(item, event->position().toPoint()))
             return;
-        editItem(item); // inline rename, as in agterm
+        editItem(item); // inline rename, as in hangar
         return;
     }
     QTreeWidget::mouseDoubleClickEvent(event);
@@ -794,7 +794,7 @@ void Sidebar::startDrag(Qt::DropActions)
     else if (const QStringList ids = pressed.isEmpty() || selectedSessionIds().contains(pressed) ? selectedSessionIds() : QStringList{pressed};
              !ids.isEmpty()) {
         mime->setData(sessionsMime, ids.join(QLatin1Char(',')).toUtf8());
-        // dropped on a terminal, a session types its id: the claude conversation it runs (resume ends in the id), else agterm's
+        // dropped on a terminal, a session types its id: the claude conversation it runs (resume ends in the id), else hangar's
         QStringList text;
         for (const QString &id : ids) {
             const Session *s = m_store.session(id);

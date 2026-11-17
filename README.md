@@ -18,7 +18,7 @@ Hangar keeps them in one tree:
 - **Live sessions.** Quit, update or relaunch the app while your agents keep running, mid-turn included. The next launch reattaches to them with their screen state.
 - **Splits, companions and overlays.** Split a session, pin a log tail or a second shell under it, or run a program in an overlay without touching the shell underneath.
 - **Remote sessions.** Attach sessions that run on another Mac over ssh, with their status and notifications.
-- **Full control API.** The bundled `agtermctl` drives everything over a local socket. An agent skill teaches your agent to use it, so the agent can build its own layout, show you a page, or ask you a question.
+- **Full control API.** The bundled `hangarctl` drives everything over a local socket. An agent skill teaches your agent to use it, so the agent can build its own layout, show you a page, or ask you a question.
 
 The terminal engine is [Ghostty](https://ghostty.org)'s libghostty: rendering, VT parsing and shell I/O.
 
@@ -45,30 +45,30 @@ Anyone with the code controls your terminals until you revoke it.
 
 Hangar runs on Apple Silicon Macs with macOS 14 or later.
 
-1. Download the `.dmg` from the [latest release](https://github.com/NaikSoftware/agterm/releases/latest), open it, and drag `agterm.app` to Applications.
+1. Download the `.dmg` from the [latest release](https://github.com/NaikSoftware/hangar/releases/latest), open it, and drag `Hangar.app` to Applications.
 2. The build is not notarized. Clear the download flag once:
    ```sh
-   xattr -dr com.apple.quarantine /Applications/agterm.app
+   xattr -dr com.apple.quarantine /Applications/Hangar.app
    ```
-3. Start the app. It installs `agtermctl`, the agent status hooks and the agent skill on first launch and after each update.
+3. Start the app. It installs `hangarctl`, the agent status hooks and the agent skill on first launch and after each update.
 
-The phone app is attached to the same release as `agterm2-mobile.apk`.
-Open it on the phone, or run `adb install -r agterm2-mobile.apk`.
+The phone app is attached to the same release as `hangar-mobile.apk`.
+Open it on the phone, or run `adb install -r hangar-mobile.apk`.
 
-A Qt6/KDE version for Linux lives in [NaikSoftware/agterm-qt](https://github.com/NaikSoftware/agterm-qt).
+A Qt6/KDE version for Linux lives in [NaikSoftware/hangar](https://github.com/NaikSoftware/hangar).
 
 ## Scripting
 
-`agtermctl` drives a running app over a local unix socket, one command per call.
+`hangarctl` drives a running app over a local unix socket, one command per call.
 
 ```sh
-ws=$(agtermctl workspace new demo)
-sid=$(agtermctl session new --workspace "$ws" --cwd "$PWD" --no-select)
-agtermctl session type $'claude\n' --target "$sid"       # start an agent in a session you are not looking at
-agtermctl session text --target "$sid" --lines 10       # read its screen back
-agtermctl session status blocked --target "$sid"        # set the sidebar status
-agtermctl ask "Deploy now?" --button yes=Deploy --button no=Not\ yet --default no
-agtermctl tree --json                                   # the whole model as JSON
+ws=$(hangarctl workspace new demo)
+sid=$(hangarctl session new --workspace "$ws" --cwd "$PWD" --no-select)
+hangarctl session type $'claude\n' --target "$sid"       # start an agent in a session you are not looking at
+hangarctl session text --target "$sid" --lines 10       # read its screen back
+hangarctl session status blocked --target "$sid"        # set the sidebar status
+hangarctl ask "Deploy now?" --button yes=Deploy --button no=Not\ yet --default no
+hangarctl tree --json                                   # the whole model as JSON
 ```
 
 You rarely write these by hand.
@@ -78,12 +78,12 @@ Ready-made recipes are in the [cookbook](cookbook/).
 ## Documentation
 
 - [User guide](site/docs.html): workspaces, sessions, splits, overlays, keymap and settings.
-- [Command reference](site/commands.html): every `agtermctl` command.
+- [Command reference](site/commands.html): every `hangarctl` command.
 - [Troubleshooting](macos/docs/troubleshooting.md): logs and common problems.
 - [CONTRIBUTING.md](CONTRIBUTING.md): build from source.
 - [ARCHITECTURE.md](macos/ARCHITECTURE.md): modules, surface ownership and the libghostty boundary.
 
-Report bugs in [Issues](https://github.com/NaikSoftware/agterm/issues).
+Report bugs in [Issues](https://github.com/NaikSoftware/hangar/issues).
 
 ## Origins and attribution
 

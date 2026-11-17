@@ -11,12 +11,12 @@
   relaunch and Recent Closed, and a failed load leaves the row with its error and a reload, never a missing row.
 
 ## Context (from discovery)
-- Page creation: `agtermCore/Sources/agtermCore/AppStore+Companions.swift` (`addPageCompanion`, `companionSlot`
+- Page creation: `HangarCore/Sources/HangarCore/AppStore+Companions.swift` (`addPageCompanion`, `companionSlot`
   with no content check, `convertToCompanion`), `ControlDispatcher+Companions.swift` (refuses image, markdown and
-  text sources for a page row at :30), `agterm/Control/ControlServer+Companions.swift` (`pageCompanionRefusal`).
-- CLI: `agtermCore/Sources/agtermctlKit/SessionCommands.swift` (`session overlay --html/--url --companion`).
+  text sources for a page row at :30), `Hangar/Control/ControlServer+Companions.swift` (`pageCompanionRefusal`).
+- CLI: `HangarCore/Sources/hangarctlKit/SessionCommands.swift` (`session overlay --html/--url --companion`).
 - Bridge: `HtmlBridge.swift` (the `session.` prefix already defaults to the page's own session, :103),
-  `agterm/Views/HtmlOverlayRegistry.swift` (`webViewDidClose` sets `closeRequested`, never cleared, and every
+  `Hangar/Views/HtmlOverlayRegistry.swift` (`webViewDidClose` sets `closeRequested`, never cleared, and every
   mount re-checks it, :231/:427/:798).
 - Close: `AppStore+Panes.swift:462` `closeOverlay` hard-closes a page row (:465); `AppActions.closeSession`
   prompts per setting and is gated by `uiActionsEnabled` (:289-291); control close uses the store path
@@ -51,9 +51,9 @@
 - maintain backward compatibility: a snapshot without a page descriptor restores as a terminal
 
 ## Testing Strategy
-- **unit tests**: host-free `agtermCore` tests for store, snapshot, Recent Closed, dispatcher, bridge, CLI and
-  remote tree; hosted `agtermTests` for ControlServer, overlay registry, sidebar, actions and remote attach.
-- **e2e tests**: one targeted `agtermUITests/ControlAPIUITests` case for `session overlay --page` plus a
+- **unit tests**: host-free `HangarCore` tests for store, snapshot, Recent Closed, dispatcher, bridge, CLI and
+  remote tree; hosted `HangarTests` for ControlServer, overlay registry, sidebar, actions and remote attach.
+- **e2e tests**: one targeted `HangarUITests/ControlAPIUITests` case for `session overlay --page` plus a
   companion under it, run with `-only-testing:`; never the whole suite.
 
 ## Progress Tracking
@@ -116,9 +116,9 @@
 
 ### Task 1: Page rows as companion parents
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/PaletteCatalog.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreCompanionsTests.swift`, `agtermCore/Tests/agtermCoreTests/PaletteCatalogTests.swift`
-- Modify: `agtermTests/WorkspaceSidebarCompanionsTests.swift`, `agtermTests/AppActionsCompanionsTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/PaletteCatalog.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreCompanionsTests.swift`, `HangarCore/Tests/HangarCoreTests/PaletteCatalogTests.swift`
+- Modify: `HangarTests/WorkspaceSidebarCompanionsTests.swift`, `HangarTests/AppActionsCompanionsTests.swift`
 
 - [x] remove `.convertCompanion` from `PaletteCatalog.terminalOnly` so Convert matches the sidebar on a
       top-level page; Duplicate as Companion stays terminal-only
@@ -129,9 +129,9 @@
 
 ### Task 2: Save and restore every local page row
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Snapshot.swift`, `AppStore+Snapshot.swift`, `Session.swift`
-- Modify: `agtermCore/Sources/agtermCore/WindowLibrary.swift`, `ZmxLifecycle.swift`
-- Modify: `agtermCore/Sources/agtermCore/RecentClosed.swift`, `AppStore+RecentClosed.swift`, `AppStore+PendingClose.swift`, `WindowLibrary+RecentClosed.swift`
+- Modify: `HangarCore/Sources/HangarCore/Snapshot.swift`, `AppStore+Snapshot.swift`, `Session.swift`
+- Modify: `HangarCore/Sources/HangarCore/WindowLibrary.swift`, `ZmxLifecycle.swift`
+- Modify: `HangarCore/Sources/HangarCore/RecentClosed.swift`, `AppStore+RecentClosed.swift`, `AppStore+PendingClose.swift`, `WindowLibrary+RecentClosed.swift`
 - Modify: `SnapshotRoundTripTests.swift`, `RecentClosedTests.swift`, `WindowLibraryRecentClosedTests.swift`, `AppStoreCompanionsTests.swift`, the zmx claim and identity inventory tests
 
 - [x] `PageSnapshot` descriptor on `SessionSnapshot` for file and URL pages, written for every local page row and
@@ -154,11 +154,11 @@
 
 ### Task 3: session.page command and the --page CLI flag
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`, `ControlDispatcher+Companions.swift`, `ControlActions.swift`, `ControlActionsDefaults.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Companions.swift` (top-level page creation beside `addPageCompanion`)
-- Modify: `agterm/Control/ControlServer+Companions.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift`
-- Modify: `ControlDispatcherCompanionsTests.swift`, `HtmlBridgeTests.swift`, `AppStoreCompanionsTests.swift`, `agtermctlKitTests/OverlayCommandsTests.swift` (or the existing overlay CLI test file), `agtermTests/ControlServerCompanionPageTests.swift`, `agtermUITests/ControlAPIUITests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`, `ControlDispatcher+Companions.swift`, `ControlActions.swift`, `ControlActionsDefaults.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Companions.swift` (top-level page creation beside `addPageCompanion`)
+- Modify: `Hangar/Control/ControlServer+Companions.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
+- Modify: `ControlDispatcherCompanionsTests.swift`, `HtmlBridgeTests.swift`, `AppStoreCompanionsTests.swift`, `hangarctlKitTests/OverlayCommandsTests.swift` (or the existing overlay CLI test file), `HangarTests/ControlServerCompanionPageTests.swift`, `HangarUITests/ControlAPIUITests.swift`
 
 - [x] store API creates a top-level page after the anchor's whole group, sharing the overlay-open and
       refusal path with `addPageCompanion`; a refused page removes the row again
@@ -172,16 +172,16 @@
 - [x] write the targeted UI test: `session overlay --page` then `session new --parent <page>`, read back in
       `tree`
 - [x] run touched tests - must pass before task 4 (host-free and hosted pass; the UI test passed in Task 7)
-- ⚠️ the UI test lives in `agtermUITests/ControlCompanionsUITests.swift`, since `ControlAPIUITests.swift` sits at
+- ⚠️ the UI test lives in `HangarUITests/ControlCompanionsUITests.swift`, since `ControlAPIUITests.swift` sits at
       its 2000-line lint budget; its run was stopped at setUp ("Failed to activate application", state Running
-      Background) while another `com.umputun.agterm.debug` instance from another worktree was running, so it
+      Background) while another `ua.naiksoftware.hangar.debug` instance from another worktree was running, so it
       still needs one run with no other Debug instance open
 
 ### Task 4: Page window.close goes through the app session close
 **Files:**
-- Modify: `agterm/Views/HtmlOverlayRegistry.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Panes.swift` (`closeOverlay` page branch) if the routing needs it
-- Modify: `agtermTests/HtmlOverlayRegistryTests.swift`
+- Modify: `Hangar/Views/HtmlOverlayRegistry.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift` (`closeOverlay` page branch) if the routing needs it
+- Modify: `HangarTests/HtmlOverlayRegistryTests.swift`
 
 - [x] `webViewDidClose` on a page row calls the app session close (honoring the confirmation setting, grace-period
       undo, group close); an overlay covering a terminal keeps closing only the overlay
@@ -199,15 +199,15 @@
 - [x] run touched tests - must pass before task 5
 - ➕ the hook is `HtmlOverlayRegistry.closePageSession`, wired by `ControlServer` beside `dispatch` to
       `AppActions.closeSession`; `AppStore+Panes.swift` needed no change. The failure view's Reload lives in
-      `HtmlOverlayView.swift`, tested in the new `agtermTests/HtmlOverlayViewTests.swift`; the wired close and the
+      `HtmlOverlayView.swift`, tested in the new `HangarTests/HtmlOverlayViewTests.swift`; the wired close and the
       non-prompting control close are tested in `ControlServerCompanionPageTests.swift`
 
 ### Task 5: Attach a page-rooted group from another Mac
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/RemoteTree.swift`, `AppStore+ReplicaPage.swift`
-- Modify: `agterm/Control/ControlServer+RemoteCompanions.swift`, `ControlServer+RemoteGroup.swift`
-- Modify: `agterm/AppActions+RemoteAttach.swift`
-- Modify: `RemoteTreeTests.swift`, `AppStoreReplicaPageTests.swift`, `agtermTests/ControlServerRemotePageTests.swift`, `agtermTests/ControlServerRemoteGroupTests.swift`, `agtermTests/RemoteAttachTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemoteTree.swift`, `AppStore+ReplicaPage.swift`
+- Modify: `Hangar/Control/ControlServer+RemoteCompanions.swift`, `ControlServer+RemoteGroup.swift`
+- Modify: `Hangar/AppActions+RemoteAttach.swift`
+- Modify: `RemoteTreeTests.swift`, `AppStoreReplicaPageTests.swift`, `HangarTests/ControlServerRemotePageTests.swift`, `HangarTests/ControlServerRemoteGroupTests.swift`, `HangarTests/RemoteAttachTests.swift`
 
 - [x] origin tree lists local page roots without a daemon requirement, excludes replica rows, admits page
       companions under a page root, and reports the root's full companion membership
@@ -230,7 +230,7 @@
 ### Task 6: Product docs, command reference and agent skill
 **Files:**
 - Modify: `site/docs.html`, `site/commands.html`
-- Modify: `plugins/agterm/skills/agterm/SKILL.md`, `plugins/agterm/skills/agterm/reference.md`
+- Modify: `plugins/hangar/skills/hangar/SKILL.md`, `plugins/hangar/skills/hangar/reference.md`
 - Modify: `.claude/rules/control-api.md`, `.claude/rules/sidebar.md`, `.claude/rules/windows.md` as the contracts change
 
 - [x] document `--page`, page parents, restore behavior including the launch-time `--js` execution, failed rows,
@@ -247,7 +247,7 @@
 - [x] verify every Overview and Solution Overview point is implemented
 - [x] verify edge cases: page parent closed with undo, failed restore row, replica not saved, older snapshot
 - [x] `scripts/build.sh` Release build succeeds
-- [x] run `cd agtermCore && swift test`
+- [x] run `cd HangarCore && swift test`
 - [ ] run `make test-app`
   ⚠️ unresolved. Full runs on the final tree: run 1 passed (1897 tests, before the round 1 fixes), run 2 failed
   `ControlServerZmxTests.testRealClientPaneChangesFromSupervisorToOrphanedWhileBarePaneReadsApp`, run 3 failed
@@ -255,12 +255,12 @@
   Both are one mechanism: the session host's own `zmx attach` prints `session ... created`, fails to connect with
   `FileNotFound`, exits 1, and the client's bare-attach fallback roots the pane at the app. The first test failed
   0 of 20 times alone and 2 of 20 times beside concurrent core SessionHost tests. Evidence is in
-  `/tmp/agterm-session-host-evidence/*/host.log` and `zmx-logs`. Who unlinks the new socket name is unknown. It
+  `/tmp/hangar-session-host-evidence/*/host.log` and `zmx-logs`. Who unlinks the new socket name is unknown. It
   is the backlog item `session-host-sometimes-creates-an-app-rooted-daemon`, re-filed on master in e72082a1 with
   these sightings; this branch changes no session host or zmx code.
 - [x] run `make lint`
 - [x] run the targeted UI test once with `-only-testing:`
-  passed (8.4 s) once no other `com.umputun.agterm.debug` instance was running
+  passed (8.4 s) once no other `ua.naiksoftware.hangar.debug` instance was running
 
 ### Task 8: revmux review until clean
 - [x] run revmux on the branch; fix every gating finding and re-run until a round reports none

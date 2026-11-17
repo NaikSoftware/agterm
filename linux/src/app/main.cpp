@@ -60,21 +60,21 @@ static void ensureProfile()
     if (!entry.readEntry("DefaultProfile", QString()).isEmpty())
         return;
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/konsole");
-    const QString file = dir + QStringLiteral("/agterm-qt.profile");
+    const QString file = dir + QStringLiteral("/hangar.profile");
     if (!QFile::exists(file)) {
         QDir().mkpath(dir);
         KConfig profile(file, KConfig::SimpleConfig);
-        profile.group(QStringLiteral("General")).writeEntry("Name", "agterm-qt");
+        profile.group(QStringLiteral("General")).writeEntry("Name", "hangar");
         profile.group(QStringLiteral("General")).writeEntry("Parent", "FALLBACK/");
         profile.group(QStringLiteral("General")).writeEntry("TerminalMargin", 10);
         profile.group(QStringLiteral("Appearance")).writeEntry("ColorScheme", "Breeze");
         profile.sync();
     }
-    entry.writeEntry("DefaultProfile", "agterm-qt.profile");
+    entry.writeEntry("DefaultProfile", "hangar.profile");
     entry.sync();
 }
 
-// agterm-qt --install agent-hooks|cli|skill|all [--home DIR]: the extras the launch installs, run by hand
+// hangar --install agent-hooks|cli|skill|all [--home DIR]: the extras the launch installs, run by hand
 static int installFromCommandLine(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
@@ -104,18 +104,18 @@ int main(int argc, char **argv)
         return installFromCommandLine(argc, argv);
     QApplication app(argc, argv);
     app.installEventFilter(new SmoothWheel(&app));
-    app.setApplicationName(QStringLiteral("agterm-qt")); // also names the Konsole-part profile namespace
+    app.setApplicationName(QStringLiteral("hangar")); // also names the Konsole-part profile namespace
     app.setApplicationVersion(QLatin1String(appVersion));
-    app.setDesktopFileName(QStringLiteral("agterm-qt"));
+    app.setDesktopFileName(QStringLiteral("hangar"));
     Q_INIT_RESOURCE(resources); // before the window: the fallback icon lives in the static UI library
-    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("agterm-qt"), QIcon(QStringLiteral(":/agterm-qt.png"))));
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("hangar"), QIcon(QStringLiteral(":/hangar.png"))));
 
     const QString dir = stateDir();
     QDir().mkpath(dir);
     // two instances on one state dir would each rewrite the whole file from memory and lose the other's sessions
-    QLockFile lock(dir + QStringLiteral("/agterm.lock"));
+    QLockFile lock(dir + QStringLiteral("/hangar.lock"));
     if (!lock.tryLock(0)) {
-        QMessageBox::warning(nullptr, QStringLiteral("agterm-qt"), QStringLiteral("agterm-qt is already running on %1").arg(dir));
+        QMessageBox::warning(nullptr, QStringLiteral("hangar"), QStringLiteral("hangar is already running on %1").arg(dir));
         return 1;
     }
 
@@ -157,8 +157,8 @@ int main(int argc, char **argv)
             w->save();
         library.saveIndex();
     });
-    installExtrasOnUpdate(); // first launch or a new install: hooks, skill and the agtermctl link follow the build
-    if (const QString shot = qEnvironmentVariable("AGTERM_SCREENSHOT"); !shot.isEmpty()) // dev aid for UI review
+    installExtrasOnUpdate(); // first launch or a new install: hooks, skill and the hangarctl link follow the build
+    if (const QString shot = qEnvironmentVariable("HANGAR_SCREENSHOT"); !shot.isEmpty()) // dev aid for UI review
         QTimer::singleShot(6000, &window, [&window, shot] { window.grab().save(shot); });
 
     return app.exec();

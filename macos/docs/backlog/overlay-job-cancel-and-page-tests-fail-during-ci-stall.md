@@ -1,6 +1,6 @@
 ---
 worth: maybe
-where: agtermCore/Tests/agtermctlKitTests/OverlayRunJobTests.swift
+where: HangarCore/Tests/hangarctlKitTests/OverlayRunJobTests.swift
 added: 2026-11-16
 ---
 # overlay job cancel and page tests failed once during a macOS CI stall
@@ -22,7 +22,7 @@ jobs, passed after 65 s, and unrelated tests around 08:36 to 08:37 reported 98 s
   claim the page, so `AppStore.pageClaimWindow` (30 s, real clock) would end it during a long stall; the page offer
   time was not measured. `docs/ci-flakes.md` lists the same test under #949's pre-merge runs. Cause unresolved.
 
-Second sighting on #1021 at f5a04f7b (run 43866829158, job 133297572799), a change with no `agtermCore` code.
+Second sighting on #1021 at f5a04f7b (run 43866829158, job 133297572799), a change with no `HangarCore` code.
 Both `OverlayRunJobTests` cancel tests failed the same way after about 30 s.
 `ServerStreamsTests.everyPageKindOpensInEveryLinkMode` (`.overlay75`) answered `no overlay`, and two more page
 tests failed after 117.8 s: `aClickReplacesAHiddenClickedPageOnlyOnceTheNewFileChecksOut`

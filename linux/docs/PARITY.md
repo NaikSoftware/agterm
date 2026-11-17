@@ -1,6 +1,6 @@
-# Parity with agterm master
+# Parity with hangar master
 
-The target is agterm `master` (NaikSoftware fork), not a redesign.
+The target is hangar `master` (NaikSoftware fork), not a redesign.
 Sources: `site/docs.html`, the site screenshots, the Swift code, and the fork-only commits.
 macOS keys map to Linux as ⌘ → Ctrl+Shift (Konsole's convention); ⌘⇧ and ⌘⌃ → Ctrl+Alt+Shift; ⌃ → Ctrl; ⌥ → Alt.
 
@@ -25,13 +25,13 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
 - [x] Session context menu: Tint (None, seven colours, Show On icon/name/background; batch), palette Tint Session items, `session|workspace tint`, `--tint` on new
 - [x] Drag to reorder sessions and workspaces; drag a session to another workspace; multi-select
 - [x] Drop folders from the file manager onto the tree to open sessions there
-- [x] Drop a session row on a terminal to type its Claude Code conversation id, else its agterm id (agterm-qt only)
+- [x] Drop a session row on a terminal to type its Claude Code conversation id, else its hangar id (hangar only)
 - [x] Strip agent spinner glyphs (✳ ◑ braille) from terminal titles (fork)
 - [x] Close-session reselection by MRU within the workspace
 - [x] Shortcuts: new session ⌘N, new workspace ⌘⇧N, open directory ⌘O, close ⌘W, prev/next session ⌥⌘↑↓, attention ⌃⌥↑↓, toggle sidebar ⌘⌃S, flag ⌘⇧F
 - [x] Shortcuts: reopen ⌘⇧T, font ⌘+ ⌘− ⌘0 (`font inc|dec|reset`, sizes persisted; driven through Konsole's Ctrl+wheel zoom)
-- [x] A pane's grid apart from its window (agterm-qt only, the phone's Fit to phone): `session grid <cols>x<rows> | --reset`;
-  wheel notches into a pane (agterm-qt only, the phone's drag): `session scroll <lines>`
+- [x] A pane's grid apart from its window (hangar only, the phone's Fit to phone): `session grid <cols>x<rows> | --reset`;
+  wheel notches into a pane (hangar only, the phone's drag): `session scroll <lines>`
 
 ## Phase 2: terminals
 
@@ -61,7 +61,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   Open Window ▸, Rename Window…, Delete Window, Navigate ▸ Previous/Next Window; closing one of several windows asks and keeps it
   reopenable, closing the last quits; windows open at quit reopen with their frames and the frontmost in front. Settings are app-wide.
   `window new|list|select|go|close|rename|delete|resize|move|zoom|fullscreen|minimize`, `--window W` on session/workspace/tree
-  commands (a session id finds its window without it), panes export `AGTERM_WINDOW_ID`. Wayland: `window move` is refused and
+  commands (a session id finds its window without it), panes export `HANGAR_WINDOW_ID`. Wayland: `window move` is refused and
   `window list` omits x/y (a client can neither place nor locate its window there); resize, zoom, fullscreen and minimize work.
   Not ported: palette "Open Window: <name>" entries, the auto-hide-sidebar-in-background-windows setting, the Dock menu
 - [x] Notifications: `notify`, unseen-count badge, banner click focuses the session, `session seen`
@@ -113,8 +113,8 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   re-run captures each pane's foreground group leader argv from /proc at a clean quit (idle shells skipped) and types it
   into the new shell once; `restore-denylist.conf` (starter: tmux, screen, zellij); `restore mode|capture|clear`,
   `session restore <cmd>|--none|--clear [--pane]` pins, read-back `restoreCommand`/`splitRestoreCommand`
-- [x] Live sessions: each main/right pane runs under `agterm-session-host` (in place of master's zmx), a daemon in
-  `$XDG_RUNTIME_DIR/agterm-qt-<state hash>/` that keeps the pty across quits; the next launch reattaches, replaying the
+- [x] Live sessions: each main/right pane runs under `hangar-session-host` (in place of master's zmx), a daemon in
+  `$XDG_RUNTIME_DIR/hangar-<state hash>/` that keeps the pty across quits; the next launch reattaches, replaying the
   last 4 MB of output plus the DEC modes in force and making the foreground program redraw. A daemon that is gone
   falls back to the captured command, as master's create-only payload. Deleting a session, closing a split or deleting
   a window ends its daemons; closing a window keeps them; a `none`/`rerun` launch reaps them all. Pane ids survive a
@@ -124,7 +124,7 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   copy|paste|select-all|search`, `session text` (visible screen; `--all` and `--lines` page the scrollback through the view's
   scrollbar), `session new --parent` as `session.companion.new`, `surface zoom`, `sidebar [show|hide|toggle]|mode|flagged-layout|
   expand|collapse|width`, `pick` (the palette; exits 0 picked/custom, 2 cancelled), `ask` (a dialog; buttons, hotkeys, line or
-  multiline input, choices with other; exits 0/2/3), `msg send|read|ack` (panes export `AGTERM_PANE_ID`), `recent list|open <id>|clear`,
+  multiline input, choices with other; exits 0/2/3), `msg send|read|ack` (panes export `HANGAR_PANE_ID`), `recent list|open <id>|clear`,
   `notify <body>`, repeated `--target` for `session close|move`. Read-back `context`, `collapsed`, `splitFocused`, `ask`,
   `sidebarFlaggedLayout`, `sidebarWidth`, `zoomedSurface`, `pickPending`, `askPending`. Absent features answer master's
   "<cmd> is not supported on this platform" with the reason: `zmx.*`, `session restart|lead|background`, `surface cursor`
@@ -132,15 +132,15 @@ Legend: [x] done · [ ] todo · (fork) = fork-only feature, not in upstream docs
   Simplified: a terminal-style ask is a dialog over the window rather than drawn in the pane; pick rows show no status glyph;
   `msg send --all` reaches the addressed window only; search counts case-insensitive matches in the pane's history;
   `pane.focused` events are not emitted
-- [x] Agent skill (`share/skill/agterm`, adapted to agterm-qt) and Help ▸ Developer Documentation…. Unlike master, the
+- [x] Agent skill (`share/skill/hangar`, adapted to hangar) and Help ▸ Developer Documentation…. Unlike master, the
   installers are not in the Help menu: an installed build runs all three in the background on its first launch and after
   each update (fingerprint of the shipped files and the binary path in `extras-installed`). Command line tool
-  (links `~/.local/bin/agtermctl`; an agtermctl already there is left alone), agent status hooks (master's package and
+  (links `~/.local/bin/hangarctl`; an hangarctl already there is left alone), agent status hooks (master's package and
   merge rules: Claude Code hooks + the swarm-companion mod, shell rc integration, Codex `config.toml` block, Pi extension,
   OpenCode v1/v2 plugin with the login-shell version probe; symlinks and modes kept, `.bak` backups, idempotent; an older
-  agterm-qt hook install is migrated), agent skill (Claude Code and Codex, ownership marker); no first-launch welcome.
-  `agterm-qt --install agent-hooks|skill|cli|all [--home DIR]` runs them by hand. The Codex adapter reads its hook JSON with python3 (master used macOS plutil). Not detected: an
+  hangar hook install is migrated), agent skill (Claude Code and Codex, ownership marker); no first-launch welcome.
+  `hangar --install agent-hooks|skill|cli|all [--home DIR]` runs them by hand. The Codex adapter reads its hook JSON with python3 (master used macOS plutil). Not detected: an
   unparseable `config.toml` (no TOML parser; a top-level `hooks` key is found line by line)
-- [x] Phone relay (agterm-qt only): Settings ▸ Connect a Phone… or `agtermctl mobile serve|reset` for the agterm Mobile app
+- [x] Phone relay (hangar only): Settings ▸ Connect a Phone… or `hangarctl mobile serve|reset` for the hangar Mobile app
   (`mobile/`): the control protocol over TLS, pinned by the certificate's SHA-256 and gated by a 256-bit token, paired by
-  QR code or `agterm://pair` link; `session type --pane` types into either pane
+  QR code or `hangar://pair` link; `session type --pane` types into either pane

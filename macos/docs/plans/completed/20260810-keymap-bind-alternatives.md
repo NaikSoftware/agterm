@@ -28,22 +28,22 @@ invariant, which is narrower than "nothing changes" and is pinned by tests in Ta
 
 ## Context (from discovery)
 
-- `agtermCore/Sources/agtermCore/Keybind.swift` — `parseKeybind` (243), `parseChord` (257),
+- `HangarCore/Sources/HangarCore/Keybind.swift` — `parseKeybind` (243), `parseChord` (257),
   `keybindConflicts` (306), `Chord.displayString` (198), `Chord.glyphString` (211), `Keybind = [Chord]` (234)
-- `agtermCore/Sources/agtermCore/Keymap.swift` — `equivalent(for:)` (16) is
+- `HangarCore/Sources/HangarCore/Keymap.swift` — `equivalent(for:)` (16) is
   `builtinOverrides[action] ?? action.defaultChord`, `glyphHint` (22), `resolveBuiltinOverrides` (141),
   `validateCommands` (213), `parseMapLine` (296), `parseCommandLine` (335)
-- `agtermCore/Sources/agtermCore/KeybindMatcher.swift` — the leader state machine. **UUID-typed at its
+- `HangarCore/Sources/HangarCore/KeybindMatcher.swift` — the leader state machine. **UUID-typed at its
   core**: `MatchResult.fired(UUID)` and `init(_ binds: [(Keybind, UUID)])`.
-- `agtermCore/Sources/agtermCore/CustomCommandEngine.swift` — wraps the matcher, resolves id to command
-- `agtermCore/Sources/agtermCore/ControlKeymap.swift` — `ControlKeymapAction`, `ControlKeymapCommand`,
+- `HangarCore/Sources/HangarCore/CustomCommandEngine.swift` — wraps the matcher, resolves id to command
+- `HangarCore/Sources/HangarCore/ControlKeymap.swift` — `ControlKeymapAction`, `ControlKeymapCommand`,
   `ControlKeymap.project` (112)
-- `agtermCore/Sources/agtermctlKit/SocketClient.swift` — `formatKeymap` (239)
-- `agterm/Commands/CustomCommandRunner.swift` — `handleKeyDown(_:in:)` (98), `rebuild` (65) and its
+- `HangarCore/Sources/hangarctlKit/SocketClient.swift` — `formatKeymap` (239)
+- `Hangar/Commands/CustomCommandRunner.swift` — `handleKeyDown(_:in:)` (98), `rebuild` (65) and its
   validity log (68), the `toggle_fullscreen` special case (129). **It receives no `AppActions`** today
-  (`agterm/agtermApp.swift:65`).
-- `agterm/AppActions+Palette.swift` — `shortcutGlyph(for:)` (12);
-  `PaletteCommand.builtinAction` lives in `agtermCore/Sources/agtermCore/PaletteCatalog.swift:144`
+  (`Hangar/hangarApp.swift:65`).
+- `Hangar/AppActions+Palette.swift` — `shortcutGlyph(for:)` (12);
+  `PaletteCommand.builtinAction` lives in `HangarCore/Sources/HangarCore/PaletteCatalog.swift:144`
 - `CustomCommand.shortcut` is a raw `String` re-parsed on demand and **preserved verbatim** into the
   control projection. The model does not change; only parse, validate and dispatch learn about `|`.
 
@@ -61,14 +61,14 @@ custom-command-only (`parseCommandLine`, 353).
 
 ## Testing Strategy
 
-- **host-free unit tests** (`agtermCore/Tests/`) carry the weight: parsing, validation, projection, matching
-- **hosted tests** (`agtermTests/`) cover only what needs AppKit. `agtermTests/FullScreenChordTests.swift`
+- **host-free unit tests** (`HangarCore/Tests/`) carry the weight: parsing, validation, projection, matching
+- **hosted tests** (`HangarTests/`) cover only what needs AppKit. `HangarTests/FullScreenChordTests.swift`
   already drives `handleKeyDown(_:in:)` with a window harness and registry setup — extend it rather than
   adding a second hosted file for the same entry point
 - do **not** re-assert guards upstream of the change (text-field pass-through, the repeat guard). They are
   unmodified and already covered
 - **no new XCUITest.** Nothing here is a new user-visible surface
-- run each gate ONCE at the end: `cd agtermCore && swift test`, `make test-app`, `make lint`. Scope
+- run each gate ONCE at the end: `cd HangarCore && swift test`, `make test-app`, `make lint`. Scope
   intermediate runs with `--filter` / `-only-testing:`
 
 ## Progress Tracking
@@ -160,7 +160,7 @@ Why the invariant holds elsewhere:
   and `|` now splits first. Harmless: no unshifted key produces `|`, so such a binding parses today but can
   never fire — the spelling that fires is `shift+\`.
 
-`keybindConflicts`, `KeybindMatcher` and `CustomCommandEngine.Outcome` are `public` in `agtermCore` and
+`keybindConflicts`, `KeybindMatcher` and `CustomCommandEngine.Outcome` are `public` in `HangarCore` and
 change signature. Their only consumers are `Keymap.swift:244`, `CustomCommandRunner.swift:140`,
 `CustomCommandEngine`, and their own tests — all in this repository, so this is a source-compatible
 refactor, not a published API break.
@@ -211,14 +211,14 @@ and falls back to a small switch for the few actions with no palette row — no 
 ### Task 1: Parse alternatives, render a Keybind, retarget the matcher
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Keybind.swift`
-- Modify: `agtermCore/Sources/agtermCore/KeybindMatcher.swift`
-- Modify: `agtermCore/Sources/agtermCore/Keymap.swift`
-- Modify: `agtermCore/Sources/agtermCore/CustomCommandEngine.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/KeybindTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/KeybindMatcherTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/KeymapTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/CustomCommandEngineTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Keybind.swift`
+- Modify: `HangarCore/Sources/HangarCore/KeybindMatcher.swift`
+- Modify: `HangarCore/Sources/HangarCore/Keymap.swift`
+- Modify: `HangarCore/Sources/HangarCore/CustomCommandEngine.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/KeybindTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/KeybindMatcherTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/KeymapTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/CustomCommandEngineTests.swift`
 
 - [x] add `parseKeybinds(_:) -> [Keybind]?` splitting on `|`, nil when any alternative is malformed or the
       list is empty; leave `parseKeybind` untouched so existing callers keep compiling
@@ -240,8 +240,8 @@ and falls back to a small switch for the few actions with no palette row — no 
 ### Task 2: Accept alternatives on `map` lines
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Keymap.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/KeymapTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Keymap.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/KeymapTests.swift`
 
 - [x] replace the `keybind.count == 1` guard (`Keymap.swift:310`) with `parseKeybinds`, splitting the
       result into the first single-chord alternative (menu-bound) and the rest (monitor-bound)
@@ -266,10 +266,10 @@ and falls back to a small switch for the few actions with no palette row — no 
 ### Task 3: Per-alternative validation across both verbs
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Keybind.swift`
-- Modify: `agtermCore/Sources/agtermCore/Keymap.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/KeybindTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/KeymapTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Keybind.swift`
+- Modify: `HangarCore/Sources/HangarCore/Keymap.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/KeybindTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/KeymapTests.swift`
 
 - [x] rework pass 1 to test each alternative separately against the active built-in menu chord set,
       **including built-in monitor alternatives**, dropping only the offending alternative
@@ -295,19 +295,19 @@ and falls back to a small switch for the few actions with no palette row — no 
 ### Task 4: Fire built-in alternatives from the monitor
 
 **Files:**
-- Modify: `agterm/Commands/CustomCommandRunner.swift`
-- Modify: `agterm/AppActions+Palette.swift`
-- Modify: `agterm/agtermApp.swift`
-- Modify: `agtermTests/FullScreenChordTests.swift`
+- Modify: `Hangar/Commands/CustomCommandRunner.swift`
+- Modify: `Hangar/AppActions+Palette.swift`
+- Modify: `Hangar/hangarApp.swift`
+- Modify: `HangarTests/FullScreenChordTests.swift`
 
-- [x] inject `AppActions` into `CustomCommandRunner` (it receives none today, `agtermApp.swift:65`)
+- [x] inject `AppActions` into `CustomCommandRunner` (it receives none today, `hangarApp.swift:65`)
 - [x] add `AppActions.perform(_ action: BuiltinAction, in window: NSWindow?)` as a reverse lookup over
       `PaletteCommand.allCases` on `builtinAction`, running the palette row's body under the MENU item's
       modal rule and its `isVisible(in:)` enablement so an alternative behaves as its line's menu chord
       does; a small switch covers the few actions with no palette row
 - [x] dispatch `.builtin` from `handleKeyDown(_:in:)` without the `focusedSurface` / `runNoSurface` split —
       a built-in acts on the active session and key window like a palette row
-- [x] rebuild the engine on `.agtermKeymapChanged` from both commands and built-in sequences
+- [x] rebuild the engine on `.hangarKeymapChanged` from both commands and built-in sequences
 - [x] fix the validity log at `CustomCommandRunner.swift:68` to use `parseKeybinds`, so a `|` shortcut no
       longer logs a false "invalid shortcut; skipping keybind" while the engine binds it
 - [x] leave `guard !event.isARepeat` where it is: holding a key bound to a built-in fires once
@@ -318,12 +318,12 @@ and falls back to a small switch for the few actions with no palette row — no 
 ### Task 5: Read-back and display
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlKeymap.swift`
-- Modify: `agtermCore/Sources/agtermCore/Keymap.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SocketClient.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlKeymapTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/KeymapTests.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/SocketClientTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlKeymap.swift`
+- Modify: `HangarCore/Sources/HangarCore/Keymap.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SocketClient.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlKeymapTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/KeymapTests.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/SocketClientTests.swift`
 
 - [x] add `alternates: [String]?` to `ControlKeymapAction`, omitted when empty, each alternative in kitty
       syntax; leave `chord` meaning the menu key equivalent so the `menu` half stays comparable
@@ -342,8 +342,8 @@ and falls back to a small switch for the few actions with no palette row — no 
 ### Task 6: Pin compatibility and verify acceptance criteria
 
 **Files:**
-- Modify: `agtermCore/Tests/agtermCoreTests/KeymapTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlKeymapTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/KeymapTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlKeymapTests.swift`
 
 - [x] add a test parsing a realistic `keymap.conf` with no `|` and no multi-chord `map` — several `map`
       lines including a bare non-arrow one, keyed and palette-only `command` lines, a deliberate conflict —
@@ -357,13 +357,13 @@ and falls back to a small switch for the few actions with no palette row — no 
       each already asserted by `CustomCommandEngineTests.eitherAlternativeFiresTheSameCommand`,
       `KeymapTests.mapSequenceOnlyLineLeavesTheActionWithoutAMenuChord`, and
       `KeymapTests.commandAlternativeShadowedByABuiltinDropsAloneAndKeepsTheSibling`
-- [x] run the full gates ONCE: `cd agtermCore && swift test`, `make test-app`, `make lint`
+- [x] run the full gates ONCE: `cd HangarCore && swift test`, `make test-app`, `make lint`
 
 ### Task 7: [Final] Update documentation
 
 **Files:**
 - Modify: `.claude/rules/keymap.md`, `.claude/rules/control-api.md`
-- Modify: `plugins/agterm/skills/agterm/SKILL.md`, `plugins/agterm/skills/agterm/reference.md`
+- Modify: `plugins/hangar/skills/hangar/SKILL.md`, `plugins/hangar/skills/hangar/reference.md`
 - Modify: `README.md`, `site/docs.html`, `site/commands.html`
 
 - [x] rewrite `.claude/rules/keymap.md:18` ("`map <chord> <action>` accepts one chord, not a leader") and
@@ -393,10 +393,10 @@ and `perform(_:in:)` all read it. The palette keeps showing rows the menu disabl
 session), so it needs a shown-but-inert state rather than the rows vanishing.
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/PaletteCatalog.swift`
-- Modify: `agterm/AppActions+Palette.swift`, `agterm/agtermApp+Menus.swift`, `agterm/Views/Palette.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PaletteCatalogTests.swift`
-- Modify: `agtermTests/AppActionsPaletteTests.swift`, `agtermTests/CustomCommandRunnerTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/PaletteCatalog.swift`
+- Modify: `Hangar/AppActions+Palette.swift`, `Hangar/hangarApp+Menus.swift`, `Hangar/Views/Palette.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PaletteCatalogTests.swift`
+- Modify: `HangarTests/AppActionsPaletteTests.swift`, `HangarTests/CustomCommandRunnerTests.swift`
 - Modify: `.claude/rules/menu-actions.md`, `.claude/rules/keymap.md`, `README.md`, `site/docs.html`,
   `docs/backlog/toggle-fullscreen-menu-chord-bypasses-the-modal-gate.md`
 
@@ -415,7 +415,7 @@ session), so it needs a shown-but-inert state rather than the rows vanishing.
       close session dismissing the cover its sidebar sibling is blocked by
 - [x] update `menu-actions.md` (the owner), `keymap.md` (cross-reference), README, `site/docs.html` and the
       `toggle_fullscreen` backlog item's now-stale wording
-- [x] run the full gates ONCE: `cd agtermCore && swift test`, `make test-app`, `make lint`
+- [x] run the full gates ONCE: `cd HangarCore && swift test`, `make test-app`, `make lint`
 
 ### Task 9: [Scope expansion, approved mid-run] One conflict rule, and a palette flag that is not a snapshot
 
@@ -428,9 +428,9 @@ refreshes only on appear/query/mode, so a row that went inert under an open pale
 and dismissed it.
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Keymap.swift`
-- Modify: `agterm/Views/Palette.swift`, `agterm/AppActions+Palette.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/KeymapTests.swift`, `agtermTests/AppActionsPaletteTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Keymap.swift`
+- Modify: `Hangar/Views/Palette.swift`, `Hangar/AppActions+Palette.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/KeymapTests.swift`, `HangarTests/AppActionsPaletteTests.swift`
 - Modify: `.claude/rules/keymap.md`, `.claude/rules/menu-actions.md`
 
 - [x] keep the menu-shadow pass first and unchanged; compute the conflict relation ONCE over its survivors
@@ -447,12 +447,12 @@ and dismissed it.
       the new `runIfEnabled()`, which is what `runItem` dismisses on
 - [x] write tests: a row flipping live→inert→live under an open palette, and an inert row running and
       dismissing nothing
-- [x] run the full gates ONCE: `cd agtermCore && swift test`, `make test-app`, `make lint`
+- [x] run the full gates ONCE: `cd HangarCore && swift test`, `make test-app`, `make lint`
 
 ## Post-Completion
 
 **Manual verification** (no automated test replaces this):
-- launch a Debug instance with an isolated `AGTERM_STATE_DIR` and a `keymap.conf` using alternatives on
+- launch a Debug instance with an isolated `HANGAR_STATE_DIR` and a `keymap.conf` using alternatives on
   both verbs; confirm the menu item, the alternative sequence, and the palette hint agree
 - confirm a half-typed leader still times out after 1.5s and that Esc abandons it
 - confirm ⌘Q and the reserved chords (ctrl+tab, ctrl+1/2) are unaffected

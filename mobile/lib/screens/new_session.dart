@@ -5,7 +5,7 @@ import '../theme.dart';
 import 'actions.dart';
 import 'session.dart';
 
-// agterm-qt's workspace "+" menu: the launcher ids and the command each types into the new shell
+// hangar's workspace "+" menu: the launcher ids and the command each types into the new shell
 const launchers = [
   ('terminal', 'Terminal', ''),
   ('claude', 'Claude Code', 'claude'),
@@ -14,7 +14,7 @@ const launchers = [
   ('antigravity', 'Antigravity', 'agy'),
 ];
 
-Future<void> showNewSession(BuildContext context, AgtermModel m, {String? workspaceId, Session? parent}) => showModalBottomSheet(
+Future<void> showNewSession(BuildContext context, HangarModel m, {String? workspaceId, Session? parent}) => showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) => Padding(
@@ -25,7 +25,7 @@ Future<void> showNewSession(BuildContext context, AgtermModel m, {String? worksp
 
 class NewSessionSheet extends StatefulWidget {
   const NewSessionSheet({super.key, required this.model, required this.host, this.workspaceId, this.parent});
-  final AgtermModel model;
+  final HangarModel model;
   final String? workspaceId;
   final Session? parent;
   final BuildContext host; // pushes the new session's screen after the sheet closes

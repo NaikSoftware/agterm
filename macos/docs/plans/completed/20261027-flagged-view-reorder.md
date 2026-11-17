@@ -11,14 +11,14 @@
   read-back.
 
 ## Context (from discovery)
-- membership: `Session.flagged`, mutators in `agtermCore/Sources/agtermCore/AppStore+SessionState.swift`
+- membership: `Session.flagged`, mutators in `HangarCore/Sources/HangarCore/AppStore+SessionState.swift`
   (`setFlag(_:forSession:)`, `setFlag(_:forSessions:)`, `clearFlags()`); `workspace.flag` for Flag All.
 - projection: `AppStore.flaggedSessions` (`AppStore.swift:895`, tree order), read for order by
   `WorkspaceSidebar.swift:428,517` and `navigableSessions` (`AppStore+Focus.swift:199`); other readers use
   emptiness or count only.
 - flagged tree rows: `Coordinator.workspaceProjection` (`WorkspaceSidebar+FlaggedLayout.swift`).
 - drag: `WorkspaceSidebar+DragDrop.swift` (source guard :13, `resolveSessionMove` :124 rejects a nil item,
-  spring expansion guard :201); host-free arithmetic in `agtermCore/Sources/agtermCore/SidebarDrop.swift`
+  spring expansion guard :201); host-free arithmetic in `HangarCore/Sources/HangarCore/SidebarDrop.swift`
   (`resolveSessions`, `workspaceInsertIndex` as the visible-to-full precedent).
 - observation: `WorkspaceSidebar.updateNSView` (:101-114) is the only observation registration site; it reads
   the store fields the sidebar renders from.
@@ -28,7 +28,7 @@
 - close reselection: `closeSession` removes the session before `closeReselectionTarget`, passing its old tree
   location (`AppStore.swift:565-583`); `nearestInScopeTarget` walks tree order (`AppStore+CloseReselection.swift:37-45`).
 - per-window state: `WindowLibrary.stores` holds one `AppStore` per window; only `FlaggedViewLayout` is app-wide.
-  `restoredRuntime` builds a `WindowLibrary` at `agtermApp.swift:379` (hosted-test branch) and `:391`; the
+  `restoredRuntime` builds a `WindowLibrary` at `hangarApp.swift:379` (hosted-test branch) and `:391`; the
   convenience init is `WindowLibrary.swift:133`.
 - control: `session.flag` (`ControlProtocol.swift:27`); the dispatcher passes `mode` raw
   (`ControlDispatcher.swift:437-438`) and the app parses it (`ControlServer+SessionActions.swift:642-646`);
@@ -46,11 +46,11 @@
 - keep the flagged-dashboard recipe as is: it reads `workspaces[].sessions[]` and stays tree-ordered
 
 ## Testing Strategy
-- **unit tests** (`agtermCore` swift-testing): order model, arrivals, persistence round trip and legacy seed,
+- **unit tests** (`HangarCore` swift-testing): order model, arrivals, persistence round trip and legacy seed,
   lifecycle, close reselection, `SidebarDrop` table tests for both layouts, dispatcher and CLI parsing,
   projection read-back
-- **hosted tests** (`agtermTests`): settings propagation of the layout, the app-side `session.flag move` action
-- **UI tests** (`agtermUITests`): the drag adapter is covered here, not by simulated hosted drags:
+- **hosted tests** (`HangarTests`): settings propagation of the layout, the app-side `session.flag move` action
+- **UI tests** (`HangarUITests`): the drag adapter is covered here, not by simulated hosted drags:
   a flat-layout between-row drop (nil-item gap) and a collapsed flagged-tree target with hidden siblings in
   `ReorderUITests`, plus a control round trip asserting `flaggedOrder` and sidebar row order
 
@@ -98,8 +98,8 @@
   `WindowLibrary` holds the effective layout and copies it onto each store at creation, BEFORE restore, on
   launch, new window and closed-window reopen alike. Its initial value is a `WindowLibrary.init` parameter
   assigned before `bootstrap()` (`WindowLibrary.swift:156`), defaulting to flat in the convenience init: launch
-  restores windows inside `init`, called from `agtermApp.restoredRuntime` (`agtermApp.swift:114`, both library
-  constructions at :379 and :391), and `SettingsModel` is built only after it (`:123`), so `agtermApp` passes
+  restores windows inside `init`, called from `hangarApp.restoredRuntime` (`hangarApp.swift:114`, both library
+  constructions at :379 and :391), and `SettingsModel` is built only after it (`:123`), so `hangarApp` passes
   `settingsStore.load().effectiveFlaggedViewLayout` through `restoredRuntime`. Later changes go through
   `SettingsModel.applyFlaggedViewLayout`, which sets both the `GhosttyApp` copy the sidebar renders from and the
   `WindowLibrary` mirror, before the appearance notification. Nothing else sets either copy.
@@ -144,7 +144,7 @@
 ### Task 1: Make room in the files at the line limit
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`, `AppStore+Snapshot.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`, `AppStore+Snapshot.swift`
 
 - [x] move `restore(from:)` (`AppStore.swift:910-951`) into `AppStore+Snapshot.swift`, with the internal access
       it needs: `freshWorkspaceID` (private, :238) and the `sessionRecency` setter (`public private(set)`, :125)
@@ -154,12 +154,12 @@
 ### Task 2: Saved flagged order in the core model
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/AppStore+FlaggedOrder.swift`, `WindowLibrary+FlaggedLayout.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift` (stored properties only),
+- Create: `HangarCore/Sources/HangarCore/AppStore+FlaggedOrder.swift`, `WindowLibrary+FlaggedLayout.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (stored properties only),
   `AppStore+SessionState.swift`, `Snapshot.swift`, `AppStore+Snapshot.swift`, `AppStore+PendingClose.swift`,
   `AppStore+RecentClosed.swift`, `AppStore+CloseReselection.swift`, `WindowLibrary.swift` (stored mirror and
   init parameter only)
-- Create/Modify: tests in `agtermCore/Tests/agtermCoreTests/` (new `AppStoreFlaggedOrderTests.swift`,
+- Create/Modify: tests in `HangarCore/Tests/HangarCoreTests/` (new `AppStoreFlaggedOrderTests.swift`,
   `SnapshotRoundTripTests.swift`, `AppStorePendingCloseTests.swift`, `RecentClosedTests.swift`,
   new `WindowLibraryFlaggedLayoutTests.swift`, since `WindowLibraryTests.swift` is at 1963 of 2000 lines)
 
@@ -186,8 +186,8 @@
 ### Task 3: Drop arithmetic for both flagged layouts
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/SidebarDrop.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/SidebarDropTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/SidebarDrop.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/SidebarDropTests.swift`
 
 - [x] add the flat/plain resolver: visible slot or on-row drop in saved order to a block move, nil-item gaps
       included, no-op detection in saved order
@@ -203,12 +203,12 @@
 ### Task 4: Sidebar drag, rendering and navigation
 
 **Files:**
-- Modify: `agterm/Views/WorkspaceSidebar+DragDrop.swift`, `agterm/Views/WorkspaceSidebar.swift`,
-  `agterm/Views/WorkspaceSidebar+FlaggedLayout.swift`, `agterm/SettingsModel.swift`, `agterm/agtermApp.swift`,
-  `agtermCore/Sources/agtermCore/AppStore+Focus.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreNavigationTests.swift`, `agtermTests/SettingsModelTests.swift`,
-  `agtermTests/SidebarFlaggedLayoutTests.swift`, `agtermTests/SidebarWorkspaceFlagTests.swift`,
-  `agtermTests/AppActionsPaletteTests.swift`, `agtermUITests/ReorderUITests.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar+DragDrop.swift`, `Hangar/Views/WorkspaceSidebar.swift`,
+  `Hangar/Views/WorkspaceSidebar+FlaggedLayout.swift`, `Hangar/SettingsModel.swift`, `Hangar/hangarApp.swift`,
+  `HangarCore/Sources/HangarCore/AppStore+Focus.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreNavigationTests.swift`, `HangarTests/SettingsModelTests.swift`,
+  `HangarTests/SidebarFlaggedLayoutTests.swift`, `HangarTests/SidebarWorkspaceFlagTests.swift`,
+  `HangarTests/AppActionsPaletteTests.swift`, `HangarUITests/ReorderUITests.swift`
 
 - [x] allow session drags in flagged mode; keep workspace rows non-draggable under the flagged tree
 - [x] route flat/plain drops to the saved-order move and flagged-tree drops through the translation into
@@ -231,13 +231,13 @@
 ### Task 5: Control API and CLI
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/ControlDispatcher+SessionFlag.swift`,
-  `agtermCore/Tests/agtermctlKitTests/SessionMetadataCommandsTests.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift` (one dispatch line), `ControlActionsDefaults.swift`,
-  `ControlProjection.swift`, `AppStore+FlaggedOrder.swift` (read-back), `agtermCore/Sources/agtermctlKit/SessionMetadataCommands.swift`,
-  `agterm/Control/ControlServer+SessionActions.swift` (or a new extension if it nears the limit)
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherSessionMetadataTests.swift`, `MockControlActions.swift`,
-  `agtermTests/ControlServerFlaggedLayoutTests.swift`, `agtermUITests/ControlSidebarStatusUITests.swift`
+- Create: `HangarCore/Sources/HangarCore/ControlDispatcher+SessionFlag.swift`,
+  `HangarCore/Tests/hangarctlKitTests/SessionMetadataCommandsTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift` (one dispatch line), `ControlActionsDefaults.swift`,
+  `ControlProjection.swift`, `AppStore+FlaggedOrder.swift` (read-back), `HangarCore/Sources/hangarctlKit/SessionMetadataCommands.swift`,
+  `Hangar/Control/ControlServer+SessionActions.swift` (or a new extension if it nears the limit)
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherSessionMetadataTests.swift`, `MockControlActions.swift`,
+  `HangarTests/ControlServerFlaggedLayoutTests.swift`, `HangarUITests/ControlSidebarStatusUITests.swift`
 
 - [x] add `session.flag move` with `--before`/`--after`: dispatcher checks, new `ControlActions` requirement with
       an unsupported default, app action checking flagged and same window
@@ -251,14 +251,14 @@
 ### Task 6: Verify acceptance criteria
 - [x] verify flat and plain reorder across workspaces, tree-layout moves, navigation per layout, arrivals and
       lifecycle, control move and read-back
-- [x] run `cd agtermCore && swift test`
+- [x] run `cd HangarCore && swift test`
 - [x] run `make test-app`
 - [x] run `make lint`
 - [x] build and launch an isolated Debug instance and drag in all three layouts
 
 ### Task 7: [Final] Update documentation
 - [x] `site/docs.html` flagged view section; `site/commands.html` for `session flag move` and `flaggedOrder`
-- [x] `plugins/agterm/skills/agterm/` reference and SKILL.md pointer
+- [x] `plugins/hangar/skills/hangar/` reference and SKILL.md pointer
 - [x] `.claude/rules/sidebar.md`: drag in the flagged view, the saved order and two orders by layout, the
       observation sentence, and the layout-ownership note at :98-99 (the store now mirrors the layout;
       `rendersWorkspaceRows(flaggedLayout:)` keeps its signature)

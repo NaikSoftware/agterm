@@ -3,19 +3,19 @@
 # ~/.config/fish/functions/claude.fish, or source this file from ~/.config/fish/config.fish.
 # See README.md.
 
-# Claude Code: per-agterm-tab session resume.
-# Binds each tab's Claude Code session id to the tab's own uuid (AGTERM_SESSION_ID),
+# Claude Code: per-hangar-tab session resume.
+# Binds each tab's Claude Code session id to the tab's own uuid (HANGAR_SESSION_ID),
 # so restoring the terminal resumes that tab's own conversation instead of starting fresh.
-# Requires: agterm (exports AGTERM_SESSION_ID, restores running commands) + fish.
-function claude --description 'Per-agterm-tab Claude Code session resume'
+# Requires: hangar (exports HANGAR_SESSION_ID, restores running commands) + fish.
+function claude --description 'Per-hangar-tab Claude Code session resume'
     if not status is-interactive
         command claude $argv                                    # non-interactive (script/subshell) -> passthrough
         return
     end
 
-    set -l sid (string lower -- "$AGTERM_SESSION_ID")
+    set -l sid (string lower -- "$HANGAR_SESSION_ID")
     if test -z "$sid"
-        command claude $argv                                    # not in an agterm tab -> passthrough
+        command claude $argv                                    # not in an hangar tab -> passthrough
         return
     end
     if not string match -qr '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' -- "$sid"
@@ -39,7 +39,7 @@ function claude --description 'Per-agterm-tab Claude Code session resume'
         end
     end
 
-    # The account. CLAUDE_CONFIG_DIR names it for a launch the user typed, but agterm replays a
+    # The account. CLAUDE_CONFIG_DIR names it for a launch the user typed, but hangar replays a
     # pane's argv and not its environment, so the variable is gone from a restored launch and the
     # tab would look for its conversation under the default account. The remembered directory is
     # consulted only when the default account holds nothing for this tab, so it never takes a
@@ -47,7 +47,7 @@ function claude --description 'Per-agterm-tab Claude Code session resume'
     set -l default "$HOME/.claude"
     set -l state "$XDG_STATE_HOME"
     test -n "$state"; or set state "$HOME/.local/state"
-    set -l memo "$state/agterm-claude-resume/$sid"
+    set -l memo "$state/hangar-claude-resume/$sid"
     set -l roots "$CLAUDE_CONFIG_DIR"
     test -n "$roots[1]"; or set roots "$default"
     if test -z "$CLAUDE_CONFIG_DIR"; and test -r "$memo"

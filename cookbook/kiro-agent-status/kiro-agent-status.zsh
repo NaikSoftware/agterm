@@ -14,13 +14,13 @@
 # text would miss that.
 #
 # The poller owns all three per-turn states (active, blocked, completed); this file owns only its
-# lifetime and the final `idle`. Alternative to agterm's shipped shell/integration.sh, whose default
-# AGTERM_AGENT_RE does not list kiro — do not add kiro to that regex on top of this, since for a REPL
+# lifetime and the final `idle`. Alternative to hangar's shipped shell/integration.sh, whose default
+# HANGAR_AGENT_RE does not list kiro — do not add kiro to that regex on top of this, since for a REPL
 # it pins one `active` across the whole session, which is what this recipe exists to avoid.
 #
 # Fish users want kiro-agent-status.fish instead.
 
-[ -n "${AGTERM_SESSION_ID:-}" ] || return 0 2>/dev/null
+[ -n "${HANGAR_SESSION_ID:-}" ] || return 0 2>/dev/null
 
 # Locate kiro-status-detector.sh and the stock status script relative to this file.
 if [ -n "${ZSH_VERSION:-}" ]; then
@@ -31,7 +31,7 @@ else
   _kas_dir="$(cd "$(dirname "$_kas_self")" >/dev/null 2>&1 && pwd)"
 fi
 : "${KIRO_STATUS_DETECTOR:=$_kas_dir/kiro-status-detector.sh}"
-: "${AGTERM_STATUS_WRAPPER:=$HOME/.config/agterm/agent-status/agterm-agent-status.sh}"
+: "${HANGAR_STATUS_WRAPPER:=$HOME/.config/hangar/agent-status/hangar-agent-status.sh}"
 
 # Is that pid still our detector? The poller has stop conditions of its own — a hard-killed app
 # takes about five seconds of failed reads — so it can be long gone while kiro-cli runs on for hours,
@@ -81,14 +81,14 @@ function _kas_run {
     # zombie to collect anyway. The sleep is what matters, and it is not cosmetic: killing the poller
     # does not cancel a status write it had already spawned, and that grandchild would otherwise land
     # after the idle below and leave the row showing a turn that is over. A tick of the poll interval
-    # is longer than that one agtermctl call has left to run.
+    # is longer than that one hangarctl call has left to run.
     sleep "${KIRO_STATUS_INTERVAL:-0.5}" 2>/dev/null || true
   fi
   # The session is over, so nothing about it is worth flagging: `idle` clears the row unconditionally,
   # where a `completed` left to --auto-reset would outlive the thing it describes. The poller cannot do
   # this itself — by here it is dead either way, killed above or already self-exited. Runs even when no
   # poller started, since some earlier session may have left a status on the row.
-  "$AGTERM_STATUS_WRAPPER" idle >/dev/null 2>&1 || true
+  "$HANGAR_STATUS_WRAPPER" idle >/dev/null 2>&1 || true
   return $rc
 }
 

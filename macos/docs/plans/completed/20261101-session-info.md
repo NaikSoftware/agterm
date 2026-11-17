@@ -14,14 +14,14 @@ mirrored to a viewer attached to a remote session.
 ## Context (from discovery)
 
 - Uncommitted prototype in this worktree, approved visually by Eugene in an isolated Debug instance:
-  - `agtermCore/Sources/agtermCore/SessionInfoMarkup.swift` + `SessionInfoMarkupTests.swift` (8 cases):
+  - `HangarCore/Sources/HangarCore/SessionInfoMarkup.swift` + `SessionInfoMarkupTests.swift` (8 cases):
     plain or inline Foundation markdown to host-free `SessionInfoSpan`s, `^[text](color: "NAME")` and
     `^[text](dim: true)`, link label kept, unknown color and parse errors rejected, blank, line-break and
     control-character visible text rejected after entity decoding.
-  - `agterm/Views/SidebarInfoCell.swift`: `SidebarInfoMetrics`, `SidebarInfoCellView` (one tail-truncated
+  - `Hangar/Views/SidebarInfoCell.swift`: `SidebarInfoMetrics`, `SidebarInfoCellView` (one tail-truncated
     line under the name, colored fragments keep color on a selected row, uncolored ones follow
     `themeTextColor(selected:)`, color emoji drawn at 0.7 and centered on cap height, tooltip on truncation).
-  - `agterm/Views/SidebarInfoProto.swift`: throwaway sample source behind `AGTERM_PROTO_INFO=1`.
+  - `Hangar/Views/SidebarInfoProto.swift`: throwaway sample source behind `HANGAR_PROTO_INFO=1`.
   - `WorkspaceSidebar+RowRendering.swift`: `heightOfRowByItem`, `sessionInfo(forSession:)` shared by height
     and cell, `session-info-cell` identifier, title row centered on a band of plain row height.
   - `SidebarRowViews.swift`: `SidebarCellView` no longer `final`, `themeTextColor(selected:)` extracted.
@@ -53,16 +53,16 @@ mirrored to a viewer attached to a remote session.
 
 - **testing approach**: Regular - code first, then its tests in the same task.
 - Every task ends with its tests written and passing before the next starts.
-- Gates run ONCE at the end (`make build`, `cd agtermCore && swift test`, `make test-app`, `make lint`);
+- Gates run ONCE at the end (`make build`, `cd HangarCore && swift test`, `make test-app`, `make lint`);
   per-task runs are scoped with `--filter` or `-only-testing:` to what changed.
 - A file reaching its line cap is a STOP: ask before splitting it; never raise the limit.
 - Update this plan when scope changes during implementation.
 
 ## Testing Strategy
 
-- **unit tests** (`agtermCore`, swift-testing): parsing, validation, dispatcher, store events, projection,
+- **unit tests** (`HangarCore`, swift-testing): parsing, validation, dispatcher, store events, projection,
   presentation frames, settings, CLI.
-- **hosted tests** (`agtermTests`, scoped `-only-testing:`): app effect, timer, remote presentation, sidebar
+- **hosted tests** (`HangarTests`, scoped `-only-testing:`): app effect, timer, remote presentation, sidebar
   row height and colors, and one command-to-row integration check through the real dispatcher into a live
   outline.
 - **XCUITest**, two targeted cases: the Interface tab-fit check extended in `SettingsUITests`, and one
@@ -132,12 +132,12 @@ public struct SessionInfo: Equatable, Sendable {
 ### Task 1: SessionInfo model, validation and store setter
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/SessionInfoMarkup.swift`
-- Modify: `agtermCore/Sources/agtermCore/Session.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+SessionState.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/SessionInfoMarkupTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreEventTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/SnapshotRoundTripTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/SessionInfoMarkup.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+SessionState.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/SessionInfoMarkupTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreEventTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/SnapshotRoundTripTests.swift`
 
 - [x] add `SessionInfo` and `SessionInfo.make(source:markdown:hideAfter:)` returning the value or a rejection
       message: source cap, `HudSpec.isValidHideAfter`, then `SessionInfoMarkup.spans`
@@ -157,17 +157,17 @@ public struct SessionInfo: Equatable, Sendable {
 ### Task 2: session.info protocol, dispatcher and read-back
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+SessionMetadata.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlActions.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlActionsDefaults.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherSessionMetadataTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTreeProjectionTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/MockControlActions.swift`
-- Modify: `agterm/Control/ControlServer.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+SessionMetadata.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlActions.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherSessionMetadataTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreTreeProjectionTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
 
 - [x] ➕ register `.sessionInfo` in `ControlServer.dispatch`'s exhaustive switch beside `.sessionContext`, moved
       here from task 3 because a new command case breaks the app build until it is listed
@@ -176,7 +176,7 @@ public struct SessionInfo: Equatable, Sendable {
       `SessionInfo.make` and rejecting every bad combination before any action runs
 - [x] add `setSessionInfo` to `ControlActions` with the unimplemented default
 - [x] add optional `info`, `infoMarkdown`, `infoHideAfter` to `ControlSessionNode` with defaults in the
-      compatibility initializer (agtermCore is consumed by the agterm-linux fork), populated in `AppStore`
+      compatibility initializer (HangarCore is consumed by the agterm-linux fork), populated in `AppStore`
       from `effectiveInfo` per the read-back rule in Technical Details
 - [x] write dispatcher tests in `ControlDispatcherSessionMetadataTests` (`ControlProtocolTests.swift` is at
       its cap): set, clear, the encoded request shape, and every rejection path calling NO action
@@ -188,13 +188,13 @@ public struct SessionInfo: Equatable, Sendable {
 ### Task 3: App effect, expiry timer and close/undo
 
 **Files:**
-- Create: `agterm/Control/ControlServer+SessionInfo.swift`
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+PendingClose.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agterm/Views/WindowAccessor.swift`
-- Create: `agtermTests/ControlServerSessionInfoTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStorePendingCloseTests.swift`
+- Create: `Hangar/Control/ControlServer+SessionInfo.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+PendingClose.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `Hangar/Views/WindowAccessor.swift`
+- Create: `HangarTests/ControlServerSessionInfoTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePendingCloseTests.swift`
 
 - [x] implement `setSessionInfo` in the new file through `AppStore.setInfo` (`ControlServer+SessionActions.swift`
       is at its cap; the switch registration landed in task 2)
@@ -219,18 +219,18 @@ public struct SessionInfo: Equatable, Sendable {
 ### Task 4: Remote presentation of the info line
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/PresentationFrames.swift`
-- Modify: `agtermCore/Sources/agtermCore/PresentationHub.swift` (➕ `info` joins `supportedKinds`, which advertises
+- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`
+- Modify: `HangarCore/Sources/HangarCore/PresentationHub.swift` (➕ `info` joins `supportedKinds`, which advertises
   it; `publish` does not filter by negotiated kinds, so an older viewer still receives the frames and stays safe by
   decoding them as `.unknown` and ignoring the snapshot's extra key)
-- Modify: `agtermCore/Sources/agtermCore/RemotePresentationClient.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+SessionState.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Presentation.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+RemotePresentation.swift`
-- Modify: `agterm/Control/ControlServer+RemotePresentation.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PresentationFramesTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/RemotePresentationStateTests.swift`
-- Modify: `agtermTests/ControlServerRemotePresentationTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/RemotePresentationClient.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+SessionState.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Presentation.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+RemotePresentation.swift`
+- Modify: `Hangar/Control/ControlServer+RemotePresentation.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PresentationFramesTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/RemotePresentationStateTests.swift`
+- Modify: `HangarTests/ControlServerRemotePresentationTests.swift`
 
 - [x] add an `info` frame and an optional, defaulted `PresentationSnapshot.info` carrying source, markdown
       flag and configured hideAfter; `AppStore.setInfo` publishes the local value to `presentationHub` as
@@ -249,14 +249,14 @@ public struct SessionInfo: Equatable, Sendable {
 ### Task 5: Sidebar rendering from the store, and the Interface toggle
 
 **Files:**
-- Delete: `agterm/Views/SidebarInfoProto.swift`
-- Modify: `agterm/Views/WorkspaceSidebar+RowRendering.swift`
-- Modify: `agterm/Views/WorkspaceSidebar.swift`
-- Modify: `agterm/Views/SidebarInfoCell.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppSettings.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppSettingsTests.swift`
-- Create: `agtermTests/SidebarInfoRowTests.swift`
-- Modify: `agtermUITests/SettingsUITests.swift`
+- Delete: `Hangar/Views/SidebarInfoProto.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar+RowRendering.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar.swift`
+- Modify: `Hangar/Views/SidebarInfoCell.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppSettings.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppSettingsTests.swift`
+- Create: `HangarTests/SidebarInfoRowTests.swift`
+- Modify: `HangarUITests/SettingsUITests.swift`
 
 - [x] add `case sessionInfo` to `InterfaceElement` in the sidebar section, `hiddenByDefault`, label
       "Session info", a nil `symbolName`, placed by `settingsOrder(in:)`
@@ -276,13 +276,13 @@ public struct SessionInfo: Equatable, Sendable {
 - [x] run `swift test --filter AppSettingsTests`, the scoped hosted tests and the scoped XCUITest - must pass
       before task 6
 
-### Task 6: agtermctl session info
+### Task 6: hangarctl session info
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermctlKit/SessionMetadataCommands.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/SessionMetadataCommandsTests.swift`
-- Create: `agtermUITests/ControlSessionInfoUITests.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionMetadataCommands.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/SessionMetadataCommandsTests.swift`
+- Create: `HangarUITests/ControlSessionInfoUITests.swift`
 
 - [x] add `session info [TEXT] [--clear] [--markdown] [--hide-after N]` beside `session context`, with
       target/window options and help showing the quoted color form `^[text](color: "green")`
@@ -298,15 +298,15 @@ public struct SessionInfo: Equatable, Sendable {
 Eugene replaced task 5's on/off Interface toggle with a three-way choice after seeing it; codex agreed.
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppSettings.swift`
-- Modify: `agterm/Ghostty/GhosttyApp.swift`
-- Modify: `agterm/SettingsModel.swift`
-- Modify: `agterm/Views/SettingsView.swift`
-- Modify: `agterm/Views/WorkspaceSidebar+RowRendering.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SessionMetadataCommands.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppSettingsTests.swift`
-- Modify: `agtermTests/SidebarInfoRowTests.swift`
-- Modify: `agtermUITests/SettingsUITests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppSettings.swift`
+- Modify: `Hangar/Ghostty/GhosttyApp.swift`
+- Modify: `Hangar/SettingsModel.swift`
+- Modify: `Hangar/Views/SettingsView.swift`
+- Modify: `Hangar/Views/WorkspaceSidebar+RowRendering.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionMetadataCommands.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppSettingsTests.swift`
+- Modify: `HangarTests/SidebarInfoRowTests.swift`
+- Modify: `HangarUITests/SettingsUITests.swift`
 
 - [x] drop `InterfaceElement.sessionInfo` (never shipped) and restore the settings tests that enumerate it
 - [x] add `SessionInfoDisplay` (`always`|`flagged`|`off`, labels Always/Flagged/Off) and raw
@@ -319,7 +319,7 @@ Eugene replaced task 5's on/off Interface toggle with a three-way choice after s
 - [x] update the CLI help to the three-way rule
 - [x] write tests: settings default, resolution, round trip and labels; hosted rows for Off keeping the line and
       timer, Flagged hiding in the tree and showing after a mode flip, and a setting change redrawing through
-      `.agtermAppearanceChanged`; the Interface tab UI test picks Flagged, checks it persists and the tab fits
+      `.hangarAppearanceChanged`; the Interface tab UI test picks Flagged, checks it persists and the tab fits
 - [x] run the settings tests, the scoped hosted tests and the scoped UI test - must pass before task 8
 
 ### Task 8: Cross-surface documentation
@@ -327,8 +327,8 @@ Eugene replaced task 5's on/off Interface toggle with a three-way choice after s
 **Files:**
 - Modify: `.claude/rules/control-api.md`
 - Modify: `.claude/rules/sidebar.md`
-- Modify: `plugins/agterm/skills/agterm/SKILL.md`
-- Modify: `plugins/agterm/skills/agterm/reference.md`
+- Modify: `plugins/hangar/skills/hangar/SKILL.md`
+- Modify: `plugins/hangar/skills/hangar/reference.md`
 - Modify: `site/commands.html`
 - Modify: `site/docs.html`
 
@@ -351,7 +351,7 @@ Eugene replaced task 5's on/off Interface toggle with a three-way choice after s
 - [x] expiry clears the line and shrinks the row while hidden too; relaunch starts with no info
 - [x] an attached viewer shows the origin's line with its configured hideAfter, loses it on origin expiry
       and on stream end, and a local override hides and then reveals the origin's line
-- [x] run `make build`, `cd agtermCore && swift test`, `make test-app`, `make lint` - all clean
+- [x] run `make build`, `cd HangarCore && swift test`, `make test-app`, `make lint` - all clean
 - [x] ➕ lint caught two `twoColumnSection` calls passing two closures by trailing syntax; fixed
 - [x] ➕ `watchdogFiresWhileTheGlobalQueueIsExhausted` (unrelated `session wait` test) timed out once in the
       gate and passed in 26 later runs; it now records stage and process diagnostics on a timeout with
@@ -366,7 +366,7 @@ Eugene replaced task 5's on/off Interface toggle with a three-way choice after s
 
 **Manual verification:**
 - Launch an isolated Debug instance, set lines from
-  `agtermctl --socket` (plain, markdown with colors, emoji, a long one, one with `--hide-after 5`), and check
+  `hangarctl --socket` (plain, markdown with colors, emoji, a long one, one with `--hide-after 5`), and check
   by eye: row height, truncation and tooltip, selection colors, a tinted row, and the line disappearing on
   expiry.
 - Look at Settings > Interface with the Session info picker on each value, and switch the sidebar to the flagged view under Flagged.

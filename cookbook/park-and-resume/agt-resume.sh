@@ -5,8 +5,8 @@
 # saved directory, running the command that was captured at park time.
 set -e
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
-PARK_DIR=${AGT_PARK_DIR:-$HOME/.agterm-projects}
+HANGARCTL=${HANGARCTL:-hangarctl}
+PARK_DIR=${AGT_PARK_DIR:-$HOME/.hangar-projects}
 
 p=$1
 if [ -z "$p" ]; then
@@ -21,7 +21,7 @@ if [ ! -f "$snapshot" ]; then
 fi
 
 jq -c '.[]' "$snapshot" | while read -r w; do
-	ws=$("$AGTERMCTL" workspace new "$(printf '%s' "$w" | jq -r .name)" --collapsed --json | jq -r .result.id)
+	ws=$("$HANGARCTL" workspace new "$(printf '%s' "$w" | jq -r .name)" --collapsed --json | jq -r .result.id)
 	printf '%s' "$w" | jq -c '.sessions[]' | while read -r s; do
 		cmd=$(printf '%s' "$s" | jq -r .cmd)
 		set -- --workspace "$ws" --no-select \
@@ -30,6 +30,6 @@ jq -c '.[]' "$snapshot" | while read -r w; do
 		if [ -n "$cmd" ]; then
 			set -- "$@" --command "$cmd"
 		fi
-		"$AGTERMCTL" session new "$@"
+		"$HANGARCTL" session new "$@"
 	done
 done

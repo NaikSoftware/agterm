@@ -1,11 +1,11 @@
-// Runs against a live `agtermctl mobile serve` when AGTERM_PAIR_LINK is set; skipped otherwise.
+// Runs against a live `hangarctl mobile serve` when HANGAR_PAIR_LINK is set; skipped otherwise.
 import 'dart:io';
 
-import 'package:agterm_mobile/client.dart';
+import 'package:hangar_mobile/client.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final link = Platform.environment['AGTERM_PAIR_LINK'];
+  final link = Platform.environment['HANGAR_PAIR_LINK'];
   test('relay answers control commands with the pinned certificate', () async {
     final p = Pairing.parse(link!)!;
     final c = await Connection.open(p);
@@ -20,11 +20,11 @@ void main() {
     final grid = await c.call('session.grid', target: created['id'], args: {'columns': 40, 'rows': 60});
     expect([grid['columns'], grid['rows']], [40, 60]); // Fit to phone: the phone's grid
     await c.call('session.grid', target: created['id'], args: {'reset': true});
-    await expectLater(c.call('session.info', target: 'nope'), throwsA(isA<AgtermError>()));
+    await expectLater(c.call('session.info', target: 'nope'), throwsA(isA<HangarError>()));
     c.close();
     final bad = Pairing(name: 'x', host: p.host, port: p.port, token: 'A' * 43, fingerprint: p.fingerprint);
-    await expectLater(Connection.open(bad), throwsA(isA<AgtermError>().having((e) => e.message, 'message', contains('revoked'))));
+    await expectLater(Connection.open(bad), throwsA(isA<HangarError>().having((e) => e.message, 'message', contains('revoked'))));
     final wrongCert = Pairing(name: 'x', host: p.host, port: p.port, token: p.token, fingerprint: '0' * 64);
-    await expectLater(Connection.open(wrongCert), throwsA(isA<AgtermError>().having((e) => e.message, 'message', contains('certificate'))));
-  }, skip: link == null ? 'set AGTERM_PAIR_LINK' : false);
+    await expectLater(Connection.open(wrongCert), throwsA(isA<HangarError>().having((e) => e.message, 'message', contains('certificate'))));
+  }, skip: link == null ? 'set HANGAR_PAIR_LINK' : false);
 }

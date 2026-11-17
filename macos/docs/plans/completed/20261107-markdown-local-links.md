@@ -11,34 +11,34 @@
   root is refused (`/` or home) opens without navigation, so its strip has no Back/Forward and read-back
   `navigation` is false.
 - Integration: link pages move from `loadHTMLString(baseURL: nil)` to the existing `HtmlPageSchemeHandler`
-  (`agterm-page://<page-id>/<path>`), so WebKit owns history and scroll restoration and the existing
+  (`hangar-page://<page-id>/<path>`), so WebKit owns history and scroll restoration and the existing
   toolbar, `session overlay navigate back|forward`, `canGoBack`/`canGoForward` read-back and reload
   `--current` work unchanged.
 
 ## Context (from discovery)
-- Renderer: `agterm/Resources/markdown/render.js` (strips local hrefs), `agtermCore/.../MarkdownPage.swift`
-  (document builder, `localPath`/`lexicalPath`/`remoteImageReferences`), `agterm/Views/MarkdownProbe.swift`
+- Renderer: `Hangar/Resources/markdown/render.js` (strips local hrefs), `HangarCore/.../MarkdownPage.swift`
+  (document builder, `localPath`/`lexicalPath`/`remoteImageReferences`), `Hangar/Views/MarkdownProbe.swift`
   (bounded read, picture embedding from the folder of the path it is given).
-- Web view: `agterm/Views/HtmlOverlayRegistry.swift` (exactly 1000 lines, the lint limit; `loadOriginal`,
-  `textLoaded`, `pageURL` already maps `agterm-page` to a file path at :707, `urlChanged`/`reportPage`,
+- Web view: `Hangar/Views/HtmlOverlayRegistry.swift` (exactly 1000 lines, the lint limit; `loadOriginal`,
+  `textLoaded`, `pageURL` already maps `hangar-page` to a file path at :707, `urlChanged`/`reportPage`,
   `reportFailure` shared by every page kind at :770, scheme handler installed only for `.replica` at :269),
-  `agterm/Views/HtmlPageSchemeHandler.swift`, `agterm/Views/HtmlOverlayView.swift` (strip gated on
-  `overlay.navigation`), `agterm/Views/TextPageBridge.swift` (precedent for a page source in its own file).
-- Policy and model: `agtermCore/.../HtmlOverlay.swift` (`HtmlNavigationPolicy.decide` sees only
+  `Hangar/Views/HtmlPageSchemeHandler.swift`, `Hangar/Views/HtmlOverlayView.swift` (strip gated on
+  `overlay.navigation`), `Hangar/Views/TextPageBridge.swift` (precedent for a page source in its own file).
+- Policy and model: `HangarCore/.../HtmlOverlay.swift` (`HtmlNavigationPolicy.decide` sees only
   `HtmlOverlay`; `identity` at :302; `grantError`); `HtmlSource`, `ReplicaContent` and
   `PresentationPageSource` are public enums matched by agterm-linux, and an older presenter fails its stream
   on an enum shape it cannot decode (PresentationFrames.swift:269-272), so none gains associated values.
-- Remote: `agtermCore/.../PresentationFrames.swift` (`PresentationPage` :300), `AppStore+RemotePage.swift`
+- Remote: `HangarCore/.../PresentationFrames.swift` (`PresentationPage` :300), `AppStore+RemotePage.swift`
   (`openRemotePage`), `AppStore+ReplicaPage.swift` (`replicaSource`, navigation already copied),
-  `RemotePageResources.swift` (`content`), `agterm/Control/ControlServer+PageServe.swift` (`claimPageServe`
+  `RemotePageResources.swift` (`content`), `Hangar/Control/ControlServer+PageServe.swift` (`claimPageServe`
   keeps only the source).
 - Control: `SessionCommands.swift:688-698` and `ControlDispatcher+Overlay.swift` `markdownContent` reject
   `--navigation`; `ControlServer+MarkdownPage.swift` opens clicked markdown without navigation after a
   detached file check; `ControlServer+LinkOverlay.swift:13` opens clicked URLs with `navigation: true`.
-- Tests: `agtermCore/Tests/agtermCoreTests/{MarkdownPageTests,HtmlOverlayTests,RemotePageResourcesTests,ControlDispatcherOverlayTests}.swift`
-  plus the presentation-frame codec tests; hosted `agtermTests/MarkdownPageRenderingTests.swift` (225 lines,
+- Tests: `HangarCore/Tests/HangarCoreTests/{MarkdownPageTests,HtmlOverlayTests,RemotePageResourcesTests,ControlDispatcherOverlayTests}.swift`
+  plus the presentation-frame codec tests; hosted `HangarTests/MarkdownPageRenderingTests.swift` (225 lines,
   home for new hosted tests; `HtmlOverlayRegistryTests.swift` is at 1848 of 2000),
-  `ControlServerPageServeTests.swift`; XCUITest `agtermUITests/ControlHtmlOverlayUITests.swift:44`.
+  `ControlServerPageServeTests.swift`; XCUITest `HangarUITests/ControlHtmlOverlayUITests.swift:44`.
 - Supersedes `docs/backlog/markdown-overlay-follows-local-md-links.md`.
 
 ## Development Approach
@@ -47,16 +47,16 @@
 - **CRITICAL: every task MUST include new/updated tests** for code changes in that task
 - **CRITICAL: all tests must pass before starting next task** - no exceptions
 - **CRITICAL: update this plan file when scope changes during implementation**
-- run only the touched tests while working: `cd agtermCore && swift test --filter <Suite>`,
-  `xcodebuild test -project agterm.xcodeproj -scheme agtermTests -destination 'platform=macOS' -derivedDataPath build/DerivedData -only-testing:agtermTests/<Class>/<test>`,
-  and the one XCUITest method by `-only-testing:agtermUITests/ControlHtmlOverlayUITests/<test>`;
+- run only the touched tests while working: `cd HangarCore && swift test --filter <Suite>`,
+  `xcodebuild test -project Hangar.xcodeproj -scheme HangarTests -destination 'platform=macOS' -derivedDataPath build/DerivedData -only-testing:HangarTests/<Class>/<test>`,
+  and the one XCUITest method by `-only-testing:HangarUITests/ControlHtmlOverlayUITests/<test>`;
   the full gates run once in the acceptance task
 
 ## Testing Strategy
-- **unit tests** (`agtermCore`, host-free): containment, canonical suffix, grant computation and refusal,
+- **unit tests** (`HangarCore`, host-free): containment, canonical suffix, grant computation and refusal,
   policy decisions, identity, flag validation, remote resource rules, presentation-frame decoding across
   versions
-- **hosted tests** (`agtermTests`, mostly `MarkdownPageRenderingTests`): render.js link filter,
+- **hosted tests** (`HangarTests`, mostly `MarkdownPageRenderingTests`): render.js link filter,
   scheme-served pages, native history and scroll restoration, failed link keeping the page, theme refresh
   and reload, presenter replica navigation
 - **e2e**: extend the existing markdown socket test in `ControlHtmlOverlayUITests` with navigation read-back
@@ -68,7 +68,7 @@
 - keep plan in sync with actual work done
 
 ## Solution Overview
-- One path for local and remote: a link page first loads `agterm-page://<page-id>/<canonical path>`, and a
+- One path for local and remote: a link page first loads `hangar-page://<page-id>/<canonical path>`, and a
   followed link keeps the URL WebKit resolved, a symlinked document included; the handler's
   source builds `MarkdownPage.html` for the requested path off the main actor (local: `MarkdownProbe`;
   presenter: bytes fetched from the origin plus remote pictures). That source, local and replica, lives in
@@ -109,7 +109,7 @@
 | render.js gets the current folder from the app (page loads with `baseURL: nil`) | changed | the scheme URL gives the document a real base; WebKit resolves relative links |
 | markdown-it `validateLink` rejects `file:` | dropped | no `file:` URLs are used |
 | `other.md#section` keeps its fragment | kept | |
-| App-side history of (path, scrollY) in agtermCore | dropped | WebKit's own history through the scheme handler; Task 2 proves scroll restoration before anything depends on it |
+| App-side history of (path, scrollY) in HangarCore | dropped | WebKit's own history through the scheme handler; Task 2 proves scroll restoration before anything depends on it |
 | New click drops forward branch; missing target leaves history usable | kept | native behavior; a failed link load keeps the shown page |
 | Bare reload = original file; toolbar and `--current` = shown file; theme refresh neither resets nor adds history | kept | |
 | `--markdown` rejects `--navigation` | changed | accepts it; links follow only with navigation; clicked markdown opens with it |
@@ -117,7 +117,7 @@
 | Pages on another Mac excluded | changed | remote parity, per Eugene |
 
 ## Technical Details
-- agtermCore `MarkdownPage`:
+- HangarCore `MarkdownPage`:
   - `linkGrant(for path: String, home: String = NSHomeDirectory()) -> MarkdownLinkGrant?` - canonical
     original path and canonical folder; nil when that folder is `/` or `home` (compared canonically);
   - `linkedDocument(_ requested: String, grant: MarkdownLinkGrant) -> String?` - the normalized request
@@ -126,7 +126,7 @@
     alias takes its pictures from the folder its links resolve against;
   - `html(markdown:images:style:links: Bool = false)` writes `data-links="local"` when true;
   - `remoteImageReferences` skips markdown-spelled references.
-- `MarkdownLinkGrant: Codable, Equatable, Sendable` (agtermCore, public: `PresentationPage` carries it) with
+- `MarkdownLinkGrant: Codable, Equatable, Sendable` (HangarCore, public: `PresentationPage` carries it) with
   `path` and `root`. Optional `markdownLinks` field on `HtmlOverlay` (defaulted init parameter) and on
   `PresentationPage`. JSON decoding ignores an unknown key, so an old presenter shows links as text; an old
   origin sends none, which a new presenter reads as nil.
@@ -135,7 +135,7 @@
   already opens the file on the calling thread, so the synchronous `ControlActions` seam is unchanged.
   A nil grant with navigation requested opens the page with `navigation: false`.
 - `HtmlNavigationPolicy.decide`, `.markdown` and `.replica(_, .markdown)`: with a grant, allow a main-frame
-  URL with scheme `agterm-page`, host equal to the page id, a markdown-suffixed path lexically inside
+  URL with scheme `hangar-page`, host equal to the page id, a markdown-suffixed path lexically inside
   `grant.root`; everything else as today. No `userActivated` requirement: initial load, reload and
   Back/Forward arrive as non-link navigations, and the page runs no scripts that could start one.
 - render.js, when `data-links="local"`: keep an href with no scheme, not starting with `/` or `//`, whose
@@ -172,10 +172,10 @@
 ### Task 1: Path rules, grant and link filter
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/MarkdownPage.swift`
-- Modify: `agterm/Resources/markdown/render.js`
-- Modify: `agtermCore/Tests/agtermCoreTests/MarkdownPageTests.swift`
-- Modify: `agtermTests/MarkdownPageRenderingTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/MarkdownPage.swift`
+- Modify: `Hangar/Resources/markdown/render.js`
+- Modify: `HangarCore/Tests/HangarCoreTests/MarkdownPageTests.swift`
+- Modify: `HangarTests/MarkdownPageRenderingTests.swift`
 
 - [x] write failing tests for `linkGrant`: canonical path and folder; nil for `/`, home, and a symlinked
       alias of home; a symlinked first file yields its target's folder
@@ -195,7 +195,7 @@
 ### Task 2: Prove native history and scroll restoration on a scheme-served markdown page
 
 **Files:**
-- Modify: `agtermTests/MarkdownPageRenderingTests.swift`
+- Modify: `HangarTests/MarkdownPageRenderingTests.swift`
 
 - [x] write a hosted test serving two long documents built by `MarkdownPage.html(... links: true)` (`a.md`
       and `sub/b.md` with a heading) through a test-local `WKURLSchemeHandler`, with production settings:
@@ -210,13 +210,13 @@
 ### Task 3: Local link pages
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/HtmlOverlay.swift`
-- Create: `agterm/Views/MarkdownPageSource.swift` (markdown page source, local and replica, with the
+- Modify: `HangarCore/Sources/HangarCore/HtmlOverlay.swift`
+- Create: `Hangar/Views/MarkdownPageSource.swift` (markdown page source, local and replica, with the
   registry's existing replica markdown branch moved in)
-- Modify: `agterm/Views/HtmlOverlayRegistry.swift` (hook lines only; stays within 1000 lines)
-- Modify: `agterm/Control/ControlServer+MarkdownPage.swift`, `agterm/Control/ControlServer+SessionActions.swift`
+- Modify: `Hangar/Views/HtmlOverlayRegistry.swift` (hook lines only; stays within 1000 lines)
+- Modify: `Hangar/Control/ControlServer+MarkdownPage.swift`, `Hangar/Control/ControlServer+SessionActions.swift`
   (grant computed off the main actor at open)
-- Modify: `agtermCore/Tests/agtermCoreTests/HtmlOverlayTests.swift`, `agtermTests/MarkdownPageRenderingTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HtmlOverlayTests.swift`, `HangarTests/MarkdownPageRenderingTests.swift`
 
 - [x] write failing policy tests: own-host markdown URL inside the grant allowed; no grant, other host,
       non-markdown path, escaping path (plain and percent-encoded `..`), subframe and new window refused;
@@ -243,16 +243,16 @@
 ### Task 4: Remote pages follow links too
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/PresentationFrames.swift`, `AppStore+RemotePage.swift`,
+- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`, `AppStore+RemotePage.swift`,
   `AppStore+ReplicaPage.swift`, `RemotePageResources.swift`, `HtmlOverlay.swift` (replica identity)
-- Modify: `agterm/Control/ControlServer+PageServe.swift`, `agterm/Control/ControlServer.swift`,
-  `agterm/Views/MarkdownPageSource.swift`
-- Create: `agterm/Views/HtmlReplicaLink.swift` (`HtmlReplicaLink` and its bounded read moved out of the
+- Modify: `Hangar/Control/ControlServer+PageServe.swift`, `Hangar/Control/ControlServer.swift`,
+  `Hangar/Views/MarkdownPageSource.swift`
+- Create: `Hangar/Views/HtmlReplicaLink.swift` (`HtmlReplicaLink` and its bounded read moved out of the
   registry, Eugene approved, so the presenter source reads through the same loop)
-- Modify: `agtermCore/Tests/agtermCoreTests/RemotePageResourcesTests.swift`, the presentation-frame codec
+- Modify: `HangarCore/Tests/HangarCoreTests/RemotePageResourcesTests.swift`, the presentation-frame codec
   tests, `HtmlOverlayTests.swift`
-- Modify: `agtermTests/ControlServerPageServeTests.swift`, `agtermTests/MarkdownPageRenderingTests.swift`,
-  `agtermTests/ControlServerForwardedClickTests.swift`
+- Modify: `HangarTests/ControlServerPageServeTests.swift`, `HangarTests/MarkdownPageRenderingTests.swift`,
+  `HangarTests/ControlServerForwardedClickTests.swift`
 
 - [x] write failing codec tests: `PresentationPage` round-trips the grant; a frame without it decodes to
       nil; a frame with it decodes under the old shape (unknown key ignored)
@@ -273,12 +273,12 @@
 ### Task 5: Control surface: `--navigation` for markdown and clicked pages
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift` (flag rule and messages at :688-698)
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Overlay.swift`, `ControlProtocol.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift` (flag rule and messages at :688-698)
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Overlay.swift`, `ControlProtocol.swift`
   (`navigationWithoutPage`, `markdownOptions` texts)
-- Modify: `agterm/Control/ControlServer+MarkdownPage.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherOverlayTests.swift` and the CLI parse tests
-- Modify: `agtermUITests/ControlHtmlOverlayUITests.swift`
+- Modify: `Hangar/Control/ControlServer+MarkdownPage.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherOverlayTests.swift` and the CLI parse tests
+- Modify: `HangarUITests/ControlHtmlOverlayUITests.swift`
 
 - [x] write failing tests: CLI and dispatcher accept `--markdown --navigation` and still reject the other
       flags; the CLI open computes the grant beside `markdownFileRefusal`; markdown page companions stay
@@ -290,12 +290,12 @@
 
 ### Task 6: Verify acceptance criteria
 - [x] verify every Overview item, locally and on a replica page
-- [x] `make lint`, `cd agtermCore && swift test`, `make test-app` (each once)
-- [x] `lsappinfo list | grep -A4 agterm.debug` after the hosted run
+- [x] `make lint`, `cd HangarCore && swift test`, `make test-app` (each once)
+- [x] `lsappinfo list | grep -A4 hangar.debug` after the hosted run
 
 ### Task 7: [Final] Update documentation
 - [x] `site/docs.html` markdown overlay section and `site/commands.html` `--markdown`/`--navigation`
-- [x] `plugins/agterm/skills/agterm/` reference for `--markdown --navigation`
+- [x] `plugins/hangar/skills/hangar/` reference for `--markdown --navigation`
 - [x] `.claude/rules/control-api.md`: the markdown-page bullet (~line 772, "strips every link but http(s) and
       fragments") and the remote content-page bullet (~line 2054, "a markdown page its own file plus pictures")
 - [x] `HtmlPageSchemeHandler` doc comment (:11-12), which names only pages on another Mac

@@ -14,7 +14,7 @@ It pairs with the [flagged-dashboard](../flagged-dashboard/) recipe: press this 
 
 ## Requirements
 
-- agterm 0.38.0 or later. That release added the checkbox form to `agtermctl ask` (`--choice`, `--multiple`, `--checked`). The recency rule also relies on 0.31.0, which stamps `statusChangedAt` on every accepted status write, idle included.
+- hangar 0.38.0 or later. That release added the checkbox form to `hangarctl ask` (`--choice`, `--multiple`, `--checked`). The recency rule also relies on 0.31.0, which stamps `statusChangedAt` on every accepted status write, idle included.
 - `jq`
 
 ## Setup
@@ -27,21 +27,21 @@ cp agt-flag-recent.sh ~/bin/
 chmod +x ~/bin/agt-flag-recent.sh
 ```
 
-Then add an entry to `~/.config/agterm/keymap.conf`:
+Then add an entry to `~/.config/hangar/keymap.conf`:
 
 ```
 command "Flag Recent" ctrl+shift+u --error-hud ~/bin/agt-flag-recent.sh
 ```
 
-Apply the file with File ▸ Reload Keymap or `agtermctl keymap reload`. Any free chord works, a leader sequence such as `ctrl+a>u` included. `--error-hud` puts a panel over the session when the script fails, since a chord otherwise throws its stderr away.
+Apply the file with File ▸ Reload Keymap or `hangarctl keymap reload`. Any free chord works, a leader sequence such as `ctrl+a>u` included. `--error-hud` puts a panel over the session when the script fails, since a chord otherwise throws its stderr away.
 
 This is a keymap or palette command, not a shell command: the custom-command runner supplies `AGT_SOCKET` and `AGT_WINDOW_ID`, and the script refuses to run without the socket.
 
-Custom commands do not load your shell profile. agterm prepends its bundled CLI directory and adds `/usr/local/bin` and `/opt/homebrew/bin` to `PATH`. Override these variables in the keymap line when needed:
+Custom commands do not load your shell profile. hangar prepends its bundled CLI directory and adds `/usr/local/bin` and `/opt/homebrew/bin` to `PATH`. Override these variables in the keymap line when needed:
 
 - `FLAG_RECENT_MINUTES`: how far back a status write counts. Default `30`.
 - `JQ`: path to `jq`. Default `jq`.
-- `AGTERMCTL`: path to `agtermctl`. Default `agtermctl`.
+- `HANGARCTL`: path to `hangarctl`. Default `hangarctl`.
 
 ```
 command "Flag Recent" ctrl+shift+u --error-hud FLAG_RECENT_MINUTES=60 ~/bin/agt-flag-recent.sh
@@ -49,13 +49,13 @@ command "Flag Recent" ctrl+shift+u --error-hud FLAG_RECENT_MINUTES=60 ~/bin/agt-
 
 ## Usage
 
-Press the chord, untick anything you want left out, and press Return. Press it again later to rebuild the set; switch back to the full tree with the flagged-view footer button or `agtermctl sidebar mode tree`.
+Press the chord, untick anything you want left out, and press Return. Press it again later to rebuild the set; switch back to the full tree with the flagged-view footer button or `hangarctl sidebar mode tree`.
 
 ## How it works
 
-One `agtermctl tree --json --window` read gives every session node its `status`, `statusChangedAt` (the epoch second its status was last written) and `context`. A `jq` filter keeps the `active` ones and those stamped after the cutoff, and turns each into a dialog row.
+One `hangarctl tree --json --window` read gives every session node its `status`, `statusChangedAt` (the epoch second its status was last written) and `context`. A `jq` filter keeps the `active` ones and those stamped after the cutoff, and turns each into a dialog row.
 
-`agtermctl ask open --multiple` with one `--choice`, `--choice-subtitle` and `--checked` per row draws the checkbox list. A form like this gets OK and Cancel buttons with OK as the default, and blocks until answered. OK prints `{"result":"answered","id":"ok","selected":[...]}`; Cancel and Esc exit 3, and a cancel from elsewhere exits 2, which the script treats as "leave the flags alone" so `--error-hud` stays quiet. Only after an OK does it run `session flag clear` for the window, `session flag on` for each ticked id, and `sidebar mode flagged`.
+`hangarctl ask open --multiple` with one `--choice`, `--choice-subtitle` and `--checked` per row draws the checkbox list. A form like this gets OK and Cancel buttons with OK as the default, and blocks until answered. OK prints `{"result":"answered","id":"ok","selected":[...]}`; Cancel and Esc exit 3, and a cancel from elsewhere exits 2, which the script treats as "leave the flags alone" so `--error-hud` stays quiet. Only after an OK does it run `session flag clear` for the window, `session flag on` for each ticked id, and `sidebar mode flagged`.
 
 `statusChangedAt` records when a status was written, not when it changed, so a hook re-asserting `active` on every tool call keeps refreshing it. That is what makes a plain cutoff enough.
 
@@ -67,7 +67,7 @@ The set is a snapshot. A session that starts working after the run is not added,
 
 Any accepted status write counts, a cleared or idle one included, so the rule is status recency rather than proof that an agent did work.
 
-Status and its timestamp are not saved. After agterm restarts every local session starts with no status and no stamp, so nothing matches until agents report again.
+Status and its timestamp are not saved. After hangar restarts every local session starts with no status and no stamp, so nothing matches until agents report again.
 
 The dialog holds at most 50 rows. More recent sessions than that and `ask` refuses before any flag changes, which `--error-hud` shows.
 

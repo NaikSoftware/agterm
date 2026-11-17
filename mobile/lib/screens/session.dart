@@ -35,7 +35,7 @@ const keys = [
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key, required this.model, required this.sessionId});
-  final AgtermModel model;
+  final HangarModel model;
   final String sessionId;
 
   @override
@@ -59,14 +59,14 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _scrolling = false;
   bool polling = false;
 
-  AgtermModel get m => widget.model;
+  HangarModel get m => widget.model;
   Session? get s => m.session(widget.sessionId);
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load()); // _load asks the route, which initState may not
-    // shortcut: polls the plain-text screen; a streamed, coloured terminal needs a pty tap in agterm-qt
+    // shortcut: polls the plain-text screen; a streamed, coloured terminal needs a pty tap in hangar
     poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _load());
     m.addListener(_onModel);
     _lifecycle = AppLifecycleListener(onPause: () => _setForeground(false), onResume: () => _setForeground(true));
@@ -126,7 +126,7 @@ class _SessionScreenState extends State<SessionScreen> {
       // a new grid width resizes the text even when the screen's text is the same (an idle shell)
       if (mounted && (t != text || error != null || columns != _columns || lost)) setState(() => (text = t, error = null, _columns = columns));
       if (s != null && s!.unseen > 0) unawaited(m.act('session.seen', target: widget.sessionId));
-    } on AgtermError catch (e) {
+    } on HangarError catch (e) {
       if (mounted) setState(() => error = e.message);
     } on TimeoutException {
       // keep the last screen
@@ -185,7 +185,7 @@ class _SessionScreenState extends State<SessionScreen> {
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'reset': true});
         m.fitted.remove(key);
       }
-    } on AgtermError catch (e) {
+    } on HangarError catch (e) {
       autoFit.wanted = false; // a refused fit (a pane another Mac leads) is not retried on every change
       if (mounted) report(context, e.message);
     } on TimeoutException {
@@ -315,7 +315,7 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   double _fit = 11, _width = 360, _height = 600;
-  int? _columns; // the computer's grid width, from session.text; older agterm-qt sends none
+  int? _columns; // the computer's grid width, from session.text; older hangar sends none
 
   // fitted, the phone shows the program's whole grid, so a drag scrolls the program itself: it reaches the computer as
   // wheel notches (session scroll), which a TUI such as Claude Code reads as its own scrolling

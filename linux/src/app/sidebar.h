@@ -11,7 +11,7 @@ class QPainter;
 
 // A launcher's icon as a template tinted `color`: the terminal glyph, or the agent's logo.
 QIcon launcherIcon(const QString &launcherId, const QColor &color);
-// agterm's title-bar and footer glyphs: sidebar, split, splitH, filepanel, clock, grid, gridFilled
+// hangar's title-bar and footer glyphs: sidebar, split, splitH, filepanel, clock, grid, gridFilled
 QIcon chromeIcon(const QString &name, const QColor &color);
 // a status's glyph colour and shape (circle square triangle diamond capsule star) from Settings > Agent Status
 QColor statusColor(const Settings &settings, const QString &status);
@@ -38,7 +38,7 @@ private:
     Sidebar *m_sidebar;
 };
 
-// The workspace -> session tree, drawn like agterm's sidebar.
+// The workspace -> session tree, drawn like hangar's sidebar.
 class Sidebar : public QTreeWidget
 {
     Q_OBJECT

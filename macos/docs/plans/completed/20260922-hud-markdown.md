@@ -14,22 +14,22 @@
   None of those slot rules change.
 
 ## Context (from discovery)
-- `agtermCore/Sources/agtermCore/Hud.swift`: `HudSpec` (Codable, `decodeIfPresent` for optional fields),
+- `HangarCore/Sources/HangarCore/Hud.swift`: `HudSpec` (Codable, `decodeIfPresent` for optional fields),
   `HudLayout.box`, `renderedBody`, `bodyLines`, `wrap`, `cellCount`, `textLength`; `maxColumns` 60,
   `horizontalPadding` 2, `verticalPadding` 1, `spinnerWidth` 2.
-- `agtermCore/Sources/agtermCore/ControlDispatcher+Hud.swift`: `parseHudSpec` rejects control characters
+- `HangarCore/Sources/HangarCore/ControlDispatcher+Hud.swift`: `parseHudSpec` rejects control characters
   (newline included) via the shared `containsControlCharacters`, which pick and ask also use.
-- `agterm/Resources/hud/hud.sh`: header `<cols> <rows> <spinner> <pid> <interval> <textcolor> [frame...]`,
+- `Hangar/Resources/hud/hud.sh`: header `<cols> <rows> <spinner> <pid> <interval> <textcolor> [frame...]`,
   centers each line with `${#line}`, a blank line switches later lines to dim, frames are shifted off after
   six fixed fields; WINCH only drops the cached frame and re-reads the same grid.
-- `agterm/Control/ControlServer+Hud.swift`: open/update measure `paneMetrics` from the INCOMING spec before
+- `Hangar/Control/ControlServer+Hud.swift`: open/update measure `paneMetrics` from the INCOMING spec before
   `AppStore.updateHud` runs; `writeHudBody` is called from open, update and `overlay.resize`
   (`ControlServer+SessionActions.swift`) only.
-- `agterm/Views/WindowContentView+Detail.swift`: a window or divider resize changes the panel frame and
+- `Hangar/Views/WindowContentView+Detail.swift`: a window or divider resize changes the panel frame and
   updates the pane-frame cache, but never rewrites the body, so the header grid goes stale.
-- `agterm/agtermApp.swift` overlay factory: creates the HUD surface with `session.fontSize`, under an
+- `Hangar/hangarApp.swift` overlay factory: creates the HUD surface with `session.fontSize`, under an
   `isHud` predicate; `GhosttySurfaceView` applies `initialFontSize` to `config.font_size`.
-- `agterm/Control/ControlServer+RemotePresentation.swift`: rebuilds `HudSpec` field by field for a
+- `Hangar/Control/ControlServer+RemotePresentation.swift`: rebuilds `HudSpec` field by field for a
   mirrored HUD. `AppStore.swift` builds `ControlHudNode`; CLI, protocol and tree carry separate fields, not
   the whole spec. `PresentationHud` carries the whole `HudSpec`; `maxFrameBytes` 256 KiB.
 - Parser probes (Swift scripts in /tmp, 2026-09-22), `AttributedString(markdown:)` with `.full` syntax:
@@ -54,7 +54,7 @@
 - update this plan when scope changes during implementation
 
 ## Testing Strategy
-- unit tests in `agtermCore` for the renderer, dispatcher, CLI, protocol, projection and store
+- unit tests in `HangarCore` for the renderer, dispatcher, CLI, protocol, projection and store
 - `HudHelperTests` for the painter's literal mode, including mode switches inside one running helper
 - hosted tests for the factory font input, measurement, geometry refresh and the remote bridge
 
@@ -66,7 +66,7 @@
 - `HudSpec.markdown: Bool` and `HudSpec.fontSize: Double?` (both decoded with `decodeIfPresent`) carry the
   new options. The protocol, CLI and `tree` get their own fields; the remote bridge copies both.
 - Foundation's `AttributedString(markdown:)` with `.full` syntax parses the message. A host-free renderer
-  in `agtermCore` walks its runs by block identity and turns them into finished rows: styled with generated
+  in `HangarCore` walks its runs by block identity and turns them into finished rows: styled with generated
   SGR, wrapped at 60 columns, clipped to the panel's current grid on both axes. The painter prints those
   rows verbatim and never measures or interprets them.
 - Markdown semantics are the parser's: a single newline inside a paragraph is a soft break and renders as
@@ -162,9 +162,9 @@
 - `ControlHudNode.fontSize: Double?`: the request, omitted when the panel inherits the session's size.
 
 **API surface**:
-- `ControlArgs.markdown: Bool?`; `agtermctl session hud [open] --markdown` and `hud update --markdown`;
+- `ControlArgs.markdown: Bool?`; `hangarctl session hud [open] --markdown` and `hud update --markdown`;
   an update without the flag goes back to plain mode (whole-spec replacement, as today).
-- `--file PATH` on `hud open` (and the bare form) and `hud update`: `agtermctl` reads the message from the
+- `--file PATH` on `hud open` (and the bare form) and `hud update`: `hangarctl` reads the message from the
   file, in either mode, instead of the positional argument; the two are mutually exclusive. One trailing
   newline is dropped, since files end with one and plain mode rejects newlines. The read is CLI-side, like
   `session type --stdin`, so the protocol and dispatcher see an ordinary message and every cap and
@@ -183,11 +183,11 @@
 ### Task 1: Add markdown and fontSize to HudSpec and the read-back
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Hud.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift` (`ControlHudNode` builder)
-- Modify: `agtermCore/Tests/agtermCoreTests/HudTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/SnapshotRoundTripTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Hud.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift` (`ControlHudNode` builder)
+- Modify: `HangarCore/Tests/HangarCoreTests/HudTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/SnapshotRoundTripTests.swift`
 
 - [x] add `markdown: Bool` and `fontSize: Double?` to `HudSpec` (init defaults, `decodeIfPresent`, coding
   keys) and carry both through `withBackgroundColor` and `withSizePercent`
@@ -200,8 +200,8 @@
 ### Task 2: Markdown block renderer
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/HudMarkdown.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/HudMarkdownTests.swift`
+- Create: `HangarCore/Sources/HangarCore/HudMarkdown.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/HudMarkdownTests.swift`
 
 - [x] create `HudMarkdown` (internal enum, static functions) that parses with `.full` syntax, groups runs
   by block identity and emits unwrapped logical rows of `(text, style)` runs per the block rendering rules
@@ -219,10 +219,10 @@
 ### Task 3: Row wrapping, styling and clipping
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/HudMarkdown.swift`
-- Modify: `agtermCore/Sources/agtermCore/Hud.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/HudMarkdownTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/HudTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/HudMarkdown.swift`
+- Modify: `HangarCore/Sources/HangarCore/Hud.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HudMarkdownTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HudTests.swift`
 
 - [x] wrap logical rows at `maxColumns` over the visible stream across runs, with hanging indent for list
   items and quote prefixes, and spinner indentation for rows after the first
@@ -240,8 +240,8 @@
 ### Task 4: Painter literal mode
 
 **Files:**
-- Modify: `agterm/Resources/hud/hud.sh`
-- Modify: `agtermCore/Tests/agtermCoreTests/HudHelperTests.swift`
+- Modify: `Hangar/Resources/hud/hud.sh`
+- Modify: `HangarCore/Tests/HangarCoreTests/HudHelperTests.swift`
 
 - [x] parse the seventh header field, reset every tick; shift seven fields before frames
 - [x] in literal mode print each row verbatim at the shared block offset, skip the blank-line dim switch
@@ -256,10 +256,10 @@
 ### Task 5: Dispatcher validation and protocol argument
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Hud.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherHudTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Hud.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherHudTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
 
 - [x] add `ControlArgs.markdown: Bool?` and `ControlArgs.fontSize: Double?`
 - [x] in markdown mode allow LF and TAB in the message only, keep rejecting other control characters,
@@ -274,8 +274,8 @@
 ### Task 6: CLI flags
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
 
 - [x] add `--markdown` to `hud open` (and the bare `hud` form) and `hud update`, with help naming the
   4096 cap and that a single newline is a soft break
@@ -291,14 +291,14 @@
 ### Task 7: HUD font size in the app
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Session.swift` (`hudFontSize`)
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Panes.swift` (`openHud` stores it, `updateHud` holds
+- Modify: `HangarCore/Sources/HangarCore/Session.swift` (`hudFontSize`)
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift` (`openHud` stores it, `updateHud` holds
   the request)
-- Modify: `agterm/Control/ControlServer+Hud.swift` (resolve before measuring, `paneMetrics` cell)
-- Modify: `agterm/Control/ControlServer+SessionActions.swift` (`overlay.resize` measures the stored size)
-- Modify: `agterm/agtermApp.swift` (overlay factory font under `isHud`)
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreHudTests.swift`
-- Modify: `agtermTests/ControlServerSessionActionsTests.swift` and a hosted HUD test file
+- Modify: `Hangar/Control/ControlServer+Hud.swift` (resolve before measuring, `paneMetrics` cell)
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift` (`overlay.resize` measures the stored size)
+- Modify: `Hangar/hangarApp.swift` (overlay factory font under `isHud`)
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreHudTests.swift`
+- Modify: `HangarTests/ControlServerSessionActionsTests.swift` and a hosted HUD test file
 
 - [x] resolve the effective creation size into a local before measuring on open; `openHud` stores it after
   the replacing teardown; clear it on close, on a refused open and on a failed body write
@@ -315,8 +315,8 @@
 ### Task 8: Geometry refresh
 
 **Files:**
-- Modify: `agterm/Views/WindowContentView+Detail.swift`
-- Modify: `agterm/Control/ControlServer+Hud.swift`
+- Modify: `Hangar/Views/WindowContentView+Detail.swift`
+- Modify: `Hangar/Control/ControlServer+Hud.swift`
 - Modify: a hosted HUD test file
 
 - [x] on a panel-frame change for a live HUD, rewrite its body from fresh `paneMetrics`, coalesced to one
@@ -330,9 +330,9 @@
 ### Task 9: Remote presentation
 
 **Files:**
-- Modify: `agterm/Control/ControlServer+RemotePresentation.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/RemotePresentationStateTests.swift`
-- Modify: `agtermTests/ControlServerRemotePresentationTests.swift`
+- Modify: `Hangar/Control/ControlServer+RemotePresentation.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/RemotePresentationStateTests.swift`
+- Modify: `HangarTests/ControlServerRemotePresentationTests.swift`
 
 - [x] copy `markdown` and `fontSize` when rebuilding the mirrored `HudSpec`
 - [x] confirm the receiving side applies no 256 cap to a markdown message
@@ -343,7 +343,7 @@
 - [x] run the new and changed tests
 
 ### Task 10: [Final] Update documentation
-- [x] `plugins/agterm/skills/agterm/` (reference and examples): `--markdown`, `--font-size`, `--file`, the
+- [x] `plugins/hangar/skills/hangar/` (reference and examples): `--markdown`, `--font-size`, `--file`, the
   cap, soft vs hard breaks, tight lists, a controller status panel example
 - [x] `site/commands.html`: the three flags and the `markdown`/`fontSize` read-back fields; `site/docs.html`:
   HUD section
@@ -354,7 +354,7 @@
 - [x] verify plain HUD output is unchanged apart from the header field
 - [x] verify every block and inline kind in Technical Details renders as specified
 - [x] build the app (`make build`)
-- [x] run `cd agtermCore && swift test`
+- [x] run `cd HangarCore && swift test`
 - [x] run `make test-app`
 - [x] run `make lint`
 - [x] move this plan to `docs/plans/completed/`

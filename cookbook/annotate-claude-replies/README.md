@@ -22,22 +22,22 @@ The notes that come back are not only your comments. Each one quotes the lines i
 
 ```
 ## Note 1 — 11:04 · the reply you just read, line 12
-> the launcher already opens revdiff in an agterm overlay
+> the launcher already opens revdiff in an hangar overlay
 which launcher? I never set this up
 ```
 
 ## Requirements
 
-- agterm 0.13.0 or later. That is where `{AGT_PANE}` began reporting the pane a custom command fired from, which is how the notes get routed back into the right half of a split. Everything else it uses is older: `session overlay open --block` and `notify` shipped in 0.3.1, `session type --pane` in 0.7.0.
+- hangar 0.13.0 or later. That is where `{AGT_PANE}` began reporting the pane a custom command fired from, which is how the notes get routed back into the right half of a split. Everything else it uses is older: `session overlay open --block` and `notify` shipped in 0.3.1, `session type --pane` in 0.7.0.
 - [revdiff](https://github.com/umputun/revdiff), on your `PATH`
 - Claude Code. The recipe reads Claude Code's own session transcripts, so no other agent will work without being ported.
 - `python3`, which macOS ships
 
-`AGTERMCTL`, `REVDIFF` and `PYTHON` at the top of the script take an absolute path if any of them is somewhere unusual. `REVDIFF` is worth knowing about if you keep more than one build: the script resolves whatever `revdiff` the widened `PATH` finds first, which is not necessarily the one your interactive shell picks.
+`HANGARCTL`, `REVDIFF` and `PYTHON` at the top of the script take an absolute path if any of them is somewhere unusual. `REVDIFF` is worth knowing about if you keep more than one build: the script resolves whatever `revdiff` the widened `PATH` finds first, which is not necessarily the one your interactive shell picks.
 
 ## Setup
 
-Copy the four files somewhere on your machine, say `~/.local/bin/agterm-annotate/`, and make them executable:
+Copy the four files somewhere on your machine, say `~/.local/bin/hangar-annotate/`, and make them executable:
 
 ```sh
 chmod +x annotate-replies.sh annotate-extract.py annotate-render.py save-transcript-path.py
@@ -55,7 +55,7 @@ Register the Stop hook by adding an entry to the `Stop` array in `~/.claude/sett
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.local/bin/agterm-annotate/save-transcript-path.py",
+            "command": "python3 ~/.local/bin/hangar-annotate/save-transcript-path.py",
             "timeout": 5,
             "async": true
           }
@@ -66,23 +66,23 @@ Register the Stop hook by adding an entry to the `Stop` array in `~/.claude/sett
 }
 ```
 
-Then add the keybinding to `~/.config/agterm/keymap.conf` and apply it with File ▸ Reload Keymap or `agtermctl keymap reload`:
+Then add the keybinding to `~/.config/hangar/keymap.conf` and apply it with File ▸ Reload Keymap or `hangarctl keymap reload`:
 
 ```
-command "Annotate replies"  cmd+ctrl+e  ~/.local/bin/agterm-annotate/annotate-replies.sh "{AGT_SESSION_ID}" "{AGT_PANE}"
+command "Annotate replies"  cmd+ctrl+e  ~/.local/bin/hangar-annotate/annotate-replies.sh "{AGT_SESSION_ID}" "{AGT_PANE}"
 ```
 
-Pick a chord that is free in your own keymap. A custom command cannot shadow a built-in, so one that collides is quietly demoted to palette-only and the chord appears to do nothing. On 0.19.0 and later `agtermctl keymap list` shows what every chord resolved to; before that, read `keymap.conf` and the commented list of built-in defaults at the top of it. Either way the command is always reachable by name from the action palette, which is the quickest way to tell a bad chord from a broken script.
+Pick a chord that is free in your own keymap. A custom command cannot shadow a built-in, so one that collides is quietly demoted to palette-only and the chord appears to do nothing. On 0.19.0 and later `hangarctl keymap list` shows what every chord resolved to; before that, read `keymap.conf` and the commented list of built-in defaults at the top of it. Either way the command is always reachable by name from the action palette, which is the quickest way to tell a bad chord from a broken script.
 
 Two settings, read from the environment. Put them in front of the script in the keymap line, or change the defaults at the top of the script — a keymap change needs a reload before it takes effect, an edit to the script does not:
 
-- `AGTERM_ANNOTATE_SUBMIT=0` leaves the notes at the prompt for you to read over and send yourself. The default sends them, so quitting revdiff is the whole interaction.
-- `AGTERM_ANNOTATE_PROMPTS=2` reaches back a further exchange, and so on. The default of 1 is everything since your last prompt.
-`AGTERM_ANNOTATE_REVDIFF_FLAGS` replaces the flags handed to revdiff, which default to `--wrap --wrap-indent=2`. Wrapping is on because a reply is prose rather than code, and the indent stops a wrapped bullet from reading as a new one. Adding `--tree-width=1` shrinks the side panel to its narrowest.
+- `HANGAR_ANNOTATE_SUBMIT=0` leaves the notes at the prompt for you to read over and send yourself. The default sends them, so quitting revdiff is the whole interaction.
+- `HANGAR_ANNOTATE_PROMPTS=2` reaches back a further exchange, and so on. The default of 1 is everything since your last prompt.
+`HANGAR_ANNOTATE_REVDIFF_FLAGS` replaces the flags handed to revdiff, which default to `--wrap --wrap-indent=2`. Wrapping is on because a reply is prose rather than code, and the indent stops a wrapped bullet from reading as a new one. Adding `--tree-width=1` shrinks the side panel to its narrowest.
 
-Two further flags are added automatically, but only when the binary advertises them, so a revdiff without them is never handed an unknown flag. `--no-tree` starts with the side panel hidden, which a single reply has no use for; it is in revdiff `master` but not in v1.12.0, so a released build simply will not get it yet. `--preview` starts in rendered markdown rather than source: annotations are placed in the source view, so the flow is read the rendered reply, toggle to source, mark it up. Setting `AGTERM_ANNOTATE_REVDIFF_FLAGS` yourself turns the probe off entirely and uses exactly what you give it.
+Two further flags are added automatically, but only when the binary advertises them, so a revdiff without them is never handed an unknown flag. `--no-tree` starts with the side panel hidden, which a single reply has no use for; it is in revdiff `master` but not in v1.12.0, so a released build simply will not get it yet. `--preview` starts in rendered markdown rather than source: annotations are placed in the source view, so the flow is read the rendered reply, toggle to source, mark it up. Setting `HANGAR_ANNOTATE_REVDIFF_FLAGS` yourself turns the probe off entirely and uses exactly what you give it.
 
-Every setting can also live in `~/.config/agterm-annotate/config`, a plain shell file sourced on each run. That is the better place for anything machine-specific: it takes effect on the next press, while a keymap line needs a reload first, and it keeps the script itself identical to the published one. `AGTERM_ANNOTATE_REVDIFF_NAMES` belongs there — it lists the binary names to try in order, so a local build under its own name is a config line rather than an edit.
+Every setting can also live in `~/.config/hangar-annotate/config`, a plain shell file sourced on each run. That is the better place for anything machine-specific: it takes effect on the next press, while a keymap line needs a reload first, and it keeps the script itself identical to the published one. `HANGAR_ANNOTATE_REVDIFF_NAMES` belongs there — it lists the binary names to try in order, so a local build under its own name is a config line rather than an edit.
 
 ## Usage
 
@@ -90,9 +90,9 @@ Ask Claude something. When the answer lands, press the chord.
 
 revdiff opens over the session. The sidebar lists what you asked and then each reply in the order it came, so the one you were reading is last and the earlier ones are a keypress away. Mark the lines you want to argue with, then quit.
 
-The notes are sent as soon as you quit, so annotating and quitting is the whole interaction. Set `AGTERM_ANNOTATE_SUBMIT=0` if you would rather they waited at the prompt for you to read over and add to. Quitting with no annotations sends nothing either way.
+The notes are sent as soon as you quit, so annotating and quitting is the whole interaction. Set `HANGAR_ANNOTATE_SUBMIT=0` if you would rather they waited at the prompt for you to read over and add to. Quitting with no annotations sends nothing either way.
 
-`AGTERM_ANNOTATE_INLINE=0` sends a one-line pointer to the notes file instead of the notes themselves. That is also what happens automatically in a split or scratch pane, for the reason below.
+`HANGAR_ANNOTATE_INLINE=0` sends a one-line pointer to the notes file instead of the notes themselves. That is also what happens automatically in a split or scratch pane, for the reason below.
 
 A pane only becomes annotatable once a turn has finished in it, because that is when the hook runs. Pressing the chord in a plain shell says so and does nothing else.
 
@@ -108,20 +108,20 @@ Sections run oldest first, the order the exchange happened in, with the prompt a
 
 Two things cost an hour each:
 
-An overlay's command runs through `sh -c` with the app's **GUI** `PATH`, which has neither `/opt/homebrew/bin` nor `~/.local/bin`. A bare `revdiff` there exits 127 and the overlay flashes shut, so the script resolves it to an absolute path first. The same trap applies to the script itself, which agterm runs detached in a small-`PATH` `/bin/sh` with stdio on `/dev/null`. That is why it widens `PATH` at the top and logs to `/tmp/agterm-annotate.log` instead of printing.
+An overlay's command runs through `sh -c` with the app's **GUI** `PATH`, which has neither `/opt/homebrew/bin` nor `~/.local/bin`. A bare `revdiff` there exits 127 and the overlay flashes shut, so the script resolves it to an absolute path first. The same trap applies to the script itself, which hangar runs detached in a small-`PATH` `/bin/sh` with stdio on `/dev/null`. That is why it widens `PATH` at the top and logs to `/tmp/hangar-annotate.log` instead of printing.
 
-`session overlay open --block` exits with the program's own status, so a non-zero code can equally mean agterm refused before revdiff ever ran. Reading only the code turns "overlay already open" into a meaningless "exited with 1", so the script reads the reply text as well.
+`session overlay open --block` exits with the program's own status, so a non-zero code can equally mean hangar refused before revdiff ever ran. Reading only the code turns "overlay already open" into a meaningless "exited with 1", so the script reads the reply text as well.
 
 Putting the notes at the prompt needs `session paste`, because `session type` sends a real Return for every newline and multi-line text would submit itself line by line. `session paste` reads the system clipboard, so the script saves what is on it, pastes, and puts it back. The script calls it without `--pane`, so the paste targets the session's main pane, and a note taken in a split or scratch pane falls back to typing a one-line pointer at the notes file instead.
 
 ## Limits
 
-- **It types into your session and sends.** The notes are injected at the prompt of the session you pressed the chord in and submitted for you, so the agent acts on them without you seeing them first. `AGTERM_ANNOTATE_SUBMIT=0` stops at the prompt instead.
-- **It uses the clipboard.** Pasting is the only way to land multi-line text at a prompt without submitting it. What was on the clipboard is saved and put back, but only if it was plain text — an image or rich content is lost. `AGTERM_ANNOTATE_INLINE=0` avoids the clipboard entirely.
+- **It types into your session and sends.** The notes are injected at the prompt of the session you pressed the chord in and submitted for you, so the agent acts on them without you seeing them first. `HANGAR_ANNOTATE_SUBMIT=0` stops at the prompt instead.
+- **It uses the clipboard.** Pasting is the only way to land multi-line text at a prompt without submitting it. What was on the clipboard is saved and put back, but only if it was plain text — an image or rich content is lost. `HANGAR_ANNOTATE_INLINE=0` avoids the clipboard entirely.
 - **A promoted pane can open the wrong replies.** The record is keyed on the pane the agent's shell was started in, but the chord reports the pane it fires from now, and those diverge after a promote: closing the left half of a split promotes the right one, so a chord in the survivor can open the replies of the pane that closed. There is no `{AGT_PANE_ID}` keymap token to reconcile the two from a script.
-- **The hook writes to `~/.cache/agterm-annotate/` on every finished turn**, in every agterm pane, whether or not you ever press the chord. Each file holds that pane's last reply in full, and `last-notes.md` holds the last set of notes. Delete the directory to clear them; nothing prunes it.
+- **The hook writes to `~/.cache/hangar-annotate/` on every finished turn**, in every hangar pane, whether or not you ever press the chord. Each file holds that pane's last reply in full, and `last-notes.md` holds the last set of notes. Delete the directory to clear them; nothing prunes it.
 - **It reads your Claude Code transcripts**, and copies the replies into a file under `TMPDIR`. Anything in an answer is in that file, in the clear.
-- Nothing under `${TMPDIR}/agterm-annotate/` is ever deleted. Old replies and notes stay until the system clears the directory.
+- Nothing under `${TMPDIR}/hangar-annotate/` is ever deleted. Old replies and notes stay until the system clears the directory.
 - Claude Code only. No other agent hands a hook the transcript path.
 - One reply set per pane at a time. Pressing the chord again while revdiff is open is dropped rather than stacking a second overlay.
 - A session that already has an overlay open cannot take another, so the chord says so and stops. Close the overlay first.

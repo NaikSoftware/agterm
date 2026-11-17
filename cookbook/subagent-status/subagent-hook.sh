@@ -9,7 +9,7 @@
 #   turn-end      Stop                replaces the stock Stop entry
 #   end           SessionEnd
 set -u
-[ -n "${AGTERM_SESSION_ID:-}" ] || exit 0
+[ -n "${HANGAR_SESSION_ID:-}" ] || exit 0
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=subagent-common.sh
@@ -25,7 +25,7 @@ case "$mode" in start | activity | stop) [ -n "$agent" ] || exit 0 ;; esac
 
 # The first agent above this hook is the claude that fired it; its pid tells the refresher when to give up.
 # A second agent above that one spawned it as a worker (`claude -p` from a tool call), which inherits the
-# session's AGTERM_SESSION_ID and must not take over its line. A run of one name counts once, for a launcher
+# session's HANGAR_SESSION_ID and must not take over its line. A run of one name counts once, for a launcher
 # that does not exec, and an unreadable tree counts as the pane's own agent, as in the stock adapter.
 is_agent() {
   case "$1" in claude | codex | kimi | opencode | pi | gemini | cursor-agent | aider | crush | goose) return 0 ;; esac
@@ -99,7 +99,7 @@ refresh_loop() {
     fi
     set_line "$(conversation_dir "$conv")" "$AGT_SUBAGENT_HIDE_AFTER"
   done
-  "$AGTERMCTL" session info --clear --target "$AGTERM_SESSION_ID" >/dev/null 2>&1
+  "$HANGARCTL" session info --clear --target "$HANGAR_SESSION_ID" >/dev/null 2>&1
   rm -f "$session_dir/refresher.pid"
 }
 
@@ -169,7 +169,7 @@ case "$mode" in
     ;;
   end)
     rm -f "$session_dir/current" "$session_dir/agent.pid"
-    "$AGTERMCTL" session info --clear --target "$AGTERM_SESSION_ID" >/dev/null 2>&1
+    "$HANGARCTL" session info --clear --target "$HANGAR_SESSION_ID" >/dev/null 2>&1
     ;;
 esac
 exit 0

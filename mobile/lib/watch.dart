@@ -48,7 +48,7 @@ class Watch {
         title: 'Watching $computer',
         body: 'Tells you when an agent needs you',
         notificationDetails: const AndroidNotificationDetails('watching', 'Watching',
-            channelDescription: 'Shown while Agterm2 watches your computer in the background',
+            channelDescription: 'Shown while Hangar watches your computer in the background',
             importance: Importance.low, priority: Priority.low, ongoing: true, showWhen: false,
             channelShowBadge: false, icon: 'ic_watch'), // the icon's dot means an agent alert, not that the app is watching
         startType: AndroidServiceStartType.startNotSticky, // the plugin's service can't restart without its intent

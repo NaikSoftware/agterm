@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+HANGARCTL=${HANGARCTL:-hangarctl}
 JQ=${JQ:-jq}
 FLAG_RECENT_MINUTES=${FLAG_RECENT_MINUTES:-30}
 
-socket=${AGT_SOCKET:?run this as an agterm custom command, which supplies AGT_SOCKET}
+socket=${AGT_SOCKET:?run this as an hangar custom command, which supplies AGT_SOCKET}
 win=${AGT_WINDOW_ID:-active}
-ctl() { "$AGTERMCTL" "$@" --socket "$socket"; }
+ctl() { "$HANGARCTL" "$@" --socket "$socket"; }
 
 cutoff=$(($(date +%s) - FLAG_RECENT_MINUTES * 60))
 rows=$(ctl tree --json --window "$win" | CUTOFF=$cutoff "$JQ" -r '

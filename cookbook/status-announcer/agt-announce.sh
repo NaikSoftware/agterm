@@ -7,7 +7,7 @@
 # second one calls itself.
 set -e
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+HANGARCTL=${HANGARCTL:-hangarctl}
 
 # The dedicated session's name. Toggling off closes whatever session carries it,
 # so pick something you would not name a session of your own.
@@ -31,10 +31,10 @@ self_path() {
 # not running. Scanning all windows rather than the frontmost one keeps the toggle
 # honest: found from anywhere, so a second announcer is never started by accident.
 find_announcer() {
-	"$AGTERMCTL" window list --json |
+	"$HANGARCTL" window list --json |
 		jq -r '.result.windows[] | select(.open) | .id' |
 		while read -r window; do
-			"$AGTERMCTL" tree --json --window "$window" |
+			"$HANGARCTL" tree --json --window "$window" |
 				jq -r --arg name "$ANNOUNCER_NAME" \
 					'.result.tree.workspaces[].sessions[]
 						| select(.name == $name) | .id'
@@ -45,7 +45,7 @@ find_announcer() {
 # closed since, which the caller speaks around rather than failing on.
 workspace_name() {
 	[ -n "$1" ] && [ -n "$2" ] || return 0
-	"$AGTERMCTL" tree --json --window "$1" 2>/dev/null |
+	"$HANGARCTL" tree --json --window "$1" 2>/dev/null |
 		jq -r --arg id "$2" '.result.tree.workspaces[]
 			| select(.id == $id) | .name' |
 		head -n 1
@@ -75,8 +75,8 @@ announce() {
 loop() {
 	printf 'status announcer: listening for %s\n' "$SPOKEN"
 	printf 'run the toggle again to stop\n\n'
-	"$AGTERMCTL" events --json --kind status |
-		jq -r --unbuffered --arg self "${AGTERM_SESSION_ID:-}" --arg spoken "$SPOKEN" '
+	"$HANGARCTL" events --json --kind status |
+		jq -r --unbuffered --arg self "${HANGAR_SESSION_ID:-}" --arg spoken "$SPOKEN" '
 			($spoken | split(" ")) as $want
 			| select(.session != $self)
 			| select(.payload.status as $status | $want | index($status))
@@ -92,7 +92,7 @@ loop() {
 toggle() {
 	running=$(find_announcer)
 	if [ -n "$running" ]; then
-		"$AGTERMCTL" session close --target "$running"
+		"$HANGARCTL" session close --target "$running"
 		return
 	fi
 	# session.new execs its command directly under the app's launchd PATH, which
@@ -101,7 +101,7 @@ toggle() {
 	# --no-select leaves your selection and focus where they are. The announcer is a
 	# background thing; being yanked into it every time you start it is a nuisance.
 	script=$(self_path)
-	"$AGTERMCTL" session new --name "$ANNOUNCER_NAME" --no-select \
+	"$HANGARCTL" session new --name "$ANNOUNCER_NAME" --no-select \
 		--command "/bin/zsh -lc \"'$script' loop\""
 }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish one Git snapshot for the top-level agents in an agterm session."""
+"""Publish one Git snapshot for the top-level agents in an hangar session."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def owner() -> tuple[int, str] | None:
         name = Path(command).name
         if name in {"claude", "codex"}:
             agents.append((pid, name))
-        if name in {"login", "agterm", "agterm-session-host"} or int(parent) <= 1:
+        if name in {"login", "hangar", "hangar-session-host"} or int(parent) <= 1:
             break
         pid = int(parent)
     else:
@@ -109,7 +109,7 @@ def snapshot(cwd: str) -> tuple[str, str] | None:
 
 def session_node(ctl: list[str], sid: str, socket: str) -> dict[str, Any] | None:
     windows = json.loads(run([*ctl, "window", "list", "--json", "--socket", socket]))
-    preferred = os.environ.get("AGTERM_WINDOW_ID")
+    preferred = os.environ.get("HANGAR_WINDOW_ID")
     for window in sorted(windows["result"]["windows"], key=lambda w: w["id"] != preferred):
         if not window.get("open"):
             continue
@@ -162,11 +162,11 @@ def format_summaries(summaries: dict[str, Any]) -> tuple[str, list[str]]:
 
 def refresh(event: dict[str, Any], pid: int, agent: str) -> None:
     """Serialize registration, Git reads, and publication across both panes."""
-    sid = os.environ["AGTERM_SESSION_ID"]
-    pane = os.environ["AGTERM_PANE_ID"]
-    socket = os.environ["AGTERM_SOCKET"]
-    ctl = [os.environ.get("AGTERMCTL", "agtermctl")]
-    state_dir = Path(tempfile.gettempdir()) / f"agterm-git-info-{os.getuid()}"
+    sid = os.environ["HANGAR_SESSION_ID"]
+    pane = os.environ["HANGAR_PANE_ID"]
+    socket = os.environ["HANGAR_SOCKET"]
+    ctl = [os.environ.get("HANGARCTL", "hangarctl")]
+    state_dir = Path(tempfile.gettempdir()) / f"hangar-git-info-{os.getuid()}"
     state_dir.mkdir(mode=0o700, exist_ok=True)
     key = hashlib.sha256(f"{socket}\0{sid}".encode()).hexdigest()
     state = state_dir / f"{key}.json"
@@ -218,7 +218,7 @@ def refresh(event: dict[str, Any], pid: int, agent: str) -> None:
 def main() -> None:
     """Ignore unavailable integration state without interrupting an agent."""
     if not all(
-        os.environ.get(key) for key in ("AGTERM_SESSION_ID", "AGTERM_PANE_ID", "AGTERM_SOCKET")
+        os.environ.get(key) for key in ("HANGAR_SESSION_ID", "HANGAR_PANE_ID", "HANGAR_SOCKET")
     ):
         return
     event = json.load(sys.stdin)

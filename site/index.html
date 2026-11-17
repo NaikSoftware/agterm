@@ -3,36 +3,36 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>agterm — a simply good macOS terminal with a full control API</title>
+    <title>hangar — a simply good macOS terminal with a full control API</title>
     <meta
       name="description"
       content="Native macOS terminal with named workspaces and a local control API for scripts, AI coding agents, and multi-session workflows."
     />
     <meta
       name="keywords"
-      content="agterm, macOS terminal, scriptable terminal, terminal control API, terminal for AI agents, Claude Code terminal, Codex terminal, Pi coding agent terminal, OpenCode terminal, libghostty, ghostty, agtermctl, concurrent AI agents, agentic terminal"
+      content="hangar, macOS terminal, scriptable terminal, terminal control API, terminal for AI agents, Claude Code terminal, Codex terminal, Pi coding agent terminal, OpenCode terminal, libghostty, ghostty, hangarctl, concurrent AI agents, agentic terminal"
     />
     <meta name="author" content="umputun" />
-    <link rel="canonical" href="https://agterm.com/" />
+    <link rel="canonical" href="https://naiksoftware.github.io/hangar/" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="agterm — a simply good macOS terminal with a full control API" />
+    <meta property="og:title" content="hangar — a simply good macOS terminal with a full control API" />
     <meta
       property="og:description"
       content="Native macOS terminal with named workspaces and a local control API for scripts, AI coding agents, and multi-session workflows."
     />
-    <meta property="og:url" content="https://agterm.com/" />
-    <meta property="og:image" content="https://agterm.com/assets/agterm-og.png" />
+    <meta property="og:url" content="https://naiksoftware.github.io/hangar/" />
+    <meta property="og:image" content="https://naiksoftware.github.io/hangar/assets/hangar-og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:site_name" content="agterm" />
+    <meta property="og:site_name" content="hangar" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@umputun" />
-    <meta name="twitter:title" content="agterm — a simply good macOS terminal with a full control API" />
+    <meta name="twitter:title" content="hangar — a simply good macOS terminal with a full control API" />
     <meta
       name="twitter:description"
       content="Native macOS terminal with named workspaces and a local control API for scripts, AI coding agents, and multi-session workflows."
     />
-    <meta name="twitter:image" content="https://agterm.com/assets/agterm-og.png" />
+    <meta name="twitter:image" content="https://naiksoftware.github.io/hangar/assets/hangar-og.png" />
     <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
     <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png" />
@@ -45,22 +45,22 @@
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
-        "name": "agterm",
+        "name": "hangar",
         "description": "Native macOS terminal built on libghostty with a deliberately small workspace and session interface and a full local control API, so scripts and AI coding agents can drive almost every part of it and read the state back.",
-        "url": "https://agterm.com",
+        "url": "https://naiksoftware.github.io/hangar",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "macOS 14+",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
         "author": { "@type": "Person", "name": "Umputun", "url": "https://github.com/umputun" },
-        "codeRepository": "https://github.com/umputun/agterm",
-        "downloadUrl": "https://github.com/umputun/agterm/releases",
+        "codeRepository": "https://github.com/NaikSoftware/hangar",
+        "downloadUrl": "https://github.com/NaikSoftware/hangar/releases",
         "softwareVersion": "0.42.3"
       }
     </script>
   </head>
   <body>
     <div
-      id="agterm-root"
+      id="hangar-root"
       style="
         background: #191d20;
         color: #e6e1d7;
@@ -108,7 +108,7 @@
                 font-size: 16px;
                 letter-spacing: -0.01em;
               "
-              >agterm</span
+              >hangar</span
             >
           </a>
           <div
@@ -127,7 +127,7 @@
             <a href="/docs" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">docs</a>
             <a href="/commands" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">commands</a>
             <a
-              href="https://github.com/umputun/agterm"
+              href="https://github.com/NaikSoftware/hangar"
               style="
                 margin-left: 6px;
                 color: #c9cdd2;
@@ -149,7 +149,7 @@
               <a href="#install">install</a>
               <a href="/docs">docs</a>
               <a href="/commands">commands</a>
-              <a href="https://github.com/umputun/agterm">GitHub ↗</a>
+              <a href="https://github.com/NaikSoftware/hangar">GitHub ↗</a>
             </nav>
           </details>
         </div>
@@ -187,8 +187,8 @@
           A simply good terminal. <span style="color: var(--accent, #6d82f3)">Full control API.</span>
         </h1>
         <p style="font-size: clamp(17px, 2vw, 21px); line-height: 1.55; color: #bfbab0; max-width: 60ch; margin: 0 0 38px">
-          agterm organizes sessions into named workspaces. The bundled
-          <code style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 0.92em">agtermctl</code> drives all of it over
+          hangar organizes sessions into named workspaces. The bundled
+          <code style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 0.92em">hangarctl</code> drives all of it over
           a local socket: build layouts, type into any pane and read its text back, open overlays, dashboards, native pickers, and question dialogs.
           Running many AI coding agents at once is the obvious use, and far from the only one.
         </p>
@@ -255,7 +255,7 @@
           <div class="hero-gallery">
             <img
               src="/assets/screenshot-main.webp"
-              alt="agterm main window: two-level sidebar grouping sessions under workspaces"
+              alt="hangar main window: two-level sidebar grouping sessions under workspaces"
               width="1187"
               height="696"
               fetchpriority="high"
@@ -408,7 +408,7 @@
         <p style="font-size: 18px; line-height: 1.55; color: #bfbab0; max-width: 58ch; margin: 0 0 56px">
           Workspaces and sessions are the whole model, and there is nothing to learn beyond them. Everything they hold is also an
           object the control API can create, move, inspect, and read back. Running several coding agents means many long-lived
-          sessions, each progressing on its own. A tabbed terminal loses track of them quickly. agterm doesn't.
+          sessions, each progressing on its own. A tabbed terminal loses track of them quickly. hangar doesn't.
         </p>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px">
@@ -453,7 +453,7 @@
               Programmatic control
             </h3>
             <p style="font-size: 15px; line-height: 1.6; color: #949ba4; margin: 0">
-              A bundled CLI, <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agtermctl</span>,
+              A bundled CLI, <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">hangarctl</span>,
               drives almost everything over a local socket: create sessions, type into them, run overlays, move windows, or post a
               notification tied to a specific session.
             </p>
@@ -532,8 +532,8 @@
               Agents drive it too
             </h3>
             <p style="font-size: 15px; line-height: 1.6; color: #949ba4; margin: 0">
-              An installable skill teaches Claude Code or Codex the control model and the full agtermctl command set, so an agent
-              running inside agterm builds its own layout, runs overlays, and manages windows without you explaining the API.
+              An installable skill teaches Claude Code or Codex the control model and the full hangarctl command set, so an agent
+              running inside hangar builds its own layout, runs overlays, and manages windows without you explaining the API.
             </p>
           </div>
 
@@ -588,7 +588,7 @@
           Close the app, keep the work.
         </h2>
         <p style="font-size: 18px; line-height: 1.55; color: #bfbab0; max-width: 60ch; margin: 0 0 44px">
-          A pane's process does not have to live inside agterm. Live sessions keep it running while the app restarts, the same
+          A pane's process does not have to live inside hangar. Live sessions keep it running while the app restarts, the same
           sessions can be opened from another Mac, and a Linux host can run them for you.
         </p>
 
@@ -620,9 +620,9 @@
               </h3>
             </div>
             <p style="font-size: 15px; line-height: 1.65; color: #949ba4; margin: 0">
-              Quit, update, or relaunch agterm while your primary and split panes keep running, an agent mid-turn included. The
+              Quit, update, or relaunch hangar while your primary and split panes keep running, an agent mid-turn included. The
               next launch reattaches to those processes with their text and TUI state. Choose it under Settings ▸ General ▸ Restore
-              sessions; it takes effect after restarting agterm and needs zsh or fish as the macOS login shell or as the ghostty <code style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 0.92em">command</code>.
+              sessions; it takes effect after restarting hangar and needs zsh or fish as the macOS login shell or as the ghostty <code style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 0.92em">command</code>.
               <a href="/docs#restore" style="color: #6d82f3">Restore modes</a>
             </p>
           </div>
@@ -654,10 +654,10 @@
             </div>
             <p style="font-size: 15px; line-height: 1.65; color: #949ba4; margin: 0">
               Open a session running on another Mac as a row in this sidebar, split included, with
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agtermctl zmx attach HOST ID</span>.
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">hangarctl zmx attach HOST ID</span>.
               Its status glyph, notifications, HUD and title-bar context follow it here, and its panes take this Mac's size. The
-              other Mac runs agterm in Live sessions mode and is reached over key-based ssh. A Linux host can run your sessions
-              too: under agterm-server every shell keeps running when the Mac sleeps, the network drops or the window closes, and
+              other Mac runs hangar in Live sessions mode and is reached over key-based ssh. A Linux host can run your sessions
+              too: under hangar-server every shell keeps running when the Mac sleeps, the network drops or the window closes, and
               a remote window on the Mac shows them with splits, companions, the scratch, overlays, asks, pages and agent status.
               <a href="/docs#remote-sessions" style="color: #6d82f3">Remote sessions</a> ·
               <a href="/docs#remote-server" style="color: #6d82f3">Remote server</a>
@@ -859,7 +859,7 @@
             <p style="font-size: 14.5px; line-height: 1.6; color: #949ba4; margin: 0">
               Watch up to nine sessions' live output in one view-only grid, overlaid on the window. Arrow keys move a highlight,
               Enter jumps into a session, Esc closes. Driven from the control API with
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agtermctl dashboard</span>.
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">hangarctl dashboard</span>.
             </p>
           </div>
 
@@ -972,7 +972,7 @@
                   line-height: 1.7;
                 "
               >
-                ▸ agterm &nbsp;·&nbsp; radio-t &nbsp;·&nbsp; go-pkgz
+                ▸ hangar &nbsp;·&nbsp; radio-t &nbsp;·&nbsp; go-pkgz
               </div>
             </div>
             <div style="border: 1px solid rgba(255, 255, 255, 0.1); background: #15191c; border-radius: 10px; overflow: hidden">
@@ -1082,7 +1082,7 @@
               &nbsp;The yazi file manager in a floating panel over the active session, from one
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">command</span> line in
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">keymap.conf</span>.
-              <a href="/docs#extend" style="color: #6d82f3">Extend agterm</a>
+              <a href="/docs#extend" style="color: #6d82f3">Extend hangar</a>
             </figcaption>
           </figure>
           <figure
@@ -1190,7 +1190,7 @@
                 A genuinely good terminal, first.
               </h2>
               <p style="font-size: 18px; line-height: 1.6; color: #bfbab0; margin: 0">
-                None of this is limited to agents. agterm is built on Ghostty's engine, the
+                None of this is limited to agents. hangar is built on Ghostty's engine, the
                 same fast, GPU-accelerated rendering and VT parsing, and handles everyday multi-project work with nothing scripted
                 at all. The workspaces, palettes, and keyboard-first navigation help just as much whether you're running coding
                 agents or juggling a dozen shells.
@@ -1256,7 +1256,7 @@
                 margin-bottom: 16px;
               "
             >
-              // agtermctl
+              // hangarctl
             </div>
             <h2
               style="
@@ -1271,12 +1271,12 @@
               Every ability, scriptable.
             </h2>
             <p style="font-size: 18px; line-height: 1.55; color: #bfbab0; margin: 0">
-              Almost everything you can do in agterm by hand,
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agtermctl</span> can do over a
+              Almost everything you can do in hangar by hand,
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">hangarctl</span> can do over a
               local socket — no hidden UI-only actions. That turns the terminal into something you program around your own flow: a
               script or an agent builds and steers its own layout, and you extend the app's behavior without ever touching its
               source. What people have built on it lives in the
-              <a href="https://github.com/umputun/agterm/tree/master/cookbook" style="color: #6d82f3">cookbook</a>: complete
+              <a href="https://github.com/NaikSoftware/hangar/tree/master/cookbook" style="color: #6d82f3">cookbook</a>: complete
               workflows, each a directory with a README and its scripts, written to be copied into your own setup and edited.
             </p>
           </div>
@@ -1403,18 +1403,18 @@
                 color: #e6e1d7;
               "
             ><span style="color:#6b727a;"># create a workspace and open a session in it</span>
-<span style="color:var(--accent,#6d82f3);">ws</span>=$(agtermctl workspace new work)
-agtermctl session new --workspace <span style="color:#f2b45c;">"$ws"</span> --cwd ~/src/agterm
+<span style="color:var(--accent,#6d82f3);">ws</span>=$(hangarctl workspace new work)
+hangarctl session new --workspace <span style="color:#f2b45c;">"$ws"</span> --cwd ~/src/hangar
 
 <span style="color:#6b727a;"># inject a command into a session by id prefix</span>
-agtermctl session type --target 9f3c <span style="color:#f2b45c;">$'make test\n'</span>
+hangarctl session type --target 9f3c <span style="color:#f2b45c;">$'make test\n'</span>
 
 <span style="color:#6b727a;"># run a diff review in a floating overlay, block for its status</span>
-agtermctl session overlay open <span style="color:#f2b45c;">"revdiff HEAD~3"</span> --block
+hangarctl session overlay open <span style="color:#f2b45c;">"revdiff HEAD~3"</span> --block
 
 <span style="color:#6b727a;"># flag this session for your attention when it finishes</span>
-agtermctl session status completed --auto-reset \
-  --target <span style="color:#5ea1f2;">"$AGTERM_SESSION_ID"</span></pre>
+hangarctl session status completed --auto-reset \
+  --target <span style="color:#5ea1f2;">"$HANGAR_SESSION_ID"</span></pre>
           </div>
           <p style="font-size: 16px; line-height: 1.6; color: #949ba4; margin: 0; max-width: 64ch">
             Bind any of it to a key or the action palette through
@@ -1423,10 +1423,10 @@ agtermctl session status completed --auto-reset \
             around <em style="color: #cbc6bc; font-style: normal">your</em> workflow instead of adapting to the app's.
           </p>
           <a
-            href="/docs#agtermctl"
+            href="/docs#hangarctl"
             style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 14px; color: #5ea1f2; justify-self: start"
             class="hv4"
-            >full agtermctl reference →</a
+            >full hangarctl reference →</a
           >
         </div>
       </div>
@@ -1455,7 +1455,7 @@ agtermctl session status completed --auto-reset \
             margin: 0 0 44px;
           "
         >
-          Get agterm.
+          Get hangar.
         </h2>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px">
@@ -1486,7 +1486,7 @@ agtermctl session status completed --auto-reset \
             </div>
             <p style="font-size: 14px; line-height: 1.6; color: #949ba4; margin: 16px 0 0">
               The cask also installs the
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agtermctl</span> CLI, so cask users
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">hangarctl</span> CLI, so cask users
               shouldn't run the in-app installer too.
             </p>
           </div>
@@ -1504,11 +1504,11 @@ agtermctl session status completed --auto-reset \
             <p style="font-size: 14px; line-height: 1.6; color: #949ba4; margin: 0 0 16px">
               Grab the latest <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">.dmg</span> from
               releases, open it, and drag
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agterm.app</span> into
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">Hangar.app</span> into
               /Applications.
             </p>
             <a
-              href="https://github.com/umputun/agterm/releases"
+              href="https://github.com/NaikSoftware/hangar/releases"
               style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13px; color: #5ea1f2"
               class="hv4"
               >releases page →</a
@@ -1580,7 +1580,7 @@ agtermctl session status completed --auto-reset \
           </p>
           <div style="display: flex; gap: 14px; justify-content: center; flex-wrap: wrap">
             <a
-              href="https://github.com/umputun/agterm"
+              href="https://github.com/NaikSoftware/hangar"
               style="
                 font-family: &quot;JetBrains Mono&quot;, monospace;
                 font-size: 15px;
@@ -1634,7 +1634,7 @@ agtermctl session status completed --auto-reset \
                 <rect x="26" y="54" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
                 <rect x="54" y="54" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
               </svg>
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; font-weight: 700; font-size: 15px">agterm</span>
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; font-weight: 700; font-size: 15px">hangar</span>
             </div>
             <p style="font-size: 13.5px; color: #6b727a; line-height: 1.6; margin: 0">
               Terminal for agentic flow. Embeds libghostty, the terminal engine from
@@ -1659,14 +1659,14 @@ agtermctl session status completed --auto-reset \
             <div style="display: flex; flex-direction: column; gap: 11px">
               <span style="color: #4a5158; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase">Docs</span>
               <a href="/docs#install" style="color: #949ba4" class="hv7">Getting started</a>
-              <a href="/docs#agtermctl" style="color: #949ba4" class="hv7">agtermctl</a>
+              <a href="/docs#hangarctl" style="color: #949ba4" class="hv7">hangarctl</a>
               <a href="/docs#keymap" style="color: #949ba4" class="hv7">Keymap</a>
             </div>
             <div style="display: flex; flex-direction: column; gap: 11px">
               <span style="color: #4a5158; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase">Project</span>
-              <a href="https://github.com/umputun/agterm" style="color: #949ba4" class="hv7">GitHub</a>
-              <a href="https://github.com/umputun/agterm/issues" style="color: #949ba4" class="hv7">Issues</a>
-              <a href="https://github.com/umputun/agterm/discussions" style="color: #949ba4" class="hv7">Discussions</a>
+              <a href="https://github.com/NaikSoftware/hangar" style="color: #949ba4" class="hv7">GitHub</a>
+              <a href="https://github.com/NaikSoftware/hangar/issues" style="color: #949ba4" class="hv7">Issues</a>
+              <a href="https://github.com/NaikSoftware/hangar/discussions" style="color: #949ba4" class="hv7">Discussions</a>
             </div>
           </div>
         </div>
@@ -1684,7 +1684,7 @@ agtermctl session status completed --auto-reset \
               justify-content: space-between;
             "
           >
-            <span>agterm.com · terminal for agentic flow</span
+            <span>naiksoftware.github.io/hangar · terminal for agentic flow</span
             ><span>by <a href="https://github.com/umputun" style="color: #6b727a" class="hv4">Umputun</a></span>
           </div>
         </div>

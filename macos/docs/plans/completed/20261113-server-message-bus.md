@@ -1,9 +1,9 @@
-# Pane mailbox on agterm-server
+# Pane mailbox on hangar-server
 
 ## Overview
-- `msg send`, `msg read` and `msg ack` are refused on agterm-server (discussion #994): the server's default-deny
+- `msg send`, `msg read` and `msg ack` are refused on hangar-server (discussion #994): the server's default-deny
   `ServerCommandPolicy` never got them, and the message bus plan (`completed/20261030-message-bus.md`) predates
-  agterm-server, so its "remote rows excluded" line is no approved exception.
+  hangar-server, so its "remote rows excluded" line is no approved exception.
 - Serve the three commands on the server between panes of that same server: main, split and scratch panes of its
   sessions, with the same identity, delivery, lifetime and read-back contract as on the Mac.
 - Deliver the `message` event for server mail to an attached Mac, so its hooks and `events.read` subscribers see
@@ -22,9 +22,9 @@
   addresses (`resolveMessagePane`), lists `--all` panes (`messagePanes`) and reports a queued message
   (`messageQueued`). `ServerActions` already dispatches through `ControlDispatcher` (`ServerActions.swift:38`) and
   inherits the unsupported defaults from `ControlActionsDefaults.swift`.
-- `MessageBus` is Foundation-only. Server panes already carry `AGTERM_SESSION_ID`/`AGTERM_PANE_ID`
-  (`ServerPanes.swift:66`, `agtermEnvironment`), so the CLI's identity works unchanged.
-- The server runs the shared `AppStore` (headless, no control event sink, `AgtermServer.swift:62`). Its panes
+- `MessageBus` is Foundation-only. Server panes already carry `HANGAR_SESSION_ID`/`HANGAR_PANE_ID`
+  (`ServerPanes.swift:66`, `hangarEnvironment`), so the CLI's identity works unchanged.
+- The server runs the shared `AppStore` (headless, no control event sink, `HangarServer.swift:62`). Its panes
   have no surfaces: liveness is `Session.daemonBackedPanes` plus `scratchDaemon`, as `ServerActions+Sessions.swift`
   `daemonPane` resolves it. `AppStore+Messages.swift` `livePanes`/`emitMessageQueued` read realized surfaces only.
 - Disposal sites in `AppStore` (split close, primary close/promotion, respawn, restart, session/workspace/window
@@ -43,9 +43,9 @@
   (`PresentationFrames.swift:868`).
 - The Mac forwards only `RemoteOperation.structuralCommands` to a server (`RemoteOperation+Request.swift:12`);
   `session text`/`type`/`status` act on the Mac's own surface or store. No route carries `msg.*`.
-- `agtermctl` decodes the whole `ControlResponse` before returning (`SocketClient.swift:67`), so a new
+- `hangarctl` decodes the whole `ControlResponse` before returning (`SocketClient.swift:67`), so a new
   `MessageRejection.Reason` case would make an older CLI lose the whole reply.
-- `agtermCore` is consumed by agterm-linux: no new case on public enums such as `MessagePaneError.Kind`.
+- `HangarCore` is consumed by agterm-linux: no new case on public enums such as `MessagePaneError.Kind`.
 - `ServerCommandPolicyTests` checks hand-picked commands; `Command` is not `CaseIterable`.
 
 ## Development Approach
@@ -56,12 +56,12 @@
 - Mac local-pane messaging keeps its behavior; the only Mac change is the named rejection for a remote row.
 
 ## Testing Strategy
-- **host-free** (`cd agtermCore && swift test --filter <Suite>` while working): `ServerActionsMessagesTests`,
+- **host-free** (`cd HangarCore && swift test --filter <Suite>` while working): `ServerActionsMessagesTests`,
   `AppStoreMessagesTests`, `ControlDispatcherMessagesTests`, `MessageBusTests`, `CatalogFramesTests`,
   `CatalogDiffTests`, `ServerCatalogTests`, `RemoteCatalogMirrorTests`, `PresentationFramesTests`,
-  `RemotePresentationClientTests`, `agtermctlKitTests/MessageCommandsTests`, `ServerCommandPolicyTests`.
-- **hosted**: `-only-testing:agtermTests/ControlServerMessagesTests` for the Mac adapter's remote-row rejection.
-- final gates once: `make build`, `cd agtermCore && swift test`, `make test-app`, `make lint`.
+  `RemotePresentationClientTests`, `hangarctlKitTests/MessageCommandsTests`, `ServerCommandPolicyTests`.
+- **hosted**: `-only-testing:HangarTests/ControlServerMessagesTests` for the Mac adapter's remote-row rejection.
+- final gates once: `make build`, `cd HangarCore && swift test`, `make test-app`, `make lint`.
 
 ## Progress Tracking
 - mark completed items with `[x]` immediately when done
@@ -108,17 +108,17 @@
 
 ## Implementation Steps
 
-### Task 1: Serve the mailbox on agterm-server and name the remote refusal on the Mac
+### Task 1: Serve the mailbox on hangar-server and name the remote refusal on the Mac
 
 **Files:**
-- Create: `agtermCore/Sources/AgtermServerKit/ServerActions+Messages.swift`
-- Create: `agtermCore/Tests/AgtermServerTests/ServerActionsMessagesTests.swift`
-- Modify: `agtermCore/Sources/AgtermServerKit/ServerCommandPolicy.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Messages.swift`, `MessageBus.swift`,
-  `ControlDispatcher+Messages.swift`; `agterm/Control/ControlServer+Messages.swift`;
-  `agtermCore/Sources/agtermctlKit/MessageCommands.swift`
+- Create: `HangarCore/Sources/HangarServerKit/ServerActions+Messages.swift`
+- Create: `HangarCore/Tests/HangarServerTests/ServerActionsMessagesTests.swift`
+- Modify: `HangarCore/Sources/HangarServerKit/ServerCommandPolicy.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Messages.swift`, `MessageBus.swift`,
+  `ControlDispatcher+Messages.swift`; `Hangar/Control/ControlServer+Messages.swift`;
+  `HangarCore/Sources/hangarctlKit/MessageCommands.swift`
 - Modify: `AppStoreMessagesTests.swift`, `ControlDispatcherMessagesTests.swift`, `MessageBusTests.swift`,
-  `agtermctlKitTests/MessageCommandsTests.swift`, `agtermTests/ControlServerMessagesTests.swift`
+  `hangarctlKitTests/MessageCommandsTests.swift`, `HangarTests/ControlServerMessagesTests.swift`
 
 - [x] failing server tests: send/read/ack between two panes of one session and across sessions; role and pane-id
       recipients; scratch and hidden split as recipient and identity; a swap keeps mail with the identity;
@@ -138,9 +138,9 @@
 ### Task 2: Lifetime, read-back and the message event
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Panes.swift`, `AppStore+Messages.swift`, `AppStore.swift`,
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`, `AppStore+Messages.swift`, `AppStore.swift`,
   `ControlProjection.swift`, `CatalogFrames.swift`, `AppStore+Catalog.swift`, `PresentationFrames.swift`,
-  `RemotePresentationClient.swift`; `agtermCore/Sources/AgtermServerKit/ServerCatalog.swift`,
+  `RemotePresentationClient.swift`; `HangarCore/Sources/HangarServerKit/ServerCatalog.swift`,
   `ServerActions+Messages.swift`
 - Modify: `AppStoreMessagesTests.swift`, `CatalogFramesTests.swift`, `CatalogDiffTests.swift`,
   `ServerCatalogTests.swift`, `RemoteCatalogMirrorTests.swift`, `PresentationFramesTests.swift`,
@@ -175,28 +175,28 @@
 ### Task 3: Classify every command for the server, then docs and gates
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift` (`CaseIterable`)
-- Modify: `agtermCore/Tests/AgtermServerTests/ServerCommandPolicyTests.swift`
-- Modify: `site/commands.html` (msg section, "On agterm-server" served list, tree fields), `site/docs.html`
-  (msg section), `plugins/agterm/skills/agterm/reference.md` (msg, tree fields, agterm-server list),
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift` (`CaseIterable`)
+- Modify: `HangarCore/Tests/HangarServerTests/ServerCommandPolicyTests.swift`
+- Modify: `site/commands.html` (msg section, "On hangar-server" served list, tree fields), `site/docs.html`
+  (msg section), `plugins/hangar/skills/hangar/reference.md` (msg, tree fields, hangar-server list),
   `.claude/rules/control-api.md` (message bus, read-back, server policy)
 - Create: `docs/backlog/local-to-server-messaging.md`
 
 - [x] `Command: CaseIterable`; one test requires exactly one class per case: served, `physicalWindowCommands`, or
       the undecided list as test data; an undecided entry that is served or physical fails
-- [x] docs: msg between panes of one agterm-server, mail per server run, the `message` event reaching each Mac
+- [x] docs: msg between panes of one hangar-server, mail per server run, the `message` event reaching each Mac
       subscribed to the recipient's session, `events.read` not served on the server, the new tree fields and `detail`, and both unsupported
       directions (a Mac session to a server session: `unknown pane` with `detail: "remote session"`; a server
       pane to a Mac session: `unknown pane`)
 - [x] backlog item: local-to-server messaging (two-way route over ssh, sender identity, replies, mixed recipients,
       `--all` scope) as the open parity gap
-- [x] full gates once: `make build`, `cd agtermCore && swift test`, `make test-app`, `make lint`
+- [x] full gates once: `make build`, `cd HangarCore && swift test`, `make test-app`, `make lint`
 - [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 **Manual verification**:
-- on a Linux host running the built agterm-server, two panes of one session exchange messages with
-  `agtermctl msg send/read --wait/ack`; the attached Mac's `tree` shows the pending count and its event hook
+- on a Linux host running the built hangar-server, two panes of one session exchange messages with
+  `hangarctl msg send/read --wait/ack`; the attached Mac's `tree` shows the pending count and its event hook
   fires for the server mail
 
 Smells pre-check: skipped — non-Go project

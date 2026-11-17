@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Antigravity CLI (agy) lifecycle hook adapter for agterm agent status.
+# Antigravity CLI (agy) lifecycle hook adapter for hangar agent status.
 # Reads the hook payload from stdin, prints the JSON response agy requires on
-# stdout, and forwards the state transition to agterm-agent-status.sh.
+# stdout, and forwards the state transition to hangar-agent-status.sh.
 
 set -u
 
@@ -28,10 +28,10 @@ case "$action" in
     ;;
 esac
 
-[ -n "${AGTERM_SESSION_ID:-}" ] || exit 0
+[ -n "${HANGAR_SESSION_ID:-}" ] || exit 0
 { [ -z "${CLAUDECODE:-}" ] && [ -z "${CLAUDE_CODE_SESSION_ID:-}" ]; } || exit 0
 
-status_script=${AGTERM_STATUS_WRAPPER:-${AGTERM_STATUS_SCRIPT:-${HOME:-}/.config/agterm/agent-status/agterm-agent-status.sh}}
+status_script=${HANGAR_STATUS_WRAPPER:-${HANGAR_STATUS_SCRIPT:-${HOME:-}/.config/hangar/agent-status/hangar-agent-status.sh}}
 [ -x "$status_script" ] || exit 0
 
 is_headless_agy() {

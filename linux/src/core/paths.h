@@ -3,16 +3,16 @@
 #include <QStandardPaths>
 #include <QString>
 
-// Shared by the app and agtermctl so both derive the same socket: --socket, then AGTERM_STATE_DIR, then default.
+// Shared by the app and hangarctl so both derive the same socket: --socket, then HANGAR_STATE_DIR, then default.
 inline QString stateDir()
 {
-    const QString env = qEnvironmentVariable("AGTERM_STATE_DIR");
-    return env.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/agterm-qt") : env;
+    const QString env = qEnvironmentVariable("HANGAR_STATE_DIR");
+    return env.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/hangar") : env;
 }
 
 inline QString socketPath()
 {
-    return stateDir() + QStringLiteral("/agterm.sock");
+    return stateDir() + QStringLiteral("/hangar.sock");
 }
 
 inline constexpr int maxRequestBytes = 4 << 20;

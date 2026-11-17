@@ -32,7 +32,7 @@ SPLIT = tree({"kind": "left", "paneID": LEFT}, {"kind": "right", "paneID": RIGHT
 
 
 class FakeRun:
-    """records every command and answers agtermctl and codex calls from scripted state."""
+    """records every command and answers hangarctl and codex calls from scripted state."""
 
     def __init__(self, tree_value=SPLIT, mailboxes=None, queue_code=0, windows=None):
         self.tree = tree_value
@@ -64,7 +64,7 @@ class FakeRun:
             to = args[args.index("--to") + 1]
             self.sent.append((to, stdin))
             mid = f"M{len(self.sent)}"
-            self.mailboxes.setdefault(to, []).append({"id": mid, "from": f"{SID}:{os.environ['AGTERM_PANE_ID']}",
+            self.mailboxes.setdefault(to, []).append({"id": mid, "from": f"{SID}:{os.environ['HANGAR_PANE_ID']}",
                                                       "body": stdin})
             return done(out=json.dumps({"result": {"messageID": mid}}))
         if cmd == ["msg", "read"]:
@@ -83,8 +83,8 @@ class StateTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         patches = [
             mock.patch.object(mc, "STATE_DIR", self.tmp.name),
-            mock.patch.object(mc, "AGTERMCTL", "agtermctl"),
-            mock.patch.dict(os.environ, {"AGTERM_SESSION_ID": SID, "AGTERM_PANE_ID": LEFT}, clear=False),
+            mock.patch.object(mc, "HANGARCTL", "hangarctl"),
+            mock.patch.dict(os.environ, {"HANGAR_SESSION_ID": SID, "HANGAR_PANE_ID": LEFT}, clear=False),
             mock.patch.object(mc, "find_codex_pid", return_value=None),
             # the real reader calls macOS sysctl, which the Linux CI runner's libc lacks
             mock.patch.object(mc, "process_argv", return_value=None),
@@ -92,7 +92,7 @@ class StateTest(unittest.TestCase):
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
-        for name in ("AGTERM_SOCKET", "AGTERM_WINDOW_ID"):
+        for name in ("HANGAR_SOCKET", "HANGAR_WINDOW_ID"):
             os.environ.pop(name, None)
 
     def use(self, fake):
@@ -132,11 +132,11 @@ class ComposeTest(unittest.TestCase):
 
     def test_render_marks_other_mail_with_sender(self):
         cases = [({"body": "build done", "from": "S2:P9"}, "from S2:P9:\nbuild done"),
-                 ({"body": "build done"}, "from outside agterm:\nbuild done")]
+                 ({"body": "build done"}, "from outside hangar:\nbuild done")]
         for message, tail in cases:
             with self.subTest(message=message):
                 text = mc.render(message)
-                self.assertTrue(text.startswith("[agterm mailbox, not a peer chat message]"))
+                self.assertTrue(text.startswith("[hangar mailbox, not a peer chat message]"))
                 self.assertTrue(text.endswith(tail))
                 self.assertFalse(text.startswith(mc.LABEL))
 
@@ -152,7 +152,7 @@ class PaneTest(StateTest):
         other["windows"][0]["workspaces"][0]["sessions"][0]["id"] = "S2"
         self.use(FakeRun(windows={"W1": other, "W2": SPLIT}))
         for window in ("", "W1"):
-            with self.subTest(window=window), mock.patch.dict(os.environ, {"AGTERM_WINDOW_ID": window}):
+            with self.subTest(window=window), mock.patch.dict(os.environ, {"HANGAR_WINDOW_ID": window}):
                 self.assertEqual(mc.other_pane(SID, LEFT), RIGHT)
 
     def test_other_pane_refuses_unsplit_session(self):
@@ -167,23 +167,23 @@ class PaneTest(StateTest):
 
     def test_other_pane_refuses_unknown_session(self):
         self.use(FakeRun())
-        with self.assertRaisesRegex(mc.ChatError, "not in any open agterm window"):
+        with self.assertRaisesRegex(mc.ChatError, "not in any open hangar window"):
             mc.other_pane("S9", LEFT)
 
     def test_tree_read_names_callers_window_and_socket(self):
         fake = self.use(FakeRun())
-        with mock.patch.dict(os.environ, {"AGTERM_WINDOW_ID": "W1", "AGTERM_SOCKET": "/tmp/s.sock"}):
+        with mock.patch.dict(os.environ, {"HANGAR_WINDOW_ID": "W1", "HANGAR_SOCKET": "/tmp/s.sock"}):
             mc.other_pane(SID, LEFT)
-        self.assertEqual(fake.calls[0], ["agtermctl", "tree", "--json", "--window", "W1", "--socket", "/tmp/s.sock"])
+        self.assertEqual(fake.calls[0], ["hangarctl", "tree", "--json", "--window", "W1", "--socket", "/tmp/s.sock"])
 
-    def test_agtermctl_override_is_used(self):
+    def test_hangarctl_override_is_used(self):
         fake = self.use(FakeRun())
-        with mock.patch.object(mc, "AGTERMCTL", "/opt/agterm/agtermctl"):
+        with mock.patch.object(mc, "HANGARCTL", "/opt/hangar/hangarctl"):
             mc.other_pane(SID, LEFT)
-        self.assertEqual(fake.calls[0][0], "/opt/agterm/agtermctl")
+        self.assertEqual(fake.calls[0][0], "/opt/hangar/hangarctl")
 
     def test_missing_identity_is_refused(self):
-        with mock.patch.dict(os.environ, {"AGTERM_PANE_ID": ""}), self.assertRaisesRegex(mc.ChatError, "Setup"):
+        with mock.patch.dict(os.environ, {"HANGAR_PANE_ID": ""}), self.assertRaisesRegex(mc.ChatError, "Setup"):
             mc.own_identity()
 
 
@@ -233,7 +233,7 @@ class SayTest(StateTest):
 
     def test_say_from_right_pane_reaches_left(self):
         fake = self.use(FakeRun())
-        with mock.patch.dict(os.environ, {"AGTERM_PANE_ID": RIGHT}):
+        with mock.patch.dict(os.environ, {"HANGAR_PANE_ID": RIGHT}):
             result = mc.say("hello")
         self.assertEqual(fake.sent[0][0], f"{SID}:{LEFT}")
         self.assertEqual(result["receiver"], "none")
@@ -361,13 +361,13 @@ class CourierTest(StateTest):
         self.assertEqual(fake.queued, [])
 
 
-class AgtermHookTest(StateTest):
+class HangarHookTest(StateTest):
     def hook(self, event, socket="/tmp/test.sock"):
         err = io.StringIO()
-        env = {"AGT_SOCKET": socket, "AGTERM_SOCKET": "/tmp/live.sock"}
+        env = {"AGT_SOCKET": socket, "HANGAR_SOCKET": "/tmp/live.sock"}
         with mock.patch("sys.stdin", io.StringIO(json.dumps(event))), mock.patch.dict(os.environ, env), \
                 mock.patch("sys.stderr", err):
-            code = mc.agterm_hook()
+            code = mc.hangar_hook()
         return code, err.getvalue()
 
     def event(self, pane=RIGHT):
@@ -378,7 +378,7 @@ class AgtermHookTest(StateTest):
         self.register_codex(RIGHT)
         self.assertEqual(self.hook(self.event()), (0, ""))
         self.assertEqual(fake.queued, [mc.render({"body": "ping"})])
-        ctl = [c for c in fake.calls if c[0] == "agtermctl"]
+        ctl = [c for c in fake.calls if c[0] == "hangarctl"]
         self.assertTrue(ctl)
         self.assertTrue(all(c[-2:] == ["--socket", "/tmp/test.sock"] for c in ctl))
 

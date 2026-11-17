@@ -1,4 +1,4 @@
-"""Render agterm's app icon for Linux from the Icon Composer layer in macos/agterm/AppIcon.icon.
+"""Render hangar's app icon for Linux from the Icon Composer layer in macos/hangar/AppIcon.icon.
 
 macOS shapes the square artwork at runtime ("fill": "automatic"); hicolor themes need the shape baked in,
 so the layer is clipped to a rounded square with a little margin, at every size the theme looks up.
@@ -18,7 +18,7 @@ ImageDraw.Draw(mask).rounded_rectangle((margin, margin, big - margin, big - marg
 icon = Image.new("RGBA", (big, big), (0, 0, 0, 0))
 icon.paste(art, (0, 0), mask)
 for size in (16, 22, 24, 32, 48, 64, 128, 256, 512):
-    path = f"{root}/resources/icons/hicolor/{size}x{size}/apps/agterm-qt.png"
+    path = f"{root}/resources/icons/hicolor/{size}x{size}/apps/hangar.png"
     os.makedirs(os.path.dirname(path), exist_ok=True)
     icon.resize((size, size), Image.LANCZOS).save(path, optimize=True)
 print("icons written")

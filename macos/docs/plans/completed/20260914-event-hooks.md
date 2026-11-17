@@ -2,9 +2,9 @@
 
 ## Overview
 
-Today the only way to react to an agterm event is a running process polling `events.read` over the control
+Today the only way to react to an hangar event is a running process polling `events.read` over the control
 socket. This adds `hooks.conf`, a file beside `keymap.conf`, where each line binds a shell command to an
-event kind. agterm runs the command detached when a matching event enters the control event ring, with the
+event kind. hangar runs the command detached when a matching event enters the control event ring, with the
 event JSON on stdin and a small fixed `$AGT_*` environment. No process has to stay alive, the file survives
 restarts, and reload/edit reuse the keymap UX.
 
@@ -61,7 +61,7 @@ work that also improves `events.read`.
   occupied until the running child exits; a re-add before that exit reattaches to the occupied record and
   waits, so the one-child bound survives remove/re-add. An old child's completion never starts an obsolete
   pending command.
-- **Same-socket calls**: a hook may call `agtermctl --socket "$AGT_SOCKET"`. The control server handles one
+- **Same-socket calls**: a hook may call `hangarctl --socket "$AGT_SOCKET"`. The control server handles one
   connection inline and blocks that thread on main-actor dispatch, so a hook's request queues behind the
   request that emitted its event. This is safe only because dispatch never waits on the hook; an integration
   test pins it.
@@ -76,14 +76,14 @@ work that also improves `events.read`.
 
 ## Context (from discovery)
 
-- Keymap parsing: `agtermCore/Sources/agtermCore/Keymap.swift` (`parseKeymap`, `KeymapDiagnostic`,
+- Keymap parsing: `HangarCore/Sources/HangarCore/Keymap.swift` (`parseKeymap`, `KeymapDiagnostic`,
   duplicate-name skip at the `commandLines` guard). Paths and starter text: `ConfigPaths.swift`
-  (`keymapPath`, `starterKeymapConf`). App loading and reload: `agterm/SettingsModel.swift`
-  (`reloadKeymap`, `keymapURL`, `.agtermKeymapChanged`).
-- Detached launch today: `agterm/Commands/CustomCommandRunner.swift` `spawn` (widened `PATH`, stdio to
+  (`keymapPath`, `starterKeymapConf`). App loading and reload: `Hangar/SettingsModel.swift`
+  (`reloadKeymap`, `keymapURL`, `.hangarKeymapChanged`).
+- Detached launch today: `Hangar/Commands/CustomCommandRunner.swift` `spawn` (widened `PATH`, stdio to
   `/dev/null`, termination handler hops to main, `notifyCommandFailure`). Hooks reuse the launch shape, not
   the focus lookup, selection, usage recording, or the `command-failure:` banner namespace.
-- Event ring: `agtermCore/Sources/agtermCore/ControlEvents.swift` (`ControlEventKind`, `ControlEventPayload`,
+- Event ring: `HangarCore/Sources/HangarCore/ControlEvents.swift` (`ControlEventKind`, `ControlEventPayload`,
   `ControlEventRing.append` returns the sequenced event). Emission: `AppStore+Events.swift`,
   `AppStore+Status.swift` `setAgentIndicator` (captures `previous` already, emits only on indicator change),
   `WindowLibrary.swift` `controlEventSink` with the 100 ms `tree.changed` debounce.
@@ -92,39 +92,39 @@ work that also improves `events.read`.
 - Control plumbing: `ControlProtocol.swift` (`enum Command`, `ControlResult`), `ControlDispatcher.swift`
   (987 lines; `keymapReload`/`keymapList` cases and the `ControlActions` protocol),
   `ControlActionsDefaults.swift` (unsupported defaults for outside conformers), app effects in
-  `agterm/Control/ControlServer+AppCommands.swift`, CLI in `agtermCore/Sources/agtermctlKit/MiscCommands.swift`
+  `Hangar/Control/ControlServer+AppCommands.swift`, CLI in `HangarCore/Sources/hangarctlKit/MiscCommands.swift`
   (`Keymap` command), human event text in `EventCommands.swift` `EventFormatter.human`.
-- Menus/actions: `agterm/agtermApp+Menus.swift`, `agterm/AppActions.swift` (`reloadKeymap`, `editKeymap`
-  marks `keymapEditOverlaySession`), `agterm/AppActions+Palette.swift` (execution switch),
-  `agterm/Views/WindowContentView.swift` `handleClosedEditorOverlays` (reload on overlay close),
-  `agterm/Views/SettingsView.swift` keymap Reload button, `PaletteCatalog.swift` (`PaletteCommand`).
-- Tests: `agtermCore/Tests/agtermCoreTests` (`KeymapTests`, `ControlEventRingTests`,
+- Menus/actions: `Hangar/hangarApp+Menus.swift`, `Hangar/AppActions.swift` (`reloadKeymap`, `editKeymap`
+  marks `keymapEditOverlaySession`), `Hangar/AppActions+Palette.swift` (execution switch),
+  `Hangar/Views/WindowContentView.swift` `handleClosedEditorOverlays` (reload on overlay close),
+  `Hangar/Views/SettingsView.swift` keymap Reload button, `PaletteCatalog.swift` (`PaletteCommand`).
+- Tests: `HangarCore/Tests/HangarCoreTests` (`KeymapTests`, `ControlEventRingTests`,
   `AppStoreEventTests`, `ControlDispatcherTests`, `ControlEventProtocolTests`, `PaletteCatalogTests`),
-  `agtermCore/Tests/agtermctlKitTests` (`EventCommandsTests`, `CommandsTests`), hosted `agtermTests`
-  via `xcodebuild` (`scripts/test-app.sh` forwards no arguments), `agtermUITests/ControlAPIUITests.swift`
+  `HangarCore/Tests/hangarctlKitTests` (`EventCommandsTests`, `CommandsTests`), hosted `HangarTests`
+  via `xcodebuild` (`scripts/test-app.sh` forwards no arguments), `HangarUITests/ControlAPIUITests.swift`
   (`testKeymapReload…` siblings).
 - Docs surfaces: `site/docs.html` (`#keymap`, `#events`; canonical user guide), `site/commands.html`
-  (canonical command reference), `plugins/agterm/skills/agterm/` (`SKILL.md`, `reference.md`),
+  (canonical command reference), `plugins/hangar/skills/hangar/` (`SKILL.md`, `reference.md`),
   `.claude/rules/control-api.md`, `.claude/rules/keymap.md`, `ARCHITECTURE.md`. No surface states a command
   count.
 
 ## Development Approach
 
-- **testing approach**: TDD. Parser, scheduler and protocol shaping are host-free logic in `agtermCore`;
+- **testing approach**: TDD. Parser, scheduler and protocol shaping are host-free logic in `HangarCore`;
   write the failing test first, then the code.
 - complete each task fully before moving to the next; small, focused changes
 - **CRITICAL: every task MUST include new/updated tests** for code changes in that task, success and error
   paths, as separate checklist items
 - **CRITICAL: the tests a task touches must pass before starting the next task**; the full gates run once,
   in Task 9
-- targeted runs: host-free `cd agtermCore && swift test --filter <Class>`; hosted
-  `xcodebuild test -project agterm.xcodeproj -scheme agtermTests -destination 'platform=macOS'
-  -derivedDataPath build/DerivedData -only-testing:agtermTests/<Class>` (after `scripts/setup.sh` and
-  `xcodegen generate` once); UI `-only-testing:agtermUITests/ControlAPIUITests/<method>`
+- targeted runs: host-free `cd HangarCore && swift test --filter <Class>`; hosted
+  `xcodebuild test -project Hangar.xcodeproj -scheme HangarTests -destination 'platform=macOS'
+  -derivedDataPath build/DerivedData -only-testing:HangarTests/<Class>` (after `scripts/setup.sh` and
+  `xcodegen generate` once); UI `-only-testing:HangarUITests/ControlAPIUITests/<method>`
 - **CRITICAL: update this plan file when scope changes during implementation**
-- `agtermCore` stays free of AppKit/Foundation `Process`; the process runner lives in the app target and
-  reaches the scheduler through a protocol defined in `agtermCore`
-- `agtermCore` is consumed by the `agterm-linux` fork: new `public` symbols are fine, never narrow existing
+- `HangarCore` stays free of AppKit/Foundation `Process`; the process runner lives in the app target and
+  reaches the scheduler through a protocol defined in `HangarCore`
+- `HangarCore` is consumed by the `agterm-linux` fork: new `public` symbols are fine, never narrow existing
   ones, and new `ControlActions` requirements get defaults
 - new wire structs and dispatch helpers go in their own files/extensions; do not grow `ControlDispatcher.swift`
   toward the 1000-line limit
@@ -132,11 +132,11 @@ work that also improves `events.read`.
 
 ## Testing Strategy
 
-- **unit tests**: `agtermCore` for parser, scheduler, protocol/CLI shaping, event emission, formatter
-- **hosted tests** (`agtermTests`): the process runner with a real `/bin/sh` child: large payload with early
+- **unit tests**: `HangarCore` for parser, scheduler, protocol/CLI shaping, event emission, formatter
+- **hosted tests** (`HangarTests`): the process runner with a real `/bin/sh` child: large payload with early
   stdin close, EOF delivery, exit 0/1 with EPIPE, spawn failure, delivery error while the child is alive,
   cancellation on exit, immediate-exit race; Edit Hooks starter creation and preservation
-- **UI/e2e tests** (`agtermUITests/ControlAPIUITests`): `hooks reload`/`hooks list` round trips against an
+- **UI/e2e tests** (`HangarUITests/ControlAPIUITests`): `hooks reload`/`hooks list` round trips against an
   isolated instance, the same-socket integration case, Edit Hooks opening the editor and reloading on exit.
   Run only the new methods via `-only-testing:`.
 
@@ -151,17 +151,17 @@ work that also improves `events.read`.
 
 Three layers, each owned once:
 
-1. **`agtermCore`**: `Hooks` model and `parseHooksConf`; wire read-back structs in `ControlHooks.swift`;
+1. **`HangarCore`**: `Hooks` model and `parseHooksConf`; wire read-back structs in `ControlHooks.swift`;
    `HookScheduler` (queues, identity, reload diff, counters, last failure, banner suppression state)
    driving an injected `HookLauncher` protocol; the two new event kinds, `previous`, and their emission sites.
 2. **App target**: `HookProcessRunner` implements `HookLauncher` with `Process` and the stdin pipe;
    `SettingsModel` loads and reloads `hooks.conf`; the ring append feeds the scheduler; the scheduler's
    failure sink posts the banner; menu/palette/settings wiring; `ControlActions` effects.
-3. **CLI and docs**: `agtermctl hooks reload|list`, human formatter, docs, skill, rules.
+3. **CLI and docs**: `hangarctl hooks reload|list`, human formatter, docs, skill, rules.
 
 ## Technical Details
 
-Config parsing (`agtermCore/Sources/agtermCore/Hooks.swift`):
+Config parsing (`HangarCore/Sources/HangarCore/Hooks.swift`):
 
 ```swift
 public struct HookIdentity: Hashable, Sendable { public let kind: ControlEventKind; public let command: String }
@@ -173,7 +173,7 @@ public struct Hooks: Equatable, Sendable { public let entries: [HookEntry] }   /
 public func parseHooksConf(_ text: String) -> (hooks: Hooks, diagnostics: [KeymapDiagnostic])
 ```
 
-Read-back (`agtermCore/Sources/agtermCore/ControlHooks.swift`, created in Task 3, routed in Task 4):
+Read-back (`HangarCore/Sources/HangarCore/ControlHooks.swift`, created in Task 3, routed in Task 4):
 
 ```swift
 public struct ControlHooks: Codable, Sendable, Equatable {
@@ -188,7 +188,7 @@ public struct ControlHookEntry: Codable, Sendable, Equatable {
 }
 ```
 
-Scheduler (`agtermCore/Sources/agtermCore/HookScheduler.swift`), `@MainActor`, host-free:
+Scheduler (`HangarCore/Sources/HangarCore/HookScheduler.swift`), `@MainActor`, host-free:
 
 ```swift
 @MainActor public protocol HookLauncher: AnyObject {
@@ -216,7 +216,7 @@ this run's. The run token survives retirement and reattachment: on remove K, re-
 original child's exit releases K and starts E. A callback is stale only when its token differs from the
 record's current running token, and a stale callback changes nothing.
 
-Runner (`agterm/Commands/HookProcessRunner.swift`, app target): `init(socketProvider:executableURL:)`
+Runner (`Hangar/Commands/HookProcessRunner.swift`, app target): `init(socketProvider:executableURL:)`
 (executable defaults to `/bin/sh`, injectable for spawn-failure tests). Before `run()`: create the `Pipe`,
 `fcntl(writeFD, F_SETNOSIGPIPE, 1)` checked, create the `DispatchIO` channel owning the write end. Then
 `Process("/bin/sh", ["-c", command])`, env = app env overlaid with the six variables (always set), widened
@@ -249,14 +249,14 @@ one-process-per-line note, stdin JSON note) followed by commented example lines.
 ### Task 1: New event kinds and `previous` on status
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlEvents.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Status.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Panes.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Events.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/EventCommands.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreEventTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlEventProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/EventCommandsTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlEvents.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Status.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Events.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/EventCommands.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreEventTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlEventProtocolTests.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/EventCommandsTests.swift`
 
 - [x] write failing tests: `status` event carries `previous` equal to the prior status; a shape-only change
       emits `previous == status`; a refused write emits nothing
@@ -274,9 +274,9 @@ one-process-per-line note, stdin JSON note) followed by commented example lines.
 ### Task 2: `hooks.conf` model, parser, paths, starter text
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/Hooks.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/HooksTests.swift`
-- Modify: `agtermCore/Sources/agtermCore/ConfigPaths.swift`
+- Create: `HangarCore/Sources/HangarCore/Hooks.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/HooksTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ConfigPaths.swift`
 - Modify: the test file that pins `ConfigPaths.keymapPath`
 
 - [x] write failing parser tests: valid lines for every kind; multiple lines per kind kept in file order;
@@ -294,10 +294,10 @@ one-process-per-line note, stdin JSON note) followed by commented example lines.
 ### Task 3: Hook scheduler and read-back types (host-free)
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/ControlHooks.swift`
-- Create: `agtermCore/Sources/agtermCore/HookScheduler.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/HookSchedulerTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlEventProtocolTests.swift` (wire round-trip of the new structs)
+- Create: `HangarCore/Sources/HangarCore/ControlHooks.swift`
+- Create: `HangarCore/Sources/HangarCore/HookScheduler.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/HookSchedulerTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlEventProtocolTests.swift` (wire round-trip of the new structs)
 
 - [x] write failing tests: `ControlHooks`/`ControlHookEntry` encode/decode with nil omission for
       `runningPid`, `elapsedSeconds`, `lastFailure`
@@ -328,25 +328,25 @@ one-process-per-line note, stdin JSON note) followed by commented example lines.
 ### Task 4: Control protocol, dispatcher and CLI for `hooks.reload` / `hooks.list`
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift` (`Command` cases, `ControlResult.hooks`)
-- Create: `agtermCore/Sources/agtermCore/ControlDispatcher+Hooks.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift` (two protocol requirements with one-line
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift` (`Command` cases, `ControlResult.hooks`)
+- Create: `HangarCore/Sources/HangarCore/ControlDispatcher+Hooks.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift` (two protocol requirements with one-line
   godoc each and one routing case; the file is at 987 of the 1000-line limit and protocol requirements cannot
   live in an extension, so the budget is about ten lines. If lint reports the limit, ask before splitting
   the file per CLAUDE.md; do not raise the limit)
-- Modify: `agtermCore/Sources/agtermCore/ControlActionsDefaults.swift` (unsupported defaults)
-- Modify: `agtermCore/Sources/agtermctlKit/MiscCommands.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/Commands.swift` (subcommand registration)
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlEventProtocolTests.swift` (`Command` and `ControlResult` round trips)
-- Modify: `agtermCore/Tests/agtermctlKitTests/CommandsTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlActionsDefaults.swift` (unsupported defaults)
+- Modify: `HangarCore/Sources/hangarctlKit/MiscCommands.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/Commands.swift` (subcommand registration)
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlEventProtocolTests.swift` (`Command` and `ControlResult` round trips)
+- Modify: `HangarCore/Tests/hangarctlKitTests/CommandsTests.swift`
 
 - [x] write failing tests: `Command` round-trips the two raw values; `ControlResult.hooks` encodes with nil
       omission
 - [x] write failing dispatcher tests: both commands reach `ControlActions.reloadHooks()` / `listHooks()`,
       reject a target and `--window`, never fall through to the nil switch; a conformer relying on the
       defaults gets the unsupported error
-- [x] write failing CLI tests: `agtermctl hooks reload` and `hooks list` build the right requests; `list`
+- [x] write failing CLI tests: `hangarctl hooks reload` and `hooks list` build the right requests; `list`
       prints a human table (kind, command, running, pending, dropped, last failure) and `--json` passes the
       result through; error text on a failed response
 - [x] implement the `Command` cases, `ControlResult.hooks`, the dispatcher extension, `ControlActions`
@@ -356,9 +356,9 @@ one-process-per-line note, stdin JSON note) followed by commented example lines.
 ### Task 5: Process runner in the app target
 
 **Files:**
-- Create: `agterm/Commands/HookProcessRunner.swift`
-- Create: `agtermTests/HookProcessRunnerTests.swift`
-- Modify: `agterm/Notifications/NotificationManager.swift` (`notifyHookFailure` with `hook-failure:` ids)
+- Create: `Hangar/Commands/HookProcessRunner.swift`
+- Create: `HangarTests/HookProcessRunnerTests.swift`
+- Modify: `Hangar/Notifications/NotificationManager.swift` (`notifyHookFailure` with `hook-failure:` ids)
 
 - [x] write failing hosted tests with a real `/bin/sh` child: env has all six variables set, empty ones
       included, and `PATH` widened; cwd is the app's; stdin receives one JSON object plus newline then EOF
@@ -377,44 +377,44 @@ one-process-per-line note, stdin JSON note) followed by commented example lines.
       builder (the `bannersEnabled` guard is not observable without a notification-center seam and is not
       tested)
 - [x] implement `HookProcessRunner: HookLauncher` per Technical Details and the banner method
-- [x] run `-only-testing:agtermTests/HookProcessRunnerTests` via the direct `xcodebuild` recipe; must pass
+- [x] run `-only-testing:HangarTests/HookProcessRunnerTests` via the direct `xcodebuild` recipe; must pass
       before task 6
 
 ### Task 6: Wire loading, reload, dispatch and control effects in the app
 
 **Files:**
-- Modify: `agterm/SettingsModel.swift` (`hooks`, `hooksDiagnostics`, `hooksPath`, `reloadHooks`)
-- Modify: `agtermCore/Sources/agtermCore/WindowLibrary.swift` (post-append observer closure)
-- Modify: `agterm/AppDelegate.swift` or `agterm/agtermApp.swift` (own the scheduler + runner, wire the
+- Modify: `Hangar/SettingsModel.swift` (`hooks`, `hooksDiagnostics`, `hooksPath`, `reloadHooks`)
+- Modify: `HangarCore/Sources/HangarCore/WindowLibrary.swift` (post-append observer closure)
+- Modify: `Hangar/AppDelegate.swift` or `Hangar/hangarApp.swift` (own the scheduler + runner, wire the
   failure sink to `notifyHookFailure`, subscribe)
-- Modify: `agterm/Control/ControlServer+AppCommands.swift` (`reloadHooks`, `listHooks`)
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlEventRingTests.swift` (or `WindowLibrary` tests)
-- Modify: `agtermUITests/ControlAPIUITests.swift`
+- Modify: `Hangar/Control/ControlServer+AppCommands.swift` (`reloadHooks`, `listHooks`)
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlEventRingTests.swift` (or `WindowLibrary` tests)
+- Modify: `HangarUITests/ControlAPIUITests.swift`
 
 - [x] write failing test: `WindowLibrary` invokes an `onControlEvent` observer with the sequenced event
       after each ring append, including debounced `tree.changed`, never during bootstrap
 - [x] write failing UI tests beside `testKeymapReload…`: `hooks reload` returns the diagnostic count for a
       clean and for a broken isolated `hooks.conf`; `hooks list` reports path, diagnostics and entries
 - [x] write failing UI integration test with a finite fixture: a `hooks.conf` line on `status` that exits
-      unless the event names session A, then runs `agtermctl notify --socket "$AGT_SOCKET"`; drive
+      unless the event names session A, then runs `hangarctl notify --socket "$AGT_SOCKET"`; drive
       `session status --target A blocked`; assert the response returns, the notify ring event appears, and
       `hooks list` reaches no running and no pending work within a deadline
-- [x] implement: SettingsModel loads `hooks.conf` on start and `reloadHooks` posts `.agtermHooksChanged`;
+- [x] implement: SettingsModel loads `hooks.conf` on start and `reloadHooks` posts `.hangarHooksChanged`;
       scheduler `apply` on load/reload; observer feeds `dispatch`; control effects mirror the keymap ones
 - [x] run the new UI methods only with `-only-testing:`; must pass before task 7
 
 ### Task 7: Menu, palette and Settings actions
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/PaletteCatalog.swift` (`reloadHooks`, `editHooks`)
-- Modify: `agterm/AppActions.swift` (`reloadHooks`, `editHooks`, `hooksEditOverlaySession`)
-- Modify: `agterm/AppActions+Palette.swift` (execution switch cases)
-- Modify: `agterm/Views/WindowContentView.swift` (`handleClosedEditorOverlays` reloads hooks on close)
-- Modify: `agterm/agtermApp+Menus.swift`
-- Modify: `agterm/Views/SettingsView.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/PaletteCatalogTests.swift`
-- Create: `agtermTests/HooksEditTests.swift` (starter-file cases; no hosted keymap-edit test file exists)
-- Modify: `agtermUITests/ControlAPIUITests.swift`
+- Modify: `HangarCore/Sources/HangarCore/PaletteCatalog.swift` (`reloadHooks`, `editHooks`)
+- Modify: `Hangar/AppActions.swift` (`reloadHooks`, `editHooks`, `hooksEditOverlaySession`)
+- Modify: `Hangar/AppActions+Palette.swift` (execution switch cases)
+- Modify: `Hangar/Views/WindowContentView.swift` (`handleClosedEditorOverlays` reloads hooks on close)
+- Modify: `Hangar/hangarApp+Menus.swift`
+- Modify: `Hangar/Views/SettingsView.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/PaletteCatalogTests.swift`
+- Create: `HangarTests/HooksEditTests.swift` (starter-file cases; no hosted keymap-edit test file exists)
+- Modify: `HangarUITests/ControlAPIUITests.swift`
 
 - [x] write failing tests: the two palette commands exist with titles, are keyless, and have the same
       enablement as their keymap counterparts
@@ -436,7 +436,7 @@ one-process-per-line note, stdin JSON note) followed by commented example lines.
   the subscribed kind; the queue bounds concurrency, it does not detect feedback loops)
 - Modify: `site/commands.html` (`hooks reload`, `hooks list` with read-back fields; `events read` gains the
   two kinds and `previous`)
-- Modify: `plugins/agterm/skills/agterm/SKILL.md`, `reference.md`
+- Modify: `plugins/hangar/skills/hangar/SKILL.md`, `reference.md`
 - Modify: `site/index.html` (feature mention beside the keymap one) and `site/llms.txt` (discovery index
   entry), both of which already name `keymap.conf`
 - Modify: `.claude/rules/control-api.md` (implementation constraints: launch contract, slot release only on
@@ -457,7 +457,7 @@ one-process-per-line note, stdin JSON note) followed by commented example lines.
       exit 0 and exit 1, immediate-exit race, fan-out independence, pane emission edges, `previous` on status,
       same-socket integration, Edit Hooks starter/preserve/reload; the docs page carries the self-feeding
       loop warning
-- [x] run full gates once: `cd agtermCore && swift test`, `make test-app`, `make lint`
+- [x] run full gates once: `cd HangarCore && swift test`, `make test-app`, `make lint`
 
 ### Task 10: [Final] Update documentation
 - [x] re-read `README.md`; the control-API demo is unchanged, so the synopsis stays as is
@@ -467,7 +467,7 @@ one-process-per-line note, stdin JSON note) followed by commented example lines.
 ## Post-Completion
 
 **Manual verification**: in an isolated Debug instance with a `hooks.conf` of the four example lines, drive
-`session status`, split/scratch toggles and session create/close through `agtermctl --socket`, and confirm
+`session status`, split/scratch toggles and session create/close through `hangarctl --socket`, and confirm
 `hooks list` counters, the failure banner once per hook, and that the live terminal stays responsive under a
 deliberately hung hook script.
 

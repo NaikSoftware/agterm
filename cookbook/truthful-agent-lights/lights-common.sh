@@ -9,7 +9,7 @@
 # own vocabulary, change it here rather than in Settings.
 
 # the CLI that talks to the control socket
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+HANGARCTL=${HANGARCTL:-hangarctl}
 
 # Where the pid notes, turn stamps and heartbeats live. The hooks and the
 # sweeper must resolve this to the SAME directory or the sweeper reads no
@@ -22,25 +22,25 @@ AGTERMCTL=${AGTERMCTL:-agtermctl}
 # the machines that set it — the hooks writing stamps nobody reads, the sweeper
 # concluding that live sessions are dead. A path off $HOME is the same path in
 # both. Override AGT_LIGHTS_STATE if you must, and then set it in both places.
-AGT_LIGHTS_STATE=${AGT_LIGHTS_STATE:-$HOME/.local/state/agterm-lights}
+AGT_LIGHTS_STATE=${AGT_LIGHTS_STATE:-$HOME/.local/state/hangar-lights}
 
 # the stock status script the hooks package installs. When one is present the
 # recipe posts through it, so socket, pane and pane-id handling stay upstream's;
-# when none is, the fallback in set-status.sh calls agtermctl directly.
+# when none is, the fallback in set-status.sh calls hangarctl directly.
 #
-# Since agterm 0.26.0 the package wires the Claude hooks to
-# agterm-claude-status.sh: an adapter that stays silent when the hook was fired
+# Since hangar 0.26.0 the package wires the Claude hooks to
+# hangar-claude-status.sh: an adapter that stays silent when the hook was fired
 # by a worker agent spawned inside the session (a headless `claude -p` from a
-# tool call inherits the spawner's AGTERM_* environment and would otherwise
-# repaint the spawner's row) and hands every other post to agterm-agent-status.sh.
+# tool call inherits the spawner's HANGAR_* environment and would otherwise
+# repaint the spawner's row) and hands every other post to hangar-agent-status.sh.
 # Posting through the adapter keeps that guard; posting through the generic
 # script would undo it. So the adapter is preferred when it is installed, and an
 # older package without it falls back to the generic script. Set
 # AGT_STATUS_SCRIPT to post through something else.
 if [ -z "${AGT_STATUS_SCRIPT:-}" ]; then
-  AGT_STATUS_SCRIPT=$HOME/.config/agterm/agent-status/agterm-claude-status.sh
+  AGT_STATUS_SCRIPT=$HOME/.config/hangar/agent-status/hangar-claude-status.sh
   [ -x "$AGT_STATUS_SCRIPT" ] ||
-    AGT_STATUS_SCRIPT=$HOME/.config/agterm/agent-status/agterm-agent-status.sh
+    AGT_STATUS_SCRIPT=$HOME/.config/hangar/agent-status/hangar-agent-status.sh
 fi
 
 # extended regex of agent binaries, matched against the WHOLE command name:
@@ -72,7 +72,7 @@ AGT_SSH_WORK_SECS=${AGT_SSH_WORK_SECS:-120}   # ssh older than this is a run, no
 agt_active_args() { # color shape [extra flags…] -> fills AGT_STATUS_ARGS
   # Blank a color or shape variable to mean "post this state without that
   # override", so the glyph falls back to your Settings ▸ Agent Status choice.
-  # The empty value must never reach the CLI: agtermctl rejects `--shape ""`,
+  # The empty value must never reach the CLI: hangarctl rejects `--shape ""`,
   # and the status call swallows its own errors, so it would fail invisibly.
   local color=$1 shape=$2
   shift 2

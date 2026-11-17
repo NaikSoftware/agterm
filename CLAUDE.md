@@ -1,6 +1,6 @@
-# agterm project notes
+# hangar project notes
 
-agterm is a native macOS SwiftUI terminal on libghostty with a workspace-to-session sidebar.
+hangar is a native macOS SwiftUI terminal on libghostty with a workspace-to-session sidebar.
 Read `site/docs.html` for product behavior and `ARCHITECTURE.md` for modules, surface ownership, and
 C-boundary concurrency before changing the bridge.
 `README.md` is the product synopsis, not the reference.
@@ -26,9 +26,9 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   that in the control API rather than in a private timer inside one caller, or every other caller ships
   the same artifact.
 - For every new capability, propose useful control API/CLI coverage: protocol command and arguments,
-  dispatch, `agtermctl`, read-back, and tests. Control-native features count; skip only chrome with nothing
+  dispatch, `hangarctl`, read-back, and tests. Control-native features count; skip only chrome with nothing
   meaningful to drive.
-- A remote session, attached from another Mac or served by an agterm-server Linux host, is a normal view,
+- A remote session, attached from another Mac or served by an hangar-server Linux host, is a normal view,
   not an extra.
   Every new or changed capability that works locally works there too: design the remote path (presentation,
   page serving, control routing) together with the local one, and a missing remote path is part of the task.
@@ -42,16 +42,16 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   Moving within what the page was opened with is in scope: an HTML file's grant folder, a markdown file's link
   root, a URL page's origin, and any origin for a `--browse` page; a terminal click may replace a hidden clicked page.
   Features that make it a general browser (tabs, an address bar, links followed past those bounds) are declined.
-  What a mouse-capturing program does with a click is that program's, not agterm's.
+  What a mouse-capturing program does with a click is that program's, not hangar's.
 - A decline of a feature request that a custom command covers explains the extension model with the request
   as the worked example: README's "bind X yourself", `site/docs.html#extend`, the agent skill, the cookbook.
   It also points "can you add X" requests to Discussions ▸ Ideas instead of issues.
-- Custom forks are not supported. An answer, recipe or decision is made for agterm itself and is never limited or
-  adjusted for what a reporter's fork has or lacks. agterm-linux stays in view only as `agtermCore`'s downstream
+- Custom forks are not supported. An answer, recipe or decision is made for hangar itself and is never limited or
+  adjusted for what a reporter's fork has or lacks. agterm-linux stays in view only as `HangarCore`'s downstream
   consumer (module boundaries below).
 - When adding a process that runs user commands or reparents a session, weigh its effect on macOS TCC
   attribution per service, up front. The responsible process is not always TCC's authorization subject:
-  the #574 microphone test recorded `agterm-session-host` as responsible, `com.umputun.agterm` as the
+  the #574 microphone test recorded `hangar-session-host` as responsible, `ua.naiksoftware.hangar` as the
   subject, and access allowed. Check each service rather than assuming one answer covers all of them. A
   passive `AXIsProcessTrusted` false can also be a stale grant, not a code bug: a stored grant may require
   a specific old cdhash (an ad-hoc build's requirement is a bare cdhash), so verify the row's full
@@ -62,22 +62,22 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   state and socket paths, leave it running, and explain how to reach the feature.
 - An isolated state dir also redirects config to `<stateDir>/config`. Copy
   `keymap.conf`, `ghostty.conf`, and `restore-denylist.conf` when real custom behavior is required.
-  Set only a short `/tmp` `AGTERM_STATE_DIR` so app and inherited CLI derive the same socket.
+  Set only a short `/tmp` `HANGAR_STATE_DIR` so app and inherited CLI derive the same socket.
   Prepend the Debug app's `Contents/MacOS` to PATH for custom commands; login shells may restore the
   deployed CLI, so manual commands should use the Debug binary's full path.
 - `open -n` passes the caller's environment to the app, including inherited `CLAUDE*` markers and
-  live-terminal `AGTERM_*`/`GHOSTTY_*` variables; a `claude` started in that instance warns that transcript
+  live-terminal `HANGAR_*`/`GHOSTTY_*` variables; a `claude` started in that instance warns that transcript
   saving is off.
-  Launch through `env -u NAME ...` naming every such variable, which drops `AGTERM_STATE_DIR` too, so pass
-  the isolated one back with `open -n --env AGTERM_STATE_DIR=...`; verify with `ps eww -p <pid>`.
+  Launch through `env -u NAME ...` naming every such variable, which drops `HANGAR_STATE_DIR` too, so pass
+  the isolated one back with `open -n --env HANGAR_STATE_DIR=...`; verify with `ps eww -p <pid>`.
 - The control socket binds from the window scene's task, so a backgrounded `open -n -g` can leave the app
   running with no socket until a window renders.
   If the socket is still absent 10 s after launch, activate the instance; never leave a socket wait unbounded.
   An activation by pid once left it unbound for 15 s more (2026-11-07); stopping it and relaunching without `-g`
   bound the socket at once.
-- `agtermctl` never reads `AGTERM_SOCKET`; it resolves `--socket`, then `AGTERM_STATE_DIR`, then
-  `~/Library/Application Support/agterm`. A shell inside the live terminal therefore defaults onto the
-  live socket, and exporting a short `AGTERM_STATE_DIR` is what keeps inherited commands off it.
+- `hangarctl` never reads `HANGAR_SOCKET`; it resolves `--socket`, then `HANGAR_STATE_DIR`, then
+  `~/Library/Application Support/hangar`. A shell inside the live terminal therefore defaults onto the
+  live socket, and exporting a short `HANGAR_STATE_DIR` is what keeps inherited commands off it.
 - After launching an instance for manual testing, do not touch it. For an assisted experiment, announce
   every action. Ask before acting when unclear.
 - Put nontrivial work in an isolated worktree and remove it after merge. See the build section for artifact
@@ -98,7 +98,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
 
 - Xcodegen creates the app project; Xcode 26 builds it. Call `xcodegen`, `xcodebuild`, and `swift`
   directly through repository scripts; `mise` is unused.
-- Swift 6 `agtermCore` uses complete concurrency checking and has no Xcode/libghostty dependency.
+- Swift 6 `HangarCore` uses complete concurrency checking and has no Xcode/libghostty dependency.
 - `scripts/setup.sh` builds pinned libghostty with Homebrew `zig@0.17`, zmx with `zig@0.16`, and Xcode's
   Metal Toolchain.
   It is idempotent after artifacts exist. zmx is the plain upstream pin plus `scripts/zmx-patches/`,
@@ -106,7 +106,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
 - Commands:
   - `scripts/run.sh`: setup, generate, Debug build, launch.
   - `scripts/build.sh`: setup, generate, Release build.
-  - `cd agtermCore && swift test`: host-free tests; `scripts/test.sh` wraps it.
+  - `cd HangarCore && swift test`: host-free tests; `scripts/test.sh` wraps it.
   - `scripts/test-app.sh`: isolated hosted AppKit tests.
   - `make prep|build|run|release|deploy|test|test-app|lint|clean`; `make dist VERSION=x.y.z [PUBLISH=1]`.
 - `make lint` runs strict SwiftLint from `macos/`. Root limits are 200-column lines, 1000-line source
@@ -117,20 +117,20 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   investigated, and gets an entry there once it is understood.
 - Run each gate ONCE, at the end, and scope everything else to what changed: a new or changed test runs
   via `-only-testing:<Target>/<Class>/<test>`. Never re-run a whole XCUITest suite to verify a narrow
-  change; `agtermUITests/ControlAPIUITests` alone is 82 methods and about 7.5 minutes, and tells you
+  change; `HangarUITests/ControlAPIUITests` alone is 82 methods and about 7.5 minutes, and tells you
   nothing the targeted run did not.
-- The app build's Bundle helper executables phase runs `swift build` on `agtermCore/.build`, so any SwiftPM
+- The app build's Bundle helper executables phase runs `swift build` on `HangarCore/.build`, so any SwiftPM
   process holding that directory (a hung `swift test` included) stalls `xcodebuild` there with no output;
   check `ps` for one before reading a quiet build as compiling.
 - An XCUITest or hosted test run that times out at runner init (`Timed out while enabling automation mode`)
   or waits with zero test cases started: see `.claude/rules/ui-tests.md` before retrying or restarting.
 - A TCC-gated tool run from a shell in the live terminal (`screencapture`, XCUITest) can be denied after a
-  deploy replaces the app under a running `agterm-session-host`, even with an existing grant.
+  deploy replaces the app under a running `hangar-session-host`, even with an existing grant.
   `codesign -v <pid>` reports the code on disk does not match, and tccd logs
   `Failed to match existing code requirement`. Check both before calling a permission missing;
   a Debug instance can capture its own view in-process instead.
 - After the helper binary is replaced, nehelper refuses Local Network for about 30 s while it rebuilds its
-  UUID cache (`Caching 0 UUID(s)`, then `Caching 1 UUID(s) for ua.naiksoftware.agterm2`); retry a failed LAN
+  UUID cache (`Caching 0 UUID(s)`, then `Caching 1 UUID(s) for ua.naiksoftware.hangar`); retry a failed LAN
   probe after that before treating it as a failure.
 - For maintainer work, ask before splitting a touched long file and do not raise limits reflexively.
   Contributors need not refactor preexisting length; mention it without blocking or suggesting a limit bump.
@@ -139,7 +139,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
 
 - Fetch `origin master` before creating a native Claude worktree so it forks the current remote tip.
   Do not manually `git worktree add`.
-- Fresh worktrees lack ignored `GhosttyKit.xcframework`, `agterm/Resources/{ghostty,terminfo,zmx}`,
+- Fresh worktrees lack ignored `GhosttyKit.xcframework`, `Hangar/Resources/{ghostty,terminfo,zmx}`,
   `.ghostty-build-stamp`, and `.zmx-build-stamp`. Symlink all six from the main checkout instead of rebuilding;
   use absolute targets for resources. Each stamp makes its staged artifacts count as current. They remain
   untracked and disappear with worktree removal.
@@ -161,81 +161,81 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   written with relative paths acts on HOME, not the repository. When ExitWorktree reports no active
   session, leave the removal to a session started in the main checkout.
 - Before removing a worktree, and after any hosted or UI test run, run
-  `lsappinfo list | grep -A4 agterm.debug`.
+  `lsappinfo list | grep -A4 hangar.debug`.
   An entry marked `exited-with-subordinates` that lists `relatedCoalitionPIDs` is held by those pids:
   identify them with `ps -p`, stop the ones that are leaked test processes, and report anything else to
   Eugene.
   An entry without `relatedCoalitionPIDs` right after a run can be transient; check again after a minute
   before acting, and report it to Eugene if it persists.
-- Debug Swift code lives in `agterm.debug.dylib`; inspect it or object files, not the stub executable.
+- Debug Swift code lives in `hangar.debug.dylib`; inspect it or object files, not the stub executable.
 - For throwaway launch-time probes, append to a temp file. `NSLog` from `open -n` is unreliable; production
   logging uses `os.Logger`.
 - `scripts/run.sh` activates an existing instance instead of loading a rebuild. Use a distinct isolated
   launch for current code.
 - Stop an isolated Live-mode Debug instance and its daemons before rebuilding the same DerivedData.
-  Rewriting the bundle's `zmx` or `agterm-session-host` under running daemons can trigger
+  Rewriting the bundle's `zmx` or `hangar-session-host` under running daemons can trigger
   `SIGKILL (Code Signature Invalid)`; the reports go to `~/Library/Logs/DiagnosticReports/`.
   Foreground programs can survive without a tty; stop any survivors by pid.
 - `make deploy` copies Release to `~/Applications`, whose app, PATH CLI, and installed hooks shadow Debug.
   Test fresh CLI/hooks with the Debug binary or redeploy and reinstall them. Debug uses
-  `ua.naiksoftware.agterm2.debug`, distinct from Release (`ua.naiksoftware.agterm2`).
-- A Debug build launched with `AGTERM_STATE_DIR` unset or empty adopts
-  `~/Library/Application Support/agterm-debug` (`DebugStateDirectory`), exporting it so its shells and
-  their `agtermctl` resolve the same socket. A non-empty value always wins, the live directory included.
-  Config is not adopted: that launch reads the default config directory, `~/.config/agterm` unless the
+  `ua.naiksoftware.hangar.debug`, distinct from Release (`ua.naiksoftware.hangar`).
+- A Debug build launched with `HANGAR_STATE_DIR` unset or empty adopts
+  `~/Library/Application Support/hangar-debug` (`DebugStateDirectory`), exporting it so its shells and
+  their `hangarctl` resolve the same socket. A non-empty value always wins, the live directory included.
+  Config is not adopted: that launch reads the default config directory, `~/.config/hangar` unless the
   setting names another. Manual runs still pass a short `/tmp`
   directory: the adopted one is shared by every unisolated Debug launch and persists between them.
 - A second instance on a state directory another process owns exits with status 1 before reading or
-  writing anything there. `agtermApp.init` first takes an exclusive `flock` on `<stateDir>/agterm.lock`
+  writing anything there. `hangarApp.init` first takes an exclusive `flock` on `<stateDir>/hangar.lock`
   (`StateDirectoryLock`), and a lock it cannot take exits too. Every store save rewrites its whole file
   from memory, so a second loader once overwrote the owner's newer sessions with its stale tree (#741);
-  `agterm --help` started one, since libghostty appends `Contents/MacOS` to every pane's PATH.
-  A running build predating the lock holds no `agterm.lock`, so the first fixed launch beside one is
+  `hangar --help` started one, since libghostty appends `Contents/MacOS` to every pane's PATH.
+  A running build predating the lock holds no `hangar.lock`, so the first fixed launch beside one is
   unprotected: stop old instances before it.
-- Instances on different state directories that share one `AGTERM_CONTROL_SOCKET` are separated by the
+- Instances on different state directories that share one `HANGAR_CONTROL_SOCKET` are separated by the
   socket lock instead. `ControlServer.init` takes an exclusive `flock` on `<socket>.lock` and `start`
   refuses to bind while another live instance holds it, logging `already served by another instance`.
   Ownership is settled at init so the launch window's first shell, whose environment is snapshotted
   before `start` runs, cannot bake the owner's path.
-  A refused instance advertises `<socket>.unavailable` in `AGTERM_SOCKET`, so a command passing
-  `--socket "$AGTERM_SOCKET"` fails rather than reaching the owner. A BARE `agtermctl` still reaches it:
+  A refused instance advertises `<socket>.unavailable` in `HANGAR_SOCKET`, so a command passing
+  `--socket "$HANGAR_SOCKET"` fails rather than reaching the owner. A BARE `hangarctl` still reaches it:
   the CLI never reads that variable and resolves the default path.
-- `lsof -p <pid> | grep agterm.sock` showing an fd on a socket path `ls` cannot find means an orphaned
+- `lsof -p <pid> | grep hangar.sock` showing an fd on a socket path `ls` cannot find means an orphaned
   socket; a window scene that never bound one is a different fault. Reaching it now takes a build
   predating the lock, or the socket file being deleted by hand.
 
 ## Protect the live terminal
 
-- Never run experimental or test `agtermctl` mutations (bundled recipes, probes, test scenarios) on the
+- Never run experimental or test `hangarctl` mutations (bundled recipes, probes, test scenarios) on the
   default socket; it controls the user's live daily-driver terminal, so experiments go to an isolated socket.
   A session's normal operations on itself (context, rename, status, notify, HUD, chat, its own companions)
   are ordinary use.
 - Every delegated agent that might touch the app or CLI must receive verbatim:
-  “never execute `agterm`/`agtermctl` against the default socket, never launch or quit the app, static
+  “never execute `hangar`/`hangarctl` against the default socket, never launch or quit the app, static
   reading only.”
-- Never kill or relaunch `~/Applications/agterm.app`, and never `pkill agterm` or `osascript … to quit`
+- Never kill or relaunch `~/Applications/Hangar.app`, and never `pkill hangar` or `osascript … to quit`
   (both also reach dev instances). Deployment replaces files but the user decides when to restart.
 - Manual Debug UI work uses a separate `open -n` instance with isolated state and short socket. Address
   its CLI with `--socket` after the subcommand. Stop only its known PID with SIGTERM; clean quit triggers
   the visible quit-confirmation alert. Use clean quit only when testing its final cwd/running-command flush.
 - A stopped Debug instance can leave its Dock tile; a click on it relaunches the bundle with no
-  `AGTERM_STATE_DIR`, which a current build answers from `agterm-debug` and a build predating
+  `HANGAR_STATE_DIR`, which a current build answers from `hangar-debug` and a build predating
   `DebugStateDirectory` answers from the live state and daemons. After SIGTERM, confirm the tile is gone
-  with `lsappinfo list | grep agterm.debug` and tell Eugene when one lingers.
+  with `lsappinfo list | grep hangar.debug` and tell Eugene when one lingers.
 - A manual-test pane opens in `$HOME`, and a pane restored from a daemon keeps whatever directory it had.
   Never type a bare `claude` into one. Always send `cd <dir> && claude` with a directory Claude Code
   already trusts, `~/dev.umputun/agterm` by default. A session rooted at `$HOME` treats every dotfile and
   repo as its project, and it stops on the folder-trust prompt, which is never yours to answer.
 - The automatic installers never run in Debug builds.
   Never invoke `AgentHooksInstaller`, `SkillInstaller` or `CLIInstaller` from a Debug or worktree
-  instance in a manual run. They write `~/.config/agterm/`,
-  `~/.claude/settings.json`, and `~/.codex/`, which `AGTERM_STATE_DIR` does not isolate, and bake
-  `Bundle.main`'s `agtermctl` path into the installed wrappers. A Debug install silently repoints the
+  instance in a manual run. They write `~/.config/hangar/`,
+  `~/.claude/settings.json`, and `~/.codex/`, which `HANGAR_STATE_DIR` does not isolate, and bake
+  `Bundle.main`'s `hangarctl` path into the installed wrappers. A Debug install silently repoints the
   user's live hooks at DerivedData, and removing the worktree leaves them dead with no error.
-  Verify installer behavior through `agtermCore` tests, or redeploy Release and reinstall from it.
+  Verify installer behavior through `HangarCore` tests, or redeploy Release and reinstall from it.
 - Unix socket paths cap near 104 bytes. A long scratch path lets the app launch while control bind fails.
 - Use absolute repo-root paths for existence checks. Tool cwd persists across calls and often drifts into
-  `agtermCore`.
+  `HangarCore`.
 - CI and release mechanics live in `.claude/rules/ci.md` and `release.md`. `CHANGELOG.md` is release-only;
   feature PRs update relevant product, skill, or engineering docs instead.
 
@@ -261,14 +261,14 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
 
 ## Module and callback boundaries
 
-- `agtermCore` imports no GhosttyKit, AppKit, Metal, or CoreGraphics. Use Double-backed geometry and
+- `HangarCore` imports no GhosttyKit, AppKit, Metal, or CoreGraphics. Use Double-backed geometry and
   convert in the app target. Darwin Foundation can expose CG types that pass Debug/tests but crash Xcode
   26.5 Release WMO deserialization with an unresolved CoreFoundation cross-reference.
 - Put model, persistence, parsing, validation, routing, response shaping, and static catalogs in
-  `agtermCore`; keep the app target a side-effect adapter, continuing the #78 hoist series. Control uses `ControlDispatcher` plus
+  `HangarCore`; keep the app target a side-effect adapter, continuing the #78 hoist series. Control uses `ControlDispatcher` plus
   `ControlActions`, with unmigrated commands returning nil to the app switch. Installers, status sound,
   and watermark follow the same split.
-- `agtermCore` is a `.library` product consumed by the `agterm-linux` fork, so a `public` symbol may have
+- `HangarCore` is a `.library` product consumed by the `agterm-linux` fork, so a `public` symbol may have
   a caller outside this repo and narrowing it can break that build.
   GitHub code search excludes forks by default; use `fork:true` or inspect a clone before concluding no
   downstream caller exists. The app target has no downstream consumer.
@@ -277,7 +277,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   `DispatchQueue.main.async`.
 - Wakeup coalesces through an `OSAllocatedUnfairLock` into one main-queue `ghostty_app_tick`. Painting is
   libghostty's own render thread, not an app callback: the embedded apprt cannot emit
-  `GHOSTTY_ACTION_RENDER`, so agterm handles no draw action. Never restore the rejected continuous 120Hz
+  `GHOSTTY_ACTION_RENDER`, so hangar handles no draw action. Never restore the rejected continuous 120Hz
   poll or use `assumeIsolated`. See [[libghostty]] before advancing `GHOSTTY_REV`.
 - `close_surface_cb` only recovers the view and dispatches; it never frees synchronously.
 - A libdispatch callback closure written inside a `@MainActor` method inherits main-actor isolation, and
@@ -318,7 +318,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   captured restore slots are the one today, in `control-api.md`'s Restore section.
 - Event arguments must appear in `EventFormatter.human`, not only JSON payloads.
 - Control API, keymap, and model changes also update bundled
-  `plugins/agterm/skills/agterm/`, the sole source for installed Claude/Codex copies.
+  `plugins/hangar/skills/hangar/`, the sole source for installed Claude/Codex copies.
   A capability agents should discover unprompted needs a trigger in SKILL.md's `description` and a section
   or pointer there; a reference.md entry alone is insufficient for discovery.
 - `site/docs.html` is the canonical user guide and `site/commands.html` the canonical command reference.
@@ -351,13 +351,13 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
   is for code the project owns, and never edit a recipe's prose unprompted.
 - A recipe's Limits list only what the recipe causes or cannot do, never general agent behavior.
   State what the recipe guarantees before a side effect, so the side effect never reads as misrouting.
-- agterm runs only on macOS, so POSIX portability is never a finding by itself. A shellcheck SC3xxx on a
+- hangar runs only on macOS, so POSIX portability is never a finding by itself. A shellcheck SC3xxx on a
   recipe is a CI lint gate, not a runtime defect: `/bin/sh` there is bash 3.2 and `printf %q` works.
   Never propose a bash shebang as the fix; the mac shell is zsh, and CI's `.zsh` path is `zsh -n`.
 
 ## Website
 
-- `agterm.com` is the static `site/` directory on Cloudflare Pages with no build step or repository deploy
+- `naiksoftware.github.io/hangar` is the static `site/` directory on Cloudflare Pages with no build step or repository deploy
   config. Dashboard-owned wiring deploys every master push. Canonical URLs omit `.html` because Pages
   redirects with 308.
 - Assets are self-hosted: CSS, latin woff2 fonts, WebP screenshots, 1200x630 social card, and favicons.
@@ -373,7 +373,7 @@ except the repository-root `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `.claude
 - Demo and screenshot staging shows two or three agent statuses at most, and never notification badges
   next to statuses; they are alternative mechanisms.
 - A screenshot may show the username, the hostname, the agent's plan and usage, and Claude Code or codex working
-  on agterm itself with nothing private in it. A feature that serves agents is shown with real agents on agterm,
+  on hangar itself with nothing private in it. A feature that serves agents is shown with real agents on hangar,
   other sessions with made-up output; never another project's content, private folder or host names.
   Start codex with `--no-daemon`: a bare `codex` runs its hooks in the background service, which reports no status.
 

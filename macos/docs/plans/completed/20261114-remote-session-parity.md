@@ -1,7 +1,7 @@
 # Remote Session Parity
 
 ## Overview
-- A session on agterm-server (Linux) or attached from another Mac should behave like a local one. A static audit
+- A session on hangar-server (Linux) or attached from another Mac should behave like a local one. A static audit
   (2026-11-14, Claude, codex and Fable reading master `180d0c89`) found basic capabilities that work locally and
   are refused, lost or run on the wrong host for remote sessions.
 - Three actors are in scope throughout: an agent on the Linux host calling its server (A), a Mac user or CLI on a
@@ -12,17 +12,17 @@
   server (`docs/backlog/server-user-event-hooks.md`, Eugene's call).
 
 ## Context (from discovery)
-- Server: `agtermCore/Sources/AgtermServerKit/` (`ServerCommandPolicy.served` is default-deny,
-  `ServerActions+Unserved.swift` lists refusals, `AgtermServer.start` builds the store with no event sink,
+- Server: `HangarCore/Sources/HangarServerKit/` (`ServerCommandPolicy.served` is default-deny,
+  `ServerActions+Unserved.swift` lists refusals, `HangarServer.start` builds the store with no event sink,
   `PaneObserver`, `ServerStreams`, `ServerCatalog`); `HeadlessCommandPolicy` lives in
-  `agtermCore/Sources/agtermCore/CatalogRoot.swift`; the policy test is
-  `agtermCore/Tests/AgtermServerTests/ServerCommandPolicyTests.swift` (`undecided` set, pinned refusals).
-- Mac routing for server rows: `agterm/Control/ControlServer+RemoteActions.swift` (`remoteRoute`,
-  `localOnlyCommands`), `agtermCore/Sources/agtermCore/RemoteOperation+Request.swift` (`structuralCommands`,
+  `HangarCore/Sources/HangarCore/CatalogRoot.swift`; the policy test is
+  `HangarCore/Tests/HangarServerTests/ServerCommandPolicyTests.swift` (`undecided` set, pinned refusals).
+- Mac routing for server rows: `Hangar/Control/ControlServer+RemoteActions.swift` (`remoteRoute`,
+  `localOnlyCommands`), `HangarCore/Sources/HangarCore/RemoteOperation+Request.swift` (`structuralCommands`,
   `unsupportedField`, `singleTarget`), `RemoteCatalogActions`, `RemoteCatalogMirror`, `RemoteWindowViewState`.
 - Mac routing for attached rows: `ControlServer+RemoteCompanions.swift:createRemoteCompanion` (a separate ssh control
   call via `RemoteSession.controlCommand` + `remoteRunner`), `AppStore+RemotePresentation.swift`,
-  `AppStore+RemoteLayout.swift:applyRemoteLayout`, `AppStore+Catalog.swift:catalogBinding`, `agtermApp.makeScratchSurface`
+  `AppStore+RemoteLayout.swift:applyRemoteLayout`, `AppStore+Catalog.swift:catalogBinding`, `hangarApp.makeScratchSurface`
   (a plain local shell today, no daemon). An attached row has no ssh pool: `catalogPool` answers only for
   catalog-owned rows.
 - `Session.isPersistable` has five callers: quit capture (`AppDelegate.swift`), local Recent Closed
@@ -30,16 +30,16 @@
   `AppStore.swift`), and the snapshot filter (`AppStore+Snapshot.swift`).
 - Recent Closed: `RecentClosed.swift` (`RecentClosedKind`, `RecentClosedStore.load` drops the whole list on a decode
   failure), `ControlServer+Recent.swift` (no window argument), `PaletteCatalog.swift:PaletteContext.hasRecentClosed`.
-- Menu enablement: `PaletteCommand.isEnabled(in:)` in `agtermCore/Sources/agtermCore/PaletteCatalog.swift` is its
+- Menu enablement: `PaletteCommand.isEnabled(in:)` in `HangarCore/Sources/HangarCore/PaletteCatalog.swift` is its
   single owner (`.claude/rules/menu-actions.md`).
 - Presentation stream: viewers advertise the frame kinds they speak (`PresentationHub`, e.g. `pageForwardKind`); an
   origin closes the stream on a frame it cannot decode.
-- Forwards: `PooledForward` (agtermCore, on a server window's pool), `agterm/Control/RemotePortForward.swift`
+- Forwards: `PooledForward` (HangarCore, on a server window's pool), `Hangar/Control/RemotePortForward.swift`
   (standalone `ssh -L`), both used by `ControlServer+RemotePage.swift:showForwardedPage`.
-- Prune: `agtermCore/Sources/agtermCore/ZmxInventory.swift` (`ZmxInventory`, `ZmxPrunePolicy`); the Mac's claim walk
+- Prune: `HangarCore/Sources/HangarCore/ZmxInventory.swift` (`ZmxInventory`, `ZmxPrunePolicy`); the Mac's claim walk
   counts pending-close members (`WindowLibrary`).
 - Contracts: `.claude/rules/control-api.md`, `sidebar.md`, `menu-actions.md`, `site/docs.html#remote-server`,
-  `site/commands.html`, `plugins/agterm/skills/agterm/`.
+  `site/commands.html`, `plugins/hangar/skills/hangar/`.
 - Earlier plan this one amends: `docs/plans/20261106-linux-remote-server.md`.
 
 ## Development Approach
@@ -48,7 +48,7 @@
 - complete each task fully before moving to the next; every task ends with its tests passing
 - **CRITICAL: every task MUST include new/updated tests** for its code, success and error paths
 - **CRITICAL: update this plan file when scope changes during implementation**
-- every new or changed command lands with protocol, dispatcher, `agtermctl`, read-back and tests, per CLAUDE.md
+- every new or changed command lands with protocol, dispatcher, `hangarctl`, read-back and tests, per CLAUDE.md
   "Cross-surface contracts"; a command served on the server is also reachable from a server window row and from
   an attached row, or task 10's table names why not
 - a task that serves a command or adds one updates `ServerCommandPolicyTests` in the same task: it leaves
@@ -59,17 +59,17 @@
   tests the older-peer path (frame withheld, behavior as today, stream stays open)
 - the worktree needs the six artifact symlinks from the main checkout before the first build (CLAUDE.md
   "Worktrees and local builds"), after checking the stamps match
-- no experimental `agtermctl` against the default socket; manual checks use an isolated Debug instance
+- no experimental `hangarctl` against the default socket; manual checks use an isolated Debug instance
 
 ## Testing Strategy
-- **unit tests**: `cd agtermCore && swift test --filter <Suite>`: `AgtermServerTests` for server behavior,
-  `agtermCoreTests` for routing, mirror, catalog, snapshot, palette and policy, `agtermctlKitTests` for CLI parsing
-- **hosted tests**: `agtermTests` (`scripts/test-app.sh`, scoped with `-only-testing:`) for `ControlServer` routing,
+- **unit tests**: `cd HangarCore && swift test --filter <Suite>`: `HangarServerTests` for server behavior,
+  `HangarCoreTests` for routing, mirror, catalog, snapshot, palette and policy, `hangarctlKitTests` for CLI parsing
+- **hosted tests**: `HangarTests` (`scripts/test-app.sh`, scoped with `-only-testing:`) for `ControlServer` routing,
   scratch daemons, link clicks and attached-row lifecycle
-- **e2e**: `agtermUITests/ControlAPIUITests` only for a command whose end-to-end Mac path changes, scoped to the new
+- **e2e**: `HangarUITests/ControlAPIUITests` only for a command whose end-to-end Mac path changes, scoped to the new
   methods
 - each task names its test files; a new source file gets a test file of the same name
-- gates once, at the end: `cd agtermCore && swift test`, `make test-app`, `make lint`
+- gates once, at the end: `cd HangarCore && swift test`, `make test-app`, `make lint`
 
 ## Progress Tracking
 - mark completed items with `[x]` immediately when done
@@ -95,14 +95,14 @@
 - **Security.** Untrusted inputs: frames from an origin (already decoded by the presentation and catalog decoders)
   and, new here, frames and routed requests from a viewer. New capabilities: a viewer can ask its origin to
   restart, terminate, kill a pane, convert, undo, reopen, or clear status; it does so over the user's own ssh
-  authority, which can already run `agtermctl` there, so no privilege is added. The origin accepts a clear or seen
+  authority, which can already run `hangarctl` there, so no privilege is added. The origin accepts a clear or seen
   frame only for a session that viewer is presenting and only for that session's panes, and applies its own rules
   to it. Clicked loopback URLs open the origin's loopback through an ssh forward, so a remote program printing a
   URL reaches only what that host already serves. `/proc/<pid>/cmdline` reads and the event ring stay inside the
   user's own processes and the 0600 control socket. Restoring attached rows starts ssh only to hosts the user
   attached before.
-- **TCC.** The Mac scratch daemon starts through the same `agterm-session-host` path the pane daemons use, so its
-  attribution matches a pane's (#574: host responsible, `com.umputun.agterm` the subject). Task 5 checks each
+- **TCC.** The Mac scratch daemon starts through the same `hangar-session-host` path the pane daemons use, so its
+  attribution matches a pane's (#574: host responsible, `ua.naiksoftware.hangar` the subject). Task 5 checks each
   service a scratch commonly uses (microphone, screen recording, Accessibility) the way #574 did; the other tasks
   start no new kind of process on the Mac (ssh only).
 
@@ -125,8 +125,8 @@
 | Several Macs on one catalog: first-stream-wins presenter | kept | not in scope |
 
 ## Technical Details
-- **Events on the server**: `AgtermServer.start` gives its store a `controlEventSink` into a server-owned
-  `ControlEventRing`; `ServerActions.readEvents` serves `events.read` through the agtermCore read path
+- **Events on the server**: `HangarServer.start` gives its store a `controlEventSink` into a server-owned
+  `ControlEventRing`; `ServerActions.readEvents` serves `events.read` through the HangarCore read path
   (`WindowLibrary.readEvents`'s logic). `session wait` needs nothing new.
 - **Foreground read-back on Linux**: `ProcCwd.foregroundGroup` (`PaneObserver`) also reads `/proc/<pid>/cmdline`
   and the shell name; `ServerActions.controlTree` and `ServerActions+Remote.swift:remoteTree` pass it as
@@ -191,15 +191,15 @@
 
 ## Implementation Steps
 
-### Task 1: Host-agent reads on agterm-server
+### Task 1: Host-agent reads on hangar-server
 
 **Files:**
-- Modify: `agtermCore/Sources/AgtermServerKit/AgtermServer.swift`, `ServerActions.swift`, `ServerActions+Remote.swift`,
+- Modify: `HangarCore/Sources/HangarServerKit/HangarServer.swift`, `ServerActions.swift`, `ServerActions+Remote.swift`,
   `ServerActions+Unserved.swift`, `ServerActions+Sessions.swift`, `ServerCommandPolicy.swift`, `PaneObserver.swift`,
   `ServerTestSupport.swift` (test support)
-- Modify: `agtermCore/Sources/agtermCore/CatalogRoot.swift` (`HeadlessCommandPolicy` drops `surface.cursor`)
-- Tests: `AgtermServerTests/ServerActionsSessionsTests.swift`, `ServerActionsTests.swift`, `ServerActionsRemoteTests.swift`,
-  `PaneObserverTests.swift`, `AgtermServerTests.swift`, `ServerCommandPolicyTests.swift`, `agtermCoreTests/CatalogRootTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/CatalogRoot.swift` (`HeadlessCommandPolicy` drops `surface.cursor`)
+- Tests: `HangarServerTests/ServerActionsSessionsTests.swift`, `ServerActionsTests.swift`, `ServerActionsRemoteTests.swift`,
+  `PaneObserverTests.swift`, `HangarServerTests.swift`, `ServerCommandPolicyTests.swift`, `HangarCoreTests/CatalogRootTests.swift`
 
 - [x] failing test: server `session text --lines N` returns lines from scrollback beyond the viewport; fix
       `readSessionText` to request the full buffer when `lines` is set, as the Mac's `coveredText` does; make the
@@ -210,18 +210,18 @@
 - [x] foreground argv and shell name in the server `tree` and in the remote tree a viewer reads
 - [x] serve `zmx.list` and `zmx.screen` over the server's daemon namespace
 - [x] policy test: these commands leave `undecided`, pinned refusal arguments updated
-- [x] tests for each command, success and refusal paths; `swift test --filter AgtermServerTests` passes
+- [x] tests for each command, success and refusal paths; `swift test --filter HangarServerTests` passes
 
 ### Task 2: Status and unseen clear at the origin
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/PresentationFrames.swift`, `PresentationHub.swift`, `AppStore+RemotePresentation.swift`,
-  `AppStore+Status.swift`, `agtermCore/Sources/AgtermServerKit/ServerStreams.swift`, `ServerActions+Sessions.swift`,
-  `ServerActions+Effects.swift`, `ServerCommandPolicy.swift`, `agterm/agtermApp*.swift` (`wireStatusClear`),
-  `agterm/Control/ControlServer+Presentation.swift`
-- Tests: `agtermCoreTests/PresentationFramesTests.swift`, `PresentationHubTests.swift`, `RemotePresentationStateTests.swift`,
-  `AgtermServerTests/ServerStreamsTests.swift`, `ServerActionsSessionsTests.swift`, `ServerActionsEffectsTests.swift`,
-  `ServerCommandPolicyTests.swift`, `agtermTests/ControlServerRemotePresentationTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/PresentationFrames.swift`, `PresentationHub.swift`, `AppStore+RemotePresentation.swift`,
+  `AppStore+Status.swift`, `HangarCore/Sources/HangarServerKit/ServerStreams.swift`, `ServerActions+Sessions.swift`,
+  `ServerActions+Effects.swift`, `ServerCommandPolicy.swift`, `Hangar/hangarApp*.swift` (`wireStatusClear`),
+  `Hangar/Control/ControlServer+Presentation.swift`
+- Tests: `HangarCoreTests/PresentationFramesTests.swift`, `PresentationHubTests.swift`, `RemotePresentationStateTests.swift`,
+  `HangarServerTests/ServerStreamsTests.swift`, `ServerActionsSessionsTests.swift`, `ServerActionsEffectsTests.swift`,
+  `ServerCommandPolicyTests.swift`, `HangarTests/ControlServerRemotePresentationTests.swift`
 
 - [x] failing tests: a status a viewer cleared returns on reconnect (B and C); server `session type` never clears
       status; server `unseenCount` never resets
@@ -235,15 +235,15 @@
 ### Task 3: Flag, tint and saved view state for server rows; remote-window option parity
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/CatalogFrames.swift`, `CatalogDiff`/`CatalogHub` as needed,
+- Modify: `HangarCore/Sources/HangarCore/CatalogFrames.swift`, `CatalogDiff`/`CatalogHub` as needed,
   `RemoteCatalogMirror.swift`, `RemoteWindowViewState.swift`, `RemoteOperation+Request.swift`,
-  `RemoteCatalogActions.swift`, `PaletteCatalog.swift`, `agtermCore/Sources/AgtermServerKit/ServerCatalog.swift`,
+  `RemoteCatalogActions.swift`, `PaletteCatalog.swift`, `HangarCore/Sources/HangarServerKit/ServerCatalog.swift`,
   `ServerActions+Sessions.swift`, `ServerActions+Workspaces.swift`, `ServerCommandPolicy.swift`,
-  `agterm/Control/ControlServer+RemoteActions.swift`, `agterm/AppActions+Palette.swift`
-- Tests: `agtermCoreTests/CatalogFramesTests.swift`, `RemoteCatalogMirrorTests.swift`, `RemoteCatalogMirror+DetachTests.swift`,
+  `Hangar/Control/ControlServer+RemoteActions.swift`, `Hangar/AppActions+Palette.swift`
+- Tests: `HangarCoreTests/CatalogFramesTests.swift`, `RemoteCatalogMirrorTests.swift`, `RemoteCatalogMirror+DetachTests.swift`,
   `RemoteOperationRequestTests.swift`, `RemoteCatalogActionsTests.swift`, `PaletteCatalogTests.swift`,
-  `AgtermServerTests/ServerCatalogTests.swift`, `ServerActionsSessionsTests.swift`, `ServerActionsWorkspacesTests.swift`,
-  `ServerActionsMovesTests.swift`, `ServerCommandPolicyTests.swift`, `agtermTests/ControlServerRemoteActionsTests.swift`
+  `HangarServerTests/ServerCatalogTests.swift`, `ServerActionsSessionsTests.swift`, `ServerActionsWorkspacesTests.swift`,
+  `ServerActionsMovesTests.swift`, `ServerCommandPolicyTests.swift`, `HangarTests/ControlServerRemoteActionsTests.swift`
 
 - [x] flag and session/workspace tint as catalog fields (`false`/`""` for none, nil only from an older server);
       server serves `session.flag`, `session.tint`, `workspace.flag`, `workspace.tint`; its `session new --tint`
@@ -258,16 +258,16 @@
 - [x] tests: catalog encode/decode with new fields, explicit none and an older server, a cleared tint, mirror apply,
       view-state round trip (info absent), each routed option, batch receipts, palette enablement
 
-### Task 4: Pane lifecycle on agterm-server
+### Task 4: Pane lifecycle on hangar-server
 
 **Files:**
-- Modify: `agtermCore/Sources/AgtermServerKit/ServerActions+Sessions.swift`, `ServerPanes.swift`, `PaneObserver.swift`,
-  `ServerActions+Receipts.swift`, `ServerCommandPolicy.swift`, `agtermCore/Sources/agtermCore/RemoteOperation+Request.swift`,
-  `ZmxInventory.swift`, `PaletteCatalog.swift`, `agterm/Control/ControlServer+RemoteActions.swift`,
-  `agterm/AppActions+Companions.swift`, `agterm/AppActions+Palette.swift`, `agterm/Views/WorkspaceSidebar+ContextMenu.swift`
-- Tests: `AgtermServerTests/ServerActionsSessionsTests.swift`, `ServerActionsReceiptsTests.swift`, `ServerPanesTests.swift`,
-  `PaneObserverTests.swift`, `ServerCommandPolicyTests.swift`, `agtermCoreTests/RemoteOperationRequestTests.swift`,
-  `PaletteCatalogTests.swift`, `agtermTests/ControlServerRemoteActionsTests.swift`
+- Modify: `HangarCore/Sources/HangarServerKit/ServerActions+Sessions.swift`, `ServerPanes.swift`, `PaneObserver.swift`,
+  `ServerActions+Receipts.swift`, `ServerCommandPolicy.swift`, `HangarCore/Sources/HangarCore/RemoteOperation+Request.swift`,
+  `ZmxInventory.swift`, `PaletteCatalog.swift`, `Hangar/Control/ControlServer+RemoteActions.swift`,
+  `Hangar/AppActions+Companions.swift`, `Hangar/AppActions+Palette.swift`, `Hangar/Views/WorkspaceSidebar+ContextMenu.swift`
+- Tests: `HangarServerTests/ServerActionsSessionsTests.swift`, `ServerActionsReceiptsTests.swift`, `ServerPanesTests.swift`,
+  `PaneObserverTests.swift`, `ServerCommandPolicyTests.swift`, `HangarCoreTests/RemoteOperationRequestTests.swift`,
+  `PaletteCatalogTests.swift`, `HangarTests/ControlServerRemoteActionsTests.swift`
 
 - [x] `session.restart` on the server: `--command` and foreground replay (task 1's reader), pane identity and
       placement kept, Ended rows restartable; a server window routes it
@@ -282,15 +282,15 @@
 ### Task 5: Daemon-backed Mac scratch
 
 **Files:**
-- Modify: `agterm/agtermApp*.swift` (`makeScratchSurface`), `agtermCore/Sources/agtermCore/Session.swift`
+- Modify: `Hangar/hangarApp*.swift` (`makeScratchSurface`), `HangarCore/Sources/HangarCore/Session.swift`
   (`ScratchDaemon`), `Snapshot.swift`, `AppStore+Snapshot.swift`, `AppStore+Panes.swift`, `PresentationFrames.swift`
   (`PresentationLayout`), zmx discovery (`zmx.tree` projection), Live reap/claim paths, `ZmxLeadBook`,
-  `agterm/Control/ControlServer+PaneLead.swift`, `PaneLeadCover`
-- Tests: `agtermCoreTests/SessionTests.swift`, `SnapshotRoundTripTests.swift`, `PresentationLayoutTests.swift`,
-  `agtermTests/ControlServerScratchTests.swift`, `ControlServerPaneLeadTests.swift` (or the existing lead suite)
+  `Hangar/Control/ControlServer+PaneLead.swift`, `PaneLeadCover`
+- Tests: `HangarCoreTests/SessionTests.swift`, `SnapshotRoundTripTests.swift`, `PresentationLayoutTests.swift`,
+  `HangarTests/ControlServerScratchTests.swift`, `ControlServerPaneLeadTests.swift` (or the existing lead suite)
 
 - [x] in Live sessions mode a Mac scratch runs in a zmx daemon identified by `Session.ScratchDaemon`, started
-      through `agterm-session-host` like a pane
+      through `hangar-session-host` like a pane
 - [x] hide, close and shell exit keep today's visible behavior (exit closes and hides it, the next show starts a
       fresh shell); an app restart adopts the daemon and restores the scratch hidden
 - [x] reap, claim and Live reset treat scratch daemons like pane daemons
@@ -304,15 +304,15 @@
 ### Task 6: Lifecycle of rows attached from another host
 
 **Files:**
-- Modify: `agterm/Control/ControlServer+RemoteCompanions.swift`, `ControlServer+Restart.swift`, `ControlServer+SessionClose.swift`,
-  `ControlServer+Companions.swift`, `ControlServer+Zmx.swift`, `agterm/AppActions.swift`, `agterm/AppActions+Palette.swift`,
-  `agterm/agtermApp*.swift` (split/scratch factories), `agtermCore/Sources/agtermCore/AppStore+RemoteLayout.swift`,
+- Modify: `Hangar/Control/ControlServer+RemoteCompanions.swift`, `ControlServer+Restart.swift`, `ControlServer+SessionClose.swift`,
+  `ControlServer+Companions.swift`, `ControlServer+Zmx.swift`, `Hangar/AppActions.swift`, `Hangar/AppActions+Palette.swift`,
+  `Hangar/hangarApp*.swift` (split/scratch factories), `HangarCore/Sources/HangarCore/AppStore+RemoteLayout.swift`,
   `AppStore+Duplicate.swift`, `ControlProtocol.swift`, `ControlDispatcher.swift`, `PaletteCatalog.swift`,
-  `agtermCore/Sources/AgtermServerKit/ServerActions+Sessions.swift`, `ServerCommandPolicy.swift`,
-  `agtermCore/Sources/agtermctlKit/` (session close/restart commands)
-- Tests: `agtermCoreTests/AppStoreRemoteLayoutTests.swift`, `ControlDispatcherSessionCloseTests.swift`, `PaletteCatalogTests.swift`,
-  `agtermctlKitTests` session command suites, `AgtermServerTests/ServerCommandPolicyTests.swift`,
-  `agtermTests/ControlServerRemoteCompanionsTests.swift`, `ControlServerRestartTests.swift`, `RemoteLayoutCloseTests.swift`
+  `HangarCore/Sources/HangarServerKit/ServerActions+Sessions.swift`, `ServerCommandPolicy.swift`,
+  `HangarCore/Sources/hangarctlKit/` (session close/restart commands)
+- Tests: `HangarCoreTests/AppStoreRemoteLayoutTests.swift`, `ControlDispatcherSessionCloseTests.swift`, `PaletteCatalogTests.swift`,
+  `hangarctlKitTests` session command suites, `HangarServerTests/ServerCommandPolicyTests.swift`,
+  `HangarTests/ControlServerRemoteCompanionsTests.swift`, `ControlServerRestartTests.swift`, `RemoteLayoutCloseTests.swift`
 
 - [x] `session close --terminate` as `session.terminate`: on an attached row the origin's own close on the original
       session id with `--undoable` passed through, whole companion group, unknown outcome never falls back or
@@ -323,7 +323,7 @@
 - [x] ordinary Duplicate, a new split and the scratch of an attached row start on the origin and attach here
 - [x] panes the origin creates after the attach (a new or replacement split, the scratch) attach dynamically;
       `applyRemoteLayout` handles additions, not only rearrangement and removal
-- [x] `session.restore` forwarded to a Mac origin, refused on a server row with "agterm-server keeps every pane
+- [x] `session.restore` forwarded to a Mac origin, refused on a server row with "hangar-server keeps every pane
       running"
 - [x] the same paths work for a Linux session attached alone (`zmx attach` outside a server window)
 - [ ] policy test classifies `session.terminate`; tests: request shapes sent to the origin, unknown-outcome
@@ -333,11 +333,11 @@
 ### Task 7: Attached rows survive relaunch
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Session.swift` (`isSnapshotted`), `Snapshot.swift`, `AppStore+Snapshot.swift`,
-  `RecentClosed.swift` (`remoteItems`), `AppStore+RecentClosed.swift`, restore/attach path in `agterm/` and
-  `agtermCore` (`RemoteSession`, `RemoteReconnect`)
-- Tests: `agtermCoreTests/SnapshotRoundTripTests.swift`, `RecentClosedTests.swift`, `RemoteReconnectTests.swift`,
-  `agtermTests/ControlServerRemoteReconnectTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift` (`isSnapshotted`), `Snapshot.swift`, `AppStore+Snapshot.swift`,
+  `RecentClosed.swift` (`remoteItems`), `AppStore+RecentClosed.swift`, restore/attach path in `hangar/` and
+  `HangarCore` (`RemoteSession`, `RemoteReconnect`)
+- Tests: `HangarCoreTests/SnapshotRoundTripTests.swift`, `RecentClosedTests.swift`, `RemoteReconnectTests.swift`,
+  `HangarTests/ControlServerRemoteReconnectTests.swift`
 
 - [x] `isSnapshotted` used only by the snapshot filter; attached rows, page roots and page companions included,
       saved as a remote reference (host, origin session id, content kind) with pane bindings, flag, tint, watermark,
@@ -355,14 +355,14 @@
 ### Task 8: Undo and Reopen Closed for remote sessions
 
 **Files:**
-- Modify: `agtermCore/Sources/AgtermServerKit/` (close path, recent-closed and pending-close stores, `AgtermServer.start`/
-  `stop`, prune claims), `agtermCore/Sources/agtermCore/WindowLibrary.swift` (`makeStore` for remote windows),
+- Modify: `HangarCore/Sources/HangarServerKit/` (close path, recent-closed and pending-close stores, `HangarServer.start`/
+  `stop`, prune claims), `HangarCore/Sources/HangarCore/WindowLibrary.swift` (`makeStore` for remote windows),
   `WindowLibrary+RecentClosed.swift`, `AppStore+RecentClosed.swift`, `RemoteOperation+Request.swift`, `PaletteCatalog.swift`,
-  `ControlProtocol.swift` (`recent.*` `--window`), `agtermctlKit` recent commands, `agterm/Control/ControlServer+Recent.swift`,
-  `ControlServer+RemoteActions.swift`, `ControlServer+RemoteCompanions.swift`, `agterm/AppActions+Palette.swift`
-- Tests: `AgtermServerTests/ServerLifecycleTests.swift`, `ServerActionsSessionsTests.swift`, `ServerActionsReceiptsTests.swift`,
-  `ServerCommandPolicyTests.swift`, `agtermCoreTests/RecentClosedTests.swift`, `ControlRecentTests.swift`,
-  `ControlDispatcherRecentTests.swift`, `PaletteCatalogTests.swift`, `agtermTests/ControlServerRecentTests.swift`,
+  `ControlProtocol.swift` (`recent.*` `--window`), `hangarctlKit` recent commands, `Hangar/Control/ControlServer+Recent.swift`,
+  `ControlServer+RemoteActions.swift`, `ControlServer+RemoteCompanions.swift`, `Hangar/AppActions+Palette.swift`
+- Tests: `HangarServerTests/ServerLifecycleTests.swift`, `ServerActionsSessionsTests.swift`, `ServerActionsReceiptsTests.swift`,
+  `ServerCommandPolicyTests.swift`, `HangarCoreTests/RecentClosedTests.swift`, `ControlRecentTests.swift`,
+  `ControlDispatcherRecentTests.swift`, `PaletteCatalogTests.swift`, `HangarTests/ControlServerRecentTests.swift`,
   `ControlServerRemoteActionsTests.swift`
 
 - [x] server undo grace for `session.close --undoable`; pending closes saved and counted as claims; a clean stop
@@ -378,13 +378,13 @@
 ### Task 9: Link clicks resolve on the pane's host
 
 **Files:**
-- Modify: `agterm/Ghostty/GhosttySurfaceView+Input.swift`, `agtermCore/Sources/agtermCore/LinkPolicy.swift`,
+- Modify: `Hangar/Ghostty/GhosttySurfaceView+Input.swift`, `HangarCore/Sources/HangarCore/LinkPolicy.swift`,
   `AppStore+ForwardedClick.swift`, `AppStore+Catalog.swift` (`catalogBinding`), `AppStore+RemotePage.swift`
-  (`openRemotePage`), `agtermCore/Sources/AgtermServerKit/ServerStreams.swift` (`clickedPage`), `PaneObserver.swift`
-  (scratch cwd), `agterm/Control/ControlServer+ForwardedClick.swift`
-- Create: `agterm/Control/ControlServer+LinkForward.swift`
-- Tests: `agtermCoreTests/AppStoreLinkClickRequestTests.swift`, `AppStoreRemotePageTests.swift`, the `LinkPolicy` suite,
-  `AgtermServerTests/ServerStreamsTests.swift`, `PaneObserverTests.swift`, `agtermTests/ControlServerRemoteLinkClickTests.swift`,
+  (`openRemotePage`), `HangarCore/Sources/HangarServerKit/ServerStreams.swift` (`clickedPage`), `PaneObserver.swift`
+  (scratch cwd), `Hangar/Control/ControlServer+ForwardedClick.swift`
+- Create: `Hangar/Control/ControlServer+LinkForward.swift`
+- Tests: `HangarCoreTests/AppStoreLinkClickRequestTests.swift`, `AppStoreRemotePageTests.swift`, the `LinkPolicy` suite,
+  `HangarServerTests/ServerStreamsTests.swift`, `PaneObserverTests.swift`, `HangarTests/ControlServerRemoteLinkClickTests.swift`,
   `ControlServerLinkOverlayTests.swift`, `RemotePortForwardTests.swift`, `ControlServerLinkForwardTests.swift`
 
 - [x] failing tests: a path clicked in a server scratch resolves on the Mac; a clicked `http://localhost:PORT` in a
@@ -401,9 +401,9 @@
 ### Task 10: Classification, docs and gates
 
 **Files:**
-- Modify: `agtermCore/Tests/AgtermServerTests/ServerCommandPolicyTests.swift`, `.claude/rules/control-api.md`,
+- Modify: `HangarCore/Tests/HangarServerTests/ServerCommandPolicyTests.swift`, `.claude/rules/control-api.md`,
   `.claude/rules/sidebar.md`, `.claude/rules/menu-actions.md`, `site/docs.html`, `site/commands.html`,
-  `site/llms.txt` if affected, `plugins/agterm/skills/agterm/`
+  `site/llms.txt` if affected, `plugins/hangar/skills/hangar/`
 
 - [x] `undecided` is gone: each command is served or in an explicit refused-by-design set carrying its reason, per
       the table below
@@ -412,7 +412,7 @@
       (`recentID`, catalog flag/tint, `--window` on `recent.*`), rule files that describe the old behavior (remote
       Convert disabled, scratch override never persisting, remote clear staying local), skill reference and
       SKILL.md triggers for events and wait on the host
-- [x] verify every gap in the table is closed for A, B and C; gates: `cd agtermCore && swift test`,
+- [x] verify every gap in the table is closed for A, B and C; gates: `cd HangarCore && swift test`,
       `make test-app`, `make lint`
 - [x] move this plan to `docs/plans/completed/`
 

@@ -14,21 +14,21 @@
 
 ## Context (from discovery)
 
-- `agtermCore/Sources/agtermCore/Hud.swift`: `HudSpec`, `HudPosition.edgeMarginPercent` (10),
+- `HangarCore/Sources/HangarCore/Hud.swift`: `HudSpec`, `HudPosition.edgeMarginPercent` (10),
   `HudLayout` (`clampSizePercent` 10...80, `box`, `panelSize`, `heightPercent`, `textColumns` capped at
   `maxColumns` 60, `panelGrid`, `markdownBody`).
-- `agtermCore/Sources/agtermCore/AppStore+Panes.swift`: `openHud`, `updateHud`, `resizeOverlay` clamp
+- `HangarCore/Sources/HangarCore/AppStore+Panes.swift`: `openHud`, `updateHud`, `resizeOverlay` clamp
   the width and store `hudHeightPercent`.
-- `agterm/Control/ControlServer+Hud.swift`: `openHud`/`updateHud` measure once; `watchHudGeometry`
+- `Hangar/Control/ControlServer+Hud.swift`: `openHud`/`updateHud` measure once; `watchHudGeometry`
   rewrites the body on a pane-geometry change but reuses the saved height percent.
-- `agterm/Views/WindowContentView+Detail.swift`: `OverlayPanelStyle` (`panelFrame`, `offset` with the
+- `Hangar/Views/WindowContentView+Detail.swift`: `OverlayPanelStyle` (`panelFrame`, `offset` with the
   10% margin, `framed` doubling as the opaque backing), `overlayPanel`.
-- `agterm/Ghostty/HudLinkClick.swift`: `panel(in:at:)` excludes sheets and asks, not the search bar.
-- `agterm/Views/WindowContentView.swift`: `searchBarLayer`, top-trailing above the deck.
+- `Hangar/Ghostty/HudLinkClick.swift`: `panel(in:at:)` excludes sheets and asks, not the search bar.
+- `Hangar/Views/WindowContentView.swift`: `searchBarLayer`, top-trailing above the deck.
 - Control surface: `ControlProtocol.swift` (`ControlArgs`), `ControlDispatcher+Hud.swift`,
-  `ControlProjection.swift` (`ControlHudNode`), `agtermctlKit/SessionCommands.swift` (`Hud`),
+  `ControlProjection.swift` (`ControlHudNode`), `hangarctlKit/SessionCommands.swift` (`Hud`),
   `ControlServer+RemotePresentation.swift` (`showRemoteHud` rebuilds `HudSpec` field by field).
-- Docs: `plugins/agterm/skills/agterm/{SKILL.md,reference.md}`, `site/commands.html`, `site/docs.html`,
+- Docs: `plugins/hangar/skills/hangar/{SKILL.md,reference.md}`, `site/commands.html`, `site/docs.html`,
   `.claude/rules/control-api.md`.
 
 Three defects found while designing this, all reachable today and all in the way of a caption:
@@ -50,7 +50,7 @@ Three defects found while designing this, all reachable today and all in the way
   no longer rounded up to a whole percent of the pane, so it can be a few points shorter and sit a few
   points off where it did at `center` and `bottom`; and a markdown panel on a narrowed pane rewraps and
   grows a row where it used to clip with `… N more`.
-- `agtermCore` is a library the `agterm-linux` fork consumes. Public signatures are extended, never
+- `HangarCore` is a library the `agterm-linux` fork consumes. Public signatures are extended, never
   narrowed: new parameters take defaults and existing initializers keep compiling.
 - Lint file-length limits (1000 source, 2000 tests) are already at the edge in five files this work
   touches: `Session.swift` 995, `SessionCommands.swift` 994, `ControlProtocolTests.swift` 2000,
@@ -63,11 +63,11 @@ Three defects found while designing this, all reachable today and all in the way
 
 ## Testing Strategy
 
-- **host-free** (`cd agtermCore && swift test`): layout math, spec coding, dispatcher, projection, CLI
+- **host-free** (`cd HangarCore && swift test`): layout math, spec coding, dispatcher, projection, CLI
   argument and help tests.
 - **hosted** (`scripts/test-app.sh`, targeted): `OverlayPanelStyle` frames, geometry remeasure,
   `HudLinkClick` exclusion, remote mirror.
-- **UI** (`agtermUITests/ControlHudUITests`, targeted methods only): `tree` read-back of the new
+- **UI** (`HangarUITests/ControlHudUITests`, targeted methods only): `tree` read-back of the new
   fields through a real socket.
 - Where the panel draws is not asserted by any test (a HUD is a Metal surface with no XCUIElement), so
   Task 5 checks it by eye in an isolated Debug instance.
@@ -167,13 +167,13 @@ Rejected: a `--lines` row cap (a clip would hide the links the caption exists fo
 
 ## Implementation Steps
 
-### Task 1: Layout model in agtermCore
+### Task 1: Layout model in HangarCore
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Hud.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/HudTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/HudMarkdownTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/HudHelperTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Hud.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HudTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HudMarkdownTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/HudHelperTests.swift`
 
 - [x] failing test first: a markdown spec with an explicit `sizePercent` wider than 60 columns wraps at
       the panel's width; confirm it fails, then lift the cap for an explicit width only
@@ -190,22 +190,22 @@ Rejected: a `--lines` row cap (a clip would hide the links the caption exists fo
 - [x] tests: cap per anchor and flag, frameless box and body rows, points for one, two and wrapped
       lines, content past 80% of the pane (points, grid rows, clipped body and percent all agree),
       round-trip coding, the helper painting a frameless body at row 1
-- [x] `cd agtermCore && swift test --filter Hud` passes
+- [x] `cd HangarCore && swift test --filter Hud` passes
 
 ### Task 2: Store, geometry and the panel view
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/Session.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Panes.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Presentation.swift`
-- Create: `agtermCore/Sources/agtermCore/Session+Hud.swift`
-- Modify: `agterm/Control/ControlServer+Hud.swift`
-- Modify: `agterm/Control/ControlServer+SessionActions.swift`
-- Modify: `agterm/Views/WindowContentView+Detail.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreHudTests.swift`
-- Modify: `agtermTests/HudDeckGatesTests.swift`
-- Modify: `agtermTests/ControlServerSessionActionsTests.swift`
-- Modify: `agtermTests/ControlServerHudAutoHideTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/Session.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Presentation.swift`
+- Create: `HangarCore/Sources/HangarCore/Session+Hud.swift`
+- Modify: `Hangar/Control/ControlServer+Hud.swift`
+- Modify: `Hangar/Control/ControlServer+SessionActions.swift`
+- Modify: `Hangar/Views/WindowContentView+Detail.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreHudTests.swift`
+- Modify: `HangarTests/HudDeckGatesTests.swift`
+- Modify: `HangarTests/ControlServerSessionActionsTests.swift`
+- Modify: `HangarTests/ControlServerHudAutoHideTests.swift`
 
 - [x] failing test first: the same HUD laid out at one width in two pane heights has the same frame
       height in points; confirm it fails against the saved percent, then lay out from points and make
@@ -232,22 +232,22 @@ Rejected: a `--lines` row cap (a clip would hide the links the caption exists fo
 ### Task 3: Control surface
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher+Hud.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProjection.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/SessionCommands.swift`
-- Create: `agtermCore/Sources/agtermctlKit/SessionHudCommands.swift` (the `Hud` command, moved)
-- Modify: `agterm/Control/ControlServer+RemotePresentation.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherHudTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStoreHudTests.swift`
-- Modify: `agtermCore/Tests/agtermctlKitTests/HudCommandHelpTests.swift`
-- Modify: `agtermTests/ControlServerRemotePresentationTests.swift`
-- Modify: `agtermUITests/ControlHudUITests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher+Hud.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProjection.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/SessionCommands.swift`
+- Create: `HangarCore/Sources/hangarctlKit/SessionHudCommands.swift` (the `Hud` command, moved)
+- Modify: `Hangar/Control/ControlServer+RemotePresentation.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherHudTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStoreHudTests.swift`
+- Modify: `HangarCore/Tests/hangarctlKitTests/HudCommandHelpTests.swift`
+- Modify: `HangarTests/ControlServerRemotePresentationTests.swift`
+- Modify: `HangarUITests/ControlHudUITests.swift`
 
 - [x] `session.hud.open` and `.update` accept `sticky` and `frame` and pass them into the spec; an
       update that omits them returns the panel to the defaults, like every other replaced option
-- [x] `agtermctl session hud [open|update]` takes `--sticky` and `--no-frame`, with help text in the
+- [x] `hangarctl session hud [open|update]` takes `--sticky` and `--no-frame`, with help text in the
       caller's words; the `--size-percent` help on both stops saying "bounded to 10-80" without
       qualification
 - [x] `tree` reports `hud.sticky` and `hud.frame`, and `hud.sizePercent` reads back 100 for a sticky
@@ -263,9 +263,9 @@ Rejected: a `--lines` row cap (a clip would hide the links the caption exists fo
 ### Task 4: Search bar keeps its clicks
 
 **Files:**
-- Modify: `agterm/Ghostty/HudLinkClick.swift`
-- Modify: `agterm/Views/TerminalSearchBar.swift`
-- Modify: `agtermTests/GhosttySurfaceViewTrackingTests.swift`
+- Modify: `Hangar/Ghostty/HudLinkClick.swift`
+- Modify: `Hangar/Views/TerminalSearchBar.swift`
+- Modify: `HangarTests/GhosttySurfaceViewTrackingTests.swift`
 
 - [x] failing test first: with the real `TerminalSearchBar` hosted over a HUD panel, a ⌘-click at a
       point the bar covers is not claimed by the panel; confirm it fails, then exclude the bar's own
@@ -279,18 +279,18 @@ Rejected: a `--lines` row cap (a clip would hide the links the caption exists fo
 
 ### Task 5: Verify acceptance criteria
 
-- [x] run each gate once: `cd agtermCore && swift test`, `make test-app`, `make lint`, Debug build
+- [x] run each gate once: `cd HangarCore && swift test`, `make test-app`, `make lint`, Debug build
 - [x] launch an isolated Debug instance (short `/tmp` state dir, `windows` marker) and check by eye,
       capturing each: a sticky frameless two-line markdown caption at the top, full width, session-wide
       and on one pane of a split; the same at the bottom and in a corner; it keeps its height through a
       window resize and gains a row when narrowed until a line wraps; links open on ⌘-click; the search
       bar stays on top and usable over it; a default HUD looks as before; a frameless caption with
       `--font-size` and one under a non-default terminal font show every line of their text
-- [x] stop the instance by pid and check `lsappinfo list | grep -A4 agterm.debug`
+- [x] stop the instance by pid and check `lsappinfo list | grep -A4 hangar.debug`
 
 ### Task 6: [Final] Update documentation
 
-- [x] `plugins/agterm/skills/agterm/reference.md` and `SKILL.md`: the two options, the read-back
+- [x] `plugins/hangar/skills/hangar/reference.md` and `SKILL.md`: the two options, the read-back
       fields, the caption recipe, the rows-covered example, and the corrected statements about the 80%
       width bound and the height following a resize; a trigger for the pinned caption in SKILL.md's
       `description`; `examples.md` where it states the 80% cap and the 10% margin

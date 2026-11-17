@@ -255,7 +255,7 @@ private:
     QHash<QString, Panes> m_panes;
     QWidget *m_strip = nullptr;
     class FilePanel *m_filePanel = nullptr;
-    int m_filePanelWidth = 240; // agterm's default; clamped to 160..560
+    int m_filePanelWidth = 240; // hangar's default; clamped to 160..560
     void applyFilePanelWidth();
     class Palette *m_palette = nullptr;
     bool m_zoomed = false;

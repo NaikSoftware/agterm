@@ -1,5 +1,5 @@
 The workspace-stack, workspace-stack-bold, session-terminal and flag-lucide images in
-agterm/Assets.xcassets are Lucide icons (https://lucide.dev): square-stack, terminal and flag.
+Hangar/Assets.xcassets are Lucide icons (https://lucide.dev): square-stack, terminal and flag.
 
 ISC License
 

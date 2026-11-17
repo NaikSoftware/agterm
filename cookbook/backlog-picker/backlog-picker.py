@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pick a backlog item of THIS session's repo and hand it to the Claude Code run in the pane.
 
-Runs as an agterm keymap custom command, so the runner exports $AGT_* and the app spawns it with
+Runs as an hangar keymap custom command, so the runner exports $AGT_* and the app spawns it with
 launchd's PATH and stdout on /dev/null.
 
     claude already running in the pane -> types "/backlog <slug>" into the TUI
@@ -14,7 +14,7 @@ Whether claude is running here is read from the pane's live foreground argv, so 
 long as BACKLOG_FG_MATCH matches it.
 
 Environment:
-    AGTERMCTL           agtermctl to use, taken as given, when the one on PATH is not the right one
+    HANGARCTL           hangarctl to use, taken as given, when the one on PATH is not the right one
     BACKLOG_DIR         item directory relative to the repo root (default docs/backlog)
     BACKLOG_CLAUDE_CMD  launcher typed at a bare prompt (default claude)
     BACKLOG_FG_MATCH    argv pattern that means "claude runs here" (default (^|/)claude$)
@@ -165,7 +165,7 @@ def items_of(items: list[Item], today: date) -> list[dict[str, str]]:
 
 
 class Agt:
-    """Agt is the agterm control channel: the resolved agtermctl plus this session's addressing."""
+    """Agt is the hangar control channel: the resolved hangarctl plus this session's addressing."""
 
     def __init__(self) -> None:
         self.bin = self.resolve_bin()
@@ -175,32 +175,32 @@ class Agt:
 
     @staticmethod
     def resolve_bin() -> str:
-        """resolve_bin finds an agtermctl carrying `pick`, preferring the app actually running.
+        """resolve_bin finds an hangarctl carrying `pick`, preferring the app actually running.
 
         Existence is not enough. Several installs can coexist, and a PATH lookup can land on an old
         "Install Command Line Tool..." symlink pointing at an app that is not the one holding the
         socket. So the running app's own bundle is asked first and the rest are probed for the
         subcommand rather than trusted by version, since two builds can report the same version and
-        differ in what they carry. AGTERMCTL skips all of it and is taken as given: the probe reads a
+        differ in what they carry. HANGARCTL skips all of it and is taken as given: the probe reads a
         help layout a wrapper script does not reproduce, so probing the reader's explicit choice would
         discard exactly the binary the override exists to name.
         """
-        override = os.environ.get("AGTERMCTL", "")
+        override = os.environ.get("HANGARCTL", "")
         if override:
             return override if os.access(override, os.X_OK) else ""
         candidates = [running_app_ctl(),
-                      f"{os.environ.get('GHOSTTY_BIN_DIR', '')}/agtermctl",
-                      "/usr/local/bin/agtermctl",
-                      "/Applications/agterm.app/Contents/MacOS/agtermctl",
-                      str(Path.home() / "Applications/agterm.app/Contents/MacOS/agtermctl"),
-                      shutil.which("agtermctl") or ""]
+                      f"{os.environ.get('GHOSTTY_BIN_DIR', '')}/hangarctl",
+                      "/usr/local/bin/hangarctl",
+                      "/Applications/Hangar.app/Contents/MacOS/hangarctl",
+                      str(Path.home() / "Applications/Hangar.app/Contents/MacOS/hangarctl"),
+                      shutil.which("hangarctl") or ""]
         for candidate in candidates:
             if candidate and os.access(candidate, os.X_OK) and probe(candidate, "pick"):
                 return candidate
         return ""
 
     def run(self, *args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
-        """run invokes agtermctl with the socket appended, never raising on a nonzero exit."""
+        """run invokes hangarctl with the socket appended, never raising on a nonzero exit."""
         cmd = [self.bin, *args]
         if self.socket:
             cmd += ["--socket", self.socket]
@@ -262,7 +262,7 @@ def probe(binary: str, subcommand: str) -> bool:
 
 
 def running_app_ctl() -> str:
-    """running_app_ctl returns the agtermctl of the agterm process actually running, "" when none.
+    """running_app_ctl returns the hangarctl of the hangar process actually running, "" when none.
 
     pgrep is blind to GUI apps from here, so the process list is read directly.
     """
@@ -272,8 +272,8 @@ def running_app_ctl() -> str:
     except (OSError, subprocess.SubprocessError):
         return ""
     for line in res.stdout.splitlines():
-        if line.endswith("agterm.app/Contents/MacOS/agterm"):
-            return str(Path(line).parent / "agtermctl")
+        if line.endswith("Hangar.app/Contents/MacOS/Hangar"):
+            return str(Path(line).parent / "hangarctl")
     return ""
 
 
@@ -325,8 +325,8 @@ def main(argv: list[str]) -> int:
 
     agt = Agt()
     if not agt.bin:
-        fail(f"AGTERMCTL is not executable: {os.environ['AGTERMCTL']}" if os.environ.get("AGTERMCTL")
-             else "no agtermctl with pick support found (the one on PATH is too old)")
+        fail(f"HANGARCTL is not executable: {os.environ['HANGARCTL']}" if os.environ.get("HANGARCTL")
+             else "no hangarctl with pick support found (the one on PATH is too old)")
     if not items:
         fail(f"no backlog items in {root / BACKLOG_DIR}", agt)
 
@@ -429,12 +429,12 @@ class Tests(unittest.TestCase):
         import tempfile
         from unittest import mock
         with tempfile.TemporaryDirectory() as tmp:
-            wrapper = Path(tmp) / "agtermctl-wrapper"
+            wrapper = Path(tmp) / "hangarctl-wrapper"
             wrapper.write_text("#!/bin/sh\nexec true\n")   # no `pick` in its --help, so the probe would drop it
             wrapper.chmod(0o755)
-            with mock.patch.dict(os.environ, {"AGTERMCTL": str(wrapper)}):
+            with mock.patch.dict(os.environ, {"HANGARCTL": str(wrapper)}):
                 self.assertEqual(Agt.resolve_bin(), str(wrapper))
-            with mock.patch.dict(os.environ, {"AGTERMCTL": str(Path(tmp) / "not-there")}):
+            with mock.patch.dict(os.environ, {"HANGARCTL": str(Path(tmp) / "not-there")}):
                 self.assertEqual(Agt.resolve_bin(), "")
 
     def test_load_items_missing_dir(self) -> None:

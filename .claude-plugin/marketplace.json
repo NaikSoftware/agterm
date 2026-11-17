@@ -1,28 +1,28 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "agterm",
+  "name": "hangar",
   "owner": {
     "name": "Umputun",
     "email": "umputun@gmail.com"
   },
   "metadata": {
-    "description": "The agterm agent skill: drive the agterm macOS terminal over its control socket."
+    "description": "The hangar agent skill: drive the hangar macOS terminal over its control socket."
   },
   "plugins": [
     {
-      "name": "agterm",
-      "source": "./plugins/agterm",
-      "description": "Drive agterm, a native macOS terminal, programmatically via its agtermctl CLI and local control socket.",
+      "name": "hangar",
+      "source": "./plugins/hangar",
+      "description": "Drive hangar, a native macOS terminal, programmatically via its hangarctl CLI and local control socket.",
       "version": "0.42.3",
       "author": {
         "name": "Umputun"
       },
-      "homepage": "https://agterm.com",
-      "repository": "https://github.com/umputun/agterm",
+      "homepage": "https://naiksoftware.github.io/hangar",
+      "repository": "https://github.com/NaikSoftware/hangar",
       "license": "MIT",
       "category": "productivity",
       "keywords": [
-        "agterm",
+        "hangar",
         "terminal",
         "macos",
         "automation",

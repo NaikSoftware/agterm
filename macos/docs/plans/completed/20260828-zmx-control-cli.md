@@ -14,18 +14,18 @@ and act on the answer without learning zmx's own CLI.
 
 The group is deliberately named `zmx`, making the backend part of the CLI compatibility surface. The
 accepted cost is a misnamed group if a future remote backend is not zmx. The benefit is that a user who
-sees an `agterm-3f2a…` process in `ps` can search one word and land on our docs.
+sees an `hangar-3f2a…` process in `ps` can search one word and land on our docs.
 
 ## Context (from discovery)
 
-- protocol: `agtermCore/Sources/agtermCore/ControlProtocol.swift` (`Command` enum, `ControlArgs`,
+- protocol: `HangarCore/Sources/HangarCore/ControlProtocol.swift` (`Command` enum, `ControlArgs`,
   `ControlResponse`), dispatch in `ControlDispatcher.swift` (`ControlActions` protocol at `:7`, app-command
   switch at `:725`)
-- app arms: `agterm/Control/ControlServer.swift` and its `+*Commands` extensions;
+- app arms: `Hangar/Control/ControlServer.swift` and its `+*Commands` extensions;
   `clearRestoreCommands`/`captureRestoreCommands` at `:515`/`:536` are the closest precedent
-- CLI: `agtermCore/Sources/agtermctlKit/Commands.swift:91` registers the subcommand list;
+- CLI: `HangarCore/Sources/hangarctlKit/Commands.swift:91` registers the subcommand list;
   `MiscCommands.swift` holds `Restore` (`:60`) and `Theme` (`:112`)
-- daemon side: `agterm/Ghostty/ZmxClient.swift` — today it exposes only `reap`, `kill(paneIdentities:)`
+- daemon side: `Hangar/Ghostty/ZmxClient.swift` — today it exposes only `reap`, `kill(paneIdentities:)`
   and `sessionLeaderPIDs()`, always appends `--force`, and is a local in `restoredRuntime` captured by
   the finalizer/reap/resolver closures; `ControlServer` has no reference to it
 - host-free lifecycle: `ZmxLifecycle.swift` (`ZmxListParser`, `ZmxReapPolicy`, `PaneIdentityInventory`),
@@ -35,14 +35,14 @@ sees an `agterm-3f2a…` process in `ps` can search one word and land on our doc
 - pending close: `AppStore+PendingClose.swift` — `softCloseSession` at `:58`, 3s
   `pendingCloseGraceInterval`; `PendingSessionClose` already holds the `Session` objects and metadata
 - exit path: `GhosttySurfaceView.didHandleProcessExit` (`:171`, guard at `:498`) is the existing
-  idempotence bit; `agtermApp.handlePaneExit` (`:360-381`) runs the model transition *and* the promoted
+  idempotence bit; `hangarApp.handlePaneExit` (`:360-381`) runs the model transition *and* the promoted
   survivor's font callback, `DashboardController.promoteSplitMember`, and the refocus
 - settings: `AppSettings.restoreMode`, `SettingsModel.setRestoreMode` at `:222` (swallows save failure
   with `try?`); `AppStore.setRestoreCommand` (`AppStore+Restore.swift:27`) is the rollback-on-failure
   precedent; latch `GhosttyApp.restoreLaunchDecision` at `:65`
 - targeting: `ControlTargetResolver` searches OPEN stores only
 - docs surfaces: `README.md`, `.claude/rules/control-api.md`, `site/commands.html`, `site/docs.html`,
-  `plugins/agterm/skills/agterm/{SKILL.md,reference.md,troubleshooting.md,examples.md}`
+  `plugins/hangar/skills/hangar/{SKILL.md,reference.md,troubleshooting.md,examples.md}`
 
 ## Development Approach
 
@@ -50,18 +50,18 @@ sees an `agterm-3f2a…` process in `ps` can search one word and land on our doc
 - complete each task fully before moving to the next
 - make small, focused changes
 - **CRITICAL: every task MUST include new/updated tests** for code changes in that task
-  - the inventory join is host-free `agtermCore` logic with many state combinations; test it there
+  - the inventory join is host-free `HangarCore` logic with many state combinations; test it there
   - cover success and error paths, and every state a row can take
 - **CRITICAL: all tests must pass before starting the next task**
 - **CRITICAL: update this plan file when scope changes during implementation**
-- `agtermCore` stays free of AppKit and GhosttyKit; app-target code is the side-effect adapter
+- `HangarCore` stays free of AppKit and GhosttyKit; app-target code is the side-effect adapter
 - run the gates ONCE at the end (`make build`, `swift test`, `make test-app`, `make lint`), and scope
   everything else to what changed via `-only-testing:`
 
 ## Testing Strategy
 
-- **unit tests**: required for every task. Host-free logic in `agtermCore/Tests/agtermCoreTests/`, CLI
-  request shaping in `agtermCore/Tests/agtermctlKitTests/`, app-target behavior in `agtermTests/`
+- **unit tests**: required for every task. Host-free logic in `HangarCore/Tests/HangarCoreTests/`, CLI
+  request shaping in `HangarCore/Tests/hangarctlKitTests/`, app-target behavior in `HangarTests/`
 - **one test file per source file**: `ZmxInventory.swift` → `ZmxInventoryTests.swift`, never a third file
 - **protocol round-trip**: every new command and payload gets a case in `ControlProtocolTests.swift`
 - **dispatcher**: every new `ControlActions` member gets a `MockControlActions` entry and a
@@ -70,7 +70,7 @@ sees an `agterm-3f2a…` process in `ps` can search one word and land on our doc
   `onExit` callback was actually suppressed, nor that the dashboard follow-up ran. The refocus stays
   unproven either way: it needs a first responder no hosted test has
 - **UI tests**: only where a live daemon is genuinely required. `ZmxLiveUITests.swift` already carries the
-  opt-in (`AGTERM_UITEST_ENABLE_ZMX=1`); add at most one end-to-end case there and never re-run the whole
+  opt-in (`HANGAR_UITEST_ENABLE_ZMX=1`); add at most one end-to-end case there and never re-run the whole
   `ControlAPIUITests` suite to verify a narrow change
 
 ## Progress Tracking
@@ -84,7 +84,7 @@ sees an `agterm-3f2a…` process in `ps` can search one word and land on our doc
 
 One authority: every command goes over the control socket, so a running instance joins five sources into
 one answer — live stores, pending-close records, checked closed-window snapshots, the
-directory-versus-index comparison, and the observed daemon list. With agterm stopped the commands fail
+directory-versus-index comparison, and the observed daemon list. With hangar stopped the commands fail
 with "no instance"; there is no standalone path and no hybrid fallback, because a second authority would
 report a weaker truth (it can see neither pending-close nor live-model state) under the same command name.
 
@@ -104,11 +104,11 @@ check (`loop.zig:469-471`). So a client attaching between the listing and the ki
 window is narrowed rather than closed, because closing it needs an upstream zmx capability and the
 project pins zmx and runs no fork. Prune narrows it by re-listing immediately before it mutates anything
 and dropping any candidate no longer observed at zero clients, with model resolution held on the main
-actor so agterm's own claims cannot move underneath the operation.
+actor so hangar's own claims cannot move underneath the operation.
 
 What remains is an external attach between that second listing and the kill. It is narrow — the
 candidates are daemons no pane claims, so someone must reach an unclaimed daemon by name from outside
-agterm — but it stops being far-fetched once `zmx list` prints daemon names and the docs make the word
+hangar — but it stops being far-fetched once `zmx list` prints daemon names and the docs make the word
 user-facing, so the docs must say plainly that such a client can be terminated.
 
 `kill --force` is the escape hatch, and it requires an explicit target and pane. Not because other close
@@ -205,7 +205,7 @@ mean extending `ZmxSessionRecord` and the parser first. That is a separate chang
 answer "who owns this daemon"; add it later if a user asks.
 
 `unreadable` rows are reported but neither pruneable nor killable in v1, for the socket-unlink reason
-above. `foreign` covers a daemon in the namespace whose name is not `agterm-<compact uuid>`. It is
+above. `foreign` covers a daemon in the namespace whose name is not `hangar-<compact uuid>`. It is
 reported so the user can see it, and it is never pruneable — the namespace is derived from the state directory, not
 owned exclusively by us.
 
@@ -291,7 +291,7 @@ avoid:
 
 - a new suppression flag on the view. `didHandleProcessExit` already IS that state; a second flag is
   parallel state that will drift.
-- a store-only transition. `AppStore` alone bypasses `agtermApp.handlePaneExit`, which also rewires the
+- a store-only transition. `AppStore` alone bypasses `hangarApp.handlePaneExit`, which also rewires the
   promoted survivor's `onFontSizeChange`, calls `DashboardController.promoteSplitMember`, and refocuses
   the surviving or reselected surface.
 
@@ -321,7 +321,7 @@ Outcomes, which are guarded rather than flat:
 Either the plan states these guarded outcomes, or implementation proves an invariant that makes the
 defensive branches unreachable for a kill target. It must not flatten them again.
 
-A `zmx kill` invoked from the very pane it targets can kill the calling `agtermctl` before it reads the
+A `zmx kill` invoked from the very pane it targets can kill the calling `hangarctl` before it reads the
 server's reply. `session close` has the same shape; this command's help must say so.
 
 ### Kill targeting
@@ -342,8 +342,8 @@ before calling the host and name the resolved owner; owner naming belongs where 
 ### Task 1: Host-free inventory model and join
 
 **Files:**
-- Create: `agtermCore/Sources/agtermCore/ZmxInventory.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/ZmxInventoryTests.swift`
+- Create: `HangarCore/Sources/HangarCore/ZmxInventory.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/ZmxInventoryTests.swift`
 
 - [x] write failing tests for `ZmxInventory.join`: claimed, orphan, unknown, conflicted, pendingClose,
       foreign, and a claimed pane whose daemon is absent
@@ -360,8 +360,8 @@ before calling the host and name the resolved owner; owner naming belongs where 
 ### Task 2: Non-mutating claim walk over windows
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/WindowLibrary.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/WindowLibraryTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/WindowLibrary.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/WindowLibraryTests.swift`
 
 - [x] write a failing test: a valid index missing one `windows/<uuid>.json` yields that file's panes as
       `claimed` with `windowState: .unindexed`
@@ -379,8 +379,8 @@ before calling the host and name the resolved owner; owner naming belongs where 
 ### Task 3: Pending-close panes in the claim set
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/AppStore+PendingClose.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/AppStorePendingCloseTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+PendingClose.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/AppStorePendingCloseTests.swift`
 
 - [x] write a failing test: a soft-closed session's panes appear as `pendingClose` claims, not absent
 - [x] write a failing test: after the grace expires they are gone from the claim set
@@ -391,11 +391,11 @@ before calling the host and name the resolved owner; owner naming belongs where 
 ### Task 4: ControlRestoreStatus and the restore.mode command
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/MockControlActions.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
 
 - [x] write failing round-trip tests for `ControlRestoreStatus` and the `restore.mode` request/response,
       proving the wire carries raw strings and that an UNKNOWN mode string decodes without collapsing to
@@ -409,9 +409,9 @@ before calling the host and name the resolved owner; owner naming belongs where 
 ### Task 5: App-side restore mode with rollback on save failure
 
 **Files:**
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agterm/SettingsModel.swift`
-- Modify: `agtermTests/ControlServerRestoreCaptureTests.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `Hangar/SettingsModel.swift`
+- Modify: `HangarTests/ControlServerRestoreCaptureTests.swift`
 
 - [x] write a failing test: a settings save failure answers `ok: false` with the reason AND the following
       read still reports the OLD configured mode — memory must not claim a value the disk rejected
@@ -426,17 +426,17 @@ before calling the host and name the resolved owner; owner naming belongs where 
 ### Task 6: zmx client control surface and zmx.list
 
 **Files:**
-- Modify: `agterm/Ghostty/ZmxClient.swift`
-- Modify: `agterm/agtermApp.swift`
-- Modify: `agterm/Control/ControlServer.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Create: `agterm/Control/ControlServer+Zmx.swift`
-- Modify: `agtermTests/ZmxClientTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/MockControlActions.swift`
-- Create: `agtermCore/Tests/agtermCoreTests/ControlDispatcherZmxTests.swift`
-- Create: `agtermTests/ControlServerZmxTests.swift`
+- Modify: `Hangar/Ghostty/ZmxClient.swift`
+- Modify: `Hangar/hangarApp.swift`
+- Modify: `Hangar/Control/ControlServer.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Create: `Hangar/Control/ControlServer+Zmx.swift`
+- Modify: `HangarTests/ZmxClientTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
+- Create: `HangarCore/Tests/HangarCoreTests/ControlDispatcherZmxTests.swift`
+- Create: `HangarTests/ControlServerZmxTests.swift`
 
 - [x] write failing `ZmxClient` tests for `listSessions()`, including an `err=` row and an empty
       namespace returning a successful empty list rather than an error
@@ -456,15 +456,15 @@ before calling the host and name the resolved owner; owner naming belongs where 
 ### Task 7: zmx.prune
 
 **Files:**
-- Modify: `agterm/Ghostty/ZmxClient.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agterm/Control/ControlServer+Zmx.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/MockControlActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherZmxTests.swift`
-- Modify: `agtermTests/ZmxClientTests.swift`
-- Modify: `agtermTests/ControlServerZmxTests.swift`
+- Modify: `Hangar/Ghostty/ZmxClient.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `Hangar/Control/ControlServer+Zmx.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherZmxTests.swift`
+- Modify: `HangarTests/ZmxClientTests.swift`
+- Modify: `HangarTests/ControlServerZmxTests.swift`
 
 - [x] write a failing test: prune refuses an incomplete inventory and says so, killing nothing
 - [x] write a failing test: prune refuses when any row is `conflicted`, and never touches a `foreign` or
@@ -478,7 +478,7 @@ before calling the host and name the resolved owner; owner naming belongs where 
 - [x] add `killObservedOrphan(names:)` to `ZmxClient` — invokes names individually, never passes
       `--force`, counts only the exact `killed session <name>` line as success — leaving
       `kill(paneIdentities:)` forced for semantic deletion
-- [x] re-list immediately before mutating, with model resolution on the main actor so agterm's claims
+- [x] re-list immediately before mutating, with model resolution on the main actor so hangar's claims
       cannot change during the operation
 - [x] write failing round-trip and dispatcher tests for `zmx.prune`, extending `MockControlActions`
 - [x] add `case zmxPrune = "zmx.prune"`, the `ControlActions` member and the dispatcher arm
@@ -488,18 +488,18 @@ before calling the host and name the resolved owner; owner naming belongs where 
 ### Task 8: zmx.kill through a shared exit coordinator
 
 **Files:**
-- Modify: `agtermCore/Sources/agtermCore/ControlProtocol.swift`
-- Modify: `agtermCore/Sources/agtermCore/ControlDispatcher.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore+Panes.swift`
-- Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
-- Modify: `agterm/Ghostty/GhosttySurfaceView.swift`
-- Modify: `agterm/agtermApp.swift`
-- Modify: `agterm/Control/ControlServer+Zmx.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/MockControlActions.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/ControlDispatcherZmxTests.swift`
-- Modify: `agtermCore/Tests/agtermCoreTests/AppStorePaneTests.swift`
-- Modify: `agtermTests/ControlServerZmxTests.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlProtocol.swift`
+- Modify: `HangarCore/Sources/HangarCore/ControlDispatcher.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore+Panes.swift`
+- Modify: `HangarCore/Sources/HangarCore/AppStore.swift`
+- Modify: `Hangar/Ghostty/GhosttySurfaceView.swift`
+- Modify: `Hangar/hangarApp.swift`
+- Modify: `Hangar/Control/ControlServer+Zmx.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlProtocolTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/MockControlActions.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/ControlDispatcherZmxTests.swift`
+- Modify: `HangarCore/Tests/HangarCoreTests/AppStorePaneTests.swift`
+- Modify: `HangarTests/ControlServerZmxTests.swift`
 
 - [x] write a failing round-trip test for the `zmx.kill` request and response in `ControlProtocolTests`
 - [x] write a failing dispatcher test: a missing target, pane or force is refused before the host is
@@ -527,13 +527,13 @@ before calling the host and name the resolved owner; owner naming belongs where 
 - [x] add `case zmxKill = "zmx.kill"`, the `ControlActions` member, the dispatcher arm and the app arm
 - [x] run tests - must pass before task 9
 
-### Task 9: agtermctl surface
+### Task 9: hangarctl surface
 
 **Files:**
-- Create: `agtermCore/Sources/agtermctlKit/ZmxCommands.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/Commands.swift`
-- Modify: `agtermCore/Sources/agtermctlKit/MiscCommands.swift`
-- Create: `agtermCore/Tests/agtermctlKitTests/ZmxCommandsTests.swift`
+- Create: `HangarCore/Sources/hangarctlKit/ZmxCommands.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/Commands.swift`
+- Modify: `HangarCore/Sources/hangarctlKit/MiscCommands.swift`
+- Create: `HangarCore/Tests/hangarctlKitTests/ZmxCommandsTests.swift`
 
 - [x] write failing tests for the request each subcommand builds, including force and pane validation
 - [x] add the `Zmx` group with `List`, `Prune` and `Kill`, and register it in `Commands.swift:91`
@@ -541,7 +541,7 @@ before calling the host and name the resolved owner; owner naming belongs where 
 - [x] implement human output: a status header above the table, with owner window state and observation as
       their own columns so "closed / detached" reads as expected rather than suspicious
 - [x] document in `Kill`'s help that it destroys a backend process reaching every attached client, and
-      that killing the pane you are typing in can kill the calling `agtermctl` before it reads the reply
+      that killing the pane you are typing in can kill the calling `hangarctl` before it reads the reply
 - [x] run tests - must pass before task 10
 
 ### Task 10: Documentation across every mirrored surface
@@ -551,10 +551,10 @@ before calling the host and name the resolved owner; owner naming belongs where 
 - Modify: `.claude/rules/control-api.md`
 - Modify: `site/commands.html`
 - Modify: `site/docs.html`
-- Modify: `plugins/agterm/skills/agterm/SKILL.md`
-- Modify: `plugins/agterm/skills/agterm/reference.md`
-- Modify: `plugins/agterm/skills/agterm/troubleshooting.md`
-- Modify: `plugins/agterm/skills/agterm/examples.md`
+- Modify: `plugins/hangar/skills/hangar/SKILL.md`
+- Modify: `plugins/hangar/skills/hangar/reference.md`
+- Modify: `plugins/hangar/skills/hangar/troubleshooting.md`
+- Modify: `plugins/hangar/skills/hangar/examples.md`
 
 - [x] add the four commands, their arguments and read-back fields to `control-api.md` and
       `site/commands.html`
@@ -564,7 +564,7 @@ before calling the host and name the resolved owner; owner naming belongs where 
       user-facing — README included, since it carries the same unsupported escape hatch
 - [x] document that these commands need a running instance, and why there is no app-down path
 - [x] state that prune's gate is observed-and-revalidated rather than atomic, and that a client which
-      attaches from outside agterm in the remaining window can be terminated
+      attaches from outside hangar in the remaining window can be terminated
 - [x] state the kill outcomes and that the reason for explicit addressing is backend-process destruction,
       not a recovery difference from other close commands
 - [x] state no total command count on any surface, per the catalog rule
@@ -579,8 +579,8 @@ before calling the host and name the resolved owner; owner naming belongs where 
 - [x] `zmx kill` refuses without explicit target, pane and force, and each row of the outcomes table
       matches; a failed kill leaves the natural exit path working
 - [x] `restore mode` reads all five fields, reports a save failure as a failure, and rolls memory back
-- [x] every command fails with a clear "no instance" error when agterm is not running
-- [x] run the gates once: `make build`, `cd agtermCore && swift test`, `make test-app`, `make lint`
+- [x] every command fails with a clear "no instance" error when hangar is not running
+- [x] run the gates once: `make build`, `cd HangarCore && swift test`, `make test-app`, `make lint`
 
 ### Task 12: [Final] Update documentation
 - [x] `README.md` was updated in task 10; the product synopsis itself did not change
@@ -590,7 +590,7 @@ before calling the host and name the resolved owner; owner naming belongs where 
 ## Post-Completion
 
 **Manual verification** (needs a live daemon, in an isolated Debug instance with a short
-`AGTERM_STATE_DIR` and an explicit socket — never the default socket):
+`HANGAR_STATE_DIR` and an explicit socket — never the default socket):
 
 - close a window with live panes, confirm `zmx list` shows them claimed / closed / detached and that
   `prune` leaves them alone

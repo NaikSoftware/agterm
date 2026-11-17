@@ -1,4 +1,4 @@
-// Connect a Phone: the agterm Mobile relay switched on from the GUI. The relay itself stays in agtermctl (src/ctl/mobile.cpp);
+// Connect a Phone: the hangar Mobile relay switched on from the GUI. The relay itself stays in hangarctl (src/ctl/mobile.cpp);
 // this runs it as a child and shows its pairing link as a QR code.
 #include "phone.h"
 
@@ -37,9 +37,9 @@ QString mobileDir()
     return stateDir() + QStringLiteral("/mobile");
 }
 
-QString agtermctl()
+QString hangarctl()
 {
-    return QCoreApplication::applicationDirPath() + QStringLiteral("/agtermctl");
+    return QCoreApplication::applicationDirPath() + QStringLiteral("/hangarctl");
 }
 
 QString hostOf(const QString &link)
@@ -136,14 +136,14 @@ void PhoneRelay::start()
     connect(p, &QProcess::readyReadStandardOutput, this, [this, p, lines, outBuffer] {
         bool more = false;
         for (const QString &line : lines(*outBuffer, p->readAllStandardOutput()))
-            if (line.startsWith(QLatin1String("agterm://")))
+            if (line.startsWith(QLatin1String("hangar://")))
                 m_links << line, more = true;
         if (more)
             Q_EMIT changed();
     });
     connect(p, &QProcess::readyReadStandardError, this, [this, p, lines, errBuffer, lastError] {
         for (QString line : lines(*errBuffer, p->readAllStandardError())) {
-            if (line.startsWith(QLatin1String("agtermctl: ")))
+            if (line.startsWith(QLatin1String("hangarctl: ")))
                 line.remove(0, 11);
             *lastError = line;
             if (line.startsWith(QLatin1String("phone connected")) || line.startsWith(QLatin1String("refused")))
@@ -152,7 +152,7 @@ void PhoneRelay::start()
     });
     connect(p, &QProcess::errorOccurred, this, [this, p](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart)
-            m_error = tr("Cannot run %1: %2").arg(agtermctl(), p->errorString()), Q_EMIT changed();
+            m_error = tr("Cannot run %1: %2").arg(hangarctl(), p->errorString()), Q_EMIT changed();
     });
     connect(p, &QProcess::finished, this, [this, p, lastError] {
         if (m_error.isEmpty())
@@ -161,7 +161,7 @@ void PhoneRelay::start()
         p->deleteLater();
         Q_EMIT changed();
     });
-    p->start(agtermctl(), {QStringLiteral("mobile"), QStringLiteral("serve"), QStringLiteral("--no-qr"), QStringLiteral("--socket"), socketPath(),
+    p->start(hangarctl(), {QStringLiteral("mobile"), QStringLiteral("serve"), QStringLiteral("--no-qr"), QStringLiteral("--socket"), socketPath(),
                            QStringLiteral("--port"), QString::number(m_port)});
     Q_EMIT changed();
 }
@@ -228,7 +228,7 @@ void PhoneRelay::setHost(const QString &host)
 bool PhoneRelay::revoke(QString *error)
 {
     QProcess p;
-    p.start(agtermctl(), {QStringLiteral("mobile"), QStringLiteral("reset")});
+    p.start(hangarctl(), {QStringLiteral("mobile"), QStringLiteral("reset")});
     if (!p.waitForFinished(10000) || p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) {
         *error = QString::fromLocal8Bit(p.readAllStandardError()).trimmed();
         if (error->isEmpty())
@@ -253,7 +253,7 @@ void showPhoneDialog(QWidget *parent)
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     dlg->setWindowTitle(QObject::tr("Connect a Phone"));
 
-    auto *on = new QCheckBox(QObject::tr("Let agterm Mobile connect to this computer"));
+    auto *on = new QCheckBox(QObject::tr("Let hangar Mobile connect to this computer"));
     on->setObjectName(QStringLiteral("phoneOn"));
     auto *code = new QLabel;
     code->setObjectName(QStringLiteral("phoneCode"));
@@ -275,7 +275,7 @@ void showPhoneDialog(QWidget *parent)
     status->setObjectName(QStringLiteral("phoneStatus"));
     status->setWordWrap(true);
     auto *warning = new QLabel(QObject::tr("Anyone with this code controls your terminals until you revoke it. "
-                                           "Scan it in agterm Mobile, or send the link to the phone and paste it there."));
+                                           "Scan it in hangar Mobile, or send the link to the phone and paste it there."));
     warning->setWordWrap(true);
     auto *revoke = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-delete")), QObject::tr("Revoke Paired Phones…"));
 
