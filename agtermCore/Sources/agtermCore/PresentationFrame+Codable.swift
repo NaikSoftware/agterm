@@ -2,7 +2,7 @@ import Foundation
 
 extension PresentationFrame: Codable {
     private enum CodingKeys: String, CodingKey {
-        case kind, gen, rev, hello, snapshot, status, context, info, layout, hud, notify, message, mail, sound, ask, pick, overlay, page, respawn, link,
+        case kind, gen, rev, hello, snapshot, status, context, agentSession, info, layout, hud, notify, message, mail, sound, ask, pick, overlay, page, respawn, link,
              pending, lead
     }
 
@@ -18,6 +18,7 @@ extension PresentationFrame: Codable {
         case "snapshot": body = .snapshot(try container.decode(PresentationSnapshot.self, forKey: .snapshot))
         case "status": body = .status(try container.decodeIfPresent(PresentationStatus.self, forKey: .status))
         case "context": body = .context(try container.decodeIfPresent(String.self, forKey: .context))
+        case "agent.session": body = .agentSession(try container.decodeIfPresent(String.self, forKey: .agentSession))
         case "info": body = .info(try container.decodeIfPresent(PresentationInfo.self, forKey: .info))
         case "layout": body = .layout((try? container.decode(PresentationLayout.self, forKey: .layout)) ?? .invalid)
         case "hud": body = .hud(try container.decodeIfPresent(PresentationHud.self, forKey: .hud))
@@ -72,6 +73,7 @@ extension PresentationFrame: Codable {
         case .snapshot(let snapshot): try container.encode(snapshot, forKey: .snapshot)
         case .status(let status): try container.encodeIfPresent(status, forKey: .status)
         case .context(let context): try container.encodeIfPresent(context, forKey: .context)
+        case .agentSession(let id): try container.encodeIfPresent(id, forKey: .agentSession)
         case .info(let info): try container.encodeIfPresent(info, forKey: .info)
         case .layout(let layout): try container.encode(layout, forKey: .layout)
         case .hud(let hud): try container.encodeIfPresent(hud, forKey: .hud)

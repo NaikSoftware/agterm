@@ -15,6 +15,10 @@ struct AppStoreSessionStateTests {
         var contexts: [String?] {
             frames.compactMap { if case .context(let context) = $0.body { return .some(context) } else { return nil } }
         }
+
+        var agentSessions: [String?] {
+            frames.compactMap { if case .agentSession(let id) = $0.body { return .some(id) } else { return nil } }
+        }
     }
 
     private func mirroredStore(context: String? = nil) throws -> (AppStore, Session, RecordingSink) {
@@ -45,6 +49,29 @@ struct AppStoreSessionStateTests {
         store.setContext("PR #517", forSession: session.id)
 
         #expect(sink.contexts.isEmpty)
+    }
+
+    @Test func anAgentSessionIDChangeReachesTheHubOnceAndTheTree() throws {
+        var events: [ControlEventKind] = []
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = AppStore(persistence: PersistenceStore(directory: directory),
+                             controlEventSink: { events.append($0.kind) }, paneFinalizer: nil)
+        let hub = PresentationHub(staleTimeout: 30)
+        store.presentationHub = hub
+        let session = try #require(store.addSession(toWorkspace: store.addWorkspace(name: "work").id, cwd: "/repo"))
+        let sink = RecordingSink()
+        try hub.subscribe(session: session.id, hello: PresentationHello(version: 1, kinds: [], mode: .mirror),
+                          sink: sink) { store.presentationSnapshot(forSession: session.id) }
+        events.removeAll()
+
+        store.setAgentSessionID("c1", forSession: session.id)
+        store.setAgentSessionID("c1", forSession: session.id)
+
+        #expect(session.agentSessionID == "c1")
+        #expect(sink.agentSessions == ["c1"])
+        #expect(events == [.treeChanged])
+        #expect(store.presentationSnapshot(forSession: session.id).agentSession == "c1")
     }
 
     private func flagStore() throws -> (store: AppStore, target: (id: UUID, sessions: [Session]), other: Session) {

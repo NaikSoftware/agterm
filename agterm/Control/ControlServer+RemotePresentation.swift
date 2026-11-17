@@ -94,6 +94,9 @@ extension ControlServer {
             context: { [weak self] context in
                 self?.library.store(forSession: id)?.applyRemoteContext(context, forSession: id)
             },
+            agentSession: { [weak self] agentID in
+                self?.library.store(forSession: id)?.applyRemoteAgentSessionID(agentID, forSession: id)
+            },
             info: { [weak self] info in self?.library.store(forSession: id)?.applyRemoteInfo(info, forSession: id) },
             mode: { [weak self] mode in self?.library.store(forSession: id)?.setRemoteMode(mode, forSession: id) },
             askRequest: { [weak self] ask in self?.showReplicaAsk(ask, forSession: id) ?? false },

@@ -49,7 +49,13 @@ public enum SessionLauncher: String, CaseIterable, Sendable {
     /// since callers type it into a shell.
     public static func claudeSessionID(json: Data) -> String? {
         guard let object = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
-              let id = object["sessionId"] as? String, !id.isEmpty,
+              let id = object["sessionId"] as? String else { return nil }
+        return plainSessionID(id)
+    }
+
+    /// plainSessionID is `id` when it is a nonempty run of ASCII letters, digits, `_` and `-`, else nil.
+    static func plainSessionID(_ id: String) -> String? {
+        guard !id.isEmpty,
               id.unicodeScalars.allSatisfy({ $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "_-".unicodeScalars.contains($0)) })
         else { return nil }
         return id
