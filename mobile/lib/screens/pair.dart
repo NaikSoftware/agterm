@@ -5,7 +5,11 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../ble_transport.dart';
 import '../client.dart';
 import '../model.dart';
+import '../notice.dart';
 import '../theme.dart';
+
+const macAppUrl = 'https://github.com/NaikSoftware/agterm/releases/latest';
+const linuxAppUrl = 'https://github.com/NaikSoftware/agterm-qt#build-and-install';
 
 class PairScreen extends StatefulWidget {
   const PairScreen({super.key, required this.onPaired, this.canGoBack = false});
@@ -47,6 +51,28 @@ class _PairScreenState extends State<PairScreen> {
     connect(code);
   }
 
+  // the computer app's download page: open it here to send on, or long-press to copy the link
+  Widget _appButton(String label, IconData icon, String url) {
+    void copy() {
+      Clipboard.setData(ClipboardData(text: url));
+      showNotice(context, 'Link copied');
+    }
+
+    return GestureDetector(
+      onLongPress: copy,
+      child: OutlinedButton.icon(
+        key: Key('app-$label'),
+        onPressed: () async {
+          final opened = await const MethodChannel('agterm/open').invokeMethod<bool>('view', url).catchError((_) => false);
+          if (opened != true && mounted) copy();
+        },
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: widget.canGoBack ? AppBar() : null,
@@ -80,6 +106,11 @@ class _PairScreenState extends State<PairScreen> {
               'On your computer, open Settings ▸ Connect a Phone… in Agterm2 and switch it on, or run the command below in any terminal. Either shows a pairing code.',
               style: TextStyle(fontSize: 15, height: 1.5, color: C.muted),
             ),
+            const SizedBox(height: 16),
+            Row(spacing: 8, children: [
+              Expanded(child: _appButton('macOS app', Icons.laptop_mac, macAppUrl)),
+              Expanded(child: _appButton('Linux app', Icons.computer, linuxAppUrl)),
+            ]),
             const SizedBox(height: 24),
             GestureDetector(
               onLongPress: () => Clipboard.setData(const ClipboardData(text: 'agtermctl mobile serve')),
