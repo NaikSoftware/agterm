@@ -93,7 +93,9 @@ final class SessionAgentMonitor {
                 let pids = view.map { ForegroundProcess.groupPIDs(for: $0, zmxResolver: zmxResolver) } ?? []
                 let agent = SessionLauncher.agent(group: pids.compactMap(ForegroundProcess.procArgs(pid:)))
                 if session.runningAgent != agent { session.runningAgent = agent }
-                // only a new value replaces the old, so a session closed after claude exits still resumes it
+                // only a new value replaces the old, so a session closed after claude exits still resumes it;
+                // another agent clears the id, since it no longer names what the session runs
+                if agent != nil, agent != .claude { store.setAgentSessionID(nil, forSession: session.id) }
                 if agent == .claude,
                    let json = pids.lazy.compactMap(Self.claudeSessionJSON(pid:)).first(where: { SessionLauncher.claudeSessionID(json: $0) != nil }) {
                     if let line = SessionLauncher.claudeResumeLine(json: json) { session.resumeLine = line }

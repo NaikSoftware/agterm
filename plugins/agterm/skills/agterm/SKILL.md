@@ -394,6 +394,8 @@ omitted when expanded).
   place, keeping its program, id and companions (Convert to Companion).
   `session move --parent SID [--index N]` moves a companion under another top-level session, any workspace,
   still running (Move to in the row menu, or a sidebar drag).
+  Dropping a session or workspace row on a terminal types its session ids (Claude conversation id, else agterm id),
+  comma-separated.
   `session overlay open --html FILE --companion` (or `--url URL --companion`) adds a page companion: a row
   under the target session that shows the page and runs no shell. `--page` instead of `--companion` opens a
   top-level page session after the target's group, which holds companions of its own. Every local page row is

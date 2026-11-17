@@ -78,6 +78,12 @@ struct SessionLauncherTests {
         let remote = Session(initialCwd: "/b", remoteHost: "far", remoteSessionID: remoteID)
         #expect(remote.dropID == remote.id.uuidString)
     }
+
+    @MainActor @Test func anAgentIdThatIsNotAPlainTokenDropsAsTheNextFallback() {
+        let remote = Session(initialCwd: "/b", remoteHost: "far", remoteSessionID: "R")
+        remote.agentSessionID = "c1\nrm -rf ~"
+        #expect(remote.dropID == "R")
+    }
 }
 
 struct TitleSpinnerTests {

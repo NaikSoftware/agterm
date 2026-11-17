@@ -21,7 +21,7 @@ so they can hand it to an agent or a command without copying it by hand.
 
 - **A (chosen): the drag writes the text.** The sidebar's pasteboard item gets a plain-string
   representation beside its private session/workspace type. The terminal already accepts strings,
-  so the surface view does not change. A drop into another app also receives the ids; that is accepted.
+  so the surface view does not change. Drags outside the app stay refused (`setDraggingSourceOperationMask([], forLocal: false)`), so the ids reach only agterm's own views.
 - **B (rejected): the terminal resolves at drop time.** The surface accepts the private types and looks the
   sessions up across windows. More code in the surface view for no gain the user asked for.
 - Workspace-row multi-select with Cmd+click was considered and dropped: the user chose to keep session
@@ -32,7 +32,8 @@ so they can hand it to an agent or a command without copying it by hand.
 - `agtermCore`: a host-free formatter from sessions to the inserted string (agent id, else agterm id, `,` join),
   table-tested.
 - `Session` gains `agentSessionID: String?`. `SessionAgentMonitor` sets it from `~/.claude/sessions/<pid>.json`
-  where it sets `resumeLine` today, sharing the same id validation. Like `resumeLine`, only a new id replaces it.
+  where it sets `resumeLine` today, sharing the same id validation. Like `resumeLine`, only a new id replaces it while claude runs, and the id stays after claude exits;
+  another agent running clears it.
 - `ControlSessionNode` gains `agentSessionId`, the read-back of that field (tree, `agtermctl`, skill
   reference, `site/commands.html`).
 - Remote rows take `agentSessionId` from the origin's tree through the path that already mirrors origin

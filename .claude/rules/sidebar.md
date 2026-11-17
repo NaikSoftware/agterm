@@ -60,6 +60,9 @@ paths:
 - Keep all remove/insert, drop-on-row, no-op, and index-space arithmetic host-free in `SidebarDrop`;
   the Coordinator only maps pasteboard IDs and store locations. `SidebarDropTests` table-test it, and
   `testReorderWorkspaceOntoSessionRow` covers the expanded-workspace failure.
+- Session and workspace rows also carry their ids as `.string` (`Session.dropText`) for a terminal drop,
+  so the local source mask must keep `.copy` and `SidebarOutlineView` ignores modifier keys.
+  External drags stay refused: the `forLocal: false` mask is empty.
 - The footer provides workspace creation and New Session/Open Directory. Workspace row menus repeat the
   session actions. Hover shows `workspace-add-session` only when `InterfaceElement.workspaceAddSession`
   is enabled.

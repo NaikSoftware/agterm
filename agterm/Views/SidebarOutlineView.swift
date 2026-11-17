@@ -18,6 +18,9 @@ final class SidebarOutlineView: NSOutlineView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("init(coder:) is not supported") }
 
+    // a held modifier (Cmd from multi-select) would filter the `[.move, .copy]` source mask and refuse the drop
+    override func ignoreModifierKeys(for session: NSDraggingSession) -> Bool { true }
+
     /// Where a row's content belongs: the level-0 disclosure triangle ends at 14pt, and the cell's own 2pt
     /// icon inset supplies the gap after it.
     private static let contentX: CGFloat = 14
