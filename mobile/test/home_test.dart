@@ -60,4 +60,13 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  testWidgets('a tint colors both the icon and the name', (t) async {
+    await pumpHome(t, model());
+    T inRow<T extends Widget>(String key, Finder f) => t.widget<T>(find.descendant(of: find.byKey(Key(key)), matching: f).first);
+    expect(inRow<Text>('row-s4', find.text('prod api')).style?.color, tintColor('red'));
+    expect(inRow<AgentLogo>('row-s4', find.byType(AgentLogo)).color, tintColor('red'));
+    expect(inRow<Text>('ws-w1', find.text('agterm')).style?.color, tintColor('purple'));
+    expect(inRow<Lucide>('ws-w1', find.byType(Lucide)).color, tintColor('purple'));
+    await t.pumpWidget(const SizedBox());
+  });
 }
