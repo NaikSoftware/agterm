@@ -1,24 +1,27 @@
-# Text that keeps the old agterm name. rename.sh leaves it alone, check-names.sh allows it.
+# Text that keeps the old agterm name. rename.sh leaves it alone, check-names.sh allows it. Only a whole-file skip keeps hangar.
 # Fields are TAB-separated. A glob matches the repo-relative path; ** spans directories, * stays in one.
 #   <glob>                       whole file: no path move, no content change
 #   <glob> TAB line TAB <regex>  matching lines stay verbatim; check-names fails if no line matches
 #   <glob> TAB keep TAB <regex>  matching substrings stay verbatim, the rest of the line is renamed
+#   <glob> TAB path              the path keeps its name; contents are renamed
 
-# The spec and plan document the old-to-new map; tools/hangar holds the map itself.
+# The spec and plan document the old-to-new map; tools/elis holds the map itself.
 docs/superpowers/**
-tools/hangar/**
+tools/elis/**
 .superpowers/**
 # Released entries are history; the file has no product name in its title.
 macos/CHANGELOG.md
-# Task 7 migration script: it names the old paths it migrates from.
-macos/scripts/migrate-from-agterm2.sh
-macos/scripts/tests/migrate-from-agterm2-test.sh
+# Task 7 migration script: it keeps its name and every agterm it migrates from; its new-side names are renamed.
+macos/scripts/migrate-from-agterm2.sh	path
+macos/scripts/migrate-from-agterm2.sh	keep	(?i)agterm\w*
+macos/scripts/tests/migrate-from-agterm2-test.sh	path
+macos/scripts/tests/migrate-from-agterm2-test.sh	keep	(?i)agterm\w*
 
 # Our patches are renamed, but their context and removed lines are upstream code and must keep applying.
 macos/scripts/*-patches/**.patch	line	^[ -]
 
 # Credits.
-README.md	line	^Hangar started as a fork of \[agterm\]\(https://github\.com/umputun/agterm\)
+README.md	line	^Elis started as a fork of \[agterm\]\(https://github\.com/umputun/agterm\)
 site/index.html	line	<span class="credit">Started as a fork of <a href="https://github\.com/umputun/agterm">agterm</a>
 linux/LICENSE	line	^Portions copyright .*\(agterm, https://github\.com/umputun/agterm\)
 cookbook/**/README.md	line	^Author:
