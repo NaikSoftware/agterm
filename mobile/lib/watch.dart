@@ -1,5 +1,7 @@
 // Background alerts: while the app is in the background a foreground service holds the process, and with it the
 // model's one connection, up; the agents' alerts then become notifications.
+import 'dart:typed_data';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -19,6 +21,7 @@ class Watch {
   static Future<String?> init(void Function(String sessionId) onTap) async {
     enabled = await _storage.read(key: _key) != 'off';
     await _android?.deleteNotificationChannel(channelId: 'watch'); // the old status channel badged the app icon; a channel's badge can't change
+    await _android?.deleteNotificationChannel(channelId: 'alerts'); // the old alert channel kept the default buzz; a channel's vibration can't change
     await _n.initialize(
       settings: const InitializationSettings(android: AndroidInitializationSettings('ic_stat')),
       onDidReceiveNotificationResponse: (r) {
@@ -124,13 +127,17 @@ class PostedAlerts {
   }
 }
 
+/// Off/on milliseconds: two light ticks and a softer tap, short enough to feel like a nudge, not a call.
+final alertVibration = Int64List.fromList([0, 25, 90, 25, 140, 45]);
+
 /// One notification per session, updated in place, plus its workspace's group summary, which Android needs to stack them.
 /// The id is also the tap intent's request code, so it must differ per session.
 List<({int id, String title, String body, String payload, AndroidNotificationDetails details})> alertNotifications(Alert a, String workspace) {
   final name = workspace.isEmpty ? 'Sessions' : workspace;
-  AndroidNotificationDetails details({bool summary = false}) => AndroidNotificationDetails('alerts', 'Agent alerts',
+  AndroidNotificationDetails details({bool summary = false}) => AndroidNotificationDetails('agent-alerts', 'Agent alerts',
       channelDescription: 'An agent is blocked, has finished, or sent a notification',
       importance: Importance.high, priority: Priority.high, category: AndroidNotificationCategory.message,
+      enableVibration: true, vibrationPattern: alertVibration,
       subText: name, groupKey: 'ws:$name', setAsGroupSummary: summary, groupAlertBehavior: GroupAlertBehavior.children);
   return [
     (id: _notificationId(a.sessionId), title: a.title, body: a.body, payload: a.sessionId, details: details()),

@@ -151,6 +151,7 @@ void main() {
     expect((n.payload, n.details.groupKey, n.details.setAsGroupSummary), ('s1', 'ws:elis', false));
     expect((sum.title, sum.payload, sum.details.groupKey, sum.details.setAsGroupSummary), ('elis', '', 'ws:elis', true));
     expect(n.details.groupAlertBehavior, GroupAlertBehavior.children);
+    expect((n.details.channelId, n.details.vibrationPattern), ('agent-alerts', alertVibration));
     expect(other.id, isNot(sum.id));
     expect(alertNotifications(Alert('s3', 'x', 'y', 'notify'), '').last.title, 'Sessions');
   });
