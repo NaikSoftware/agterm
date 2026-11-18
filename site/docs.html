@@ -10,7 +10,7 @@
     />
     <meta
       name="keywords"
-      content="Elis docs, elisctl, Elis control api, Elis keymap, Elis agent skill, macOS terminal documentation"
+      content="Elis docs, elisctl, Elis control api, Elis keymap, Elis agent skill, macOS and Linux terminal documentation"
     />
     <link rel="canonical" href="https://naiksoftware.github.io/elis/docs" />
     <meta property="og:type" content="article" />
@@ -276,7 +276,7 @@
             Elis
           </h1>
           <p style="font-size: 19px; line-height: 1.6; color: #bfbab0; margin: 0 0 8px">
-            A native macOS terminal with a deliberately small interface and a full control API.
+            A native terminal for macOS and Linux with a deliberately small interface and a full control API.
           </p>
 
           <!-- OVERVIEW -->
@@ -306,9 +306,9 @@
               nothing here is limited to agents: with nothing scripted at all it is a capable general-purpose terminal.
             </p>
             <p style="font-size: 16px; line-height: 1.7; color: #cbc6bc; margin: 0 0 24px">
-              For the real terminal work — rendering, VT parsing, and shell I/O — Elis embeds
-              <a href="https://ghostty.org" style="color: #e08a45">Ghostty</a>'s engine (libghostty); everything above is Elis's
-              own.
+              For the real terminal work — rendering, VT parsing, and shell I/O — Elis embeds a terminal engine:
+              <a href="https://ghostty.org" style="color: #e08a45">Ghostty</a>'s libghostty on macOS and
+              <a href="https://konsole.kde.org" style="color: #e08a45">Konsole</a> on Linux; everything above is Elis's own.
             </p>
             <div
               style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 8px"
@@ -1110,7 +1110,7 @@ s=$(elisctl zmx tree studio.local --json \
 <li><strong>Bluetooth.</strong> The phone also connects over Bluetooth, so it works without Wi-Fi. It is on by default while the relay is on, and the same pairing code serves both links. The first time, macOS asks to let Elis use Bluetooth. If you refuse, the Bluetooth row in Connect a Phone… shows <em>Off: unauthorized</em> and an Open Bluetooth Settings button. The row also reads <em>Starting…</em>, <em>Advertising</em> or <em>Off</em> with a reason. Range is about 10 m. The phone tries Wi-Fi first and then Bluetooth; its Prefer Bluetooth setting reverses that. A Mac with no Wi-Fi address pairs over Bluetooth alone: type an address only if you also want a Wi-Fi link. The phone app needs Android 15 or later.</li>
 <li><strong>Security.</strong> The phone checks the Mac's TLS certificate against the fingerprint in the code, so a different host is refused. The token in the code is the only credential: anyone who holds it controls your terminals. Revoke Paired Phones…, or <code>elisctl mobile reset</code>, replaces the token and disconnects every phone, over Wi-Fi and over Bluetooth. Share the code like a password.</li>
 <li><strong>Fit to phone.</strong> The phone can force a pane to a narrower character grid. The pane then shows that grid in its top-left corner. Session ▸ Restore Terminal Size, or the same item in a session's sidebar menu, gives the size back. Resizing the view clears the grid, and so does the phone disconnecting or the relay stopping.</li>
-<li><strong>Troubleshooting.</strong> When the Mac's firewall or endpoint security blocks incoming connections, connect over USB: run <code>adb reverse tcp:PORT tcp:PORT</code>, where PORT is the relay's port (8765 by default), and set the phone's address to <code>127.0.0.1</code>.</li>
+<li><strong>Troubleshooting.</strong> When the Mac's firewall or endpoint security blocks incoming connections, connect over Bluetooth: it needs no incoming network connection.</li>
 </ul>
 <p>The <a href="commands.html#phone">phone</a> and <a href="commands.html#mobile">mobile</a> commands drive all of this from a script.</p>
 </section>

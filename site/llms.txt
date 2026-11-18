@@ -1,8 +1,8 @@
 # Elis
 
-> A terminal workspace for AI coding agents, built on libghostty, with a full control API
+> A terminal workspace for AI coding agents on macOS and Linux, with a full control API
 
-Elis is a native macOS terminal, built on libghostty (Ghostty's engine), with a deliberately small interface and a full control API. Instead of scattering sessions across tabs, it groups them into named workspaces, and almost everything that structure holds is also an object a script can address: the bundled elisctl creates and types into sessions, runs overlays, moves windows, sets a session's status glyph, and reads that state back over a local socket. Running many AI coding agents at once is the obvious use, and far from the only one. With nothing scripted it is a fast, modern general-purpose terminal for everyday work.
+Elis is a native terminal for macOS and Linux (engines: libghostty on macOS, Konsole on Linux), with a deliberately small interface and a full control API. Instead of scattering sessions across tabs, it groups them into named workspaces, and almost everything that structure holds is also an object a script can address: the bundled elisctl creates and types into sessions, runs overlays, moves windows, sets a session's status glyph, and reads that state back over a local socket. Running many AI coding agents at once is the obvious use, and far from the only one. With nothing scripted it is a fast, modern general-purpose terminal for everyday work.
 
 ## Key Features
 
@@ -32,6 +32,6 @@ Elis is a native macOS terminal, built on libghostty (Ghostty's engine), with a 
 ## Optional
 
 - [Home page](https://naiksoftware.github.io/elis): feature overview and screenshots
-- [Source](https://github.com/NaikSoftware/elis): MIT licensed, embeds libghostty from Ghostty (MIT)
+- [Source](https://github.com/NaikSoftware/elis): MIT licensed; embeds libghostty from Ghostty (MIT) on macOS and Konsole on Linux
 - [Issues](https://github.com/NaikSoftware/elis/issues): bug reports
 - [Discussions](https://github.com/NaikSoftware/elis/discussions): questions and feature requests

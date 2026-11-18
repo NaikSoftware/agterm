@@ -1,7 +1,7 @@
 ---
 name: elis
 description: >
-  Drive Elis, a macOS terminal, via elisctl. Use in an Elis session:
+  Drive Elis, a terminal for macOS and Linux, via elisctl. Use in an Elis session:
   manage and move sessions, companions and workspaces; split panes; toggle the scratch or file panel; run, hide or show overlays;
   read exit status; show HTML pages, URLs or dev servers in an overlay with saved logins or as a
   page row;
@@ -27,7 +27,7 @@ allowed-tools: Bash(elisctl *)
 
 # Driving Elis
 
-Elis is a native macOS terminal. It exposes a programmatic control channel over a local unix
+Elis is a native terminal for macOS and Linux. It exposes a programmatic control channel over a local unix
 socket, driven by the companion CLI `elisctl`. Use it to build and steer terminal layouts, run
 programs in overlays, type into sessions, notify the user in the exact session you are working in,
 and subscribe to control events. Events cover status, notifications, session lifecycle, split and

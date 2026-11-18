@@ -11,7 +11,7 @@
     {
       "name": "elis",
       "source": "./plugins/elis",
-      "description": "Drive Elis, a native macOS terminal, programmatically via its elisctl CLI and local control socket.",
+      "description": "Drive Elis, a native terminal for macOS and Linux, programmatically via its elisctl CLI and local control socket.",
       "version": "0.42.3",
       "author": {
         "name": "NaikSoftware"

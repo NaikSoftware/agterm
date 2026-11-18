@@ -4,17 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Elis — a terminal workspace for AI coding agents</title>
-    <meta
-      name="description"
-      content="Native terminal for macOS and Linux that runs many coding agents at once: named sessions in workspaces, agent status in the sidebar, a phone app, and a full control API."
-    />
+    <meta name="description" content="Elis is a native terminal for macOS and Linux. It runs many AI coding agents at once and shows which agent is working, which agent needs you, and which agent is done." />
     <link rel="canonical" href="https://naiksoftware.github.io/elis/" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Elis — a terminal workspace for AI coding agents" />
-    <meta
-      property="og:description"
-      content="Native terminal for macOS and Linux that runs many coding agents at once: named sessions in workspaces, agent status in the sidebar, a phone app, and a full control API."
-    />
+    <meta property="og:description" content="Elis is a native terminal for macOS and Linux. It runs many AI coding agents at once and shows which agent is working, which agent needs you, and which agent is done." />
     <meta property="og:url" content="https://naiksoftware.github.io/elis/" />
     <meta property="og:image" content="https://naiksoftware.github.io/elis/assets/elis-og.png" />
     <meta property="og:image:width" content="1200" />
@@ -27,15 +21,15 @@
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png" />
     <meta name="theme-color" content="#1c1c20" />
-    <link rel="preload" href="assets/fonts/archivo-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/instrument-serif-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "Elis",
-        "description": "Native terminal built on libghostty to run many coding agents at once, with workspaces of named sessions, agent status in the sidebar, an Android companion app and a full local control API.",
-        "url": "https://naiksoftware.github.io/elis",
+        "description": "A native terminal for macOS and Linux that runs many AI coding agents at once, with workspaces of named sessions, agent status in the sidebar, an Android app and a full local control API. Terminal engines: libghostty on macOS, Konsole on Linux.",
+        "url": "https://naiksoftware.github.io/elis/",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "macOS 14+, Linux, Android",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -45,334 +39,272 @@
       }
     </script>
     <style>
-      @font-face{font-family:"Archivo";font-style:normal;font-weight:700 800;font-stretch:100% 125%;font-display:swap;src:url("assets/fonts/archivo-latin.woff2") format("woff2")}
-      @font-face{font-family:"Inter";font-style:normal;font-weight:400 700;font-display:swap;src:url("assets/fonts/inter-latin.woff2") format("woff2")}
-      @font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 800;font-display:swap;src:url("assets/fonts/jetbrains-mono-latin.woff2") format("woff2")}
-      :root{--bg:#1c1c20;--surface:#26262b;--surface2:#2e2e34;--line:#303034;--term:#111114;--text:#e8e8ec;--muted:#a3a3ab;--dim:#6e6e76;--accent:#e08a45;--blocked:#ff9f43;--completed:#3fcf73;--active:#5b9cff;--unseen:#ff453a}
-      html,body{margin:0;background:var(--bg);color:var(--text)}
-      body{font-family:"Inter",-apple-system,sans-serif;font-size:16.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
-      a{color:var(--accent);text-decoration:none}
-      a:hover{color:#eca46b}
-      .i{width:1em;height:1em;display:inline-block;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-      .mono{font-family:"JetBrains Mono",ui-monospace,monospace}
-      .wrap{max-width:1200px;margin:0 auto;padding:0 32px;box-sizing:border-box}
-      .page{overflow:hidden;background:var(--bg)}
-      /* nav */
-      .nav{display:flex;align-items:center;gap:28px;height:72px}
-      .brand{display:flex;align-items:center;gap:11px;color:var(--text);font-weight:700;font-size:18px;letter-spacing:-.01em}
-      .brand:hover{color:var(--text)}
-      .mark{display:block;width:32px;height:32px;border-radius:8px;flex:none}
-      .mark.big{width:56px;height:56px;border-radius:13px}
-      .navlinks{display:flex;gap:24px;margin-left:auto;font-size:15px}
-      .navlinks a{color:var(--muted)}
-      .navlinks a:hover{color:var(--text)}
-      /* buttons: FilledButton, radius 14 */
-      .btn{display:inline-flex;align-items:center;gap:9px;height:48px;padding:0 22px;border-radius:14px;font-weight:600;font-size:15px;white-space:nowrap;box-sizing:border-box}
-      .btn .i{font-size:18px}
-      .btn.pri{background:var(--accent);color:var(--bg)}
-      .btn.pri:hover{background:#eca46b;color:var(--bg)}
-      .btn.alt{background:var(--surface2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
-      .btn.alt:hover{background:#36363d;color:var(--text)}
-      .btn.sm{height:38px;padding:0 15px;font-size:14px;border-radius:12px}
-      .tlink{display:inline-flex;align-items:center;gap:7px;font-weight:600;font-size:15px}
-      /* hero */
-      .hero{position:relative}
-      .floor{position:absolute;inset:0;background-image:linear-gradient(rgba(232,232,236,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(232,232,236,.035) 1px,transparent 1px);background-size:64px 64px;-webkit-mask:radial-gradient(ellipse 70% 55% at 50% 25%,#000 30%,transparent 75%);mask:radial-gradient(ellipse 70% 55% at 50% 25%,#000 30%,transparent 75%);pointer-events:none}
-      .glow{position:absolute;left:50%;top:420px;width:1100px;height:560px;margin-left:-550px;background:radial-gradient(closest-side,rgba(224,138,69,.14),transparent);pointer-events:none}
-      .herobody{position:relative;padding-top:72px}
-      .eyebrow{font:500 12.5px/1 "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:12px}
-      .eyebrow .tick{width:22px;height:1px;background:var(--accent)}
-      .disp{font-family:"Archivo","Inter",sans-serif;font-stretch:118%;font-weight:800;letter-spacing:-.035em}
-      h1{font-size:clamp(44px,7.4vw,96px);line-height:.95;margin:22px 0 0;text-wrap:balance;max-width:11ch}
-      h1 em{font-style:normal;color:var(--accent)}
-      .lede{font-size:clamp(17px,1.5vw,20px);color:var(--muted);max-width:600px;margin:26px 0 0;text-wrap:pretty}
-      .lede b{color:var(--text);font-weight:500}
-      .ctas{display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px;margin-top:34px}
-      .ctas .tlink{margin-left:8px}
-      .fine{font:400 12.5px/1.5 "JetBrains Mono",monospace;color:var(--dim);margin-top:18px}
-      .heroshot{position:relative;margin-top:64px}
-      /* screenshot frames */
-      .shot{border-radius:14px;overflow:hidden;background:var(--surface);box-shadow:0 0 0 1px var(--line),0 40px 110px rgba(0,0,0,.55)}
-      .shot img{display:block;width:100%;height:auto;aspect-ratio:var(--ar,1.705);object-fit:contain}
-      .shot.desk{--ar:1.705}
-      .shot.tall{--ar:.404;max-width:300px;margin:0 auto}
-      .shot.phone{--ar:.45;border-radius:28px;box-shadow:0 0 0 1px var(--line),0 0 0 7px var(--surface),0 0 0 8px var(--line),0 30px 80px rgba(0,0,0,.5)}
-      .cap{font:400 12.5px/1.5 "JetBrains Mono",monospace;color:var(--dim);margin-top:14px;text-align:center}
-      /* section scaffold */
-      .sec{padding:120px 0 0}
-      .bay{display:flex;align-items:center;gap:14px;font:500 12px/1 "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:56px}
-      .bay .n{color:var(--accent)}
-      .bay .rule{flex:1}
-      h2{font-size:clamp(34px,4.4vw,56px);line-height:1;margin:0;text-wrap:balance}
-      h3{font-size:18px;font-weight:600;margin:0;letter-spacing:-.01em}
-      .body{color:var(--muted);margin:20px 0 0;max-width:520px;text-wrap:pretty}
-      .split{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:72px;align-items:center}
-      .split.rev{grid-template-columns:minmax(0,7fr) minmax(0,5fr)}
-      kbd{font:500 13px/1 "JetBrains Mono",monospace;padding:4px 7px;border-radius:6px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);color:var(--text)}
-      /* status legend */
-      .legend{display:flex;flex-direction:column;margin-top:36px;border-top:1px solid var(--line)}
-      .lg{display:grid;grid-template-columns:44px minmax(0,1fr);gap:2px 14px;padding:16px 0;border-bottom:1px solid var(--line);align-items:center}
-      .lg .gl{display:flex;justify-content:center;align-items:center;height:22px;grid-row:span 2}
-      .lg .t{font-weight:600;font-size:15.5px}
-      .lg .d2{font-size:14.5px;color:var(--muted)}
-      .st{width:9px;height:9px;flex:none;display:inline-block}
-      .st.act{width:12px;height:12px;border-radius:50%;background:var(--active);animation:fade 1.4s ease-in-out infinite alternate}
-      .st.blk{width:15px;height:14px;background:var(--blocked);clip-path:polygon(50% 0,100% 100%,0 100%)}
-      .st.done{width:11px;height:11px;background:var(--completed);transform:rotate(45deg);border-radius:1.5px}
-      .agents{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:36px;align-items:center}
-      .ag{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:15px}
-      .logo{width:18px;height:18px;display:inline-block;flex:none;background:currentColor;-webkit-mask:url(assets/logo-claude.svg) center/contain no-repeat;mask:url(assets/logo-claude.svg) center/contain no-repeat}
-      .logo.codex{-webkit-mask-image:url(assets/logo-codex.svg);mask-image:url(assets/logo-codex.svg)}
-      .logo.oc{-webkit-mask-image:url(assets/logo-opencode.svg);mask-image:url(assets/logo-opencode.svg)}
-      .logo.ag{-webkit-mask-image:url(assets/logo-antigravity.svg);mask-image:url(assets/logo-antigravity.svg)}
-      /* feature list */
-      .specs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 56px}
-      .spec{display:grid;grid-template-columns:52px minmax(0,1fr);padding:26px 0;border-top:1px solid var(--line)}
-      .spec:nth-child(-n+2){border-top:0;padding-top:0}
-      .spec .k{font:500 12.5px/1.6 "JetBrains Mono",monospace;color:var(--accent)}
-      .spec p{margin:8px 0 0;color:var(--muted);font-size:15.5px;text-wrap:pretty}
-      /* phone */
-      .phones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:56px;max-width:640px;margin:64px auto 0;align-items:start}
-      .phones figure{margin:0}
-      .points{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;margin-top:40px}
-      .pt .i{color:var(--accent);font-size:20px;display:block;margin-bottom:10px;padding:.3em 0}
-      .ag .i{padding:.3em 0}
-      .pt div{color:var(--muted);font-size:15px}
-      .pt b{color:var(--text);font-weight:600;display:block;margin-bottom:4px}
-      .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:28px}
-      .chip{font:500 12.5px/1 "JetBrains Mono",monospace;padding:8px 11px;border-radius:999px;color:var(--muted);box-shadow:inset 0 0 0 1px var(--line);display:inline-flex;align-items:center;gap:7px}
-      .note{margin-top:20px;font-size:14px;color:var(--dim);max-width:560px}
-      /* code */
-      .code{background:var(--term);border-radius:14px;box-shadow:0 0 0 1px var(--line);overflow:hidden}
-      .code-top{display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-bottom:1px solid var(--line);font:500 12px/1 "JetBrains Mono",monospace;color:var(--dim)}
-      .code-top .dot{width:10px;height:10px;border-radius:50%;background:var(--surface2)}
-      .pre{padding:22px 22px 26px;font:400 13.5px/1.8 "JetBrains Mono",monospace;color:#d9d6e2;overflow-x:auto}
-      .cl{white-space:pre;min-height:1.8em}
-      .c-c{color:var(--dim)}
-      .c-k{color:var(--accent)}
-      .c-s{color:#4ade80}
-      .c-v{color:#f0b37e}
-      /* install */
-      .platforms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
-      .plat{border-radius:14px;padding:28px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);display:flex;flex-direction:column;gap:10px;align-items:flex-start}
-      .plat .pk{font:500 12px/1 "JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:8px}
-      .plat .pk .i{font-size:16px;color:var(--accent)}
-      .plat p{margin:0 0 8px;color:var(--muted);font-size:15px;flex:1}
-      .steps{display:flex;flex-direction:column;margin-top:8px}
-      .step{display:grid;grid-template-columns:52px minmax(0,1fr);padding:22px 0;border-top:1px solid var(--line)}
-      .step .k{font:500 13px/1.6 "JetBrains Mono",monospace;color:var(--accent)}
-      .step p{margin:0;color:var(--muted);font-size:15.5px}
-      .step p b{color:var(--text);font-weight:600}
-      .cmd{margin-top:12px;font:400 13px/1.5 "JetBrains Mono",monospace;background:var(--term);box-shadow:0 0 0 1px var(--line);border-radius:10px;padding:12px 14px;color:#d9d6e2;overflow-wrap:anywhere}
-      /* closing band */
-      .band{margin-top:120px;border-top:1px solid var(--line);background:linear-gradient(180deg,rgba(224,138,69,.06),transparent 70%)}
-      .band-in{display:flex;flex-wrap:wrap;align-items:center;gap:28px;padding:72px 0}
-      .band h2{flex:1;min-width:280px;font-size:clamp(30px,3.6vw,44px)}
-      .foot{border-top:1px solid var(--line);padding:32px 0 48px;display:flex;flex-wrap:wrap;gap:16px 32px;align-items:center;font-size:14px;color:var(--dim)}
-      .foot a{color:var(--muted)}
-      .foot a:hover{color:var(--text)}
-      .foot .fl{display:flex;flex-wrap:wrap;gap:20px}
-      .foot .credit{margin-left:auto}
-      @keyframes fade{from{opacity:1}to{opacity:.25}}
-      @media (prefers-reduced-motion: reduce){.st.act{animation:none}}
-      @media (max-width:900px){
-        .wrap{padding:0 16px}
-        .navlinks{display:none}
-        .nav .btn{margin-left:auto}
-        .herobody{padding-top:40px}
-        .heroshot{margin-top:44px}
-        .ctas .btn{flex:1 1 220px;justify-content:center}
-        .ctas .tlink{margin-left:0}
-        .sec{padding-top:88px}
-        .bay{margin-bottom:36px}
-        .split,.split.rev{grid-template-columns:minmax(0,1fr);gap:44px}
-        .split.rev > .copy{order:-1}
-        .specs,.points,.platforms{grid-template-columns:minmax(0,1fr)}
-        .spec:nth-child(2){border-top:1px solid var(--line);padding-top:26px}
-        .phones{gap:16px;margin-top:44px}
-        .shot.phone{border-radius:18px;box-shadow:0 0 0 1px var(--line),0 0 0 4px var(--surface),0 0 0 5px var(--line),0 20px 50px rgba(0,0,0,.5)}
-        .pre{font-size:12px;padding:18px 16px}
-        .cl{white-space:pre-wrap;overflow-wrap:break-word;padding-left:2ch;text-indent:-2ch}
-        .foot .credit{margin-left:0}
-        .band{margin-top:88px}
-      }
+@font-face{font-family:"Instrument Serif";font-style:normal;font-weight:400;font-display:swap;src:url("assets/fonts/instrument-serif-latin.woff2") format("woff2")}
+@font-face{font-family:"Instrument Serif";font-style:italic;font-weight:400;font-display:swap;src:url("assets/fonts/instrument-serif-italic-latin.woff2") format("woff2")}
+@font-face{font-family:"Inter";font-style:normal;font-weight:400 700;font-display:swap;src:url("assets/fonts/inter-latin.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 500;font-display:swap;src:url("assets/fonts/jetbrains-mono-latin.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:italic;font-weight:400;font-display:swap;src:url("assets/fonts/jetbrains-mono-italic-latin.woff2") format("woff2")}
+:root{--bg:#1C1C20;--surface:#26262B;--surface2:#2E2E34;--line:#303034;--text:#E8E8EC;--muted:#A3A3AB;--accent:#E08A45;--on-accent:#1C1C20;--field-hi:#D2B07C;--field-lo:#A27C46;--ink:#17161B;--paper:#F8F5F0;--disp:'Instrument Serif',Georgia,serif;--ui:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased}
+body{overflow-x:clip}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:#F0A266;text-decoration:underline}
+.wrap{width:100%;max-width:1200px;margin:0 auto;padding:0 32px}
+.nav{display:flex;align-items:center;gap:24px;padding:22px 0}
+.brand{display:flex;align-items:center;gap:10px;color:var(--text);font-weight:600;font-size:18px;letter-spacing:-.01em}
+.brand:hover{color:var(--text);text-decoration:none}
+.mark{width:30px;height:30px;border-radius:8px;display:block;flex:none}
+.navlinks{display:flex;gap:22px;margin-left:auto;font-size:14px}
+.navlinks a{color:var(--muted)}
+.navlinks a:hover{color:var(--text);text-decoration:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;height:48px;padding:0 22px;border-radius:14px;font:600 15px/1 var(--ui);white-space:nowrap;transition:background .15s,border-color .15s}
+.btn:hover{text-decoration:none}
+.pri{background:var(--accent);color:var(--on-accent)}
+.pri:hover{background:#EC9A58;color:var(--on-accent)}
+.alt{background:var(--surface);color:var(--text);border:1px solid var(--line)}
+.alt:hover{background:var(--surface2);border-color:#46464E;color:var(--text)}
+.sm{height:38px;padding:0 16px;font-size:14px}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.herobody{padding-top:40px}
+.eyebrow{font:500 13px/1.3 var(--mono);color:var(--muted);letter-spacing:.02em}
+h1,h2{font-family:var(--disp);font-weight:400;letter-spacing:-.01em;margin:0;text-wrap:balance}
+h1{font-size:clamp(50px,7.6vw,104px);line-height:.95;margin-top:18px}
+h1 em,h2 em{font-style:italic;color:var(--field-hi)}
+h2{font-size:clamp(36px,4vw,52px);line-height:1}
+.herorow{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:56px;align-items:end;margin-top:30px}
+.lede{font-size:clamp(17px,1.4vw,19px);line-height:1.55;color:var(--muted);margin:0;text-wrap:pretty}
+.lede b{color:var(--text);font-weight:500}
+.ctas{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.tlink{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:15px;padding:0 6px;height:48px}
+.fine{margin-top:14px;font-size:13px;color:var(--muted)}
+.agents{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;align-items:center}
+.agents .lbl{font:500 12px var(--mono);color:var(--muted);margin-right:4px}
+.ag{font-size:13px;font-weight:500;padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
+.field{position:relative;margin-top:48px;padding-bottom:40px}
+.field:before{content:"";position:absolute;left:0;right:0;bottom:0;height:60%;background:linear-gradient(180deg,var(--field-hi),var(--field-lo))}
+.field:after{content:"";position:absolute;left:0;right:0;bottom:0;height:60%;background:repeating-linear-gradient(90deg,rgba(23,22,27,.05) 0 1px,transparent 1px 9px);pointer-events:none}
+.field .wrap{position:relative;z-index:1}
+.shot{position:relative;border-radius:14px;overflow:hidden;background:repeating-linear-gradient(135deg,var(--surface) 0 10px,var(--surface2) 10px 20px);border:1px solid var(--line)}
+.shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;color:transparent}
+.desk{aspect-ratio:2374/1392}
+.phone{aspect-ratio:1080/2400;border-radius:20px}
+.field .shot{box-shadow:0 40px 80px -30px rgba(0,0,0,.6)}
+.swipe{display:none}
+.sec{padding:96px 0;border-top:1px solid var(--line)}
+.sec.tight{padding:72px 0}
+.hero + .sec{border-top:0}
+.kick{font:500 12px/1 var(--mono);color:var(--accent);text-transform:uppercase;letter-spacing:.12em;margin-bottom:18px}
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:64px;align-items:center}
+.dragrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:56px;align-items:center}
+.panes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:40px}
+.body{font-size:17px;line-height:1.6;color:var(--muted);margin:18px 0 0;text-wrap:pretty;max-width:540px}
+.mono{font-family:var(--mono);font-size:.92em;color:var(--text)}
+kbd{font:500 13px var(--mono);padding:2px 7px;border-radius:6px;background:var(--surface2);border:1px solid #3C3C43;color:var(--text)}
+.feat{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:56px;align-items:start;margin-top:40px}
+.flist{display:grid;gap:0;border-top:1px solid var(--line)}
+.fi{padding:15px 0;border-bottom:1px solid var(--line)}
+.fi h3{font:600 16px/1.3 var(--ui);margin:0 0 4px;display:flex;gap:10px;align-items:center}
+.fi p{margin:0;font-size:14.5px;line-height:1.5;color:var(--muted)}
+.phonewrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:64px;align-items:center}
+.phones{display:grid;grid-template-columns:repeat(2,200px);gap:20px}
+.points{display:grid;gap:16px;margin-top:26px;max-width:520px}
+.pt{display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;font-size:15.5px;line-height:1.5;color:var(--muted)}
+.pt .i{color:var(--accent);margin-top:2px}
+.pt b{color:var(--text);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13.5px;font-weight:500}
+.chip .i{width:15px;height:15px;color:var(--accent)}
+.code{background:#17161B;border:1px solid var(--line);border-radius:16px;overflow:hidden;min-width:0}
+.code-top{padding:12px 16px;border-bottom:1px solid var(--line);font:500 12px var(--mono);color:var(--muted)}
+.pre{padding:18px 20px 20px;font:13.5px/1.75 var(--mono);color:var(--text)}
+.cl{white-space:pre-wrap;overflow-wrap:anywhere;padding-left:2ch;text-indent:-2ch}
+.cl + .cl.gap{margin-top:12px}
+.ck{color:var(--accent)}
+.cs{color:#9FD4A8}
+.cv{color:#8DB8FF}
+.cm{color:var(--muted)}
+.dim{color:#76767F;padding-left:2ch}
+.msg{font-style:italic;color:var(--muted)}
+.platforms{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;margin-top:36px;align-items:start}
+.pcol{display:grid;gap:16px}
+.plat{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:26px;display:flex;flex-direction:column;gap:10px}
+.plat .pk{display:flex;align-items:center;gap:8px;font:500 12px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.plat h3{font:600 19px var(--ui);margin:4px 0 0}
+.plat p{margin:0;font-size:14.5px;line-height:1.55;color:var(--muted)}
+.plat .btn{align-self:flex-start;margin-top:6px}
+.steps{margin:6px 0 0;padding:0;list-style:none;display:grid;gap:12px;counter-reset:s}
+.steps li{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;font-size:14.5px;line-height:1.55;color:var(--muted);counter-increment:s}
+.steps li:before{content:counter(s);font:500 12px/24px var(--mono);color:var(--accent);width:24px;height:24px;border-radius:50%;border:1px solid #3C3C43;text-align:center}
+.steps b{color:var(--text);font-weight:600}
+.cmd{display:block;margin-top:8px;padding:10px 12px;border-radius:10px;background:#17161B;border:1px solid var(--line);font:12.5px/1.5 var(--mono);color:var(--text);overflow-wrap:anywhere}
+.foot{display:flex;flex-wrap:wrap;gap:14px 28px;justify-content:space-between;align-items:center;padding:32px 0 44px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+.fl{display:flex;flex-wrap:wrap;gap:8px 22px}
+.fl a{color:var(--muted)}
+.fl a:hover{color:var(--text)}
+.fr{display:flex;flex-direction:column;gap:4px;text-align:right}
+@media (max-width:900px){
+.wrap{padding:0 16px}
+.navlinks{display:none}
+.nav .btn{margin-left:auto}
+.herobody{padding-top:20px}
+.herorow,.split,.feat,.phonewrap,.platforms,.dragrow,.panes{grid-template-columns:minmax(0,1fr);gap:28px}
+.panes{gap:14px;margin-top:28px}
+.sec,.sec.tight{padding:64px 0}
+.feat{margin-top:28px}
+.phones{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;max-width:420px}
+.field{margin-top:36px;padding-bottom:28px}
+.fr{text-align:left}
+}
+@media (max-width:600px){
+.field .wrap{padding-right:0}
+.field .shot.desk{aspect-ratio:auto;height:440px;overflow-x:auto;overflow-y:hidden;border-radius:14px 0 0 14px;scroll-snap-type:x mandatory;background:#1C1C20}
+.field .shot.desk img{position:static;height:100%;width:auto;max-width:none;scroll-snap-align:start}
+.swipe{display:block;margin-top:10px;font:500 12px var(--mono);color:var(--ink)}
+.ctas .btn{width:100%}
+.tlink{padding:0}
+.pre{padding:16px 14px;font-size:12.5px}
+}
     </style>
   </head>
   <body>
-    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-      <!-- Lucide icons (ISC), lucide-static 0.469.0 -->
-      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></symbol>
-      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0" /><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></symbol>
-      <symbol id="i-bluetooth" viewBox="0 0 24 24"><path d="m7 7 10 10-5 5V2l5 5L7 17" /></symbol>
-      <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></symbol>
-      <symbol id="i-laptop" viewBox="0 0 24 24"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16" /></symbol>
-      <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2" /><line x1="8" x2="16" y1="21" y2="21" /><line x1="12" x2="12" y1="17" y2="21" /></symbol>
-      <symbol id="i-pi" viewBox="0 0 24 24"><line x1="9" x2="9" y1="4" y2="20" /><path d="M4 7c0-1.7 1.3-3 3-3h13" /><path d="M18 20c-1.7 0-3-1.3-3-3V4" /></symbol>
-      <symbol id="i-smartphone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2" ry="2" /><path d="M12 18h.01" /></symbol>
-      <symbol id="i-square-plus" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M8 12h8" /><path d="M12 8v8" /></symbol>
-      <symbol id="i-usb" viewBox="0 0 24 24"><circle cx="10" cy="7" r="1" /><circle cx="4" cy="20" r="1" /><path d="M4.7 19.3 19 5" /><path d="m21 3-3 1 2 2Z" /><path d="M9.26 7.68 5 12l2 5" /><path d="m10 14 5 2 3.5-3.5" /><path d="m18 12 1-1 1 1-1 1Z" /></symbol>
-      <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M12 20h.01" /><path d="M2 8.82a15 15 0 0 1 20 0" /><path d="M5 12.859a10 10 0 0 1 14 0" /><path d="M8.5 16.429a5 5 0 0 1 7 0" /></symbol>
-    </svg>
     <div class="page">
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <symbol id="elis" viewBox="0 0 1024 1024"><defs><linearGradient id="eb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D2B07C"></stop><stop offset="1" stop-color="#A27C46"></stop></linearGradient></defs><rect width="1024" height="1024" fill="url(#eb)"></rect><g transform="translate(512 630) scale(1.12) translate(-512 -478)"><path fill="#F8F5F0" d="M352 630C290 700 236 820 210 1200L814 1200C788 820 734 700 672 630Z"></path><path fill="#17161B" d="M416 318C370 300 310 314 288 360C266 410 270 500 300 580C330 560 350 520 356 470C362 420 380 360 416 318Z"></path><path fill="#17161B" d="M608 318C654 300 714 314 736 360C758 410 754 500 724 580C694 560 674 520 668 470C662 420 644 360 608 318Z"></path><path fill="#17161B" d="M512 270C610 270 676 320 686 400C694 470 680 540 650 610L374 610C344 540 330 470 338 400C348 320 414 270 512 270Z"></path><path fill="#C8742F" d="M348 552C338 600 346 640 376 668C400 690 432 702 460 702L460 580C420 580 380 570 348 552Z"></path><path fill="#C8742F" d="M676 552C686 600 678 640 648 668C624 690 592 702 564 702L564 580C604 580 644 570 676 552Z"></path><path fill="#F8F5F0" d="M488 282C498 278 526 278 536 282C548 350 554 420 556 480C562 520 572 540 590 560C618 590 622 610 622 640C622 704 580 744 512 744C444 744 402 704 402 640C402 610 406 590 434 560C452 540 462 520 468 480C470 420 476 350 488 282Z"></path><ellipse fill="#C8742F" cx="444" cy="446" rx="19" ry="11" transform="rotate(-14 444 446)"></ellipse><ellipse fill="#C8742F" cx="580" cy="446" rx="19" ry="11" transform="rotate(14 580 446)"></ellipse><circle fill="#8A4E22" cx="438" cy="490" r="24"></circle><circle fill="#17161B" cx="438" cy="491" r="13"></circle><circle fill="#fff" cx="446" cy="482" r="6"></circle><circle fill="#8A4E22" cx="586" cy="490" r="24"></circle><circle fill="#17161B" cx="586" cy="491" r="13"></circle><circle fill="#fff" cx="594" cy="482" r="6"></circle><path fill="#17161B" d="M482 628C496 616 528 616 542 628C546 650 530 666 512 668C494 666 478 650 482 628Z"></path><path fill="none" stroke="#17161B" stroke-width="8" stroke-linecap="round" d="M512 668V684M484 690Q512 708 540 690"></path></g><circle cx="412" cy="186" r="38" fill="#F8F5F0"></circle><circle cx="512" cy="186" r="38" fill="#F8F5F0"></circle><circle cx="612" cy="186" r="38" fill="#F8F5F0"></circle></symbol>
+        <symbol id="i-dl" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></symbol>
+        <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M12 20h.01"></path><path d="M2 8.82a15 15 0 0 1 20 0"></path><path d="M5 12.859a10 10 0 0 1 14 0"></path><path d="M8.5 16.429a5 5 0 0 1 7 0"></path></symbol>
+        <symbol id="i-bt" viewBox="0 0 24 24"><path d="m7 7 10 10-5 5V2l5 5L7 17"></path></symbol>
+        <symbol id="i-reply" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path><path d="m9 12 2 2 4-4"></path></symbol>
+        <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></symbol>
+        <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 5h.01"></path><path d="M3 12h.01"></path><path d="M3 19h.01"></path><path d="M8 5h13"></path><path d="M8 12h13"></path><path d="M8 19h13"></path></symbol>
+        <symbol id="i-phone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"></rect><path d="M12 18h.01"></path></symbol>
+        <symbol id="i-laptop" viewBox="0 0 24 24"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"></path></symbol>
+        <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"></rect><line x1="8" x2="16" y1="21" y2="21"></line><line x1="12" x2="12" y1="17" y2="21"></line></symbol>
+      </svg>
+
       <header class="hero">
-        <div class="floor"></div>
-        <div class="glow"></div>
-        <div class="wrap" style="position:relative">
+        <div class="wrap">
           <nav class="nav">
-            <a class="brand" href="./"><img class="mark" src="assets/favicon-180.png" alt="" />Elis</a>
+            <a class="brand" href="./"><svg class="mark" aria-hidden="true"><use href="#elis"></use></svg>Elis</a>
             <div class="navlinks">
               <a href="docs.html">Docs</a>
               <a href="commands.html">Commands</a>
               <a href="https://github.com/NaikSoftware/elis">GitHub</a>
             </div>
-            <a class="btn pri sm" href="#install"><svg class="i"><use href="#i-download" /></svg>Download</a>
+            <a class="btn pri sm" href="#install"><svg class="i"><use href="#i-dl"></use></svg>Download</a>
           </nav>
         </div>
         <div class="wrap herobody">
-          <div class="eyebrow"><span class="tick"></span>Terminal workspace · macOS, Linux, Android</div>
-          <h1 class="disp">Park every agent. <em>Watch them all.</em></h1>
-          <p class="lede">Elis is a native terminal built to run many coding agents at once. <b>Every agent works in its own named session</b>, sessions sit in workspaces, and the sidebar shows which one is working, which one waits for you, and which one is done.</p>
-          <div class="ctas">
-            <a class="btn pri" href="https://github.com/NaikSoftware/elis/releases/latest"><svg class="i"><use href="#i-download" /></svg>Download for macOS</a>
-            <a class="btn alt" href="https://github.com/NaikSoftware/elis/tree/master/linux"><svg class="i"><use href="#i-monitor" /></svg>Download for Linux</a>
-            <a class="tlink" href="https://github.com/NaikSoftware/elis/releases/latest"><svg class="i"><use href="#i-smartphone" /></svg>Android APK<svg class="i"><use href="#i-arrow-right" /></svg></a>
+          <div class="eyebrow">Terminal workspace for AI coding agents</div>
+          <h1>Herd your agents. <em>Miss none of them.</em></h1>
+          <div class="herorow">
+            <div>
+              <p class="lede">Elis is a native terminal for macOS and Linux. It runs many coding agents at once. <b>Each agent works in its own named session.</b> Sessions sit in tinted workspaces. The sidebar shows which agent is working, which agent needs you, and which agent is done.</p>
+              <div class="agents"><span class="lbl">Agents</span><span class="ag">Claude Code</span><span class="ag">Codex</span><span class="ag">OpenCode</span><span class="ag">Antigravity</span><span class="ag">Pi</span></div>
+            </div>
+            <div>
+              <div class="ctas">
+                <a class="btn pri" href="https://github.com/NaikSoftware/elis/releases/latest"><svg class="i"><use href="#i-dl"></use></svg>Download for macOS</a>
+                <a class="btn alt" href="https://github.com/NaikSoftware/elis/tree/master/linux"><svg class="i"><use href="#i-monitor"></use></svg>Download for Linux</a>
+                <a class="tlink" href="https://github.com/NaikSoftware/elis/releases/latest">Android APK<svg class="i"><use href="#i-arrow"></use></svg></a>
+              </div>
+              <div class="fine">macOS 14+ on Apple Silicon · Linux: Qt6/KDE, build from source · MIT</div>
+            </div>
           </div>
-          <div class="fine">macOS 14+ on Apple Silicon · Linux: Qt6/KDE, build from source · MIT</div>
-          <div class="heroshot">
-            <div class="shot desk"><img src="assets/shot-desktop-main.webp" width="2374" height="1392" alt="Elis on macOS: workspaces of agent sessions in the sidebar, a Claude Code session and a shell split beside it" /></div>
+        </div>
+        <div class="field">
+          <div class="wrap">
+            <div class="shot desk"><img src="assets/shot-desktop-main.webp" width="2374" height="1392" alt="Elis with workspaces of agent sessions in the sidebar, a Claude Code session, and a shell split beside it" /></div>
+            <div class="swipe">Swipe to see the whole window →</div>
           </div>
         </div>
       </header>
 
-      <section class="sec" id="status">
-        <div class="wrap">
-          <div class="bay"><span class="n">Bay 01</span><span>Status</span><span class="rule"></span><span>Sidebar</span></div>
-          <div class="split">
-            <div class="copy">
-              <h2 class="disp">See every agent at once.</h2>
-              <p class="body">A tabbed terminal loses track of five agents in five projects. Elis keeps them in one tree. Each workspace holds the sessions of one project and remembers its folder, and each agent reports its state onto its own row.</p>
-              <div class="legend">
-                <div class="lg"><span class="gl"><span class="st act"></span></span><span class="t">Working</span><span class="d2">A blue circle fades in and out, and a slow wave runs across the row.</span></div>
-                <div class="lg"><span class="gl"><span class="st blk"></span></span><span class="t">Needs you</span><span class="d2">A triangle: a permission prompt or a question.</span></div>
-                <div class="lg"><span class="gl"><span class="st done"></span></span><span class="t">Done</span><span class="d2">A diamond marks a finished turn until you look at it.</span></div>
-              </div>
-              <div class="agents">
-                <span class="ag"><span class="logo"></span>Claude Code</span>
-                <span class="ag"><span class="logo codex"></span>Codex</span>
-                <span class="ag"><span class="logo oc"></span>OpenCode</span>
-                <span class="ag"><span class="logo ag"></span>Antigravity</span>
-                <span class="ag"><svg class="i" style="font-size:17px"><use href="#i-pi" /></svg>Pi</span>
-              </div>
-            </div>
-            <div class="shot tall"><img src="assets/shot-desktop-status.webp" width="440" height="1090" loading="lazy" alt="The sidebar: working, blocked and finished agent sessions in tinted workspaces" /></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="sec" id="switcher">
-        <div class="wrap">
-          <div class="bay"><span class="n">Bay 02</span><span>Switcher</span><span class="rule"></span><span>⌃P</span></div>
-          <div class="split rev">
-            <div class="shot desk"><img src="assets/shot-desktop-switcher.webp" width="2374" height="1392" loading="lazy" alt="The session switcher open over the terminal, with the sessions that need you at the top" /></div>
-            <div class="copy">
-              <h2 class="disp">Jump to the one that needs you.</h2>
-              <p class="body">Click the session title in the title bar or press <kbd>⌃P</kbd>. Search every session, see the blocked ones first, and reopen a session you closed by mistake.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section class="sec" id="features">
         <div class="wrap">
-          <div class="bay"><span class="n">Bay 03</span><span>Workbench</span><span class="rule"></span><span>Built in</span></div>
-          <div class="specs">
-            <div class="spec"><span class="k">03.1</span><div><h3>Live sessions</h3><p>Quit, update or relaunch the app while your agents keep running, mid-turn included. The next launch reattaches to them with their screen state.</p></div></div>
-            <div class="spec"><span class="k">03.2</span><div><h3>File panel</h3><p>A directory tree of the session's folder beside the terminal, with a context menu, clipboard, and drag and drop.</p></div></div>
-            <div class="spec"><span class="k">03.3</span><div><h3>Splits, companions, overlays</h3><p>Split a session, pin a log tail or a second shell under it, or run a program in an overlay without touching the shell underneath.</p></div></div>
-            <div class="spec"><span class="k">03.4</span><div><h3>Remote sessions</h3><p>Attach sessions that run on another Mac over ssh, with their status and notifications.</p></div></div>
+          <div class="kick">Features</div>
+          <h2>Many sessions, <em>one window.</em></h2>
+          <div class="feat">
+            <div class="shot desk"><img src="assets/shot-desktop-switcher.webp" width="2374" height="1392" loading="lazy" alt="The session switcher over the terminal, with the sessions that need you at the top" /></div>
+            <div class="flist">
+              <div class="fi"><h3>Session switcher <kbd>⌃P</kbd></h3><p>Search all sessions. Sessions that need you come first.</p></div>
+              <div class="fi"><h3>Live sessions</h3><p>Agents keep running when you quit or update Elis. The next launch reattaches them.</p></div>
+              <div class="fi"><h3>Splits, companions, overlays</h3><p>Split a session, pin a log under it, or run a program over its shell.</p></div>
+              <div class="fi"><h3>Remote sessions</h3><p>Attach sessions from another Mac over ssh, with their status.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec" id="agents">
+        <div class="wrap">
+          <div class="dragrow">
+            <div>
+              <div class="kick">Drag and drop</div>
+              <h2>Agents coordinate <em>with each other.</em></h2>
+              <p class="body">Drag sessions and files into an agent's prompt. A file from the file panel adds its path. A session adds its id, and the agent can talk to that session.</p>
+            </div>
+            <div class="shot desk"><img src="assets/shot-desktop-files.webp" width="2374" height="1392" loading="lazy" alt="The file panel beside the pair-link agent, with a dropped file path in its prompt" /></div>
+          </div>
+          <div class="panes">
+            <div class="code">
+              <div class="code-top">ui-tests</div>
+              <div class="pre">
+                <div class="cl"><span class="ck">❯</span> Claude session <span class="cv">6293f019</span> also uses emulator-5554. Tell it that you are about to run UI tests on it, and ask it to wait until you say the emulator is free.</div>
+                <div class="dim">Called 1 tool</div>
+                <div class="cl">● I told session <span class="cv">6293f019</span> ("Pairing screen") that I'm running UI tests on emulator-5554. It will wait until I say the emulator is free.</div>
+                <div class="cl gap"><span class="ck">❯</span> Tests are done. Tell Claude session <span class="cv">6293f019</span> that emulator-5554 is free.</div>
+              </div>
+            </div>
+            <div class="code">
+              <div class="code-top">pair-link</div>
+              <div class="pre">
+                <div class="cl"><span class="cm">›</span> <span class="msg">Message from @UI-tests-on-emulator…: I'm about to run UI tests on emulator-5554. Please wait until I tell you it's free.</span></div>
+                <div class="cl">● OK. I'll keep off emulator-5554 until you tell me it's free.</div>
+                <div class="cl gap"><span class="cm">›</span> <span class="msg">Message from @UI-tests-on-emulator…: emulator-5554 is free now: my UI tests are done, and you can use the emulator again.</span></div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       <section class="sec" id="phone">
-        <div class="wrap">
-          <div class="bay"><span class="n">Bay 04</span><span>Phone</span><span class="rule"></span><span>Android</span></div>
-          <div class="split" style="align-items:end">
-            <h2 class="disp">Answer an agent from your pocket.</h2>
-            <div>
-              <p class="body" style="margin-top:0">Elis for Android shows the same workspace tree as the desktop. An agent's question arrives as answer buttons, so a permission prompt is one tap.</p>
-              <div class="chips">
-                <span class="chip"><svg class="i"><use href="#i-wifi" /></svg>Wi‑Fi</span>
-                <span class="chip"><svg class="i"><use href="#i-usb" /></svg>USB</span>
-                <span class="chip"><svg class="i"><use href="#i-bluetooth" /></svg>Bluetooth</span>
-              </div>
+        <div class="wrap phonewrap">
+          <div>
+            <div class="kick">Android app</div>
+            <h2>Answer agents <em>from your phone.</em></h2>
+            <div class="points">
+              <div class="pt"><svg class="i"><use href="#i-reply"></use></svg><div><b>Answer an agent from anywhere.</b> A permission prompt or a question shows as one-tap buttons.</div></div>
+              <div class="pt"><svg class="i"><use href="#i-bell"></use></svg><div><b>Know when an agent needs you or is done.</b> The notification clears when you read the session on the computer.</div></div>
+              <div class="pt"><svg class="i"><use href="#i-list"></use></svg><div><b>See every session and its status.</b> The phone shows the same workspaces as the computer.</div></div>
+            </div>
+            <div class="chips">
+              <span class="chip"><svg class="i"><use href="#i-wifi"></use></svg>Wi‑Fi / LAN</span>
+              <span class="chip"><svg class="i"><use href="#i-bt"></use></svg>Bluetooth</span>
             </div>
           </div>
           <div class="phones">
-            <figure><div class="shot phone"><img src="assets/shot-phone-sessions.webp" width="1080" height="2340" loading="lazy" alt="Phone: the Elis sessions screen with an agent's question as answer buttons and workspaces with agent statuses" /></div><figcaption class="cap">Sessions and one-tap answers</figcaption></figure>
-            <figure><div class="shot phone"><img src="assets/shot-phone-session.webp" width="1080" height="2340" loading="lazy" alt="Phone: a Claude Code session fitted to the phone screen" /></div><figcaption class="cap">Fit to phone</figcaption></figure>
-          </div>
-          <div class="points">
-            <div class="pt"><svg class="i"><use href="#i-square-plus" /></svg><div><b>New session</b>Start a terminal or an agent in any workspace and folder.</div></div>
-            <div class="pt"><svg class="i"><use href="#i-smartphone" /></svg><div><b>Fit to phone</b>The program redraws for the phone's columns and rows. The desktop gets its size back when the phone disconnects.</div></div>
-            <div class="pt"><svg class="i"><use href="#i-bell" /></svg><div><b>Alerts</b>A notification when an agent blocks or finishes. It goes away when you read the session on the computer.</div></div>
-          </div>
-          <p class="note">The relay is off by default and uses TLS pinned to your computer's certificate. Anyone with the pairing code controls your terminals until you revoke it.</p>
-        </div>
-      </section>
-
-      <section class="sec" id="api">
-        <div class="wrap">
-          <div class="bay"><span class="n">Bay 05</span><span>Control API</span><span class="rule"></span><span class="mono">elisctl</span></div>
-          <div class="split rev">
-            <div class="code">
-              <div class="code-top"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="margin-left:8px">zsh</span></div>
-              <div class="pre">
-                <div class="cl"><span class="c-v">ws</span>=$(<span class="c-k">elisctl</span> workspace new demo)</div>
-                <div class="cl"><span class="c-v">sid</span>=$(<span class="c-k">elisctl</span> session new --workspace <span class="c-s">"$ws"</span> --no-select)</div>
-                <div class="cl"></div>
-                <div class="cl c-c"># start an agent in a session you are not looking at</div>
-                <div class="cl"><span class="c-k">elisctl</span> session type <span class="c-s">$'claude\n'</span> --target <span class="c-s">"$sid"</span></div>
-                <div class="cl"></div>
-                <div class="cl c-c"># read its screen back, then mark it in the sidebar</div>
-                <div class="cl"><span class="c-k">elisctl</span> session text --target <span class="c-s">"$sid"</span> --lines 10</div>
-                <div class="cl"><span class="c-k">elisctl</span> session status blocked --target <span class="c-s">"$sid"</span></div>
-                <div class="cl"></div>
-                <div class="cl c-c"># ask the human; the answer comes back on stdout</div>
-                <div class="cl"><span class="c-k">elisctl</span> ask <span class="c-s">"Deploy now?"</span> --button yes=Deploy --button no=Later</div>
-                <div class="cl"></div>
-                <div class="cl"><span class="c-k">elisctl</span> tree --json<span class="c-c">   # the whole model as JSON</span></div>
-              </div>
-            </div>
-            <div class="copy">
-              <h2 class="disp">Your agents drive the terminal.</h2>
-              <p class="body">The bundled <span class="mono" style="color:var(--text)">elisctl</span> drives everything over a local socket, one command per call. An agent skill teaches your agent to use it, so the agent builds its own layout, shows you a page, or asks you a question.</p>
-              <p class="body">You rarely write these by hand. Ask the agent in your session for a key binding, a layout or a workflow, and the skill writes it.</p>
-              <div class="ctas"><a class="btn alt" href="commands.html">Command reference<svg class="i"><use href="#i-arrow-right" /></svg></a></div>
-            </div>
+            <div class="shot phone"><img src="assets/shot-phone-sessions.webp" width="1080" height="2400" loading="lazy" alt="Phone: sessions, with an agent's question as answer buttons" /></div>
+            <div class="shot phone"><img src="assets/shot-phone-session.webp" width="1080" height="2400" loading="lazy" alt="Phone: a Claude Code session" /></div>
           </div>
         </div>
       </section>
 
-      <section class="sec" id="linux">
-        <div class="wrap">
-          <div class="bay"><span class="n">Bay 06</span><span>Linux</span><span class="rule"></span><span>Qt6 / KDE</span></div>
-          <div class="split">
-            <div class="copy">
-              <h2 class="disp">Same Elis on Linux.</h2>
-              <p class="body">A native Qt6 app for KDE and other Linux desktops, with the same workspace tree, agent status and phone pairing.</p>
-              <div class="ctas"><a class="btn alt" href="https://github.com/NaikSoftware/elis/tree/master/linux"><svg class="i"><use href="#i-monitor" /></svg>Download for Linux</a></div>
-              <p class="note">Build from source for now; the link has the steps.</p>
-            </div>
-            <div class="code">
-              <div class="code-top"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="margin-left:8px">build on Linux</span></div>
-              <div class="pre">
-                <div class="cl"><span class="c-k">git</span> clone https://github.com/NaikSoftware/elis</div>
-                <div class="cl"><span class="c-k">cd</span> elis/linux</div>
-                <div class="cl"></div>
-                <div class="cl c-c"># needs Qt6 and CMake</div>
-                <div class="cl"><span class="c-k">cmake</span> -S . -B build &amp;&amp; <span class="c-k">cmake</span> --build build</div>
-              </div>
+      <section class="sec tight" id="api">
+        <div class="wrap split">
+          <div>
+            <div class="kick">Control API</div>
+            <h2>Agents control <em>the terminal.</em></h2>
+            <p class="body">With <span class="mono">elisctl</span> and the agent skill, an agent opens sessions, reads their screens and asks you questions. <a href="commands.html">Command reference →</a></p>
+          </div>
+          <div class="code">
+            <div class="code-top">zsh</div>
+            <div class="pre">
+              <div class="cl"><span class="cv">sid</span>=$(<span class="ck">elisctl</span> session new --no-select)</div>
+              <div class="cl"><span class="ck">elisctl</span> session type <span class="cs">$'claude\n'</span> --target <span class="cs">"$sid"</span></div>
+              <div class="cl"><span class="ck">elisctl</span> session text --target <span class="cs">"$sid"</span> --lines 10</div>
+              <div class="cl"><span class="ck">elisctl</span> ask <span class="cs">"Deploy now?"</span> --button yes=Deploy --button no=Later</div>
             </div>
           </div>
         </div>
@@ -380,44 +312,51 @@
 
       <section class="sec" id="install">
         <div class="wrap">
-          <div class="bay"><span class="n">Bay 07</span><span>Install</span><span class="rule"></span><span>Three apps</span></div>
+          <div class="kick">Install</div>
+          <h2>macOS <em>and Linux.</em></h2>
           <div class="platforms">
-            <div class="plat"><span class="pk"><svg class="i"><use href="#i-laptop" /></svg>macOS</span><h3>The main app</h3><p>Apple Silicon, macOS 14 or later. A DMG on every GitHub release.</p><a class="btn pri sm" href="https://github.com/NaikSoftware/elis/releases/latest"><svg class="i"><use href="#i-download" /></svg>Download for macOS</a></div>
-            <div class="plat"><span class="pk"><svg class="i"><use href="#i-monitor" /></svg>Linux</span><h3>Qt6 / KDE</h3><p>The same workspace tree and agent status. Build from source for now.</p><a class="btn alt sm" href="https://github.com/NaikSoftware/elis/tree/master/linux"><svg class="i"><use href="#i-download" /></svg>Download for Linux</a></div>
-            <div class="plat"><span class="pk"><svg class="i"><use href="#i-smartphone" /></svg>Android</span><h3>Phone app</h3><p>An APK in the same release. Pair it over Wi‑Fi, USB or Bluetooth.</p><a class="btn alt sm" href="https://github.com/NaikSoftware/elis/releases/latest"><svg class="i"><use href="#i-download" /></svg>Get the APK</a></div>
-          </div>
-          <div class="split" style="margin-top:72px;align-items:start">
-            <div class="copy">
-              <h2 class="disp">Up in a minute.</h2>
-              <p class="body">On macOS, the first launch installs <span class="mono" style="color:var(--text)">elisctl</span>, the agent status hooks and the agent skill. Each update refreshes them.</p>
+            <div class="plat">
+              <span class="pk"><svg class="i"><use href="#i-laptop"></use></svg>macOS</span>
+              <h3>Apple Silicon, macOS 14 or later</h3>
+              <ol class="steps">
+                <li><span><b>Download the DMG</b> from the latest release. Drag Elis to Applications.</span></li>
+                <li><span><b>Clear the quarantine flag once.</b> The build is not notarized.<span class="cmd">xattr -dr com.apple.quarantine /Applications/Elis.app</span></span></li>
+                <li><span><b>Start Elis.</b> The first launch installs <span class="mono">elisctl</span>, the agent status hooks and the agent skill.</span></li>
+              </ol>
+              <a class="btn pri sm" href="https://github.com/NaikSoftware/elis/releases/latest"><svg class="i"><use href="#i-dl"></use></svg>Download for macOS</a>
             </div>
-            <div class="steps">
-              <div class="step"><span class="k">1</span><p><b>Download the DMG</b> from the <a href="https://github.com/NaikSoftware/elis/releases/latest">latest release</a>, open it, and drag Elis to Applications.</p></div>
-              <div class="step"><span class="k">2</span><div><p><b>Clear the download flag once.</b> The build is not notarized.</p><div class="cmd">xattr -dr com.apple.quarantine /Applications/Elis.app</div><p>Coming from Agterm2? Run <span class="mono">migrate-from-agterm2.sh</span> from the release with <span class="mono">--dry-run</span> first, then without, before Elis starts.</p></div></div>
-              <div class="step"><span class="k">3</span><p><b>Start Elis</b> and run an agent in the first session. To pair the phone, open the app menu ▸ Connect a Phone… and scan the code.</p></div>
+            <div class="pcol">
+              <div class="plat">
+                <span class="pk"><svg class="i"><use href="#i-monitor"></use></svg>Linux</span>
+                <h3>Qt6 / KDE</h3>
+                <p>The same workspaces, agent status and phone pairing. Build it from source.</p>
+                <a class="btn alt sm" href="https://github.com/NaikSoftware/elis/tree/master/linux"><svg class="i"><use href="#i-monitor"></use></svg>Download for Linux</a>
+              </div>
+              <div class="plat">
+                <span class="pk"><svg class="i"><use href="#i-phone"></use></svg>Android</span>
+                <h3>Phone app</h3>
+                <p>The APK is in the same release. To pair, open the app menu ▸ Connect a Phone…</p>
+                <a class="btn alt sm" href="https://github.com/NaikSoftware/elis/releases/latest"><svg class="i"><use href="#i-dl"></use></svg>Download the APK</a>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <div class="band">
-        <div class="wrap">
-          <div class="band-in">
-            <img class="mark big" src="assets/favicon-180.png" alt="" />
-            <h2 class="disp">Give your agents an Elis.</h2>
-            <a class="btn pri" href="#install"><svg class="i"><use href="#i-download" /></svg>Download</a>
+      <div class="wrap">
+        <footer class="foot">
+          <div class="fl">
+            <a href="docs.html">User guide</a>
+            <a href="commands.html">Commands</a>
+            <a href="https://github.com/NaikSoftware/elis">GitHub</a>
+            <a href="https://github.com/NaikSoftware/elis/issues">Issues</a>
+            <span>MIT</span>
           </div>
-          <footer class="foot">
-            <div class="fl">
-              <a href="docs.html">User guide</a>
-              <a href="commands.html">Commands</a>
-              <a href="https://github.com/NaikSoftware/elis">GitHub</a>
-              <a href="https://github.com/NaikSoftware/elis/issues">Issues</a>
-              <span>MIT</span>
-            </div>
-            <span class="credit">Started as a fork of <a href="https://github.com/umputun/agterm">agterm</a> by <a href="https://github.com/umputun">@umputun</a>. Terminal engine: <a href="https://ghostty.org">libghostty</a>.</span>
-          </footer>
-        </div>
+          <div class="fr">
+            <span>Named after Elis, an Australian Shepherd.</span>
+            <span>Elis started as a fork of <a href="https://github.com/umputun/agterm">agterm</a> by <a href="https://github.com/umputun">@umputun</a>. Terminal engines: <a href="https://ghostty.org">libghostty</a> on macOS, <a href="https://konsole.kde.org">Konsole</a> on Linux.</span>
+          </div>
+        </footer>
       </div>
     </div>
   </body>
