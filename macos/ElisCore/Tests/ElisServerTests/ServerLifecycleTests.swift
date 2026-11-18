@@ -61,7 +61,7 @@ final class ServerLifecycleTests {
         try? FileManager.default.removeItem(atPath: root)
     }
 
-    private func start(shell: String = "/bin/zsh") throws -> ElisServer {
+    func start(shell: String = "/bin/zsh") throws -> ElisServer {
         let zmx = try #require(RealZmx.binary, "no zmx binary staged; run scripts/setup.sh or set ELIS_ZMX_BIN")
         let resources = scratch.root + "/res"
         try? FileManager.default.createDirectory(atPath: resources, withIntermediateDirectories: true)
@@ -76,7 +76,7 @@ final class ServerLifecycleTests {
         return server
     }
 
-    private func newSession(_ server: ElisServer, cwd: String? = nil, command: String? = nil) throws -> Session {
+    func newSession(_ server: ElisServer, cwd: String? = nil, command: String? = nil) throws -> Session {
         let reply = server.actions.createSession(ControlSessionCreateOptions(window: nil, cwd: cwd ?? scratch.root, workspace: nil,
                                                                              workspaceName: nil, createWorkspace: nil, command: command,
                                                                              wait: nil, name: nil, after: nil, before: nil,
@@ -85,12 +85,12 @@ final class ServerLifecycleTests {
         return try #require(server.store.session(withID: id))
     }
 
-    private func type(_ server: ElisServer, _ session: Session, _ text: String, pane: StatusPane? = nil) async {
+    func type(_ server: ElisServer, _ session: Session, _ text: String, pane: StatusPane? = nil) async {
         _ = await server.actions.typeSession(session.id.uuidString, window: nil,
                                              options: ControlSessionTypeOptions(text: text, select: false, pane: pane, paneID: nil))
     }
 
-    private func screen(_ server: ElisServer, _ session: Session, pane: StatusPane? = nil) -> String {
+    func screen(_ server: ElisServer, _ session: Session, pane: StatusPane? = nil) -> String {
         server.actions.readSessionText(session.id.uuidString, window: nil,
                                        options: ControlSessionTextOptions(pane: pane, paneID: nil, all: false, lines: nil)).result?.text ?? ""
     }
