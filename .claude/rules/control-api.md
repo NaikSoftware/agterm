@@ -238,13 +238,16 @@ refuses `phone.*` from a phone. `site/commands.html#phone` owns the rest.
 
 `session.attach` answers `result.attach = {argv, paneID}`: a zmx viewer attach that never claims, never leads
 and skips scrollback (`ZMX_MANAGED_SCREEN_ONLY`, `ZMX_MANAGED_FOLLOW`; patch 0007, see the zmx patches README).
-A zmx older than 0007 ignores both variables: full scrollback, and it may lead an unowned daemon.
+A zmx older than 0007, or a daemon started before the update (the daemon's own zmx acts on the flags),
+ignores both variables: full scrollback, and it may lead an unowned daemon.
+A follow viewer of a session nobody leads is told role `unowned`;
+a relay must not take it as a cue to reattach or lead, as `PaneLead.report` does for the Mac's own surfaces.
 The Mac answers it locally for its own Live panes, rows attached from another Mac and elis-server rows,
 and elis-server's socket serves its own panes. No ssh ControlPath: each attach opens its own ssh connection.
 Page rows and the page bridge refuse it. `elisctl session attach` execs the argv; `--json` prints the response and execs nothing.
 The relay (`mobile serve`) prints `phone attached from <ip> pane <paneID>` and `phone detached ...` lines;
 the app turns them into `phone.attached` / `phone.detached` and `surfaces[].phoneViewers`.
-A relay stop detaches every remaining viewer with `ip=-`.
+When the relay stops or restarts, every remaining viewer detaches with `ip=-`.
 elis-server's own tree omits `phoneViewers`, an approved exception (2026-11-18): the relay runs only on a Mac.
 Debug builds are ad-hoc signed with a bare `cdhash` requirement,
 so each rebuild asks for Bluetooth again at the relay's first start.

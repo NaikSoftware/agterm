@@ -171,6 +171,17 @@ same scripts on itself, then merges master.
 - Call `open(channel:)` before OPENED; `enqueue` on a channel that is not open returns `.closed`.
 - OPENED, GRID, LEAD, RESYNC and CLOSE bypass the scheduler, so GRID can overtake queued DATA laid out for the old grid.
 - Channel ids come from the phone: cap open channels and refuse OPEN on 0 and 1.
+- Daemon age, not host age, decides 0007: a daemon started before the update ignores its flags (full scrollback, then
+  an overflow/resync loop, and it may lead).
+- The app should refuse or mark such a pane in the `session.attach` answer (`zmxOutdatedBefore` exists for local
+  daemons), so the relay keeps no version logic.
+- The relay prints one `phone detached` line per open channel before `phone disconnected`, always with the app's
+  `attach.paneID`.
+- The remote viewer argv has no ServerAlive keepalive yet; add it with the watchdog.
+- Strip `OSC 2;zmx-role;<nonce>…` titles from the viewer stream; consider returning the nonce in the answer.
+- `phone.attached` carries no session id; resolve it at emit time if hooks need it.
+- The relay must refuse a phone's own `session.attach` (`PhoneSession` forwards it today) and resolve attaches itself.
+- A pane never shown since launch answers `session not realized`; decide whether the phone may watch it.
 
 ## Left to the builder
 
