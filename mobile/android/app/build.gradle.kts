@@ -49,6 +49,16 @@ kotlin {
     }
 }
 
+// A release without the emulator shim would silently fall back to the text view on that ABI.
+tasks.named("preBuild") {
+    doFirst {
+        for (abi in listOf("arm64-v8a", "x86_64")) {
+            val so = file("src/main/jniLibs/$abi/libvtshim.so")
+            if (!so.exists()) throw GradleException("Missing ${so.path}: run mobile/tool/build-vtshim.sh before building")
+        }
+    }
+}
+
 flutter {
     source = "../.."
 }
