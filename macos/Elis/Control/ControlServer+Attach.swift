@@ -25,10 +25,20 @@ extension ControlServer {
             }
             let refusal = ControlResponse(ok: false, error: "\(target ?? "active") is not a Live session")
             let token = session.paneToken(for: split ? .right : .left)
-            guard !token.isEmpty, let source = liveSource(session, identity: identity, split: split),
-                  let attach = try? ControlAttach.viewer(source, paneID: token) else { return refusal }
+            guard !token.isEmpty, let source = liveSource(session, identity: identity, split: split) else { return refusal }
+            if case .local(_, let daemon) = source, predatesZmxBuild(daemon) {
+                return ControlResponse(ok: false, error: "session predates this version; restart it to watch it on the phone")
+            }
+            guard let attach = try? ControlAttach.viewer(source, paneID: token) else { return refusal }
             return ControlResponse(ok: true, result: ControlResult(attach: attach))
         }
+    }
+
+    /// An old zmx daemon ignores the viewer's skip-scrollback flag, so its replay would overflow the relay.
+    /// A failed listing or a missing created time serves the attach, as `zmx list` marks no row outdated then.
+    private func predatesZmxBuild(_ daemon: String) -> Bool {
+        guard let cutoff = zmxOutdatedBefore, let records = zmxClient?.sessionRecords() else { return false }
+        return LiveReset.isOutdated(created: records.first { $0.name == daemon }?.createdAt, cutoff: cutoff)
     }
 
     /// A remote row never falls back to this Mac's zmx: its panes run on the origin.
