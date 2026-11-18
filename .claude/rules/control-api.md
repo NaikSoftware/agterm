@@ -20,7 +20,7 @@ paths:
 ## Control API
 
 - `elisctl` drives app/store actions over a local Unix socket. One-shot commands and polled
-  `events.read` are in scope; terminal-output streaming is not.
+  `events.read` are in scope; terminal-output streaming is not, except through `session.attach` for the phone relay.
 - `ElisCore` owns protocol types, target/socket resolution, and host-free dispatch.
   `ControlServer` owns the socket and app-side effects; blocking accept/read runs off-main and requests
   hop to the main actor. SwiftPM `elisctlKit` owns ArgumentParser and `SocketClient`.
@@ -235,6 +235,17 @@ over injectable effects, and no archive bytes are sent to the host until the tar
 protocol command. `phone.*` is the protocol face of the app's `PhoneRelay`. elis-server leaves `session.grid`,
 `session.scroll` and all `phone.*` unserved, a page cannot send `phone.*` (`HtmlBridge` refuses them), and the relay
 refuses `phone.*` from a phone. `site/commands.html#phone` owns the rest.
+
+`session.attach` answers `result.attach = {argv, paneID}`: a zmx viewer attach that never claims, never leads
+and skips scrollback (`ZMX_MANAGED_SCREEN_ONLY`, `ZMX_MANAGED_FOLLOW`; patch 0007, see the zmx patches README).
+A zmx older than 0007 ignores both variables: full scrollback, and it may lead an unowned daemon.
+The Mac answers it locally for its own Live panes, rows attached from another Mac and elis-server rows,
+and elis-server's socket serves its own panes. No ssh ControlPath: each attach opens its own ssh connection.
+Page rows and the page bridge refuse it. `elisctl session attach` execs the argv; `--json` prints the response and execs nothing.
+The relay (`mobile serve`) prints `phone attached from <ip> pane <paneID>` and `phone detached ...` lines;
+the app turns them into `phone.attached` / `phone.detached` and `surfaces[].phoneViewers`.
+A relay stop detaches every remaining viewer with `ip=-`.
+elis-server's own tree omits `phoneViewers`, an approved exception (2026-11-18): the relay runs only on a Mac.
 Debug builds are ad-hoc signed with a bare `cdhash` requirement,
 so each rebuild asks for Bluetooth again at the relay's first start.
 
