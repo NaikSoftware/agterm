@@ -38,28 +38,34 @@ struct SessionAttachCommandsTests {
 
     @Test func jsonRefusalPrintsToStdoutThenFails() throws {
         let r = try reply(ControlResponse(ok: false, error: "no live pane"))
-        #expect(Session.Attach.decide(r, json: true) == .printThenFail(r.line))
+        #expect(Session.Attach.decide(r, json: true, callerPaneID: nil) == .printThenFail(r.line))
     }
 
     @Test func aRefusalExitsNonzeroWithTheError() throws {
-        let action = Session.Attach.decide(try reply(ControlResponse(ok: false, error: "no live pane")), json: false)
+        let action = Session.Attach.decide(try reply(ControlResponse(ok: false, error: "no live pane")), json: false, callerPaneID: nil)
         #expect(action == .fail("error: no live pane"))
     }
 
     @Test func anAttachExecsItsArgv() throws {
         let attach = ControlAttach(argv: ["zmx", "attach", "d1"], paneID: "p1")
-        let action = Session.Attach.decide(try reply(ControlResponse(ok: true, result: ControlResult(attach: attach))), json: false)
+        let action = Session.Attach.decide(try reply(ControlResponse(ok: true, result: ControlResult(attach: attach))), json: false, callerPaneID: "p2")
         #expect(action == .exec(["zmx", "attach", "d1"]))
     }
 
     @Test func jsonPrintsTheResponseAndDoesNotExec() throws {
         let attach = ControlAttach(argv: ["zmx"], paneID: "p1")
         let r = try reply(ControlResponse(ok: true, result: ControlResult(attach: attach)))
-        #expect(Session.Attach.decide(r, json: true) == .print(r.line))
+        #expect(Session.Attach.decide(r, json: true, callerPaneID: nil) == .print(r.line))
+    }
+
+    @Test func refusesToAttachThePaneItRunsIn() throws {
+        let attach = ControlAttach(argv: ["zmx", "attach", "d1"], paneID: "p1")
+        let action = Session.Attach.decide(try reply(ControlResponse(ok: true, result: ControlResult(attach: attach))), json: false, callerPaneID: "p1")
+        #expect(action == .fail("error: cannot attach a pane to itself"))
     }
 
     @Test func aReplyWithoutAnAttachFails() throws {
-        let action = Session.Attach.decide(try reply(ControlResponse(ok: true)), json: false)
+        let action = Session.Attach.decide(try reply(ControlResponse(ok: true)), json: false, callerPaneID: nil)
         #expect(action == .fail("error: the response carries no attach command"))
     }
 }
