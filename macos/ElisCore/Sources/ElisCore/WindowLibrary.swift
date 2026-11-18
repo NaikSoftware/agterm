@@ -81,6 +81,7 @@ public final class WindowLibrary {
     /// its catalog stream exactly while it is open.
     @ObservationIgnored public var onRemoteStoreOpened: ((UUID, AppStore) -> Void)?
     @ObservationIgnored public var onRemoteStoreClosed: ((UUID) -> Void)?
+    @ObservationIgnored public var phoneViewerCount: (String) -> Int = { _ in 0 }
     /// remoteDuplicates maps a remote window whose server turned out to be another window's to that window.
     @ObservationIgnored var remoteDuplicates: [UUID: UUID] = [:]
     /// remoteOpenClaims are remote windows the user opened whose mirror has not asked yet; never saved.
@@ -738,6 +739,7 @@ public final class WindowLibrary {
         )
         store.flaggedLayout = flaggedLayout
         store.recentClosedWindow = windowID
+        store.phoneViewerCount = { [weak self] in self?.phoneViewerCount($0) ?? 0 }
         return store
     }
 

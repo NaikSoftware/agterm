@@ -18,6 +18,8 @@ public enum ControlEventKind: String, Codable, CaseIterable, Sendable, Equatable
     case phoneConnected = "phone.connected"
     case phoneDisconnected = "phone.disconnected"
     case phoneRefused = "phone.refused"
+    case phoneAttached = "phone.attached"
+    case phoneDetached = "phone.detached"
 }
 
 /// Kind-specific event data. Optional fields keep the encoded payload compact while preserving one
@@ -40,8 +42,8 @@ public struct ControlEventPayload: Codable, Sendable, Equatable {
     /// The `remote.opened` / `remote.closed` ssh destination the row is attached to, as `zmx attach` was
     /// given it.
     public var host: String?
-    /// The `pane.focused` pane's surface token, the value `tree` reports as `surfaces[].paneID`; nil while
-    /// that pane's surface does not exist yet.
+    /// The `pane.focused`, `phone.attached` or `phone.detached` pane's surface token, the value `tree` reports as
+    /// `surfaces[].paneID`; nil while a focused pane's surface does not exist yet.
     public var paneID: String?
     /// The `session.created` companion's parent id; nil for a top-level session.
     public var parent: String?
@@ -51,7 +53,7 @@ public struct ControlEventPayload: Codable, Sendable, Equatable {
     public var messageID: String?
     /// The `remote.opened` / `remote.closed` row's session id on its origin, the id `zmx attach` takes.
     public var remoteSessionID: String?
-    /// The `phone.*` events' phone address.
+    /// The `phone.*` events' phone address; nil on a `phone.detached` the relay's exit caused.
     public var ip: String?
 
     public init(name: String? = nil, status: String? = nil, pane: String? = nil,

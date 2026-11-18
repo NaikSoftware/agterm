@@ -147,6 +147,33 @@ final class PhoneRelayTests: XCTestCase {
         XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("gone ") } })
     }
 
+    /// Viewer lines count per pane without becoming `lastEvent`; a stray detach emits nothing, and stopping
+    /// the relay detaches each viewer left, without an address.
+    func testViewerLinesCountPanesAndStoppingTheRelayDetachesTheRest() throws {
+        let relay = made(try slowServe(extra: """
+        echo 'elisctl: phone attached from 10.0.0.9 pane a' >&2
+        echo 'elisctl: phone attached from 10.0.0.9 pane a' >&2
+        echo 'elisctl: phone attached from 10.0.0.9 pane b' >&2
+        echo 'elisctl: phone detached from 10.0.0.9 pane b' >&2
+        echo 'elisctl: phone detached from 10.0.0.9 pane b' >&2
+        """))
+        var events: [String] = []
+        relay.onEvent = { kind, payload in events.append([kind.rawValue, payload.ip ?? "-", payload.paneID ?? "-"].joined(separator: " ")) }
+        relay.attach(socketPath: "/tmp/unused.sock")
+        relay.setOn(true)
+
+        XCTAssertTrue(wait { relay.lastEvent == "phone disconnected from 10.0.0.9" })
+        XCTAssertEqual(relay.viewers.count(paneID: "a"), 2)
+        XCTAssertEqual(relay.viewers.count(paneID: "b"), 0)
+        XCTAssertEqual(events.filter { !$0.hasPrefix("phone.connected") && !$0.hasPrefix("phone.disconnected") },
+                       ["phone.attached 10.0.0.9 a", "phone.attached 10.0.0.9 a", "phone.attached 10.0.0.9 b",
+                        "phone.detached 10.0.0.9 b"])
+
+        relay.setOn(false)
+        XCTAssertEqual(Array(events.suffix(2)), ["phone.detached - a", "phone.detached - a"])
+        XCTAssertEqual(relay.viewers, PhoneViewers())
+    }
+
     func testPhoneEnableAnswersOnceTheRelayListensAndTheTreeAndEventsKeepTheTokenOut() async throws {
         let library = WindowLibrary(directory: dir.appendingPathComponent("state", isDirectory: true))
         let server = ControlServer(library: library, actions: AppActions(library: library),
@@ -154,7 +181,7 @@ final class PhoneRelayTests: XCTestCase {
                                    identity: AppIdentity(version: "test", commit: "test"), zmxClient: nil,
                                    socketPath: dir.appendingPathComponent("control.sock").path)
         let relay = made(try slowServe())
-        relay.onEvent = { kind, ip in library.emitAppEvent(ControlEventDraft(kind: kind, payload: ControlEventPayload(ip: ip))) }
+        relay.onEvent = { library.emitAppEvent(ControlEventDraft(kind: $0, payload: $1)) }
         relay.attach(socketPath: "/tmp/unused.sock")
         server.phoneRelay = relay
         let dispatcher = ControlDispatcher(actions: server)

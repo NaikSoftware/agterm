@@ -18,8 +18,10 @@ final class PhoneRelay {
     /// The `phone.status` `bluetooth` value from the running serve's last Bluetooth line.
     private(set) var bluetooth: String?
 
-    /// A phone connected, left or was refused; the app emits it as a `phone.*` control event.
-    @ObservationIgnored var onEvent: ((ControlEventKind, String) -> Void)?
+    /// A phone connected, left, was refused or opened or closed a pane; the app emits it as a `phone.*` control event.
+    @ObservationIgnored var onEvent: ((ControlEventKind, ControlEventPayload) -> Void)?
+    /// The phone's open panes, which `tree` reads as `phoneViewers`.
+    @ObservationIgnored private(set) var viewers = PhoneViewers()
     @ObservationIgnored private let stateDirectory: URL
     @ObservationIgnored private let tool: URL?
     @ObservationIgnored private var socketPath: String?
@@ -120,6 +122,7 @@ final class PhoneRelay {
 
     /// Ends the running child and, once it has exited, starts a new one if the relay is still on.
     private func restart() {
+        detachViewers() // the old child's exit is ignored once `generation` moves on
         generation += 1
         let ticket = generation
         links = []
@@ -206,7 +209,10 @@ final class PhoneRelay {
         case .event(let text):
             lastEvent = text
             lastStderr = text
-            if let event = PhoneRelayLine.controlEvent(text) { onEvent?(event.kind, event.ip) }
+            if let event = PhoneRelayLine.controlEvent(text) { onEvent?(event.kind, ControlEventPayload(ip: event.ip)) }
+        case let .viewer(attached, ip, paneID):
+            if attached { viewers.attach(paneID: paneID) } else if !viewers.detach(paneID: paneID) { return }
+            onEvent?(attached ? .phoneAttached : .phoneDetached, ControlEventPayload(paneID: paneID, ip: ip))
         case .other(let text): lastStderr = text
         case .bluetooth(let value): bluetooth = value // a status, never the error an exit shows
         }
@@ -218,11 +224,16 @@ final class PhoneRelay {
             lastStderr = nil
             return restart()
         }
+        detachViewers()
         process = nil
         links = []
         bluetooth = nil
         error = lastStderr.flatMap { PhoneRelayLine.isEvent($0) ? nil : $0 } ?? "The relay stopped."
         lastStderr = nil
+    }
+
+    private func detachViewers() {
+        for paneID in viewers.reset() { onEvent?(.phoneDetached, ControlEventPayload(paneID: paneID)) }
     }
 
     private nonisolated static func environment(_ stateDirectory: URL) -> [String: String] {

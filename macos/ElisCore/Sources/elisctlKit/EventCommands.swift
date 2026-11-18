@@ -115,6 +115,9 @@ enum EventFormatter {
             return "\(time) \(event.kind.rawValue)"
         case .phoneConnected, .phoneDisconnected, .phoneRefused:
             return "\(time) \(event.kind.rawValue) ip=\(event.payload.ip ?? "-")"
+        case .phoneAttached, .phoneDetached:
+            return ([time, event.kind.rawValue] + [event.payload.ip, event.payload.paneID ?? "-"].compactMap { $0 })
+                .joined(separator: " ")
         case .message:
             return "\(time) \(event.kind.rawValue) \(name) pane-id=\(event.payload.paneID ?? "-")"
                 + " from=\(event.payload.from ?? "-") id=\(event.payload.messageID ?? "-")"

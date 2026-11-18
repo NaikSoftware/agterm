@@ -85,6 +85,8 @@ public enum PhoneRelayLine: Equatable {
     case other(String)
     /// `bluetooth: advertising | off (<reason>)`, as the `phone.status` value.
     case bluetooth(String)
+    /// `phone attached|detached from <ip> pane <paneID>`: the phone opened or closed a pane. Not relay status.
+    case viewer(attached: Bool, ip: String, paneID: String)
 
     /// Serve's `off (<reason>)` reasons and the value each one reads back as.
     public static let bluetoothReasons = ["powered off": "off", "unauthorized": "unauthorized", "unsupported": "unsupported",
@@ -113,6 +115,12 @@ public enum PhoneRelayLine: Equatable {
         if line.hasPrefix("bluetooth: off ("), line.hasSuffix(")"),
            let value = bluetoothReasons[String(line.dropFirst("bluetooth: off (".count).dropLast())] {
             return .bluetooth(value)
+        }
+        for (prefix, attached) in [("phone attached from ", true), ("phone detached from ", false)] where line.hasPrefix(prefix) {
+            let parts = line.dropFirst(prefix.count).components(separatedBy: " pane ")
+            if parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty {
+                return .viewer(attached: attached, ip: parts[0], paneID: parts[1])
+            }
         }
         return isEvent(line) ? .event(line) : .other(line)
     }

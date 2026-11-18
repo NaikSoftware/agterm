@@ -131,7 +131,8 @@ struct elisApp: App {
                                           zmxOutdatedBefore: restored.zmxOutdatedBefore)
         _controlServer = State(initialValue: controlServer)
         let phoneRelay = PhoneRelay(stateDirectory: stateDirectory)
-        phoneRelay.onEvent = { [weak library] in library?.emitAppEvent(ControlEventDraft(kind: $0, payload: ControlEventPayload(ip: $1))) }
+        phoneRelay.onEvent = { [weak library] in library?.emitAppEvent(ControlEventDraft(kind: $0, payload: $1)) }
+        library.phoneViewerCount = { [weak phoneRelay] in phoneRelay?.viewers.count(paneID: $0) ?? 0 }
         controlServer.phoneRelay = phoneRelay
         _phoneRelay = State(initialValue: phoneRelay)
         actions.remoteAttacher = controlServer
