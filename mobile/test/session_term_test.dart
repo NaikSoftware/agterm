@@ -101,9 +101,11 @@ Map<String, Object> treeOf({bool live = true, bool split = false}) => {
     };
 
 class FakeSnapshot implements VtSnapshot {
-  FakeSnapshot(this.cols, this.rows);
+  FakeSnapshot(this.cols, this.rows, this.altScreen);
   @override
   final int cols, rows;
+  @override
+  final bool altScreen;
   @override
   int get cursorX => 0;
   @override
@@ -119,6 +121,7 @@ class FakeVt implements Vt {
   int cols, rows, resets = 0, snapshots = 0;
   final written = <int>[];
   bool disposed = false, failSnapshot = false;
+  bool alt = true; // a full-screen program: Term, no scrollback
 
   @override
   void write(Uint8List bytes) => written.addAll(bytes);
@@ -140,7 +143,7 @@ class FakeVt implements Vt {
   VtSnapshot snapshot() {
     snapshots++;
     if (failSnapshot) throw StateError('boom');
-    return FakeSnapshot(cols, rows);
+    return FakeSnapshot(cols, rows, alt);
   }
   @override
   void dispose() => disposed = true;
@@ -235,6 +238,46 @@ void main() {
     expect(find.byType(TerminalView), findsOneWidget);
     expect(h.r.of(LinkKind.resize), isEmpty);
     expect([for (final f in h.r.frames) if (f.channel >= 2 && f.kind == LinkKind.data) f], isEmpty); // watch only
+    await h.stop();
+  });
+
+  testWidgets('theScreenPicksScrollbackUntilATap', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.vts.single.alt = false;
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('\$ ')));
+    await t.pump();
+    await t.pump();
+    expect(find.byType(TerminalView), findsNothing); // the main screen: its history, scrollable
+    expect(find.byKey(const Key('screen')), findsOneWidget);
+    final texts = h.r.texts;
+    await t.pump(const Duration(seconds: 2));
+    expect(h.r.texts, greaterThan(texts));
+    expect(h.r.closes, isEmpty); // the channel stays open to see the next switch
+
+    h.vts.single.alt = true;
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('top')));
+    await t.pump();
+    await t.pump();
+    expect(find.byType(TerminalView), findsOneWidget);
+
+    await t.tap(find.byKey(const Key('scrollback')));
+    await t.pump();
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('more')));
+    await t.pump();
+    await t.pump();
+    expect(find.byType(TerminalView), findsNothing); // the tap holds until the screen switches again
+
+    h.vts.single.alt = false;
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('q')));
+    await t.pump();
+    await t.pump();
+    h.vts.single.alt = true;
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('vim')));
+    await t.pump();
+    await t.pump();
+    expect(find.byType(TerminalView), findsOneWidget);
     await h.stop();
   });
 
@@ -377,7 +420,7 @@ void main() {
       return Vt(c, r);
     });
     await h.opened(cols: 20, rows: 3);
-    h.r.send(frame(LinkKind.data, 2, utf8.encode('hello\x1b[1;31m!')));
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('\x1b[?1049hhello\x1b[1;31m!'))); // a full-screen program
     await t.pump();
     await t.pump();
     final view = t.widget<TerminalView>(find.byType(TerminalView));
@@ -444,19 +487,18 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('scrollbackClosesAndReopensTheTerm', (t) async {
+  testWidgets('scrollbackKeepsTheTermChannel', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
     await t.tap(find.byKey(const Key('scrollback')));
     await t.pump();
-    expect(h.r.closes, [2]);
     expect(find.byType(TerminalView), findsNothing);
     await t.tap(find.byKey(const Key('scrollback')));
     await t.pump();
-    expect(h.r.lastChannel, 3);
-    await h.opened();
     expect(find.byType(TerminalView), findsOneWidget);
+    expect(h.r.closes, isEmpty);
+    expect(h.r.lastChannel, 2);
     await h.stop();
   });
 

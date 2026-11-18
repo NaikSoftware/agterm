@@ -52,6 +52,7 @@ class _SessionScreenState extends State<SessionScreen> {
   final vScroll = ScrollController();
   String pane = 'left';
   bool scrollback = false, sending = false;
+  bool? _alt; // the screen the last frame showed; scrollback follows each switch, a tap holds until the next
   String text = '';
   String? error;
   bool fitting = false;
@@ -128,7 +129,6 @@ class _SessionScreenState extends State<SessionScreen> {
         !m.background &&
         m.state == LinkState.connected &&
         m.mux != null &&
-        !scrollback && // shortcut: scrollback is the text view's; the Term view has no history until M5
         s?.livePanes.contains(pane) == true &&
         !_refused.contains(pane);
     final t = term;
@@ -136,6 +136,7 @@ class _SessionScreenState extends State<SessionScreen> {
       t.removeListener(_onTerm);
       t.close(); // CLOSE: the Mac's viewer count drops; a resume opens a fresh channel
       term = null;
+      _alt = null; // the next stream picks the view again
     }
     if (want && term == null) term = TermSession(m.mux!, widget.sessionId, pane, vt: widget.vt)..addListener(_onTerm);
   }
@@ -146,6 +147,7 @@ class _SessionScreenState extends State<SessionScreen> {
     if (t.ended case final reason?) {
       t.removeListener(_onTerm);
       term = null;
+      _alt = null; // the next stream picks the view again
       if (reason == 'Disconnected' || reason == revokedMessage) {
         // the disconnected state shows; the next mux reopens
       } else if (!t.opened) {
@@ -161,14 +163,23 @@ class _SessionScreenState extends State<SessionScreen> {
       }
       unawaited(_load());
       unawaited(_syncFit());
-    } else if (text.isNotEmpty && t.snapshot != null) {
+    } else if (text.isNotEmpty && _termShown && t.snapshot!.altScreen) {
       text = ''; // shown from now on; a fallback later starts from a fresh read, not this one
     }
     setState(() {});
   }
 
   // the text view stays until the terminal has a first frame: no blank screen while the channel opens
-  bool get _termShown => term?.snapshot != null;
+  bool get _termShown => !scrollback && term?.snapshot != null;
+
+  // the main screen (a shell, a command printing lines) shows its history; a full-screen program shows Term.
+  // Called from build, before anything reads [scrollback]: the frame that shows the switch already picks.
+  void _pickView(VtSnapshot? snap) {
+    if (snap == null || snap.altScreen == _alt) return;
+    _alt = snap.altScreen;
+    scrollback = !snap.altScreen;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
 
   Future<void> _load() async {
     // a delayed read (after a fit, a key) can fire after the screen closed
@@ -303,6 +314,7 @@ class _SessionScreenState extends State<SessionScreen> {
     final s = this.s;
     if (s == null) return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
     final t = term;
+    _pickView(t?.snapshot);
     final options = promptOptions(_termShown ? t!.snapshot!.lines.map((l) => l.text).join('\n') : text);
     return Scaffold(
       appBar: AppBar(
@@ -438,7 +450,7 @@ class _SessionScreenState extends State<SessionScreen> {
       key: const Key('term'),
       reverse: true,
       padding: const EdgeInsets.all(12),
-      child: TerminalView(snapshot: t.snapshot, hold: t.hold),
+      child: TerminalView(snapshot: t.snapshot, hold: t.hold, columns: m.fitted[_fitKey]?.$1 ?? (autoFit.wanted ? _fitColumns() : null)),
     );
   }
 

@@ -118,11 +118,15 @@ class VtSnapshot {
         cursorX = s[2],
         cursorY = s[3],
         cursorVisible = s[4] & 3 == 3,
+        altScreen = s[10] == 1, // GHOSTTY_TERMINAL_SCREEN_ALTERNATE, whichever mode (47, 1047, 1049) switched it
         // only the viewport rows: the overscan row below them is not shown (no sub-row scroll in M4b)
         lines = List.generate(s[1], (r) => VtRow._(s, r));
 
   final int cols, rows, cursorX, cursorY;
   final bool cursorVisible;
+
+  /// A full-screen program's screen, which has no history.
+  final bool altScreen;
   final List<VtRow> lines;
 }
 

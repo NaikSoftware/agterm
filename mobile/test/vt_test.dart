@@ -93,9 +93,13 @@ void main() {
     vt.write(_b('\x1b[?1049h'));
     expect(vt.mode(1049), isTrue);
     expect(vt.snapshot().lines[0].text, '');
+    expect(vt.snapshot().altScreen, isTrue);
     vt.write(_b('\x1b[?1049l'));
     expect(vt.mode(1049), isFalse);
     expect(vt.snapshot().lines[0].text, 'main');
+    expect(vt.snapshot().altScreen, isFalse);
+    vt.write(_b('\x1b[?47h')); // the older switch counts too
+    expect(vt.snapshot().altScreen, isTrue);
   }, skip: skip);
 
   test('useAfterDisposeThrows', () {
