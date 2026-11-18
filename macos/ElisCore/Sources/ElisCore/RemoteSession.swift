@@ -124,10 +124,7 @@ public enum RemoteSession {
     /// Validates the daemon name and the endpoint paths.
     public static func zmxAttachArguments(endpoint: ControlZmxEndpoint, daemon: String,
                                           lead: ZmxLeadAttachment?) throws -> [String] {
-        guard ZmxSupport.isDaemonName(daemon) || ZmxSupport.isScratchDaemonName(daemon) else { throw InvocationError.invalidSession }
-        guard isPath(endpoint.executable), isPath(endpoint.socketDirectory) else {
-            throw InvocationError.invalidEndpoint
-        }
+        try validate(endpoint: endpoint, daemon: daemon)
         let guardScript = "printf '%s\\n' 'elis: remote session is gone'; exit 1"
         return [
             // the four the LOCAL pane sets in `ZmxSupport`, empty being unset to zmx: an inherited
@@ -138,6 +135,30 @@ public enum RemoteSession {
         ] + (lead?.assignments ?? []) + [
             endpoint.executable, "attach", daemon, "/bin/sh", "-c", guardScript,
         ]
+    }
+
+    /// The `env … zmx screen` words that read `daemon`'s own screen, with `zmxAttachArguments`' validation.
+    public static func zmxScreenArguments(endpoint: ControlZmxEndpoint, daemon: String) throws -> [String] {
+        try validate(endpoint: endpoint, daemon: daemon)
+        return ["/usr/bin/env", "ZMX_SESSION=", "ZMX_SESSION_PREFIX=", "ZMX_DIR=" + endpoint.socketDirectory,
+                endpoint.executable, "screen", daemon]
+    }
+
+    /// One ssh invocation running `zmx screen` for `daemon` on `host`, with the keepalive wrapper.
+    public static func screenCommand(host: String, endpoint: ControlZmxEndpoint, daemon: String,
+                                     connectTimeout: Int = 5) throws -> [String] {
+        try validate(host: host)
+        let remote = CommandRestore.shellQuotedLine(try zmxScreenArguments(endpoint: endpoint, daemon: daemon))
+        return keepingAlive(sshArguments(host: host, connectTimeout: connectTimeout, interactive: false) + [remote])
+    }
+
+    /// keepingAlive runs `ssh`, an ssh argv ending in host and remote command, under `sh` with the
+    /// keepalive options `keepAliveCheck` picks, so a dead link ends it.
+    static func keepingAlive(_ ssh: [String]) -> [String] {
+        // $ka is unquoted on purpose: four words or none
+        let line = CommandRestore.shellQuotedLine(Array(ssh.dropLast(2))) + " $ka "
+            + CommandRestore.shellQuotedLine(Array(ssh.suffix(2)))
+        return ["/bin/sh", "-c", keepAliveCheck(Array(ssh.dropFirst().dropLast())) + "; exec " + line]
     }
 
     /// One ssh invocation attaching to `daemon` on `host`, for the lifetime of the pane.
@@ -256,6 +277,11 @@ public enum RemoteSession {
     private static func validate(host: String) throws {
         guard !host.isEmpty else { throw InvocationError.emptyHost }
         guard isHost(host) else { throw InvocationError.invalidHost }
+    }
+
+    private static func validate(endpoint: ControlZmxEndpoint, daemon: String) throws {
+        guard ZmxSupport.isDaemonName(daemon) || ZmxSupport.isScratchDaemonName(daemon) else { throw InvocationError.invalidSession }
+        guard isPath(endpoint.executable), isPath(endpoint.socketDirectory) else { throw InvocationError.invalidEndpoint }
     }
 
     /// isHost reports whether `value` may be handed to ssh as its destination argument.

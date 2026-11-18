@@ -62,10 +62,14 @@ struct SocketClient {
     }
 
     /// Write one request line (newline excluded) and return the response line undecoded, so a relay passes through
-    /// commands and fields this build does not model.
-    func sendRaw(_ request: Data) throws -> Data {
+    /// commands and fields this build does not model. With a `timeout`, a reply that takes longer is no reply.
+    func sendRaw(_ request: Data, timeout: TimeInterval? = nil) throws -> Data {
         let fd = try connect()
         defer { close(fd) }
+        if let timeout {
+            var limit = timeval(tv_sec: Int(timeout), tv_usec: 0)
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
+        }
         try Self.writeAll(fd, request + Data([UInt8(ascii: "\n")]))
         guard let line = Self.readLine(fd) else { throw SocketClientError("no response from \(path)") }
         return line

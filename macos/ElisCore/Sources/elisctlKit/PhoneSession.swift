@@ -52,6 +52,10 @@ final class PhoneSession: @unchecked Sendable {
     private var grids: [String: [Data]] = [:]
     /// Keeps pipelined requests in order, and holds a hung app to one blocked thread per phone.
     private let work = DispatchQueue(label: "elisctl.mobile.phone")
+    /// Set once `{"mux":1}` is answered; from then on every byte is a frame.
+    private var link: PhoneLinkSession?
+    /// Between `{"mux":1}` and its answer: later bytes are frames, held in `buffer` for the link.
+    private var upgrading = false
 
     /// `onEnd` runs once, on `queue`, when the session closes.
     init(_ connection: any PhoneTransportConnection, order: Int, queue: DispatchQueue, settings: Settings,
@@ -91,6 +95,7 @@ final class PhoneSession: @unchecked Sendable {
     func close() {
         guard !ended else { return }
         ended = true
+        link?.close(reason: "phone disconnected") // before the log: a channel's own lines come first
         if token != nil { settings.log("phone disconnected from \(connection.peerLabel)") }
         closing = true
         revoke?.cancel()
@@ -103,8 +108,9 @@ final class PhoneSession: @unchecked Sendable {
 
     private func receive(_ data: Data) {
         guard !closing else { return }
+        if let link { return link.receive(data) }
         buffer.append(data)
-        while !closing, let newline = buffer.firstIndex(of: 0x0A) {
+        while !closing, !upgrading, let newline = buffer.firstIndex(of: 0x0A) {
             let line = Data(buffer[buffer.startIndex..<newline])
             buffer.removeSubrange(buffer.startIndex...newline)
             handle(line)
@@ -113,14 +119,12 @@ final class PhoneSession: @unchecked Sendable {
     }
 
     private func handle(_ line: Data) {
-        var object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] ?? [:]
-        let id = (try? JSONSerialization.data(withJSONObject: object.removeValue(forKey: "id") ?? NSNull(),
-                                               options: .fragmentsAllowed)) ?? Data("null".utf8)
         if let token {
             if revoked(token) { return close() } // by `mobile reset`
-            forward(object, id: id)
-            return
+            if PhoneLinkUpgrade.isRequest(line) { return upgrade() }
+            return request(line) { [weak self] in self?.send($0) }
         }
+        let (object, id) = Self.parse(line)
         guard let offered = object["auth"] as? String, tokenMatches(offered) else {
             settings.log("refused \(connection.peerLabel): wrong token")
             closing = true // lines already sent are not more attempts
@@ -139,19 +143,67 @@ final class PhoneSession: @unchecked Sendable {
         }
     }
 
-    private func forward(_ request: [String: Any], id: Data) {
+    /// Answers after every earlier request, then hands the link the frames that came after the upgrade line.
+    private func upgrade() {
+        upgrading = true
+        work.async { [self] in
+            queue.async { [self] in
+                guard !closing else { return }
+                connection.send(PhoneLinkUpgrade.answer) { [self] in
+                    guard !closing else { return }
+                    let link = PhoneLinkSession(
+                        send: { [weak self] bytes, done in
+                            guard let self, !closing else { return done() }
+                            connection.send(bytes, completion: done)
+                        },
+                        forward: { [weak self] line, reply in
+                            guard let self, let token else { return }
+                            if revoked(token) { return close() }
+                            request(line, reply: reply)
+                        },
+                        revoked: { [weak self] in
+                            guard let self, let token else { return true }
+                            return revoked(token)
+                        },
+                        socketPath: settings.socketPath, queue: queue, peer: connection.peerLabel,
+                        window: connection is BlePhoneLink ? 16384 : 262_144, log: settings.log, clock: Date.init)
+                    link.onEnd = { [weak self] in self?.close() }
+                    self.link = link
+                    let held = buffer
+                    buffer = Data()
+                    link.receive(held)
+                }
+            }
+        }
+    }
+
+    private func request(_ line: Data, reply: @escaping (Data) -> Void) {
+        let (object, id) = Self.parse(line)
+        forward(object, id: id, reply: reply)
+    }
+
+    /// The request without its `id`, and the `id`'s JSON to splice into the answer.
+    private static func parse(_ line: Data) -> ([String: Any], Data) {
+        var object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] ?? [:]
+        let id = (try? JSONSerialization.data(withJSONObject: object.removeValue(forKey: "id") ?? NSNull(),
+                                               options: .fragmentsAllowed)) ?? Data("null".utf8)
+        return (object, id)
+    }
+
+    private func forward(_ request: [String: Any], id: Data, reply: @escaping (Data) -> Void) {
         let body = (try? JSONSerialization.data(withJSONObject: request, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data("{}".utf8)
         let socketPath = settings.socketPath
         let grid = Self.gridClaim(request)
-        // a paired phone must not switch the relay off, revoke its pairing or read the link
-        let refused = (request["cmd"] as? String)?.hasPrefix("phone.") == true
+        // a paired phone must not switch the relay off, revoke its pairing or read the link, nor get an argv to run
+        let cmd = request["cmd"] as? String ?? ""
+        let refusal = cmd.hasPrefix("phone.") ? "phone.*" : cmd == Command.sessionAttach.rawValue ? cmd : nil
         // holds the session: a request queued before the phone left still runs, and its grid is then released
         work.async { [self] in
             let answer: Data
             do {
                 // on the phone's queue, so the refusal keeps its place among earlier answers
-                answer = refused ? Self.encode(ControlResponse(ok: false, error: "phone.* is not available from a phone"))
-                    : try SocketClient(path: socketPath).sendRaw(body)
+                answer = try refusal.map { Self.encode(ControlResponse(ok: false, error: "\($0) is not available from a phone")) }
+                    ?? SocketClient(path: socketPath).sendRaw(body)
             } catch {
                 answer = Self.encode(ControlResponse(ok: false, error: "Elis is not reachable: \(error)"))
             }
@@ -165,7 +217,7 @@ final class PhoneSession: @unchecked Sendable {
                         if self.closing { self.releaseGrids() } // the phone left while this one was in flight
                     }
                 }
-                self.send(Self.tagged(answer, id: id))
+                reply(Self.tagged(answer, id: id)) // both replies drop it once the phone left
             }
         }
     }

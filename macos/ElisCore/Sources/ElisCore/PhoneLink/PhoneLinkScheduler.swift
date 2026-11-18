@@ -8,6 +8,8 @@ public struct PhoneLinkScheduler: Sendable {
     private let bufferLimit: Int
     private var queues: [UInt32: Data] = [:]
     private var credits: [UInt32: UInt32] = [:]
+    /// Bytes sent on each vt channel since the phone's last CREDIT there; a reopen keeps it.
+    private var sentSinceGrant: [UInt32: Int] = [:]
     private var opened: [UInt32] = []
     private var cursor = 0
 
@@ -17,6 +19,7 @@ public struct PhoneLinkScheduler: Sendable {
     }
 
     public var pendingBytes: Int { queues.values.reduce(0) { $0 + $1.count } }
+    public func pendingBytes(channel: UInt32) -> Int { queues[channel]?.count ?? 0 }
 
     public mutating func enqueue(channel: UInt32, _ bytes: Data) -> Enqueue {
         if channel < 2 {
@@ -40,8 +43,12 @@ public struct PhoneLinkScheduler: Sendable {
         if !opened.contains(channel) { opened.append(channel) }
     }
 
+    /// Whether a full window went out on `channel` since the phone's last CREDIT there (since open if none came).
+    public func windowSpent(channel: UInt32) -> Bool { (sentSinceGrant[channel] ?? 0) >= Int(window) }
+
     public mutating func grant(channel: UInt32, bytes: UInt32) {
         guard channel >= 2, let current = credits[channel] else { return }
+        sentSinceGrant[channel] = 0
         let (sum, overflow) = current.addingReportingOverflow(bytes)
         credits[channel] = overflow ? .max : sum
     }
@@ -50,6 +57,7 @@ public struct PhoneLinkScheduler: Sendable {
         guard channel >= 2 else { return }
         queues[channel] = nil
         credits[channel] = nil
+        sentSinceGrant[channel] = nil
         if let index = opened.firstIndex(of: channel) {
             opened.remove(at: index)
             if index < cursor { cursor -= 1 }
@@ -67,6 +75,7 @@ public struct PhoneLinkScheduler: Sendable {
             let limit = min(cap, Int(credits[channel] ?? 0))
             if let frame = take(channel: channel, limit: limit) {
                 credits[channel, default: 0] -= UInt32(frame.payload.count)
+                sentSinceGrant[channel, default: 0] += frame.payload.count
                 cursor = (index + 1) % opened.count
                 return frame
             }

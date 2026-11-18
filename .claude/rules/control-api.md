@@ -236,12 +236,55 @@ protocol command. `phone.*` is the protocol face of the app's `PhoneRelay`. elis
 `session.scroll` and all `phone.*` unserved, a page cannot send `phone.*` (`HtmlBridge` refuses them), and the relay
 refuses `phone.*` from a phone. `site/commands.html#phone` owns the rest.
 
-`session.attach` answers `result.attach = {argv, paneID}`: a zmx viewer attach that never claims, never leads
+Relay mux (M4a). The spec `docs/superpowers/specs/2026-11-18-phone-terminal-stream-design.md` owns the frame
+format; this paragraph owns the relay's behavior and the wire contract the phone (M4b) builds on.
+After auth a phone sends `{"mux":1}`;
+the relay answers after all earlier answers, then speaks PhoneLink frames.
+Channel 0 carries control lines through the same serial path as the line protocol
+(order kept, grids released on disconnect); `session.attach` and `phone.*` are refused on both protocols.
+Channel 1 carries events from a queue bounded at 256 KiB: when full, the oldest rows go and one
+`{"dropped":N}` line follows; after a read error, `{"dropped":N}` then `{"gap":true}`.
+Channels 2 and up are vt panes; `PhoneLinkSession` and `PhoneLinkTerminal` own the refusal texts and caps.
+OPEN, then `session.attach` (10 s), a `screen` read and OPENED, then bytes by credit.
+At most 8 vt channels per phone; a closed channel keeps its slot until its attach request returns.
+A re-attach names the pane by `paneID`, so it cannot land on the pane that took the role since.
+An overflow stops the old attach and re-attaches with a 1 s backoff that doubles to 30 s
+while overflows recur within 10 s; the channel stays open and RESYNC resets the credit window on both sides.
+A full window unacknowledged for 30 s closes the channel with reason `stalled`.
+The phone is closed by a bad frame, an over-long control line, more than 4 MiB of channel-0 answers waiting,
+or more than 256 OPENED, RESYNC, GRID and CLOSE frames waiting (`phone link overflow from <ip>`).
+
+Wire contract for the phone (M4b):
+
+- GRID always follows RESYNC, changed or not; both go before any new DATA.
+- A `{"dropped":N}` line also means "re-read `tree`": tree rows may be among the dropped.
+- CLOSE reasons are free text (`session ended`, `stalled`, `pane moved`, `could not read the pane's size`,
+  `could not start the attach: …`, or the app's refusal). CLOSE discards undelivered DATA.
+  The relay does not answer a phone CLOSE.
+- The duplicate-OPEN refusal is the text `channel already open` and can arrive before the real OPENED;
+  the existing stream continues.
+- OPENED `{"error":"revoked"}` is followed by the link closing.
+- The phone sends CREDIT at least once per window consumed, and a zero-byte CREDIT clears the stall clock.
+  A CREDIT in flight across RESYNC can let the relay send up to one extra window.
+- LEAD and relay-to-phone CREDIT are not sent in M4a. Channel ids are used once per link.
+- Priority is strict 0 > 1 > vt: a large `tree` answer on Bluetooth holds every vt channel until it is out.
+- Grid poll: every 2 s for a local pane, every 30 s for a remote one.
+- A relay killed by a signal prints no per-pane detach lines: viewer processes end by SIGHUP,
+  and the app resets its viewers.
+
+`session.attach` answers `result.attach = {argv, paneID, screen, remote}`:
+`screen` is the zmx `screen` argv for the same daemon (the relay reads the grid with it),
+and `remote` is true for an origin's pane.
+Remote viewer and screen argvs run through the ssh keepalive wrapper.
+It is a zmx viewer attach that never claims, never leads
 and skips scrollback (`ZMX_MANAGED_SCREEN_ONLY`, `ZMX_MANAGED_FOLLOW`; patch 0007, see the zmx patches README).
 A zmx older than 0007, or a daemon started before the update (the daemon's own zmx acts on the flags),
 ignores both variables: full scrollback, and it may lead an unowned daemon.
 A follow viewer of a session nobody leads is told role `unowned`;
 a relay must not take it as a cue to reattach or lead, as `PaneLead.report` does for the Mac's own surfaces.
+A local daemon older than the current zmx build is refused (`predatesZmxBuild`):
+`session predates this version; restart it to watch it on the phone`;
+a remote one is left to the relay's re-attach backoff.
 The Mac answers it locally for its own Live panes, rows attached from another Mac and elis-server rows,
 and elis-server's socket serves its own panes. No ssh ControlPath: each attach opens its own ssh connection.
 Page rows and the page bridge refuse it. `elisctl session attach` execs the argv; `--json` prints the response and execs nothing.

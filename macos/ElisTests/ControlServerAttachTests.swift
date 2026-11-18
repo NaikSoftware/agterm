@@ -23,11 +23,18 @@ final class ControlServerAttachTests: XCTestCase {
         try await super.tearDown()
     }
 
-    private func makeServer() -> ControlServer {
+    private func makeServer(zmxClient: ZmxClient? = nil, outdatedBefore: Date? = nil) -> ControlServer {
         ControlServer(library: library, actions: AppActions(library: library),
                       settingsModel: SettingsModel(library: library, settingsStore: SettingsStore(directory: stateDir)),
-                      identity: AppIdentity(version: "test", commit: "test"), zmxClient: client,
-                      socketPath: stateDir.appendingPathComponent("control.sock").path)
+                      identity: AppIdentity(version: "test", commit: "test"), zmxClient: zmxClient ?? client,
+                      zmxOutdatedBefore: outdatedBefore, socketPath: stateDir.appendingPathComponent("control.sock").path)
+    }
+
+    /// A server whose `zmx list` reports the session's daemon created at `created` seconds, against a cutoff of 1000.
+    private func makeServer(daemonOf session: Session, created: Int) -> ControlServer {
+        let row = "name=\(ZmxSupport.daemonName(for: session.paneIdentity))\tpid=200\tclients=1\tcreated=\(created)"
+        let listing = ZmxClient(executablePath: "/tmp/zmx", socketDirectory: "/tmp/zmx-dir", runner: { _ in row })
+        return makeServer(zmxClient: listing, outdatedBefore: Date(timeIntervalSince1970: 1000))
     }
 
     /// A row whose panes carry `ELIS_PANE_ID` tokens; never put in a window, so nothing launches.
@@ -62,7 +69,7 @@ final class ControlServerAttachTests: XCTestCase {
         attach.map {
             ControlAttach(argv: $0.argv.map { $0.replacingOccurrences(of: "ZMX_MANAGED=[0-9a-f]+", with: "ZMX_MANAGED=*",
                                                                        options: .regularExpression) },
-                          paneID: $0.paneID)
+                          paneID: $0.paneID, screen: $0.screen, remote: $0.remote)
         }
     }
 
@@ -209,5 +216,26 @@ final class ControlServerAttachTests: XCTestCase {
         XCTAssertTrue(response.ok, response.error ?? "")
         let expected = try ControlAttach.viewer(.remote(host: "box", endpoint: splitEndpoint, daemon: ZmxSupport.daemonName(for: split)), paneID: paneID)
         XCTAssertEqual(masked(response.result?.attach), masked(expected))
+    }
+
+    func testOutdatedLocalDaemonIsRefused() async throws {
+        let (_, session) = try makeSession(live: true)
+        let server = makeServer(daemonOf: session, created: 999)
+
+        let response = await attach(server, session.id.uuidString)
+
+        XCTAssertFalse(response.ok)
+        XCTAssertEqual(response.error, "session predates this version; restart it to watch it on the phone")
+        XCTAssertNil(response.result?.attach)
+    }
+
+    func testCurrentLocalDaemonIsServed() async throws {
+        let (_, session) = try makeSession(live: true)
+        let server = makeServer(daemonOf: session, created: 1000)
+
+        let response = await attach(server, session.id.uuidString)
+
+        XCTAssertTrue(response.ok, response.error ?? "")
+        XCTAssertNotNil(response.result?.attach)
     }
 }

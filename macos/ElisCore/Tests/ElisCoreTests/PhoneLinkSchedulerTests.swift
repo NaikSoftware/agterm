@@ -17,6 +17,24 @@ import Testing
         #expect(scheduler.next(maxChunk: 10) == nil)
     }
 
+    @Test func windowSpentCountsFromTheLastGrantAcrossReopen() {
+        var scheduler = PhoneLinkScheduler(window: 10, bufferLimit: 1000)
+        scheduler.open(channel: 2)
+        _ = scheduler.enqueue(channel: 2, bytes(25))
+        _ = scheduler.next(maxChunk: 6)
+        #expect(!scheduler.windowSpent(channel: 2))
+        _ = scheduler.next(maxChunk: 6)
+        #expect(scheduler.windowSpent(channel: 2))
+        // a reopen (RESYNC) refills the credit but is no CREDIT from the phone
+        scheduler.open(channel: 2)
+        #expect(scheduler.windowSpent(channel: 2))
+        scheduler.grant(channel: 2, bytes: 4)
+        #expect(!scheduler.windowSpent(channel: 2))
+        scheduler.close(channel: 2)
+        scheduler.open(channel: 2)
+        #expect(!scheduler.windowSpent(channel: 2))
+    }
+
     @Test func noCreditDoesNotBlockControl() {
         var scheduler = PhoneLinkScheduler(window: 0, bufferLimit: 1000)
         scheduler.open(channel: 2)
@@ -177,5 +195,17 @@ import Testing
         scheduler.close(channel: 2)
         #expect(scheduler.pendingBytes == 0)
         #expect(scheduler.next(maxChunk: 10) == nil)
+    }
+
+    @Test func pendingBytesPerChannel() {
+        var scheduler = PhoneLinkScheduler(window: 0, bufferLimit: 1000)
+        scheduler.open(channel: 2)
+        _ = scheduler.enqueue(channel: 1, bytes(7))
+        _ = scheduler.enqueue(channel: 2, bytes(5))
+        #expect(scheduler.pendingBytes(channel: 1) == 7)
+        #expect(scheduler.pendingBytes(channel: 2) == 5)
+        #expect(scheduler.pendingBytes(channel: 0) == 0)
+        _ = scheduler.next(maxChunk: 3)
+        #expect(scheduler.pendingBytes(channel: 1) == 4)
     }
 }
