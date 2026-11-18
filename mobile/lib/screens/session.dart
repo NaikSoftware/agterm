@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../client.dart';
 import '../model.dart';
+import '../terminal/row_cache.dart';
 import '../terminal/term_session.dart';
 import '../terminal/terminal_view.dart';
 import '../terminal/vt.dart';
@@ -420,8 +421,8 @@ class _SessionScreenState extends State<SessionScreen> {
   // wheel notches (session scroll), which a TUI such as Claude Code reads as its own scrolling
   bool get _remoteScroll => !scrollback && m.fitted.containsKey(_fitKey);
 
-  void _drag(DragUpdateDetails d) {
-    _dragRows += d.delta.dy / (_fit * 1.3);
+  void _drag(DragUpdateDetails d, double rowHeight) {
+    _dragRows += d.delta.dy / rowHeight;
     if (!_scrolling) _sendScroll();
   }
 
@@ -433,7 +434,10 @@ class _SessionScreenState extends State<SessionScreen> {
     final err = await m.act('session.scroll', target: widget.sessionId, args: {'pane': pane, 'lines': -rows});
     _scrolling = false;
     if (!mounted) return;
-    if (err != null) return report(context, err);
+    if (err != null) {
+      _dragRows = 0;
+      return report(context, err);
+    }
     unawaited(_load());
     _sendScroll(); // what the finger moved meanwhile
   }
@@ -446,12 +450,20 @@ class _SessionScreenState extends State<SessionScreen> {
       );
 
   // the grid scaled to the width; taller than the box, the bottom rows (the cursor's) stay in view
+  // a live stream has no phone-side history, so a drag always scrolls the program
   Widget _termView(TermSession t) {
-    return SingleChildScrollView(
-      key: const Key('term'),
-      reverse: true,
-      padding: const EdgeInsets.all(12),
-      child: TerminalView(snapshot: t.snapshot, hold: t.hold, columns: m.fitted[_fitKey]?.$1 ?? (autoFit.wanted ? _fitColumns() : null)),
+    final columns = m.fitted[_fitKey]?.$1 ?? (autoFit.wanted ? _fitColumns() : null);
+    return LayoutBuilder(
+      builder: (context, box) => GestureDetector(
+        onVerticalDragUpdate: (d) => _drag(d, CellMetrics.fit(box.maxWidth - 24, columns ?? t.snapshot?.cols ?? 80).h),
+        child: SingleChildScrollView(
+          key: const Key('term'),
+          reverse: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(12),
+          child: TerminalView(snapshot: t.snapshot, hold: t.hold, columns: columns),
+        ),
+      ),
     );
   }
 
@@ -480,7 +492,7 @@ class _SessionScreenState extends State<SessionScreen> {
             padding: const EdgeInsets.all(12),
             child: SizedBox(width: double.infinity, child: body),
           );
-          return _remoteScroll ? GestureDetector(onVerticalDragUpdate: _drag, child: view) : view;
+          return _remoteScroll ? GestureDetector(onVerticalDragUpdate: (d) => _drag(d, _fit * 1.3), child: view) : view;
         });
 
   Widget _answers(List<PromptOption> options) => Padding(

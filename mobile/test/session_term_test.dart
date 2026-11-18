@@ -8,6 +8,7 @@ import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/link/messages.dart';
 import 'package:elis_mobile/model.dart';
 import 'package:elis_mobile/screens/session.dart';
+import 'package:elis_mobile/terminal/row_cache.dart';
 import 'package:elis_mobile/terminal/terminal_view.dart';
 import 'package:elis_mobile/terminal/vt.dart';
 import 'package:elis_mobile/theme.dart';
@@ -31,6 +32,8 @@ class Relay {
   final frames = <LinkFrame>[];
   final calls = <String>[];
   final grids = <Map>[]; // session.grid arguments
+  final scrolls = <Map>[]; // session.scroll arguments
+  final refused = <String>{}; // commands answered with an error
   final _decoder = LinkDecoder();
   final _lines = LineBuffer();
   final _control = LineBuffer();
@@ -60,6 +63,11 @@ class Relay {
       final r = jsonDecode(line) as Map;
       calls.add(r['cmd']);
       if (r['cmd'] == 'session.grid') grids.add(r['args'] as Map);
+      if (r['cmd'] == 'session.scroll') scrolls.add(r['args'] as Map);
+      if (refused.contains(r['cmd'])) {
+        send(frame(LinkKind.data, 0, utf8.encode('${jsonEncode({'id': r['id'], 'ok': false, 'error': 'refused ${r['cmd']}'})}\n')));
+        continue;
+      }
       final result = switch (r['cmd']) {
         'tree' => {'tree': tree},
         'events.read' => {
@@ -500,6 +508,40 @@ void main() {
     await h.retree(treeOf(live: false));
     expect(h.r.closes, [2]);
     expect(find.byType(TerminalView), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('termDragScrollsTheProgram', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await t.pump();
+    final term = find.byKey(const Key('term'));
+    final cols = h.m.fitted['s1/left']?.$1 ?? h.vts.single.cols;
+    final row = CellMetrics.fit(t.getSize(term).width - 24, cols).h;
+    final g = await t.startGesture(t.getCenter(term));
+    await g.moveBy(Offset(0, 3 * row));
+    await g.up();
+    await t.pump();
+    expect(h.r.scrolls, [
+      {'pane': 'left', 'lines': -3},
+    ]);
+    await h.stop();
+  });
+
+  testWidgets('termDragErrorIsReportedOnce', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await t.pump();
+    h.r.refused.add('session.scroll');
+    final g = await t.startGesture(t.getCenter(find.byKey(const Key('term'))));
+    await g.moveBy(const Offset(0, 200));
+    await g.up();
+    await t.pump();
+    await t.pump();
+    expect(find.text('refused session.scroll'), findsOneWidget);
+    expect(h.r.scrolls, hasLength(1));
     await h.stop();
   });
 
