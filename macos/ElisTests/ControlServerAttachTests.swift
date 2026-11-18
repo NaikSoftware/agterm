@@ -31,10 +31,12 @@ final class ControlServerAttachTests: XCTestCase {
     }
 
     /// A row whose panes carry `ELIS_PANE_ID` tokens; never put in a window, so nothing launches.
-    private func makeSession(live: Bool, split: Bool = false) throws -> (store: AppStore, session: Session) {
+    /// `realized: false` leaves the slots empty, as for a pane never shown since launch.
+    private func makeSession(live: Bool, split: Bool = false, realized: Bool = true) throws -> (store: AppStore, session: Session) {
         let store = try XCTUnwrap(library.activeStore)
         let workspace = try XCTUnwrap(store.currentWorkspaceID)
         let session = try XCTUnwrap(store.addSession(toWorkspace: workspace, cwd: NSTemporaryDirectory()))
+        guard realized else { return (store, session) }
         session.surface = view(token: session.paneIdentity.uuidString, live: live)
         if split {
             store.toggleSplit(session.id)
@@ -148,5 +150,64 @@ final class ControlServerAttachTests: XCTestCase {
         session.catalogPanes[session.paneIdentity]?.held = true
         let held = await attach(server, session.id.uuidString)
         XCTAssertEqual(held.error, "\(session.id.uuidString) is not a Live session")
+    }
+
+    func testAPaneNeverRealizedIsNotRealizedOnEveryRowKind() async throws {
+        let server = makeServer()
+        let (_, local) = try makeSession(live: true, realized: false)
+        let (store, attached) = try makeSession(live: false, realized: false)
+        store.bindRemote(RemoteBinding(remoteSessionID: "r", daemonsByLocalPane: [attached.paneIdentity: "d"], presentationVersion: 1,
+                                       origin: .init(host: "mini", endpoint: originEndpoint, sessionName: "r")),
+                         forSession: attached.id)
+        let (_, catalog) = try makeSession(live: false, realized: false)
+        store.bindRemote(RemoteBinding(remoteSessionID: "s", daemonsByLocalPane: [:], presentationVersion: 1,
+                                       origin: .init(host: "box", endpoint: originEndpoint, sessionName: "s"), catalogOwned: true,
+                                       originHeadless: true),
+                         forSession: catalog.id)
+        catalog.catalogPanes = [catalog.paneIdentity: CatalogPane(identity: catalog.paneIdentity, daemon: "d", endpoint: originEndpoint)]
+
+        for session in [local, attached, catalog] {
+            let response = await attach(server, session.id.uuidString)
+            XCTAssertEqual(response.error, "session not realized")
+        }
+    }
+
+    func testAttachedRowSplitPaneUsesItsSplitDaemon() async throws {
+        let server = makeServer()
+        let (store, session) = try makeSession(live: false, split: true)
+        let split = try XCTUnwrap(session.splitPaneIdentity)
+        let splitDaemon = ZmxSupport.daemonName(for: UUID())
+        store.bindRemote(RemoteBinding(remoteSessionID: "r", daemonsByLocalPane: [session.paneIdentity: "primary", split: splitDaemon],
+                                       presentationVersion: 1, origin: .init(host: "mini", endpoint: originEndpoint, sessionName: "r")),
+                         forSession: session.id)
+        let paneID = try XCTUnwrap(treePaneID(store, session, kind: "right"))
+
+        let response = await attach(server, session.id.uuidString, args: ControlArgs(pane: "right"))
+
+        XCTAssertTrue(response.ok, response.error ?? "")
+        XCTAssertEqual(masked(response.result?.attach),
+                       masked(try ControlAttach.viewer(.remote(host: "mini", endpoint: originEndpoint, daemon: splitDaemon), paneID: paneID)))
+    }
+
+    func testServerWindowRowSplitPaneUsesItsCatalogPane() async throws {
+        let server = makeServer()
+        let (store, session) = try makeSession(live: false, split: true)
+        let split = try XCTUnwrap(session.splitPaneIdentity)
+        let splitEndpoint = ControlZmxEndpoint(executable: "/srv/zmx", socketDirectory: "/srv/zmx-split")
+        store.bindRemote(RemoteBinding(remoteSessionID: "s", daemonsByLocalPane: [:], presentationVersion: 1,
+                                       origin: .init(host: "box", endpoint: originEndpoint, sessionName: "s"), catalogOwned: true,
+                                       originHeadless: true),
+                         forSession: session.id)
+        session.catalogPanes = [
+            session.paneIdentity: CatalogPane(identity: session.paneIdentity, daemon: "primary", endpoint: originEndpoint),
+            split: CatalogPane(identity: split, daemon: ZmxSupport.daemonName(for: split), endpoint: splitEndpoint),
+        ]
+        let paneID = try XCTUnwrap(treePaneID(store, session, kind: "right"))
+
+        let response = await attach(server, session.id.uuidString, args: ControlArgs(pane: "right"))
+
+        XCTAssertTrue(response.ok, response.error ?? "")
+        let expected = try ControlAttach.viewer(.remote(host: "box", endpoint: splitEndpoint, daemon: ZmxSupport.daemonName(for: split)), paneID: paneID)
+        XCTAssertEqual(masked(response.result?.attach), masked(expected))
     }
 }

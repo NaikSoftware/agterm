@@ -19,6 +19,10 @@ extension ControlServer {
             guard let identity = split ? (session.hasSplit ? session.splitPaneIdentity : nil) : session.paneIdentity else {
                 return ControlResponse(ok: false, error: "session has no split pane")
             }
+            // a pane never shown since launch has no surface, so no token and no zmx backing to read
+            guard (split ? session.splitSurface : session.surface) != nil else {
+                return ControlResponse(ok: false, error: "session not realized")
+            }
             let refusal = ControlResponse(ok: false, error: "\(target ?? "active") is not a Live session")
             let token = session.paneToken(for: split ? .right : .left)
             guard !token.isEmpty, let source = liveSource(session, identity: identity, split: split),
