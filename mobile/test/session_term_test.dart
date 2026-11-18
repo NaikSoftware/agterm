@@ -30,6 +30,7 @@ class Relay {
   final _input = StreamController<Uint8List>();
   final frames = <LinkFrame>[];
   final calls = <String>[];
+  final grids = <Map>[]; // session.grid arguments
   final _decoder = LinkDecoder();
   final _lines = LineBuffer();
   final _control = LineBuffer();
@@ -58,6 +59,7 @@ class Relay {
     for (var line = _control.next(); line != null; line = _control.next()) {
       final r = jsonDecode(line) as Map;
       calls.add(r['cmd']);
+      if (r['cmd'] == 'session.grid') grids.add(r['args'] as Map);
       final result = switch (r['cmd']) {
         'tree' => {'tree': tree},
         'events.read' => {
@@ -278,6 +280,20 @@ void main() {
     await t.pump();
     await t.pump();
     expect(find.byType(TerminalView), findsOneWidget);
+    await h.stop();
+  });
+
+  testWidgets('aFitSizesTheEmulatorBeforeTheRelayReportsIt', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened(cols: 200, rows: 60);
+    final fit = h.r.grids.single;
+    expect((h.vts.single.cols, h.vts.single.rows), (fit['columns'], fit['rows']));
+    await t.tap(find.byKey(const Key('fitPhone'))); // Restore PC size: the relay's Grid says the Mac's size
+    await t.pump();
+    h.r.send(frame(LinkKind.grid, 2, LinkFrame.resize(2, 200, 60).payload));
+    await t.pump();
+    expect((h.vts.single.cols, h.vts.single.rows), (200, 60));
     await h.stop();
   });
 

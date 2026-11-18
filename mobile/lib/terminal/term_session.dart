@@ -28,6 +28,7 @@ class TermSession extends ChangeNotifier {
   bool _closed = false, _dirty = false;
   VtSnapshot? _snapshot;
   bool _hold = false;
+  (int, int)? _fit; // the grid the phone asked for, which the relay reports up to 2 s after the program draws at it
 
   /// Why the stream ended (a refusal, a relay CLOSE, `Disconnected`); null while it runs or after [close].
   String? ended;
@@ -73,7 +74,7 @@ class TermSession extends ChangeNotifier {
     try {
       switch (e) {
         case Opened(:final cols, :final rows):
-          _vt ??= _makeVt(cols, rows);
+          _vt ??= _makeVt(_fit?.$1 ?? cols, _fit?.$2 ?? rows);
         case Data(:final bytes):
           try {
             _vt?.write(bytes); // bytes before a Resync too: the reset follows
@@ -83,6 +84,7 @@ class TermSession extends ChangeNotifier {
         case Resync():
           _vt?.reset(); // a Grid follows
         case Grid(:final cols, :final rows):
+          _fit = null; // the relay's report is the truth from now on
           _vt?.resize(cols, rows);
         case Closed(:final reason):
           return _end(reason);
@@ -92,6 +94,16 @@ class TermSession extends ChangeNotifier {
       unawaited(_ch?.close());
       return _end('The terminal view is not available: $err');
     }
+    _dirty = true;
+    notifyListeners();
+  }
+
+  /// The Mac took the phone's grid: size the emulator now, as the program redraws at once.
+  void fitted(int cols, int rows) {
+    _fit = (cols, rows);
+    final vt = _vt;
+    if (vt == null || _closed) return;
+    vt.resize(cols, rows);
     _dirty = true;
     notifyListeners();
   }

@@ -261,6 +261,7 @@ class _SessionScreenState extends State<SessionScreen> {
         final rows = max(5, (_height / (size * 1.3)).floor()); // the text's line height is 1.3
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'columns': columns, 'rows': rows});
         m.fitted[key] = (columns, rows);
+        if (term case final t? when '${widget.sessionId}/${t.pane}' == key) t.fitted(columns, rows); // not a pane switched to meanwhile
       } else {
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'reset': true});
         m.fitted.remove(key);
