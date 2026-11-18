@@ -34,7 +34,9 @@ mkdir -p "$out"
 # the source tree is recreated each run so a removed file cannot reach the build; the named volume keeps the
 # installed SDK and SwiftPM's scratch path, at the same tree path so its incremental state stays valid; the tree and
 # the scratch path are per architecture, so two builds can run at once
-docker run --rm --cpus 8 -v "$ROOT:/src:ro" -v "$bundle:/sdk.tar.gz:ro" -v elis-server-build:/build -v "$out:/out" \
+# the daemon rejects --cpus above its VM's count (Rancher Desktop defaults to fewer than 8)
+cpus="$(docker info --format '{{.NCPU}}')"; ((cpus > 8)) && cpus=8
+docker run --rm --cpus "$cpus" -v "$ROOT:/src:ro" -v "$bundle:/sdk.tar.gz:ro" -v elis-server-build:/build -v "$out:/out" \
   -e SDK="$SDK" -e ARCH="$arch" -e VERSION="$version" "$SWIFT_IMAGE" bash -euo pipefail -c '
     swift sdk list --swift-sdks-path /build/sdks | grep -qx "$SDK" \
       || swift sdk install --swift-sdks-path /build/sdks /sdk.tar.gz >/dev/null
