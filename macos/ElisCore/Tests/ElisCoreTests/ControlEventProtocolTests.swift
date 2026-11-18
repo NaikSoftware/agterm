@@ -37,6 +37,8 @@ struct ControlEventProtocolTests {
             ControlEvent(seq: 15, ts: 15.5, kind: .phoneConnected, payload: ControlEventPayload(ip: "10.0.0.5")),
             ControlEvent(seq: 16, ts: 16.5, kind: .phoneDisconnected, payload: ControlEventPayload(ip: "10.0.0.5")),
             ControlEvent(seq: 17, ts: 17.5, kind: .phoneRefused, payload: ControlEventPayload(ip: "::1")),
+            ControlEvent(seq: 18, ts: 18.5, kind: .phoneAttached, payload: ControlEventPayload(paneID: "tok", ip: "10.0.0.5")),
+            ControlEvent(seq: 19, ts: 19.5, kind: .phoneDetached, payload: ControlEventPayload(paneID: "tok")),
         ]
 
         let data = try JSONEncoder().encode(events)
@@ -81,6 +83,8 @@ struct ControlEventProtocolTests {
             ControlEvent(seq: 15, ts: 15.5, kind: .phoneConnected, payload: ControlEventPayload(ip: "10.0.0.5")),
             ControlEvent(seq: 16, ts: 16.5, kind: .phoneDisconnected, payload: ControlEventPayload(ip: "10.0.0.5")),
             ControlEvent(seq: 17, ts: 17.5, kind: .phoneRefused, payload: ControlEventPayload(ip: "::1")),
+            ControlEvent(seq: 18, ts: 18.5, kind: .phoneAttached, payload: ControlEventPayload(paneID: "tok", ip: "10.0.0.5")),
+            ControlEvent(seq: 19, ts: 19.5, kind: .phoneDetached, payload: ControlEventPayload(paneID: "tok")),
         ]
         let expected = [
             ##"{"kind":"status","payload":{"blink":true,"color":"#aabbcc","name":"api","pane":"right","##
@@ -101,6 +105,8 @@ struct ControlEventProtocolTests {
             ##"{"kind":"phone.connected","payload":{"ip":"10.0.0.5"},"seq":15,"ts":15.5}"##,
             ##"{"kind":"phone.disconnected","payload":{"ip":"10.0.0.5"},"seq":16,"ts":16.5}"##,
             ##"{"kind":"phone.refused","payload":{"ip":"::1"},"seq":17,"ts":17.5}"##,
+            ##"{"kind":"phone.attached","payload":{"ip":"10.0.0.5","paneID":"tok"},"seq":18,"ts":18.5}"##,
+            ##"{"kind":"phone.detached","payload":{"paneID":"tok"},"seq":19,"ts":19.5}"##,
         ]
 
         #expect(try events.map(canonicalJSON) == expected)

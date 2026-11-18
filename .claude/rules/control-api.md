@@ -20,7 +20,7 @@ paths:
 ## Control API
 
 - `elisctl` drives app/store actions over a local Unix socket. One-shot commands and polled
-  `events.read` are in scope; terminal-output streaming is not.
+  `events.read` are in scope; terminal-output streaming is not, except through `session.attach` for the phone relay.
 - `ElisCore` owns protocol types, target/socket resolution, and host-free dispatch.
   `ControlServer` owns the socket and app-side effects; blocking accept/read runs off-main and requests
   hop to the main actor. SwiftPM `elisctlKit` owns ArgumentParser and `SocketClient`.
@@ -235,6 +235,20 @@ over injectable effects, and no archive bytes are sent to the host until the tar
 protocol command. `phone.*` is the protocol face of the app's `PhoneRelay`. elis-server leaves `session.grid`,
 `session.scroll` and all `phone.*` unserved, a page cannot send `phone.*` (`HtmlBridge` refuses them), and the relay
 refuses `phone.*` from a phone. `site/commands.html#phone` owns the rest.
+
+`session.attach` answers `result.attach = {argv, paneID}`: a zmx viewer attach that never claims, never leads
+and skips scrollback (`ZMX_MANAGED_SCREEN_ONLY`, `ZMX_MANAGED_FOLLOW`; patch 0007, see the zmx patches README).
+A zmx older than 0007, or a daemon started before the update (the daemon's own zmx acts on the flags),
+ignores both variables: full scrollback, and it may lead an unowned daemon.
+A follow viewer of a session nobody leads is told role `unowned`;
+a relay must not take it as a cue to reattach or lead, as `PaneLead.report` does for the Mac's own surfaces.
+The Mac answers it locally for its own Live panes, rows attached from another Mac and elis-server rows,
+and elis-server's socket serves its own panes. No ssh ControlPath: each attach opens its own ssh connection.
+Page rows and the page bridge refuse it. `elisctl session attach` execs the argv; `--json` prints the response and execs nothing.
+The relay (`mobile serve`) prints `phone attached from <ip> pane <paneID>` and `phone detached ...` lines;
+the app turns them into `phone.attached` / `phone.detached` and `surfaces[].phoneViewers`.
+When the relay stops or restarts, every remaining viewer detaches with `ip=-`.
+elis-server's own tree omits `phoneViewers`, an approved exception (2026-11-18): the relay runs only on a Mac.
 Debug builds are ad-hoc signed with a bare `cdhash` requirement,
 so each rebuild asks for Bluetooth again at the relay's first start.
 
@@ -248,9 +262,14 @@ counts authenticated phones only, so replayed handshakes cannot lock out a paire
 and the 10 s auth timeout cover the rest. elisctl embeds an Info.plist (`ua.naiksoftware.elis.elisctl`, usage string)
 via `-sectcreate` in project.yml's Bundle helper executables phase, so a hand-run serve prompts under a stable identity. The L2CAP streams run on
 their own `StreamThread`, never `RunLoop.main`. `commands.html#mobile` owns the user-visible values.
+
 A Bluetooth wrong-key handshake emits no `phone.refused`: a stranger in radio range could flood the event.
 `tree.phone.bluetooth` changes emit no event; it is poll-only.
 A connected central can still read the GAP device name, a known limit of the rotating UUID against an active observer.
+
+The phone link v2 frame contract lives in `ElisCore/Sources/ElisCore/PhoneLink/`.
+Its vectors file has a byte-identical copy in the phone app
+(`mobile/test/fixtures/phone-link-vectors.json`) that changes with it.
 
 `session wait` is not a fourth exemption but a client-side composite, like `overlay open --block`: it
 opens the socket only for existing reads (`events.read`, `window.list`, `tree`), so there is no

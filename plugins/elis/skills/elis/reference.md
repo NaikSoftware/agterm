@@ -75,6 +75,9 @@ The event kinds and payloads are:
   neither. The human line reads `HH:MM:SS remote.opened NAME host=HOST remote-session-id=ID`.
 - `phone.connected` / `phone.disconnected` / `phone.refused`: a phone joined, left, or failed the token
   check. `ip` only, no window, workspace or session. The human line reads `HH:MM:SS phone.connected ip=IP`.
+- `phone.attached` / `phone.detached`: the phone opened or closed a pane view. Payload `ip` and `paneID`. The human line
+  reads `HH:MM:SS phone.attached ip=IP pane-id=TOKEN`. When the relay stops or restarts, every viewer detaches with `ip=-`.
+  `tree` shows the open count as `surfaces[].phoneViewers`, omitted at zero and never set by elis-server.
 - `app.launched`: an empty payload and no window, workspace or session. Emitted once per app run, after
   `hooks.conf` is loaded and the control socket accepts connections, so a hook on it can call
   `elisctl` at once. The restored windows and sessions are in the tree by then; their terminals may
@@ -741,6 +744,15 @@ error keeps those names for compatibility.
   `pane`, `columns`, `rows` (the real grid after the change). Read forced panes from `tree`'s `paneGrids`
   (`{left?, right?}` of `{columns, rows}`, omitted when none); `session text` reports the real `columns` and
   `rows`. The cases that clear it are listed at commands.html#session, `session grid`. elis-server does not serve it.
+- `session attach [--pane left|right] [--target] [--window W] [--json]`: attach this terminal as a viewer of a Live pane
+  (protocol `--pane primary|split…`, `--pane-id TOKEN`). It never claims, never leads and skips scrollback, so it
+  needs a zmx with patch 0007 (an older zmx sends full scrollback and may lead an unowned daemon). Works for local
+  panes, rows attached from another Mac and elis-server rows. Execs the attach argv; `--json` prints
+  `result.attach` (`argv`, `paneID`) instead and does not exec. Refusals: `<target> is not a Live session`,
+  `unknown pane id: TOKEN`, `session has no split pane`, `session not realized` (a pane not shown since launch),
+  `invalid pane: scratch`. Page rows refuse it. The CLI refuses the pane it runs in: `cannot attach a pane to itself`.
+  The viewer ends when its process is killed or the pane's session ends; keys typed into it are dropped. It does not
+  count in `phoneViewers` and emits no `phone.attached`.
 - `session scroll LINES [--pane left|right] [--target] [--window W]`: scroll by wheel notches, negative toward
   older output. `LINES` takes -1000...1000 and not 0. Returns `id`, `pane`, `lines`. A mouse-reporting program
   gets wheel events instead. On a pane another Mac leads, take the lead first (`session lead`). elis-server does not serve it.

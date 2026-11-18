@@ -312,7 +312,7 @@ extension ServerActions {
     }
 
     /// daemonPane is the pane a `--pane`/`--pane-id` pair names, defaulting to the left one, when it has a daemon.
-    private func daemonPane(of session: Session, token: String?, pane: StatusPane?) -> Result<(identity: UUID, pane: StatusPane), ActionRefusal> {
+    func daemonPane(of session: Session, token: String?, pane: StatusPane?) -> Result<(identity: UUID, pane: StatusPane), ActionRefusal> {
         guard case .pane(let resolved) = session.paneAddress(token: token, pane: pane) else {
             return .refused(ControlResponse(ok: false, error: "unknown pane id: \(token ?? "")"))
         }

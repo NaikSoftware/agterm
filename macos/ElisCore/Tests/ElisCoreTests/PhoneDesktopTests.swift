@@ -75,6 +75,21 @@ struct PhoneDesktopTests {
         #expect(PhoneRelayLine.stderr("   ") == nil)
     }
 
+    @Test func relayLineParsesViewerEvents() {
+        #expect(PhoneRelayLine.stderr("elisctl: phone attached from 10.0.0.2 pane tok")
+                == .viewer(attached: true, ip: "10.0.0.2", paneID: "tok"))
+        #expect(PhoneRelayLine.stderr("elisctl: phone detached from ::1 pane tok")
+                == .viewer(attached: false, ip: "::1", paneID: "tok"))
+        #expect(PhoneRelayLine.stderr("elisctl: phone attached from  pane tok") == .other("phone attached from  pane tok"))
+        #expect(PhoneRelayLine.stderr("elisctl: phone attached from 10.0.0.2 pane ") == .other("phone attached from 10.0.0.2 pane"))
+    }
+
+    @Test func viewerLinesAreNotStatusEvents() {
+        #expect(!PhoneRelayLine.isEvent("phone attached from 10.0.0.2 pane tok"))
+        #expect(!PhoneRelayLine.isEvent("phone detached from 10.0.0.2 pane tok"))
+        #expect(PhoneRelayLine.controlEvent("phone attached from 10.0.0.2 pane tok") == nil)
+    }
+
     @Test func bluetoothLinesMapToTheStatusValue() {
         let lines = ["advertising": "advertising", "off (powered off)": "off", "off (unauthorized)": "unauthorized",
                      "off (unsupported)": "unsupported", "off (in use by another relay)": "busy", "off (disabled)": "disabled"]

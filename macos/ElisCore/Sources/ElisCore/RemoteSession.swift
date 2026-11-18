@@ -120,6 +120,26 @@ public enum RemoteSession {
         "PATH=\"$PATH:" + (CommandPath.standardDirectories + ["$HOME/.local/bin"]).joined(separator: ":") + "\""
     }
 
+    /// The `env … zmx attach` words `attachCommand` sends over ssh; a local viewer runs them directly.
+    /// Validates the daemon name and the endpoint paths.
+    public static func zmxAttachArguments(endpoint: ControlZmxEndpoint, daemon: String,
+                                          lead: ZmxLeadAttachment?) throws -> [String] {
+        guard ZmxSupport.isDaemonName(daemon) || ZmxSupport.isScratchDaemonName(daemon) else { throw InvocationError.invalidSession }
+        guard isPath(endpoint.executable), isPath(endpoint.socketDirectory) else {
+            throw InvocationError.invalidEndpoint
+        }
+        let guardScript = "printf '%s\\n' 'elis: remote session is gone'; exit 1"
+        return [
+            // the four the LOCAL pane sets in `ZmxSupport`, empty being unset to zmx: an inherited
+            // `ZMX_SESSION` makes attach SWITCH session instead, never reaching the create-only guard,
+            // and an inherited prefix resolves a name elis never created.
+            "/usr/bin/env", "ZMX_SESSION=", "ZMX_SESSION_PREFIX=", "ZMX_NO_DETACH_KEY=1",
+            "ZMX_DIR=" + endpoint.socketDirectory,
+        ] + (lead?.assignments ?? []) + [
+            endpoint.executable, "attach", daemon, "/bin/sh", "-c", guardScript,
+        ]
+    }
+
     /// One ssh invocation attaching to `daemon` on `host`, for the lifetime of the pane.
     ///
     /// `-tt` forces a pty: a remote command does not reliably get one, and zmx reads termios and the
@@ -140,20 +160,7 @@ public enum RemoteSession {
                                      lead: ZmxLeadAttachment? = nil,
                                      connectTimeout: Int = 5, controlPath: String? = nil) throws -> [String] {
         try validate(host: host)
-        guard ZmxSupport.isDaemonName(daemon) || ZmxSupport.isScratchDaemonName(daemon) else { throw InvocationError.invalidSession }
-        guard isPath(endpoint.executable), isPath(endpoint.socketDirectory) else {
-            throw InvocationError.invalidEndpoint
-        }
-        let guardScript = "printf '%s\\n' 'elis: remote session is gone'; exit 1"
-        let remote = CommandRestore.shellQuotedLine([
-            // the four the LOCAL pane sets in `ZmxSupport`, empty being unset to zmx: an inherited
-            // `ZMX_SESSION` makes attach SWITCH session instead, never reaching the create-only guard,
-            // and an inherited prefix resolves a name elis never created.
-            "/usr/bin/env", "ZMX_SESSION=", "ZMX_SESSION_PREFIX=", "ZMX_NO_DETACH_KEY=1",
-            "ZMX_DIR=" + endpoint.socketDirectory,
-        ] + (lead?.assignments ?? []) + [
-            endpoint.executable, "attach", daemon, "/bin/sh", "-c", guardScript,
-        ])
+        let remote = CommandRestore.shellQuotedLine(try zmxAttachArguments(endpoint: endpoint, daemon: daemon, lead: lead))
         var argv = sshArguments(host: host, connectTimeout: connectTimeout, interactive: true, controlPath: controlPath) + [remote]
         // why ERROR: control-api.md, Remote sessions
         argv.insert(contentsOf: ["-o", "LogLevel=ERROR"], at: argv.count - 2)

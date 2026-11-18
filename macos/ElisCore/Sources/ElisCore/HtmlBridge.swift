@@ -46,7 +46,7 @@ public enum HtmlBridge {
     // each needs more than one request and reply: a stream handed over, or work done after the reply
     // and the phone relay: `phone.status` carries the pairing token, and a page may show content it did not write
     private static let refused: Set<Command> = [.zmxPresent, .catalogSubscribe, .sessionOverlayJobRun, .sessionOverlayPageServe, .zmxReset,
-                                                .sessionCompanionPageAttach, .phoneStatus, .phoneEnable, .phonePort,
+                                                .sessionCompanionPageAttach, .sessionAttach, .phoneStatus, .phoneEnable, .phonePort,
                                                 .phoneHost, .phoneRevoke]
     // commands that address no session, or address it some other way than by `target`
     private static let notSessionTargeted: Set<Command> = [.sessionNew, .sessionGo, .sessionUndo, .sessionOverlayJobRun,

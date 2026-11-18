@@ -59,7 +59,7 @@ extension Session {
 }
 
 /// The server refuses scratch for grid and scroll, so the CLI does too.
-private func validateGridPane(_ pane: String?) throws {
+func validateGridPane(_ pane: String?) throws {
     try validatePaneArgument(pane)
     if let pane, StatusPane(controlName: pane) == .scratch { throw ValidationError("invalid pane: \(pane)") }
 }

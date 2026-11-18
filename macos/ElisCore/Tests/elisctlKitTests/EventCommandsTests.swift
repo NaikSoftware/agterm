@@ -291,6 +291,11 @@ struct EventCommandsTests {
         }
         #expect(phone == ["00:00:00 phone.connected ip=10.0.0.3", "00:00:00 phone.disconnected ip=10.0.0.3",
                           "00:00:00 phone.refused ip=10.0.0.3"])
+        let viewers = [ControlEventPayload(paneID: "tok", ip: "10.0.0.3"), ControlEventPayload(paneID: "tok")].map {
+            EventFormatter.human(ControlEvent(seq: 21, ts: 0, kind: $0.ip == nil ? .phoneDetached : .phoneAttached, payload: $0),
+                                 timeZone: TimeZone(secondsFromGMT: 0)!)
+        }
+        #expect(viewers == ["00:00:00 phone.attached ip=10.0.0.3 pane-id=tok", "00:00:00 phone.detached ip=- pane-id=tok"])
 
         for event in events {
             let line = try EventFormatter.json(event)

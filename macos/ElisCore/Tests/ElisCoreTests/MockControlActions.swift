@@ -137,6 +137,7 @@ final class MockControlActions: ControlActions {
         case sessionText(target: String?, window: String?, ControlSessionTextOptions)
         case sessionGrid(target: String?, window: String?, pane: StatusPane, ControlGrid?)
         case sessionScroll(target: String?, window: String?, pane: StatusPane, lines: Int)
+        case sessionAttach(target: String?, pane: StatusPane, paneID: String?, window: String?)
         case windowNew(String?, minimized: Bool)
         case windowList
         case windowSelect(target: String?)
@@ -942,6 +943,11 @@ final class MockControlActions: ControlActions {
 
     func scrollSession(_ target: String?, window: String?, pane: StatusPane, lines: Int) -> ControlResponse {
         calls.append(.sessionScroll(target: target, window: window, pane: pane, lines: lines))
+        return ControlResponse(ok: true)
+    }
+
+    func sessionAttach(target: String?, pane: StatusPane, paneID: String?, window: String?) async -> ControlResponse {
+        calls.append(.sessionAttach(target: target, pane: pane, paneID: paneID, window: window))
         return ControlResponse(ok: true)
     }
 
