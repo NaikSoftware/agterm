@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.0.0 - 2026-11-18
+
+The first Elis release: a terminal workspace for AI coding agents on macOS, with a Linux server and an Android app.
+
+### New Features
+
+- **Workspaces and agent status.** Every agent works in its own named session, sessions sit in workspaces, and the sidebar shows which agent is working, which one needs you, and which one is done. Claude Code, Codex, Pi, OpenCode and other agents report their state
+- **Live sessions.** Quit, update or relaunch the app while your agents keep running; the next launch reattaches to them with their screen state
+- **Session switcher, file panel, splits, companions and overlays.** Press ⌃P to search every session and reopen closed ones, browse the session's folder beside the terminal, and drag a file or a session into an agent's prompt
+- **Remote sessions.** Attach sessions from another Mac, or run them on a Linux host with `elis-server`, so agents keep working when the Mac sleeps
+- **Control API.** The bundled `elisctl` drives everything over a local socket, and an agent skill teaches your agent to use it
+- **Elis for Android.** `elis-mobile.apk` shows your sessions on the phone, answers an agent's question with one tap, types into a session, and alerts you when an agent blocks or finishes. Pair it from Elis ▸ Connect a Phone… or `elisctl mobile serve`. It connects over Wi-Fi or Bluetooth and needs Android 15 or later
+
 ## v0.42.3 - 2026-11-13
 
 ### Bug Fixes

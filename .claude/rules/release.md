@@ -18,8 +18,7 @@ paths:
 - Each release also ships elis-server: `release.sh` needs Docker running, runs `scripts/setup-zmx-linux.sh`, and
   packages `elis-server-VERSION-linux-{aarch64,x86_64}.tar.gz` with `scripts/server-package.sh` before the Xcode
   build. Their sha256 lines go into the app as `Contents/Resources/elis-server.sha256` before the re-seal (an
-  ad-hoc re-seal on the unsigned path), and `--publish` uploads the DMG, both tarballs, `migrate-from-agterm2.sh`
-  and, with `MOBILE_APK=<path>`, `elis-mobile.apk` in one `gh release upload --clobber`.
+  ad-hoc re-seal on the unsigned path), and `--publish` uploads the DMG, both tarballs and, with `MOBILE_APK=<path>`, `elis-mobile.apk` in one `gh release upload --clobber`.
   `elisctl server install` trusts only that bundled file, so a tarball rebuilt after the app was sealed no
   longer installs.
 - Developer ID signing is inside-out: `elisctl`, zmx and `elis-session-host` are signed first with no

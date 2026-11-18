@@ -236,7 +236,7 @@ else
 fi
 rm -f "$NOTES_FILE"
 # the asset name is the file name (`path#label` sets only a display label), so the APK is copied under its asset name
-ASSETS=("$DMG" "${SERVER_TARBALLS[@]}" "$ROOT/scripts/migrate-from-agterm2.sh")
+ASSETS=("$DMG" "${SERVER_TARBALLS[@]}")
 if [ -n "${MOBILE_APK:-}" ]; then
   APK_STAGE="$(mktemp -d)"
   cp "$MOBILE_APK" "$APK_STAGE/elis-mobile.apk"

@@ -57,7 +57,7 @@ Elis runs on macOS and Linux.
    ```
 3. Start the app. It installs `elisctl`, the agent status hooks and the agent skill on first launch and after each update.
 
-Coming from Agterm2? Before you start Elis the first time, download `migrate-from-agterm2.sh` from the same release and run `bash migrate-from-agterm2.sh --dry-run`, then run it again without `--dry-run`.
+Coming from Agterm2? Before you start Elis the first time, download [`migrate-from-agterm2.sh`](https://raw.githubusercontent.com/NaikSoftware/elis/master/macos/scripts/migrate-from-agterm2.sh) and run `bash migrate-from-agterm2.sh --dry-run`, then run it again without `--dry-run`.
 It moves your sessions and config and removes what Agterm2 installed for agents.
 
 **Linux** (Qt6/KDE): build it from source with the steps in [`linux/`](linux/).

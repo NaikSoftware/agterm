@@ -382,7 +382,7 @@
 <p>Builds for Apple Silicon (arm64) Macs running macOS 14 or later are published on the <a href="https://github.com/NaikSoftware/elis/releases">releases page</a>.</p>
 <p>Download the <code>.dmg</code> from the <a href="https://github.com/NaikSoftware/elis/releases/latest">latest release</a>, open it, and drag Elis.app into <code>/Applications</code>. The build is not notarized, so clear the download flag once before the first launch:</p>
 <pre class="bash"><code>xattr -dr com.apple.quarantine /Applications/Elis.app</code></pre>
-<p>Coming from Agterm2? Before you start Elis the first time, download <code>migrate-from-agterm2.sh</code> from the same release and run it with <code>--dry-run</code> first, then without. It moves your sessions and config and removes what Agterm2 installed for agents.</p>
+<p>Coming from Agterm2? Before you start Elis the first time, download <a href="https://raw.githubusercontent.com/NaikSoftware/elis/master/macos/scripts/migrate-from-agterm2.sh"><code>migrate-from-agterm2.sh</code></a> and run it with <code>--dry-run</code> first, then without. It moves your sessions and config and removes what Agterm2 installed for agents.</p>
 <pre class="bash"><code>bash migrate-from-agterm2.sh --dry-run
 bash migrate-from-agterm2.sh</code></pre>
 <h3 id="install-help">Automatic installers</h3>
