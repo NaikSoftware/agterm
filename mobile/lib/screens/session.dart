@@ -65,7 +65,8 @@ class _SessionScreenState extends State<SessionScreen> {
   late final AppLifecycleListener _lifecycle;
   Timer? poll;
   double _dragRows = 0; // a drag's distance in rows not sent yet
-  Offset _finger = Offset.zero; // where the finger is on the Term view's grid, zoom and pan undone
+  Offset _finger = Offset.zero; // where the finger is on screen; [_wheel] maps it onto the grid, zoom and pan undone
+  final _grid = GlobalKey();
   bool _scrolling = false;
   bool polling = false;
   TermSession? term; // a Live pane watched as a terminal; the text poll stops meanwhile
@@ -546,16 +547,16 @@ class _SessionScreenState extends State<SessionScreen> {
       _height = box.maxHeight - 24;
       _layoutLead();
       final cell = CellMetrics.fit(_width, columns ?? t.snapshot!.cols);
-      return TermGestures(
-        key: const Key('term'),
-        content: Size(box.maxWidth, t.snapshot!.rows * cell.h + 24),
-        rowHeight: cell.h,
-        onScroll: (rows) => t.leading ? _wheel(t, rows, cell) : _drag(rows.toDouble()),
-        child: Listener(
-          behavior: HitTestBehavior.opaque,
-          onPointerDown: (e) => _finger = e.localPosition,
-          onPointerMove: (e) => _finger = e.localPosition,
-          child: Padding(padding: const EdgeInsets.all(12), child: TerminalView(snapshot: t.snapshot, hold: t.hold, columns: columns)),
+      // outside the zoom, so a touch beside a short grid still counts: the wheel clamps it to the nearest cell
+      return Listener(
+        onPointerDown: (e) => _finger = e.position,
+        onPointerMove: (e) => _finger = e.position,
+        child: TermGestures(
+          key: const Key('term'),
+          content: Size(box.maxWidth, t.snapshot!.rows * cell.h + 24),
+          rowHeight: cell.h,
+          onScroll: (rows) => t.leading ? _wheel(t, rows, cell) : _drag(rows.toDouble()),
+          child: Padding(padding: const EdgeInsets.all(12), child: TerminalView(key: _grid, snapshot: t.snapshot, hold: t.hold, columns: columns)),
         ),
       );
     });
@@ -564,8 +565,9 @@ class _SessionScreenState extends State<SessionScreen> {
   // leading, the phone is the program's mouse: a notch per row the finger moved, at the cell under it
   void _wheel(TermSession t, int rows, CellMetrics cell) {
     final snap = t.snapshot!;
-    final col = ((_finger.dx - 12) / cell.w).floor().clamp(0, snap.cols - 1);
-    final row = ((_finger.dy - 12) / cell.h).floor().clamp(0, snap.rows - 1);
+    final at = (_grid.currentContext!.findRenderObject() as RenderBox).globalToLocal(_finger);
+    final col = (at.dx / cell.w).floor().clamp(0, snap.cols - 1);
+    final row = (at.dy / cell.h).floor().clamp(0, snap.rows - 1);
     for (var i = 0; i < rows.abs(); i++) {
       t.wheel(up: rows > 0, col: col, row: row); // dragging down shows older rows: wheel up
     }

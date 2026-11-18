@@ -86,7 +86,11 @@ class _TermGesturesState extends State<TermGestures> {
           behavior: HitTestBehavior.opaque,
           onScaleStart: _start,
           onScaleUpdate: _update,
-          onDoubleTap: () => setState(() => _scale = 1), // the clamp puts it back at the bottom left
+          onDoubleTap: () => setState(() {
+            _scale = 1;
+            _x = 0;
+            _up = 0;
+          }),
           child: ClipRect(
             child: OverflowBox(
               alignment: Alignment.topLeft,

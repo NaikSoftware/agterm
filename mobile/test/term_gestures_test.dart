@@ -136,6 +136,20 @@ void main() {
     expect(b.global(const Offset(300, 400)), const Offset(300, 400));
   });
 
+  testWidgets('doubleTapOnATallGridReturnsToTheBottom', (t) async {
+    final b = _Box(t);
+    await b.pump(content: const Size(300, 1000));
+    await b.zoom2x();
+    await b.pinch(const Offset(100, 100), const Offset(200, 100), const Offset(0, 2000), const Offset(0, 2000));
+    expect(b.global(Offset.zero).dy, 0); // panned to the top
+    await t.tapAt(const Offset(150, 200));
+    await t.pump(const Duration(milliseconds: 50));
+    await t.tapAt(const Offset(150, 200));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(b.scale, 1);
+    expect(b.global(const Offset(0, 1000)), const Offset(0, 400));
+  });
+
   testWidgets('zoomedDragStillScrollsByRows', (t) async {
     final b = _Box(t);
     await b.pump();

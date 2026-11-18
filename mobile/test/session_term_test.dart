@@ -804,6 +804,35 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('wheelAboveAShortGridHitsItsTopRows', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    h.r.send(frame(LinkKind.grid, _claimCh, LinkFrame.resize(_claimCh, 40, 3).payload));
+    await t.pump();
+    await t.pump();
+    h.vts.single.tracksMouse = true;
+    final box = t.getRect(find.byKey(const Key('term')));
+    final cell = CellMetrics.fit(box.width - 24, h.vts.single.cols);
+    Future<List<String>> drag(Offset from) async {
+      final before = RegExp(r'wheel up \d+,(\d+)').allMatches(_typed(h)).length;
+      final g = await t.startGesture(from);
+      for (var i = 0; i < 4; i++) {
+        await g.moveBy(Offset(0, cell.h));
+        await t.pump();
+      }
+      await g.up();
+      await t.pump(const Duration(milliseconds: 400));
+      return [for (final m in RegExp(r'wheel up \d+,(\d+)').allMatches(_typed(h)).skip(before)) m[1]!];
+    }
+
+    expect(await drag(box.bottomCenter - Offset(0, 12 + cell.h * 0.5 + 4 * cell.h)), isNotEmpty); // a lower row first
+    expect(t.getRect(find.byType(TerminalView)).top, greaterThan(box.top + 12)); // an empty strip above the grid
+    expect((await drag(box.topCenter + const Offset(0, 4))).map(int.parse), everyElement(lessThan(4))); // the finger's rows, not the earlier one
+    await h.stop();
+  });
+
   testWidgets('paneSwitchResetsTheZoom', (t) async {
     final h = Harness(t, treeOf(split: true));
     await h.start();
