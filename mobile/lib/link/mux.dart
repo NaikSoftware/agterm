@@ -1,6 +1,7 @@
 // The relay mux (control-api.md "Relay mux"): channel 0 carries the control lines, channel 1 the event rows,
 // channels 2 and up one vt pane each: watched (the phone never sends DATA or RESIZE on them) or claimed (input only).
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -285,7 +286,7 @@ class ClaimChannel implements _Channel {
   final int id;
   final _events = StreamController<ClaimEvent>(); // single-subscription: LEAD in the same read as OPENED is kept
   final _opened = Completer<ClaimChannel>();
-  final _queue = <Uint8List>[];
+  final _queue = ListQueue<Uint8List>();
   int _queued = 0;
   int _headAt = 0; // bytes of _queue.first already sent
   int _unacked = 0;
@@ -300,7 +301,7 @@ class ClaimChannel implements _Channel {
     // what the window takes now does not wait (a non-empty queue means the window is spent)
     if (_events.isClosed || _queued + bytes.length - (_claimWindow - _unacked) > _claimQueueCap) return false;
     if (bytes.isEmpty) return true;
-    _queue.add(bytes);
+    _queue.add(Uint8List.fromList(bytes)); // the caller may reuse its buffer
     _queued += bytes.length;
     _pump();
     return true;
@@ -326,7 +327,7 @@ class ClaimChannel implements _Channel {
       _queued -= n;
       _headAt += n;
       if (_headAt == head.length) {
-        _queue.removeAt(0);
+        _queue.removeFirst();
         _headAt = 0;
       }
     }

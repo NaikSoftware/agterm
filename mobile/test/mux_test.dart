@@ -444,6 +444,18 @@ void main() {
     expect(sizes.fold(0, (a, n) => a + n), 40 * 1024);
   });
 
+  test('sendCopiesTheCallersBuffer', () async {
+    final (m, r, _) = await upgraded();
+    final ch = await claimLive(m, r, []);
+    ch.send(Uint8List(16384));
+    final buf = Uint8List.fromList(utf8.encode('ab'));
+    ch.send(buf);
+    buf[0] = 120;
+    r.send(frame(LinkKind.credit, 2, LinkFrame.credit(2, 16384).payload));
+    await flush();
+    expect(utf8.decode(dataOn(r, 2).last.payload), 'ab');
+  });
+
   test('queueCapRefuses', () async {
     final (m, r, _) = await upgraded();
     final ch = await claimLive(m, r, []);
