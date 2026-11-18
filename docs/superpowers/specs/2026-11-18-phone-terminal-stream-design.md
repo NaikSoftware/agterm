@@ -129,7 +129,8 @@ and the attach stream carries no cols/rows.
   types, host-free, Linux-safe.
 - `elisctlKit/PhoneLink*.swift` (new files): relay side. `PhoneSession` hands the connection to
   `PhoneLinkSession` after `{"mux":1}`; existing files get only small hooks.
-- Phone: `mobile/lib/link/` (codec) and `mobile/lib/terminal/` (ffi binding, painter, zoom).
+- Phone: `mobile/lib/link/` (codec; `mux.dart` holds the channels) and `mobile/lib/terminal/` (ffi binding,
+  painter, zoom). The ffi library is `mobile/native/vtshim.c`, built by `mobile/tool/build-vtshim.sh`.
 - Golden vectors: one JSON file of frames and frame sequences, read by both the Swift and the Dart tests.
 
 ## Migration to the Elis restructure
@@ -161,7 +162,7 @@ same scripts on itself, then merges master.
 
 A session can be any program: an agent, a shell, any CLI or TUI. The phone draws every session through one
 switcher with three modes; each is a layout of data the phone already has, never a guess about the program.
-Mockups: the "Elis phone agent UI" design canvas (zsh, Claude Code, agy, vim).
+Mockups: [the session view design](assets/2026-11-18-phone-session-view.html) (zsh, Claude Code, agy, vim), a self-contained export of the design canvas.
 
 | Mode | Built from | Fits |
 |---|---|---|

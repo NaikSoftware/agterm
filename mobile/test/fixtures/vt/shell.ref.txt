@@ -1,0 +1,30 @@
+| | | * b8edae44 fix(app): neutral no-address placeholder; bluetooth reset asserts
+| | | * b95bd09c feat(app): phone answers wait for Bluetooth; typed host on a radio-only link
+| | | * 79aa6f12 feat(app): Bluetooth status for the phone relay
+| | | * dee1c902 feat(ctl): mobile serve offers Bluetooth (BLE L2CAP)
+| | | * 29122372 fix(ctl): BLE link review fixes: exact handshake length, single-use sides, zlib vec
+tor
+| | | * d5e0210f feat(ctl): BLE link crypto and framing for the phone relay
+| | | * 22c11a40 refactor(ctl): transport-neutral phone session
+| | | * 24a07c03 docs: design for agterm Mobile over Bluetooth
+| | | * e28d68e1 fix(control): session grid/scroll refuse a pane another Mac leads
+| | |/
+| |/|
+
+bold italic underline inverse faint strike all-red
+   0    1    2    3    4    5    6    7    8    9   10   11   12   13   14   15 
+                                    
+                                    
+                                    
+                                    
+                                    
+                                    
+                                                                                                   
+wide: 日本語テキスト 中文 한국어 | emoji: 🚀✅🔥👍🏽 👨‍👩‍👧 ❤️ | combining: é ñ | ascii end
+┌──────┬──────┐
+│ box  │ ╭─╮  │
+├──────┼──────┤
+│ ░▒▓█ │ ╰─╯  │
+└──────┴──────┘
+truecolor orange 256 cyan bright yellow  white on blue 
+cursor below →

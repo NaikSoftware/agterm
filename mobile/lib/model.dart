@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'ble_transport.dart';
 import 'client.dart';
+import 'link/mux.dart';
 import 'watch.dart';
 
 // the computer's home folder: /home/<name> on Linux, /Users/<name> on macOS
@@ -41,12 +42,17 @@ class Session {
         active = m['active'] == true,
         blink = (m['blink'] ?? m['statusBlink']) == true,
         hasSplit = m['hasSplit'] == true,
+        livePanes = {
+          for (final f in (m['surfaces'] as List? ?? const []))
+            if (f is Map && f['backedByZmx'] == true) '${f['kind']}',
+        },
         split = m['split'] == true,
         collapsed = m['collapsed'] == true;
 
   final String id, name, status, agent, cwd, parent, context, tint, workspaceId, workspaceName;
   final int unseen;
   final bool flagged, active, blink, hasSplit, split, collapsed;
+  final Set<String> livePanes; // the panes (`left`, `right`) a zmx daemon backs: the phone can watch them as a terminal
 
   bool get needsYou => status == 'blocked' || status == 'completed';
   String get shortCwd => shortHome(cwd);
@@ -168,6 +174,7 @@ class ElisModel extends ChangeNotifier {
   final Future<Connection> Function(Pairing p, {bool preferBluetooth}) open;
   late final AppLifecycleListener _lifecycle;
   Connection? _c;
+  Mux? mux; // null on a relay before the mux (M4a): screens keep the text view
   LinkState state = LinkState.connecting;
   String via = ''; // the live transport's badge: 'Wi-Fi' or 'BT'
   @visibleForTesting
@@ -204,6 +211,7 @@ class ElisModel extends ChangeNotifier {
     _generation++;
     _c?.close();
     _c = null;
+    mux = null;
   }
 
   void resume() {
@@ -228,6 +236,11 @@ class ElisModel extends ChangeNotifier {
       try {
         final c = await open(pairing, preferBluetooth: BluetoothPref.prefer);
         if (gen != _generation) return c.close();
+        // first, before any other call: a large answer in flight could push the upgrade answer past its timeout
+        final mx = await Mux.upgrade(c);
+        if (gen != _generation) return c.close();
+        // rows can be lost (`{"dropped":N}`, `{"gap":true}`), tree rows among them: re-read the tree
+        mx?.events.where(rereadsTree).listen((_) => scheduleRefresh(Duration.zero));
         _c = c;
         via = c.via;
         error = null;
@@ -235,6 +248,9 @@ class ElisModel extends ChangeNotifier {
         seen = DateTime.now();
         _set(LinkState.connected);
         await refresh();
+        // only now: a screen that saw the mux earlier would open panes from the tree of the link before
+        mux = mx;
+        if (!_disposed) notifyListeners();
         unawaited(_eventLoop(gen));
         await _c!.closed;
       } catch (e) {
@@ -245,6 +261,7 @@ class ElisModel extends ChangeNotifier {
       if (gen != _generation || _disposed) return;
       _c?.close(); // a failure after connecting (e.g. in refresh) must not leak the connection
       _c = null;
+      mux = null;
       fitted.clear();
       _set(LinkState.offline);
       await Future.delayed(Duration(seconds: backoff));

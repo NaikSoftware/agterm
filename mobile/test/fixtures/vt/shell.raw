@@ -1,0 +1,164 @@
+* [33me23d5491[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix(sidebar): a click on the selected session row clears its Done status
+* [33m38af7fa2[m feat(settings): a fresh install defaults to Live sessions
+*   [33me3135c0a[m Merge pull request #37 from NaikSoftware/fix/loop-status-active
+[32m|[m[33m\[m  
+[32m|[m * [33m029211ee[m docs: a pending session cron keeps Claude's row active
+[32m|[m * [33mec1b0254[m fix(status): keep Claude's row active while a session cron is pending
+[32m|[m * [33ma3311e4b[m docs: plan for active status while a session cron is pending
+[32m|[m[32m/[m  
+*   [33m762e1168[m Merge pull request #36 from NaikSoftware/feat/default-status-shapes
+[34m|[m[35m\[m  
+[34m|[m * [33m4fe6a633[m[33m ([m[1;32mfeat/default-status-shapes[m[33m)[m feat(status): default shapes match the phone app
+[34m|[m[34m/[m  
+*   [33m384f867e[m[33m ([m[1;32mworktree-agent-afcb977031c1fdf83[m[33m)[m Merge pull request #35 from NaikSoftware/worktree-fix-teammate-status
+[36m|[m[1;31m\[m  
+[36m|[m * [33m48370b01[m fix(status): keep Claude's row active while a teammate works
+* [1;31m|[m   [33m87cab997[m Merge pull request #34 from NaikSoftware/feat/session-id-drop
+[1;31m|[m[1;33m\[m [1;31m\[m  
+[1;31m|[m [1;33m|[m[1;31m/[m  
+[1;31m|[m[1;31m/[m[1;33m|[m   
+[1;31m|[m * [33m34de0419[m fix: a sidebar drop types each id once and never the target's own
+[1;31m|[m * [33me4934fac[m fix: a drop ignores modifier keys and validates the agent id; another agent clears it
+[1;31m|[m * [33ma4568787[m fix: a drop types only a plain-token remote session id
+[1;31m|[m * [33ma22c7b99[m feat: dropping a sidebar row on a terminal types its session ids
+[1;31m|[m * [33m67232a08[m docs: control-api notes the mirrored agent session id
+[1;31m|[m * [33m97dc827d[m feat: an origin mirrors the Claude conversation id to attached rows
+[1;31m|[m * [33mefdd3406[m feat: sessions record their Claude conversation id
+[1;31m|[m * [33m971b6828[m docs: session id drop design and plan
+[1;31m|[m[1;31m/[m  
+* [33mfb8a3b65[m[33m ([m[1;33mtag: [m[1;33mv2.0.0[m[33m, [m[1;32mworktree-ui-redesign[m[33m)[m feat: app icon matches the Agterm2 phone app
+*   [33m89d4ba29[m Merge pull request #32 from NaikSoftware/feat/ui-redesign
+[1;34m|[m[1;35m\[m  
+[1;34m|[m * [33m0a0deafc[m fix(sidebar): wave follows the band's rounded ends
+[1;34m|[m * [33ma42caa34[m fix: switcher Recent omits sessions Needs you already lists
+[1;34m|[m * [33m93f47675[m feat: session switcher is one in-window overlay for every opener
+[1;34m|[m * [33m47d8f82b[m test: palette tint row stores icon and name
+[1;34m|[m *   [33m7fd8a8fc[m Merge remote-tracking branch 'origin/master' into worktree-ui-redesign
+[1;34m|[m [1;36m|[m[1;34m\[m  
+[1;34m|[m [1;36m|[m[1;34m/[m  
+[1;34m|[m[1;34m/[m[1;36m|[m   
+* [1;36m|[m   [33mb82c343b[m Merge pull request #33 from NaikSoftware/feat/tree-running-agent
+[32m|[m[33m\[m [1;36m\[m  
+[32m|[m * [1;36m|[m [33m2f75dbf1[m[33m ([m[1;32mfeat/tree-running-agent[m[33m)[m feat: the tree reports each session's running agent
+[32m|[m[32m/[m [1;36m/[m  
+[32m|[m * [33m53e853ec[m wip: session switcher everywhere; tint colors icon and name (in test)
+[32m|[m * [33m38daee0a[m docs: record the oversized-bridge hosted crash
+[32m|[m * [33md6c96ef8[m feat: switcher popover searches in place
+[32m|[m * [33me8651c2f[m fix(sidebar): group padding and gap are real row space
+[32m|[m * [33m8b7c91d5[m fix(sidebar): status dot draws unscaled at 9pt
+[32m|[m * [33mae4f2663[m fix: switcher pill always shows the workspace breadcrumb
+[32m|[m * [33m365ae8d9[m feat(sidebar): match the redesign spec, Lucide row icons
+[32m|[m * [33m4ac4fb56[m feat: title bar matches the redesign spec
+[32m|[m * [33m45b2c243[m docs: record another run of the exit-capture hosted flake
+[32m|[m * [33m2175aed1[m fix(sidebar): band review fixes
+[32m|[m * [33ma7e7936a[m fix: switcher pill stays enabled, falls through while a pick is pending
+[32m|[m * [33m95a469a0[m fix(sidebar): workspace icon is square.on.square
+[32m|[m * [33mac946387[m docs: band, wave, switcher; Settings row reads Session switcher
+[32m|[m * [33m58ca5cc5[m feat: title-bar session switcher pill replaces the recent-sessions clock
+[32m|[m * [33m5723f11a[m fix(sidebar): reset decorations on unknown rows, stack icon for palette focus mark
+[32m|[m * [33m65538e91[m feat(sidebar): workspace tint band, active-row wave and glyph fade
+[32m|[m * [33md8a3ff2c[m feat(core): sidebar band edges and active-row wave colors
+[32m|[m[32m/[m  
+*   [33m9ce2efee[m Merge pull request #31 from NaikSoftware/fix/seen-clears-auto-reset
+[34m|[m[35m\[m  
+[34m|[m * [33mc281226f[m fix: session.seen clears an auto-reset status, as a visit does
+* [35m|[m [33m38cbcf6d[m chore: fork identity ua.naiksoftware.agterm2, app name Agterm2
+[35m|[m[35m/[m  
+*   [33m4cbbff43[m Merge pull request #30 from NaikSoftware/feat/phone-bluetooth
+[36m|[m[1;31m\[m  
+[36m|[m *   [33m67246bc3[m[33m ([m[1;32mfeat/phone-bluetooth[m[33m)[m Merge remote-tracking branch 'origin/master' into feat/phone-bluetooth
+[36m|[m [1;32m|[m[36m\[m  
+[36m|[m [1;32m|[m[36m/[m  
+[36m|[m[36m/[m[1;32m|[m   
+* [1;32m|[m [33mad389782[m chore: fit the upstream sync into lint limits
+* [1;32m|[m   [33mdb6a8d37[m Merge remote-tracking branch 'upstream/master'
+[1;34m|[m[1;35m\[m [1;32m\[m  
+[1;34m|[m * [1;32m|[m [33m6a8e025f[m fix(server): hang up a closed pane's foreground job (#1025)
+[1;34m|[m * [1;32m|[m [33m096c410e[m docs(backlog): list the contracts a moving program overlay must keep
+[1;34m|[m * [1;32m|[m [33m6b4aaa6e[m fix(sidebar): draw the session info line in its own font (#1021)
+[1;34m|[m * [1;32m|[m [33mdd17c025[m docs(backlog): record a second overlay job and page test CI failure
+[1;34m|[m * [1;32m|[m [33m9ba9239a[m fix(sidebar): color a selected row's fold triangle like its text (#1024)
+[1;34m|[m * [1;32m|[m [33m85c6d79c[m docs(backlog): record program overlays staying behind when the lead moves
+[1;34m|[m * [1;32m|[m [33m1835fffd[m feat(presentation): open asks, picks and pages follow the pane lead (#1023)
+[1;34m|[m * [1;32m|[m [33m01457326[m docs(backlog): record the attached-row status takeover and CI stalls
+[1;34m|[m * [1;32m|[m [33m4ed1c518[m feat(catalog): open a Mac window as a remote window (#1018)
+[1;34m|[m * [1;32m|[m [33m07ef04da[m fix(agent-status): keep a split session active while either pane works (#1016)
+[1;34m|[m * [1;32m|[m [33m5eee361e[m feat(links): make plain-text agterm://session links clickable
+[1;34m|[m * [1;32m|[m [33m83144974[m feat(companions): move a companion under another session (#1014)
+[1;34m|[m * [1;32m|[m [33m2b66c171[m fix(agent-status): keep Claude's row active while a background shell runs
+[1;34m|[m * [1;32m|[m [33m36f7db16[m feat(remote): route remote work to the Mac leading each pane (#1012)
+[1;34m|[m * [1;32m|[m [33m1c7e7f3d[m fix(links): narrow plain http IP routing to local ranges
+[1;34m|[m * [1;32m|[m [33m74c04191[m docs(backlog): hud helper SIGTERM wait expires on Linux CI
+[1;34m|[m * [1;32m|[m [33m6361b1b1[m fix(surface): free a replaced pane's surface once its threads have exited (#1010)
+[1;34m|[m * [1;32m|[m [33m3a3073ea[m fix(remote): hand the presenter role on when the presenting Mac leaves (#1008)
+[1;34m|[m * [1;32m|[m [33m0c894d01[m docs: name the pane focus keys in the split section
+[1;34m|[m * [1;32m|[m [33mc32ebecc[m docs: rewrite the user guide as a readable reference (#1004)
+[1;34m|[m * [1;32m|[m [33m147bd829[m docs: one README remote sessions bullet for another Mac and a Linux server
+[1;34m|[m * [1;32m|[m [33m71fe573a[m docs: custom forks are not factored into request answers
+[1;34m|[m * [1;32m|[m [33mf30f8a06[m backlog sweep: link target on hover, mail counts on attached rows, spawn lock, test waits (#1001)
+[1;34m|[m * [1;32m|[m [33mbb843406[m cookbook: retire remote-session-restore (#1000)
+[1;34m|[m * [1;32m|[m [33mb4ac0ee0[m remote session parity: server and remote-Mac rows match local behavior (#999)
+[1;34m|[m * [1;32m|[m [33mc1bd2d57[m feat(text): jump between the files of a diff page (#997)
+[1;34m|[m * [1;32m|[m [33m180d0c89[m docs: move the XCUITest runner-init TCC note into the ui-tests rules
+[1;34m|[m * [1;32m|[m [33mf61cb00f[m feat(server): serve the pane mailbox on agterm-server (#996)
+[1;34m|[m * [1;32m|[m [33meb57d625[m docs(backlog): drop content page rows
+[1;34m|[m * [1;32m|[m [33m0a844715[m[33m ([m[1;33mtag: [m[1;33mv0.42.3[m[33m)[m chore(release): prepare v0.42.3
+[1;34m|[m * [1;32m|[m [33mc8c47303[m fix(split): stabilize compact pane insets on session switches
+[1;34m|[m * [1;32m|[m [33m0bbdaac3[m fix(remote): let an unnamed agterm-server session follow its terminal title
+[1;34m|[m * [1;32m|[m [33m28095850[m docs: correct the window recovery contract
+[1;34m|[m * [1;32m|[m [33m56c81247[m docs: ⌘⇧-click a session link while Claude Code captures the mouse
+[1;34m|[m * [1;32m|[m [33m09c53bba[m docs(backlog): add window overlay item
+[1;34m|[m * [1;32m|[m [33m3b8784a0[m[33m ([m[1;33mtag: [m[1;33mv0.42.2[m[33m)[m docs: note the Local Network cache refresh after a helper update
+[1;34m|[m * [1;32m|[m [33m1afdcb3c[m chore(release): add the Claude status hook fix to v0.42.2
+[1;34m|[m * [1;32m|[m [33m5cc32465[m fix(agent-status): read a missing hook payload key as empty under plutil
+[1;34m|[m * [1;32m|[m [33m10602738[m chore(release): prepare v0.42.2
+[1;34m|[m * [1;32m|[m [33m806b2ac8[m fix(settings): hold the locked keyboard layout only while agterm is active
+[1;34m|[m * [1;32m|[m [33m2484bfe1[m fix(live): start the session host as a launchd job on macOS 27 and later (#987)
+[1;34m|[m * [1;32m|[m [33md69e3436[m docs(backlog): note per-daemon disclaim keeps the inherited coalition
+[1;34m|[m * [1;32m|[m [33m03ea30a8[m[33m ([m[1;33mtag: [m[1;33mv0.42.1[m[33m)[m chore(release): prepare v0.42.1
+[1;34m|[m * [1;32m|[m [33m696edcf0[m feat(remote): log pages and text-page controls on remote sessions, page rows on agterm-server (#978)
+[1;34m|[m * [1;32m|[m [33m49ce3992[m test(ssh-pool): wait for the parked runner by retries, not wall time (#983)
+[1;34m|[m * [1;32m|[m [33m434ff263[m fix(cookbook): address review notes on remote-session-restore
+[1;34m|[m * [1;32m|[m [33mb7316f1c[m fix(cookbook): page natively in annotate-document so macOS 26 WebKit keeps painting
+[1;34m|[m * [1;32m|[m [33m82910bb8[m feat(scratch): report the scratch shell's own cwd (#981)
+[1;34m|[m * [1;32m|[m [33mf52cb2bf[m fix(hooks): keep shell rc file modes when appending the integration line
+[1;34m|[m * [1;32m|[m [33mfc6178b8[m fix(cookbook): wrap long inline code in annotate-document pages
+[1;34m|[m * [1;32m|[m [33mb8afbe6d[m fix(hooks): preserve wrapper modes when baking CLI path
+[1;34m|[m * [1;32m|[m [33med7e2cd2[m fix(cookbook): stop mailbox-chat misrouting under the Codex shared daemon (#979)
+[1;34m|[m * [1;32m|[m [33m00ab65e9[m docs(cookbook): restore remote sessions after a relaunch (#973)
+* [1;35m|[m [1;32m|[m   [33m2645cc7a[m Merge pull request #29 from NaikSoftware/feat/phone-relay
+[1;36m|[m[31m\[m [1;35m\[m [1;32m\[m  
+[1;36m|[m [31m|[m [1;35m|[m * [33mcbe29c8c[m docs: record the exit-capture hosted flake
+[1;36m|[m [31m|[m [1;35m|[m * [33m3364f2b2[m fix: Bluetooth final review fixes
+[1;36m|[m [31m|[m [1;35m|[m * [33m70e219f4[m fix(ctl): embed agtermctl Info.plist in the app build; a failed BLE rotation keeps phones
+[1;36m|[m [31m|[m [1;35m|[m * [33me821736d[m docs: phone app over Bluetooth
+[1;36m|[m [31m|[m [1;35m|[m * [33mf7a6daa6[m fix(ctl): BLE relay review fixes: rotating UUID, replay-safe cap, bounded output, embedded Info.plist
+[1;36m|[m [31m|[m [1;35m|[m * [33mb8edae44[m fix(app): neutral no-address placeholder; bluetooth reset asserts
+[1;36m|[m [31m|[m [1;35m|[m * [33mb95bd09c[m feat(app): phone answers wait for Bluetooth; typed host on a radio-only link
+[1;36m|[m [31m|[m [1;35m|[m * [33m79aa6f12[m feat(app): Bluetooth status for the phone relay
+[1;36m|[m [31m|[m [1;35m|[m * [33mdee1c902[m feat(ctl): mobile serve offers Bluetooth (BLE L2CAP)
+[1;36m|[m [31m|[m [1;35m|[m * [33m29122372[m fix(ctl): BLE link review fixes: exact handshake length, single-use sides, zlib vector
+[1;36m|[m [31m|[m [1;35m|[m * [33md5e0210f[m feat(ctl): BLE link crypto and framing for the phone relay
+[1;36m|[m [31m|[m [1;35m|[m * [33m22c11a40[m refactor(ctl): transport-neutral phone session
+[1;36m|[m [31m|[m [1;35m|[m * [33m24a07c03[m docs: design for agterm Mobile over Bluetooth
+[1;36m|[m [31m|[m [1;35m|[m * [33me28d68e1[m fix(control): session grid/scroll refuse a pane another Mac leads
+[1;36m|[m [31m|[m [1;35m|[m[31m/[m  
+[1;36m|[m [31m|[m[31m/[m[1;35m|[m   
+
+[1mbold[0m [3mitalic[0m [4munderline[0m [7minverse[0m [2mfaint[0m [9mstrike[0m [1;3;4;31mall-red[0m
+[48;5;0m   0 [0m[48;5;1m   1 [0m[48;5;2m   2 [0m[48;5;3m   3 [0m[48;5;4m   4 [0m[48;5;5m   5 [0m[48;5;6m   6 [0m[48;5;7m   7 [0m[48;5;8m   8 [0m[48;5;9m   9 [0m[48;5;10m  10 [0m[48;5;11m  11 [0m[48;5;12m  12 [0m[48;5;13m  13 [0m[48;5;14m  14 [0m[48;5;15m  15 [0m
+[48;5;16m [0m[48;5;17m [0m[48;5;18m [0m[48;5;19m [0m[48;5;20m [0m[48;5;21m [0m[48;5;22m [0m[48;5;23m [0m[48;5;24m [0m[48;5;25m [0m[48;5;26m [0m[48;5;27m [0m[48;5;28m [0m[48;5;29m [0m[48;5;30m [0m[48;5;31m [0m[48;5;32m [0m[48;5;33m [0m[48;5;34m [0m[48;5;35m [0m[48;5;36m [0m[48;5;37m [0m[48;5;38m [0m[48;5;39m [0m[48;5;40m [0m[48;5;41m [0m[48;5;42m [0m[48;5;43m [0m[48;5;44m [0m[48;5;45m [0m[48;5;46m [0m[48;5;47m [0m[48;5;48m [0m[48;5;49m [0m[48;5;50m [0m[48;5;51m [0m
+[48;5;52m [0m[48;5;53m [0m[48;5;54m [0m[48;5;55m [0m[48;5;56m [0m[48;5;57m [0m[48;5;58m [0m[48;5;59m [0m[48;5;60m [0m[48;5;61m [0m[48;5;62m [0m[48;5;63m [0m[48;5;64m [0m[48;5;65m [0m[48;5;66m [0m[48;5;67m [0m[48;5;68m [0m[48;5;69m [0m[48;5;70m [0m[48;5;71m [0m[48;5;72m [0m[48;5;73m [0m[48;5;74m [0m[48;5;75m [0m[48;5;76m [0m[48;5;77m [0m[48;5;78m [0m[48;5;79m [0m[48;5;80m [0m[48;5;81m [0m[48;5;82m [0m[48;5;83m [0m[48;5;84m [0m[48;5;85m [0m[48;5;86m [0m[48;5;87m [0m
+[48;5;88m [0m[48;5;89m [0m[48;5;90m [0m[48;5;91m [0m[48;5;92m [0m[48;5;93m [0m[48;5;94m [0m[48;5;95m [0m[48;5;96m [0m[48;5;97m [0m[48;5;98m [0m[48;5;99m [0m[48;5;100m [0m[48;5;101m [0m[48;5;102m [0m[48;5;103m [0m[48;5;104m [0m[48;5;105m [0m[48;5;106m [0m[48;5;107m [0m[48;5;108m [0m[48;5;109m [0m[48;5;110m [0m[48;5;111m [0m[48;5;112m [0m[48;5;113m [0m[48;5;114m [0m[48;5;115m [0m[48;5;116m [0m[48;5;117m [0m[48;5;118m [0m[48;5;119m [0m[48;5;120m [0m[48;5;121m [0m[48;5;122m [0m[48;5;123m [0m
+[48;5;124m [0m[48;5;125m [0m[48;5;126m [0m[48;5;127m [0m[48;5;128m [0m[48;5;129m [0m[48;5;130m [0m[48;5;131m [0m[48;5;132m [0m[48;5;133m [0m[48;5;134m [0m[48;5;135m [0m[48;5;136m [0m[48;5;137m [0m[48;5;138m [0m[48;5;139m [0m[48;5;140m [0m[48;5;141m [0m[48;5;142m [0m[48;5;143m [0m[48;5;144m [0m[48;5;145m [0m[48;5;146m [0m[48;5;147m [0m[48;5;148m [0m[48;5;149m [0m[48;5;150m [0m[48;5;151m [0m[48;5;152m [0m[48;5;153m [0m[48;5;154m [0m[48;5;155m [0m[48;5;156m [0m[48;5;157m [0m[48;5;158m [0m[48;5;159m [0m
+[48;5;160m [0m[48;5;161m [0m[48;5;162m [0m[48;5;163m [0m[48;5;164m [0m[48;5;165m [0m[48;5;166m [0m[48;5;167m [0m[48;5;168m [0m[48;5;169m [0m[48;5;170m [0m[48;5;171m [0m[48;5;172m [0m[48;5;173m [0m[48;5;174m [0m[48;5;175m [0m[48;5;176m [0m[48;5;177m [0m[48;5;178m [0m[48;5;179m [0m[48;5;180m [0m[48;5;181m [0m[48;5;182m [0m[48;5;183m [0m[48;5;184m [0m[48;5;185m [0m[48;5;186m [0m[48;5;187m [0m[48;5;188m [0m[48;5;189m [0m[48;5;190m [0m[48;5;191m [0m[48;5;192m [0m[48;5;193m [0m[48;5;194m [0m[48;5;195m [0m
+[48;5;196m [0m[48;5;197m [0m[48;5;198m [0m[48;5;199m [0m[48;5;200m [0m[48;5;201m [0m[48;5;202m [0m[48;5;203m [0m[48;5;204m [0m[48;5;205m [0m[48;5;206m [0m[48;5;207m [0m[48;5;208m [0m[48;5;209m [0m[48;5;210m [0m[48;5;211m [0m[48;5;212m [0m[48;5;213m [0m[48;5;214m [0m[48;5;215m [0m[48;5;216m [0m[48;5;217m [0m[48;5;218m [0m[48;5;219m [0m[48;5;220m [0m[48;5;221m [0m[48;5;222m [0m[48;5;223m [0m[48;5;224m [0m[48;5;225m [0m[48;5;226m [0m[48;5;227m [0m[48;5;228m [0m[48;5;229m [0m[48;5;230m [0m[48;5;231m [0m
+[48;2;0;255;128m [0m[48;2;2;253;128m [0m[48;2;5;250;128m [0m[48;2;7;248;128m [0m[48;2;10;245;128m [0m[48;2;12;243;128m [0m[48;2;15;240;128m [0m[48;2;18;237;128m [0m[48;2;20;235;128m [0m[48;2;23;232;128m [0m[48;2;25;230;128m [0m[48;2;28;227;128m [0m[48;2;30;225;128m [0m[48;2;33;222;128m [0m[48;2;36;219;128m [0m[48;2;38;217;128m [0m[48;2;41;214;128m [0m[48;2;43;212;128m [0m[48;2;46;209;128m [0m[48;2;48;207;128m [0m[48;2;51;204;128m [0m[48;2;54;201;128m [0m[48;2;56;199;128m [0m[48;2;59;196;128m [0m[48;2;61;194;128m [0m[48;2;64;191;128m [0m[48;2;66;189;128m [0m[48;2;69;186;128m [0m[48;2;72;183;128m [0m[48;2;74;181;128m [0m[48;2;77;178;128m [0m[48;2;79;176;128m [0m[48;2;82;173;128m [0m[48;2;85;170;128m [0m[48;2;87;168;128m [0m[48;2;90;165;128m [0m[48;2;92;163;128m [0m[48;2;95;160;128m [0m[48;2;97;158;128m [0m[48;2;100;155;128m [0m[48;2;103;152;128m [0m[48;2;105;150;128m [0m[48;2;108;147;128m [0m[48;2;110;145;128m [0m[48;2;113;142;128m [0m[48;2;115;140;128m [0m[48;2;118;137;128m [0m[48;2;121;134;128m [0m[48;2;123;132;128m [0m[48;2;126;129;128m [0m[48;2;128;127;128m [0m[48;2;131;124;128m [0m[48;2;133;122;128m [0m[48;2;136;119;128m [0m[48;2;139;116;128m [0m[48;2;141;114;128m [0m[48;2;144;111;128m [0m[48;2;146;109;128m [0m[48;2;149;106;128m [0m[48;2;151;104;128m [0m[48;2;154;101;128m [0m[48;2;157;98;128m [0m[48;2;159;96;128m [0m[48;2;162;93;128m [0m[48;2;164;91;128m [0m[48;2;167;88;128m [0m[48;2;170;85;128m [0m[48;2;172;83;128m [0m[48;2;175;80;128m [0m[48;2;177;78;128m [0m[48;2;180;75;128m [0m[48;2;182;73;128m [0m[48;2;185;70;128m [0m[48;2;188;67;128m [0m[48;2;190;65;128m [0m[48;2;193;62;128m [0m[48;2;195;60;128m [0m[48;2;198;57;128m [0m[48;2;200;55;128m [0m[48;2;203;52;128m [0m[48;2;206;49;128m [0m[48;2;208;47;128m [0m[48;2;211;44;128m [0m[48;2;213;42;128m [0m[48;2;216;39;128m [0m[48;2;218;37;128m [0m[48;2;221;34;128m [0m[48;2;224;31;128m [0m[48;2;226;29;128m [0m[48;2;229;26;128m [0m[48;2;231;24;128m [0m[48;2;234;21;128m [0m[48;2;236;19;128m [0m[48;2;239;16;128m [0m[48;2;242;13;128m [0m[48;2;244;11;128m [0m[48;2;247;8;128m [0m[48;2;249;6;128m [0m[48;2;252;3;128m [0m[48;2;255;0;128m [0m
+wide: 日本語テキスト 中文 한국어 | emoji: 🚀✅🔥👍🏽 👨‍👩‍👧 ❤️ | combining: é ñ | ascii end
+┌──────┬──────┐
+│ box  │ ╭─╮  │
+├──────┼──────┤
+│ ░▒▓█ │ ╰─╯  │
+└──────┴──────┘
+[38;2;255;128;0mtruecolor orange[0m [38;5;45m256 cyan[0m [93mbright yellow[0m [44;97m white on blue [0m
+cursor below → 

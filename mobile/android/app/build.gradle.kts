@@ -29,6 +29,9 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // libvtshim.so exists for these two only; a 32-bit APK would install without it
+        // the Flutter plugin pre-fills armeabi-v7a, so replace the list rather than append
+        ndk { abiFilters.clear(); abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     buildTypes {
@@ -43,6 +46,16 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+// A release without the emulator shim would silently fall back to the text view on that ABI.
+tasks.named("preBuild") {
+    doFirst {
+        for (abi in listOf("arm64-v8a", "x86_64")) {
+            val so = file("src/main/jniLibs/$abi/libvtshim.so")
+            if (!so.exists()) throw GradleException("Missing ${so.path}: run mobile/tool/build-vtshim.sh before building")
+        }
     }
 }
 
