@@ -295,7 +295,7 @@ struct EventCommandsTests {
             EventFormatter.human(ControlEvent(seq: 21, ts: 0, kind: $0.ip == nil ? .phoneDetached : .phoneAttached, payload: $0),
                                  timeZone: TimeZone(secondsFromGMT: 0)!)
         }
-        #expect(viewers == ["00:00:00 phone.attached 10.0.0.3 tok", "00:00:00 phone.detached tok"])
+        #expect(viewers == ["00:00:00 phone.attached ip=10.0.0.3 pane-id=tok", "00:00:00 phone.detached ip=- pane-id=tok"])
 
         for event in events {
             let line = try EventFormatter.json(event)

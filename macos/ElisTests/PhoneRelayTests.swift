@@ -170,7 +170,9 @@ final class PhoneRelayTests: XCTestCase {
                         "phone.detached 10.0.0.9 b"])
 
         relay.setOn(false)
-        XCTAssertEqual(Array(events.suffix(2)), ["phone.detached - a", "phone.detached - a"])
+        XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("gone ") } })
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2)) // let the old child's stderr end arrive
+        XCTAssertEqual(events.filter { $0.hasPrefix("phone.detached - ") }, ["phone.detached - a", "phone.detached - a"])
         XCTAssertEqual(relay.viewers, PhoneViewers())
     }
 
