@@ -83,6 +83,8 @@ public final class WindowLibrary {
     @ObservationIgnored public var onRemoteStoreClosed: ((UUID) -> Void)?
     /// phoneViewerCount gives each window's store the phone viewer count for a pane token; the app sets it from PhoneRelay.
     @ObservationIgnored public var phoneViewerCount: (String) -> Int = { _ in 0 }
+    /// phoneLeads gives each window's store whether the phone leads a pane token; the app sets it from PhoneRelay.
+    @ObservationIgnored public var phoneLeads: (String) -> Bool = { _ in false }
     /// remoteDuplicates maps a remote window whose server turned out to be another window's to that window.
     @ObservationIgnored var remoteDuplicates: [UUID: UUID] = [:]
     /// remoteOpenClaims are remote windows the user opened whose mirror has not asked yet; never saved.
@@ -741,6 +743,7 @@ public final class WindowLibrary {
         store.flaggedLayout = flaggedLayout
         store.recentClosedWindow = windowID
         store.phoneViewerCount = { [weak self] in self?.phoneViewerCount($0) ?? 0 }
+        store.phoneLeads = { [weak self] in self?.phoneLeads($0) ?? false }
         return store
     }
 

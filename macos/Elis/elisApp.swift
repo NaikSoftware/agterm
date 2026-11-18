@@ -133,6 +133,7 @@ struct elisApp: App {
         let phoneRelay = PhoneRelay(stateDirectory: stateDirectory)
         phoneRelay.onEvent = { [weak library] in library?.emitAppEvent(ControlEventDraft(kind: $0, payload: $1)) }
         library.phoneViewerCount = { [weak phoneRelay] in phoneRelay?.viewers.count(paneID: $0) ?? 0 }
+        library.phoneLeads = { [weak phoneRelay] in phoneRelay?.leads.count(paneID: $0) ?? 0 > 0 }
         controlServer.phoneRelay = phoneRelay
         _phoneRelay = State(initialValue: phoneRelay)
         actions.remoteAttacher = controlServer

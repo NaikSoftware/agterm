@@ -542,6 +542,8 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     public var parent: String?
     /// index is the companion's slot among the new parent's companions for `session.companion.move`; nil appends.
     public var index: Int?
+    /// claim makes `session.attach` answer a claiming attach that takes the pane's lead; nil = a viewer.
+    public var claim: Bool?
 
     public init(name: String? = nil, cwd: String? = nil, targets: [String]? = nil,
                 workspace: String? = nil, workspaceName: String? = nil,

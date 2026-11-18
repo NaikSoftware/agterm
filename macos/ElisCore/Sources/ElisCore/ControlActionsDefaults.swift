@@ -306,6 +306,12 @@ public extension ControlActions {
         ControlResponse(ok: false, error: "session.attach is not supported by this host")
     }
 
+    /// A host written before take over keeps its viewer attach.
+    func sessionAttach(target: String?, pane: StatusPane, paneID: String?, claim: Bool, window: String?) async -> ControlResponse {
+        guard !claim else { return ControlResponse(ok: false, error: "take over is not supported here") }
+        return await sessionAttach(target: target, pane: pane, paneID: paneID, window: window)
+    }
+
     /// Not `ControlActionsUnsupported.message`, which says "on this platform": the divider exists wherever
     /// there is a sidebar, so a host refusing this has not implemented the command rather than lacking the
     /// thing it moves.

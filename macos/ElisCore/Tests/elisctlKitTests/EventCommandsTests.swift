@@ -297,6 +297,12 @@ struct EventCommandsTests {
         }
         #expect(viewers == ["00:00:00 phone.attached ip=10.0.0.3 pane-id=tok", "00:00:00 phone.detached ip=- pane-id=tok"])
 
+        let leads = [ControlEventKind.phoneClaimed, .phoneReleased].map {
+            EventFormatter.human(ControlEvent(seq: 22, ts: 0, kind: $0, payload: ControlEventPayload(paneID: "tok", ip: "10.0.0.3")),
+                                 timeZone: TimeZone(secondsFromGMT: 0)!)
+        }
+        #expect(leads == ["00:00:00 phone.claimed ip=10.0.0.3 pane-id=tok", "00:00:00 phone.released ip=10.0.0.3 pane-id=tok"])
+
         for event in events {
             let line = try EventFormatter.json(event)
             #expect(!line.contains("\n"))

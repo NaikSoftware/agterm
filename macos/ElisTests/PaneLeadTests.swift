@@ -247,4 +247,9 @@ final class PaneLeadTests: XCTestCase {
         XCTAssertTrue(reattached.isEmpty)
         XCTAssertFalse(ZmxLeadBook.shared.takeClaim(pane: identity))
     }
+
+    func testTheCoverNamesThePhoneWhileItLeads() {
+        XCTAssertEqual(PaneLeadCover.title(role: .follower, reattaching: false, remote: true, phone: true), "In use on your phone")
+        XCTAssertEqual(PaneLeadCover.title(role: .follower, reattaching: false, remote: false, phone: false), "In use from another Mac")
+    }
 }

@@ -176,6 +176,32 @@ final class PhoneRelayTests: XCTestCase {
         XCTAssertEqual(relay.viewers, PhoneViewers())
     }
 
+    /// A stray release emits nothing; stopping the relay releases each lead left, without an address.
+    func testRelayStopReleasesEveryLead() throws {
+        let relay = made(try slowServe(extra: """
+        echo 'elisctl: phone leads from 10.0.0.9 pane a' >&2
+        echo 'elisctl: phone leads from 10.0.0.9 pane b' >&2
+        echo 'elisctl: phone released from 10.0.0.9 pane b' >&2
+        echo 'elisctl: phone released from 10.0.0.9 pane b' >&2
+        """))
+        var events: [String] = []
+        relay.onEvent = { kind, payload in events.append([kind.rawValue, payload.ip ?? "-", payload.paneID ?? "-"].joined(separator: " ")) }
+        relay.attach(socketPath: "/tmp/unused.sock")
+        relay.setOn(true)
+
+        XCTAssertTrue(wait { relay.lastEvent == "phone disconnected from 10.0.0.9" })
+        XCTAssertEqual(relay.leads.count(paneID: "a"), 1)
+        XCTAssertEqual(relay.leads.count(paneID: "b"), 0)
+        XCTAssertEqual(events.filter { $0.hasPrefix("phone.claimed") || $0.hasPrefix("phone.released") },
+                       ["phone.claimed 10.0.0.9 a", "phone.claimed 10.0.0.9 b", "phone.released 10.0.0.9 b"])
+
+        relay.setOn(false)
+        XCTAssertTrue(wait { logLines().contains { $0.hasPrefix("gone ") } })
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        XCTAssertEqual(events.filter { $0.hasPrefix("phone.released - ") }, ["phone.released - a"])
+        XCTAssertEqual(relay.leads, PhoneViewers())
+    }
+
     /// A serve that exits by itself detaches each viewer left, without an address.
     func testARelayThatExitsByItselfDetachesItsViewers() throws {
         let relay = made(try fakeTool("""

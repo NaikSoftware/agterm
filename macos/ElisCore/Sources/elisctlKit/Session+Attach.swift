@@ -5,12 +5,15 @@ import ElisCore
 extension Session {
     struct Attach: RequestCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Attach this terminal to a Live pane as a passive viewer.",
+            abstract: "Attach this terminal to a Live pane as a passive viewer, or with --claim as its lead.",
             discussion: """
             Replaces this process with the viewer command, on your stdio. With --json it prints the response and does not attach. \
-            The viewer ends when its process is killed or the pane's session ends; keys typed into it are dropped, the detach key too.
+            The viewer ends when its process is killed or the pane's session ends; keys typed into it are dropped, the detach key too. \
+            With --claim the command takes the pane's lead: the program runs at this terminal's size and takes its keys, \
+            and the pane on the Mac is covered until the command ends or a key there takes the lead back.
             """)
         @Option(name: .long, help: "Which pane: primary/left/top or split/right/bottom. Defaults to primary.") var pane: String?
+        @Flag(name: .long, help: "Take the pane's lead; the pane on the Mac is covered until the command ends.") var claim = false
         @OptionGroup var target: TargetOptions
         @OptionGroup var options: ClientOptions
 
@@ -27,7 +30,9 @@ extension Session {
         }
 
         func makeRequest() throws -> ControlRequest {
-            ControlRequest(cmd: .sessionAttach, target: target.target, args: options.withWindow(ControlArgs(pane: pane)))
+            var args = ControlArgs(pane: pane)
+            if claim { args.claim = true }
+            return ControlRequest(cmd: .sessionAttach, target: target.target, args: options.withWindow(args))
         }
 
         static func decide(_ reply: SocketReply, json: Bool, callerPaneID: String?) -> Action {

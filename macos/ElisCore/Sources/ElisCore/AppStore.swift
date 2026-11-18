@@ -225,6 +225,8 @@ public final class AppStore {
     @ObservationIgnored public var attentionIncludesActive = false
     /// The phone's open views of a pane token, for `tree`; the app forwards it from `PhoneRelay`.
     @ObservationIgnored public var phoneViewerCount: (String) -> Int = { _ in 0 }
+    /// Whether the phone leads a pane token, for `tree` and the pane's cover; the app forwards it from `PhoneRelay`.
+    @ObservationIgnored public var phoneLeads: (String) -> Bool = { _ in false }
 
     /// Whether GUI attention navigation walks every open window (`WindowLibrary.attentionStep`). Observed,
     /// unlike `attentionIncludesActive`, because the Navigate menu's enablement reads it.
@@ -411,7 +413,8 @@ public final class AppStore {
                                               paneID: token?.isEmpty == false ? token : nil,
                                               pendingMessages: pendingMessages(session, pane: pane, token: token),
                                               remote: remotelyPresented(session, pane: pane),
-                                              phoneViewers: token.map(phoneViewerCount).flatMap { $0 > 0 ? $0 : nil })
+                                              phoneViewers: token.map(phoneViewerCount).flatMap { $0 > 0 ? $0 : nil },
+                                              phoneLead: token.map(phoneLeads) == true ? true : nil)
                 }
                 return ControlSessionNode(id: session.id.uuidString, name: session.displayName,
                                           cwd: (session.content == .page ? parent(of: session) : nil)?.effectiveCwd
