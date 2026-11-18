@@ -129,7 +129,8 @@ final class PhoneLinkSession {
             output: { [weak self] bytes in self?.enqueue(channel: channel, bytes) ?? .closed },
             frame: { [weak self] frame in self?.sendDirect(frame) },
             ended: { [weak self] in self?.closeChannel(channel) },
-            pending: { [weak self] in self?.scheduler.pendingBytes(channel: channel) ?? 0 })
+            pending: { [weak self] in self?.scheduler.pendingBytes(channel: channel) ?? 0 },
+            windowSpent: { [weak self] in self?.scheduler.windowSpent(channel: channel) ?? false })
         let terminal = PhoneLinkTerminal(channel: channel, request: request, socketPath: socketPath, queue: queue, peer: peer,
                                          log: log, clock: clock, after: { delay, work in queue.asyncAfter(deadline: .now() + delay, execute: work) },
                                          link: link)

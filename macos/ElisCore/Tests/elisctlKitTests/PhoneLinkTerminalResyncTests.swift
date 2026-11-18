@@ -9,14 +9,15 @@ struct PhoneLinkTerminalResyncTests {
     /// A viewer that sends 600 KiB, over the 512 KiB relay buffer, then reads.
     private static let burst = "head -c 614400 /dev/zero | tr '\\0' x; exec cat"
 
-    /// A program that floods a phone sending no CREDIT: each overflow within 10 s of the last re-attach doubles the
-    /// wait, up to 30 s. The channel stays open, the queue bounded, and the relay's own wait is no stall.
+    /// A program that floods a phone that keeps granting: each overflow within 10 s of the last re-attach doubles the
+    /// wait, up to 30 s. The channel stays open and the queue bounded; the relay's own wait is no stall.
     @Test func floodBacksOffResyncs() throws {
         let harness = try TerminalHarness()
         defer { harness.finish() }
         harness.start(RawStubServer.fakeAttach("exec yes flood"))
         for (round, wait) in [1.0, 2, 4, 8, 16, 30, 30].enumerated() {
             #expect(harness.waitOverflow(count: round + 1))
+            harness.credit() // for what reached it before the overflow
             harness.advance(by: wait - 0.1)
             usleep(200_000)
             #expect(harness.attaches() == round + 1, "round \(round): re-attached before \(wait) s")
@@ -64,6 +65,27 @@ struct PhoneLinkTerminalResyncTests {
         #expect(harness.attaches() == 2)
         harness.advance(by: 0.1)
         #expect(harness.wait { harness.events().filter { $0 == .resync }.count == 2 })
+    }
+
+    /// A phone that takes bytes but never grants: resyncs refill the window, yet 30 s after OPEN the channel closes.
+    @Test func noCreditStallsDespiteResyncs() throws {
+        let harness = try TerminalHarness(drains: true)
+        defer { harness.finish() }
+        let gate = harness.dir + "/go"
+        harness.start(RawStubServer.fakeAttach(
+            "n=$(ls '\(harness.dir)' | grep -c '^started'); touch '\(harness.dir)/started'$n; "
+                + "while [ ! -e '\(gate)'$n ]; do sleep 0.02; done; exec yes late"))
+        #expect(harness.wait { harness.events().contains(.opened(80, 24)) })
+        for (round, wait) in [1.0, 2].enumerated() {
+            FileManager.default.createFile(atPath: "\(gate)\(round)", contents: nil)
+            #expect(harness.waitOverflow(count: round + 1))
+            harness.advance(by: wait)
+            #expect(harness.wait { harness.events().filter { $0 == .resync }.count == round + 1 })
+        }
+        harness.advance(by: 26) // 29 s after OPEN; the third attach is quiet
+        #expect(!harness.events().contains(.close("stalled")))
+        harness.advance(by: 1)
+        #expect(harness.events().suffix(2) == [.close("stalled"), .ended])
     }
 
     @Test func failedReattachClosesWithTheAppError() throws {
@@ -130,7 +152,7 @@ struct PhoneLinkTerminalResyncTests {
 /// the scheduler, as for a phone that sends no CREDIT.
 private final class TerminalHarness: @unchecked Sendable {
     enum Event: Equatable {
-        case opened(UInt16, UInt16), resync, grid(UInt16, UInt16), output(Data), close(String), refused(String), ended
+        case opened(UInt16, UInt16), overflow, resync, grid(UInt16, UInt16), output(Data), close(String), refused(String), ended
     }
 
     let server = RawStubServer()
@@ -146,8 +168,11 @@ private final class TerminalHarness: @unchecked Sendable {
     private var scheduled = 0
     private var scheduler = PhoneLinkScheduler(window: 262_144, bufferLimit: PhoneLinkSession.bufferLimit)
     private var terminal: PhoneLinkTerminal?
+    /// The phone takes every byte its credit allows, as a reading phone that never grants does.
+    private let drains: Bool
 
-    init() throws {
+    init(drains: Bool = false) throws {
+        self.drains = drains
         dir = NSTemporaryDirectory() + "elis-term-\(UUID().uuidString.prefix(8))"
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         try server.start()
@@ -168,6 +193,8 @@ private final class TerminalHarness: @unchecked Sendable {
             output: { [self] bytes in
                 record(.output(bytes))
                 let result = scheduler.enqueue(channel: 2, bytes)
+                if result == .overflowed { record(.overflow) }
+                while drains, scheduler.next(maxChunk: PhoneLinkSession.maxChunk) != nil {}
                 lock.withLock { largestQueue = max(largestQueue, scheduler.pendingBytes(channel: 2)) }
                 return result
             },
@@ -176,7 +203,8 @@ private final class TerminalHarness: @unchecked Sendable {
                 scheduler.close(channel: 2)
                 record(.ended)
             },
-            pending: { [self] in scheduler.pendingBytes(channel: 2) })
+            pending: { [self] in scheduler.pendingBytes(channel: 2) },
+            windowSpent: { [self] in scheduler.windowSpent(channel: 2) })
         let terminal = PhoneLinkTerminal(
             channel: 2, request: PhoneLinkOpen(type: "vt", target: "S1", pane: "left"), socketPath: server.path, queue: queue,
             peer: "mem:1", log: { [lines] in lines.append($0) }, clock: { [self] in now },
@@ -224,14 +252,7 @@ private final class TerminalHarness: @unchecked Sendable {
 
     /// Whether the relay buffer overflowed `count` times in all, the handler included.
     func waitOverflow(count: Int = 1) -> Bool {
-        let overflowed = wait {
-            // each overflow drops the queue: count the drops, as the enqueue that crossed the limit
-            var queued = 0, drops = 0
-            for case let .output(bytes) in self.events() {
-                if queued + bytes.count > PhoneLinkSession.bufferLimit { drops += 1; queued = 0 } else { queued += bytes.count }
-            }
-            return drops >= count
-        }
+        let overflowed = wait { self.events().filter { $0 == .overflow }.count >= count }
         queue.sync {}
         return overflowed
     }

@@ -20,6 +20,8 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         let ended: () -> Void
         /// Bytes queued on the channel and not sent yet, for the stall watchdog.
         let pending: () -> Int
+        /// A full window went out since the phone's last CREDIT, for the stall watchdog.
+        let windowSpent: () -> Bool
     }
 
     /// A `screen` run that has not finished by then is killed.
@@ -31,7 +33,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     static let reattachInterval: TimeInterval = 1
     static let maxBackoff: TimeInterval = 30
     static let backoffReset: TimeInterval = 10
-    /// Bytes waiting this long with no CREDIT from the phone close the channel.
+    /// This long with no CREDIT from the phone (since OPEN if none came), while it owes one, closes the channel.
     static let stallTimeout: TimeInterval = 30
     static let localPoll: TimeInterval = 2
     /// Each remote poll is a fresh ssh connection.
@@ -65,8 +67,8 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     private var reattached: Date?
     /// From an overflow until the fresh attach runs.
     private var resyncing = false
-    /// When bytes began to wait with no CREDIT since; nil while nothing waits.
-    private var waitingSince: Date?
+    /// The phone's last CREDIT, or OPENED until one comes; a RESYNC does not move it.
+    private var lastCredit = Date.distantFuture
 
     init(channel: UInt32, request: PhoneLinkOpen, socketPath: String, queue: DispatchQueue, peer: String,
          log: @escaping (String) -> Void, clock: @escaping () -> Date,
@@ -86,7 +88,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
 
     /// The phone sent CREDIT on this channel; the scheduler has already sent what it allows.
     func credited() {
-        waitingSince = link.pending() > 0 ? clock() : nil
+        lastCredit = clock()
     }
 
     /// Ends the channel without a word to the phone: the phone closed it, or the link is closing.
@@ -157,11 +159,11 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         grid = (cols, rows)
         if resyncing {
             resyncing = false
-            waitingSince = nil // a fresh window: the stall clock starts again with the next waiting byte
             link.resynced(cols, rows) // a resync prints no viewer lines
             return
         }
         link.opened(cols, rows)
+        lastCredit = clock()
         paneID = attach.paneID
         log("phone attached from \(peer) pane \(attach.paneID)")
         nextPoll = clock() + (remote ? Self.remotePoll : Self.localPoll)
@@ -184,11 +186,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         guard !stopped, epoch == self.epoch else { return }
         let filtered = filter.filter(bytes)
         guard !filtered.isEmpty else { return }
-        switch link.output(filtered) {
-        case .queued: if waitingSince == nil, link.pending() > 0 { waitingSince = clock() }
-        case .closed: break
-        case .overflowed: overflowed()
-        }
+        if link.output(filtered) == .overflowed { overflowed() }
     }
 
     /// The phone fell a whole buffer behind: drop this attach and start a fresh one, which repaints the screen.
@@ -219,15 +217,9 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         after(1) { [weak self] in
             guard let self, !stopped else { return }
             let now = clock()
-            // the relay's own backoff wait is not the phone's stall: the phone has nothing to grant CREDIT for
-            if !resyncing {
-                if link.pending() == 0 {
-                    waitingSince = nil
-                } else {
-                    let since = waitingSince ?? now
-                    waitingSince = since
-                    if now.timeIntervalSince(since) >= Self.stallTimeout { return close(reason: "stalled") }
-                }
+            // a pending resync alone owes nothing: during a backoff wait the phone gets no bytes to grant CREDIT for
+            if now.timeIntervalSince(lastCredit) >= Self.stallTimeout, link.windowSpent() || link.pending() > 0 {
+                return close(reason: "stalled")
             }
             if !resyncing, screenProcess == nil, now >= nextPoll {
                 nextPoll = now + (remote ? Self.remotePoll : Self.localPoll)
@@ -236,6 +228,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
                     let size = (cols: UInt16(screen.columns), rows: UInt16(screen.rows))
                     guard size != grid else { return }
                     grid = size
+                    // the viewer pty keeps its size: zmx ignores a follower's pty size, and the phone draws the daemon's grid
                     link.frame(.grid(channel: channel, cols: size.cols, rows: size.rows))
                 }
             }
