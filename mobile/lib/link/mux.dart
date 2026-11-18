@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import '../client.dart';
 import 'decoder.dart';
 import 'frame.dart';
+import 'messages.dart';
 
 sealed class VtEvent {}
 
@@ -26,7 +27,8 @@ class Grid extends VtEvent {
   final int cols, rows;
 }
 
-/// Reset the emulator; a Grid follows, then a full screen.
+/// Reset the emulator; a Grid follows, then a full screen. Data received before it must still be reported to
+/// [VtChannel.consumed] (in order): those bytes leave the credit accounting there, not here.
 class Resync extends VtEvent {}
 
 class Closed extends VtEvent {
@@ -40,27 +42,13 @@ bool rereadsTree(Map<String, dynamic> row) => row.containsKey('dropped') || row[
 const _creditBatch = 16 * 1024;
 const _duplicateOpen = 'channel already open';
 
-/// Splits newline-terminated lines out of a byte stream; a line may span frames.
-class _Lines {
-  var _buffer = <int>[];
-
-  Iterable<String> feed(List<int> bytes) sync* {
-    _buffer.addAll(bytes);
-    for (var nl = _buffer.indexOf(10); nl >= 0; nl = _buffer.indexOf(10)) {
-      final line = utf8.decode(_buffer.sublist(0, nl), allowMalformed: true);
-      _buffer = _buffer.sublist(nl + 1);
-      yield line;
-    }
-  }
-}
-
 class Mux {
   Mux._(this._c);
 
   final Connection _c;
   final _decoder = LinkDecoder();
-  final _control = _Lines();
-  final _eventLines = _Lines();
+  final _control = LineBuffer();
+  final _eventLines = LineBuffer();
   final _events = StreamController<Map<String, dynamic>>.broadcast(); // nobody may listen: rows are not kept
   final _channels = <int, VtChannel>{};
   final _done = Completer<void>();
@@ -114,9 +102,13 @@ class Mux {
 
   void _onFrame(LinkFrame f) {
     if (f.channel == 0 && f.kind == LinkKind.data) {
-      _control.feed(f.payload).forEach(_c.controlLine);
+      _control.add(f.payload);
+      for (var line = _control.next(); line != null; line = _control.next()) {
+        _c.controlLine(line);
+      }
     } else if (f.channel == 1 && f.kind == LinkKind.data) {
-      for (final line in _eventLines.feed(f.payload)) {
+      _eventLines.add(f.payload);
+      for (var line = _eventLines.next(); line != null; line = _eventLines.next()) {
         if (_jsonLine(line) case final row?) _events.add(row);
       }
     } else {
@@ -162,12 +154,14 @@ class VtChannel {
   Stream<VtEvent> get events => _events.stream;
 
   /// The emulator consumed [bytes] of Data: CREDIT once caught up with what arrived, or per 16 KiB.
+  /// The caller must report every Data event it received, in order, those before a Resync included: unreported
+  /// pre-Resync bytes would absorb later consumption, no CREDIT would go out, and the relay closes the channel `stalled`.
   void consumed(int bytes) {
     if (_events.isClosed) return;
     final old = min(bytes, _stale);
     _stale -= old;
-    bytes -= old;
-    _unconsumed = max(0, _unconsumed - bytes);
+    bytes = min(bytes - old, _unconsumed);
+    _unconsumed -= bytes;
     _pending += bytes;
     if (_pending > 0 && (_unconsumed == 0 || _pending >= _creditBatch)) {
       _mux._add(LinkFrame.credit(id, _pending));
@@ -194,7 +188,12 @@ class VtChannel {
         }
         if (error != null) return _end('$error');
         if (_opened.isCompleted) return;
-        _events.add(Opened(o['cols'] as int? ?? 0, o['rows'] as int? ?? 0));
+        if ((o['cols'], o['rows']) case (final int cols, final int rows)) {
+          _events.add(Opened(cols, rows));
+        } else {
+          _mux._add(LinkFrame.json(LinkKind.close, id, {'reason': 'closed'})); // the relay holds it open: free the slot
+          return _end('the relay sent a bad OPENED');
+        }
         _opened.complete(this);
       case LinkKind.data:
         _unconsumed += f.payload.length;

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:elis_mobile/client.dart';
@@ -295,5 +296,66 @@ void main() {
     await flush();
     expect([a, b, ends], [['opened 80x24', 'closed Disconnected'], ['opened 80x24', 'closed Disconnected'], 2]);
     await expectLater(m.open('w'), throwsA(isA<ElisError>()));
+  });
+
+  test('oldRelayErrorFallsBackAtOnce', () async {
+    final (c, r) = await connect(old: true);
+    final m = Mux.upgrade(c);
+    final b = c.call('b'); // held during the upgrade, then sent as a line
+    await flush();
+    expect(r.lines.last, linkUpgradeRequest.trim());
+    // a relay before M4a forwards {"mux":1} as a command and answers it without an id
+    r.send(utf8.encode('{"id":null,"ok":false,"error":"unknown command"}\n'));
+    expect(await m.timeout(const Duration(seconds: 1)), isNull);
+    await flush();
+    final req = jsonDecode(r.lines.last) as Map;
+    expect(req['cmd'], 'b');
+    r.send(answer(req['id'], {'v': 'b'}));
+    expect(await b, {'v': 'b'});
+  });
+
+  test('linkLossDuringUpgradeFailsHeldCalls', () async {
+    final (c, r) = await connect();
+    final m = Mux.upgrade(c);
+    final held = expectLater(c.call('b'), throwsA(isA<ElisError>()));
+    await flush();
+    r.drop();
+    expect(await m.timeout(const Duration(seconds: 1)), isNull);
+    await held;
+  });
+
+  test('aCharacterSplitAcrossReadsDecodesOnTheLinePath', () async {
+    final (c, r) = await connect();
+    final x = c.call('x');
+    await flush();
+    final bytes = answer((jsonDecode(r.lines.last) as Map)['id'], {'v': 'ü€'});
+    final at = utf8.encode('{"id":2,"ok":true,"result":{"v":"ü').length + 1; // inside the 3-byte €
+    r.send(bytes.sublist(0, at));
+    r.send(bytes.sublist(at));
+    expect(await x, {'v': 'ü€'});
+  });
+
+  test('aLongAnswerInSmallReadsParsesInLinearTime (4 MB in 500-byte reads)', () async {
+    final (c, r) = await connect();
+    final x = c.call('x');
+    await flush();
+    final big = 'a' * (4 << 20);
+    final bytes = answer((jsonDecode(r.lines.last) as Map)['id'], {'v': big});
+    final clock = Stopwatch()..start();
+    for (var at = 0; at < bytes.length; at += 500) {
+      r.send(bytes.sublist(at, min(at + 500, bytes.length)));
+    }
+    expect((await x)['v'], big);
+    expect(clock.elapsed, lessThan(const Duration(seconds: 2)));
+  });
+
+  test('aBadOpenedIsARefusalAndFreesTheSlot', () async {
+    final (m, r, _) = await upgraded();
+    final f = m.open('w');
+    await flush();
+    r.send(json(LinkKind.opened, 2, {'cols': '80', 'rows': 24}));
+    await expectLater(f, throwsA(isA<ElisError>()));
+    final last = r.frames.last;
+    expect((last.kind, last.channel), (LinkKind.close, 2));
   });
 }
