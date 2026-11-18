@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-18-phone-terminal-stream-design.md` ("Modes: Watch and Take over", "Protocol model", "Attach model", "Phone terminal engine"). Relay contract: `.claude/rules/control-api.md` (Relay mux, Pane lead). Style: the M4a and M4b plans beside this file.
 
-**Blockers:** none. **Owner question:** elis-server's own tree will omit the new `phoneLead` field, as it omits `phoneViewers`; the approved exception (2026-11-18) names only `phoneViewers`, so the owner confirms it before Task 2 merges. zmx needs no new patch: 0001 already gives a claiming attach the lead (test "a claiming attach takes the lead from a live leader and both are told"), applies only the leader's input and resize, and reports the role ahead of any output.
+**Blockers:** none. **Owner decisions (2026-11-18):** elis-server's own tree omits `phoneLead`, as it omits `phoneViewers` (approved exception; the Mac's tree shows it for server rows); the gesture rule of call 9 is approved; Task 11 runs on the owner's live Elis with this branch's Release build. zmx needs no new patch: 0001 already gives a claiming attach the lead (test "a claiming attach takes the lead from a live leader and both are told"), applies only the leader's input and resize, and reports the role ahead of any output.
 
 **Superseded spec lines (Task 9 edits them):** the M5 line's "Fit to phone on the terminal view" is done (M4b); "Bluetooth end-to-end on the emulator" becomes the owner's physical phone (emulators are forbidden).
 
@@ -183,8 +183,8 @@
 
 ### Task 11: End to end on the owner's phone over Bluetooth (controller only, never a subagent)
 
-- [ ] Build the Mac app Debug and launch one isolated instance per `CLAUDE.md` (`env -u …`, `open -n --env ELIS_STATE_DIR=/tmp/elis-m5`, Live sessions on); every `elisctl` call uses the Debug binary with `--socket`. Create test sessions there only: a shell, `vim`, and `cd ~/IdeaProjects/elis && claude`.
-- [ ] `adb install -r` the debug APK (never uninstall, never `flutter test integration_test`); ask the owner to pair the phone with the Debug relay and to turn Wi-Fi off, so the `via` chip reads Bluetooth. Allow the Bluetooth prompt the Debug build raises.
+- [ ] Owner decision: the owner's live Elis. `make deploy INSTALL_DIR=/Applications` (the owner runs `/Applications/Elis.app`), then the owner restarts Elis. Create new test sessions only, in a `Phone test` workspace, with `--no-select`: a shell, `vim`, and `cd ~/IdeaProjects/elis && claude`. Never type into, take over or close any other session; close the test workspace at the end.
+- [ ] `adb install -r` the debug APK (never uninstall, never `flutter test integration_test`); the phone stays paired; ask the owner to turn Wi-Fi off on the phone so the `via` chip reads Bluetooth.
 - [ ] Check with screenshots (`adb exec-out screencap -p`), each on a local row and on one remote row (elis-server or attached Mac):
   1. Watch: one-finger drag scrolls Claude Code's transcript; pinch zooms, two fingers pan, double tap resets.
   2. Take over: the Mac pane shows `In use on your phone`; `tree` shows `phoneLead` and the Mac's `lead: follower`; `events` printed `phone.claimed`; the program redraws at the phone's grid.
@@ -192,4 +192,4 @@
   4. A key on the Mac's cover: the phone returns to Watch with the message; `phone.released` printed.
   5. Give back, app pause, and Bluetooth off on the phone: each time the Mac leads again within a few seconds and `phoneLead` is gone.
   6. A 200 KiB paste completes and the relay's memory stays flat.
-- [ ] Stop the Debug instance by pid with SIGTERM, confirm no Dock tile lingers, report the results with the screenshots.
+- [ ] Close the `Phone test` workspace and report the results with the screenshots.
