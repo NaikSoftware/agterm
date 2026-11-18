@@ -9,22 +9,28 @@ struct PhoneAttachTests {
     @Test func viewerLeadSetsScreenOnlyAndFollowNotClaim() {
         let viewer = ZmxLeadAttachment.viewer
 
-        #expect(viewer.environment == ["ZMX_MANAGED": viewer.nonce, "ZMX_MANAGED_SCREEN_ONLY": "1", "ZMX_MANAGED_FOLLOW": "1"])
+        #expect(viewer.environment ==
+                ["ZMX_MANAGED": viewer.nonce, "ZMX_MANAGED_SCREEN_ONLY": "1", "ZMX_MANAGED_FOLLOW": "1"])
         #expect(!viewer.claim)
         #expect(ZmxLeadAttachment.viewer.nonce != viewer.nonce)
     }
 
     @Test func attachCommandOutputIsUnchanged() throws {
-        let argv = try RemoteSession.attachCommand(host: "buildbox", endpoint: endpoint, daemon: daemon)
-        let guardScript = "printf '%s\\n' 'elis: remote session is gone'; exit 1"
-        let remote = CommandRestore.shellQuotedLine([
-            "/usr/bin/env", "ZMX_SESSION=", "ZMX_SESSION_PREFIX=", "ZMX_NO_DETACH_KEY=1", "ZMX_DIR=/tmp/zmx-x",
-            "/Applications/Elis.app/zmx", "attach", daemon, "/bin/sh", "-c", guardScript,
-        ])
+        let fixed = ControlZmxEndpoint(executable: "/opt/zmx", socketDirectory: "/tmp/zd")
+        let tail = "'/opt/zmx' 'attach' 'elis-00000000000000000000000000000001' '/bin/sh' '-c' "
+            + "'printf '\\''%s\\n'\\'' '\\''elis: remote session is gone'\\''; exit 1'"
+        let env = "'/usr/bin/env' 'ZMX_SESSION=' 'ZMX_SESSION_PREFIX=' 'ZMX_NO_DETACH_KEY=1' 'ZMX_DIR=/tmp/zd' "
+        let pinnedDaemon = "elis-00000000000000000000000000000001"
+        let head = ["ssh", "-tt", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "LogLevel=ERROR", "buildbox"]
 
-        #expect(argv.last == remote)
-        #expect(argv.prefix(9) == ["ssh", "-tt", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
-                                   "-o", "LogLevel=ERROR", "buildbox"])
+        let plain = try RemoteSession.attachCommand(host: "buildbox", endpoint: fixed, daemon: pinnedDaemon)
+        #expect(plain == head + [env + tail])
+
+        let lead = ZmxLeadAttachment(nonce: "n0nce", claim: false, screenOnly: true, follow: true)
+        let viewer = try RemoteSession.attachCommand(host: "buildbox", endpoint: fixed, daemon: pinnedDaemon,
+                                                    lead: lead)
+        let words = "'ZMX_MANAGED=n0nce' 'ZMX_MANAGED_FOLLOW=1' 'ZMX_MANAGED_SCREEN_ONLY=1' "
+        #expect(viewer == head + [env + words + tail])
     }
 
     @Test func localViewerArgvRunsZmxDirectly() throws {
@@ -40,7 +46,8 @@ struct PhoneAttachTests {
     }
 
     @Test func remoteViewerArgvUsesSshWithoutControlPath() throws {
-        let attach = try ControlAttach.viewer(.remote(host: "buildbox", endpoint: endpoint, daemon: daemon), paneID: "p2")
+        let source = LivePaneSource.remote(host: "buildbox", endpoint: endpoint, daemon: daemon)
+        let attach = try ControlAttach.viewer(source, paneID: "p2")
 
         #expect(attach.argv.first == "ssh")
         #expect(attach.argv.contains("buildbox"))
