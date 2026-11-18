@@ -162,7 +162,7 @@ same scripts on itself, then merges master.
 
 A session can be any program: an agent, a shell, any CLI or TUI. The phone draws every session through one
 switcher with three modes; each is a layout of data the phone already has, never a guess about the program.
-Mockups: the "Elis phone agent UI" design canvas (zsh, Claude Code, agy, vim).
+Mockups: [the session view design](assets/2026-11-18-phone-session-view.html) (zsh, Claude Code, agy, vim), a self-contained export of the design canvas.
 
 | Mode | Built from | Fits |
 |---|---|---|
