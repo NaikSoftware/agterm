@@ -386,6 +386,9 @@ final class RawStubServer: @unchecked Sendable {
                     close(fd)
                     return
                 }
+                // a client that gave up on a held answer is gone by the reply: EPIPE, not a SIGPIPE that kills the run
+                var noSigPipe: Int32 = 1
+                setsockopt(conn, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
                 serve(conn)
                 close(conn)
             }

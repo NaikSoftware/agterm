@@ -97,6 +97,8 @@ final class PhoneLinkPty: @unchecked Sendable {
         // if a relay command ever does that
         // wait without reaping, then reap under the lock: terminate() never signals a pgid freed for reuse
         var info = siginfo_t()
+        // shortcut: a waitid failure other than EINTR falls through to waitpid under the lock, which would block
+        // terminate(); unreachable for our own unreaped child, handle it if the reaping ever moves elsewhere
         while waitid(P_PID, id_t(pid), &info, WEXITED | WNOWAIT) < 0 && errno == EINTR {}
         let status: Int32 = lock.withLock {
             reaped = true

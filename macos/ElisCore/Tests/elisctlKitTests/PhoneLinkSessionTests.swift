@@ -204,6 +204,28 @@ struct PhoneLinkSessionTests {
         #expect(before == before.sorted() && (before.last ?? 0) < 1001)
     }
 
+    /// A phone that pipelines requests and reads nothing: past 4 MiB of answers waiting, the link closes.
+    @Test func controlAnswersPastTheBoundEndTheLink() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { fixture.stop() }
+        phone.hold()
+        let cmd = String(repeating: "x", count: 40000)
+        phone.deliver((1...130).map { Self.control(#"{"cmd":"\#(cmd)","id":\#($0)}"# + "\n") }.reduce(Data(), +))
+        #expect(phone.waitClosed())
+        #expect(fixture.waitLogged("phone link overflow from mem:1"))
+    }
+
+    /// A phone that sends OPEN after OPEN and reads nothing: past 256 waiting answers, the link closes.
+    @Test func directFramesPastTheBoundEndTheLink() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { fixture.stop() }
+        phone.hold()
+        let open = PhoneLinkFrame.json(.open, channel: 0, PhoneLinkOpen(type: "vt", target: "S1", pane: "left")).encoded()
+        phone.deliver(Data(Array(repeating: open, count: 300).joined()))
+        #expect(phone.waitClosed())
+        #expect(fixture.waitLogged("phone link overflow from mem:1"))
+    }
+
     @Test func pollerStopsOnClose() throws {
         let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }

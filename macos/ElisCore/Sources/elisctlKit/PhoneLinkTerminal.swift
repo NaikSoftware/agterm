@@ -35,7 +35,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     static let stallTimeout: TimeInterval = 30
     static let localPoll: TimeInterval = 2
     /// Each remote poll is a fresh ssh connection.
-    static let remotePoll: TimeInterval = 10
+    static let remotePoll: TimeInterval = 30
 
     let channel: UInt32
     private let request: PhoneLinkOpen
@@ -68,6 +68,9 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     /// The first tick that saw a full window sent since the phone's last CREDIT (or OPEN); only a CREDIT clears it,
     /// not a RESYNC. Counted from the spend, not the CREDIT: an idle phone's old CREDIT must not close it on a burst.
     private var spentSince: Date?
+    /// From an app request's send until its answer is back on the relay queue, even after `stop()`: the link keeps
+    /// the slot of a closed channel while this holds.
+    private(set) var asking = false
 
     init(channel: UInt32, request: PhoneLinkOpen, socketPath: String, queue: DispatchQueue, peer: String,
          log: @escaping (String) -> Void, clock: @escaping () -> Date,
@@ -103,9 +106,12 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     private func requestAttach() {
         var args: [String: Any] = [:]
         args["pane"] = request.pane
+        // a live pane id wins over the role, so a re-attach cannot land on the pane that took the role since
+        if let paneID { args["paneID"] = paneID }
         let body = (try? JSONSerialization.data(withJSONObject: ["cmd": Command.sessionAttach.rawValue, "target": request.target,
                                                                  "args": args], options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
         let socketPath = socketPath
+        asking = true
         Thread.detachNewThread { [self] in
             let result: Result<ControlAttach, Refusal>
             do {
@@ -120,7 +126,10 @@ final class PhoneLinkTerminal: @unchecked Sendable {
             } catch {
                 result = .failure(Refusal("Elis is not reachable: \(error)"))
             }
-            queue.async { [self] in answered(result) }
+            queue.async { [self] in
+                asking = false
+                answered(result)
+            }
         }
     }
 
@@ -131,6 +140,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         case let .success(answer): attach = answer
         case let .failure(refusal): return fail(refusal.message)
         }
+        if let paneID, attach.paneID != paneID { return close(reason: "pane moved") }
         screenArgv = attach.screen
         remote = attach.remote
         readScreen { [self] screen in

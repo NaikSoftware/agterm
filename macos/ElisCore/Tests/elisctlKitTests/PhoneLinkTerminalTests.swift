@@ -156,6 +156,32 @@ struct PhoneLinkTerminalTests {
         #expect(!fixture.logged().contains { $0.hasPrefix("phone detached") })
     }
 
+    /// A closed channel keeps its slot while its attach request still runs, so OPEN+CLOSE cannot pile up requests.
+    @Test func closedChannelsHoldTheirSlotUntilTheAnswer() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        defer { fixture.server.releaseAttach() }
+        let before = fixture.server.requests().count
+        fixture.server.holdAttach()
+        let close = { (channel: UInt32) in PhoneLinkFrame.json(.close, channel: channel, PhoneLinkClose(reason: "done")).encoded() }
+        phone.deliver((2...9).map { Self.open($0) + close($0) }.reduce(Data(), +) + Self.open(10))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 10) == PhoneLinkOpened(error: "too many open panes"))
+        #expect(Self.waitAttaches(fixture, 1, after: before))
+        fixture.server.releaseAttach()
+        // the answers land one at a time; a fresh channel opens once one slot is back
+        let deadline = Date().addingTimeInterval(30)
+        var channel: UInt32 = 10
+        var opened: PhoneLinkOpened?
+        while opened != PhoneLinkOpened(cols: 80, rows: 24), Date() < deadline {
+            channel += 1
+            usleep(50_000)
+            phone.deliver(Self.open(channel))
+            opened = reader.opened(from: phone, channel: channel)
+        }
+        #expect(opened == PhoneLinkOpened(cols: 80, rows: 24))
+    }
+
     @Test func revokedPhoneCannotOpen() throws {
         let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }

@@ -12,6 +12,9 @@ final class PhoneLinkSession {
     static let eventsHandOff = 64 * 1024
     /// Open vt channels per phone.
     static let maxTerminals = 8
+    /// Channel 0's answers waiting in the scheduler, and frames waiting in `direct`, past which the link closes.
+    static let controlLimit = 4 * 1024 * 1024
+    static let directLimit = 256
 
     /// `send`'s completion runs once, on the relay queue, even when the link failed.
     private let send: (Data, @escaping () -> Void) -> Void
@@ -31,6 +34,9 @@ final class PhoneLinkSession {
     private var events: PhoneLinkEvents!
     /// Every vt channel from its OPEN on, so a duplicate or a ninth is refused while an attach is still asked for.
     private var terminals: [UInt32: PhoneLinkTerminal] = [:]
+    /// Closed channels whose attach request still runs: each keeps its slot until the answer, so OPEN and CLOSE in a
+    /// loop cannot pile up app requests.
+    private var leaving: [PhoneLinkTerminal] = []
     /// OPENED and CLOSE: they bypass the scheduler and go before its next frame.
     private var direct: [PhoneLinkFrame] = []
     private var control = Data()
@@ -107,7 +113,7 @@ final class PhoneLinkSession {
             refusal = "unsupported channel type"
         } else if request?.claim == true {
             refusal = "take over is not available yet"
-        } else if terminals.count >= Self.maxTerminals {
+        } else if terminals.count + leaving.count(where: \.asking) >= Self.maxTerminals {
             refusal = "too many open panes"
         } else {
             refusal = nil
@@ -138,13 +144,15 @@ final class PhoneLinkSession {
     }
 
     private func closeChannel(_ channel: UInt32) {
-        terminals[channel] = nil
+        leaving.removeAll { !$0.asking }
+        if let terminal = terminals.removeValue(forKey: channel), terminal.asking { leaving.append(terminal) }
         scheduler.close(channel: channel)
     }
 
     private func sendDirect(_ frame: PhoneLinkFrame) {
         guard !closed else { return }
         direct.append(frame)
+        if direct.count > Self.directLimit { return overflowed() }
         pump()
     }
 
@@ -165,6 +173,10 @@ final class PhoneLinkSession {
     private func enqueue(channel: UInt32, _ bytes: Data) -> PhoneLinkScheduler.Enqueue {
         guard !closed else { return .closed }
         let result = scheduler.enqueue(channel: channel, bytes)
+        if channel == 0, scheduler.pendingBytes(channel: 0) > Self.controlLimit {
+            overflowed()
+            return .closed
+        }
         pump()
         return result
     }
@@ -188,6 +200,12 @@ final class PhoneLinkSession {
         closed = true
         events.stop()
         send(frame.encoded()) { [weak self] in self?.onEnd?() }
+    }
+
+    /// The phone reads less than it asks for; channel 1 drops instead, and vt channels resync.
+    private func overflowed() {
+        log("phone link overflow from \(peer)")
+        end()
     }
 
     private func end() {

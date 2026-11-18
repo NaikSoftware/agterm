@@ -99,6 +99,21 @@ struct PhoneLinkTerminalResyncTests {
         #expect(harness.lines.all().filter { $0.hasPrefix("phone detached") } == ["phone detached from mem:1 pane pane-1"])
     }
 
+    /// The re-attach names the pane by id; an answer for another pane closes the channel instead of switching it.
+    @Test func reattachToAnotherPaneCloses() throws {
+        let harness = try TerminalHarness()
+        defer { harness.finish() }
+        harness.start(RawStubServer.fakeAttach(Self.burst))
+        #expect(harness.waitOverflow())
+        harness.server.answerAttach(ControlResponse(ok: true, result: ControlResult(attach: RawStubServer.fakeAttach("exec cat", paneID: "pane-2"))))
+        harness.advance(by: 1)
+        #expect(harness.wait { harness.events().contains(.close("pane moved")) })
+        #expect(!harness.events().contains(.resync))
+        #expect(harness.server.requests().filter { $0.contains("session.attach") }.last
+            == #"{"args":{"pane":"left","paneID":"pane-1"},"cmd":"session.attach","target":"S1"}"#)
+        #expect(harness.lines.all().filter { $0.hasPrefix("phone detached") } == ["phone detached from mem:1 pane pane-1"])
+    }
+
     @Test(arguments: [false, true])
     func gridChangeSendsGrid(_ remote: Bool) throws {
         let harness = try TerminalHarness()
@@ -108,7 +123,7 @@ struct PhoneLinkTerminalResyncTests {
         harness.start(RawStubServer.fakeAttach("printf hi; exec cat", screen: "cat '\(grid)'", remote: remote))
         #expect(harness.wait { harness.events().contains(.opened(80, 24)) })
         try "1 100 30 0 0 0\n".write(toFile: grid, atomically: true, encoding: .utf8)
-        let interval: TimeInterval = remote ? 10 : 2
+        let interval: TimeInterval = remote ? 30 : 2
         harness.advance(by: interval - 1)
         usleep(300_000)
         #expect(!harness.events().contains(.grid(100, 30)))
