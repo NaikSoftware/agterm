@@ -1,0 +1,84 @@
+[32mline 01 before vim[0m
+[33mline 02 before vim[0m
+[34mline 03 before vim[0m
+[35mline 04 before vim[0m
+[36mline 05 before vim[0m
+[37mline 06 before vim[0m
+[31mline 07 before vim[0m
+[32mline 08 before vim[0m
+[33mline 09 before vim[0m
+[34mline 10 before vim[0m
+[35mline 11 before vim[0m
+[36mline 12 before vim[0m
+[37mline 13 before vim[0m
+[31mline 14 before vim[0m
+[32mline 15 before vim[0m
+[33mline 16 before vim[0m
+[34mline 17 before vim[0m
+[35mline 18 before vim[0m
+[36mline 19 before vim[0m
+[37mline 20 before vim[0m
+[31mline 21 before vim[0m
+[32mline 22 before vim[0m
+[33mline 23 before vim[0m
+[34mline 24 before vim[0m
+[35mline 25 before vim[0m
+[36mline 26 before vim[0m
+[37mline 27 before vim[0m
+[31mline 28 before vim[0m
+[32mline 29 before vim[0m
+[33mline 30 before vim[0m
+[34mline 31 before vim[0m
+[35mline 32 before vim[0m
+[36mline 33 before vim[0m
+[37mline 34 before vim[0m
+[31mline 35 before vim[0m
+[32mline 36 before vim[0m
+[33mline 37 before vim[0m
+[34mline 38 before vim[0m
+[35mline 39 before vim[0m
+[36mline 40 before vim[0m
+[37mline 41 before vim[0m
+[31mline 42 before vim[0m
+[32mline 43 before vim[0m
+[33mline 44 before vim[0m
+[34mline 45 before vim[0m
+[35mline 46 before vim[0m
+[36mline 47 before vim[0m
+[37mline 48 before vim[0m
+[31mline 49 before vim[0m
+[32mline 50 before vim[0m
+[33mline 51 before vim[0m
+[34mline 52 before vim[0m
+[35mline 53 before vim[0m
+[36mline 54 before vim[0m
+[37mline 55 before vim[0m
+[31mline 56 before vim[0m
+[32mline 57 before vim[0m
+[33mline 58 before vim[0m
+[34mline 59 before vim[0m
+[35mline 60 before vim[0m
+[?1049h[>4;2m[?1h=[?2004h[?1004h[1;30r[?12h[?12l[22;2t[22;1t[27m[23m[29m[m[H[2J[?25l[30;1H"~/IdeaProjects/agterm/scripts/setup.sh" 251L, 12588B[38;5;231m[48;5;236m[2;1H▽[6n[29m[m[38;5;231m[48;5;236m[2;1H  [3;1HPzz\[0%m[6n[3;1H           [1;1H[>c[27m[23m[29m[m[38;5;231m[48;5;236m[H[2J[1;1H[38;5;81m#!/usr/bin/env bash
+# Build pinned libghostty and zmx artifacts from upstream source.
+#
+# We build from source rather than downloading a prebuilt artifact so the toolchain is fully
+# self-owned: pinned upstream revisions, local patches, zig, and Xcode's Metal Toolchain.
+#
+# GHOSTTY_REV selects the upstream commit; local patches are applied after checkout. It was held at  [8;1Ha
+# 2026-04-30 pre-regression commit while later builds blanked the scrollback on a font-size increasee[10;1H; that is
+# fixed upstream and re-verified by hand before this bump. Re-test the font-increase case when movinn[12;1Hg
+# it, and check `minimum_zig_version` in build.zig.zon against GHOSTTY_ZIG_FORMULA.
+#
+# One-time cost: the build (a few minutes, plus a Metal Toolchain download on first run) is skipped
+# whenever the staged artifacts match the current revision and patch digest. Presence alone is not
+# enough —[17;11H the stamp, not the directory, determines whether the staged artifacts can be reused.[m[38;5;231m[48;5;236m
+[1m[38;5;186mset[m[38;5;231m[48;5;236m[38;5;120m [m[38;5;231m[48;5;236m[38;5;222m-euo[m[38;5;231m[48;5;236m[38;5;120m pipefail[m[38;5;231m[48;5;236m
+[1m[38;5;186mcd[m[38;5;231m[48;5;236m [1m[38;5;186m"[m[38;5;231m[48;5;236m[38;5;167m$([m[38;5;231m[48;5;236m[1m[38;5;186mdirname[m[38;5;231m[48;5;236m[38;5;222m [m[38;5;231m[48;5;236m[1m[38;5;186m"[m[38;5;231m[48;5;236m[38;5;167m$0[m[38;5;231m[48;5;236m[1m[38;5;186m"[m[38;5;231m[48;5;236m[38;5;167m)[m[38;5;231m[48;5;236m[38;5;217m/..[m[38;5;231m[48;5;236m[1m[38;5;186m"[m[38;5;231m[48;5;236m
+
+[38;5;120mGHOSTTY_REPO[m[38;5;231m[48;5;236m=[1m[38;5;186m"[m[38;5;231m[48;5;236m[38;5;217mhttps://github.com/ghostty-org/ghostty[m[38;5;231m[48;5;236m[1m[38;5;186m"[m[38;5;231m[48;5;236m
+[38;5;120mGHOSTTY_REV[m[38;5;231m[48;5;236m=[1m[38;5;186m"[m[38;5;231m[48;5;236m[38;5;217m83fb95624b0439ee660c2679b43b38c8b63769cd[m[38;5;231m[48;5;236m[1m[38;5;186m"[m[38;5;231m[48;5;236m  [38;5;81m# v1.4.0, 2026-10-27[m[38;5;231m[48;5;236m
+[38;5;120mZMX_REPO[m[38;5;231m[48;5;236m=[1m[38;5;186m"[m[38;5;231m[48;5;236m[38;5;217mhttps://github.com/neurosnap/zmx[m[38;5;231m[48;5;236m[1m[38;5;186m"[m[38;5;231m[48;5;236m
+[38;5;120mZMX_REV[m[38;5;231m[48;5;236m=[1m[38;5;186m"[m[38;5;231m[48;5;236m[38;5;217m8bab1f0173b07e79835ea372d749af3dbf0d0842[m[38;5;231m[48;5;236m[1m[38;5;186m"[m[38;5;231m[48;5;236m  [38;5;81m# v0.8.1, 2026-09-05; SessionHostRuntime/DeviceAA[25;1HttributeResponder.swift copies its DA replies
+# zig defaults to the builder's OS version and CPU; ship the app's arm64/macOS 14 baseline.[m[38;5;231m[48;5;236m
+[38;5;120mZMX_TARGET[m[38;5;231m[48;5;236m=[1m[38;5;186m"[m[38;5;231m[48;5;236m[38;5;217maarch64-macos.14.0[m[38;5;231m[48;5;236m[1m[38;5;186m"[m[38;5;231m[48;5;236m
+[38;5;81m# setup-zmx-linux.sh builds the same pin for a Linux target into its own stage dir and stamp. Unquott[29;1Hed, so[1;1H[?25h[?4m[?12$p[?25l[m[38;5;231m[48;5;236m[30;90H20j[1;1H[30;90H   [24;1H[?25h[?25l[30;1H:qa![?25h[?25l[?2004l[>4;m[23;2t[23;1t[30;1H[K[30;1H[?1004l[?2004l[?1l>[?1049l[?25h[>4;mafter vim: main screen restored

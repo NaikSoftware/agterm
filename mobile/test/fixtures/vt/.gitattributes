@@ -1,0 +1,2 @@
+# raw pty recordings: CR bytes matter, never convert line endings
+*.raw binary
