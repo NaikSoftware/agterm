@@ -935,6 +935,26 @@ final class AppStoreEventTests {
         #expect(changes.first?.window != other.id.uuidString)
     }
 
+    @Test func aPhoneViewerChangeInvalidatesOnlyTheTreeHoldingThePane() throws {
+        let (library, store, session) = try launched()
+        session.surface = SpySurface(paneToken: "tok")
+        _ = library.newWindow(name: "other")
+        library.flushTreeEvents()
+        let anchor = try eventBatch(library.readEvents(ControlEventReadOptions(cursor: nil, kinds: nil, limit: 100)))
+
+        library.emitAppEvent(ControlEventDraft(kind: .phoneAttached, payload: ControlEventPayload(paneID: "tok", ip: "10.0.0.3")))
+        library.flushTreeEvents()
+        library.emitAppEvent(ControlEventDraft(kind: .phoneDetached, payload: ControlEventPayload(paneID: "tok")))
+        library.emitAppEvent(ControlEventDraft(kind: .phoneDetached, payload: ControlEventPayload(paneID: "elsewhere")))
+        library.flushTreeEvents()
+
+        let changes = try eventBatch(library.readEvents(ControlEventReadOptions(
+            cursor: ControlEventCursor(run: anchor.run, after: anchor.next), kinds: [.treeChanged], limit: 100
+        ))).items
+        let window = library.windowID(for: store)?.uuidString
+        #expect(changes.map(\.window) == [window, window])
+    }
+
     @Test func appLaunchedIsAppendedOncePerRunAndReachesTheHookSink() throws {
         let (library, _, _) = try launched()
         var delivered: [ControlEventKind] = []

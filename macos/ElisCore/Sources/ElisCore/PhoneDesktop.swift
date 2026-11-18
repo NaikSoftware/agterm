@@ -86,9 +86,10 @@ public enum PhoneRelayLine: Equatable {
     /// `bluetooth: advertising | off (<reason>)`, as the `phone.status` value.
     case bluetooth(String)
     /// `phone attached|detached from <ip> pane <paneID>`: the phone opened or closed a pane. Not relay status.
-    case viewer(attached: Bool, ip: String, paneID: String)
+    /// The relay prints `-` for an unknown address, read as nil.
+    case viewer(attached: Bool, ip: String?, paneID: String)
     /// `phone leads|released from <ip> pane <paneID>`: the phone took or gave up a pane's lead.
-    case lead(leading: Bool, ip: String, paneID: String)
+    case lead(leading: Bool, ip: String?, paneID: String)
 
     /// Serve's `off (<reason>)` reasons and the value each one reads back as.
     public static let bluetoothReasons = ["powered off": "off", "unauthorized": "unauthorized", "unsupported": "unsupported",
@@ -118,7 +119,7 @@ public enum PhoneRelayLine: Equatable {
            let value = bluetoothReasons[String(line.dropFirst("bluetooth: off (".count).dropLast())] {
             return .bluetooth(value)
         }
-        let panes: [(String, (String, String) -> PhoneRelayLine)] = [
+        let panes: [(String, (String?, String) -> PhoneRelayLine)] = [
             ("phone attached from ", { .viewer(attached: true, ip: $0, paneID: $1) }),
             ("phone detached from ", { .viewer(attached: false, ip: $0, paneID: $1) }),
             ("phone leads from ", { .lead(leading: true, ip: $0, paneID: $1) }),
@@ -126,7 +127,7 @@ public enum PhoneRelayLine: Equatable {
         ]
         for (prefix, make) in panes where line.hasPrefix(prefix) {
             let parts = line.dropFirst(prefix.count).components(separatedBy: " pane ")
-            if parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty { return make(parts[0], parts[1]) }
+            if parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty { return make(parts[0] == "-" ? nil : parts[0], parts[1]) }
         }
         return isEvent(line) ? .event(line) : .other(line)
     }

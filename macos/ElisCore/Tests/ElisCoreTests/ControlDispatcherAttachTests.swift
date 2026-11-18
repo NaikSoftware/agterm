@@ -19,7 +19,7 @@ struct ControlDispatcherAttachTests {
     }
 
     /// The mock implements only the old requirement, so the claim reaches the protocol default's refusal.
-    @Test func claimArgReachesTheAction() async {
+    @Test func theDefaultRefusesAClaimAndKeepsTheOldMethodForAPlainAttach() async {
         var args = ControlArgs(pane: "right")
         args.claim = true
         let (claimed, claimer) = await dispatch(args)
