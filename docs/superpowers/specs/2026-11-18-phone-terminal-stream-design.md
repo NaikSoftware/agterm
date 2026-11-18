@@ -189,23 +189,24 @@ Mockups: the "Elis phone agent UI" design canvas (zsh, Claude Code, agy, vim).
 
 ## Notes for the M4 relay (from the M2 review)
 
-- Channels 0 and 1 have no cap in `PhoneLinkScheduler`: the relay stops reading phone requests past a pending limit
-  and drops or coalesces events, or a phone that does not read grows relay memory.
-- Credit is send-side only; Take over input needs a receive window in the relay.
-- On `.overflowed`, stop the old attach reader before RESYNC, or its late bytes follow the new screen.
-- Call `open(channel:)` before OPENED; `enqueue` on a channel that is not open returns `.closed`.
+M4a settled these; the code and `control-api.md` (relay mux) own the details:
+
+- Caps: channels 0 and 1 are bounded (events queue 256 KiB, dropped rows counted), open vt channels are capped at 8,
+  and OPEN on 0 and 1 is refused. A phone's own `session.attach` and `phone.*` are refused; the relay resolves attaches itself.
+- On overflow the old attach stops before RESYNC. Credit resets to the full window at RESYNC on both sides,
+  so RESYNC cannot leave the relay spending bytes the phone no longer counts. A stall clears only on CREDIT.
+- A daemon older than the zmx build is refused for a local pane in the `session.attach` answer; a remote one is handled by the re-attach backoff.
+- The remote viewer argv has the ssh keepalive now. Zmx role titles are filtered from the stream.
+- The relay prints one `phone detached` line per open pane before `phone disconnected`, with the app's `attach.paneID`.
+- Events: after a read error the phone gets `{"dropped":N}` then `{"gap":true}` and re-reads `tree`.
+
+Still open for M4b:
+
+- Take over input needs a receive window in the relay (OPEN with `claim` is refused for now).
+- A duplicate OPEN on a live channel gets OPENED `{error}` and the old stream continues:
+  the phone must read it as "duplicate refused", not "channel failed".
 - OPENED, GRID, LEAD, RESYNC and CLOSE bypass the scheduler, so GRID can overtake queued DATA laid out for the old grid.
-- Channel ids come from the phone: cap open channels and refuse OPEN on 0 and 1.
-- Daemon age, not host age, decides 0007: a daemon started before the update ignores its flags (full scrollback, then
-  an overflow/resync loop, and it may lead).
-- The app should refuse or mark such a pane in the `session.attach` answer (`zmxOutdatedBefore` exists for local
-  daemons), so the relay keeps no version logic.
-- The relay prints one `phone detached` line per open channel before `phone disconnected`, always with the app's
-  `attach.paneID`.
-- The remote viewer argv has no ServerAlive keepalive yet; add it with the watchdog.
-- Strip `OSC 2;zmx-role;<nonce>…` titles from the viewer stream; consider returning the nonce in the answer.
 - `phone.attached` carries no session id; resolve it at emit time if hooks need it.
-- The relay must refuse a phone's own `session.attach` (`PhoneSession` forwards it today) and resolve attaches itself.
 - A pane never shown since launch answers `session not realized`; decide whether the phone may watch it.
 
 ## Left to the builder

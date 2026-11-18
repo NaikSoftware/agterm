@@ -236,12 +236,29 @@ protocol command. `phone.*` is the protocol face of the app's `PhoneRelay`. elis
 `session.scroll` and all `phone.*` unserved, a page cannot send `phone.*` (`HtmlBridge` refuses them), and the relay
 refuses `phone.*` from a phone. `site/commands.html#phone` owns the rest.
 
-`session.attach` answers `result.attach = {argv, paneID}`: a zmx viewer attach that never claims, never leads
+Relay mux (M4a; the spec `docs/superpowers/specs/2026-11-18-phone-terminal-stream-design.md` owns the frames and the M4 notes):
+after auth a phone sends `{"mux":1}`; the relay answers after all earlier answers, then speaks PhoneLink frames.
+Channel 0 carries control lines through the same serial path as the line protocol (order kept, grids released on disconnect),
+and `session.attach` and `phone.*` are refused on both protocols. Channel 1 carries events from a queue bounded at 256 KiB:
+when full, the oldest rows go and one `{"dropped":N}` line follows; after a read error, `{"dropped":N}` then `{"gap":true}`
+tells the phone to re-read `tree`. Channels 2 and up are vt panes (`PhoneLinkSession`, `PhoneLinkTerminal` own the refusal texts and caps):
+OPEN, then `session.attach` (10 s), a `screen` read and OPENED, then bytes by credit.
+A duplicate OPEN on a live channel is refused as an OPENED error while the stream continues, so a phone must not read it as a failed channel.
+An overflow stops the old attach and re-attaches with a 1 s backoff that doubles to 30 s while overflows recur within 10 s;
+the channel stays open and RESYNC resets the credit window on both sides.
+A full window unacknowledged for 30 s closes the channel with reason `stalled`.
+A bad frame or an over-long control line closes the phone.
+
+`session.attach` answers `result.attach = {argv, paneID, screen, remote}`: `screen` is the zmx `screen` argv for the same daemon
+(the relay reads the grid with it) and `remote` is true for an origin's pane; remote viewer and screen argvs run through the ssh keepalive wrapper.
+It is a zmx viewer attach that never claims, never leads
 and skips scrollback (`ZMX_MANAGED_SCREEN_ONLY`, `ZMX_MANAGED_FOLLOW`; patch 0007, see the zmx patches README).
 A zmx older than 0007, or a daemon started before the update (the daemon's own zmx acts on the flags),
 ignores both variables: full scrollback, and it may lead an unowned daemon.
 A follow viewer of a session nobody leads is told role `unowned`;
 a relay must not take it as a cue to reattach or lead, as `PaneLead.report` does for the Mac's own surfaces.
+A local daemon older than the current zmx build is refused (`predatesZmxBuild`):
+`session predates this version; restart it to watch it on the phone`; a remote one is left to the relay's re-attach backoff.
 The Mac answers it locally for its own Live panes, rows attached from another Mac and elis-server rows,
 and elis-server's socket serves its own panes. No ssh ControlPath: each attach opens its own ssh connection.
 Page rows and the page bridge refuse it. `elisctl session attach` execs the argv; `--json` prints the response and execs nothing.
