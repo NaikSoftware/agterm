@@ -24,7 +24,7 @@ OUT_DIR="build/vtshim"
 GHOSTTY_DIR="$OUT_DIR/ghostty"
 STAMP_FILE=".vtshim-build-stamp"
 # the script's own digest: an ABI, API or flag edit rebuilds
-STAMP="$GHOSTTY_REV $(shasum -a 256 "$SHIM" | cut -c1-16) $(shasum -a 256 "$0" | cut -c1-16)"
+STAMP="$GHOSTTY_REV $(shasum -a 256 "$SHIM" | cut -c1-16) $(shasum -a 256 tool/build-vtshim.sh | cut -c1-16)"
 ABIS=(arm64-v8a x86_64)
 OUTPUTS=(android/app/src/main/jniLibs/arm64-v8a/libvtshim.so android/app/src/main/jniLibs/x86_64/libvtshim.so
   "$OUT_DIR/libvtshim.dylib")
@@ -42,7 +42,10 @@ check() {
     done
     # Android 15 devices use 16 KB pages: every LOAD segment must align to at least 0x4000
     if [[ "$f" == *.so ]]; then
-      for align in $("$NDK_BIN/llvm-readelf" -lW "$f" | awk '$1 == "LOAD" { print $NF }'); do
+      local aligns align
+      aligns="$("$NDK_BIN/llvm-readelf" -lW "$f" | awk '$1 == "LOAD" { print $NF }')"
+      [[ -n "$aligns" ]] || { echo "$f: no LOAD segments"; ok=1; }
+      for align in $aligns; do
         (( align >= 0x4000 )) || { echo "$f: a LOAD segment aligns to $align, below 16 KB"; ok=1; }
       done
     fi
