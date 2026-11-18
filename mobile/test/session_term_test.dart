@@ -33,6 +33,7 @@ class Relay {
   final calls = <String>[];
   final grids = <Map>[]; // session.grid arguments
   final scrolls = <Map>[]; // session.scroll arguments
+  final textArgs = <Map>[]; // session.text arguments
   final refused = <String>{}; // commands answered with an error
   final held = <String, List<List<int>>>{}; // answers kept back until the test sends them
   final _decoder = LinkDecoder();
@@ -65,6 +66,7 @@ class Relay {
       calls.add(r['cmd']);
       if (r['cmd'] == 'session.grid') grids.add(r['args'] as Map);
       if (r['cmd'] == 'session.scroll') scrolls.add(r['args'] as Map);
+      if (r['cmd'] == 'session.text') textArgs.add(r['args'] as Map);
       if (refused.contains(r['cmd'])) {
         send(frame(LinkKind.data, 0, utf8.encode('${jsonEncode({'id': r['id'], 'ok': false, 'error': 'refused ${r['cmd']}'})}\n')));
         continue;
@@ -78,7 +80,7 @@ class Relay {
         'events.read' => {
             'events': {'run': 'r', 'next': 0, 'items': <Object>[]},
           },
-        'session.text' => {'text': 'plain text', 'columns': 40},
+        'session.text' => {'text': 'plain text', 'columns': (grids.isEmpty ? null : grids.last['columns'] as int?) ?? 40}, // the fit's width
         _ => <String, Object>{},
       };
       send(frame(LinkKind.data, 0, answer(r['id'], result)));
@@ -306,16 +308,13 @@ void main() {
     await t.pump(const Duration(seconds: 3));
     expect(h.r.texts, texts); // the text poll stops while Term is shown
     expect(h.r.calls.where((c) => c == 'session.grid'), hasLength(1)); // fitted to the phone, as the text view is
-    await t.tap(find.byKey(const Key('fitPhone')));
-    await t.pump();
-    expect(h.r.calls.where((c) => c == 'session.grid'), hasLength(2)); // Restore PC size gives the grid back
     expect(find.byType(TerminalView), findsOneWidget);
     expect(h.r.of(LinkKind.resize), isEmpty);
     expect([for (final f in h.r.frames) if (f.channel >= 2 && f.kind == LinkKind.data) f], isEmpty); // watch only
     await h.stop();
   });
 
-  testWidgets('theScreenPicksScrollbackUntilATap', (t) async {
+  testWidgets('theScreenPicksScrollback', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
@@ -335,23 +334,7 @@ void main() {
     await t.pump();
     await t.pump();
     expect(find.byType(TerminalView), findsOneWidget);
-
-    await t.tap(find.byKey(const Key('scrollback')));
-    await t.pump();
-    h.r.send(frame(LinkKind.data, 2, utf8.encode('more')));
-    await t.pump();
-    await t.pump();
-    expect(find.byType(TerminalView), findsNothing); // the tap holds until the screen switches again
-
-    h.vts.single.alt = false;
-    h.r.send(frame(LinkKind.data, 2, utf8.encode('q')));
-    await t.pump();
-    await t.pump();
-    h.vts.single.alt = true;
-    h.r.send(frame(LinkKind.data, 2, utf8.encode('vim')));
-    await t.pump();
-    await t.pump();
-    expect(find.byType(TerminalView), findsOneWidget);
+    expect(h.r.closes, isEmpty);
     await h.stop();
   });
 
@@ -361,9 +344,7 @@ void main() {
     await h.opened(cols: 200, rows: 60);
     final fit = h.r.grids.single;
     expect((h.vts.single.cols, h.vts.single.rows), (fit['columns'], fit['rows']));
-    await t.tap(find.byKey(const Key('fitPhone'))); // Restore PC size: the relay's Grid says the Mac's size
-    await t.pump();
-    h.r.send(frame(LinkKind.grid, 2, LinkFrame.resize(2, 200, 60).payload));
+    h.r.send(frame(LinkKind.grid, 2, LinkFrame.resize(2, 200, 60).payload)); // the Mac took its grid back
     await t.pump();
     expect((h.vts.single.cols, h.vts.single.rows), (200, 60));
     await h.stop();
@@ -497,6 +478,7 @@ void main() {
     expect(h.r.calls, contains('session.text'));
     expect(find.text('plain text'), findsOneWidget);
     expect(find.byType(TerminalView), findsNothing);
+    expect(h.r.textArgs.last['lines'], 2000); // no screen to follow: the history
     await h.stop();
   });
 
@@ -609,21 +591,6 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('scrollbackKeepsTheTermChannel', (t) async {
-    final h = Harness(t, treeOf());
-    await h.start();
-    await h.opened();
-    await t.tap(find.byKey(const Key('scrollback')));
-    await t.pump();
-    expect(find.byType(TerminalView), findsNothing);
-    await t.tap(find.byKey(const Key('scrollback')));
-    await t.pump();
-    expect(find.byType(TerminalView), findsOneWidget);
-    expect(h.r.closes, isEmpty);
-    expect(h.r.lastChannel, 2);
-    await h.stop();
-  });
-
   testWidgets('revokeShowsTheReason', (t) async {
     final h = Harness(t, treeOf());
     h.relays.add(Relay(treeOf(), unauthorized: true)); // the reconnect finds the pairing revoked
@@ -662,6 +629,8 @@ void main() {
     expect(find.byKey(const Key('takeOver')), findsOneWidget);
     expect(_enabled(t, 'takeOver'), isFalse);
     expect(_label(t, 'takeOver'), 'Take over');
+    final fg = t.widget<OutlinedButton>(find.byKey(const Key('takeOver'))).style!.foregroundColor!;
+    expect(fg.resolve({WidgetState.disabled})!.a, lessThan(fg.resolve({})!.a)); // reads as disabled, not as off
     await h.stop();
   });
 
@@ -669,9 +638,6 @@ void main() {
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
-    await t.tap(find.byKey(const Key('fitPhone'))); // the text poll read the first fit as given back
-    await t.pump();
-    await t.pump();
     expect(h.m.fitted['s1/left'], isNotNull);
     final grids = h.r.grids.length;
     h.r.held['session.grid'] = [];
@@ -685,7 +651,7 @@ void main() {
     expect(h.r.opens.last['claim'], isTrue);
     expect(h.m.fitted['s1/left'], isNull);
     await t.pump(const Duration(seconds: 1));
-    expect(h.r.grids, hasLength(grids + 1)); // the reset, and no fit after it
+    expect(h.r.grids, hasLength(grids + 1)); // the reset, and no fit while leading
     await h.stop();
   });
 
@@ -792,18 +758,20 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('fitIsDisabledWhileLeading', (t) async {
+  testWidgets('giveBackResumesTheFit', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
-    expect(_enabled(t, 'fitPhone'), isTrue);
     await _lead(h);
-    expect(_enabled(t, 'fitPhone'), isFalse);
-    expect(_label(t, 'fitPhone'), 'Fit to phone');
+    expect(h.m.fitted['s1/left'], isNull);
+    final grids = h.r.grids.length;
     await t.tap(find.byKey(const Key('takeOver'))); // Give back
     await t.pump();
+    await t.pump();
     expect(h.r.closes, [_claimCh]);
-    expect(_enabled(t, 'fitPhone'), isTrue);
+    expect(h.r.grids, hasLength(grids + 1));
+    expect(h.r.grids.last['columns'], isNotNull);
+    expect(h.m.fitted['s1/left'], isNotNull);
     await h.stop();
   });
 
@@ -881,6 +849,114 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('paneSwitchDuringTheResetStaysQuiet', (t) async {
+    final h = Harness(t, treeOf(split: true));
+    await h.start();
+    await h.opened();
+    h.r.held['session.grid'] = [];
+    await t.tap(find.byKey(const Key('takeOver')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('rightPane')));
+    await t.pump();
+    h.r.held.remove('session.grid')!.forEach(h.r.send);
+    await t.pump();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 10));
+    expect([for (final o in h.r.opens) if (o['claim'] == true) o], isEmpty);
+    expect(find.text('closed'), findsNothing);
+    expect(_label(t, 'takeOver'), 'Take over');
+    await h.stop();
+  });
+
+  testWidgets('keyboardDuringThePendingClaimResizesTheLead', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await t.tap(find.byKey(const Key('takeOver')));
+    await t.pump();
+    await t.pump();
+    final claimed = h.r.opens.last;
+    t.view.viewInsets = const FakeViewPadding(bottom: 600);
+    addTearDown(t.view.reset);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(h.r.of(LinkKind.resize), isEmpty);
+    h.r.send([...json(LinkKind.opened, _claimCh, {'cols': 40, 'rows': 20}), ...json(LinkKind.lead, _claimCh, {'role': 'leader'})]);
+    await t.pump();
+    await t.pump();
+    final resize = h.r.of(LinkKind.resize).single;
+    expect(resize.channel, _claimCh);
+    expect(resize.size!.rows, lessThan(claimed['rows'] as int));
+    await h.stop();
+  });
+
+  testWidgets('aRefusedResetKeepsTheFitToGiveBack', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.r.refused.add('session.grid');
+    await t.tap(find.byKey(const Key('takeOver')));
+    await t.pump();
+    await t.pump();
+    expect(find.text('refused session.grid'), findsOneWidget);
+    expect(h.m.fitted['s1/left'], isNotNull);
+    final resets = h.r.grids.where((g) => g['reset'] == true).length;
+    h.nav.currentState!.pop();
+    await t.pump();
+    await t.pump(const Duration(seconds: 1));
+    expect(h.r.grids.where((g) => g['reset'] == true).length, resets + 1); // leaving gives it back
+    await h.stop();
+  });
+
+  testWidgets('linkLossReturnsToWatch', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    h.relays.first.drop();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 1100));
+    await t.pump(const Duration(milliseconds: 10));
+    expect(h.relays.length, 2);
+    await h.opened();
+    await t.pump(const Duration(milliseconds: 10));
+    expect(_label(t, 'takeOver'), 'Take over');
+    expect(find.text('Disconnected.'), findsNothing);
+    expect([for (final o in h.r.opens) if (o['claim'] == true) o], isEmpty);
+    expect(h.r.grids.last['columns'], isNotNull); // fitted again for Watch
+    await h.stop();
+  });
+
+  testWidgets('pauseDuringThePendingClaim', (t) async {
+    AndroidFlutterLocalNotificationsPlugin.registerWith();
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('dexterous.com/flutter/local_notifications'), (_) async => null);
+    Watch.permitted = true;
+    addTearDown(() => Watch.permitted = false);
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await t.tap(find.byKey(const Key('takeOver')));
+    await t.pump();
+    await t.pump();
+    expect(h.r.lastChannel, _claimCh);
+    for (final s in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+      t.binding.handleAppLifecycleStateChanged(s);
+    }
+    await t.pump();
+    h.r.send(json(LinkKind.opened, _claimCh, {'cols': 40, 'rows': 20})); // too late: closed at once
+    await t.pump();
+    await t.pump();
+    expect(h.r.closes, containsAll([2, _claimCh]));
+    for (final s in [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+      t.binding.handleAppLifecycleStateChanged(s);
+    }
+    await t.pump();
+    await h.opened();
+    expect(find.text('closed'), findsNothing);
+    expect(_label(t, 'takeOver'), 'Take over');
+    await h.stop();
+  });
+
   // real fonts: the test font is wider than both
   testWidgets('toolbarFitsAPhoneWidthWithASplit', (t) async {
     await _loadFonts();
@@ -891,7 +967,7 @@ void main() {
     final bar = find.byKey(const Key('toolbar'));
     final segs = find.descendant(of: bar, matching: find.byType(OutlinedButton));
     void onScreen() {
-      expect(segs, findsNWidgets(5));
+      expect(segs, findsNWidgets(3));
       for (final e in segs.evaluate()) {
         final r = t.getRect(find.byWidget(e.widget));
         expect((r.left >= 0, r.right <= 360), (true, true));
@@ -900,8 +976,18 @@ void main() {
     onScreen();
     await expectLater(bar, matchesGoldenFile('goldens/session_toolbar_watch.png'));
     await _lead(h);
+    await t.pump(const Duration(milliseconds: 300)); // the segment's colour change animates
     onScreen();
     await expectLater(bar, matchesGoldenFile('goldens/session_toolbar_lead.png'));
+    await h.stop();
+  });
+
+  testWidgets('takeOverReadsAsDisabledOnAPaneThatIsNotLive', (t) async {
+    await _loadFonts();
+    _phone(t);
+    final h = Harness(t, treeOf(live: false, split: true));
+    await h.start();
+    await expectLater(find.byKey(const Key('toolbar')), matchesGoldenFile('goldens/session_toolbar_disabled.png'));
     await h.stop();
   });
 }

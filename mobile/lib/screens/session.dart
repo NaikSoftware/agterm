@@ -55,7 +55,7 @@ class _SessionScreenState extends State<SessionScreen> {
   final vScroll = ScrollController();
   String pane = 'left';
   bool scrollback = false, sending = false;
-  bool? _alt; // the screen the last frame showed; scrollback follows each switch, a tap holds until the next
+  bool? _alt; // the screen the last frame showed; scrollback follows each switch
   String text = '';
   String? error;
   bool fitting = false;
@@ -68,7 +68,7 @@ class _SessionScreenState extends State<SessionScreen> {
   bool polling = false;
   TermSession? term; // a Live pane watched as a terminal; the text poll stops meanwhile
   TermSession? _claimed; // the term Take over was asked on: a replaced term (pause, pane, reconnect) is not claimed
-  (int, int)? _leadGrid; // the phone's grid the lead was last asked for
+  (int, int)? _leadGrid, _seenGrid; // the grid the lead was given, and the one the screen shows now
   Timer? _leadResize;
   final _refused = <String>{}; // panes whose terminal the relay refused on this visit: text view until they stop being Live
   final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
@@ -176,7 +176,9 @@ class _SessionScreenState extends State<SessionScreen> {
         if (r != 'Disconnected' && r != revokedMessage && r.isNotEmpty) {
           report(context, '${r[0].toUpperCase()}${r.substring(1)}${r.endsWith('.') ? '' : '.'}');
         }
+        unawaited(_syncFit());
       }
+      if (_leadResize?.isActive != true) _resizeLead(); // the screen changed while the claim waited for its LEAD
       if (text.isNotEmpty && _termShown && t.snapshot!.altScreen) {
         text = ''; // shown from now on; a fallback later starts from a fresh read, not this one
       }
@@ -188,7 +190,7 @@ class _SessionScreenState extends State<SessionScreen> {
   bool get _lead => _claimed != null && _claimed == term;
   bool get _leading => _lead && term!.leading;
 
-  // the program runs at what the screen shows at a readable size, as Fit to phone sizes it
+  // the program runs at what the screen shows at a readable size, as the fit sizes it
   (int, int) _phoneGrid() {
     final cols = _fitColumns();
     return (cols, max(1, (_height / CellMetrics.fit(_width, cols).h).floor()));
@@ -199,44 +201,46 @@ class _SessionScreenState extends State<SessionScreen> {
     if (t == null) return;
     if (_lead) {
       t.release();
-      return setState(() => _claimed = null);
+      setState(() => _claimed = null);
+      return _syncFit();
     }
     t.leadLost = null; // a lead lost earlier was said then
     setState(() => _claimed = t);
-    autoFit.wanted = false;
-    // the computer's grid back first: a session grid would outlive the lead and fight the phone's
-    if (m.fitted.remove(_fitKey) != null) {
-      try {
-        await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'reset': true});
-      } on ElisError catch (e) {
-        if (mounted) report(context, e.message);
-      } on TimeoutException {
-        // the claim's own grid wins at the relay either way
-      }
-    }
-    if (!mounted || _claimed != t) return;
-    final g = _leadGrid = _phoneGrid();
+    // the computer's grid back first (auto-fit stands down while [_lead]): a session grid would fight the phone's
+    await _syncFit();
+    bool mine() => _lead && _claimed == t; // a pause or pane switch meanwhile closed [t]: nothing to say
+    if (!mounted || !mine()) return;
+    final g = _leadGrid = _seenGrid = _phoneGrid();
     final err = await t.takeOver(g.$1, g.$2);
-    if (err == null || !mounted || _claimed != t) return;
+    if (err == null || !mounted || !mine()) return;
     setState(() => _claimed = null);
     report(context, err);
+    unawaited(_syncFit());
   }
 
   // a layout change (the keyboard, a rotation) resizes the lead once it settles
   void _layoutLead() {
-    final t = term;
-    if (!_lead || t == null) return;
+    if (!_lead) return;
     final g = _phoneGrid();
-    if (g == _leadGrid) return;
-    _leadGrid = g;
+    if (g == _seenGrid) return;
+    _seenGrid = g;
     _leadResize?.cancel();
-    _leadResize = Timer(const Duration(milliseconds: 300), () {
-      if (_lead && term == t) t.resizeLead(g.$1, g.$2);
-    });
+    _leadResize = Timer(const Duration(milliseconds: 300), _resizeLead);
+  }
+
+  // only once leading: before that TermSession drops a resize while the claim waits for OPENED
+  void _resizeLead() {
+    final g = _seenGrid;
+    if (!_leading || g == null || g == _leadGrid) return;
+    _leadGrid = g;
+    term!.resizeLead(g.$1, g.$2);
   }
 
   // the text view stays until the terminal has a first frame: no blank screen while the channel opens
   bool get _termShown => !scrollback && term?.snapshot != null;
+
+  // without a terminal stream there is no screen to follow: the history, always
+  bool get _history => scrollback || term == null;
 
   // the main screen (a shell, a command printing lines) shows its history; a full-screen program shows Term.
   // Called from build, before anything reads [scrollback]: the frame that shows the switch already picks.
@@ -258,7 +262,7 @@ class _SessionScreenState extends State<SessionScreen> {
     try {
       // fitted, the grid has more rows than the computer's view shows; reading the last ones gets all of them
       final fit = m.fitted[_fitKey];
-      final rows = scrollback ? 2000 : fit?.$2 ?? 0;
+      final rows = _history ? 2000 : fit?.$2 ?? 0;
       final r = await m.call('session.text', target: widget.sessionId, args: {'pane': pane, if (rows > 0) 'lines': rows});
       final t = _trimEnd('${r['text'] ?? ''}');
       final columns = (r['columns'] as num?)?.toInt();
@@ -281,8 +285,8 @@ class _SessionScreenState extends State<SessionScreen> {
     }
   }
 
-  // "Fit to phone": the program's grid becomes what this screen shows at a readable size (session grid), apart from the
-  // computer's view, so it redraws for the phone; the button then gives the grid back to the computer's view
+  // the fit: while this screen shows the pane, the program's grid is what it shows at a readable size (session grid),
+  // apart from the computer's view, so it redraws for the phone; leaving gives the grid back
   static const readable = 12.0;
   String get _fitKey => '${widget.sessionId}/$pane';
   int _fitColumns() => max(20, (_width / _advance(MediaQuery.textScalerOf(context).scale(readable))).floor());
@@ -306,19 +310,15 @@ class _SessionScreenState extends State<SessionScreen> {
     return size;
   }
 
-  void toggleFit() {
-    autoFit.wanted = !m.fitted.containsKey(_fitKey);
-    _syncFit();
-  }
-
   /// Fits or gives back the grid as [autoFit] says for the screen's state now; a change during a call runs after it.
   Future<void> _syncFit() async {
     if (fitting || !mounted) return;
     final visible = _foreground && !m.background && m.state == LinkState.connected;
-    final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible);
+    final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible && !_lead);
     if (on == null) return;
     setState(() => fitting = true);
     final key = _fitKey;
+    var ok = false;
     try {
       if (on) {
         // JetBrains Mono advances 0.6 em; a larger system font size asks for fewer, bigger columns
@@ -332,6 +332,7 @@ class _SessionScreenState extends State<SessionScreen> {
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'reset': true});
         m.fitted.remove(key);
       }
+      ok = true;
     } on ElisError catch (e) {
       autoFit.wanted = false; // a refused fit (a pane another Mac leads) is not retried on every change
       if (mounted) report(context, e.message);
@@ -344,7 +345,9 @@ class _SessionScreenState extends State<SessionScreen> {
     if (!mounted) return;
     setState(() => fitting = false);
     Future.delayed(const Duration(milliseconds: 300), _load); // the program redraws at its new width
-    unawaited(_syncFit()); // the app paused, resumed or changed pane during the call
+    // the app paused, resumed or changed pane during the call; after a failure, the next change retries (a refused reset
+    // keeps its record, so leaving still gives the grid back)
+    if (ok) unawaited(_syncFit());
   }
 
   /// Gives back [p]'s grid without waiting: the screen is closing or moving to the other pane.
@@ -438,7 +441,7 @@ class _SessionScreenState extends State<SessionScreen> {
           Expanded(
               child: Stack(children: [
             Positioned.fill(child: _terminal()),
-            Positioned(top: 14, left: 12, right: 18, child: _toolbar(s)),
+            Positioned(top: 14, right: 18, child: _toolbar(s)),
             if (m.state != LinkState.connected)
               Center(
                   child: Padding(
@@ -467,6 +470,8 @@ class _SessionScreenState extends State<SessionScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               backgroundColor: (on ? C.surface2 : C.surface).withValues(alpha: 0.92),
               foregroundColor: on ? C.text : C.muted,
+              disabledBackgroundColor: C.bg.withValues(alpha: 0.6),
+              disabledForegroundColor: C.muted.withValues(alpha: 0.45),
               side: BorderSide(color: on ? C.line : C.surface2),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
@@ -484,21 +489,11 @@ class _SessionScreenState extends State<SessionScreen> {
       _load();
       _syncFit();
     }
-    // a split's five segments are wider than a phone: the rest go on a second row
-    return Wrap(key: const Key('toolbar'), alignment: WrapAlignment.end, runSpacing: 6, children: [
+    return Row(key: const Key('toolbar'), mainAxisSize: MainAxisSize.min, children: [
         if (s.hasSplit) ...[
           seg('Left pane', pane == 'left', () => setPane('left')),
           seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
         ],
-        seg('Scrollback', scrollback, () {
-          setState(() => scrollback = !scrollback);
-          _syncTerm();
-          _load();
-          _syncFit();
-        }, key: const Key('scrollback')),
-        seg(m.fitted.containsKey(_fitKey) ? 'Restore PC size' : 'Fit to phone', m.fitted.containsKey(_fitKey),
-            _lead ? null : (fitting ? () {} : toggleFit),
-            key: const Key('fitPhone')),
         seg(_lead ? 'Give back' : 'Take over', _lead, term == null ? null : (fitting ? () {} : toggleLead), key: const Key('takeOver')),
     ]);
   }
@@ -508,7 +503,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   // fitted, the phone shows the program's whole grid, so a drag scrolls the program itself: it reaches the computer as
   // wheel notches (session scroll), which a TUI such as Claude Code reads as its own scrolling
-  bool get _remoteScroll => !scrollback && m.fitted.containsKey(_fitKey);
+  bool get _remoteScroll => !_history && m.fitted.containsKey(_fitKey);
 
   void _drag(DragUpdateDetails d, double rowHeight) {
     _dragRows += d.delta.dy / rowHeight;
@@ -541,7 +536,7 @@ class _SessionScreenState extends State<SessionScreen> {
   // the grid scaled to the width; taller than the box, the bottom rows (the cursor's) stay in view
   // a live stream has no phone-side history, so a drag always scrolls the program
   Widget _termView(TermSession t) {
-    final columns = m.fitted[_fitKey]?.$1 ?? (autoFit.wanted ? _fitColumns() : null);
+    final columns = _lead ? null : m.fitted[_fitKey]?.$1 ?? (autoFit.wanted ? _fitColumns() : null);
     return LayoutBuilder(builder: (context, box) {
       _width = box.maxWidth - 24;
       _height = box.maxHeight - 24;
@@ -579,13 +574,13 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Widget _textView() => LayoutBuilder(builder: (context, box) {
           // the computer's own grid width, so a full-width row fills one phone row exactly; history written at a wider
-          // size (before Fit to phone) wraps rather than shrinking everything
+          // size (before the fit) wraps rather than shrinking everything
           final cols = max(20, _columns ?? text.split('\n').fold<int>(20, (a, l) => max(a, l.runes.length)));
           // JetBrains Mono advances 0.6 em
           _width = box.maxWidth - 24;
           _height = box.maxHeight - 24;
           _layoutLead();
-          // tiny when the computer's grid is wide, but whole rows, so the layout stays the program's (Fit to phone reads it)
+          // tiny when the computer's grid is wide, but whole rows, so the layout stays the program's (the fit reads it)
           _fit = _sizeFor(cols, min(13, _width / (cols * 0.6)));
           final size = _fit;
           final body = SelectableText(
