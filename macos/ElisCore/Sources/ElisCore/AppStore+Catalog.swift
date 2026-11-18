@@ -356,4 +356,7 @@ extension AppStore {
 public extension Session {
     /// catalogPaneHeld is whether pane `identity`'s daemon is stopped on its Mac origin, so nothing attaches it.
     func catalogPaneHeld(_ identity: UUID) -> Bool { catalogPanes[identity]?.held == true }
+
+    /// catalogPane is pane `identity` as a remote window row's catalog last listed it.
+    func catalogPane(_ identity: UUID) -> CatalogPane? { catalogPanes[identity] }
 }
