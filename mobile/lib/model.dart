@@ -242,13 +242,15 @@ class ElisModel extends ChangeNotifier {
         // rows can be lost (`{"dropped":N}`, `{"gap":true}`), tree rows among them: re-read the tree
         mx?.events.where(rereadsTree).listen((_) => scheduleRefresh(Duration.zero));
         _c = c;
-        mux = mx;
         via = c.via;
         error = null;
         backoff = 1;
         seen = DateTime.now();
         _set(LinkState.connected);
         await refresh();
+        // only now: a screen that saw the mux earlier would open panes from the tree of the link before
+        mux = mx;
+        if (!_disposed) notifyListeners();
         unawaited(_eventLoop(gen));
         await _c!.closed;
       } catch (e) {

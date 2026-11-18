@@ -31,6 +31,9 @@ class TermSession extends ChangeNotifier {
   /// Why the stream ended (a refusal, a relay CLOSE, `Disconnected`); null while it runs or after [close].
   String? ended;
 
+  /// OPENED arrived: an [ended] reason is a CLOSE mid-stream, not a refusal of the open.
+  bool get opened => _ch != null;
+
   VtSnapshot? get snapshot {
     _read();
     return _snapshot;

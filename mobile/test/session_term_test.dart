@@ -23,9 +23,10 @@ const _refusal = 'session predates this version; restart it to watch it on the p
 
 /// A mux relay that answers the model's control calls on channel 0 and records every frame the phone sends.
 class Relay {
-  Relay(this.tree);
+  Relay(this.tree, {this.unauthorized = false});
 
-  final Map<String, Object> tree;
+  Map<String, Object> tree;
+  final bool unauthorized; // a revoked pairing: auth fails
   final _input = StreamController<Uint8List>();
   final frames = <LinkFrame>[];
   final calls = <String>[];
@@ -45,7 +46,8 @@ class Relay {
         send(upgradeAnswer);
         return;
       }
-      send(answer((jsonDecode(line) as Map)['id'])); // auth
+      final id = (jsonDecode(line) as Map)['id'];
+      send(unauthorized ? utf8.encode('${jsonEncode({'id': id, 'ok': false, 'error': 'unauthorized'})}\n') : answer(id)); // auth
     }
   }
 
@@ -75,6 +77,7 @@ class Relay {
   List<Map> get opens => [for (final f in of(LinkKind.open)) jsonDecode(utf8.decode(f.payload)) as Map];
   List<int> get closes => [for (final f in of(LinkKind.close)) f.channel];
   int get lastChannel => of(LinkKind.open).last.channel;
+  int get texts => calls.where((c) => c == 'session.text').length;
 }
 
 Map<String, Object> treeOf({bool live = true, bool split = false}) => {
@@ -163,6 +166,15 @@ class Harness {
     await t.pumpAndSettle(const Duration(milliseconds: 10));
   }
 
+  /// The Mac's tree changes and the phone re-reads it.
+  Future<void> retree(Map<String, Object> tree) async {
+    for (final x in relays) {
+      x.tree = tree;
+    }
+    await m.refresh();
+    await t.pump();
+  }
+
   Future<void> opened({int cols = 80, int rows = 24}) async {
     r.send(json(LinkKind.opened, r.lastChannel, {'cols': cols, 'rows': rows}));
     await t.pump();
@@ -209,9 +221,12 @@ void main() {
     await t.pump();
     expect([for (final f in h.r.of(LinkKind.credit)) f.creditBytes], [5, 3]);
 
+    final texts = h.r.texts;
     await t.pump(const Duration(seconds: 3));
-    expect(h.r.calls, isNot(contains('session.text'))); // the text poll stops while Term is active
+    expect(h.r.texts, texts); // the text poll stops while Term is shown
     expect(h.r.calls, isNot(contains('session.grid'))); // no Fit to phone on the Term view
+    final fit = t.widget<OutlinedButton>(find.byKey(const Key('fitPhone')));
+    expect(fit.onPressed, isNull); // visible and disabled
     expect(h.r.of(LinkKind.resize), isEmpty);
     expect([for (final f in h.r.frames) if (f.channel >= 2 && f.kind == LinkKind.data) f], isEmpty); // watch only
     await h.stop();
@@ -337,4 +352,111 @@ void main() {
     expect(view.hold, isFalse);
     await h.stop();
   }, skip: !File(lib).existsSync());
+
+  testWidgets('opensWithoutABlankScreen', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await t.pump(const Duration(seconds: 1)); // OPENED is slow: the text view stays and polls
+    expect(find.text('plain text'), findsOneWidget);
+    expect(find.byType(TerminalView), findsNothing);
+    await h.opened();
+    expect(find.byType(TerminalView), findsOneWidget);
+    expect(find.text('plain text'), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('midStreamCloseReopensOnce', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.r.send(json(LinkKind.close, 2, {'reason': 'stalled'}));
+    await t.pump();
+    await t.pump();
+    expect(h.r.lastChannel, 3); // reopened, quietly
+    expect(find.textContaining('stalled'), findsNothing);
+    await h.opened();
+    expect(find.byType(TerminalView), findsOneWidget);
+    h.r.send(json(LinkKind.close, 3, {'reason': 'stalled'}));
+    await t.pump();
+    await t.pump();
+    expect(h.r.lastChannel, 3); // a second close soon: text view, said readably
+    expect(find.text('The live terminal closed (the phone fell behind). Showing the text view.'), findsOneWidget);
+    await t.pump(const Duration(seconds: 1));
+    expect(find.text('plain text'), findsOneWidget);
+    await h.stop();
+  });
+
+  testWidgets('restartedSessionLeavesTheRefusal', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    h.r.send(json(LinkKind.opened, 2, {'error': _refusal}));
+    await t.pump();
+    await h.retree(treeOf(live: false)); // restarted: not Live for a moment
+    await h.retree(treeOf());
+    expect(h.r.lastChannel, 3);
+    await h.stop();
+  });
+
+  testWidgets('paneThatBecomesOrStopsBeingLive', (t) async {
+    final h = Harness(t, treeOf(live: false));
+    await h.start();
+    expect(h.r.opens, isEmpty);
+    await h.retree(treeOf());
+    expect(h.r.lastChannel, 2);
+    await h.opened();
+    expect(find.byType(TerminalView), findsOneWidget);
+    await h.retree(treeOf(live: false));
+    expect(h.r.closes, [2]);
+    expect(find.byType(TerminalView), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('scrollbackClosesAndReopensTheTerm', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await t.tap(find.byKey(const Key('scrollback')));
+    await t.pump();
+    expect(h.r.closes, [2]);
+    expect(find.byType(TerminalView), findsNothing);
+    await t.tap(find.byKey(const Key('scrollback')));
+    await t.pump();
+    expect(h.r.lastChannel, 3);
+    await h.opened();
+    expect(find.byType(TerminalView), findsOneWidget);
+    await h.stop();
+  });
+
+  testWidgets('revokeShowsTheReason', (t) async {
+    final h = Harness(t, treeOf());
+    h.relays.add(Relay(treeOf(), unauthorized: true)); // the reconnect finds the pairing revoked
+    await h.start();
+    final first = h.relays.first;
+    first.send(json(LinkKind.opened, 2, {'error': 'revoked'})); // the link closes after it
+    await t.pump();
+    await t.pump();
+    expect(find.text(revokedMessage), findsNothing); // no refusal notice: the link state says it
+    await t.pump(const Duration(milliseconds: 1100)); // the reconnect is refused
+    await t.pump();
+    expect(find.text(revokedMessage), findsOneWidget);
+    expect(find.text('Disconnected. Reconnecting…'), findsNothing);
+    expect(h.relays.length, 2);
+    await h.stop();
+  });
+
+  testWidgets('reconnectOpensFromTheNewTree', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.relays.first.tree = treeOf(live: false); // the next link's tree: the pane is no longer Live
+    h.relays.first.drop();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 1100));
+    await t.pump(const Duration(milliseconds: 10));
+    expect(h.relays.length, 2);
+    expect(h.r.opens, isEmpty); // nothing opened from the old link's tree
+    await t.pump(const Duration(seconds: 1));
+    expect(find.text('plain text'), findsOneWidget);
+    await h.stop();
+  });
 }

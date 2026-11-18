@@ -63,7 +63,8 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _scrolling = false;
   bool polling = false;
   TermSession? term; // a Live pane watched as a terminal; the text poll stops meanwhile
-  final _refused = <String>{}; // panes whose terminal the relay refused or closed on this visit: text view
+  final _refused = <String>{}; // panes whose terminal the relay refused on this visit: text view until they stop being Live
+  final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
 
   ElisModel get m => widget.model;
   Session? get s => m.session(widget.sessionId);
@@ -95,6 +96,9 @@ class _SessionScreenState extends State<SessionScreen> {
     poll?.cancel();
     term?.removeListener(_onTerm);
     term?.close();
+    for (final t in _closedRecently.values) {
+      t.cancel();
+    }
     m.removeListener(_onModel);
     _lifecycle.dispose();
     _release(pane);
@@ -119,6 +123,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   /// Watch the pane as a terminal when it is Live, the relay has the mux and the screen is in front; else the text view.
   void _syncTerm() {
+    _refused.removeWhere((p) => s?.livePanes.contains(p) != true); // a restarted session gets another try
     final want = _foreground &&
         !m.background &&
         m.state == LinkState.connected &&
@@ -141,20 +146,34 @@ class _SessionScreenState extends State<SessionScreen> {
     if (t.ended case final reason?) {
       t.removeListener(_onTerm);
       term = null;
-      // a lost link shows the disconnected state and reopens on the next mux; anything else falls back to text, said once
-      if (reason != 'Disconnected' && reason != revokedMessage) {
-        _refused.add(t.pane);
+      if (reason == 'Disconnected' || reason == revokedMessage) {
+        // the disconnected state shows; the next mux reopens
+      } else if (!t.opened) {
+        _refused.add(t.pane); // the relay's refusal is already readable: said once
         report(context, reason);
+      } else if (_closedRecently[t.pane] == null) {
+        // closed mid-stream (`stalled`, `pane moved`, `session ended`): open once more, quietly
+        _closedRecently[t.pane] = Timer(const Duration(seconds: 10), () => _closedRecently.remove(t.pane));
+        _syncTerm();
+      } else {
+        _refused.add(t.pane);
+        report(context, 'The live terminal closed (${reason == 'stalled' ? 'the phone fell behind' : reason}). Showing the text view.');
       }
       unawaited(_load());
       unawaited(_syncFit());
+    } else if (t.snapshot != null && text.isNotEmpty) {
+      text = ''; // shown from now on; a fallback later starts from a fresh read, not this one
     }
     setState(() {});
   }
 
+  // the text view stays until the terminal has a first frame: no blank screen while the channel opens
+  bool get _termShown => term?.snapshot != null;
+
   Future<void> _load() async {
-    if (polling || m.state != LinkState.connected || m.background || ModalRoute.of(context)?.isCurrent != true) return;
-    if (term != null) {
+    // a delayed read (after a fit, a key) can fire after the screen closed
+    if (!mounted || polling || m.state != LinkState.connected || m.background || ModalRoute.of(context)?.isCurrent != true) return;
+    if (_termShown) {
       if (s != null && s!.unseen > 0) unawaited(m.act('session.seen', target: widget.sessionId));
       return;
     }
@@ -285,7 +304,7 @@ class _SessionScreenState extends State<SessionScreen> {
     final s = this.s;
     if (s == null) return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
     final t = term;
-    final options = promptOptions(t == null ? text : t.snapshot?.lines.map((l) => l.text).join('\n') ?? '');
+    final options = promptOptions(_termShown ? t!.snapshot!.lines.map((l) => l.text).join('\n') : text);
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -321,8 +340,13 @@ class _SessionScreenState extends State<SessionScreen> {
             Positioned.fill(child: _terminal()),
             Positioned(top: 14, right: 18, child: _toolbar(s)),
             if (m.state != LinkState.connected)
-              const Center(
-                  child: Text('Disconnected. Reconnecting…', key: Key('disconnected'), style: TextStyle(color: C.danger, fontWeight: FontWeight.w600))),
+              Center(
+                  child: Padding(
+                padding: const EdgeInsets.all(24),
+                // why it cannot connect when known (a revoked pairing does not reconnect)
+                child: Text(m.error ?? 'Disconnected. Reconnecting…',
+                    key: const Key('disconnected'), textAlign: TextAlign.center, style: const TextStyle(color: C.danger, fontWeight: FontWeight.w600)),
+              )),
           ])),
           if (options.isNotEmpty) _answers(options),
           _keyBar(),
@@ -333,7 +357,7 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   Widget _toolbar(Session s) {
-    Widget seg(String label, bool on, VoidCallback onTap, {Key? key}) => Padding(
+    Widget seg(String label, bool on, VoidCallback? onTap, {Key? key}) => Padding(
           padding: const EdgeInsets.only(left: 6),
           child: OutlinedButton(
             key: key,
@@ -369,9 +393,11 @@ class _SessionScreenState extends State<SessionScreen> {
           setState(() => scrollback = !scrollback);
           _syncTerm();
           _load();
+          _syncFit();
         }, key: const Key('scrollback')),
-        if (term == null)
-          seg(m.fitted.containsKey(_fitKey) ? 'Restore PC size' : 'Fit to phone', m.fitted.containsKey(_fitKey), fitting ? () {} : toggleFit,
+        // disabled, not hidden, on the Term view: Fit there is M5's
+        seg(m.fitted.containsKey(_fitKey) ? 'Restore PC size' : 'Fit to phone', m.fitted.containsKey(_fitKey),
+            term != null ? null : (fitting ? () {} : toggleFit),
             key: const Key('fitPhone')),
     ]);
   }
@@ -405,18 +431,16 @@ class _SessionScreenState extends State<SessionScreen> {
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         decoration: BoxDecoration(color: C.term, border: Border.all(color: const Color(0xFF1A1C24)), borderRadius: BorderRadius.circular(12)),
         clipBehavior: Clip.antiAlias,
-        child: term != null ? _termView(term!) : _textView(),
+        child: _termShown ? _termView(term!) : _textView(),
       );
 
   // the grid scaled to the width; taller than the box, the bottom rows (the cursor's) stay in view
   Widget _termView(TermSession t) {
-    final snap = t.snapshot;
-    if (snap == null) return const SizedBox.expand(key: Key('term'));
     return SingleChildScrollView(
       key: const Key('term'),
       reverse: true,
       padding: const EdgeInsets.all(12),
-      child: TerminalView(snapshot: snap, hold: t.hold),
+      child: TerminalView(snapshot: t.snapshot, hold: t.hold),
     );
   }
 
