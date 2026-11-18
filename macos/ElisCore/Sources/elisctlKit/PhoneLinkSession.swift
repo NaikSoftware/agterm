@@ -8,6 +8,8 @@ final class PhoneLinkSession {
     static let maxChunk = 16384
     /// A vt channel's relay buffer.
     static let bufferLimit = 512 * 1024
+    /// Event rows wait in `PhoneLinkEvents` while channel 1 already holds this much in the scheduler.
+    static let eventsHandOff = 64 * 1024
 
     /// `send`'s completion runs once, on the relay queue, even when the link failed.
     private let send: (Data, @escaping () -> Void) -> Void
@@ -22,12 +24,14 @@ final class PhoneLinkSession {
     var onEnd: (() -> Void)?
     private var decoder = PhoneLinkDecoder()
     private var scheduler: PhoneLinkScheduler
+    private var events: PhoneLinkEvents!
     private var control = Data()
     private var sending = false
     private var closed = false
 
     init(send: @escaping (Data, @escaping () -> Void) -> Void, forward: @escaping (Data, @escaping (Data) -> Void) -> Void,
-         socketPath: String, peer: String, window: UInt32, log: @escaping (String) -> Void, clock: @escaping () -> Date) {
+         socketPath: String, queue: DispatchQueue, peer: String, window: UInt32, log: @escaping (String) -> Void,
+         clock: @escaping () -> Date) {
         self.send = send
         self.forward = forward
         self.socketPath = socketPath
@@ -35,7 +39,11 @@ final class PhoneLinkSession {
         self.log = log
         self.clock = clock
         scheduler = PhoneLinkScheduler(window: window, bufferLimit: Self.bufferLimit)
+        events = PhoneLinkEvents(socketPath: socketPath, queue: queue) { [weak self] in self?.pump() }
+        events.start()
     }
+
+    deinit { events.stop() }
 
     func receive(_ bytes: Data) {
         guard !closed else { return }
@@ -50,7 +58,7 @@ final class PhoneLinkSession {
             guard !closed else { return }
             switch (frame.kind, frame.channel) {
             case (.data, 0): receiveControl(frame.payload)
-            default: break // events (channel 1) and vt channels (n >= 2) arrive in later tasks
+            default: break // the phone sends nothing on channel 1; vt channels (n >= 2) arrive in later tasks
             }
         }
     }
@@ -58,6 +66,7 @@ final class PhoneLinkSession {
     /// Stops sending; the owner closes the transport.
     func close(reason _: String) {
         closed = true
+        events.stop()
     }
 
     private func receiveControl(_ bytes: Data) {
@@ -81,7 +90,11 @@ final class PhoneLinkSession {
 
     /// One transport send in flight, so the scheduler, not the transport, holds what waits.
     private func pump() {
-        guard !closed, !sending, let frame = scheduler.next(maxChunk: Self.maxChunk) else { return }
+        guard !closed else { return }
+        while scheduler.pendingBytes(channel: 1) < Self.eventsHandOff, let line = events.next() {
+            _ = scheduler.enqueue(channel: 1, line)
+        }
+        guard !sending, let frame = scheduler.next(maxChunk: Self.maxChunk) else { return }
         sending = true
         send(frame.encoded()) { [weak self] in
             self?.sending = false
@@ -92,6 +105,7 @@ final class PhoneLinkSession {
     private func end() {
         guard !closed else { return }
         closed = true
+        events.stop()
         onEnd?()
     }
 }

@@ -174,6 +174,8 @@ final class MemoryPhone: PhoneTransportConnection, @unchecked Sendable {
     private let changed = DispatchSemaphore(value: 0)
     private var sent: [Data] = []
     private var isClosed = false
+    /// Completions held back while a test plays a phone that takes no more bytes; nil while sends complete.
+    private var held: [() -> Void]?
 
     init(queue: DispatchQueue) { self.queue = queue }
 
@@ -181,11 +183,21 @@ final class MemoryPhone: PhoneTransportConnection, @unchecked Sendable {
     func deliver(_ bytes: Data) { queue.async { self.onReceive?(bytes) } }
     func peerLeft() { queue.async { self.onClose?() } }
     func closed() -> Bool { lock.withLock { isClosed } }
+    /// From now on the transport makes no progress: no send completes until `release()`.
+    func hold() { lock.withLock { held = [] } }
+    func release() {
+        let completions = lock.withLock { defer { held = nil }; return held ?? [] }
+        completions.forEach { queue.async(execute: $0) }
+    }
 
     func send(_ data: Data, completion: @escaping () -> Void) {
-        lock.withLock { sent.append(data) }
+        let holding = lock.withLock {
+            sent.append(data)
+            held?.append(completion)
+            return held != nil
+        }
         changed.signal()
-        queue.async(execute: completion) // later, as a real transport does
+        if !holding { queue.async(execute: completion) } // later, as a real transport does
     }
 
     func close() { lock.withLock { isClosed = true } }
@@ -222,14 +234,51 @@ final class LogLines: @unchecked Sendable {
 
 final class FingerprintBox: @unchecked Sendable { var value: String? }
 
-/// A control socket stub that answers `version` with 9.9.9 and every other line with `{"echo":cmd}`, keeping the raw lines.
+/// A control socket stub that answers `version` with 9.9.9, `events.read` from a scripted ring, and every other
+/// line with `{"echo":cmd}`, keeping the raw lines; `events.read` lines are kept apart, as their cursors.
 final class RawStubServer: @unchecked Sendable {
     let path = "/tmp/agm-\(UUID().uuidString.prefix(8)).sock"
     private let lock = NSLock()
     private var received: [String] = []
     private var stopped = false
+    private let run = UUID().uuidString
+    private var events: [String] = []
+    /// Each `events.read`'s `after`, nil for the bootstrap read.
+    private var eventReads: [UInt64?] = []
 
     func requests() -> [String] { lock.withLock { received } }
+    func eventReadCursors() -> [UInt64?] { lock.withLock { eventReads } }
+
+    /// Appends `count` `status` events with seq numbers after the last one; `padding` makes each row larger.
+    func addEvents(_ count: Int, padding: Int = 0) {
+        let session = String(repeating: "x", count: padding)
+        lock.withLock {
+            for _ in 0..<count {
+                events.append(#"{"seq":\#(events.count + 1),"ts":0,"kind":"status","session":"\#(session)","payload":{}}"#)
+            }
+        }
+    }
+
+    /// Whether an `events.read` matching `cursor` arrives, within a slow-runner bound.
+    func waitEventRead(_ cursor: (UInt64?) -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(30)
+        while !eventReadCursors().contains(where: cursor) {
+            if Date() > deadline { return false }
+            usleep(20_000)
+        }
+        return true
+    }
+
+    /// The ring's answer, recorded and read under one lock so a test that saw the read knows its anchor.
+    private func eventsReply(_ object: [String: Any]) -> String {
+        lock.withLock {
+            let after = ((object["args"] as? [String: Any])?["after"] as? String).flatMap(UInt64.init)
+            eventReads.append(after)
+            let start = after.map(Int.init) ?? events.count
+            let items = events[min(start, events.count)..<min(start + 100, events.count)]
+            return #"{"ok":true,"result":{"events":{"run":"\#(run)","next":\#(start + items.count),"items":[\#(items.joined(separator: ","))]}}}"#
+        }
+    }
 
     /// Whether `line` arrives among the requests after the first `count`, within a slow-runner bound.
     func waitFor(_ line: String, after count: Int) -> Bool {
@@ -273,9 +322,10 @@ final class RawStubServer: @unchecked Sendable {
         var byte: UInt8 = 0
         while read(conn, &byte, 1) == 1, byte != 0x0A { line.append(byte) }
         guard byte == 0x0A, let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return }
-        lock.withLock { received.append(String(decoding: line, as: UTF8.self)) }
         let cmd = object["cmd"] as? String ?? ""
-        let reply = cmd == "version" ? #"{"ok":true,"result":{"app":{"version":"9.9.9"}}}"# : #"{"ok":true,"result":{"echo":"\#(cmd)"}}"#
+        if cmd != "events.read" { lock.withLock { received.append(String(decoding: line, as: UTF8.self)) } }
+        let reply = cmd == "version" ? #"{"ok":true,"result":{"app":{"version":"9.9.9"}}}"#
+            : cmd == "events.read" ? eventsReply(object) : #"{"ok":true,"result":{"echo":"\#(cmd)"}}"#
         let data = Data((reply + "\n").utf8)
         data.withUnsafeBytes { _ = UnixSocket.write(conn, $0.baseAddress!, data.count) }
     }

@@ -178,4 +178,16 @@ import Testing
         #expect(scheduler.pendingBytes == 0)
         #expect(scheduler.next(maxChunk: 10) == nil)
     }
+
+    @Test func pendingBytesPerChannel() {
+        var scheduler = PhoneLinkScheduler(window: 0, bufferLimit: 1000)
+        scheduler.open(channel: 2)
+        _ = scheduler.enqueue(channel: 1, bytes(7))
+        _ = scheduler.enqueue(channel: 2, bytes(5))
+        #expect(scheduler.pendingBytes(channel: 1) == 7)
+        #expect(scheduler.pendingBytes(channel: 2) == 5)
+        #expect(scheduler.pendingBytes(channel: 0) == 0)
+        _ = scheduler.next(maxChunk: 3)
+        #expect(scheduler.pendingBytes(channel: 1) == 4)
+    }
 }

@@ -17,6 +17,7 @@ public struct PhoneLinkScheduler: Sendable {
     }
 
     public var pendingBytes: Int { queues.values.reduce(0) { $0 + $1.count } }
+    public func pendingBytes(channel: UInt32) -> Int { queues[channel]?.count ?? 0 }
 
     public mutating func enqueue(channel: UInt32, _ bytes: Data) -> Enqueue {
         if channel < 2 {
