@@ -31,6 +31,53 @@ struct PhoneAttachTests {
                                                     lead: lead)
         let words = "'ZMX_MANAGED=n0nce' 'ZMX_MANAGED_FOLLOW=1' 'ZMX_MANAGED_SCREEN_ONLY=1' "
         #expect(viewer == head + [env + words + tail])
+
+        let source = LivePaneSource.remote(host: "buildbox", endpoint: fixed, daemon: pinnedDaemon)
+        let attach = try ControlAttach.viewer(source, paneID: "p")
+        let keepAlive = "ka=; 'ssh' '-G' '-tt' '-o' 'BatchMode=yes' '-o' 'ConnectTimeout=5' '-o' 'LogLevel=ERROR' 'buildbox'"
+            + " 2>/dev/null | grep -qx 'serveraliveinterval 0' && ka='-o ServerAliveInterval=5 -o ServerAliveCountMax=2'; "
+        let attachLine = "exec 'ssh' '-tt' '-o' 'BatchMode=yes' '-o' 'ConnectTimeout=5' '-o' 'LogLevel=ERROR' $ka 'buildbox' "
+            + CommandRestore.shellQuotedLine([env + "'ZMX_MANAGED=*' 'ZMX_MANAGED_FOLLOW=1' 'ZMX_MANAGED_SCREEN_ONLY=1' " + tail])
+        let masked = attach.argv.map {
+            $0.replacingOccurrences(of: "ZMX_MANAGED=[0-9a-f]+", with: "ZMX_MANAGED=*", options: .regularExpression)
+        }
+        #expect(masked == ["/bin/sh", "-c", keepAlive + attachLine])
+        let screenKeepAlive = "ka=; 'ssh' '-G' '-T' '-o' 'BatchMode=yes' '-o' 'ConnectTimeout=5' 'buildbox'"
+            + " 2>/dev/null | grep -qx 'serveraliveinterval 0' && ka='-o ServerAliveInterval=5 -o ServerAliveCountMax=2'; "
+        let screenLine = "exec 'ssh' '-T' '-o' 'BatchMode=yes' '-o' 'ConnectTimeout=5' $ka 'buildbox' "
+            + CommandRestore.shellQuotedLine(["'/usr/bin/env' 'ZMX_SESSION=' 'ZMX_SESSION_PREFIX=' 'ZMX_DIR=/tmp/zd' "
+                                              + "'/opt/zmx' 'screen' 'elis-00000000000000000000000000000001'"])
+        #expect(attach.screen == ["/bin/sh", "-c", screenKeepAlive + screenLine])
+        #expect(attach.remote)
+    }
+
+    @Test func screenArgvForLocalPane() throws {
+        let attach = try ControlAttach.viewer(.local(endpoint: endpoint, daemon: daemon), paneID: "p1")
+
+        #expect(attach.screen == ["/usr/bin/env", "ZMX_SESSION=", "ZMX_SESSION_PREFIX=", "ZMX_DIR=/tmp/zmx-x",
+                                  "/Applications/Elis.app/zmx", "screen", daemon])
+        #expect(!attach.screen.contains("ssh"))
+        #expect(!attach.remote)
+    }
+
+    @Test func remoteViewerUsesKeepAlive() throws {
+        let attach = try ControlAttach.viewer(.remote(host: "buildbox", endpoint: endpoint, daemon: daemon), paneID: "p2")
+
+        for argv in [attach.argv, attach.screen] {
+            #expect(Array(argv.prefix(2)) == ["/bin/sh", "-c"])
+            #expect(argv.count == 3)
+            #expect(argv.last?.contains("ServerAliveInterval=5") == true)
+        }
+        #expect(attach.screen.last?.contains("'screen'") == true)
+        #expect(attach.remote)
+    }
+
+    @Test func oldAnswerDecodesWithDefaults() throws {
+        let old = try JSONDecoder().decode(ControlAttach.self, from: Data(#"{"argv":["zmx"],"paneID":"p"}"#.utf8))
+        #expect(old == ControlAttach(argv: ["zmx"], paneID: "p", screen: [], remote: false))
+
+        let new = ControlAttach(argv: ["a"], paneID: "p", screen: ["s"], remote: true)
+        #expect(try JSONDecoder().decode(ControlAttach.self, from: JSONEncoder().encode(new)) == new)
     }
 
     @Test func localViewerArgvRunsZmxDirectly() throws {
@@ -49,11 +96,10 @@ struct PhoneAttachTests {
         let source = LivePaneSource.remote(host: "buildbox", endpoint: endpoint, daemon: daemon)
         let attach = try ControlAttach.viewer(source, paneID: "p2")
 
-        #expect(attach.argv.first == "ssh")
-        #expect(attach.argv.contains("buildbox"))
-        #expect(!attach.argv.contains { $0.hasPrefix("ControlPath") })
-        let remote = try #require(attach.argv.last)
-        #expect(remote.contains("ZMX_MANAGED_SCREEN_ONLY=1") && remote.contains("ZMX_MANAGED_FOLLOW=1"))
+        let script = try #require(attach.argv.last)
+        #expect(script.contains("'ssh'") && script.contains("'buildbox'"))
+        #expect(!script.contains("ControlPath"))
+        #expect(script.contains("ZMX_MANAGED_SCREEN_ONLY=1") && script.contains("ZMX_MANAGED_FOLLOW=1"))
     }
 
     @Test func invalidDaemonIsRejected() {

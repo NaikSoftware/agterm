@@ -33,6 +33,10 @@ struct ServerAttachTests {
             #expect(attach.argv.contains(ZmxSupport.daemonName(for: split)))
             #expect(attach.argv.contains("ZMX_MANAGED_FOLLOW=1"))
             #expect(attach.argv.contains("ZMX_MANAGED_SCREEN_ONLY=1"))
+            #expect(attach.screen == ["/usr/bin/env", "ZMX_SESSION=", "ZMX_SESSION_PREFIX=",
+                                      "ZMX_DIR=" + configuration.zmxSocketDirectory, configuration.zmxPath, "screen",
+                                      ZmxSupport.daemonName(for: split)])
+            #expect(!attach.remote)
         }
         let primary = await harness.actions.sessionAttach(target: session.id.uuidString, pane: .left, paneID: nil, window: nil)
         #expect(primary.result?.attach?.paneID == session.paneIdentity.uuidString)

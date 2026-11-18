@@ -62,7 +62,7 @@ final class ControlServerAttachTests: XCTestCase {
         attach.map {
             ControlAttach(argv: $0.argv.map { $0.replacingOccurrences(of: "ZMX_MANAGED=[0-9a-f]+", with: "ZMX_MANAGED=*",
                                                                        options: .regularExpression) },
-                          paneID: $0.paneID)
+                          paneID: $0.paneID, screen: $0.screen, remote: $0.remote)
         }
     }
 
