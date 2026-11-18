@@ -14,6 +14,8 @@ extension Session {
         enum Action: Equatable {
             case exec([String])
             case print(String)
+            /// A refused `--json` reply: the line goes to stdout like every command's, then the exit is nonzero.
+            case printThenFail(String)
             case fail(String)
         }
 
@@ -26,8 +28,8 @@ extension Session {
         }
 
         static func decide(_ reply: SocketReply, json: Bool) -> Action {
-            if json { return reply.response.ok ? .print(reply.line) : .fail(reply.line) }
-            guard reply.response.ok else { return .fail("error: " + (reply.response.error ?? "unknown error")) }
+            if json { return reply.response.ok ? .print(reply.line) : .printThenFail(reply.line) }
+            guard reply.response.ok else { return .fail(SocketClient.formatResponse(reply.response)) }
             guard let argv = reply.response.result?.attach?.argv, !argv.isEmpty else {
                 return .fail("error: the response carries no attach command")
             }
@@ -38,6 +40,9 @@ extension Session {
             let reply = try SocketClient(path: options.socketPath()).send(makeRequest())
             switch Self.decide(reply, json: options.json) {
             case .print(let line): print(line)
+            case .printThenFail(let line):
+                print(line)
+                throw ExitCode.failure
             case .fail(let message):
                 FileHandle.standardError.write(Data((message + "\n").utf8))
                 throw ExitCode.failure

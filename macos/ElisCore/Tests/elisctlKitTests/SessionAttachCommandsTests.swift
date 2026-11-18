@@ -19,12 +19,26 @@ struct SessionAttachCommandsTests {
         #expect(try parse(["session", "attach", "--target", "9f3c", "--pane", "right"]).makeRequest() == expected)
     }
 
+    private func validationMessage(_ argv: [String]) -> String? {
+        do {
+            _ = try Elisctl.parseAsRoot(argv)
+            return nil
+        } catch {
+            return Elisctl.message(for: error)
+        }
+    }
+
     @Test func rejectsAnUnknownPane() {
-        #expect(throws: (any Error).self) { try Elisctl.parseAsRoot(["session", "attach", "--pane", "middle"]) }
+        #expect(validationMessage(["session", "attach", "--pane", "middle"]) == "--pane must be left, right, or scratch")
     }
 
     @Test func refusesTheScratchPane() {
-        #expect(throws: (any Error).self) { try Elisctl.parseAsRoot(["session", "attach", "--pane", "scratch"]) }
+        #expect(validationMessage(["session", "attach", "--pane", "scratch"]) == "invalid pane: scratch")
+    }
+
+    @Test func jsonRefusalPrintsToStdoutThenFails() throws {
+        let r = try reply(ControlResponse(ok: false, error: "no live pane"))
+        #expect(Session.Attach.decide(r, json: true) == .printThenFail(r.line))
     }
 
     @Test func aRefusalExitsNonzeroWithTheError() throws {
