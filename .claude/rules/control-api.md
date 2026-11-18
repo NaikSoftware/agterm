@@ -272,26 +272,34 @@ Wire contract for the phone (M4b):
 - A relay killed by a signal prints no per-pane detach lines: viewer processes end by SIGHUP,
   and the app resets its viewers.
 
-Take over (M5), `PhoneLinkClaim`. A claim is a vt channel of its own beside the watch channel, counted in the 8,
+Take over (M5), `PhoneLinkClaim`.
+A claim is a vt channel of its own beside the watch channel, counted in the 8,
 and carries no DATA to the phone.
 
-- OPEN `{type:"vt", target, pane?, claim:true, cols, rows}`; each size 1...1000, else OPENED `{"error":"bad size"}`.
-  The relay asks `session.attach` with `claim`, runs the argv on a pty at that size and reads its output only for
-  role reports carrying the answer's `nonce`.
-- OPENED `{cols, rows}` (the pty's current size) goes only after the leader report, then LEAD `{"role":"leader"}`.
-  No report within 10 s refuses `this host's zmx cannot hand over the lead; update Elis there`; an answer without
-  `nonce` refuses `Elis gave no claiming attach for this pane`; the app's refusals pass through
-  (`session not realized` for a pane never shown).
-- Phone DATA is input written to the pty under a 16384-byte receive window: CREDIT goes back per completed pty write,
-  one in flight at a time, so writes coalesce. More than a window unacknowledged closes `input overflow`.
+- OPEN `{type:"vt", target, pane?, claim:true, cols, rows}`;
+  each size 1...1000, else OPENED `{"error":"bad size"}`.
+  The relay asks `session.attach` with `claim`, runs the argv on a pty at that size,
+  and reads its output only for role reports carrying the answer's `nonce`.
+- OPENED `{cols, rows}` (the pty's current size) goes only after the leader report,
+  then LEAD `{"role":"leader"}`.
+  No report within 10 s refuses `this host's zmx cannot hand over the lead; update Elis there`.
+  An answer without `nonce` refuses `Elis gave no claiming attach for this pane`.
+  The app's refusals pass through (`session not realized` for a pane never shown).
+- Phone DATA is input written to the pty under a 16384-byte receive window.
+  CREDIT goes back per completed pty write, one in flight at a time, so writes coalesce.
+  More than a window unacknowledged closes `input overflow`.
   Input before OPENED is dropped. A RESIZE with a size outside 1...1000 is ignored.
 - A later role sends LEAD `{role}`, ends the attach and CLOSE `the computer took the lead back`.
-  The attach's exit closes `session ended`. A phone CLOSE or a closed link ends the attach without a word.
-- Taking or losing the lead resyncs every watch channel on the pane: the daemon has already resized by the report,
-  so a fresh viewer attach is where old-grid bytes stop. A RESIZE or a release polls the grid at once and again 2 s later.
-- The relay prints `phone leads from <ip> pane <paneID>` once the claim leads and `phone released from <ip> pane <paneID>`
-  when it ends; the app turns them into `phone.claimed` / `phone.released` and `surfaces[].phoneLead`, and every
-  `phone.*` pane event emits `tree.changed` for the window holding the pane. A relay `-` address reads as no `ip`.
+  The attach's exit closes `session ended`.
+  A phone CLOSE or a closed link ends the attach without a word.
+- Taking or losing the lead resyncs every watch channel on the pane:
+  the daemon has already resized by the report, so a fresh viewer attach is where old-grid bytes stop.
+  A RESIZE or a release polls the grid at once and again 2 s later.
+- The relay prints `phone leads from <ip> pane <paneID>` once the claim leads,
+  and `phone released from <ip> pane <paneID>` when it ends.
+  The app turns them into `phone.claimed` / `phone.released` and `surfaces[].phoneLead`.
+  Every `phone.*` pane event emits `tree.changed` for the window holding the pane.
+  A relay `-` address leaves `ip` absent from the event payload; the human line prints `ip=-`.
   elis-server's own tree omits `phoneLead` by the same approved exception as `phoneViewers`.
 
 `session.attach` answers `result.attach = {argv, paneID, screen, remote, nonce?}`:
@@ -2629,8 +2637,9 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   the pane's zmx reports. A pane with no daemon never does, which is every local pane outside Live
   sessions mode, and neither does an origin or a zmx without the patch. Such a pane behaves as
   before and is never covered. A role change emits `tree.changed`.
-- A phone's Take over is one more claiming client (Relay mux above): the Mac pane follows and its cover reads
-  `In use on your phone` while `PhoneRelay.leads` holds the pane; a key on it takes the lead back as from another Mac.
+- A phone's Take over is one more claiming client (Relay mux above).
+  The Mac pane follows, and its cover reads `In use on your phone` while `PhoneRelay.leads` holds the pane.
+  A key on it takes the lead back, as from another Mac.
 - A pane that does not lead is covered (`PaneLeadCover`), by every host of its terminal: the deck, where
   it sits BELOW the pane's own pane overlay and hides while one is up, terminal zoom, and the dashboard.
   The daemon ignores a session switch while its leader is managed: the client's nonce, its generation and

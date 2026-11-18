@@ -170,6 +170,7 @@ on the computer that runs only while you want it.
   scrolls the program, two fingers zoom and pan, a double tap resets the zoom.
 - **Take over** gives the phone a Live pane's lead: the program runs at the phone's size and takes the phone's keys,
   while the Mac shows the pane as in use on your phone. Give back, leaving the screen or a key on the Mac returns it.
+  It is disabled on a pane that is not Live and while a fit is under way.
 - **Fit to phone** is on while a session's screen is open: it gives the program the phone's own grid (`session grid`): as many columns and rows as the phone shows
   at a readable size, so it redraws for the phone and nothing wraps, while the computer's font stays as it was. While
   fitted, dragging the screen scrolls the program itself (wheel notches through `session scroll`), so Claude Code
