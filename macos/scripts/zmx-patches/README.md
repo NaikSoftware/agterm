@@ -50,7 +50,8 @@ longer apply, and re-running `check.py`.
   and has not yet heard Init from, whose terminal answers again; the program reads the spare reply as the
   answer to its next query. The daemon now drops each query it answered from that output.
 - `0007-managed-viewer.patch` lets a managed client attach as a viewer. With `ZMX_MANAGED_FOLLOW` it never
-  leads, not even a session nobody leads, so its Init neither resizes the pty nor asks for its size;
+  leads, not even a session nobody leads, so its Init neither resizes the pty nor asks for its size,
+  and it gets the screen even of a session no client led yet;
   `ZMX_MANAGED_CLAIM` wins over it. With `ZMX_MANAGED_SCREEN_ONLY` the replay on attach skips the
   scrollback but keeps the `ESC[2J ESC[H ESC[0m` boundary in front of the visible screen. A client
   without them behaves as before, and an older zmx ignores both, since it reads only the claim bit.

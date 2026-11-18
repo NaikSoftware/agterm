@@ -69,7 +69,17 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
              try self.setLeader(gpa, client);
          }
          // ahead of the snapshot below, so a managed client learns its role before any output
-@@ -1094,7 +1102,7 @@
+@@ -1087,14 +1095,15 @@
+         }
+ 
+         // Only serialize on re-attach (has_had_client), not first attach, to avoid
+-        // interfering with shell initialization (DA1 queries, etc.)
+-        if (self.has_pty_output and self.has_had_client) {
++        // interfering with shell initialization (DA1 queries, etc.). A follower never
++        // resizes the pty, so it gets the screen even of a session nobody led yet.
++        if (self.has_pty_output and (self.has_had_client or client.follow)) {
+             const cursor = &term.screens.active.cursor;
+             std.log.debug(
                  "cursor before serialize: x={d} y={d} pending_wrap={}",
                  .{ cursor.x, cursor.y, cursor.pending_wrap },
              );
@@ -78,7 +88,7 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
                  std.log.debug("serialize terminal state", .{});
                  // Rewrite OSC 133;A to include redraw=0 so the outer terminal
                  // does not clear prompt lines on resize (issue #111).
-@@ -1670,9 +1678,12 @@
+@@ -1670,9 +1679,12 @@
  }
  
  fn testManaged(alloc: std.mem.Allocator, daemon: *Daemon, fd: i32, claim: bool) !*Client {
@@ -92,7 +102,7 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
      daemon.handleManage(client, std.mem.asBytes(&flags));
      return client;
  }
-@@ -1755,6 +1766,89 @@
+@@ -1755,6 +1767,115 @@
  
      _ = daemon.closeClient(alloc, viewer, 1, false);
      _ = daemon.closeClient(alloc, origin, 0, false);
@@ -132,6 +142,32 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
 +    try std.testing.expectEqual(@as(usize, 0), queuedCount(viewer, .Resize));
 +    try std.testing.expectEqual(ipc.Role.unowned, queuedRoles(viewer).last.?.role);
 +    try std.testing.expectEqual(@as(usize, 80), term.cols);
++    _ = daemon.closeClient(alloc, viewer, 0, false);
++}
++
++test "a follow viewer gets the screen of a session no client ever led" {
++    const alloc = std.testing.allocator;
++    const cfg = Cfg{ .socket_dir = "", .log_dir = "" };
++    var term = try initTerminal(alloc, std.testing.io, .{ .cols = 80, .rows = 24 }, &cfg);
++    defer term.deinit(alloc);
++    var daemon = testDaemon();
++    defer daemon.clients.deinit(alloc);
++    defer daemon.pty_write_buf.deinit(alloc);
++    daemon.has_pty_output = true;
++
++    const a = try lib_posix.pipe2(.{});
++    defer lib_posix.close(a[1]);
++    const b = try lib_posix.pipe2(.{});
++    defer lib_posix.close(b[1]);
++    const pty = b[0];
++    defer lib_posix.close(pty);
++
++    const viewer = try testManagedFlags(alloc, &daemon, a[0], .{ .follow = true });
++    try daemon.handleInit(alloc, viewer, pty, &term, std.mem.asBytes(&ipc.Resize{ .rows = 40, .cols = 50 }));
++
++    try std.testing.expectEqual(@as(usize, 1), queuedCount(viewer, .Output));
++    try std.testing.expectEqual(@as(?i32, null), daemon.leader_client_fd);
++    try std.testing.expect(!daemon.has_had_client);
 +    _ = daemon.closeClient(alloc, viewer, 0, false);
 +}
 +
@@ -185,12 +221,13 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
 diff -ruN zmx-orig/src/main.zig zmx/src/main.zig
 --- zmx-orig/src/main.zig
 +++ zmx/src/main.zig
-@@ -693,6 +693,8 @@
+@@ -693,6 +693,9 @@
          \\                       OSC 2;zmx-role;<token>:<unowned|leader|follower>:<generation>
          \\  ZMX_MANAGED_CLAIM    With ZMX_MANAGED, take the lead on attach even from a live leader
          \\                       (set to any value). Without it an attach leads only a session nobody leads
 +        \\  ZMX_MANAGED_FOLLOW   With ZMX_MANAGED, never lead, not even a session nobody leads
-+        \\  ZMX_MANAGED_SCREEN_ONLY  With ZMX_MANAGED, replay only the visible screen on attach
++        \\  ZMX_MANAGED_SCREEN_ONLY
++        \\                       With ZMX_MANAGED, replay only the visible screen on attach
          \\
      ;
      var buf: [8192]u8 = undefined;
