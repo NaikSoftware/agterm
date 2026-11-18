@@ -871,6 +871,39 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('giveBackDuringTheResetCancelsTheClaim', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.r.held['session.grid'] = [];
+    await t.tap(find.byKey(const Key('takeOver')));
+    await t.pump();
+    expect(_enabled(t, 'takeOver'), isTrue);
+    await t.tap(find.byKey(const Key('takeOver'))); // Give back
+    await t.pump();
+    h.r.held.remove('session.grid')!.forEach(h.r.send);
+    await t.pump();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 10));
+    expect([for (final o in h.r.opens) if (o['claim'] == true) o], isEmpty);
+    expect(_label(t, 'takeOver'), 'Take over');
+    await h.stop();
+  });
+
+  testWidgets('takeOverIsDisabledWhileAFitIsPending', (t) async {
+    final h = Harness(t, treeOf());
+    h.r.held['session.grid'] = [];
+    await h.start();
+    await h.opened();
+    expect(h.r.grids, hasLength(1));
+    expect(_enabled(t, 'takeOver'), isFalse);
+    h.r.held.remove('session.grid')!.forEach(h.r.send);
+    await t.pump();
+    await t.pump();
+    expect(_enabled(t, 'takeOver'), isTrue);
+    await h.stop();
+  });
+
   testWidgets('keyboardDuringThePendingClaimResizesTheLead', (t) async {
     final h = Harness(t, treeOf());
     await h.start();

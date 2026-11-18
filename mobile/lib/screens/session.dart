@@ -495,7 +495,8 @@ class _SessionScreenState extends State<SessionScreen> {
           seg('Left pane', pane == 'left', () => setPane('left')),
           seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
         ],
-        seg(_lead ? 'Give back' : 'Take over', _lead, term == null ? null : (fitting ? () {} : toggleLead), key: const Key('takeOver')),
+        // Give back cancels at any moment; Take over waits for a fit call in flight, which would race the claim
+        seg(_lead ? 'Give back' : 'Take over', _lead, term == null || (fitting && !_lead) ? null : toggleLead, key: const Key('takeOver')),
     ]);
   }
 
