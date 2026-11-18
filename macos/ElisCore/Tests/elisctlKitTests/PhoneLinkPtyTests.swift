@@ -60,11 +60,16 @@ struct PhoneLinkPtyTests {
 
     @Test func terminateEndsAPipelineThatHoldsTheTerminal() async throws {
         let recorder = Recorder()
-        let pty = try recorder.spawn(["/bin/sh", "-c", "printf hi; cat"])
-        #expect(await eventually { recorder.output.contains("hi") })
+        // every member ignores SIGHUP, so only a signal to the whole group ends the sleep that holds no terminal
+        let pty = try recorder.spawn(["/bin/sh", "-c", "trap '' HUP; sleep 60 </dev/null >/dev/null 2>&1 & echo pid=$!; cat"])
+        #expect(await eventually { recorder.output.contains("\r\n") })
+        let line = recorder.output.split(whereSeparator: \.isNewline).first { $0.hasPrefix("pid=") }
+        let grandchild = try #require(line.flatMap { pid_t($0.dropFirst(4)) }, "output: \(recorder.output)")
         pty.terminate()
         // onExit fires after the reader thread leaves its loop, so it also proves the reader ended
         #expect(await recorder.waitExit())
+        #expect(await eventually { kill(grandchild, 0) == -1 && errno == ESRCH }, "pid \(grandchild) outlived terminate()")
+        kill(grandchild, SIGKILL)
     }
 
     @Test func badExecutableThrows() {

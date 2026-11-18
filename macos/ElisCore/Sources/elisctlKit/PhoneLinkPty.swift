@@ -33,7 +33,7 @@ final class PhoneLinkPty: @unchecked Sendable {
         let controller = posix_openpt(O_RDWR | O_NOCTTY)
         guard controller >= 0 else { throw Failure(operation: "posix_openpt", errno: errno) }
         do {
-            _ = fcntl(controller, F_SETFD, FD_CLOEXEC)
+            guard fcntl(controller, F_SETFD, FD_CLOEXEC) == 0 else { throw Failure(operation: "fcntl", errno: errno) }
             guard grantpt(controller) == 0 else { throw Failure(operation: "grantpt", errno: errno) }
             guard unlockpt(controller) == 0 else { throw Failure(operation: "unlockpt", errno: errno) }
             guard let name = ptsname(controller) else { throw Failure(operation: "ptsname", errno: errno) }
@@ -95,9 +95,15 @@ final class PhoneLinkPty: @unchecked Sendable {
         close(controller)
         // shortcut: a child that closes its stdio but keeps running is waited for and never killed; add a kill here
         // if a relay command ever does that
-        var status: Int32 = 0
-        while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
-        lock.withLock { reaped = true }
+        // wait without reaping, then reap under the lock: terminate() never signals a pgid freed for reuse
+        var info = siginfo_t()
+        while waitid(P_PID, id_t(pid), &info, WEXITED | WNOWAIT) < 0 && errno == EINTR {}
+        let status: Int32 = lock.withLock {
+            reaped = true
+            var status: Int32 = 0
+            while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+            return status
+        }
         let signal = status & 0x7f
         onExit(signal == 0 ? (status >> 8) & 0xff : 128 + signal)
     }
