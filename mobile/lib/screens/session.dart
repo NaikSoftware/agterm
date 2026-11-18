@@ -237,8 +237,7 @@ class _SessionScreenState extends State<SessionScreen> {
   /// Fits or gives back the grid as [autoFit] says for the screen's state now; a change during a call runs after it.
   Future<void> _syncFit() async {
     if (fitting || !mounted) return;
-    // shortcut: no Fit to phone on the Term view (it scales the Mac's grid); M5 adds it
-    final visible = _foreground && !m.background && m.state == LinkState.connected && term == null;
+    final visible = _foreground && !m.background && m.state == LinkState.connected;
     final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible);
     if (on == null) return;
     setState(() => fitting = true);
@@ -395,9 +394,8 @@ class _SessionScreenState extends State<SessionScreen> {
           _load();
           _syncFit();
         }, key: const Key('scrollback')),
-        // disabled, not hidden, on the Term view: Fit there is M5's
         seg(m.fitted.containsKey(_fitKey) ? 'Restore PC size' : 'Fit to phone', m.fitted.containsKey(_fitKey),
-            term != null ? null : (fitting ? () {} : toggleFit),
+            fitting ? () {} : toggleFit,
             key: const Key('fitPhone')),
     ]);
   }

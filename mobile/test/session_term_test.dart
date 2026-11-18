@@ -228,9 +228,11 @@ void main() {
     final texts = h.r.texts;
     await t.pump(const Duration(seconds: 3));
     expect(h.r.texts, texts); // the text poll stops while Term is shown
-    expect(h.r.calls, isNot(contains('session.grid'))); // no Fit to phone on the Term view
-    final fit = t.widget<OutlinedButton>(find.byKey(const Key('fitPhone')));
-    expect(fit.onPressed, isNull); // visible and disabled
+    expect(h.r.calls.where((c) => c == 'session.grid'), hasLength(1)); // fitted to the phone, as the text view is
+    await t.tap(find.byKey(const Key('fitPhone')));
+    await t.pump();
+    expect(h.r.calls.where((c) => c == 'session.grid'), hasLength(2)); // Restore PC size gives the grid back
+    expect(find.byType(TerminalView), findsOneWidget);
     expect(h.r.of(LinkKind.resize), isEmpty);
     expect([for (final f in h.r.frames) if (f.channel >= 2 && f.kind == LinkKind.data) f], isEmpty); // watch only
     await h.stop();
