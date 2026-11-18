@@ -15,26 +15,28 @@ import 'actions.dart';
 import 'home.dart' show StatusChip;
 import 'prompt.dart';
 
-// what each key-bar key types into the pane: xterm sequences, as Konsole sends them
+// what each key-bar key types into the pane: xterm sequences, as Konsole sends them, or while the phone leads, the key
+// the emulator encodes in the program's own modes
 const keys = [
-  ('esc', '\x1b', 'Escape'),
-  ('tab', '\t', 'Tab'),
-  ('⇧tab', '\x1b[Z', 'Shift Tab'),
-  ('^C', '\x03', 'Control C'),
-  ('↑', '\x1b[A', 'Up'),
-  ('↓', '\x1b[B', 'Down'),
-  ('←', '\x1b[D', 'Left'),
-  ('→', '\x1b[C', 'Right'),
-  ('⏎', '\r', 'Enter'),
-  ('^D', '\x04', 'Control D'),
-  ('^L', '\x0c', 'Control L'),
-  ('^R', '\x12', 'Control R'),
-  ('^Z', '\x1a', 'Control Z'),
-  ('^U', '\x15', 'Control U'),
-  ('home', '\x1b[H', 'Home'),
-  ('end', '\x1b[F', 'End'),
-  ('pgup', '\x1b[5~', 'Page up'),
-  ('pgdn', '\x1b[6~', 'Page down'),
+  ('esc', '\x1b', 'Escape', VtKey.escape, 0),
+  ('tab', '\t', 'Tab', VtKey.tab, 0),
+  ('⇧tab', '\x1b[Z', 'Shift Tab', VtKey.tab, vtShift),
+  ('^C', '\x03', 'Control C', VtKey.c, vtCtrl),
+  ('↑', '\x1b[A', 'Up', VtKey.arrowUp, 0),
+  ('↓', '\x1b[B', 'Down', VtKey.arrowDown, 0),
+  ('←', '\x1b[D', 'Left', VtKey.arrowLeft, 0),
+  ('→', '\x1b[C', 'Right', VtKey.arrowRight, 0),
+  ('⏎', '\r', 'Enter', VtKey.enter, 0),
+  ('^D', '\x04', 'Control D', VtKey.d, vtCtrl),
+  ('^L', '\x0c', 'Control L', VtKey.l, vtCtrl),
+  ('^R', '\x12', 'Control R', VtKey.r, vtCtrl),
+  ('^Z', '\x1a', 'Control Z', VtKey.z, vtCtrl),
+  ('^U', '\x15', 'Control U', VtKey.u, vtCtrl),
+  ('home', '\x1b[H', 'Home', VtKey.home, 0),
+  ('end', '\x1b[F', 'End', VtKey.end, 0),
+  ('pgup', '\x1b[5~', 'Page up', VtKey.pageUp, 0),
+  ('pgdn', '\x1b[6~', 'Page down', VtKey.pageDown, 0),
+  ('paste', null, 'Paste', null, 0), // the clipboard
 ];
 
 class SessionScreen extends StatefulWidget {
@@ -65,6 +67,9 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _scrolling = false;
   bool polling = false;
   TermSession? term; // a Live pane watched as a terminal; the text poll stops meanwhile
+  TermSession? _claimed; // the term Take over was asked on: a replaced term (pause, pane, reconnect) is not claimed
+  (int, int)? _leadGrid; // the phone's grid the lead was last asked for
+  Timer? _leadResize;
   final _refused = <String>{}; // panes whose terminal the relay refused on this visit: text view until they stop being Live
   final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
 
@@ -96,6 +101,7 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   void dispose() {
     poll?.cancel();
+    _leadResize?.cancel();
     term?.removeListener(_onTerm);
     term?.close();
     for (final t in _closedRecently.values) {
@@ -164,10 +170,69 @@ class _SessionScreenState extends State<SessionScreen> {
       }
       unawaited(_load());
       unawaited(_syncFit());
-    } else if (text.isNotEmpty && _termShown && t.snapshot!.altScreen) {
-      text = ''; // shown from now on; a fallback later starts from a fresh read, not this one
+    } else {
+      if (t.leadLost case final r? when _claimed == t) {
+        _claimed = null;
+        if (r != 'Disconnected' && r != revokedMessage && r.isNotEmpty) {
+          report(context, '${r[0].toUpperCase()}${r.substring(1)}${r.endsWith('.') ? '' : '.'}');
+        }
+      }
+      if (text.isNotEmpty && _termShown && t.snapshot!.altScreen) {
+        text = ''; // shown from now on; a fallback later starts from a fresh read, not this one
+      }
     }
     setState(() {});
+  }
+
+  // asked for, the lead is pending (the relay can wait 10 s for zmx) or held; input goes to it only once [leading]
+  bool get _lead => _claimed != null && _claimed == term;
+  bool get _leading => _lead && term!.leading;
+
+  // the program runs at what the screen shows at a readable size, as Fit to phone sizes it
+  (int, int) _phoneGrid() {
+    final cols = _fitColumns();
+    return (cols, max(1, (_height / CellMetrics.fit(_width, cols).h).floor()));
+  }
+
+  Future<void> toggleLead() async {
+    final t = term;
+    if (t == null) return;
+    if (_lead) {
+      t.release();
+      return setState(() => _claimed = null);
+    }
+    t.leadLost = null; // a lead lost earlier was said then
+    setState(() => _claimed = t);
+    autoFit.wanted = false;
+    // the computer's grid back first: a session grid would outlive the lead and fight the phone's
+    if (m.fitted.remove(_fitKey) != null) {
+      try {
+        await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'reset': true});
+      } on ElisError catch (e) {
+        if (mounted) report(context, e.message);
+      } on TimeoutException {
+        // the claim's own grid wins at the relay either way
+      }
+    }
+    if (!mounted || _claimed != t) return;
+    final g = _leadGrid = _phoneGrid();
+    final err = await t.takeOver(g.$1, g.$2);
+    if (err == null || !mounted || _claimed != t) return;
+    setState(() => _claimed = null);
+    report(context, err);
+  }
+
+  // a layout change (the keyboard, a rotation) resizes the lead once it settles
+  void _layoutLead() {
+    final t = term;
+    if (!_lead || t == null) return;
+    final g = _phoneGrid();
+    if (g == _leadGrid) return;
+    _leadGrid = g;
+    _leadResize?.cancel();
+    _leadResize = Timer(const Duration(milliseconds: 300), () {
+      if (_lead && term == t) t.resizeLead(g.$1, g.$2);
+    });
   }
 
   // the text view stays until the terminal has a first frame: no blank screen while the channel opens
@@ -292,13 +357,35 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Future<void> type(String keys) async {
     HapticFeedback.selectionClick();
+    if (_leading) return term!.text(keys);
     final err = await m.act('session.type', target: widget.sessionId, args: {'text': keys, 'pane': pane});
     if (mounted) report(context, err);
     Future.delayed(const Duration(milliseconds: 150), _load);
   }
 
+  void _press(String? seq, VtKey? key, int mods) {
+    if (key == null || seq == null) return unawaited(_paste());
+    if (!_leading) return unawaited(type(seq));
+    HapticFeedback.selectionClick();
+    term!.key(key, mods: mods);
+  }
+
+  Future<void> _paste() async {
+    final clip = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (clip == null || clip.isEmpty || !mounted) return;
+    if (!_leading) return type(clip);
+    HapticFeedback.selectionClick();
+    if (!term!.paste(clip)) report(context, 'The program has not read the earlier input yet; paste again in a moment.');
+  }
+
   Future<void> sendInput() async {
     final t = input.text;
+    if (_leading) {
+      // the text, then Enter as a key: the program sees a typed line, not a paste
+      if (t.isNotEmpty) term!.text(t);
+      term!.key(VtKey.enter);
+      return input.clear();
+    }
     if (t.isEmpty) return type('\r');
     setState(() => sending = true);
     // the text, then the Enter on its own: Claude Code reads a pasted "...\r" as one paste, not a submit
@@ -351,7 +438,7 @@ class _SessionScreenState extends State<SessionScreen> {
           Expanded(
               child: Stack(children: [
             Positioned.fill(child: _terminal()),
-            Positioned(top: 14, right: 18, child: _toolbar(s)),
+            Positioned(top: 14, left: 12, right: 18, child: _toolbar(s)),
             if (m.state != LinkState.connected)
               Center(
                   child: Padding(
@@ -397,7 +484,8 @@ class _SessionScreenState extends State<SessionScreen> {
       _load();
       _syncFit();
     }
-    return Row(mainAxisSize: MainAxisSize.min, children: [
+    // a split's five segments are wider than a phone: the rest go on a second row
+    return Wrap(key: const Key('toolbar'), alignment: WrapAlignment.end, runSpacing: 6, children: [
         if (s.hasSplit) ...[
           seg('Left pane', pane == 'left', () => setPane('left')),
           seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
@@ -409,8 +497,9 @@ class _SessionScreenState extends State<SessionScreen> {
           _syncFit();
         }, key: const Key('scrollback')),
         seg(m.fitted.containsKey(_fitKey) ? 'Restore PC size' : 'Fit to phone', m.fitted.containsKey(_fitKey),
-            fitting ? () {} : toggleFit,
+            _lead ? null : (fitting ? () {} : toggleFit),
             key: const Key('fitPhone')),
+        seg(_lead ? 'Give back' : 'Take over', _lead, term == null ? null : (fitting ? () {} : toggleLead), key: const Key('takeOver')),
     ]);
   }
 
@@ -453,9 +542,15 @@ class _SessionScreenState extends State<SessionScreen> {
   // a live stream has no phone-side history, so a drag always scrolls the program
   Widget _termView(TermSession t) {
     final columns = m.fitted[_fitKey]?.$1 ?? (autoFit.wanted ? _fitColumns() : null);
-    return LayoutBuilder(
-      builder: (context, box) => GestureDetector(
-        onVerticalDragUpdate: (d) => _drag(d, CellMetrics.fit(box.maxWidth - 24, columns ?? t.snapshot?.cols ?? 80).h),
+    return LayoutBuilder(builder: (context, box) {
+      _width = box.maxWidth - 24;
+      _height = box.maxHeight - 24;
+      _layoutLead();
+      return GestureDetector(
+        onVerticalDragUpdate: (d) {
+          final cell = CellMetrics.fit(_width, columns ?? t.snapshot?.cols ?? 80);
+          t.leading ? _wheel(t, d, cell) : _drag(d, cell.h);
+        },
         child: SingleChildScrollView(
           key: const Key('term'),
           reverse: true,
@@ -463,8 +558,23 @@ class _SessionScreenState extends State<SessionScreen> {
           padding: const EdgeInsets.all(12),
           child: TerminalView(snapshot: t.snapshot, hold: t.hold, columns: columns),
         ),
-      ),
-    );
+      );
+    });
+  }
+
+  // leading, the phone is the program's mouse: a notch per row the finger moved, at the cell under it. The grid sits
+  // at the bottom of the box (reverse scroll), so rows count up from there.
+  void _wheel(TermSession t, DragUpdateDetails d, CellMetrics cell) {
+    _dragRows += d.delta.dy / cell.h;
+    final n = _dragRows.truncate(); // dragging down shows older rows: wheel up
+    _dragRows -= n;
+    final snap = t.snapshot;
+    if (n == 0 || snap == null) return;
+    final col = ((d.localPosition.dx - 12) / cell.w).floor().clamp(0, snap.cols - 1);
+    final row = (snap.rows - 1 - ((_height + 12 - d.localPosition.dy) / cell.h).floor()).clamp(0, snap.rows - 1);
+    for (var i = 0; i < n.abs(); i++) {
+      t.wheel(up: n > 0, col: col, row: row);
+    }
   }
 
   Widget _textView() => LayoutBuilder(builder: (context, box) {
@@ -474,6 +584,7 @@ class _SessionScreenState extends State<SessionScreen> {
           // JetBrains Mono advances 0.6 em
           _width = box.maxWidth - 24;
           _height = box.maxHeight - 24;
+          _layoutLead();
           // tiny when the computer's grid is wide, but whole rows, so the layout stays the program's (Fit to phone reads it)
           _fit = _sizeFor(cols, min(13, _width / (cols * 0.6)));
           final size = _fit;
@@ -538,14 +649,14 @@ class _SessionScreenState extends State<SessionScreen> {
           itemCount: keys.length,
           separatorBuilder: (_, _) => const SizedBox(width: 6),
           itemBuilder: (context, i) {
-            final (label, seq, name) = keys[i];
+            final (label, seq, name, key, mods) = keys[i];
             return Semantics(
               label: name,
               button: true,
               excludeSemantics: true,
               child: OutlinedButton(
                 key: Key('key-$name'),
-                onPressed: () => type(seq),
+                onPressed: () => _press(seq, key, mods),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(44, 44),
                   padding: const EdgeInsets.symmetric(horizontal: 10),

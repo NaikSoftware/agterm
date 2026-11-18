@@ -34,6 +34,7 @@ class Relay {
   final grids = <Map>[]; // session.grid arguments
   final scrolls = <Map>[]; // session.scroll arguments
   final refused = <String>{}; // commands answered with an error
+  final held = <String, List<List<int>>>{}; // answers kept back until the test sends them
   final _decoder = LinkDecoder();
   final _lines = LineBuffer();
   final _control = LineBuffer();
@@ -66,6 +67,10 @@ class Relay {
       if (r['cmd'] == 'session.scroll') scrolls.add(r['args'] as Map);
       if (refused.contains(r['cmd'])) {
         send(frame(LinkKind.data, 0, utf8.encode('${jsonEncode({'id': r['id'], 'ok': false, 'error': 'refused ${r['cmd']}'})}\n')));
+        continue;
+      }
+      if (held[r['cmd']] case final q?) {
+        q.add(frame(LinkKind.data, 0, answer(r['id'])));
         continue;
       }
       final result = switch (r['cmd']) {
@@ -164,7 +169,13 @@ class FakeVt implements Vt {
   final replies = <int>[];
   @override
   Uint8List encodeKey(VtKey key, {int mods = 0, String text = ''}) =>
-      Uint8List.fromList(utf8.encode(switch (key) { VtKey.arrowUp => '\x1b[A', VtKey.arrowDown => '\x1b[B', _ => text }));
+      Uint8List.fromList(utf8.encode(switch (key) {
+        VtKey.arrowUp => '\x1b[A',
+        VtKey.arrowDown => '\x1b[B',
+        VtKey.enter => '\r',
+        VtKey.c when mods == vtCtrl => '\x03',
+        _ => text,
+      }));
   @override
   Uint8List encodeText(String text) => Uint8List.fromList(utf8.encode(text));
   @override
@@ -236,6 +247,36 @@ extension<T> on T {
     f(this);
     return this;
   }
+}
+
+const _claimCh = 3; // the watch channel is 2
+
+/// Taps Take over; the relay opens the claim and makes the phone the leader.
+Future<void> _lead(Harness h) async {
+  await h.t.tap(find.byKey(const Key('takeOver')));
+  await h.t.pump();
+  await h.t.pump();
+  expect(h.r.lastChannel, _claimCh);
+  h.r.send([...json(LinkKind.opened, _claimCh, {'cols': 40, 'rows': 20}), ...json(LinkKind.lead, _claimCh, {'role': 'leader'})]);
+  await h.t.pump();
+  await h.t.pump();
+}
+
+String _typed(Harness h) => utf8.decode([for (final f in h.r.frames) if (f.channel == _claimCh && f.kind == LinkKind.data) ...f.payload]);
+int _types(Harness h) => h.r.calls.where((c) => c == 'session.type').length;
+String _label(WidgetTester t, String key) => t.widget<Text>(find.descendant(of: find.byKey(Key(key)), matching: find.byType(Text))).data!;
+bool _enabled(WidgetTester t, String key) => t.widget<OutlinedButton>(find.byKey(Key(key))).onPressed != null;
+
+Future<void> _loadFonts() async {
+  for (final (family, file) in [('Inter', 'Inter'), ('JetBrainsMono', 'JetBrainsMono')]) {
+    await (FontLoader(family)..addFont(rootBundle.load('assets/fonts/$file.ttf'))).load();
+  }
+}
+
+void _phone(WidgetTester t) {
+  t.view.physicalSize = const Size(1080, 2340);
+  t.view.devicePixelRatio = 3;
+  addTearDown(t.view.reset);
 }
 
 void main() {
@@ -613,6 +654,254 @@ void main() {
     expect(h.r.opens, isEmpty); // nothing opened from the old link's tree
     await t.pump(const Duration(seconds: 1));
     expect(find.text('plain text'), findsOneWidget);
+    await h.stop();
+  });
+  testWidgets('takeOverButtonIsDisabledWithoutATerminal', (t) async {
+    final h = Harness(t, treeOf(live: false));
+    await h.start();
+    expect(find.byKey(const Key('takeOver')), findsOneWidget);
+    expect(_enabled(t, 'takeOver'), isFalse);
+    expect(_label(t, 'takeOver'), 'Take over');
+    await h.stop();
+  });
+
+  testWidgets('takeOverResetsTheFitFirst', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await t.tap(find.byKey(const Key('fitPhone'))); // the text poll read the first fit as given back
+    await t.pump();
+    await t.pump();
+    expect(h.m.fitted['s1/left'], isNotNull);
+    final grids = h.r.grids.length;
+    h.r.held['session.grid'] = [];
+    await t.tap(find.byKey(const Key('takeOver')));
+    await t.pump();
+    expect(h.r.grids.last, {'pane': 'left', 'reset': true});
+    expect(h.r.lastChannel, 2); // no claim until the computer has its grid back
+    h.r.held.remove('session.grid')!.forEach(h.r.send);
+    await t.pump();
+    await t.pump();
+    expect(h.r.opens.last['claim'], isTrue);
+    expect(h.m.fitted['s1/left'], isNull);
+    await t.pump(const Duration(seconds: 1));
+    expect(h.r.grids, hasLength(grids + 1)); // the reset, and no fit after it
+    await h.stop();
+  });
+
+  testWidgets('takeOverUsesThePhoneGrid', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await t.tap(find.byKey(const Key('takeOver')));
+    await t.pump();
+    await t.pump();
+    final box = t.getSize(find.byKey(const Key('term')));
+    final cols = h.r.grids.first['columns'] as int; // Fit to phone's columns for the same box
+    final rows = ((box.height - 24) / CellMetrics.fit(box.width - 24, cols).h).floor();
+    expect(h.r.opens.last, {'type': 'vt', 'target': 's1', 'pane': 'left', 'claim': true, 'cols': cols, 'rows': rows});
+    await h.stop();
+  });
+
+  testWidgets('refusalStaysInWatch', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await t.tap(find.byKey(const Key('takeOver')));
+    await t.pump();
+    await t.pump();
+    expect(_label(t, 'takeOver'), 'Give back'); // the relay can take up to 10 s
+    h.r.send(json(LinkKind.opened, _claimCh, {'error': 'session not realized'}));
+    await t.pump();
+    await t.pump();
+    expect(find.text('session not realized'), findsOneWidget);
+    expect(_label(t, 'takeOver'), 'Take over');
+    await t.tap(find.byKey(const Key('key-Up')));
+    await t.pump();
+    expect(_types(h), 1);
+    await h.stop();
+  });
+
+  testWidgets('keyBarSendsEncodedKeysWhileLeading', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    expect(_label(t, 'takeOver'), 'Give back');
+    await t.tap(find.byKey(const Key('key-Up')));
+    await t.tap(find.byKey(const Key('key-Control C')));
+    await t.pump();
+    expect(_typed(h), '\x1b[A\x03');
+    expect(_types(h), 0);
+    await h.stop();
+  });
+
+  testWidgets('composerSendsTextThenEnter', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    await t.enterText(find.byKey(const Key('composer')), 'ls');
+    await t.tap(find.byKey(const Key('send')));
+    await t.pump();
+    expect(_typed(h), 'ls\r');
+    expect(find.text('ls'), findsNothing);
+    await t.tap(find.byKey(const Key('send')));
+    await t.pump();
+    expect(_typed(h), 'ls\r\r');
+    expect(_types(h), 0);
+    await h.stop();
+  });
+
+  testWidgets('pasteKeyPastes', (t) async {
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform,
+        (c) async => c.method == 'Clipboard.getData' ? {'text': 'echo hi'} : null);
+    addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await t.scrollUntilVisible(find.byKey(const Key('key-Paste')), 200, scrollable: find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)));
+    await t.tap(find.byKey(const Key('key-Paste')));
+    await t.pump();
+    await t.pump();
+    expect(_types(h), 1);
+    await _lead(h);
+    await t.scrollUntilVisible(find.byKey(const Key('key-Paste')), 200, scrollable: find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)));
+    await t.tap(find.byKey(const Key('key-Paste')));
+    await t.pump();
+    await t.pump();
+    expect(_typed(h), 'echo hi');
+    expect(_types(h), 1);
+    await h.stop();
+  });
+
+  testWidgets('dragSendsWheelWhileLeading', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    h.vts.single.tracksMouse = true;
+    final term = find.byKey(const Key('term'));
+    final row = CellMetrics.fit(t.getSize(term).width - 24, h.vts.single.cols).h;
+    final g = await t.startGesture(t.getCenter(term));
+    await g.moveBy(Offset(0, 3 * row));
+    await g.up();
+    await t.pump();
+    expect(RegExp('wheel up').allMatches(_typed(h)), hasLength(3));
+    expect(h.r.scrolls, isEmpty);
+    await h.stop();
+  });
+
+  testWidgets('fitIsDisabledWhileLeading', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    expect(_enabled(t, 'fitPhone'), isTrue);
+    await _lead(h);
+    expect(_enabled(t, 'fitPhone'), isFalse);
+    expect(_label(t, 'fitPhone'), 'Fit to phone');
+    await t.tap(find.byKey(const Key('takeOver'))); // Give back
+    await t.pump();
+    expect(h.r.closes, [_claimCh]);
+    expect(_enabled(t, 'fitPhone'), isTrue);
+    await h.stop();
+  });
+
+  testWidgets('leadLostReturnsToWatch', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    h.r.send([...json(LinkKind.lead, _claimCh, {'role': 'follower'}), ...json(LinkKind.close, _claimCh, {'reason': 'the computer took the lead back'})]);
+    await t.pump();
+    await t.pump();
+    expect(find.text('The computer took the lead back.'), findsOneWidget);
+    expect(_label(t, 'takeOver'), 'Take over');
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('x')));
+    await t.pump();
+    await t.pump();
+    expect(find.text('The computer took the lead back.'), findsOneWidget); // said once
+    await t.tap(find.byKey(const Key('key-Up')));
+    await t.pump();
+    expect(_types(h), 1);
+    await h.stop();
+  });
+
+  testWidgets('pauseAndPaneSwitchRelease', (t) async {
+    AndroidFlutterLocalNotificationsPlugin.registerWith();
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('dexterous.com/flutter/local_notifications'), (_) async => null);
+    Watch.permitted = true;
+    addTearDown(() => Watch.permitted = false);
+    final h = Harness(t, treeOf(split: true));
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    for (final s in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+      t.binding.handleAppLifecycleStateChanged(s);
+    }
+    await t.pump();
+    expect(h.r.closes, containsAll([2, _claimCh]));
+    for (final s in [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+      t.binding.handleAppLifecycleStateChanged(s);
+    }
+    await t.pump();
+    final watch = h.r.lastChannel;
+    await h.opened();
+    expect(_label(t, 'takeOver'), 'Take over');
+    await t.tap(find.byKey(const Key('takeOver')));
+    await t.pump();
+    await t.pump();
+    final claim = h.r.lastChannel;
+    h.r.send([...json(LinkKind.opened, claim, {'cols': 40, 'rows': 20}), ...json(LinkKind.lead, claim, {'role': 'leader'})]);
+    await t.pump();
+    await t.tap(find.byKey(const Key('rightPane')));
+    await t.pump();
+    expect(h.r.closes, containsAll([watch, claim]));
+    expect(_label(t, 'takeOver'), 'Take over');
+    await h.stop();
+  });
+
+  testWidgets('keyboardInsetResizesTheLead', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    t.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(t.view.reset);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
+    t.view.viewInsets = const FakeViewPadding(bottom: 600);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 200));
+    expect(h.r.of(LinkKind.resize), isEmpty);
+    await t.pump(const Duration(milliseconds: 150));
+    expect([for (final f in h.r.of(LinkKind.resize)) f.channel], [_claimCh]);
+    await t.pump(const Duration(seconds: 1));
+    expect(h.r.of(LinkKind.resize), hasLength(1));
+    await h.stop();
+  });
+
+  // real fonts: the test font is wider than both
+  testWidgets('toolbarFitsAPhoneWidthWithASplit', (t) async {
+    await _loadFonts();
+    _phone(t);
+    final h = Harness(t, treeOf(split: true));
+    await h.start();
+    await h.opened();
+    final bar = find.byKey(const Key('toolbar'));
+    final segs = find.descendant(of: bar, matching: find.byType(OutlinedButton));
+    void onScreen() {
+      expect(segs, findsNWidgets(5));
+      for (final e in segs.evaluate()) {
+        final r = t.getRect(find.byWidget(e.widget));
+        expect((r.left >= 0, r.right <= 360), (true, true));
+      }
+    }
+    onScreen();
+    await expectLater(bar, matchesGoldenFile('goldens/session_toolbar_watch.png'));
+    await _lead(h);
+    onScreen();
+    await expectLater(bar, matchesGoldenFile('goldens/session_toolbar_lead.png'));
     await h.stop();
   });
 }
