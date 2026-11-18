@@ -21,7 +21,7 @@ Claude Code, codex and agy correctly, with native UI around it.
 
 - Native ask/pick sheets on the phone (needs a presenter routing rule; own design later).
 - A terminal for non-Live panes: they keep the text view, improved in M1.
-- iOS. The Linux (elis) relay: phones paired with it keep the text view; a C++ port later reuses the golden vectors (user decision).
+- iOS. The Linux (`linux/`) relay: phones paired with it keep the text view; a C++ port later reuses the golden vectors (user decision).
 
 ## Anti-goals
 

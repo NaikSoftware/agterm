@@ -173,7 +173,7 @@ This plan covers M2 only. M1, M3, M4 and M5 get their own plans.
 
 ### Task 5: Dart codec on the phone, pinned by the same vectors
 
-**Repository:** `/Users/n.savchenko/IdeaProjects/elis`, branch `feat/phone-link` from `main`.
+**Repository:** `mobile/` in this monorepo (first written in agterm-qt on branch `feat/phone-link`).
 
 **Files:**
 - Create: `mobile/lib/link/frame.dart`, `mobile/lib/link/decoder.dart`, `mobile/lib/link/messages.dart`

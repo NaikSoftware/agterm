@@ -255,7 +255,7 @@ A connected central can still read the GAP device name, a known limit of the rot
 
 The phone link v2 frame contract lives in `ElisCore/Sources/ElisCore/PhoneLink/`.
 Its vectors file has a byte-identical copy in the phone app
-(`mobile/test/fixtures/phone-link-vectors.json` in elis) that changes with it.
+(`mobile/test/fixtures/phone-link-vectors.json`) that changes with it.
 
 `session wait` is not a fourth exemption but a client-side composite, like `overlay open --block`: it
 opens the socket only for existing reads (`events.read`, `window.list`, `tree`), so there is no
