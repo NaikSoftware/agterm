@@ -168,6 +168,19 @@ struct PhoneLinkSessionTests {
         #expect(bytesBeforeDrop <= 80 * 1024 + 1024)
     }
 
+    /// A broken cursor restarts the read at the tail; the phone hears it missed events before the next row.
+    @Test func aRestartedReadSendsAGap() throws {
+        let (fixture, phone) = try Self.upgraded()
+        defer { fixture.stop() }
+        #expect(fixture.server.waitEventRead { $0 != nil })
+        fixture.server.failNextEventRead()
+        #expect(fixture.server.waitEventRead { _ in fixture.server.eventReadCursors().filter { $0 == nil }.count >= 2 })
+        fixture.server.addEvents(1)
+        let reader = MuxReader(channel: 1)
+        #expect(reader.json(from: phone)?["gap"] as? Bool == true)
+        #expect(reader.json(from: phone)?["seq"] as? Int == 1)
+    }
+
     @Test func pollerStopsOnClose() throws {
         let (fixture, phone) = try Self.upgraded()
         defer { fixture.stop() }

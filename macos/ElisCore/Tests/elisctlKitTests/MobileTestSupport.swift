@@ -245,9 +245,12 @@ final class RawStubServer: @unchecked Sendable {
     private var events: [String] = []
     /// Each `events.read`'s `after`, nil for the bootstrap read.
     private var eventReads: [UInt64?] = []
+    private var failNextRead = false
 
     func requests() -> [String] { lock.withLock { received } }
     func eventReadCursors() -> [UInt64?] { lock.withLock { eventReads } }
+    /// The next `events.read` answers `event run changed`, as after an app relaunch.
+    func failNextEventRead() { lock.withLock { failNextRead = true } }
 
     /// Appends `count` `status` events with seq numbers after the last one; `padding` makes each row larger.
     func addEvents(_ count: Int, padding: Int = 0) {
@@ -274,6 +277,10 @@ final class RawStubServer: @unchecked Sendable {
         lock.withLock {
             let after = ((object["args"] as? [String: Any])?["after"] as? String).flatMap(UInt64.init)
             eventReads.append(after)
+            if failNextRead {
+                failNextRead = false
+                return #"{"ok":false,"error":"event run changed"}"#
+            }
             let start = after.map(Int.init) ?? events.count
             let items = events[min(start, events.count)..<min(start + 100, events.count)]
             return #"{"ok":true,"result":{"events":{"run":"\#(run)","next":\#(start + items.count),"items":[\#(items.joined(separator: ","))]}}}"#
