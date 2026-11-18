@@ -135,6 +135,40 @@ struct PhoneLinkTerminalResyncTests {
         #expect(harness.events().filter { if case .grid = $0 { true } else { false } }.count == 1)
     }
 
+    /// A lead change re-attaches at once; a resync asked for while one is under way starts no second attach.
+    @Test func resyncReattachesWithoutBackoff() throws {
+        let harness = try TerminalHarness()
+        defer { harness.finish() }
+        harness.start(RawStubServer.fakeAttach("printf hi; exec cat"))
+        #expect(harness.wait { harness.events().contains(.opened(80, 24)) })
+        harness.server.holdAttach()
+        harness.resync()
+        harness.resync()
+        #expect(harness.wait { harness.attaches() == 2 })
+        harness.server.releaseAttach()
+        #expect(harness.wait { harness.events().contains(.resync) })
+        let events = harness.events()
+        #expect(events.firstIndex(of: .resync).map { events[$0 + 1] } == .grid(80, 24))
+        usleep(300_000) // a second attach would be asked for by now
+        #expect(harness.attaches() == 2)
+        #expect(harness.lines.all().filter { $0.hasPrefix("phone") } == ["phone attached from mem:1 pane pane-1"])
+    }
+
+    /// A resync during an overflow's backoff re-attaches now, and the backoff's end adds no attach.
+    @Test func resyncDuringBackoffReplacesTheWait() throws {
+        let harness = try TerminalHarness()
+        defer { harness.finish() }
+        let marker = harness.dir + "/once"
+        harness.start(RawStubServer.fakeAttach("if [ -e '\(marker)' ]; then printf new; exec cat; else touch '\(marker)'; exec yes old; fi"))
+        #expect(harness.waitOverflow())
+        harness.resync()
+        #expect(harness.wait { harness.events().contains(.resync) })
+        harness.advance(by: 5)
+        usleep(300_000)
+        #expect(harness.attaches() == 2)
+        #expect(harness.events().filter { $0 == .resync }.count == 1)
+    }
+
     @Test func noCreditCloses() throws {
         let harness = try TerminalHarness()
         defer { harness.finish() }
@@ -276,6 +310,8 @@ private final class TerminalHarness: @unchecked Sendable {
             terminal?.credited()
         }
     }
+
+    func resync() { queue.sync { terminal?.resync() } }
 
     private func drain() { while scheduler.next(maxChunk: PhoneLinkSession.maxChunk) != nil {} }
 

@@ -89,6 +89,69 @@ struct PhoneLinkPtyTests {
         #expect(recorder.output == seen)
     }
 
+    @Test func writeReachesTheProgram() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/cat"])
+        let written = Written()
+        pty.write(Data("hello\n".utf8)) { written.add($0) }
+        #expect(await eventually { recorder.output.components(separatedBy: "hello").count == 3 }, "output: \(recorder.output)")
+        #expect(await eventually { written.counts == [6] })
+        pty.terminate()
+        #expect(await recorder.waitExit())
+    }
+
+    @Test func writeAfterTerminateReportsZero() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/cat"])
+        pty.terminate()
+        let written = Written()
+        pty.write(Data("late\n".utf8)) { written.add($0) }
+        #expect(await eventually { written.counts == [0] })
+        #expect(await recorder.waitExit())
+    }
+
+    @Test func writeAndResizeAfterTheChildExitedDoNothing() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/sh", "-c", "exit 0"])
+        #expect(await recorder.waitExit())
+        let written = Written()
+        pty.write(Data("late\n".utf8)) { written.add($0) }
+        pty.resize(cols: 100, rows: 40)
+        #expect(await eventually { written.counts == [0] })
+    }
+
+    @Test func resizeChangesTheWindowSize() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/sh", "-c", "read line; stty size"])
+        pty.resize(cols: 100, rows: 40)
+        pty.write(Data("\n".utf8)) { _ in }
+        #expect(await recorder.waitExit())
+        #expect(recorder.output.contains("40 100"), "output: \(recorder.output)")
+    }
+
+    @Test func fullPtyDoesNotBlockTerminate() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/sh", "-c", "stty raw -echo; echo ready; exec sleep 60"])
+        #expect(await eventually { recorder.output.contains("ready") })
+        let written = Written()
+        for _ in 0..<16 { pty.write(Data(repeating: 0x78, count: 65536)) { written.add($0) } }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(written.counts.isEmpty) // the program reads nothing, so the first write never completes
+        let started = Date()
+        pty.terminate()
+        #expect(Date().timeIntervalSince(started) < 3)
+        #expect(await recorder.waitExit())
+        #expect(await eventually { written.counts.count == 16 })
+    }
+
+    /// Written collects what each `write` reported, in completion order.
+    private final class Written: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [Int] = []
+        func add(_ count: Int) { lock.withLock { values.append(count) } }
+        var counts: [Int] { lock.withLock { values } }
+    }
+
     private func eventually(_ seconds: Double = 15, _ condition: () -> Bool) async -> Bool {
         let deadline = Date().addingTimeInterval(seconds)
         while Date() < deadline {

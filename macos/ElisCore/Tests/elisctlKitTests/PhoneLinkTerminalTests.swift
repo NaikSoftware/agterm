@@ -44,12 +44,12 @@ struct PhoneLinkTerminalTests {
         #expect(fixture.server.requests().filter { $0.contains("session.attach") }.count == 1)
     }
 
-    @Test func refusesClaimAndTooManyPanes() throws {
+    @Test func refusesUnsizedClaimAndTooManyPanes() throws {
         let (fixture, phone) = try MobileFixture.upgraded()
         defer { Self.finish(fixture, phone) }
         phone.deliver(Self.open(2, claim: true) + Self.open(3, type: "text") + (4...12).map { Self.open($0) }.reduce(Data(), +))
         let reader = FrameReader()
-        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(error: "take over is not available yet"))
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(error: "bad size"))
         #expect(reader.opened(from: phone, channel: 3) == PhoneLinkOpened(error: "unsupported channel type"))
         // the ninth is refused before the first eight have their attach
         #expect(reader.opened(from: phone, channel: 12) == PhoneLinkOpened(error: "too many open panes"))
@@ -258,6 +258,12 @@ final class FrameReader {
             guard let bytes = phone.readSent(), let decoded = try? decoder.feed(bytes) else { return nil }
             frames += decoded
         }
+    }
+
+    /// Every frame not read yet, once the phone has been quiet for half a second.
+    func pending(_ phone: MemoryPhone) -> [PhoneLinkFrame] {
+        while let bytes = phone.readSent(timeout: 0.5), let decoded = try? decoder.feed(bytes) { frames += decoded }
+        return frames
     }
 
     func opened(from phone: MemoryPhone, channel: UInt32) -> PhoneLinkOpened? {

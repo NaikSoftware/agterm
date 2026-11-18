@@ -10,6 +10,12 @@ public struct PhoneLinkTitleFilter: Sendable {
     public init() {}
 
     public mutating func filter(_ bytes: Data) -> Data {
+        var notices: [ZmxLeadNotice] = []
+        return filter(bytes, notices: &notices)
+    }
+
+    /// Also appends each well-formed report it drops to `notices`.
+    public mutating func filter(_ bytes: Data, notices: inout [ZmxLeadNotice]) -> Data {
         let data = pending + bytes
         pending = Data()
         var out = Data(capacity: data.count)
@@ -22,6 +28,11 @@ public struct PhoneLinkTitleFilter: Sendable {
             let rest = data[index...]
             if rest.starts(with: Self.start) {
                 if let end = Self.end(of: rest) {
+                    let title = rest[(rest.startIndex + 4)..<end]
+                    let terminator = title.last == 0x07 ? 1 : 2
+                    if let notice = ZmxLeadNotice(title: String(decoding: title.dropLast(terminator), as: UTF8.self)) {
+                        notices.append(notice)
+                    }
                     index = end
                     continue
                 }

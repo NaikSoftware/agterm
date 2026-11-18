@@ -50,7 +50,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     /// Bumped for each attach and at an overflow, so bytes and the exit of a replaced attach are dropped.
     private var epoch = 0
     /// Set from the first attach on; until then a failure answers OPENED with an error.
-    private var paneID: String?
+    private(set) var paneID: String?
     private var filter = PhoneLinkTitleFilter()
     private var stopped = false
     private var screenArgv: [String] = []
@@ -63,8 +63,11 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     private var backoff = PhoneLinkTerminal.reattachInterval
     /// When the last re-attach after an overflow was asked for.
     private var reattached: Date?
-    /// From an overflow until the fresh attach runs.
+    /// From an overflow or `resync()` until the fresh attach runs.
     private var resyncing = false
+    /// The overflow's re-attach timer still to fire; a `resync()` takes its place, so a stale one does nothing.
+    private var backoffTimer: Int?
+    private var timers = 0
     /// The first tick that saw a full window sent since the phone's last CREDIT (or OPEN); only a CREDIT clears it,
     /// not a RESYNC. Counted from the spend, not the CREDIT: an idle phone's old CREDIT must not close it on a burst.
     private var spentSince: Date?
@@ -93,6 +96,24 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         spentSince = nil
     }
 
+    /// The pane's lead changed: drop the attach and start a fresh one now, which repaints at the new grid. An attach
+    /// already under way is fresh enough, but its screen read may predate the change.
+    func resync() {
+        guard !stopped, paneID != nil else { return }
+        if resyncing, backoffTimer == nil { return pollSoon() }
+        backoffTimer = nil
+        epoch += 1 // first: no byte of the old attach may follow RESYNC
+        pty?.terminate()
+        pty = nil
+        resyncing = true
+        requestAttach()
+    }
+
+    /// The next tick reads the grid.
+    func pollSoon() {
+        nextPoll = clock()
+    }
+
     /// Ends the channel without a word to the phone: the phone closed it, or the link is closing.
     func stop() {
         guard !stopped else { return }
@@ -108,27 +129,32 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         args["pane"] = request.pane
         // a live pane id wins over the role, so a re-attach cannot land on the pane that took the role since
         if let paneID { args["paneID"] = paneID }
-        let body = (try? JSONSerialization.data(withJSONObject: ["cmd": Command.sessionAttach.rawValue, "target": request.target,
-                                                                 "args": args], options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
-        let socketPath = socketPath
         asking = true
-        Thread.detachNewThread { [self] in
-            let result: Result<ControlAttach, Refusal>
+        Self.requestAttach(target: request.target, args: args, socketPath: socketPath) { [self] result in
+            queue.async { [self] in
+                asking = false
+                answered(result)
+            }
+        }
+    }
+
+    /// Sends `session.attach` on a plain thread; `done` runs there with the attach or the refusal text.
+    static func requestAttach(target: String, args: [String: Any], socketPath: String,
+                              done: @escaping @Sendable (Result<ControlAttach, Refusal>) -> Void) {
+        let body = (try? JSONSerialization.data(withJSONObject: ["cmd": Command.sessionAttach.rawValue, "target": target, "args": args],
+                                                options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+        Thread.detachNewThread {
             do {
-                let line = try SocketClient(path: socketPath).sendRaw(body, timeout: Self.attachTimeout)
+                let line = try SocketClient(path: socketPath).sendRaw(body, timeout: attachTimeout)
                 let answer = try JSONDecoder().decode(ControlResponse.self, from: line)
                 guard answer.ok, let attach = answer.result?.attach else {
                     throw Refusal(answer.error ?? "Elis gave no attach for this pane")
                 }
-                result = .success(attach)
+                done(.success(attach))
             } catch let refusal as Refusal {
-                result = .failure(refusal)
+                done(.failure(refusal))
             } catch {
-                result = .failure(Refusal("Elis is not reachable: \(error)"))
-            }
-            queue.async { [self] in
-                asking = false
-                answered(result)
+                done(.failure(Refusal("Elis is not reachable: \(error)")))
             }
         }
     }
@@ -209,8 +235,12 @@ final class PhoneLinkTerminal: @unchecked Sendable {
             backoff = Self.reattachInterval
         }
         resyncing = true
+        timers += 1
+        let timer = timers
+        backoffTimer = timer
         after(backoff) { [weak self] in
-            guard let self, !stopped else { return }
+            guard let self, !stopped, backoffTimer == timer else { return }
+            backoffTimer = nil
             reattached = clock()
             requestAttach()
         }
@@ -291,7 +321,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         }
     }
 
-    private struct Refusal: Error {
+    struct Refusal: Error {
         let message: String
         init(_ message: String) { self.message = message }
     }

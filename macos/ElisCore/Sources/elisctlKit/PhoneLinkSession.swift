@@ -10,7 +10,7 @@ final class PhoneLinkSession {
     static let bufferLimit = 512 * 1024
     /// Event rows wait in `PhoneLinkEvents` while channel 1 already holds this much in the scheduler.
     static let eventsHandOff = 64 * 1024
-    /// Open vt channels per phone.
+    /// Open vt channels per phone, Take over channels included.
     static let maxTerminals = 8
     /// Channel 0's answers waiting in the scheduler, and frames waiting in `direct`, past which the link closes.
     static let controlLimit = 4 * 1024 * 1024
@@ -34,11 +34,13 @@ final class PhoneLinkSession {
     private var events: PhoneLinkEvents!
     /// Every vt channel from its OPEN on, so a duplicate or a ninth is refused while an attach is still asked for.
     private var terminals: [UInt32: PhoneLinkTerminal] = [:]
-    /// Closed channels whose attach request still runs: each keeps its slot until the answer, so OPEN and CLOSE in a
-    /// loop cannot pile up app requests.
-    private var leaving: [PhoneLinkTerminal] = []
-    /// OPENED and CLOSE: they bypass the scheduler and go before its next frame.
-    private var direct: [PhoneLinkFrame] = []
+    /// Take over channels, which carry no DATA to the phone.
+    private var claims: [UInt32: PhoneLinkClaim] = [:]
+    /// Closed channels whose attach request still runs, as their `asking`: each keeps its slot until the answer, so
+    /// OPEN and CLOSE in a loop cannot pile up app requests.
+    private var leaving: [() -> Bool] = []
+    /// OPENED, LEAD, CREDIT and CLOSE: they bypass the scheduler and go before its next frame; `sent` runs once out.
+    private var direct: [(frame: PhoneLinkFrame, sent: (() -> Void)?)] = []
     private var control = Data()
     private var sending = false
     private var closed = false
@@ -80,10 +82,20 @@ final class PhoneLinkSession {
                 pump()
                 terminals[frame.channel]?.credited()
             case (.close, _):
-                guard let terminal = terminals[frame.channel] else { break }
-                terminal.stop()
+                if let terminal = terminals[frame.channel] {
+                    terminal.stop()
+                } else if let claim = claims[frame.channel] {
+                    claim.stop()
+                } else {
+                    break
+                }
                 closeChannel(frame.channel)
-            default: break // the phone sends nothing on channel 1; vt input and RESIZE come with Take over (M5)
+            case (.data, _): claims[frame.channel]?.input(frame.payload)
+            case (.resize, _):
+                guard let claim = claims[frame.channel], let size = frame.size else { break }
+                claim.resize(cols: size.cols, rows: size.rows)
+                if let paneID = claim.paneID { watching(paneID).forEach { $0.pollSoon() } }
+            default: break // the phone sends nothing on channel 1, and a watch channel takes no input
             }
         }
     }
@@ -94,7 +106,10 @@ final class PhoneLinkSession {
         events.stop()
         // not guarded on `closed`: after `end()` the owner's close still has to end the channels
         let open = terminals.values
+        let claimed = claims.values
         terminals = [:]
+        claims = [:]
+        claimed.forEach { $0.stop() }
         open.forEach { $0.stop() }
     }
 
@@ -105,15 +120,13 @@ final class PhoneLinkSession {
         let request = try? frame.decodeJSON(PhoneLinkOpen.self)
         if channel < 2 {
             refusal = "channels 0 and 1 are not vt channels"
-        } else if terminals[channel] != nil {
+        } else if terminals[channel] != nil || claims[channel] != nil {
             refusal = "channel already open"
         } else if request == nil {
             refusal = "malformed open"
         } else if request?.type != "vt" {
             refusal = "unsupported channel type"
-        } else if request?.claim == true {
-            refusal = "take over is not available yet"
-        } else if terminals.count + leaving.count(where: \.asking) >= Self.maxTerminals {
+        } else if terminals.count + claims.count + leaving.count(where: { $0() }) >= Self.maxTerminals {
             refusal = "too many open panes"
         } else {
             refusal = nil
@@ -121,6 +134,7 @@ final class PhoneLinkSession {
         guard let request, refusal == nil else {
             return sendDirect(.json(.opened, channel: channel, PhoneLinkOpened(error: refusal)))
         }
+        if request.claim == true { return openClaim(channel, request) }
         let queue = queue
         let link = PhoneLinkTerminal.Link(
             opened: { [weak self] cols, rows in
@@ -143,15 +157,35 @@ final class PhoneLinkSession {
         terminal.start()
     }
 
+    private func openClaim(_ channel: UInt32, _ request: PhoneLinkOpen) {
+        let queue = queue
+        let link = PhoneLinkClaim.Link(
+            frame: { [weak self] frame in self?.sendDirect(frame) },
+            credit: { [weak self] bytes, sent in self?.sendDirect(.credit(channel: channel, bytes: bytes), sent: sent) },
+            ended: { [weak self] in self?.closeChannel(channel) },
+            // the daemon has resized by the report, so a fresh viewer attach is where old-grid bytes stop
+            leadChanged: { [weak self] paneID in self?.watching(paneID).forEach { $0.resync() } },
+            released: { [weak self] paneID in self?.watching(paneID).forEach { $0.pollSoon() } })
+        let claim = PhoneLinkClaim(channel: channel, request: request, socketPath: socketPath, queue: queue, peer: peer, log: log,
+                                   after: { delay, work in queue.asyncAfter(deadline: .now() + delay, execute: work) }, link: link)
+        claims[channel] = claim
+        claim.start()
+    }
+
+    private func watching(_ paneID: String) -> [PhoneLinkTerminal] {
+        terminals.values.filter { $0.paneID == paneID }
+    }
+
     private func closeChannel(_ channel: UInt32) {
-        leaving.removeAll { !$0.asking }
-        if let terminal = terminals.removeValue(forKey: channel), terminal.asking { leaving.append(terminal) }
+        leaving.removeAll { !$0() }
+        if let terminal = terminals.removeValue(forKey: channel), terminal.asking { leaving.append { terminal.asking } }
+        if let claim = claims.removeValue(forKey: channel), claim.asking { leaving.append { claim.asking } }
         scheduler.close(channel: channel)
     }
 
-    private func sendDirect(_ frame: PhoneLinkFrame) {
+    private func sendDirect(_ frame: PhoneLinkFrame, sent: (() -> Void)? = nil) {
         guard !closed else { return }
-        direct.append(frame)
+        direct.append((frame, sent))
         if direct.count > Self.directLimit { return overflowed() }
         pump()
     }
@@ -187,10 +221,12 @@ final class PhoneLinkSession {
         while scheduler.pendingBytes(channel: 1) < Self.eventsHandOff, let line = events.next() {
             _ = scheduler.enqueue(channel: 1, line)
         }
-        guard !sending, let frame = direct.isEmpty ? scheduler.next(maxChunk: Self.maxChunk) : direct.removeFirst() else { return }
+        guard !sending, let (frame, sent) = direct.isEmpty ? scheduler.next(maxChunk: Self.maxChunk).map({ ($0, nil) }) : direct.removeFirst()
+        else { return }
         sending = true
         send(frame.encoded()) { [weak self] in
             self?.sending = false
+            sent?()
             self?.pump()
         }
     }

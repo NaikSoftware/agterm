@@ -12,15 +12,23 @@ final class PhoneLinkPty: @unchecked Sendable {
 
     private let pid: pid_t
     private let controller: Int32
+    private let terminalPath: String
     private let onOutput: @Sendable (Data) -> Void
     // recursive, so an onOutput that calls terminate() on the reader thread does not deadlock
     private let lock = NSRecursiveLock()
     private var stopping = false
     private var reaped = false
+    /// Set before the controller is closed: its number, and the terminal path, may then belong to another pane's pty.
+    private var closed = false
+    /// Writes not taken by the writer thread yet, which starts with the first write.
+    private let writes = NSCondition()
+    private var queued: [(bytes: Data, done: @Sendable (Int) -> Void)] = []
+    private var writer: Thread?
 
-    private init(pid: pid_t, controller: Int32, onOutput: @escaping @Sendable (Data) -> Void) {
+    private init(pid: pid_t, controller: Int32, terminalPath: String, onOutput: @escaping @Sendable (Data) -> Void) {
         self.pid = pid
         self.controller = controller
+        self.terminalPath = terminalPath
         self.onOutput = onOutput
     }
 
@@ -34,6 +42,10 @@ final class PhoneLinkPty: @unchecked Sendable {
         guard controller >= 0 else { throw Failure(operation: "posix_openpt", errno: errno) }
         do {
             guard fcntl(controller, F_SETFD, FD_CLOEXEC) == 0 else { throw Failure(operation: "fcntl", errno: errno) }
+            // a program that stops reading must not block the writer under the lock
+            guard fcntl(controller, F_SETFL, fcntl(controller, F_GETFL) | O_NONBLOCK) == 0 else {
+                throw Failure(operation: "fcntl", errno: errno)
+            }
             guard grantpt(controller) == 0 else { throw Failure(operation: "grantpt", errno: errno) }
             guard unlockpt(controller) == 0 else { throw Failure(operation: "unlockpt", errno: errno) }
             guard let name = ptsname(controller) else { throw Failure(operation: "ptsname", errno: errno) }
@@ -46,7 +58,7 @@ final class PhoneLinkPty: @unchecked Sendable {
             // TIOCSWINSZ is _IOW('t', 103, struct winsize), a macro Swift does not import
             guard ioctl(terminal, UInt(0x8008_7467), &size) == 0 else { throw Failure(operation: "TIOCSWINSZ", errno: errno) }
             let pid = try launch(argv, terminalPath: path)
-            let pty = PhoneLinkPty(pid: pid, controller: controller, onOutput: onOutput)
+            let pty = PhoneLinkPty(pid: pid, controller: controller, terminalPath: path, onOutput: onOutput)
             let reader = Thread { pty.readUntilEnd(onExit: onExit) }
             reader.name = "phone-link-pty"
             reader.start()
@@ -66,6 +78,77 @@ final class PhoneLinkPty: @unchecked Sendable {
             stopping = true
             if !reaped { kill(-pid, SIGTERM) }
         }
+    }
+
+    /// write hands `bytes` to the program after every earlier write; `done` gets the count written, 0 once stopping,
+    /// and runs on the writer thread with no lock held.
+    func write(_ bytes: Data, done: @escaping @Sendable (Int) -> Void) {
+        writes.withLock {
+            queued.append((bytes, done))
+            if writer == nil {
+                let thread = Thread { [self] in writeUntilEnd() }
+                thread.name = "phone-link-pty-writer"
+                writer = thread
+                thread.start()
+            }
+            writes.signal()
+        }
+    }
+
+    /// resize sets the terminal's size, which signals SIGWINCH to its foreground group; nothing once the pty closed.
+    func resize(cols: UInt16, rows: UInt16) {
+        lock.withLock {
+            guard !closed, !stopping else { return }
+            // the controller refuses TIOCSWINSZ on macOS, as in spawn
+            let terminal = open(terminalPath, O_RDWR | O_NOCTTY | O_CLOEXEC | O_NONBLOCK)
+            guard terminal >= 0 else { return }
+            var size = winsize(ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0)
+            _ = ioctl(terminal, UInt(0x8008_7467), &size)
+            close(terminal)
+        }
+    }
+
+    private func writeUntilEnd() {
+        while true {
+            // read before the queue lock: never take `lock` under `writes`
+            let finished = lock.withLock { stopping || closed }
+            let next: (bytes: Data, done: @Sendable (Int) -> Void)?? = writes.withLock {
+                if !queued.isEmpty { return queued.removeFirst() }
+                if finished {
+                    writer = nil // a later write starts a thread of its own, which reports 0
+                    return .some(nil)
+                }
+                writes.wait(until: Date().addingTimeInterval(0.1))
+                return nil
+            }
+            switch next {
+            case let .some(.some(item)): item.done(writeAll(item.bytes))
+            case .some(.none): return
+            case .none: continue
+            }
+        }
+    }
+
+    private func writeAll(_ bytes: Data) -> Int {
+        var offset = 0
+        while offset < bytes.count {
+            let result: (count: Int, errno: Int32)? = lock.withLock {
+                guard !stopping, !closed else { return nil }
+                let count = bytes.withUnsafeBytes { Darwin.write(controller, $0.baseAddress! + offset, bytes.count - offset) }
+                return (count, errno)
+            }
+            guard let result else { return 0 }
+            if result.count > 0 {
+                offset += result.count
+            } else if result.errno == EAGAIN || result.errno == EINTR {
+                // outside the lock; a controller closed meanwhile is caught by the check above
+                var poller = pollfd(fd: controller, events: Int16(POLLOUT), revents: 0)
+                _ = poll(&poller, 1, 100)
+            } else {
+                return offset
+            }
+        }
+        return offset
     }
 
     private func readUntilEnd(onExit: @Sendable (Int32) -> Void) {
@@ -92,7 +175,10 @@ final class PhoneLinkPty: @unchecked Sendable {
             // a descendant that left the group can hold the terminal open forever
             if let giveUpAt, now >= giveUpAt { break }
         }
-        close(controller)
+        lock.withLock {
+            closed = true
+            close(controller)
+        }
         // shortcut: a child that closes its stdio but keeps running is waited for and never killed; add a kill here
         // if a relay command ever does that
         // wait without reaping, then reap under the lock: terminate() never signals a pgid freed for reuse
