@@ -42,7 +42,23 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
          try ipc.appendMessage(gpa, &sock_write_buf, .Manage, std.mem.asBytes(&flags));
      }
  
-@@ -547,6 +551,8 @@
+@@ -267,14 +271,7 @@
+     var had_terminal_client = daemon.hasTerminalClient();
+ 
+     daemon_loop: while (daemon.running) {
+-        // If the program asked for focus reports (DECSET 1004), send focus-out
+-        // when the last attached client leaves and focus-in when one returns,
+-        // as a terminal would when its window loses/gains focus.
+-        const has_terminal_client = daemon.hasTerminalClient();
+-        if (has_terminal_client != had_terminal_client and term.modes.get(.focus_event)) {
+-            daemon.queuePtyInput(gpa, if (has_terminal_client) "\x1b[I" else "\x1b[O");
+-        }
+-        had_terminal_client = has_terminal_client;
++        had_terminal_client = daemon.reportFocus(gpa, had_terminal_client, term.modes.get(.focus_event));
+ 
+         poll_fds.clearRetainingCapacity();
+ 
+@@ -547,6 +544,8 @@
      /// sent .Manage: leads only by claiming, never by typing, and is told its role
      managed: bool = false,
      claim_on_init: bool = false,
@@ -51,16 +67,45 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
      told_role: ?ipc.Role = null,
      read_buf: ipc.SocketBuffer,
      write_buf: std.ArrayList(u8),
-@@ -902,6 +908,8 @@
+@@ -660,14 +659,26 @@
+         try term.resize(gpa, .{ .cols = cols, .rows = rows });
+     }
+ 
+-    /// True while a client that sent .Init (a real `zmx attach`) is connected.
++    /// True while a client that sent .Init (a real `zmx attach`) is connected. A follow viewer does
++    /// not count: its input is dropped, so it cannot answer a DA query, and it has no focus to report.
+     fn hasTerminalClient(self: *const Daemon) bool {
+         for (self.clients.items) |c| {
+-            if (c.is_terminal) return true;
++            if (c.is_terminal and !c.follow) return true;
+         }
+         return false;
+     }
+ 
++    /// If the program asked for focus reports (DECSET 1004), send focus-out when the last attached
++    /// client leaves and focus-in when one returns, as a terminal would when its window loses/gains
++    /// focus. Returns whether a terminal client is attached now.
++    fn reportFocus(self: *Daemon, gpa: std.mem.Allocator, had_terminal_client: bool, focus_event: bool) bool {
++        const has_terminal_client = self.hasTerminalClient();
++        if (has_terminal_client != had_terminal_client and focus_event) {
++            self.queuePtyInput(gpa, if (has_terminal_client) "\x1b[I" else "\x1b[O");
++        }
++        return has_terminal_client;
++    }
++
+     pub fn closeClient(self: *Daemon, gpa: std.mem.Allocator, client: *Client, i: usize, shutdown_on_last: bool) bool {
+         const fd = client.socket_fd;
+         // leader is disconnected, remove ref and let another client claim leader on input
+@@ -902,6 +913,8 @@
          const flags = std.mem.bytesToValue(ipc.ManageFlags, payload);
          client.managed = true;
          client.claim_on_init = flags.claim;
 +        client.screen_only_on_init = flags.screen_only;
-+        client.follow = flags.follow;
++        client.follow = flags.follow and !flags.claim;
      }
  
      /// Queue automation bytes without touching leadership, and say whether they were queued.
-@@ -1067,7 +1075,7 @@
+@@ -1067,7 +1080,7 @@
  
          client.is_terminal = true;
  
@@ -69,7 +114,7 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
              try self.setLeader(gpa, client);
          }
          // ahead of the snapshot below, so a managed client learns its role before any output
-@@ -1087,14 +1095,15 @@
+@@ -1087,14 +1100,15 @@
          }
  
          // Only serialize on re-attach (has_had_client), not first attach, to avoid
@@ -88,7 +133,7 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
                  std.log.debug("serialize terminal state", .{});
                  // Rewrite OSC 133;A to include redraw=0 so the outer terminal
                  // does not clear prompt lines on resize (issue #111).
-@@ -1670,9 +1679,12 @@
+@@ -1670,9 +1684,12 @@
  }
  
  fn testManaged(alloc: std.mem.Allocator, daemon: *Daemon, fd: i32, claim: bool) !*Client {
@@ -102,7 +147,7 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
      daemon.handleManage(client, std.mem.asBytes(&flags));
      return client;
  }
-@@ -1755,6 +1767,115 @@
+@@ -1755,6 +1772,169 @@
  
      _ = daemon.closeClient(alloc, viewer, 1, false);
      _ = daemon.closeClient(alloc, origin, 0, false);
@@ -192,6 +237,7 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
 +
 +    try std.testing.expectEqual(@as(?i32, a[0]), daemon.leader_client_fd);
 +    try std.testing.expectEqual(ipc.Role.leader, queuedRoles(client).last.?.role);
++    try std.testing.expect(daemon.hasTerminalClient());
 +    _ = daemon.closeClient(alloc, client, 0, false);
 +}
 +
@@ -215,6 +261,59 @@ diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
 +
 +    _ = daemon.closeClient(alloc, viewer, 1, false);
 +    _ = daemon.closeClient(alloc, plain, 0, false);
++}
++
++test "the daemon answers DA1 itself while only a follow viewer is attached" {
++    const alloc = std.testing.allocator;
++    const cfg = Cfg{ .socket_dir = "", .log_dir = "" };
++    var term = try initTerminal(alloc, std.testing.io, .{ .cols = 80, .rows = 24 }, &cfg);
++    defer term.deinit(alloc);
++    var daemon = testDaemon();
++    defer daemon.clients.deinit(alloc);
++    defer daemon.pty_write_buf.deinit(alloc);
++
++    const a = try lib_posix.pipe2(.{});
++    defer lib_posix.close(a[1]);
++    const b = try lib_posix.pipe2(.{});
++    defer lib_posix.close(b[1]);
++    const pty = b[0];
++    defer lib_posix.close(pty);
++
++    const viewer = try testManagedFlags(alloc, &daemon, a[0], .{ .follow = true });
++    try daemon.handleInit(alloc, viewer, pty, &term, std.mem.asBytes(&ipc.Resize{ .rows = 40, .cols = 50 }));
++    var seen: [256]u8 = undefined;
++    var read = "a\x1b[cb".*;
++    daemon.relayPtyOutput(alloc, &read);
++
++    try std.testing.expectEqualStrings("\x1b[?62;22c", daemon.pty_write_buf.items);
++    try std.testing.expectEqualStrings("ab", queuedOutput(viewer, &seen));
++    _ = daemon.closeClient(alloc, viewer, 0, false);
++}
++
++test "a follow viewer's attach and detach send no focus event" {
++    const alloc = std.testing.allocator;
++    const cfg = Cfg{ .socket_dir = "", .log_dir = "" };
++    var term = try initTerminal(alloc, std.testing.io, .{ .cols = 80, .rows = 24 }, &cfg);
++    defer term.deinit(alloc);
++    var daemon = testDaemon();
++    defer daemon.clients.deinit(alloc);
++    defer daemon.pty_write_buf.deinit(alloc);
++
++    const a = try lib_posix.pipe2(.{});
++    defer lib_posix.close(a[1]);
++    const b = try lib_posix.pipe2(.{});
++    defer lib_posix.close(b[1]);
++    const pty = b[0];
++    defer lib_posix.close(pty);
++
++    const viewer = try testManagedFlags(alloc, &daemon, a[0], .{ .follow = true });
++    try daemon.handleInit(alloc, viewer, pty, &term, std.mem.asBytes(&ipc.Resize{ .rows = 40, .cols = 50 }));
++    var attached = daemon.reportFocus(alloc, false, true);
++    _ = daemon.closeClient(alloc, viewer, 0, false);
++    attached = daemon.reportFocus(alloc, attached, true);
++
++    try std.testing.expect(!attached);
++    try std.testing.expectEqualStrings("", daemon.pty_write_buf.items);
  }
  
  test "switch moves a stock leader and leaves a managed one bound to its session" {
@@ -250,8 +349,8 @@ diff -ruN zmx-orig/src/role.zig zmx/src/role.zig
      stream: ghostty_vt.Stream(NoopHandler),
      nonce: []const u8,
 diff -ruN zmx-orig/src/util.zig zmx/src/util.zig
---- zmx-orig/src/util.zig
-+++ zmx/src/util.zig
+--- zmx-orig/src/util.zig	2026-11-18 04:45:42
++++ zmx/src/util.zig	2026-11-18 13:36:07
 @@ -787,7 +787,7 @@
      writeDynamicColor(writer, .cursor, colors.cursor);
  }

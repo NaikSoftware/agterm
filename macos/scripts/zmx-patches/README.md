@@ -51,6 +51,7 @@ longer apply, and re-running `check.py`.
   answer to its next query. The daemon now drops each query it answered from that output.
 - `0007-managed-viewer.patch` lets a managed client attach as a viewer. With `ZMX_MANAGED_FOLLOW` it never
   leads, not even a session nobody leads, so its Init neither resizes the pty nor asks for its size,
+  it is not a terminal the daemon stops answering DA queries or reporting focus for,
   and it gets the screen even of a session no client led yet;
   `ZMX_MANAGED_CLAIM` wins over it. With `ZMX_MANAGED_SCREEN_ONLY` the replay on attach skips the
   scrollback but keeps the `ESC[2J ESC[H ESC[0m` boundary in front of the visible screen. A client
