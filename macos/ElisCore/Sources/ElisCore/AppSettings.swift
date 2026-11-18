@@ -217,7 +217,7 @@ public enum InterfaceElement: String, Codable, Sendable, CaseIterable {
         case .quickTerminal: return "terminal"
         case .customCommands: return "ellipsis.circle"
         case .newWorkspace: return "square.on.square"
-        case .newSession: return "plus.rectangle"
+        case .newSession: return "plus"
         case .flaggedView: return "flag"
         case .focusFilter: return "viewfinder"
         case .workspaceAddSession: return "plus"
@@ -234,6 +234,7 @@ public enum InterfaceElement: String, Codable, Sendable, CaseIterable {
         case .newWorkspace, .workspaceIcons: return "workspace-stack"
         case .sessionIcons: return "session-terminal"
         case .focusFilter: return "focus-frame"
+        case .workspaceAddSession: return "session-plus"
         default: return nil
         }
     }
