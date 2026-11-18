@@ -1,0 +1,268 @@
+import Foundation
+import Testing
+@testable import ElisCore
+
+struct SessionHostTests {
+    @Test func classificationDistinguishesDeadFromUnreadableAndUnrelatedProcesses() {
+        let cases: [(Int32?, SessionHost.ResponsibleProcess?, SessionHost.Attribution)] = [
+            (10, .live(10), .orphaned), (10, .live(20), .supervisor), (10, .live(30), .app),
+            (10, .dead, .orphaned), (10, .unknown, .unknown), (10, nil, .unknown),
+            (10, .live(40), .unknown), (nil, .live(20), .unknown), (0, .live(20), .unknown), (10, .live(-1), .unknown),
+        ]
+        for (leader, responsible, expected) in cases {
+            #expect(SessionHost.classify(leader: leader, responsible: responsible, hostPid: 20, appPid: 30) == expected)
+        }
+        #expect(SessionHost.classify(leader: 20, responsible: .live(20), hostPid: 20, appPid: 30) == .orphaned)
+        #expect(SessionHost.classify(leader: 10, responsible: .live(20), hostPid: nil, appPid: nil) == .unknown)
+    }
+
+    @Test func placementMarksPanesRootedOnAHostOtherThanTheCurrentOneAsStale() {
+        let roots = SessionHost.Roots(hosts: [20, 21], current: .running(20))
+        let cases: [(SessionHost.ResponsibleProcess, SessionHost.Placement)] = [
+            (.live(20), .init(attribution: .supervisor, staleHost: false)),
+            (.live(21), .init(attribution: .supervisor, staleHost: true)),
+            (.live(30), .init(attribution: .app, staleHost: false)),
+            (.live(40), .init(attribution: .unknown, staleHost: false)),
+            (.dead, .init(attribution: .orphaned, staleHost: false)),
+        ]
+        for (responsible, expected) in cases {
+            #expect(SessionHost.place(leader: 10, responsible: responsible, roots: roots, appPid: 30) == expected)
+        }
+        let noCurrent = SessionHost.Roots(hosts: [21], current: .absent)
+        #expect(SessionHost.place(leader: 10, responsible: .live(21), roots: noCurrent, appPid: 30)
+            == .init(attribution: .supervisor, staleHost: true))
+    }
+
+    @Test func placementWithAnUnknownCurrentKeyKeepsSupervisionAndNeverMarksStale() {
+        let roots = SessionHost.Roots(hosts: [20, 21], current: .unknown)
+        for host: Int32 in [20, 21] {
+            #expect(SessionHost.place(leader: 10, responsible: .live(host), roots: roots, appPid: 30)
+                == .init(attribution: .supervisor, staleHost: false))
+        }
+    }
+
+    private let hello = SessionHost.Hello(bundleID: "ua.naiksoftware.elis", bundlePath: "/Applications/Elis.app")
+
+    @Test func helloUsesTheDocumentedWireKeys() throws {
+        let frame = try SessionHost.encodeFrame(SessionHost.Request.hello(hello))
+        let object = try #require(JSONSerialization.jsonObject(with: frame) as? [String: [String: Any]])
+        let body = try #require(object["hello"])
+
+        #expect(Set(object.keys) == ["hello"])
+        #expect(body["protocol"] as? Int == 1)
+        #expect(body["bundleID"] as? String == "ua.naiksoftware.elis")
+        #expect(body["bundlePath"] as? String == "/Applications/Elis.app")
+        #expect(body["pid"] == nil)
+        #expect(try SessionHost.decodeFrame(SessionHost.Request.self, from: frame) == .hello(hello))
+    }
+
+    @Test func ensurePreservesArgumentsAndEnvironmentInOneLine() throws {
+        let ensure = SessionHost.Ensure(
+            name: "elis-test", argv: ["/Applications/My App.app/zmx", "attach", "elis-test", "/bin/zsh", "-lic", "echo 'a b'"],
+            cwd: "/Users/test/my project", env: ["MULTILINE": "first\nsecond", "QUOTED": "a\"b\\c", "EMPTY": ""], rows: 40, cols: 120)
+        let frame = try SessionHost.encodeFrame(SessionHost.Request.ensure(ensure))
+
+        #expect(frame.last == 0x0A)
+        #expect(frame.filter { $0 == 0x0A }.count == 1)
+        #expect(try SessionHost.decodeFrame(SessionHost.Request.self, from: frame) == .ensure(ensure))
+        let object = try #require(JSONSerialization.jsonObject(with: frame) as? [String: [String: Any]])
+        #expect(object["ensure"]?["argv"] as? [String] == ensure.argv)
+        #expect(object["ensure"]?["env"] as? [String: String] == ensure.env)
+        #expect(object["ensure"]?["rows"] as? Int == 40)
+        #expect(object["ensure"]?["cols"] as? Int == 120)
+    }
+
+    @Test func responseVariantsUseTheDocumentedEnvelopes() throws {
+        let responses: [(String, SessionHost.Response)] = [
+            ("hello", .hello(.init(bundleID: hello.bundleID, bundlePath: hello.bundlePath, pid: 4242))),
+            ("ok", .ok(.init(state: .existing, leaderPid: 12345))),
+            ("ok", .ok(.init(state: .created, leaderPid: 12346))),
+            ("error", .error(.init(stage: .before, message: "invalid cwd"))),
+            ("error", .error(.init(stage: .started, message: "timeout\nwaiting for leader"))),
+        ]
+        for (key, response) in responses {
+            let frame = try SessionHost.encodeFrame(response)
+            let object = try #require(JSONSerialization.jsonObject(with: frame) as? [String: [String: Any]])
+            #expect(Set(object.keys) == [key])
+            #expect(try SessionHost.decodeFrame(SessionHost.Response.self, from: frame) == response)
+        }
+        let ready = Data("{\"ok\":{\"state\":\"created\",\"leaderPid\":12345}}\n".utf8)
+        #expect(try SessionHost.decodeFrame(SessionHost.Response.self, from: ready) == .ok(.init(state: .created, leaderPid: 12345)))
+    }
+
+    @Test func frameLimitCountsEncodedBytesIncludingTerminator() throws {
+        let small = SessionHost.Response.error(.init(stage: .before, message: ""))
+        let overhead = try SessionHost.encodeFrame(small).count
+        let message = String(repeating: "a", count: SessionHost.maximumFrameBytes - overhead)
+        let exact = SessionHost.Response.error(.init(stage: .before, message: message))
+        let frame = try SessionHost.encodeFrame(exact)
+
+        #expect(frame.count == 65_536)
+        #expect(try SessionHost.decodeFrame(SessionHost.Response.self, from: frame) == exact)
+        #expect(throws: SessionHost.Rejection.frameTooLarge) {
+            try SessionHost.encodeFrame(SessionHost.Response.error(.init(stage: .before, message: message + "a")))
+        }
+        #expect(throws: SessionHost.Rejection.frameTooLarge) {
+            try SessionHost.decodeFrame(SessionHost.Response.self, from: Data(repeating: 0x61, count: 65_537))
+        }
+        #expect(throws: SessionHost.Rejection.frameTooLarge) {
+            try SessionHost.encodeFrame(SessionHost.Response.error(.init(stage: .before, message: String(repeating: "é", count: 33_000))))
+        }
+    }
+
+    @Test(arguments: ["", "{}", "{}\n{}\n", "\n"])
+    func incompleteOrMultipleFramesAreRejected(_ text: String) {
+        #expect(throws: SessionHost.Rejection.invalidFrame) {
+            try SessionHost.decodeFrame(SessionHost.Request.self, from: Data(text.utf8))
+        }
+    }
+
+    @Test(arguments: ["{}\n", "{\"unknown\":{}}\n", "{\"hello\":{},\"ensure\":{}}\n"])
+    func requestRequiresOneMessageVariant(_ text: String) {
+        #expect(throws: SessionHost.Rejection.invalidMessage) {
+            try SessionHost.decodeFrame(SessionHost.Request.self, from: Data(text.utf8))
+        }
+    }
+
+    @Test func malformedJSONAndAmbiguousResponsesAreRejected() {
+        #expect(throws: DecodingError.self) {
+            try SessionHost.decodeFrame(SessionHost.Request.self, from: Data("not-json\n".utf8))
+        }
+        #expect(throws: SessionHost.Rejection.invalidMessage) {
+            try SessionHost.decodeFrame(SessionHost.Response.self, from: Data("{\"ok\":{},\"error\":{}}\n".utf8))
+        }
+    }
+
+    @Test func pathsShareTheConfiguredSocketDirectory() throws {
+        let paths = try SessionHost.paths(socketDirectory: "/tmp/elis-zmx-test/")
+        #expect(paths.socket == "/tmp/elis-zmx-test/session-host/session-host.sock")
+        #expect(paths.ownerLock == "/tmp/elis-zmx-test/session-host/session-host.lock")
+        #expect(paths.spawnLock == "/tmp/elis-zmx-test/session-host/session-host.spawn.lock")
+        #expect(paths.pidfile == "/tmp/elis-zmx-test/session-host/session-host.pid")
+        #expect(paths.log == "/tmp/elis-zmx-test/session-host/session-host.log")
+    }
+
+    @Test func socketPathLimitReservesTheTerminatingNUL() throws {
+        let suffix = "/session-host/session-host.sock"
+        let directory = "/" + String(repeating: "a", count: 103 - suffix.utf8.count - 1)
+        #expect(try SessionHost.paths(socketDirectory: directory).socket.utf8.count == 103)
+        #expect(throws: SessionHost.Rejection.socketPathTooLong) {
+            try SessionHost.paths(socketDirectory: directory + "a")
+        }
+        #expect(throws: SessionHost.Rejection.socketPathTooLong) {
+            try SessionHost.paths(socketDirectory: "/" + String(repeating: "é", count: 45))
+        }
+    }
+
+    @Test func endpointKeyJoinsTheImageUUIDPrefixAndTheAuditSession() throws {
+        let uuid = try #require(UUID(uuidString: "0A1B2C3D-4E5F-6071-8293-A4B5C6D7E8F9"))
+        #expect(SessionHost.endpointKey(imageUUID: uuid, auditSession: 100003) == "0a1b2c3d4e5f-100003")
+    }
+
+    @Test func keyedPathsLiveInTheirOwnEndpointDirectory() throws {
+        let paths = try SessionHost.paths(socketDirectory: "/tmp/elis-zmx-test", key: "0a1b2c3d4e5f-100003")
+        let directory = "/tmp/elis-zmx-test/session-host-0a1b2c3d4e5f-100003"
+        #expect(paths.socket == directory + "/session-host.sock")
+        #expect(paths.ownerLock == directory + "/session-host.lock")
+        #expect(paths.spawnLock == directory + "/session-host.spawn.lock")
+        #expect(paths.pidfile == directory + "/session-host.pid")
+        #expect(paths.log == directory + "/session-host.log")
+        #expect(try SessionHost.paths(socketDirectory: "/tmp/elis-zmx-test", endpoint: "session-host") ==
+                SessionHost.paths(socketDirectory: "/tmp/elis-zmx-test"))
+    }
+
+    @Test(arguments: ["", "0a1b2c3d4e5f", "0a1b2c3d4e5f-", "0A1B2C3D4E5F-1", "0a1b2c3d4e5-1", "0a1b2c3d4e5fa-1",
+                      "0a1b2c3d4e5g-1", "0a1b2c3d4e5f--1", "0a1b2c3d4e5f-12345678901", "0a1b2c3d4e5f-1-2",
+                      "../../etc-1", "0a1b2c3d4e5f-١"])
+    func malformedEndpointKeysAreRejected(_ key: String) {
+        #expect(throws: SessionHost.Rejection.invalidEndpointKey) {
+            try SessionHost.paths(socketDirectory: "/tmp/elis-zmx-test", key: key)
+        }
+    }
+
+    @Test(arguments: [("session-host", true), ("session-host-0a1b2c3d4e5f-100003", true), ("session-host-", false),
+                      ("session-host-0a1b2c3d4e5f", false), ("session-hostx", false), ("zmx.sock", false),
+                      ("session-host-../x-1", false)])
+    func endpointNamesAreTheLegacyDirectoryOrAKeyedOne(_ name: String, _ accepted: Bool) {
+        #expect(SessionHost.isEndpointName(name) == accepted)
+    }
+
+    @Test func endpointOutsideTheNamingIsRejected() {
+        #expect(throws: SessionHost.Rejection.invalidEndpointKey) {
+            try SessionHost.paths(socketDirectory: "/tmp/elis-zmx-test", endpoint: "../escape")
+        }
+    }
+
+    @Test(arguments: ["", "relative/path"])
+    func socketDirectoryMustBeAbsolute(_ directory: String) {
+        #expect(throws: SessionHost.Rejection.invalidSocketDirectory) {
+            try SessionHost.paths(socketDirectory: directory)
+        }
+    }
+
+    @Test func acknowledgedEnsureUsesPlainAttach() {
+        for state in [SessionHost.Ready.State.existing, .created] {
+            let outcome = SessionHost.ClientOutcome.decide(phase: .afterDispatch, reply: .ok(.init(state: state, leaderPid: 42)))
+            #expect(outcome == .plainAttach)
+            #expect(outcome.diagnostic == nil)
+        }
+    }
+
+    @Test func failuresBeforeEnsurePreserveCreationPayload() {
+        let outcome = SessionHost.ClientOutcome.decide(phase: .beforeDispatch, reply: nil)
+        #expect(outcome == .fullAttach)
+        #expect(outcome.diagnostic == nil)
+        #expect(SessionHost.ClientOutcome.decide(phase: .afterDispatch, reply: .error(.init(stage: .before, message: "rejected"))) == .fullAttach)
+    }
+
+    @Test func uncertainEnsureNeverReplaysAndExplainsTheFallback() {
+        let replies: [SessionHost.Response?] = [nil, .error(.init(stage: .started, message: "timeout")), .hello(hello)]
+        for reply in replies {
+            let outcome = SessionHost.ClientOutcome.decide(phase: .afterDispatch, reply: reply)
+            #expect(outcome == .uncertain)
+            #expect(outcome.diagnostic == "Session creation could not be confirmed; the command may have started and was not retried.")
+        }
+    }
+
+    @Test func handshakeUsesBundleIdentityAndSupportedProtocol() {
+        #expect(SessionHost.handshakeAccepts(local: hello, remote: .init(bundleID: hello.bundleID, bundlePath: hello.bundlePath, pid: 42)))
+        #expect(!SessionHost.handshakeAccepts(local: hello, remote: .init(bundleID: "ua.naiksoftware.elis.debug", bundlePath: hello.bundlePath)))
+        #expect(!SessionHost.handshakeAccepts(local: hello, remote: .init(bundleID: hello.bundleID, bundlePath: "/Other/Elis.app")))
+        #expect(!SessionHost.handshakeAccepts(local: hello, remote: .init(bundleID: hello.bundleID, bundlePath: hello.bundlePath, protocolVersion: 2)))
+        #expect(!SessionHost.handshakeAccepts(local: hello, remote: .init(bundleID: hello.bundleID, bundlePath: "Elis.app")))
+    }
+
+    @Test func applicationBuildMetadataDoesNotInvalidateHandshake() throws {
+        let local = try JSONDecoder().decode(SessionHost.Hello.self, from: Data("""
+        {"protocol":1,"bundleID":"ua.naiksoftware.elis","bundlePath":"/Applications/Elis.app","appVersion":"1","build":"old"}
+        """.utf8))
+        let remote = try JSONDecoder().decode(SessionHost.Hello.self, from: Data("""
+        {"protocol":1,"bundleID":"ua.naiksoftware.elis","bundlePath":"/Applications/Elis.app","appVersion":"2","build":"new","pid":42}
+        """.utf8))
+        #expect(SessionHost.handshakeAccepts(local: local, remote: remote))
+    }
+
+    @Test func handshakeCanonicalizesBundleSymlinks() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let bundle = directory.appendingPathComponent("Elis.app")
+        let alias = directory.appendingPathComponent("alias.app")
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: bundle)
+
+        #expect(SessionHost.handshakeAccepts(
+            local: .init(bundleID: hello.bundleID, bundlePath: bundle.path),
+            remote: .init(bundleID: hello.bundleID, bundlePath: alias.path)))
+    }
+
+    #if os(macOS)
+    @Test func temporaryDirectoryAliasesMatch() throws {
+        let bundle = URL(fileURLWithPath: "/tmp/session-host-\(UUID().uuidString).app", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        #expect(SessionHost.handshakeAccepts(
+            local: .init(bundleID: hello.bundleID, bundlePath: bundle.path),
+            remote: .init(bundleID: hello.bundleID, bundlePath: "/private" + bundle.path)))
+    }
+    #endif
+}

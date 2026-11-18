@@ -13,8 +13,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # (module name, file) — the receiver's hyphenated filename cannot be
 # imported by name, so both load through an explicit SourceFileLoader.
 MODULES = (
-    ("agtermctl", "agtermctl.py"),
-    ("agtermctl_receiver", "agtermctl-receiver.py"),
+    ("elisctl", "elisctl.py"),
+    ("elisctl_receiver", "elisctl-receiver.py"),
 )
 
 

@@ -1,0 +1,9 @@
+<RCC>
+  <qresource prefix="/">
+    <file>launchers/claude.svg</file>
+    <file>launchers/codex.svg</file>
+    <file>launchers/opencode.svg</file>
+    <file>launchers/antigravity.svg</file>
+    <file alias="elis.png">icons/hicolor/256x256/apps/elis.png</file>
+  </qresource>
+</RCC>

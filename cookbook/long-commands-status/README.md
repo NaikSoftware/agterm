@@ -14,12 +14,12 @@ Pass `--blink` and `--sound` to get attention on the end states only — they ap
 agst --blink --sound default make test
 ```
 
-Outside agterm (`$AGTERM_SESSION_ID` unset), `agst` `exec`s the command directly — no status calls, no overhead, same exit code.
+Outside Elis (`$ELIS_SESSION_ID` unset), `agst` `exec`s the command directly — no status calls, no overhead, same exit code.
 
 ## Requirements
 
-- agterm 0.17.0 or later, which shipped `session status --shape`.
-- `agtermctl` on your `PATH`, or set `AGTERMCTL` to its full path.
+- Elis 0.17.0 or later, which shipped `session status --shape`.
+- `elisctl` on your `PATH`, or set `ELISCTL` to its full path.
 
 ## Setup
 
@@ -45,11 +45,11 @@ agst make test && agst make deploy
 
 ## How it works
 
-`active` is set before the command runs. The command's exit code is captured without `set -e`, so the final status call runs either way. Status calls are best-effort (`2>&1 || :`): a missing `agtermctl` or closed socket fails silently and the command runs as if `agst` were not there.
+`active` is set before the command runs. The command's exit code is captured without `set -e`, so the final status call runs either way. Status calls are best-effort (`2>&1 || :`): a missing `elisctl` or closed socket fails silently and the command runs as if `agst` were not there.
 
 `--blink` and `--sound` are forwarded to the end states only (`completed`/`blocked`), not to `active`, so a long-running command does not pulse or beep the whole time. `--shape` and `--socket` apply to every status call including `active`.
 
-`$AGTERM_SESSION_ID` is the gate: agterm exports it into every shell it spawns, so its presence is the signal that a status call has somewhere to land. Outside agterm the wrapper `exec`s the command directly — same exit code, same stdout, same stderr, no fork.
+`$ELIS_SESSION_ID` is the gate: Elis exports it into every shell it spawns, so its presence is the signal that a status call has somewhere to land. Outside Elis the wrapper `exec`s the command directly — same exit code, same stdout, same stderr, no fork.
 
 ## Limits
 
@@ -58,6 +58,6 @@ Nothing destructive: the wrapper only posts status for its own session.
 - The status reflects the command's exit code, not real-time progress. A hung command reads as `active` for as long as it hangs.
 - A command that backgrounds itself and returns exit 0 reports `completed` while the real work is still going.
 - `active` is set once, before the command starts, and not re-asserted.
-- Status calls are best-effort: if `agtermctl` is missing or the socket is closed, the command runs unaffected.
+- Status calls are best-effort: if `elisctl` is missing or the socket is closed, the command runs unaffected.
 - Ctrl-C kills the wrapper along with the command, so the end status is never posted and the row stays `active` until a later call clears it.
-- While the command runs, `agtermctl tree` reports the pane's foreground as the `sh` wrapper's argv, not the wrapped command's.
+- While the command runs, `elisctl tree` reports the pane's foreground as the `sh` wrapper's argv, not the wrapped command's.

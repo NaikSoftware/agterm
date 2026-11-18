@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
-AGTERMCTL="${AGTERMCTL:-agtermctl}"
+ELISCTL="${ELISCTL:-elisctl}"
 
 if [[ $# -ne 1 || ! -f "$1" ]]; then
   echo "usage: show.sh FILE (got: ${1:-nothing})" >&2
@@ -8,16 +8,16 @@ if [[ $# -ne 1 || ! -f "$1" ]]; then
 fi
 file="$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1")"
 
-if [[ "${AGTERM_ENABLED:-}" != "1" || -z "${AGTERM_SESSION_ID:-}" ]]; then
-  open "$file" && echo "not in agterm, opened in browser: $file"
+if [[ "${ELIS_ENABLED:-}" != "1" || -z "${ELIS_SESSION_ID:-}" ]]; then
+  open "$file" && echo "not in elis, opened in browser: $file"
   exit $?
 fi
 
-sid="$AGTERM_SESSION_ID"
+sid="$ELIS_SESSION_ID"
 # tree reports the frontmost window only; a session in a background window would read as missing
-# agtermctl never reads AGTERM_SOCKET, so a bare call can reach another instance's socket
+# elisctl never reads ELIS_SOCKET, so a bare call can reach another instance's socket
 node_json() {
-  "$AGTERMCTL" tree --json ${AGTERM_SOCKET:+--socket "$AGTERM_SOCKET"} ${AGTERM_WINDOW_ID:+--window "$AGTERM_WINDOW_ID"} | jq --arg id "$sid" '[.. | objects | select(.id? == $id)][0]'
+  "$ELISCTL" tree --json ${ELIS_SOCKET:+--socket "$ELIS_SOCKET"} ${ELIS_WINDOW_ID:+--window "$ELIS_WINDOW_ID"} | jq --arg id "$sid" '[.. | objects | select(.id? == $id)][0]'
 }
 
 # the reported path may differ from ours by a symlinked parent (/tmp -> /private/tmp)
@@ -28,7 +28,7 @@ canon() {
 
 node="$(node_json)"
 if [[ -z "$node" || "$node" == "null" ]]; then
-  echo "session $sid not found in agterm tree" >&2
+  echo "session $sid not found in elis tree" >&2
   exit 1
 fi
 
@@ -42,13 +42,13 @@ if [[ -n "$program" ]]; then
 fi
 
 if [[ -n "$shown" && "$(canon "$shown")" == "$file" ]]; then
-  "$AGTERMCTL" session overlay reload ${AGTERM_SOCKET:+--socket "$AGTERM_SOCKET"} --target "$sid" >/dev/null || exit 1
+  "$ELISCTL" session overlay reload ${ELIS_SOCKET:+--socket "$ELIS_SOCKET"} --target "$sid" >/dev/null || exit 1
   action="reloaded"
 else
   if [[ -n "$shown" || -n "$shown_url" ]]; then
-    "$AGTERMCTL" session overlay close ${AGTERM_SOCKET:+--socket "$AGTERM_SOCKET"} --target "$sid" >/dev/null || exit 1
+    "$ELISCTL" session overlay close ${ELIS_SOCKET:+--socket "$ELIS_SOCKET"} --target "$sid" >/dev/null || exit 1
   fi
-  "$AGTERMCTL" session overlay open ${AGTERM_SOCKET:+--socket "$AGTERM_SOCKET"} --html "$file" --target "$sid" --size-percent 95 --navigation >/dev/null || exit 1
+  "$ELISCTL" session overlay open ${ELIS_SOCKET:+--socket "$ELIS_SOCKET"} --html "$file" --target "$sid" --size-percent 95 --navigation >/dev/null || exit 1
   action="opened"
 fi
 

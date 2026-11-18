@@ -1,14 +1,14 @@
 {
-  "name": "agterm",
+  "name": "elis",
   "interface": {
-    "displayName": "agterm"
+    "displayName": "Elis"
   },
   "plugins": [
     {
-      "name": "agterm",
+      "name": "elis",
       "source": {
         "source": "local",
-        "path": "./plugins/agterm"
+        "path": "./plugins/elis"
       },
       "policy": {
         "installation": "AVAILABLE"

@@ -1,0 +1,39 @@
+name: elis_mobile
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.7
+
+dependencies:
+  crypto: ^3.0.8
+  cryptography: ^2.9.0
+  flutter:
+    sdk: flutter
+  flutter_local_notifications: ^22.3.3 # 23 needs compileSdk 37
+  flutter_secure_storage: ^11.2.0
+  flutter_svg: ^2.4.0
+  mobile_scanner: ^7.5.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/agents/
+    - assets/elis-icon.svg
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono.ttf
+    - family: NotoSansSymbols2 # the agents' glyphs JetBrains Mono lacks: ✻ ✳ ✔ ✘, braille spinners
+      fonts:
+        - asset: assets/fonts/NotoSansSymbols2.ttf

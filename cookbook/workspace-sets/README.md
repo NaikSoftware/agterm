@@ -14,7 +14,7 @@ This is the second answer to [discussion #293](https://github.com/umputun/agterm
 
 ## Requirements
 
-- agterm 0.18.0 or later. `workspace filter` and the `workspace focus add` mode shipped in that release.
+- Elis 0.18.0 or later. `workspace filter` and the `workspace focus add` mode shipped in that release.
 - `jq`
 
 ## Setup
@@ -33,7 +33,7 @@ Edit the block between the `--- sets ---` markers. One `case` arm per group, one
 work)
 	cat <<-'EOF'
 		umputun.dev
-		agterm
+		elis
 		ai-thingz
 	EOF
 	;;
@@ -41,7 +41,7 @@ work)
 
 Names holding spaces need no quoting, because each line is one name. Add as many arms as you want; nothing below the block counts them.
 
-Then add one entry per group to `~/.config/agterm/keymap.conf`:
+Then add one entry per group to `~/.config/elis/keymap.conf`:
 
 ```
 command "focus work"     ctrl+a>1  ~/bin/agt-sets.sh work
@@ -50,9 +50,9 @@ command "focus personal" ctrl+a>2  ~/bin/agt-sets.sh personal
 
 `ctrl+a>1` is a leader sequence: press ⌃A, release, then press 1. Any chord carrying a modifier works as the leader, and the second key needs none. Leave the chord out entirely and the entry is palette-only, which scales better past three or four groups.
 
-Apply the file with File ▸ Reload Keymap or `agtermctl keymap reload`.
+Apply the file with File ▸ Reload Keymap or `elisctl keymap reload`.
 
-Fired from a chord or the palette, the script runs under the app's `PATH` rather than your shell's. That is the launchd default: `/usr/local/bin` plus the system directories, with no `/opt/homebrew/bin` and nothing else your profile adds. `agtermctl` normally resolves there, because **Help ▸ Install Command Line Tool…** symlinks it into `/usr/local/bin`. `jq` resolves only if it is a system one; recent macOS ships `/usr/bin/jq`, but a Homebrew `jq` is out of reach and needs its absolute path written into the script. Set `AGTERMCTL` to the binary's full path if yours sits somewhere unusual.
+Fired from a chord or the palette, the script runs under the app's `PATH` rather than your shell's. That is the launchd default: `/usr/local/bin` plus the system directories, with no `/opt/homebrew/bin` and nothing else your profile adds. `elisctl` normally resolves there, because **Help ▸ Install Command Line Tool…** symlinks it into `/usr/local/bin`. `jq` resolves only if it is a system one; recent macOS ships `/usr/bin/jq`, but a Homebrew `jq` is out of reach and needs its absolute path written into the script. Set `ELISCTL` to the binary's full path if yours sits somewhere unusual.
 
 ## Usage
 
@@ -68,7 +68,7 @@ Run it from a shell when the result looks wrong. It prints nothing on success an
 
 ## How it works
 
-Three commands do the work, the same three the sibling recipe uses. `agtermctl tree --json` lists the window's workspaces with their ids, names and membership. `workspace focus add|off --target <id>` marks or unmarks one workspace. `workspace filter on|off` applies or suspends the whole set for the window.
+Three commands do the work, the same three the sibling recipe uses. `elisctl tree --json` lists the window's workspaces with their ids, names and membership. `workspace focus add|off --target <id>` marks or unmarks one workspace. `workspace filter on|off` applies or suspends the whole set for the window.
 
 One `tree` read answers every question the script has: which workspaces exist, which are already marked, and whether the filter is applied. Everything after it is `jq` over that one snapshot, so the state cannot shift underneath the decision.
 
@@ -96,4 +96,4 @@ Selecting a session outside the marked set switches the filter off and keeps the
 
 The flagged sidebar view is a flat session list and ignores the filter entirely.
 
-`ctrl+a` becomes a leader once bound, so agterm consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.
+`ctrl+a` becomes a leader once bound, so Elis consumes it and it no longer reaches the terminal. If you rely on ⌃A for beginning-of-line in readline, or as a tmux prefix, pick another leader.

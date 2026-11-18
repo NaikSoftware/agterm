@@ -1,9 +1,9 @@
 {
-  "agterm-session-resume": {
+  "elis-session-resume": {
     "SessionStart": [
       {
         "type": "command",
-        "command": "\"$HOME/.config/agterm/hooks/agy/agy-pin-resume.sh\"",
+        "command": "\"$HOME/.config/elis/hooks/agy/agy-pin-resume.sh\"",
         "timeout": 5
       }
     ]

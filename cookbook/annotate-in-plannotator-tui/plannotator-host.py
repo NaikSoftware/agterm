@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Answer plannotator-tui's delivery calls for agterm, in place of the `herdr` CLI it expects.
+"""Answer plannotator-tui's delivery calls for elis, in place of the `herdr` CLI it expects.
 
 plannotator-tui hands feedback to an agent only through the Herdr multiplexer's CLI, by running
 `$HERDR_BIN_PATH agent prompt <pane> <feedback>`. Herdr is not installed; annotate.py points
-HERDR_BIN_PATH here, so the viewer's own Send button works in agterm. Three calls are answered:
+HERDR_BIN_PATH here, so the viewer's own Send button works in elis. Three calls are answered:
 
     pane read <pane> ...           the text annotate.py captured (AGT_ANNOTATE_CAPTURE)
     pane get <pane>                the agent annotate.py saw in the pane, for the button label
@@ -49,7 +49,7 @@ def main(argv):
         with open(os.environ["AGT_ANNOTATE_OUTBOX"], "a", encoding="utf-8") as fh:
             fh.write(json.dumps(argv[3]) + "\n")
         return 0
-    return refuse("unsupported", "agterm's herdr stand-in has no: herdr " + " ".join(argv))
+    return refuse("unsupported", "elis's herdr stand-in has no: herdr " + " ".join(argv))
 
 
 if __name__ == "__main__":

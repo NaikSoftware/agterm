@@ -12,29 +12,29 @@ Each item is a relative age, an eight-word title, a one-sentence detail, and a s
 
 ## Requirements
 
-- agterm 0.10.0 or later, which shipped the `{AGT_PANE}` keymap token and `session overlay open --background-color`. The overlay itself works from 0.8.0.
+- Elis 0.10.0 or later, which shipped the `{AGT_PANE}` keymap token and `session overlay open --background-color`. The overlay itself works from 0.8.0.
 - `zsh`, for the script
 - `jq`, for reading the transcript
-- Claude Code CLI, for the summary. Tested with 2.1.220. The flags it depends on (`--safe-mode`, `--json-schema`, `--tools`, `--no-session-persistence`) are less stable than agterm's own API, so a much newer or older CLI may need the invocation adjusted.
+- Claude Code CLI, for the summary. Tested with 2.1.220. The flags it depends on (`--safe-mode`, `--json-schema`, `--tools`, `--no-session-persistence`) are less stable than Elis's own API, so a much newer or older CLI may need the invocation adjusted.
 
 ## Setup
 
-Put the script somewhere on disk, make it executable, and bind it. The example uses `~/.config/agterm/scripts`; anywhere works as long as the keymap line points at it.
+Put the script somewhere on disk, make it executable, and bind it. The example uses `~/.config/elis/scripts`; anywhere works as long as the keymap line points at it.
 
 ```bash
-mkdir -p ~/.config/agterm/scripts
-cp claude-recap.zsh ~/.config/agterm/scripts/
-chmod +x ~/.config/agterm/scripts/claude-recap.zsh
+mkdir -p ~/.config/elis/scripts
+cp claude-recap.zsh ~/.config/elis/scripts/
+chmod +x ~/.config/elis/scripts/claude-recap.zsh
 ```
 
-Add the line to `~/.config/agterm/keymap.conf` and apply it with File ▸ Reload Keymap or `agtermctl keymap reload`:
+Add the line to `~/.config/elis/keymap.conf` and apply it with File ▸ Reload Keymap or `elisctl keymap reload`:
 
 ```
-# ctrl+a>c: recap the claude code session running in this agterm session.
+# ctrl+a>c: recap the claude code session running in this elis session.
 # {AGT_SESSION_ID} is passed twice: --target opens the overlay on THIS session, and the script
 # argument lets it resolve the session's cwd, because a fresh overlay pty cannot read $AGT_*.
 # zsh -c so the login shell puts jq and claude on PATH.
-command "Claude Recap" ctrl+a>c agtermctl session overlay open 'zsh -c "$HOME/.config/agterm/scripts/claude-recap.zsh {AGT_SESSION_ID} {AGT_PANE}"' --size-percent 60 --background-color "#2e3a2e" --target {AGT_SESSION_ID}
+command "Claude Recap" ctrl+a>c elisctl session overlay open 'zsh -c "$HOME/.config/elis/scripts/claude-recap.zsh {AGT_SESSION_ID} {AGT_PANE}"' --size-percent 60 --background-color "#2e3a2e" --target {AGT_SESSION_ID}
 ```
 
 ### The pane map
@@ -44,12 +44,12 @@ Without this part the recap finds the transcript by working directory, which pic
 If you already have a status line, paste these lines into it, after it has read stdin into `$input`:
 
 ```bash
-# record which transcript is live in this agterm pane, for claude-recap
-if [ -n "$AGTERM_SESSION_ID" ]; then
+# record which transcript is live in this elis pane, for claude-recap
+if [ -n "$ELIS_SESSION_ID" ]; then
     transcript_path=$(echo "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
     if [ -n "$transcript_path" ]; then
         mkdir -p /tmp/claude/panes 2>/dev/null
-        printf '%s\n' "$transcript_path" > "/tmp/claude/panes/${AGTERM_SESSION_ID}.${AGTERM_PANE:-left}"
+        printf '%s\n' "$transcript_path" > "/tmp/claude/panes/${ELIS_SESSION_ID}.${ELIS_PANE:-left}"
     fi
 fi
 ```
@@ -71,7 +71,7 @@ Claude Code takes one `statusLine` command, so this is an either/or: extend the 
 
 All optional:
 
-- `AGTERMCTL`, the agterm CLI, default `agtermctl`
+- `ELISCTL`, the Elis CLI, default `elisctl`
 - `CLAUDE_BIN`, the Claude Code binary, default `claude`
 - `RECAP_MODEL`, the summarizing model, default `claude-haiku-4-5-20251001`
 - `CLAUDE_DIRS`, space-separated Claude Code config dirs to search, default `$HOME/.claude`. Set it if you run more than one config dir.
@@ -85,7 +85,7 @@ It works on a session an agent is driving right now, and on one whose Claude Cod
 
 ## How it works
 
-The overlay is a real pty and does not inherit `$AGT_*`, which is why the session id and pane are passed as arguments. With the id, the script asks `agtermctl tree --json` for that session's working directory.
+The overlay is a real pty and does not inherit `$AGT_*`, which is why the session id and pane are passed as arguments. With the id, the script asks `elisctl tree --json` for that session's working directory.
 
 Claude Code files transcripts under a slug of the working directory, so the obvious lookup is the newest `.jsonl` under the slug for this cwd. It picks the wrong run twice: two panes of one split in the same repository share a cwd and so share a slug, and a run that moves into a git worktree files its transcript under the worktree while the pane's shell stays put. The per-pane record is the reliable source, so the script reads `$PANE_MAP_DIR/<session-id>.<pane>` first and falls back to the slug lookup only for a pane that never rendered a status line.
 
@@ -103,6 +103,6 @@ Each press sends up to 120 KB of the transcript to the model. That is your promp
 
 Skip the pane map and the recap can name the wrong run: both panes of a split working in one repository resolve to the same transcript, and a Claude Code run that moved into a git worktree is filed under the worktree rather than the pane's directory.
 
-The pane map itself has one hole. A `claude` started under tmux, or under any daemon that outlives the shell, inherits the `AGTERM_*` of whichever session started that server, so its transcript is recorded against that session instead of its own. The recap then falls back to the working-directory lookup.
+The pane map itself has one hole. A `claude` started under tmux, or under any daemon that outlives the shell, inherits the `ELIS_*` of whichever session started that server, so its transcript is recorded against that session instead of its own. The recap then falls back to the working-directory lookup.
 
 The summary is a model's reading of a condensed transcript. It is a signpost for picking work back up, not a record: statuses in particular are inferred from what the transcript shows, and a piece of work concluded outside the session reads as unfinished.

@@ -6,7 +6,7 @@ Author: [@x9x9x9x9x9x91](https://github.com/x9x9x9x9x9x91)
 
 ## What it does
 
-Press the key and the picker agterm draws for its own palettes opens over the current window, listing your projects: every direct subdirectory of the roots you name. Type a few letters, press Return, and a new session opens in that project's directory, inside a workspace named after the project. The workspace is created if the sidebar does not have it yet and reused if it does, so pressing the key twice for the same project stacks a second session into the same workspace rather than making a second workspace.
+Press the key and the picker Elis draws for its own palettes opens over the current window, listing your projects: every direct subdirectory of the roots you name. Type a few letters, press Return, and a new session opens in that project's directory, inside a workspace named after the project. The workspace is created if the sidebar does not have it yet and reused if it does, so pressing the key twice for the same project stacks a second session into the same workspace rather than making a second workspace.
 
 It closes the gap between "I am somewhere" and "I want a shell in that project". The built-in ⌘N opens a session where you already are, and reaching a different project through the sidebar means finding its workspace first — or creating one, naming it, and setting the directory by hand when it is a project you have not opened this week. Here the starting point does not matter: any session, any workspace, one key, no typing beyond the filter.
 
@@ -18,7 +18,7 @@ With that command set, the same picker line can carry the work itself: keep typi
 
 ## Requirements
 
-- agterm 0.19.0 or later. The floor comes from `agtermctl pick`, which shipped in 0.19.0: it reads choices on stdin, shows them in the native fuzzy picker, and prints the chosen one back as JSON — including, with `--allow-custom`, a line of free text that matches no row, which is what the prompt flow rides on. Everything else the script calls — `session new` with `--workspace-name`, `--create-workspace`, `--cwd`, `--command`, `--window`, and `notify` — is older than that.
+- Elis 0.19.0 or later. The floor comes from `elisctl pick`, which shipped in 0.19.0: it reads choices on stdin, shows them in the native fuzzy picker, and prints the chosen one back as JSON — including, with `--allow-custom`, a line of free text that matches no row, which is what the prompt flow rides on. Everything else the script calls — `session new` with `--workspace-name`, `--create-workspace`, `--cwd`, `--command`, `--window`, and `notify` — is older than that.
 - `jq`, to build the picker's items.
 - `/bin/sh`. The script is POSIX shell and does not need a particular one.
 
@@ -32,13 +32,13 @@ cp project-launcher.sh ~/bin/
 chmod +x ~/bin/project-launcher.sh
 ```
 
-Add an entry to `~/.config/agterm/keymap.conf`:
+Add an entry to `~/.config/elis/keymap.conf`:
 
 ```
 command "Launch Project" cmd+shift+g zsh -lc "$HOME/bin/project-launcher.sh"
 ```
 
-Apply it with File ▸ Reload Keymap or `agtermctl keymap reload`. ⌘⇧G is free in agterm's shipped defaults, so nothing is shadowed by taking it; any chord with a modifier works, and leaving the chord out makes the entry palette-only.
+Apply it with File ▸ Reload Keymap or `elisctl keymap reload`. ⌘⇧G is free in Elis's shipped defaults, so nothing is shadowed by taking it; any chord with a modifier works, and leaving the chord out makes the entry palette-only.
 
 `zsh -lc` is there for `PATH`. A custom command inherits the app's environment, which is the launchd default and has no `/opt/homebrew/bin` in it, so a bare `jq` inside the script fails. A login shell sources your profile first and gives the script the `PATH` you normally have.
 
@@ -53,7 +53,7 @@ Put the exports in `.zshenv` or `.zprofile` — the keymap entry runs the script
 command "Launch Project" cmd+shift+g zsh -lc "AGT_PROJECT_ROOTS=$HOME/src:$HOME/work AGT_PROJECT_COMMAND=claude $HOME/bin/project-launcher.sh"
 ```
 
-If `agtermctl` is not on your `PATH`, set `AGTERMCTL` to its full path. **Help ▸ Install Command Line Tool…** normally puts it in `/usr/local/bin`.
+If `elisctl` is not on your `PATH`, set `ELISCTL` to its full path. **Help ▸ Install Command Line Tool…** normally puts it in `/usr/local/bin`.
 
 ## Usage
 
@@ -67,7 +67,7 @@ The sidebar row takes its label from the session the usual way — the shell's t
 
 ## How it works
 
-The script does three things over the control socket: it hands the project list to `agtermctl pick`, opens the session with `agtermctl session new`, and reports its own failures with `agtermctl notify`.
+The script does three things over the control socket: it hands the project list to `elisctl pick`, opens the session with `elisctl session new`, and reports its own failures with `elisctl notify`.
 
 It runs as the custom command's own process rather than inside an overlay, which is what keeps it short — no second pty, no fzf, nothing to install. The runner exports `$AGT_WINDOW_ID` and `$AGT_SOCKET` into the process, so the script reads its targets out of the environment instead of taking `{AGT_X}` tokens as arguments.
 
@@ -83,7 +83,7 @@ The prompt reaches the command by temp file, not by splicing. `--command` is tok
 
 `session new` carries `--window` for the same reason `pick` does, and it matters twice here: the session must land in the window the picker showed in, and the workspace-name lookup itself is scoped to the target window — an unpinned call matches, or creates, against whatever window is frontmost by the time the pick lands, which after a moment of window-switching is not necessarily where you pressed the key.
 
-A keybinding's command runs with stdout and stderr on `/dev/null`, and a non-zero exit raises only a bare "exit N" banner with no detail. Anything the reader has to see is therefore posted with `agtermctl notify`, which is the one channel that reaches a script whose output goes nowhere.
+A keybinding's command runs with stdout and stderr on `/dev/null`, and a non-zero exit raises only a bare "exit N" banner with no detail. Anything the reader has to see is therefore posted with `elisctl notify`, which is the one channel that reaches a script whose output goes nowhere.
 
 ## Limits
 

@@ -3,1703 +3,361 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>agterm — a simply good macOS terminal with a full control API</title>
-    <meta
-      name="description"
-      content="Native macOS terminal with named workspaces and a local control API for scripts, AI coding agents, and multi-session workflows."
-    />
-    <meta
-      name="keywords"
-      content="agterm, macOS terminal, scriptable terminal, terminal control API, terminal for AI agents, Claude Code terminal, Codex terminal, Pi coding agent terminal, OpenCode terminal, libghostty, ghostty, agtermctl, concurrent AI agents, agentic terminal"
-    />
-    <meta name="author" content="umputun" />
-    <link rel="canonical" href="https://agterm.com/" />
+    <title>Elis — a terminal workspace for AI coding agents</title>
+    <meta name="description" content="Elis is a native terminal for macOS and Linux. It runs many AI coding agents at once and shows which agent is working, which agent needs you, and which agent is done." />
+    <link rel="canonical" href="https://naiksoftware.github.io/elis/" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="agterm — a simply good macOS terminal with a full control API" />
-    <meta
-      property="og:description"
-      content="Native macOS terminal with named workspaces and a local control API for scripts, AI coding agents, and multi-session workflows."
-    />
-    <meta property="og:url" content="https://agterm.com/" />
-    <meta property="og:image" content="https://agterm.com/assets/agterm-og.png" />
+    <meta property="og:title" content="Elis — a terminal workspace for AI coding agents" />
+    <meta property="og:description" content="Elis is a native terminal for macOS and Linux. It runs many AI coding agents at once and shows which agent is working, which agent needs you, and which agent is done." />
+    <meta property="og:url" content="https://naiksoftware.github.io/elis/" />
+    <meta property="og:image" content="https://naiksoftware.github.io/elis/assets/elis-og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:site_name" content="agterm" />
+    <meta property="og:site_name" content="Elis" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@umputun" />
-    <meta name="twitter:title" content="agterm — a simply good macOS terminal with a full control API" />
-    <meta
-      name="twitter:description"
-      content="Native macOS terminal with named workspaces and a local control API for scripts, AI coding agents, and multi-session workflows."
-    />
-    <meta name="twitter:image" content="https://agterm.com/assets/agterm-og.png" />
-    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon-180.png" />
-    <meta name="theme-color" content="#191d20" />
-    <link rel="preload" href="/assets/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/assets/fonts/ibm-plex-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/style.css?v=3" />
+    <meta name="twitter:image" content="https://naiksoftware.github.io/elis/assets/elis-og.png" />
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png" />
+    <meta name="theme-color" content="#1c1c20" />
+    <link rel="preload" href="assets/fonts/instrument-serif-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
-        "name": "agterm",
-        "description": "Native macOS terminal built on libghostty with a deliberately small workspace and session interface and a full local control API, so scripts and AI coding agents can drive almost every part of it and read the state back.",
-        "url": "https://agterm.com",
+        "name": "Elis",
+        "description": "A native terminal for macOS and Linux that runs many AI coding agents at once, with workspaces of named sessions, agent status in the sidebar, an Android app and a full local control API. Terminal engines: libghostty on macOS, Konsole on Linux.",
+        "url": "https://naiksoftware.github.io/elis/",
         "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "macOS 14+",
+        "operatingSystem": "macOS 14+, Linux, Android",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "author": { "@type": "Person", "name": "Umputun", "url": "https://github.com/umputun" },
-        "codeRepository": "https://github.com/umputun/agterm",
-        "downloadUrl": "https://github.com/umputun/agterm/releases",
+        "codeRepository": "https://github.com/NaikSoftware/elis",
+        "downloadUrl": "https://github.com/NaikSoftware/elis/releases/latest",
         "softwareVersion": "0.42.3"
       }
     </script>
+    <style>
+@font-face{font-family:"Instrument Serif";font-style:normal;font-weight:400;font-display:swap;src:url("assets/fonts/instrument-serif-latin.woff2") format("woff2")}
+@font-face{font-family:"Instrument Serif";font-style:italic;font-weight:400;font-display:swap;src:url("assets/fonts/instrument-serif-italic-latin.woff2") format("woff2")}
+@font-face{font-family:"Inter";font-style:normal;font-weight:400 700;font-display:swap;src:url("assets/fonts/inter-latin.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 500;font-display:swap;src:url("assets/fonts/jetbrains-mono-latin.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:italic;font-weight:400;font-display:swap;src:url("assets/fonts/jetbrains-mono-italic-latin.woff2") format("woff2")}
+:root{--bg:#1C1C20;--surface:#26262B;--surface2:#2E2E34;--line:#303034;--text:#E8E8EC;--muted:#A3A3AB;--accent:#E08A45;--on-accent:#1C1C20;--field-hi:#D2B07C;--field-lo:#A27C46;--ink:#17161B;--paper:#F8F5F0;--disp:'Instrument Serif',Georgia,serif;--ui:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased}
+body{overflow-x:clip}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:#F0A266;text-decoration:underline}
+.wrap{width:100%;max-width:1200px;margin:0 auto;padding:0 32px}
+.nav{display:flex;align-items:center;gap:24px;padding:22px 0}
+.brand{display:flex;align-items:center;gap:10px;color:var(--text);font-weight:600;font-size:18px;letter-spacing:-.01em}
+.brand:hover{color:var(--text);text-decoration:none}
+.mark{width:30px;height:30px;border-radius:8px;display:block;flex:none}
+.navlinks{display:flex;gap:22px;margin-left:auto;font-size:14px}
+.navlinks a{color:var(--muted)}
+.navlinks a:hover{color:var(--text);text-decoration:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;height:48px;padding:0 22px;border-radius:14px;font:600 15px/1 var(--ui);white-space:nowrap;transition:background .15s,border-color .15s}
+.btn:hover{text-decoration:none}
+.pri{background:var(--accent);color:var(--on-accent)}
+.pri:hover{background:#EC9A58;color:var(--on-accent)}
+.alt{background:var(--surface);color:var(--text);border:1px solid var(--line)}
+.alt:hover{background:var(--surface2);border-color:#46464E;color:var(--text)}
+.sm{height:38px;padding:0 16px;font-size:14px}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.herobody{padding-top:40px}
+.eyebrow{font:500 13px/1.3 var(--mono);color:var(--muted);letter-spacing:.02em}
+h1,h2{font-family:var(--disp);font-weight:400;letter-spacing:-.01em;margin:0;text-wrap:balance}
+h1{font-size:clamp(50px,7.6vw,104px);line-height:.95;margin-top:18px}
+h1 em,h2 em{font-style:italic;color:var(--field-hi)}
+h2{font-size:clamp(36px,4vw,52px);line-height:1}
+.herorow{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:56px;align-items:end;margin-top:30px}
+.lede{font-size:clamp(17px,1.4vw,19px);line-height:1.55;color:var(--muted);margin:0;text-wrap:pretty}
+.lede b{color:var(--text);font-weight:500}
+.ctas{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.tlink{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:15px;padding:0 6px;height:48px}
+.fine{margin-top:14px;font-size:13px;color:var(--muted)}
+.agents{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;align-items:center}
+.agents .lbl{font:500 12px var(--mono);color:var(--muted);margin-right:4px}
+.ag{font-size:13px;font-weight:500;padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
+.field{position:relative;margin-top:48px;padding-bottom:40px}
+.field:before{content:"";position:absolute;left:0;right:0;bottom:0;height:60%;background:linear-gradient(180deg,var(--field-hi),var(--field-lo))}
+.field:after{content:"";position:absolute;left:0;right:0;bottom:0;height:60%;background:repeating-linear-gradient(90deg,rgba(23,22,27,.05) 0 1px,transparent 1px 9px);pointer-events:none}
+.field .wrap{position:relative;z-index:1}
+.shot{position:relative;border-radius:14px;overflow:hidden;background:repeating-linear-gradient(135deg,var(--surface) 0 10px,var(--surface2) 10px 20px);border:1px solid var(--line)}
+.shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;color:transparent}
+.desk{aspect-ratio:2374/1392}
+.phone{aspect-ratio:1080/2400;border-radius:20px}
+.field .shot{box-shadow:0 40px 80px -30px rgba(0,0,0,.6)}
+.swipe{display:none}
+.sec{padding:96px 0;border-top:1px solid var(--line)}
+.sec.tight{padding:72px 0}
+.hero + .sec{border-top:0}
+.kick{font:500 12px/1 var(--mono);color:var(--accent);text-transform:uppercase;letter-spacing:.12em;margin-bottom:18px}
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:64px;align-items:center}
+.dragrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:56px;align-items:center}
+.panes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:40px}
+.body{font-size:17px;line-height:1.6;color:var(--muted);margin:18px 0 0;text-wrap:pretty;max-width:540px}
+.mono{font-family:var(--mono);font-size:.92em;color:var(--text)}
+kbd{font:500 13px var(--mono);padding:2px 7px;border-radius:6px;background:var(--surface2);border:1px solid #3C3C43;color:var(--text)}
+.feat{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:56px;align-items:start;margin-top:40px}
+.flist{display:grid;gap:0;border-top:1px solid var(--line)}
+.fi{padding:15px 0;border-bottom:1px solid var(--line)}
+.fi h3{font:600 16px/1.3 var(--ui);margin:0 0 4px;display:flex;gap:10px;align-items:center}
+.fi p{margin:0;font-size:14.5px;line-height:1.5;color:var(--muted)}
+.phonewrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:64px;align-items:center}
+.phones{display:grid;grid-template-columns:repeat(2,200px);gap:20px}
+.points{display:grid;gap:16px;margin-top:26px;max-width:520px}
+.pt{display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;font-size:15.5px;line-height:1.5;color:var(--muted)}
+.pt .i{color:var(--accent);margin-top:2px}
+.pt b{color:var(--text);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13.5px;font-weight:500}
+.chip .i{width:15px;height:15px;color:var(--accent)}
+.code{background:#17161B;border:1px solid var(--line);border-radius:16px;overflow:hidden;min-width:0}
+.code-top{padding:12px 16px;border-bottom:1px solid var(--line);font:500 12px var(--mono);color:var(--muted)}
+.pre{padding:18px 20px 20px;font:13.5px/1.75 var(--mono);color:var(--text)}
+.cl{white-space:pre-wrap;overflow-wrap:anywhere;padding-left:2ch;text-indent:-2ch}
+.cl + .cl.gap{margin-top:12px}
+.ck{color:var(--accent)}
+.cs{color:#9FD4A8}
+.cv{color:#8DB8FF}
+.cm{color:var(--muted)}
+.dim{color:#76767F;padding-left:2ch}
+.msg{font-style:italic;color:var(--muted)}
+.platforms{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;margin-top:36px;align-items:start}
+.pcol{display:grid;gap:16px}
+.plat{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:26px;display:flex;flex-direction:column;gap:10px}
+.plat .pk{display:flex;align-items:center;gap:8px;font:500 12px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.plat h3{font:600 19px var(--ui);margin:4px 0 0}
+.plat p{margin:0;font-size:14.5px;line-height:1.55;color:var(--muted)}
+.plat .btn{align-self:flex-start;margin-top:6px}
+.steps{margin:6px 0 0;padding:0;list-style:none;display:grid;gap:12px;counter-reset:s}
+.steps li{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;font-size:14.5px;line-height:1.55;color:var(--muted);counter-increment:s}
+.steps li:before{content:counter(s);font:500 12px/24px var(--mono);color:var(--accent);width:24px;height:24px;border-radius:50%;border:1px solid #3C3C43;text-align:center}
+.steps b{color:var(--text);font-weight:600}
+.cmd{display:block;margin-top:8px;padding:10px 12px;border-radius:10px;background:#17161B;border:1px solid var(--line);font:12.5px/1.5 var(--mono);color:var(--text);overflow-wrap:anywhere}
+.foot{display:flex;flex-wrap:wrap;gap:14px 28px;justify-content:space-between;align-items:center;padding:32px 0 44px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+.fl{display:flex;flex-wrap:wrap;gap:8px 22px}
+.fl a{color:var(--muted)}
+.fl a:hover{color:var(--text)}
+.fr{display:flex;flex-direction:column;gap:4px;text-align:right}
+@media (max-width:900px){
+.wrap{padding:0 16px}
+.navlinks{display:none}
+.nav .btn{margin-left:auto}
+.herobody{padding-top:20px}
+.herorow,.split,.feat,.phonewrap,.platforms,.dragrow,.panes{grid-template-columns:minmax(0,1fr);gap:28px}
+.panes{gap:14px;margin-top:28px}
+.sec,.sec.tight{padding:64px 0}
+.feat{margin-top:28px}
+.phones{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;max-width:420px}
+.field{margin-top:36px;padding-bottom:28px}
+.fr{text-align:left}
+}
+@media (max-width:600px){
+.field .wrap{padding-right:0}
+.field .shot.desk{aspect-ratio:auto;height:440px;overflow-x:auto;overflow-y:hidden;border-radius:14px 0 0 14px;scroll-snap-type:x mandatory;background:#1C1C20}
+.field .shot.desk img{position:static;height:100%;width:auto;max-width:none;scroll-snap-align:start}
+.swipe{display:block;margin-top:10px;font:500 12px var(--mono);color:var(--ink)}
+.ctas .btn{width:100%}
+.tlink{padding:0}
+.pre{padding:16px 14px;font-size:12.5px}
+}
+    </style>
   </head>
   <body>
-    <div
-      id="agterm-root"
-      style="
-        background: #191d20;
-        color: #e6e1d7;
-        font-family: &quot;IBM Plex Sans&quot;, system-ui, sans-serif;
-        -webkit-font-smoothing: antialiased;
-        min-height: 100vh;
-        overflow-x: clip;
-      "
-    >
-      <!-- ===== NAV ===== -->
-      <div
-        style="
-          position: sticky;
-          top: 0;
-          z-index: 50;
-          background: rgba(25, 29, 32, 0.72);
-          backdrop-filter: blur(14px);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-        "
-      >
-        <div
-          class="site-nav-bar"
-          style="
-            max-width: 1140px;
-            margin: 0 auto;
-            padding: 0 28px;
-            height: 64px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-          "
-        >
-          <a href="#top" style="display: flex; align-items: center; gap: 11px; color: #e6e1d7">
-            <svg width="27" height="27" viewBox="0 0 100 100" fill="none" style="display: block; border-radius: 22%">
-              <rect width="100" height="100" rx="24" fill="#1e40d8"></rect>
-              <rect x="26" y="26" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
-              <rect x="54" y="26" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
-              <rect x="26" y="54" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
-              <rect x="54" y="54" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
-            </svg>
-            <span
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-weight: 700;
-                font-size: 16px;
-                letter-spacing: -0.01em;
-              "
-              >agterm</span
-            >
-          </a>
-          <div
-            class="site-nav-desktop"
-            style="
-              display: flex;
-              align-items: center;
-              gap: 6px;
-              font-family: &quot;JetBrains Mono&quot;, monospace;
-              font-size: 13.5px;
-            "
-          >
-            <a href="#features" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">features</a>
-            <a href="#scripting" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">scripting</a>
-            <a href="#install" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">install</a>
-            <a href="/docs" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">docs</a>
-            <a href="/commands" style="color: #949ba4; padding: 8px 12px; border-radius: 7px" class="hv1">commands</a>
-            <a
-              href="https://github.com/umputun/agterm"
-              style="
-                margin-left: 6px;
-                color: #c9cdd2;
-                border: 1px solid rgba(255, 255, 255, 0.16);
-                background: rgba(255, 255, 255, 0.03);
-                padding: 7px 14px;
-                border-radius: 7px;
-                font-weight: 500;
-              "
-              class="hv2"
-              >GitHub ↗</a
-            >
-          </div>
-          <details class="site-nav-mobile">
-            <summary>menu</summary>
-            <nav aria-label="Mobile navigation" onclick="this.parentElement.open=false">
-              <a href="#features">features</a>
-              <a href="#scripting">scripting</a>
-              <a href="#install">install</a>
-              <a href="/docs">docs</a>
-              <a href="/commands">commands</a>
-              <a href="https://github.com/umputun/agterm">GitHub ↗</a>
-            </nav>
-          </details>
+    <div class="page">
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <symbol id="elis" viewBox="0 0 1024 1024"><defs><linearGradient id="eb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D2B07C"></stop><stop offset="1" stop-color="#A27C46"></stop></linearGradient></defs><rect width="1024" height="1024" fill="url(#eb)"></rect><g transform="translate(512 630) scale(1.12) translate(-512 -478)"><path fill="#F8F5F0" d="M352 630C290 700 236 820 210 1200L814 1200C788 820 734 700 672 630Z"></path><path fill="#17161B" d="M416 318C370 300 310 314 288 360C266 410 270 500 300 580C330 560 350 520 356 470C362 420 380 360 416 318Z"></path><path fill="#17161B" d="M608 318C654 300 714 314 736 360C758 410 754 500 724 580C694 560 674 520 668 470C662 420 644 360 608 318Z"></path><path fill="#17161B" d="M512 270C610 270 676 320 686 400C694 470 680 540 650 610L374 610C344 540 330 470 338 400C348 320 414 270 512 270Z"></path><path fill="#C8742F" d="M348 552C338 600 346 640 376 668C400 690 432 702 460 702L460 580C420 580 380 570 348 552Z"></path><path fill="#C8742F" d="M676 552C686 600 678 640 648 668C624 690 592 702 564 702L564 580C604 580 644 570 676 552Z"></path><path fill="#F8F5F0" d="M488 282C498 278 526 278 536 282C548 350 554 420 556 480C562 520 572 540 590 560C618 590 622 610 622 640C622 704 580 744 512 744C444 744 402 704 402 640C402 610 406 590 434 560C452 540 462 520 468 480C470 420 476 350 488 282Z"></path><ellipse fill="#C8742F" cx="444" cy="446" rx="19" ry="11" transform="rotate(-14 444 446)"></ellipse><ellipse fill="#C8742F" cx="580" cy="446" rx="19" ry="11" transform="rotate(14 580 446)"></ellipse><circle fill="#8A4E22" cx="438" cy="490" r="24"></circle><circle fill="#17161B" cx="438" cy="491" r="13"></circle><circle fill="#fff" cx="446" cy="482" r="6"></circle><circle fill="#8A4E22" cx="586" cy="490" r="24"></circle><circle fill="#17161B" cx="586" cy="491" r="13"></circle><circle fill="#fff" cx="594" cy="482" r="6"></circle><path fill="#17161B" d="M482 628C496 616 528 616 542 628C546 650 530 666 512 668C494 666 478 650 482 628Z"></path><path fill="none" stroke="#17161B" stroke-width="8" stroke-linecap="round" d="M512 668V684M484 690Q512 708 540 690"></path></g><circle cx="412" cy="186" r="38" fill="#F8F5F0"></circle><circle cx="512" cy="186" r="38" fill="#F8F5F0"></circle><circle cx="612" cy="186" r="38" fill="#F8F5F0"></circle></symbol>
+        <symbol id="i-dl" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></symbol>
+        <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M12 20h.01"></path><path d="M2 8.82a15 15 0 0 1 20 0"></path><path d="M5 12.859a10 10 0 0 1 14 0"></path><path d="M8.5 16.429a5 5 0 0 1 7 0"></path></symbol>
+        <symbol id="i-bt" viewBox="0 0 24 24"><path d="m7 7 10 10-5 5V2l5 5L7 17"></path></symbol>
+        <symbol id="i-reply" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path><path d="m9 12 2 2 4-4"></path></symbol>
+        <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></symbol>
+        <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 5h.01"></path><path d="M3 12h.01"></path><path d="M3 19h.01"></path><path d="M8 5h13"></path><path d="M8 12h13"></path><path d="M8 19h13"></path></symbol>
+        <symbol id="i-phone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"></rect><path d="M12 18h.01"></path></symbol>
+        <symbol id="i-laptop" viewBox="0 0 24 24"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"></path></symbol>
+        <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"></rect><line x1="8" x2="16" y1="21" y2="21"></line><line x1="12" x2="12" y1="17" y2="21"></line></symbol>
+      </svg>
+
+      <header class="hero">
+        <div class="wrap">
+          <nav class="nav">
+            <a class="brand" href="./"><svg class="mark" aria-hidden="true"><use href="#elis"></use></svg>Elis</a>
+            <div class="navlinks">
+              <a href="docs.html">Docs</a>
+              <a href="commands.html">Commands</a>
+              <a href="https://github.com/NaikSoftware/elis">GitHub</a>
+            </div>
+            <a class="btn pri sm" href="#install"><svg class="i"><use href="#i-dl"></use></svg>Download</a>
+          </nav>
         </div>
-      </div>
-
-      <!-- ===== HERO ===== -->
-      <div id="top" style="position: relative; max-width: 1140px; margin: 0 auto; padding: 88px 28px 40px">
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 26px">
-          <span
-            style="
-              font-family: &quot;JetBrains Mono&quot;, monospace;
-              font-size: 12px;
-              letter-spacing: 0.14em;
-              text-transform: uppercase;
-              color: var(--accent, #6d82f3);
-              border: 1px solid rgba(109, 130, 243, 0.35);
-              background: rgba(109, 130, 243, 0.07);
-              padding: 5px 11px;
-              border-radius: 100px;
-            "
-            >native macOS · libghostty</span
-          >
-        </div>
-        <h1
-          style="
-            font-family: &quot;JetBrains Mono&quot;, monospace;
-            font-weight: 800;
-            font-size: clamp(38px, 6.2vw, 74px);
-            line-height: 0.98;
-            letter-spacing: -0.03em;
-            margin: 0 0 26px;
-            max-width: 24ch;
-          "
-        >
-          A simply good terminal. <span style="color: var(--accent, #6d82f3)">Full control API.</span>
-        </h1>
-        <p style="font-size: clamp(17px, 2vw, 21px); line-height: 1.55; color: #bfbab0; max-width: 60ch; margin: 0 0 38px">
-          agterm organizes sessions into named workspaces. The bundled
-          <code style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 0.92em">agtermctl</code> drives all of it over
-          a local socket: build layouts, type into any pane and read its text back, open overlays, dashboards, native pickers, and question dialogs.
-          Running many AI coding agents at once is the obvious use, and far from the only one.
-        </p>
-
-        <!-- install command -->
-        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 14px">
-          <div
-            style="
-              display: inline-flex;
-              align-items: center;
-              gap: 14px;
-              background: #22272b;
-              border: 1px solid rgba(255, 255, 255, 0.1);
-              border-radius: 11px;
-              padding: 14px 16px;
-              font-family: &quot;JetBrains Mono&quot;, monospace;
-              font-size: 14.5px;
-            "
-          >
-            <span style="color: var(--accent, #6d82f3)">$</span>
-            <span style="color: #e6e1d7">brew install --cask umputun/apps/agterm</span>
-            <button
-              onclick="cp(this)"
-              style="
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                background: rgba(255, 255, 255, 0.04);
-                color: #949ba4;
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-size: 12px;
-                padding: 6px 11px;
-                border-radius: 7px;
-                cursor: pointer;
-                white-space: nowrap;
-              "
-              class="hv3"
-            >
-              copy
-            </button>
-          </div>
-          <a
-            href="#install"
-            style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 14px; color: #949ba4; padding: 14px 8px"
-            class="hv4"
-            >or build from source →</a
-          >
-        </div>
-        <p style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 12.5px; color: #6b727a; margin: 0 0 44px">
-          Apple Silicon · macOS 14+ · signed &amp; notarized · embeds Ghostty's engine
-        </p>
-
-        <!-- product shot -->
-        <div
-          style="
-            position: relative;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 14px;
-            overflow: hidden;
-            background: #22272b;
-            box-shadow:
-              0 40px 120px -30px rgba(0, 0, 0, 0.8),
-              0 0 0 1px rgba(255, 255, 255, 0.02);
-          "
-        >
-          <div class="hero-gallery">
-            <img
-              src="/assets/screenshot-main.webp"
-              alt="agterm main window: two-level sidebar grouping sessions under workspaces"
-              width="1187"
-              height="696"
-              fetchpriority="high"
-            />
-            <img
-              src="/assets/screenshot-dashboard.webp"
-              alt="The dashboard: a grid of several live terminal sessions watched at once"
-              width="1187"
-              height="696"
-              loading="lazy"
-            />
-            <img
-              src="/assets/screenshot-session-palette.webp"
-              alt="Fuzzy session palette for jumping to any session by name"
-              width="1187"
-              height="696"
-              loading="lazy"
-            />
-            <img
-              src="/assets/screenshot-action-palette.webp"
-              alt="A split session with the action palette open"
-              width="1187"
-              height="696"
-              loading="lazy"
-            />
-            <img
-              src="/assets/screenshot-agent-prompt.webp"
-              alt="An agent's interactive prompt with attention glyphs on sessions that need you"
-              width="1187"
-              height="696"
-              loading="lazy"
-            />
-            <img
-              src="/assets/screenshot-floating-overlay.webp"
-              alt="The yazi file manager in a floating overlay over the active session"
-              width="1187"
-              height="696"
-              loading="lazy"
-            />
-            <img
-              src="/assets/screenshot-keymap-editor.webp"
-              alt="The keymap editor overlay"
-              width="1187"
-              height="696"
-              loading="lazy"
-            />
-            <img
-              src="/assets/screenshot-attention.webp"
-              alt="The attention list showing sessions that need you"
-              width="1187"
-              height="696"
-              loading="lazy"
-            />
-          </div>
-        </div>
-        <p
-          style="
-            text-align: center;
-            font-family: &quot;JetBrains Mono&quot;, monospace;
-            font-size: 12px;
-            color: #6b727a;
-            margin: 16px 0 0;
-          "
-        >
-          Workspaces and sessions, the fuzzy palettes, floating overlays, and agent-status glyphs on the rows that need you.
-        </p>
-      </div>
-
-      <!-- ===== STATUS STRIP ===== -->
-
-      <div style="max-width: 1140px; margin: 52px auto 0; padding: 0 28px">
-        <div
-          style="
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-            gap: 1px;
-            background: rgba(255, 255, 255, 0.07);
-            border: 1px solid rgba(255, 255, 255, 0.07);
-            border-radius: 12px;
-            overflow: hidden;
-          "
-        >
-          <div style="background: #15191c; padding: 22px 24px; display: flex; align-items: center; gap: 13px">
-            <span
-              style="
-                width: 9px;
-                height: 9px;
-                border-radius: 100px;
-                background: #5ea1f2;
-                box-shadow: 0 0 12px #5ea1f2;
-                animation: pulse 2s ease-in-out infinite;
-              "
-            ></span>
+        <div class="wrap herobody">
+          <div class="eyebrow">Terminal workspace for AI coding agents</div>
+          <h1>Herd your agents. <em>Miss none of them.</em></h1>
+          <div class="herorow">
             <div>
-              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13px; font-weight: 600">active</div>
-              <div style="font-size: 12.5px; color: #949ba4">agent working</div>
+              <p class="lede">Elis is a native terminal for macOS and Linux. It runs many coding agents at once. <b>Each agent works in its own named session.</b> Sessions sit in tinted workspaces. The sidebar shows which agent is working, which agent needs you, and which agent is done.</p>
+              <div class="agents"><span class="lbl">Agents</span><span class="ag">Claude Code</span><span class="ag">Codex</span><span class="ag">OpenCode</span><span class="ag">Antigravity</span><span class="ag">Pi</span></div>
             </div>
-          </div>
-          <div style="background: #15191c; padding: 22px 24px; display: flex; align-items: center; gap: 13px">
-            <span style="width: 9px; height: 9px; border-radius: 100px; background: #f2b45c; box-shadow: 0 0 12px #f2b45c"></span>
             <div>
-              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13px; font-weight: 600">blocked</div>
-              <div style="font-size: 12.5px; color: #949ba4">waiting on you</div>
+              <div class="ctas">
+                <a class="btn pri" href="https://github.com/NaikSoftware/elis/releases/latest"><svg class="i"><use href="#i-dl"></use></svg>Download for macOS</a>
+                <a class="btn alt" href="https://github.com/NaikSoftware/elis/tree/master/linux"><svg class="i"><use href="#i-monitor"></use></svg>Download for Linux</a>
+                <a class="tlink" href="https://github.com/NaikSoftware/elis/releases/latest">Android APK<svg class="i"><use href="#i-arrow"></use></svg></a>
+              </div>
+              <div class="fine">macOS 14+ on Apple Silicon · Linux: Qt6/KDE, build from source · MIT</div>
             </div>
           </div>
-          <div style="background: #15191c; padding: 22px 24px; display: flex; align-items: center; gap: 13px">
-            <span style="width: 9px; height: 9px; border-radius: 100px; background: #7ece8f; box-shadow: 0 0 12px #7ece8f"></span>
+        </div>
+        <div class="field">
+          <div class="wrap">
+            <div class="shot desk"><img src="assets/shot-desktop-main.webp" width="2374" height="1392" alt="Elis with workspaces of agent sessions in the sidebar, a Claude Code session, and a shell split beside it" /></div>
+            <div class="swipe">Swipe to see the whole window →</div>
+          </div>
+        </div>
+      </header>
+
+      <section class="sec" id="features">
+        <div class="wrap">
+          <div class="kick">Features</div>
+          <h2>Many sessions, <em>one window.</em></h2>
+          <div class="feat">
+            <div class="shot desk"><img src="assets/shot-desktop-switcher.webp" width="2374" height="1392" loading="lazy" alt="The session switcher over the terminal, with the sessions that need you at the top" /></div>
+            <div class="flist">
+              <div class="fi"><h3>Session switcher <kbd>⌃P</kbd></h3><p>Search all sessions. Sessions that need you come first.</p></div>
+              <div class="fi"><h3>Live sessions</h3><p>Agents keep running when you quit or update Elis. The next launch reattaches them.</p></div>
+              <div class="fi"><h3>Splits, companions, overlays</h3><p>Split a session, pin a log under it, or run a program over its shell.</p></div>
+              <div class="fi"><h3>Remote sessions</h3><p>Attach sessions from another Mac over ssh, with their status.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec" id="agents">
+        <div class="wrap">
+          <div class="dragrow">
             <div>
-              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13px; font-weight: 600">completed</div>
-              <div style="font-size: 12.5px; color: #949ba4">done, clears when seen</div>
+              <div class="kick">Drag and drop</div>
+              <h2>Agents coordinate <em>with each other.</em></h2>
+              <p class="body">Drag sessions and files into an agent's prompt. A file from the file panel adds its path. A session adds its id, and the agent can talk to that session.</p>
             </div>
+            <div class="shot desk"><img src="assets/shot-desktop-files.webp" width="2374" height="1392" loading="lazy" alt="The file panel beside the pair-link agent, with a dropped file path in its prompt" /></div>
           </div>
-          <div style="background: #15191c; padding: 22px 24px; display: flex; align-items: center; gap: 13px">
-            <span style="width: 9px; height: 9px; border-radius: 100px; border: 1.5px solid #4a5158"></span>
-            <div>
-              <div style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13px; font-weight: 600">idle</div>
-              <div style="font-size: 12.5px; color: #949ba4">nothing to show</div>
+          <div class="panes">
+            <div class="code">
+              <div class="code-top">ui-tests</div>
+              <div class="pre">
+                <div class="cl"><span class="ck">❯</span> Claude session <span class="cv">6293f019</span> also uses emulator-5554. Tell it that you are about to run UI tests on it, and ask it to wait until you say the emulator is free.</div>
+                <div class="dim">Called 1 tool</div>
+                <div class="cl">● I told session <span class="cv">6293f019</span> ("Pairing screen") that I'm running UI tests on emulator-5554. It will wait until I say the emulator is free.</div>
+                <div class="cl gap"><span class="ck">❯</span> Tests are done. Tell Claude session <span class="cv">6293f019</span> that emulator-5554 is free.</div>
+              </div>
+            </div>
+            <div class="code">
+              <div class="code-top">pair-link</div>
+              <div class="pre">
+                <div class="cl"><span class="cm">›</span> <span class="msg">Message from @UI-tests-on-emulator…: I'm about to run UI tests on emulator-5554. Please wait until I tell you it's free.</span></div>
+                <div class="cl">● OK. I'll keep off emulator-5554 until you tell me it's free.</div>
+                <div class="cl gap"><span class="cm">›</span> <span class="msg">Message from @UI-tests-on-emulator…: emulator-5554 is free now: my UI tests are done, and you can use the emulator again.</span></div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- ===== FEATURES ===== -->
-      <div id="features" style="max-width: 1140px; margin: 0 auto; padding: 100px 28px 40px">
-        <div
-          style="
-            font-family: &quot;JetBrains Mono&quot;, monospace;
-            font-size: 12px;
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-            color: var(--accent, #6d82f3);
-            margin-bottom: 16px;
-          "
-        >
-          // features
-        </div>
-        <h2
-          style="
-            font-family: &quot;JetBrains Mono&quot;, monospace;
-            font-weight: 800;
-            font-size: clamp(28px, 4vw, 44px);
-            letter-spacing: -0.025em;
-            line-height: 1.05;
-            margin: 0 0 18px;
-            max-width: 20ch;
-          "
-        >
-          A small structure, and a command for every part of it.
-        </h2>
-        <p style="font-size: 18px; line-height: 1.55; color: #bfbab0; max-width: 58ch; margin: 0 0 56px">
-          Workspaces and sessions are the whole model, and there is nothing to learn beyond them. Everything they hold is also an
-          object the control API can create, move, inspect, and read back. Running several coding agents means many long-lived
-          sessions, each progressing on its own. A tabbed terminal loses track of them quickly. agterm doesn't.
-        </p>
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px">
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 30px">
-            <svg width="30" height="30" viewBox="0 0 30 30" fill="none" style="margin-bottom: 20px">
-              <rect x="1" y="1" width="12" height="12" rx="2" stroke="#6d82f3" stroke-width="1.6"></rect>
-              <rect x="17" y="1" width="12" height="12" rx="2" stroke="#4a5158" stroke-width="1.6"></rect>
-              <rect x="1" y="17" width="12" height="12" rx="2" stroke="#4a5158" stroke-width="1.6"></rect>
-              <rect x="17" y="17" width="12" height="12" rx="2" stroke="#6d82f3" stroke-width="1.6"></rect>
-            </svg>
-            <h3
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-weight: 700;
-                font-size: 19px;
-                margin: 0 0 11px;
-                letter-spacing: -0.01em;
-              "
-            >
-              Workspace organization
-            </h3>
-            <p style="font-size: 15px; line-height: 1.6; color: #949ba4; margin: 0">
-              A vertical, two-level sidebar groups sessions under named workspaces like "work" and "personal". Drag between them,
-              split into two shells, and reach any session by name, recency, or keyboard.
-            </p>
-          </div>
-
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 30px">
-            <svg width="30" height="30" viewBox="0 0 30 30" fill="none" style="margin-bottom: 20px">
-              <path d="M4 8l6 5-6 5" stroke="#5ea1f2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-              <path d="M15 20h11" stroke="#5ea1f2" stroke-width="1.8" stroke-linecap="round"></path>
-            </svg>
-            <h3
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-weight: 700;
-                font-size: 19px;
-                margin: 0 0 11px;
-                letter-spacing: -0.01em;
-              "
-            >
-              Programmatic control
-            </h3>
-            <p style="font-size: 15px; line-height: 1.6; color: #949ba4; margin: 0">
-              A bundled CLI, <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agtermctl</span>,
-              drives almost everything over a local socket: create sessions, type into them, run overlays, move windows, or post a
-              notification tied to a specific session.
-            </p>
-          </div>
-
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 30px">
-            <svg width="30" height="30" viewBox="0 0 30 30" fill="none" style="margin-bottom: 20px">
-              <circle cx="8" cy="8" r="4" fill="#6d82f3"></circle>
-              <circle cx="8" cy="22" r="4" fill="#f2b45c"></circle>
-              <path d="M17 8h9M17 22h9" stroke="#4a5158" stroke-width="1.8" stroke-linecap="round"></path>
-            </svg>
-            <h3
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-weight: 700;
-                font-size: 19px;
-                margin: 0 0 11px;
-                letter-spacing: -0.01em;
-              "
-            >
-              Agent status at a glance
-            </h3>
-            <p style="font-size: 15px; line-height: 1.6; color: #949ba4; margin: 0">
-              Each agent reports its state onto its sidebar row as a tinted glyph — active, blocked, or completed — so a screen of
-              concurrent agents shows which one needs you. Wiring is automatic for Claude Code, Codex, Pi, and OpenCode.
-            </p>
-          </div>
-
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 30px">
-            <svg width="30" height="30" viewBox="0 0 30 30" fill="none" style="margin-bottom: 20px">
-              <rect x="2" y="4" width="26" height="18" rx="2.5" stroke="#6d82f3" stroke-width="1.6"></rect>
-              <path
-                d="M6 10l3 3-3 3M13 16h6"
-                stroke="#6d82f3"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              ></path>
-            </svg>
-            <h3
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-weight: 700;
-                font-size: 19px;
-                margin: 0 0 11px;
-                letter-spacing: -0.01em;
-              "
-            >
-              A surface built for flow
-            </h3>
-            <p style="font-size: 15px; line-height: 1.6; color: #949ba4; margin: 0">
-              Split a session, pin companions under it, drop a scratch terminal over it, or run a program in a floating overlay
-              without disturbing the session beneath. Jump anywhere with a fuzzy palette; flip through recents with Ctrl-Tab.
-            </p>
-          </div>
-
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 30px">
-            <svg width="30" height="30" viewBox="0 0 30 30" fill="none" style="margin-bottom: 20px">
-              <path
-                d="M15 2l11 6v8c0 7-5 10-11 12C9 26 4 23 4 16V8l11-6z"
-                stroke="#5ea1f2"
-                stroke-width="1.6"
-                stroke-linejoin="round"
-              ></path>
-              <path d="M10 15l4 4 7-8" stroke="#5ea1f2" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-            <h3
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-weight: 700;
-                font-size: 19px;
-                margin: 0 0 11px;
-                letter-spacing: -0.01em;
-              "
-            >
-              Agents drive it too
-            </h3>
-            <p style="font-size: 15px; line-height: 1.6; color: #949ba4; margin: 0">
-              An installable skill teaches Claude Code or Codex the control model and the full agtermctl command set, so an agent
-              running inside agterm builds its own layout, runs overlays, and manages windows without you explaining the API.
-            </p>
-          </div>
-
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 30px">
-            <svg width="30" height="30" viewBox="0 0 30 30" fill="none" style="margin-bottom: 20px">
-              <path d="M15 3v24M3 9v12M27 9v12" stroke="#f2b45c" stroke-width="1.8" stroke-linecap="round"></path>
-            </svg>
-            <h3
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-weight: 700;
-                font-size: 19px;
-                margin: 0 0 11px;
-                letter-spacing: -0.01em;
-              "
-            >
-              A terminal first
-            </h3>
-            <p style="font-size: 15px; line-height: 1.6; color: #949ba4; margin: 0">
-              With nothing scripted at all it handles everyday multi-project work: 512 bundled themes, a live-preview theme picker,
-              and custom key mappings. Rebuild the layout with one of three restore modes: fresh shells, re-run captured commands,
-              or primary and split processes kept alive across launches.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div style="max-width: 1140px; margin: 0 auto; padding: 100px 28px 40px">
-        <div
-          style="
-            font-family: &quot;JetBrains Mono&quot;, monospace;
-            font-size: 12px;
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-            color: var(--accent, #6d82f3);
-            margin-bottom: 16px;
-          "
-        >
-          // sessions that survive
-        </div>
-        <h2
-          style="
-            font-family: &quot;JetBrains Mono&quot;, monospace;
-            font-weight: 800;
-            font-size: clamp(28px, 4vw, 44px);
-            letter-spacing: -0.025em;
-            line-height: 1.05;
-            margin: 0 0 18px;
-            max-width: 20ch;
-          "
-        >
-          Close the app, keep the work.
-        </h2>
-        <p style="font-size: 18px; line-height: 1.55; color: #bfbab0; max-width: 60ch; margin: 0 0 44px">
-          A pane's process does not have to live inside agterm. Live sessions keep it running while the app restarts, the same
-          sessions can be opened from another Mac, and a Linux host can run them for you.
-        </p>
-
-        <div class="survive-grid">
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 36px">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
-              <span
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 11.5px;
-                  color: #e6e1d7;
-                  border: 1px solid rgba(255, 255, 255, 0.16);
-                  background: rgba(255, 255, 255, 0.04);
-                  padding: 3px 8px;
-                  border-radius: 6px;
-                "
-                >live</span
-              >
-              <h3
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-weight: 700;
-                  font-size: 19px;
-                  margin: 0;
-                  letter-spacing: -0.01em;
-                "
-              >
-                Live sessions
-              </h3>
-            </div>
-            <p style="font-size: 15px; line-height: 1.65; color: #949ba4; margin: 0">
-              Quit, update, or relaunch agterm while your primary and split panes keep running, an agent mid-turn included. The
-              next launch reattaches to those processes with their text and TUI state. Choose it under Settings ▸ General ▸ Restore
-              sessions; it takes effect after restarting agterm and needs zsh or fish as the macOS login shell or as the ghostty <code style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 0.92em">command</code>.
-              <a href="/docs#restore" style="color: #6d82f3">Restore modes</a>
-            </p>
-          </div>
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 36px">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
-              <span
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 11.5px;
-                  color: #e6e1d7;
-                  border: 1px solid rgba(255, 255, 255, 0.16);
-                  background: rgba(255, 255, 255, 0.04);
-                  padding: 3px 8px;
-                  border-radius: 6px;
-                "
-                >ssh</span
-              >
-              <h3
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-weight: 700;
-                  font-size: 19px;
-                  margin: 0;
-                  letter-spacing: -0.01em;
-                "
-              >
-                Remote sessions
-              </h3>
-            </div>
-            <p style="font-size: 15px; line-height: 1.65; color: #949ba4; margin: 0">
-              Open a session running on another Mac as a row in this sidebar, split included, with
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agtermctl zmx attach HOST ID</span>.
-              Its status glyph, notifications, HUD and title-bar context follow it here, and its panes take this Mac's size. The
-              other Mac runs agterm in Live sessions mode and is reached over key-based ssh. A Linux host can run your sessions
-              too: under agterm-server every shell keeps running when the Mac sleeps, the network drops or the window closes, and
-              a remote window on the Mac shows them with splits, companions, the scratch, overlays, asks, pages and agent status.
-              <a href="/docs#remote-sessions" style="color: #6d82f3">Remote sessions</a> ·
-              <a href="/docs#remote-server" style="color: #6d82f3">Remote server</a>
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== SURFACES ===== -->
-      <div style="max-width: 1140px; margin: 0 auto; padding: 100px 28px 40px">
-        <div
-          style="
-            font-family: &quot;JetBrains Mono&quot;, monospace;
-            font-size: 12px;
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-            color: var(--accent, #6d82f3);
-            margin-bottom: 16px;
-          "
-        >
-          // surfaces
-        </div>
-        <h2
-          style="
-            font-family: &quot;JetBrains Mono&quot;, monospace;
-            font-weight: 800;
-            font-size: clamp(28px, 4vw, 44px);
-            letter-spacing: -0.025em;
-            line-height: 1.05;
-            margin: 0 0 18px;
-            max-width: 20ch;
-          "
-        >
-          One session, many surfaces.
-        </h2>
-        <p style="font-size: 18px; line-height: 1.55; color: #bfbab0; max-width: 60ch; margin: 0 0 44px">
-          A session is never just one shell. Split it, pin companions under it, drop a terminal over it, or float a program on top
-          — every extra surface is always a keystroke away and stays alive when hidden, so nothing you started ever gets lost.
-        </p>
-
-        <div class="surfaces-grid">
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 26px">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
-              <span
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 11.5px;
-                  color: #e6e1d7;
-                  border: 1px solid rgba(255, 255, 255, 0.16);
-                  background: rgba(255, 255, 255, 0.04);
-                  padding: 3px 8px;
-                  border-radius: 6px;
-                "
-                >⌘D</span
-              >
-              <h3
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-weight: 700;
-                  font-size: 17px;
-                  margin: 0;
-                  letter-spacing: -0.01em;
-                "
-              >
-                Split panes
-              </h3>
-            </div>
-            <p style="font-size: 14.5px; line-height: 1.6; color: #949ba4; margin: 0">
-              Two shells side by side or top and bottom in one session. Run the agent in one pane and watch logs in the other;
-              the inactive pane dims toward the background so the focused one is always obvious.
-            </p>
-          </div>
-
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 26px">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
-              <span
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 11.5px;
-                  color: #e6e1d7;
-                  border: 1px solid rgba(255, 255, 255, 0.16);
-                  background: rgba(255, 255, 255, 0.04);
-                  padding: 3px 8px;
-                  border-radius: 6px;
-                "
-                >⌘J</span
-              >
-              <h3
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-weight: 700;
-                  font-size: 17px;
-                  margin: 0;
-                  letter-spacing: -0.01em;
-                "
-              >
-                Scratch terminal
-              </h3>
-            </div>
-            <p style="font-size: 14.5px; line-height: 1.6; color: #949ba4; margin: 0">
-              A per-session third shell that covers the session full-screen. Opens in its directory, always available, and just
-              hidden — toggle it back and the same shell is waiting.
-            </p>
-          </div>
-
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 26px">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
-              <span
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 11.5px;
-                  color: #e6e1d7;
-                  border: 1px solid rgba(255, 255, 255, 0.16);
-                  background: rgba(255, 255, 255, 0.04);
-                  padding: 3px 8px;
-                  border-radius: 6px;
-                "
-                >⌃`</span
-              >
-              <h3
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-weight: 700;
-                  font-size: 17px;
-                  margin: 0;
-                  letter-spacing: -0.01em;
-                "
-              >
-                Quick terminal
-              </h3>
-            </div>
-            <p style="font-size: 14.5px; line-height: 1.6; color: #949ba4; margin: 0">
-              One scratch shell for the whole app, in a floating panel at 90% of whichever screen has focus. Give it a
-              system-wide hotkey and it drops onto the Space you are on from any application, opening in the active session's
-              directory — dismiss it with the same key or by clicking away.
-            </p>
-          </div>
-
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 26px">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
-              <span
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 12.5px;
-                  color: #e6e1d7;
-                  border: 1px solid rgba(255, 255, 255, 0.16);
-                  background: rgba(255, 255, 255, 0.04);
-                  padding: 3px 8px;
-                  border-radius: 6px;
-                  line-height: 1;
-                "
-                >⧉</span
-              >
-              <h3
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-weight: 700;
-                  font-size: 17px;
-                  margin: 0;
-                  letter-spacing: -0.01em;
-                "
-              >
-                Overlays
-              </h3>
-            </div>
-            <p style="font-size: 14.5px; line-height: 1.6; color: #949ba4; margin: 0">
-              Run any program full-screen, in a centered floating panel, or over a single split pane, without disturbing the
-              shell beneath. When it exits, the overlay vanishes and the session is exactly as you left it.
-            </p>
-          </div>
-
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 26px">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
-              <span
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 12.5px;
-                  color: #e6e1d7;
-                  border: 1px solid rgba(255, 255, 255, 0.16);
-                  background: rgba(255, 255, 255, 0.04);
-                  padding: 3px 8px;
-                  border-radius: 6px;
-                  line-height: 1;
-                "
-                >▦</span
-              >
-              <h3
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-weight: 700;
-                  font-size: 17px;
-                  margin: 0;
-                  letter-spacing: -0.01em;
-                "
-              >
-                Dashboard
-              </h3>
-            </div>
-            <p style="font-size: 14.5px; line-height: 1.6; color: #949ba4; margin: 0">
-              Watch up to nine sessions' live output in one view-only grid, overlaid on the window. Arrow keys move a highlight,
-              Enter jumps into a session, Esc closes. Driven from the control API with
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agtermctl dashboard</span>.
-            </p>
-          </div>
-
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 26px">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
-              <span
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 12.5px;
-                  color: #e6e1d7;
-                  border: 1px solid rgba(255, 255, 255, 0.16);
-                  background: rgba(255, 255, 255, 0.04);
-                  padding: 3px 8px;
-                  border-radius: 6px;
-                  line-height: 1;
-                "
-                >↳</span
-              >
-              <h3
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-weight: 700;
-                  font-size: 17px;
-                  margin: 0;
-                  letter-spacing: -0.01em;
-                "
-              >
-                Companions
-              </h3>
-            </div>
-            <p style="font-size: 14.5px; line-height: 1.6; color: #949ba4; margin: 0">
-              Pin a log tail, a watcher, a second shell or an HTML page under a session in the sidebar. Companions move, fold and
-              close with it; Duplicate as Companion copies its split layout and reruns each pane's program. Remote sessions too.
-            </p>
-          </div>
-
-        <!-- windows callout: shares row 2 with the Dashboard and Companions cards -->
-        <div
-          class="surfaces-wide"
-          style="
-            background: #22272b;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 16px;
-            display: grid;
-            align-items: center;
-          "
-        >
+      <section class="sec" id="phone">
+        <div class="wrap phonewrap">
           <div>
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
-              <span
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 11.5px;
-                  color: #e6e1d7;
-                  border: 1px solid rgba(255, 255, 255, 0.16);
-                  background: rgba(255, 255, 255, 0.04);
-                  padding: 3px 8px;
-                  border-radius: 6px;
-                "
-                >⌥⌘N</span
-              >
-              <h3
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-weight: 700;
-                  font-size: 19px;
-                  margin: 0;
-                  letter-spacing: -0.01em;
-                "
-              >
-                Windows keep contexts apart
-              </h3>
+            <div class="kick">Android app</div>
+            <h2>Answer agents <em>from your phone.</em></h2>
+            <div class="points">
+              <div class="pt"><svg class="i"><use href="#i-reply"></use></svg><div><b>Answer an agent from anywhere.</b> A permission prompt or a question shows as one-tap buttons.</div></div>
+              <div class="pt"><svg class="i"><use href="#i-bell"></use></svg><div><b>Know when an agent needs you or is done.</b> The notification clears when you read the session on the computer.</div></div>
+              <div class="pt"><svg class="i"><use href="#i-list"></use></svg><div><b>See every session and its status.</b> The phone shows the same workspaces as the computer.</div></div>
             </div>
-            <p style="font-size: 15px; line-height: 1.65; color: #949ba4; margin: 0">
-              A window is a top-level bundle of workspaces and sessions, each in its own on-screen macOS window. Keep a library of
-              them — "work" on one screen, "personal" on another — and open one per display. The set open at quit reopens next
-              launch, frames restored.
-            </p>
+            <div class="chips">
+              <span class="chip"><svg class="i"><use href="#i-wifi"></use></svg>Wi‑Fi / LAN</span>
+              <span class="chip"><svg class="i"><use href="#i-bt"></use></svg>Bluetooth</span>
+            </div>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 12px">
-            <div style="border: 1px solid rgba(109, 130, 243, 0.35); background: #15191c; border-radius: 10px; overflow: hidden">
-              <div
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 7px;
-                  padding: 9px 12px;
-                  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-                "
-              >
-                <span style="width: 8px; height: 8px; border-radius: 100px; background: #ff5f57"></span
-                ><span style="width: 8px; height: 8px; border-radius: 100px; background: #febc2e"></span
-                ><span style="width: 8px; height: 8px; border-radius: 100px; background: #28c840"></span>
-                <span
-                  style="
-                    margin-left: 6px;
-                    font-family: &quot;JetBrains Mono&quot;, monospace;
-                    font-size: 11.5px;
-                    color: var(--accent, #6d82f3);
-                  "
-                  >work</span
-                >
-              </div>
-              <div
-                style="
-                  padding: 10px 12px;
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 11px;
-                  color: #6b727a;
-                  line-height: 1.7;
-                "
-              >
-                ▸ agterm &nbsp;·&nbsp; radio-t &nbsp;·&nbsp; go-pkgz
-              </div>
+          <div class="phones">
+            <div class="shot phone"><img src="assets/shot-phone-sessions.webp" width="1080" height="2400" loading="lazy" alt="Phone: sessions, with an agent's question as answer buttons" /></div>
+            <div class="shot phone"><img src="assets/shot-phone-session.webp" width="1080" height="2400" loading="lazy" alt="Phone: a Claude Code session" /></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec tight" id="api">
+        <div class="wrap split">
+          <div>
+            <div class="kick">Control API</div>
+            <h2>Agents control <em>the terminal.</em></h2>
+            <p class="body">With <span class="mono">elisctl</span> and the agent skill, an agent opens sessions, reads their screens and asks you questions. <a href="commands.html">Command reference →</a></p>
+          </div>
+          <div class="code">
+            <div class="code-top">zsh</div>
+            <div class="pre">
+              <div class="cl"><span class="cv">sid</span>=$(<span class="ck">elisctl</span> session new --no-select)</div>
+              <div class="cl"><span class="ck">elisctl</span> session type <span class="cs">$'claude\n'</span> --target <span class="cs">"$sid"</span></div>
+              <div class="cl"><span class="ck">elisctl</span> session text --target <span class="cs">"$sid"</span> --lines 10</div>
+              <div class="cl"><span class="ck">elisctl</span> ask <span class="cs">"Deploy now?"</span> --button yes=Deploy --button no=Later</div>
             </div>
-            <div style="border: 1px solid rgba(255, 255, 255, 0.1); background: #15191c; border-radius: 10px; overflow: hidden">
-              <div
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 7px;
-                  padding: 9px 12px;
-                  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-                "
-              >
-                <span style="width: 8px; height: 8px; border-radius: 100px; background: #ff5f57"></span
-                ><span style="width: 8px; height: 8px; border-radius: 100px; background: #febc2e"></span
-                ><span style="width: 8px; height: 8px; border-radius: 100px; background: #28c840"></span>
-                <span
-                  style="margin-left: 6px; font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 11.5px; color: #949ba4"
-                  >personal</span
-                >
+          </div>
+        </div>
+      </section>
+
+      <section class="sec" id="install">
+        <div class="wrap">
+          <div class="kick">Install</div>
+          <h2>macOS <em>and Linux.</em></h2>
+          <div class="platforms">
+            <div class="plat">
+              <span class="pk"><svg class="i"><use href="#i-laptop"></use></svg>macOS</span>
+              <h3>Apple Silicon, macOS 14 or later</h3>
+              <ol class="steps">
+                <li><span><b>Download the DMG</b> from the latest release. Drag Elis to Applications.</span></li>
+                <li><span><b>Clear the quarantine flag once.</b> The build is not notarized.<span class="cmd">xattr -dr com.apple.quarantine /Applications/Elis.app</span></span></li>
+                <li><span><b>Start Elis.</b> The first launch installs <span class="mono">elisctl</span>, the agent status hooks and the agent skill.</span></li>
+              </ol>
+              <a class="btn pri sm" href="https://github.com/NaikSoftware/elis/releases/latest"><svg class="i"><use href="#i-dl"></use></svg>Download for macOS</a>
+            </div>
+            <div class="pcol">
+              <div class="plat">
+                <span class="pk"><svg class="i"><use href="#i-monitor"></use></svg>Linux</span>
+                <h3>Qt6 / KDE</h3>
+                <p>The same workspaces, agent status and phone pairing. Build it from source.</p>
+                <a class="btn alt sm" href="https://github.com/NaikSoftware/elis/tree/master/linux"><svg class="i"><use href="#i-monitor"></use></svg>Download for Linux</a>
               </div>
-              <div
-                style="
-                  padding: 10px 12px;
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 11px;
-                  color: #6b727a;
-                  line-height: 1.7;
-                "
-              >
-                ▸ dotfiles &nbsp;·&nbsp; notes &nbsp;·&nbsp; scratch
+              <div class="plat">
+                <span class="pk"><svg class="i"><use href="#i-phone"></use></svg>Android</span>
+                <h3>Phone app</h3>
+                <p>The APK is in the same release. To pair, open the app menu ▸ Connect a Phone…</p>
+                <a class="btn alt sm" href="https://github.com/NaikSoftware/elis/releases/latest"><svg class="i"><use href="#i-dl"></use></svg>Download the APK</a>
               </div>
             </div>
           </div>
         </div>
-        </div>
-      </div>
+      </section>
 
-      <!-- ===== SHOWCASE ===== -->
-
-      <div style="max-width: 1140px; margin: 0 auto; padding: 80px 28px 40px">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 16px">
-          <figure
-            style="
-              margin: 0;
-              background: #22272b;
-              border: 1px solid rgba(255, 255, 255, 0.08);
-              border-radius: 14px;
-              overflow: hidden;
-            "
-          >
-            <img
-              src="/assets/screenshot-session-palette.webp"
-              alt="Session palette"
-              width="1324"
-              height="821"
-              loading="lazy"
-              style="display: block; width: 100%; height: auto; border-bottom: 1px solid rgba(255, 255, 255, 0.06)"
-            />
-            <figcaption style="padding: 16px 20px; font-size: 14px; color: #949ba4">
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: var(--accent, #6d82f3); font-size: 12px"
-                >⌃P</span
-              >
-              &nbsp;Fuzzy session switcher — jump to any session by name or directory.
-            </figcaption>
-          </figure>
-          <figure
-            style="
-              margin: 0;
-              background: #22272b;
-              border: 1px solid rgba(255, 255, 255, 0.08);
-              border-radius: 14px;
-              overflow: hidden;
-            "
-          >
-            <img
-              src="/assets/screenshot-agent-prompt.webp"
-              alt="Agent prompt"
-              width="1187"
-              height="696"
-              loading="lazy"
-              style="display: block; width: 100%; height: auto; border-bottom: 1px solid rgba(255, 255, 255, 0.06)"
-            />
-            <figcaption style="padding: 16px 20px; font-size: 14px; color: #949ba4">
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #f2b45c; font-size: 12px">blocked</span>
-              &nbsp;An agent's prompt mid-session, with attention glyphs on the rows that need you.
-            </figcaption>
-          </figure>
-          <figure
-            style="
-              margin: 0;
-              background: #22272b;
-              border: 1px solid rgba(255, 255, 255, 0.08);
-              border-radius: 14px;
-              overflow: hidden;
-            "
-          >
-            <img
-              src="/assets/screenshot-floating-overlay.webp"
-              alt="Floating overlay"
-              width="1187"
-              height="687"
-              loading="lazy"
-              style="display: block; width: 100%; height: auto; border-bottom: 1px solid rgba(255, 255, 255, 0.06)"
-            />
-            <figcaption style="padding: 16px 20px; font-size: 14px; color: #949ba4">
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #5ea1f2; font-size: 12px">overlay</span>
-              &nbsp;The yazi file manager in a floating panel over the active session, from one
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">command</span> line in
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">keymap.conf</span>.
-              <a href="/docs#extend" style="color: #6d82f3">Extend agterm</a>
-            </figcaption>
-          </figure>
-          <figure
-            style="
-              margin: 0;
-              background: #22272b;
-              border: 1px solid rgba(255, 255, 255, 0.08);
-              border-radius: 14px;
-              overflow: hidden;
-            "
-          >
-            <img
-              src="/assets/screenshot-attention.webp"
-              alt="Attention list"
-              width="1187"
-              height="685"
-              loading="lazy"
-              style="display: block; width: 100%; height: auto; border-bottom: 1px solid rgba(255, 255, 255, 0.06)"
-            />
-            <figcaption style="padding: 16px 20px; font-size: 14px; color: #949ba4">
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: var(--accent, #6d82f3); font-size: 12px"
-                >⌃⇧I</span
-              >
-              &nbsp;The attention list — jump to any session that needs you.
-            </figcaption>
-          </figure>
-          <figure
-            style="
-              margin: 0;
-              background: #22272b;
-              border: 1px solid rgba(255, 255, 255, 0.08);
-              border-radius: 14px;
-              overflow: hidden;
-            "
-          >
-            <img
-              src="/assets/screenshot-split-theme.webp"
-              alt="Split session with two color themes"
-              width="1187"
-              height="687"
-              loading="lazy"
-              style="display: block; width: 100%; height: auto; border-bottom: 1px solid rgba(255, 255, 255, 0.06)"
-            />
-            <figcaption style="padding: 16px 20px; font-size: 14px; color: #949ba4">
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: var(--accent, #6d82f3); font-size: 12px"
-                >⌘D</span
-              >
-              &nbsp;A split session, two panes side by side on different color themes.
-            </figcaption>
-          </figure>
-          <figure
-            style="
-              margin: 0;
-              background: #22272b;
-              border: 1px solid rgba(255, 255, 255, 0.08);
-              border-radius: 14px;
-              overflow: hidden;
-            "
-          >
-            <img
-              src="/assets/screenshot-diff-tui.webp"
-              alt="A full-screen diff TUI running in a session"
-              width="1187"
-              height="739"
-              loading="lazy"
-              style="display: block; width: 100%; height: auto; border-bottom: 1px solid rgba(255, 255, 255, 0.06)"
-            />
-            <figcaption style="padding: 16px 20px; font-size: 14px; color: #949ba4">
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: var(--accent, #6d82f3); font-size: 12px"
-                >tui</span
-              >
-              &nbsp;A full-screen terminal UI running inside a session.
-            </figcaption>
-          </figure>
-        </div>
-      </div>
-
-      <!-- ===== GENERAL-PURPOSE ===== -->
-      <div style="max-width: 1140px; margin: 0 auto; padding: 80px 28px 40px">
-        <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 48px 40px">
-          <div style="display: grid; grid-template-columns: 1fr; gap: 36px">
-            <div style="max-width: 64ch">
-              <div
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-size: 12px;
-                  letter-spacing: 0.16em;
-                  text-transform: uppercase;
-                  color: #f2b45c;
-                  margin-bottom: 16px;
-                "
-              >
-                // not just for agents
-              </div>
-              <h2
-                style="
-                  font-family: &quot;JetBrains Mono&quot;, monospace;
-                  font-weight: 800;
-                  font-size: clamp(26px, 3.8vw, 40px);
-                  letter-spacing: -0.025em;
-                  line-height: 1.06;
-                  margin: 0 0 18px;
-                "
-              >
-                A genuinely good terminal, first.
-              </h2>
-              <p style="font-size: 18px; line-height: 1.6; color: #bfbab0; margin: 0">
-                None of this is limited to agents. agterm is built on Ghostty's engine, the
-                same fast, GPU-accelerated rendering and VT parsing, and handles everyday multi-project work with nothing scripted
-                at all. The workspaces, palettes, and keyboard-first navigation help just as much whether you're running coding
-                agents or juggling a dozen shells.
-              </p>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px">
-              <div style="border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px; padding: 20px; background: #15191c">
-                <div
-                  style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 14px; color: #e6e1d7; margin-bottom: 7px"
-                >
-                  512 bundled themes
-                </div>
-                <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                  A live-preview picker applies each theme as you browse — Enter commits, Esc reverts.
-                </p>
-              </div>
-              <div style="border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px; padding: 20px; background: #15191c">
-                <div
-                  style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 14px; color: #e6e1d7; margin-bottom: 7px"
-                >
-                  Fully rebindable
-                </div>
-                <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                  Every action has a shortcut, and a kitty-flavored keymap.conf rebinds any of them.
-                </p>
-              </div>
-              <div style="border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px; padding: 20px; background: #15191c">
-                <div
-                  style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 14px; color: #e6e1d7; margin-bottom: 7px"
-                >
-                  Session persistence
-                </div>
-                <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                  Tree, names, directories, splits, and windows all restore on the next launch.
-                </p>
-              </div>
-              <div style="border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px; padding: 20px; background: #15191c">
-                <div
-                  style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 14px; color: #e6e1d7; margin-bottom: 7px"
-                >
-                  Splits, search &amp; scratch
-                </div>
-                <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                  Two shells side by side or top and bottom, in-terminal find, and a scratch overlay on any session.
-                </p>
-              </div>
-            </div>
+      <div class="wrap">
+        <footer class="foot">
+          <div class="fl">
+            <a href="docs.html">User guide</a>
+            <a href="commands.html">Commands</a>
+            <a href="https://github.com/NaikSoftware/elis">GitHub</a>
+            <a href="https://github.com/NaikSoftware/elis/issues">Issues</a>
+            <span>MIT</span>
           </div>
-        </div>
-      </div>
-
-      <!-- ===== SCRIPTING ===== -->
-      <div id="scripting" style="max-width: 1140px; margin: 0 auto; padding: 100px 28px 40px">
-        <div style="display: grid; grid-template-columns: 1fr; gap: 44px">
-          <div style="max-width: 60ch">
-            <div
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-size: 12px;
-                letter-spacing: 0.16em;
-                text-transform: uppercase;
-                color: #5ea1f2;
-                margin-bottom: 16px;
-              "
-            >
-              // agtermctl
-            </div>
-            <h2
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-weight: 800;
-                font-size: clamp(28px, 4vw, 44px);
-                letter-spacing: -0.025em;
-                line-height: 1.05;
-                margin: 0 0 18px;
-              "
-            >
-              Every ability, scriptable.
-            </h2>
-            <p style="font-size: 18px; line-height: 1.55; color: #bfbab0; margin: 0">
-              Almost everything you can do in agterm by hand,
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agtermctl</span> can do over a
-              local socket — no hidden UI-only actions. That turns the terminal into something you program around your own flow: a
-              script or an agent builds and steers its own layout, and you extend the app's behavior without ever touching its
-              source. What people have built on it lives in the
-              <a href="https://github.com/umputun/agterm/tree/master/cookbook" style="color: #6d82f3">cookbook</a>: complete
-              workflows, each a directory with a README and its scripts, written to be copied into your own setup and edited.
-            </p>
+          <div class="fr">
+            <span>Named after Elis, an Australian Shepherd.</span>
+            <span>Elis started as a fork of <a href="https://github.com/umputun/agterm">agterm</a> by <a href="https://github.com/umputun">@umputun</a>. Terminal engines: <a href="https://ghostty.org">libghostty</a> on macOS, <a href="https://konsole.kde.org">Konsole</a> on Linux.</span>
           </div>
-
-          <div
-            class="cap-grid"
-            style="
-              display: grid;
-              gap: 1px;
-              background: rgba(255, 255, 255, 0.07);
-              border: 1px solid rgba(255, 255, 255, 0.07);
-              border-radius: 14px;
-              overflow: hidden;
-            "
-          >
-            <div style="background: #15191c; padding: 22px 24px">
-              <div
-                style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e6e1d7; margin-bottom: 8px"
-              >
-                Sessions &amp; workspaces
-              </div>
-              <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                Create, rename, move, reorder, flag, focus, and step between them.
-              </p>
-            </div>
-            <div style="background: #15191c; padding: 22px 24px">
-              <div
-                style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e6e1d7; margin-bottom: 8px"
-              >
-                Input &amp; selection
-              </div>
-              <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                Type real keystrokes, run programs as the process, read a session's selection.
-              </p>
-            </div>
-            <div style="background: #15191c; padding: 22px 24px">
-              <div
-                style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e6e1d7; margin-bottom: 8px"
-              >
-                Overlays &amp; splits
-              </div>
-              <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                Open full or floating overlays, block on their exit status, split and scratch.
-              </p>
-            </div>
-            <div style="background: #15191c; padding: 22px 24px">
-              <div
-                style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e6e1d7; margin-bottom: 8px"
-              >
-                Windows &amp; layout
-              </div>
-              <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                List, open, rename, and target specific named windows and their trees.
-              </p>
-            </div>
-            <div style="background: #15191c; padding: 22px 24px">
-              <div
-                style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e6e1d7; margin-bottom: 8px"
-              >
-                Search, quick &amp; theme
-              </div>
-              <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                Drive in-terminal search, the quick terminal, font size, and the sidebar mode.
-              </p>
-            </div>
-            <div style="background: #15191c; padding: 22px 24px">
-              <div
-                style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e6e1d7; margin-bottom: 8px"
-              >
-                Status &amp; notify
-              </div>
-              <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                Set a session's agent status and post desktop notifications tied to it.
-              </p>
-            </div>
-            <div style="background: #15191c; padding: 22px 24px">
-              <div
-                style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e6e1d7; margin-bottom: 8px"
-              >
-                Capture output
-              </div>
-              <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                Read back the visible content or scrollback of any session or pane — feed it straight to a script or agent.
-              </p>
-            </div>
-            <div style="background: #15191c; padding: 22px 24px">
-              <div
-                style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13.5px; color: #e6e1d7; margin-bottom: 8px"
-              >
-                Reload config live
-              </div>
-              <p style="font-size: 13.5px; line-height: 1.55; color: #949ba4; margin: 0">
-                Apply keymap.conf, hooks.conf and ghostty.conf changes on the fly — no restart needed.
-              </p>
-            </div>
-          </div>
-
-          <div style="background: #15191c; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px; overflow: hidden">
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 13px 18px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-                background: rgba(255, 255, 255, 0.02);
-              "
-            >
-              <span style="width: 11px; height: 11px; border-radius: 100px; background: #ff5f57"></span>
-              <span style="width: 11px; height: 11px; border-radius: 100px; background: #febc2e"></span>
-              <span style="width: 11px; height: 11px; border-radius: 100px; background: #28c840"></span>
-              <span style="margin-left: 10px; font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 12px; color: #6b727a"
-                >build a layout from a script</span
-              >
-            </div>
-            <pre
-              style="
-                margin: 0;
-                padding: 24px 26px;
-                overflow-x: auto;
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-size: 14px;
-                line-height: 1.85;
-                color: #e6e1d7;
-              "
-            ><span style="color:#6b727a;"># create a workspace and open a session in it</span>
-<span style="color:var(--accent,#6d82f3);">ws</span>=$(agtermctl workspace new work)
-agtermctl session new --workspace <span style="color:#f2b45c;">"$ws"</span> --cwd ~/src/agterm
-
-<span style="color:#6b727a;"># inject a command into a session by id prefix</span>
-agtermctl session type --target 9f3c <span style="color:#f2b45c;">$'make test\n'</span>
-
-<span style="color:#6b727a;"># run a diff review in a floating overlay, block for its status</span>
-agtermctl session overlay open <span style="color:#f2b45c;">"revdiff HEAD~3"</span> --block
-
-<span style="color:#6b727a;"># flag this session for your attention when it finishes</span>
-agtermctl session status completed --auto-reset \
-  --target <span style="color:#5ea1f2;">"$AGTERM_SESSION_ID"</span></pre>
-          </div>
-          <p style="font-size: 16px; line-height: 1.6; color: #949ba4; margin: 0; max-width: 64ch">
-            Bind any of it to a key or the action palette through
-            <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">keymap.conf</span> — with the focused
-            session's directory and selection passed in as tokens. Between the socket and custom commands, you shape the terminal
-            around <em style="color: #cbc6bc; font-style: normal">your</em> workflow instead of adapting to the app's.
-          </p>
-          <a
-            href="/docs#agtermctl"
-            style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 14px; color: #5ea1f2; justify-self: start"
-            class="hv4"
-            >full agtermctl reference →</a
-          >
-        </div>
-      </div>
-
-      <!-- ===== INSTALL ===== -->
-      <div id="install" style="max-width: 1140px; margin: 0 auto; padding: 100px 28px 40px">
-        <div
-          style="
-            font-family: &quot;JetBrains Mono&quot;, monospace;
-            font-size: 12px;
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-            color: var(--accent, #6d82f3);
-            margin-bottom: 16px;
-          "
-        >
-          // install
-        </div>
-        <h2
-          style="
-            font-family: &quot;JetBrains Mono&quot;, monospace;
-            font-weight: 800;
-            font-size: clamp(28px, 4vw, 44px);
-            letter-spacing: -0.025em;
-            line-height: 1.05;
-            margin: 0 0 44px;
-          "
-        >
-          Get agterm.
-        </h2>
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px">
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 28px">
-            <div
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-size: 13px;
-                color: var(--accent, #6d82f3);
-                margin-bottom: 14px;
-              "
-            >
-              Homebrew
-            </div>
-            <div
-              style="
-                background: #191d20;
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 9px;
-                padding: 14px 16px;
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-size: 13.5px;
-                color: #e6e1d7;
-                overflow-x: auto;
-              "
-            >
-              <span style="color: var(--accent, #6d82f3)">$ </span>brew install --cask umputun/apps/agterm
-            </div>
-            <p style="font-size: 14px; line-height: 1.6; color: #949ba4; margin: 16px 0 0">
-              The cask also installs the
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agtermctl</span> CLI, so cask users
-              shouldn't run the in-app installer too.
-            </p>
-          </div>
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 28px">
-            <div
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-size: 13px;
-                color: var(--accent, #6d82f3);
-                margin-bottom: 14px;
-              "
-            >
-              Direct download
-            </div>
-            <p style="font-size: 14px; line-height: 1.6; color: #949ba4; margin: 0 0 16px">
-              Grab the latest <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">.dmg</span> from
-              releases, open it, and drag
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #e6e1d7">agterm.app</span> into
-              /Applications.
-            </p>
-            <a
-              href="https://github.com/umputun/agterm/releases"
-              style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 13px; color: #5ea1f2"
-              class="hv4"
-              >releases page →</a
-            >
-          </div>
-          <div style="background: #22272b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 28px">
-            <div
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-size: 13px;
-                color: var(--accent, #6d82f3);
-                margin-bottom: 14px;
-              "
-            >
-              Build from source
-            </div>
-            <div
-              style="
-                background: #191d20;
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 9px;
-                padding: 14px 16px;
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-size: 13.5px;
-                color: #e6e1d7;
-                line-height: 1.8;
-                overflow-x: auto;
-              "
-            >
-              <span style="color: var(--accent, #6d82f3)">$ </span>scripts/setup.sh<br /><span
-                style="color: var(--accent, #6d82f3)"
-                >$ </span
-              >scripts/run.sh
-            </div>
-            <p style="font-size: 14px; line-height: 1.6; color: #949ba4; margin: 16px 0 0">
-              Requires macOS 14+, Xcode 26 with xcodegen, and Homebrew.
-            </p>
-          </div>
-        </div>
-        <p style="font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 12.5px; color: #6b727a; margin: 28px 0 0">
-          Signed and notarized for Apple Silicon (arm64) Macs on macOS 14+ — opens without any Gatekeeper workaround.
-        </p>
-      </div>
-
-      <!-- ===== CTA ===== -->
-      <div style="max-width: 1140px; margin: 0 auto; padding: 80px 28px 60px">
-        <div
-          style="
-            border: 1px solid rgba(109, 130, 243, 0.25);
-            background: linear-gradient(180deg, rgba(109, 130, 243, 0.06), rgba(109, 130, 243, 0.01));
-            border-radius: 18px;
-            padding: 56px 40px;
-            text-align: center;
-          "
-        >
-          <h2
-            style="
-              font-family: &quot;JetBrains Mono&quot;, monospace;
-              font-weight: 800;
-              font-size: clamp(26px, 3.6vw, 40px);
-              letter-spacing: -0.025em;
-              margin: 0 0 16px;
-            "
-          >
-            A terminal you can pick up and drive.
-          </h2>
-          <p style="font-size: 17px; color: #bfbab0; max-width: 48ch; margin: 0 auto 32px; line-height: 1.55">
-            Open source. Native. Built on Ghostty's terminal engine.
-          </p>
-          <div style="display: flex; gap: 14px; justify-content: center; flex-wrap: wrap">
-            <a
-              href="https://github.com/umputun/agterm"
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-size: 15px;
-                font-weight: 600;
-                color: #191d20;
-                background: var(--accent, #6d82f3);
-                padding: 14px 24px;
-                border-radius: 9px;
-              "
-              class="hv5"
-              >View on GitHub ↗</a
-            >
-            <a
-              href="/docs"
-              style="
-                font-family: &quot;JetBrains Mono&quot;, monospace;
-                font-size: 15px;
-                font-weight: 600;
-                color: #e6e1d7;
-                border: 1px solid rgba(255, 255, 255, 0.18);
-                padding: 14px 24px;
-                border-radius: 9px;
-              "
-              class="hv6"
-              >Read the docs</a
-            >
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== FOOTER ===== -->
-      <div style="border-top: 1px solid rgba(255, 255, 255, 0.07); background: #131619">
-        <div
-          style="
-            max-width: 1140px;
-            margin: 0 auto;
-            padding: 44px 28px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 28px;
-            justify-content: space-between;
-            align-items: flex-start;
-          "
-        >
-          <div style="max-width: 34ch">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px">
-              <svg width="24" height="24" viewBox="0 0 100 100" fill="none" style="display: block; border-radius: 22%">
-                <rect width="100" height="100" rx="24" fill="#1e40d8"></rect>
-                <rect x="26" y="26" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
-                <rect x="54" y="26" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
-                <rect x="26" y="54" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
-                <rect x="54" y="54" width="20" height="20" rx="5" stroke="#fff" stroke-width="5"></rect>
-              </svg>
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; font-weight: 700; font-size: 15px">agterm</span>
-            </div>
-            <p style="font-size: 13.5px; color: #6b727a; line-height: 1.6; margin: 0">
-              Terminal for agentic flow. Embeds libghostty, the terminal engine from
-              <a href="https://ghostty.org" style="color: #949ba4" class="hv4">Ghostty</a> (MIT).
-            </p>
-          </div>
-          <div
-            style="
-              display: flex;
-              gap: 56px;
-              flex-wrap: wrap;
-              font-family: &quot;JetBrains Mono&quot;, monospace;
-              font-size: 13.5px;
-            "
-          >
-            <div style="display: flex; flex-direction: column; gap: 11px">
-              <span style="color: #4a5158; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase">Product</span>
-              <a href="#features" style="color: #949ba4" class="hv7">Features</a>
-              <a href="#scripting" style="color: #949ba4" class="hv7">Scripting</a>
-              <a href="#install" style="color: #949ba4" class="hv7">Install</a>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 11px">
-              <span style="color: #4a5158; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase">Docs</span>
-              <a href="/docs#install" style="color: #949ba4" class="hv7">Getting started</a>
-              <a href="/docs#agtermctl" style="color: #949ba4" class="hv7">agtermctl</a>
-              <a href="/docs#keymap" style="color: #949ba4" class="hv7">Keymap</a>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 11px">
-              <span style="color: #4a5158; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase">Project</span>
-              <a href="https://github.com/umputun/agterm" style="color: #949ba4" class="hv7">GitHub</a>
-              <a href="https://github.com/umputun/agterm/issues" style="color: #949ba4" class="hv7">Issues</a>
-              <a href="https://github.com/umputun/agterm/discussions" style="color: #949ba4" class="hv7">Discussions</a>
-            </div>
-          </div>
-        </div>
-        <div style="max-width: 1140px; margin: 0 auto; padding: 0 28px 44px">
-          <div
-            style="
-              border-top: 1px solid rgba(255, 255, 255, 0.05);
-              padding-top: 20px;
-              font-family: &quot;JetBrains Mono&quot;, monospace;
-              font-size: 12px;
-              color: #4a5158;
-              display: flex;
-              flex-wrap: wrap;
-              gap: 8px;
-              justify-content: space-between;
-            "
-          >
-            <span>agterm.com · terminal for agentic flow</span
-            ><span>by <a href="https://github.com/umputun" style="color: #6b727a" class="hv4">Umputun</a></span>
-          </div>
-        </div>
+        </footer>
       </div>
     </div>
-    <script>
-      function cp(b) {
-        navigator.clipboard.writeText("brew install --cask umputun/apps/agterm").then(function () {
-          var t = b.textContent;
-          b.textContent = "copied";
-          setTimeout(function () {
-            b.textContent = t;
-          }, 1600);
-        });
-      }
-    </script>
   </body>
 </html>

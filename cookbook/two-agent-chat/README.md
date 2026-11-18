@@ -1,12 +1,12 @@
 # Two-agent chat
 
-Let Claude Code and Codex hold a conversation with each other in one agterm split.
+Let Claude Code and Codex hold a conversation with each other in one Elis split.
 
 Author: [@umputun](https://github.com/umputun)
 
 *A simplified version of the setup I run myself, cut down to the part worth publishing. Tested for real, with two agents talking to each other through it, but this is a first version and it will be updated as it gets used.*
 
-*[two-agent-mailbox-chat](../two-agent-mailbox-chat/) does the same job through agterm's pane mailboxes instead of typing into the composer, and is the recommended replacement.*
+*[two-agent-mailbox-chat](../two-agent-mailbox-chat/) does the same job through Elis's pane mailboxes instead of typing into the composer, and is the recommended replacement.*
 
 ## What it does
 
@@ -20,7 +20,7 @@ You start it, and you have to name the other agent for the skill to fire. Say "w
 
 ## Requirements
 
-agterm 0.24.0 or later, which added `surface cursor`. The recipe refuses to type anything without it. Python 3.10 or later. Claude Code and Codex, each already installed and runnable.
+Elis 0.24.0 or later, which added `surface cursor`. The recipe refuses to type anything without it. Python 3.10 or later. Claude Code and Codex, each already installed and runnable.
 
 ## Setup
 
@@ -35,9 +35,9 @@ agterm 0.24.0 or later, which added `surface cursor`. The recipe refuses to type
    prefix_rule(pattern=["peer-chat.py", "--to", "claude", "--message-file"], decision="allow")
    ```
 
-6. Start Codex so it can tell which pane it is in. Codex strips `AGTERM_SESSION_ID` from tool subprocesses, so start it with `codex -c "shell_environment_policy.set.AGTERM_SESSION_ID=\"$AGTERM_SESSION_ID\""` to copy the current pane's session id into every tool command, adding your normal Codex options to the same command. Without this injection the script can still resolve one matching repository checkout, but it refuses when several sessions share that checkout. If you launch Codex through a wrapper, put the flag in the wrapper and it applies to every pane.
+6. Start Codex so it can tell which pane it is in. Codex strips `ELIS_SESSION_ID` from tool subprocesses, so start it with `codex -c "shell_environment_policy.set.ELIS_SESSION_ID=\"$ELIS_SESSION_ID\""` to copy the current pane's session id into every tool command, adding your normal Codex options to the same command. Without this injection the script can still resolve one matching repository checkout, but it refuses when several sessions share that checkout. If you launch Codex through a wrapper, put the flag in the wrapper and it applies to every pane.
 
-If your `agtermctl` is not on `PATH` under that name, set `AGTERMCTL` to its full path; the script reads that variable and falls back to `agtermctl`.
+If your `elisctl` is not on `PATH` under that name, set `ELISCTL` to its full path; the script reads that variable and falls back to `elisctl`.
 
 ## Usage
 
@@ -51,7 +51,7 @@ your message as one paragraph
 MSG
 ```
 
-`--to claude` sends the other way. Either agent can sit in either pane. The script looks for the target on its usual side first, Claude Code on the left and Codex on the right, and takes the other side only when the usual one runs the other agent, since anything else there could be the sender. Agents are recognised by name in the command lines agterm reports. When the usual side names both, as a launch prompt that mentions the other agent does, it gives way only if the program it runs is plainly the other agent, and otherwise keeps the send as before. In a Claude Code and Codex pair, a launch command that still misleads the script makes the send fail its prompt check after the retries instead of typing. `--session` names a session explicitly; without it the script uses `AGTERM_SESSION_ID` when the caller has one, and otherwise looks for a single session whose target pane is running the expected agent. An explicit session is found across open windows, while `--window` constrains the lookup. The resolved window id stays pinned for the full send.
+`--to claude` sends the other way. Either agent can sit in either pane. The script looks for the target on its usual side first, Claude Code on the left and Codex on the right, and takes the other side only when the usual one runs the other agent, since anything else there could be the sender. Agents are recognised by name in the command lines Elis reports. When the usual side names both, as a launch prompt that mentions the other agent does, it gives way only if the program it runs is plainly the other agent, and otherwise keeps the send as before. In a Claude Code and Codex pair, a launch command that still misleads the script makes the send fail its prompt check after the retries instead of typing. `--session` names a session explicitly; without it the script uses `ELIS_SESSION_ID` when the caller has one, and otherwise looks for a single session whose target pane is running the expected agent. An explicit session is found across open windows, while `--window` constrains the lookup. The resolved window id stays pinned for the full send.
 
 Claude Code normally sends to Codex with Return, the key Codex uses for steering an active turn. Codex can still queue it when its current state cannot accept a steer. Add `--queue` only for an informational note that can wait until the turn ends:
 
@@ -75,7 +75,7 @@ peer-chat.py --to claude --message-file peer-chat-codex-a91f.txt
 
 This form matches the two Codex execution rules in *Setup*. A heredoc uses shell redirection, so Codex evaluates the whole request as a shell wrapper and cannot match the inner command.
 
-Before every send the script confirms that the pane it is about to type into really is running the agent named by `--to`, reading the command from agterm's own view of the pane. It looks for `claude` and `codex`. If you start an agent through a wrapper script, that name is what agterm sees instead, and the send is refused until you say so:
+Before every send the script confirms that the pane it is about to type into really is running the agent named by `--to`, reading the command from Elis's own view of the pane. It looks for `claude` and `codex`. If you start an agent through a wrapper script, that name is what Elis sees instead, and the send is refused until you say so:
 
 ```sh
 peer-chat.py --to claude --target-command cld --stdin <<'MSG'
@@ -89,11 +89,11 @@ On success it prints `{"sent": N}` and exits 0. Any refusal or failure exits 1 w
 
 ## How it works
 
-The message is typed into the other pane's composer through `agtermctl session type --stdin`, which treats a newline as Return. The script collapses the message to one paragraph and packs words into UTF-8-safe events. Each body event ends with a short marker absent from the message, and the complete event stays within 197 bytes. A live boundary test accepted a 1,627-byte event and began losing 1,022-byte windows at 1,663 bytes; the smaller cap also keeps one event visible in a narrow Claude composer. After every event the script waits for the marked composer to settle, checks the newly visible tail against that event and an overlap from the preceding text, backspaces the marker, and confirms its removal. The comparison permits a source space to become a terminal wrap, so it still works after the opening text has scrolled out of view. If a clipped periodic tail could represent either complete input or a truncated current event, the script refuses the send. The final unmarked body must stay settled for 500 ms before the script sends the submit key separately and confirms that the body cleared.
+The message is typed into the other pane's composer through `elisctl session type --stdin`, which treats a newline as Return. The script collapses the message to one paragraph and packs words into UTF-8-safe events. Each body event ends with a short marker absent from the message, and the complete event stays within 197 bytes. A live boundary test accepted a 1,627-byte event and began losing 1,022-byte windows at 1,663 bytes; the smaller cap also keeps one event visible in a narrow Claude composer. After every event the script waits for the marked composer to settle, checks the newly visible tail against that event and an overlap from the preceding text, backspaces the marker, and confirms its removal. The comparison permits a source space to become a terminal wrap, so it still works after the opening text has scrolled out of view. If a clipped periodic tail could represent either complete input or a truncated current event, the script refuses the send. The final unmarked body must stay settled for 500 ms before the script sends the submit key separately and confirms that the body cleared.
 
 Codex 0.162.1 draws an `↑` in the right margin of the first visible composer row when earlier rows have scrolled out of view. The screen read-back includes that decoration, so body verification and cleanup also try the row without its final arrow. That reading is accepted only for the first of multiple Codex rows and only when the remaining text matches after a hidden source prefix. The literal reading remains available for arrows in the message.
 
-Before the body request, the script confirms that the target pane runs the expected agent and contains a recognisable composer. `agtermctl surface cursor` must report the caret at column 2. Codex also requires its `Ask Codex to do anything` placeholder because a full-width draft can wrap its caret onto a reserved empty row at column 2. Claude's composer content is not checked before typing: its free-form prompt suggestions look like drafts in plain screen text. Cleanup and post-submit acceptance retain their known-empty content checks: a blank Claude prompt, either shipped queue hint, the `Try "..."` startup suggestion, or Codex's placeholder. It checks the target process once more immediately before each write. The agterm window is fixed before these checks, so changing the frontmost window during a send cannot redirect or strand later pieces. A changed placeholder can still block Codex before typing or prevent either agent from confirming cleanup or submission until the recipe is updated.
+Before the body request, the script confirms that the target pane runs the expected agent and contains a recognisable composer. `elisctl surface cursor` must report the caret at column 2. Codex also requires its `Ask Codex to do anything` placeholder because a full-width draft can wrap its caret onto a reserved empty row at column 2. Claude's composer content is not checked before typing: its free-form prompt suggestions look like drafts in plain screen text. Cleanup and post-submit acceptance retain their known-empty content checks: a blank Claude prompt, either shipped queue hint, the `Try "..."` startup suggestion, or Codex's placeholder. It checks the target process once more immediately before each write. The Elis window is fixed before these checks, so changing the frontmost window during a send cannot redirect or strand later pieces. A changed placeholder can still block Codex before typing or prevent either agent from confirming cleanup or submission until the recipe is updated.
 
 **Why the body is split and submit is separate:** Claude Code can lose the middle of an oversized text event, and it may absorb Return when that key reaches its parser in the same burst as the body. Bounded, separately observed events avoid the reproduced loss; the temporary marker makes each event change observable; the visible-tail comparison rejects visible mismatches and ambiguous clipped periodic alignments. The final settled-state interval makes the following Return distinct even when rendering is slow.
 
@@ -105,13 +105,13 @@ When the conversation reaches shared files, the agent whose pane received your i
 
 Sending requires exactly one of `--stdin` and `--message-file NAME`. Both keep the message text out of the process list and protect its punctuation from the shell. `--prepare-message NAME` creates the named file with mode 0600 in a per-user directory with mode 0700. A file-backed send resolves and checks the target session before opening the file. It accepts only a reserved basename and rejects links and non-regular files before claiming the file by renaming it to a per-process name, so a second send of the same name finds nothing. Files accessible to other users and bodies over 64 KiB are rejected after the claim and deleted.
 
-The recipe deliberately does not start agents. Deciding that a pane is safe to type a startup command into means guessing from what the pane has drawn, and agterm reports no foreground process for both an idle shell and a program that hides its argv. Every prompt looks different, so that guess is wrong on somebody's machine, and being wrong means typing a command into whatever holds focus.
+The recipe deliberately does not start agents. Deciding that a pane is safe to type a startup command into means guessing from what the pane has drawn, and Elis reports no foreground process for both an idle shell and a program that hides its argv. Every prompt looks different, so that guess is wrong on somebody's machine, and being wrong means typing a command into whatever holds focus.
 
 ## Limits
 
 **The script types into another pane's composer.** Once a Claude composer is recognised, the pre-write gate uses only the caret: any draft at column 2 passes, including one whose caret was moved to the start or wrapped onto that column. The later checks reject visible foreign text, but cannot prove that no draft remains outside the visible composer. Codex requires its fixed `Ask Codex to do anything` placeholder as well as column 2; a draft matching that string can imitate the empty state. Do not leave half-written input in a pane you are about to receive a message in.
 
-**Short dialog races remain.** A dialog already on screen stops the send: the pane must contain a recognisable composer with its caret at column 2 before a single character goes anywhere. A chooser or trust prompt that appears during a body write could receive text; the next composer check withholds submit, but cleanup backspaces could still affect the dialog. The visible composer state must remain unchanged from the final settled chunk immediately before Return. A chooser that appears after that check and before the separate Return request can still receive the key because agterm has no conditional type operation.
+**Short dialog races remain.** A dialog already on screen stops the send: the pane must contain a recognisable composer with its caret at column 2 before a single character goes anywhere. A chooser or trust prompt that appears during a body write could receive text; the next composer check withholds submit, but cleanup backspaces could still affect the dialog. The visible composer state must remain unchanged from the final settled chunk immediately before Return. A chooser that appears after that check and before the separate Return request can still receive the key because Elis has no conditional type operation.
 
 **Do not type in the receiving pane during a send.** Recovery progressively checks that every visible row is one contiguous part of the script's attempted body before each bounded backspace batch. This permits cleanup after the opening has scrolled away and stops when newly revealed or appended text is foreign. A keystroke arriving after that ownership check but before its backspaces can still be erased.
 
@@ -127,7 +127,7 @@ The recipe deliberately does not start agents. Deciding that a pane is safe to t
 
 **Scroll-indicator recognition is limited to Codex's top `↑`.** Other rows and the bottom `↓` are compared literally. Plain screen text cannot distinguish a margin indicator from an identical extra arrow typed at that position; the source comparison constrains recognition but cannot prove which one was drawn.
 
-**Rendered text cannot prove every source character.** Agterm exposes the terminal's plain screen text, which omits an ASCII space consumed at a visual line wrap. A correctly wrapped space and a missing space at that exact boundary therefore look identical to the script. The 197-byte event cap avoids the reproduced oversized-event loss, but the read-back is not a byte-level receipt from the agent's editor.
+**Rendered text cannot prove every source character.** Elis exposes the terminal's plain screen text, which omits an ASCII space consumed at a visual line wrap. A correctly wrapped space and a missing space at that exact boundary therefore look identical to the script. The 197-byte event cap avoids the reproduced oversized-event loss, but the read-back is not a byte-level receipt from the agent's editor.
 
 **Only a confirmed pre-body refusal is retried.** Nothing has been typed at that point, so trying again is safe. Once the body request starts, any failure stops on the first occurrence. Before submission, the script backspaces the text it owns and reports whether the empty composer was restored; it never sends an interrupt key to clear a busy agent. A failure during or after the submit request is ambiguous and retrying could duplicate the message.
 
@@ -135,15 +135,15 @@ The recipe deliberately does not start agents. Deciding that a pane is safe to t
 
 The two directions are not symmetric. Codex exposes both steering Return and queued Tab, while Claude Code exposes only its normal Return submission and manages busy input itself. Use `--queue` only for a Codex-bound note that needs no action during the current turn.
 
-The target pane is chosen once per send, from agterm's view of which pane runs the agent named by `--to`, and every later read and write goes to that pane alone. If the agents swap panes during a send, the next check refuses instead of following the agent to the other side. A session with no split is refused outright, before any pane is read: without that check a send would still pass after the other pane had closed, which is no longer a two-agent layout at all.
+The target pane is chosen once per send, from Elis's view of which pane runs the agent named by `--to`, and every later read and write goes to that pane alone. If the agents swap panes during a send, the next check refuses instead of following the agent to the other side. A session with no split is refused outright, before any pane is read: without that check a send would still pass after the other pane had closed, which is no longer a two-agent layout at all.
 
-The other side is taken only when the usual one runs the other agent under its own command, so a wrapped peer on the usual side needs `PEER_CHAT_CLAUDE_COMMAND` or `PEER_CHAT_CODEX_COMMAND` for a reversed split to be recognised. Two agents of the same kind are not a supported pair: agterm addresses a pane by its position, and with the same agent on both sides the script sends to the usual side and has no way to tell a swapped split from the original.
+The other side is taken only when the usual one runs the other agent under its own command, so a wrapped peer on the usual side needs `PEER_CHAT_CLAUDE_COMMAND` or `PEER_CHAT_CODEX_COMMAND` for a reversed split to be recognised. Two agents of the same kind are not a supported pair: Elis addresses a pane by its position, and with the same agent on both sides the script sends to the usual side and has no way to tell a swapped split from the original.
 
-**Codex cannot see which pane it is in unless you tell it at launch.** It strips `AGTERM_SESSION_ID` from every tool subprocess, and nothing inside its sandbox recovers the value: reading a parent process is blocked outright. Without the launch injection in *Setup*, the script falls back to matching the git checkout, and every worktree of one repository maps to the same checkout, so two sessions open on the same repository are indistinguishable and the send refuses. That refusal is the correct outcome, not a bug, but it is why the injection is worth doing once in your Codex launcher instead of remembering per session.
+**Codex cannot see which pane it is in unless you tell it at launch.** It strips `ELIS_SESSION_ID` from every tool subprocess, and nothing inside its sandbox recovers the value: reading a parent process is blocked outright. Without the launch injection in *Setup*, the script falls back to matching the git checkout, and every worktree of one repository maps to the same checkout, so two sessions open on the same repository are indistinguishable and the send refuses. That refusal is the correct outcome, not a bug, but it is why the injection is worth doing once in your Codex launcher instead of remembering per session.
 
-Session resolution never guesses. With `AGTERM_SESSION_ID` or `--session` it searches open windows for that session, pins its owning window and checks the target pane; `--window` restricts this to one window. Without a session id, it matches only sessions in the same checkout as the caller, and refuses on none or several instead of picking a session elsewhere that happens to have the right shape. `--session` takes a full id or any unique prefix of one.
+Session resolution never guesses. With `ELIS_SESSION_ID` or `--session` it searches open windows for that session, pins its owning window and checks the target pane; `--window` restricts this to one window. Without a session id, it matches only sessions in the same checkout as the caller, and refuses on none or several instead of picking a session elsewhere that happens to have the right shape. `--session` takes a full id or any unique prefix of one.
 
-An agent whose launcher leaves no stable name in the pane's command line cannot be targeted at all. `--target-command` matches a name that agterm can actually see, so a wrapper that execs through something anonymous stays unsupported and every send to it refuses.
+An agent whose launcher leaves no stable name in the pane's command line cannot be targeted at all. `--target-command` matches a name that Elis can actually see, so a wrapper that execs through something anonymous stays unsupported and every send to it refuses.
 
 A reply is not promised. An agent's model can decline to answer a message that arrived perfectly well, and nothing on either side reports that. If an exchange goes quiet, read the other pane instead of waiting.
 

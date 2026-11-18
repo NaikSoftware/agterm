@@ -2515,7 +2515,7 @@ class WindowResolutionTests(unittest.TestCase):
 
     def test_blank_environment_window_does_not_fall_back_to_active(self) -> None:
         with (
-            patch.dict(os.environ, {"AGTERM_WINDOW_ID": ""}, clear=True),
+            patch.dict(os.environ, {"ELIS_WINDOW_ID": ""}, clear=True),
             self.assertRaisesRegex(RuntimeError, "window selector is empty"),
         ):
             RESOLVE_WINDOW(None)
@@ -2535,7 +2535,7 @@ class WindowResolutionTests(unittest.TestCase):
         ctl = Mock(return_value=json.dumps(payload))
 
         with (
-            patch.dict(os.environ, {"AGTERM_WINDOW_ID": "environment-window"}),
+            patch.dict(os.environ, {"ELIS_WINDOW_ID": "environment-window"}),
             patch.dict(RESOLVE_WINDOW.__globals__, {"ctl": ctl}),
         ):
             self.assertEqual(
@@ -2609,7 +2609,7 @@ class WindowResolutionTests(unittest.TestCase):
 
         with (
             patch.dict(
-                os.environ, {"AGTERM_SESSION_ID": "session-full"}, clear=True
+                os.environ, {"ELIS_SESSION_ID": "session-full"}, clear=True
             ),
             patch.dict(RESOLVE_TARGET.__globals__, replacements),
         ):
@@ -2634,7 +2634,7 @@ class WindowResolutionTests(unittest.TestCase):
 
         with (
             patch.dict(
-                os.environ, {"AGTERM_WINDOW_ID": "window-a"}, clear=True
+                os.environ, {"ELIS_WINDOW_ID": "window-a"}, clear=True
             ),
             patch.dict(RESOLVE_TARGET.__globals__, replacements),
         ):
@@ -2646,7 +2646,7 @@ class WindowResolutionTests(unittest.TestCase):
         resolve_window.assert_not_called()
 
     def test_blank_session_selectors_do_not_fall_back(self) -> None:
-        for explicit, environment in (("", {}), (None, {"AGTERM_SESSION_ID": ""})):
+        for explicit, environment in (("", {}), (None, {"ELIS_SESSION_ID": ""})):
             with (
                 self.subTest(explicit=explicit, environment=environment),
                 patch.dict(os.environ, environment, clear=True),
@@ -2718,7 +2718,7 @@ class PaneResolutionTests(unittest.TestCase):
             "open_window_ids": Mock(return_value=["window-a"]),
             "tree": Mock(return_value={"sessions": [node]}),
         }
-        variables = {"AGTERM_SESSION_ID": "session-full", **(environment or {})}
+        variables = {"ELIS_SESSION_ID": "session-full", **(environment or {})}
 
         with (
             patch.dict(os.environ, variables, clear=True),

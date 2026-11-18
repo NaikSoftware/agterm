@@ -14,7 +14,7 @@ The right pane stays available while the command runs. Escape in the picker canc
 
 ## Requirements
 
-- agterm **0.26.0 or later**, which added the tree's `foregroundShell` field used before relaunching.
+- Elis **0.26.0 or later**, which added the tree's `foregroundShell` field used before relaunching.
   From 0.26.2, progress panels can stay over the left pane. If pane placement is unavailable or the
   pane is hidden, the script falls back to a session-wide panel.
 - macOS, Python **3.10 or later**, `jq`, and the system `bash`, `ps`, `env`, and `cat` commands.
@@ -32,9 +32,9 @@ The right pane stays available while the command runs. Escape in the picker canc
 1. Copy both scripts into the same directory:
 
    ```bash
-   mkdir -p ~/.config/agterm/scripts
-   cp claude-account-swap.py pane-map-hook.sh ~/.config/agterm/scripts/
-   chmod +x ~/.config/agterm/scripts/{claude-account-swap.py,pane-map-hook.sh}
+   mkdir -p ~/.config/elis/scripts
+   cp claude-account-swap.py pane-map-hook.sh ~/.config/elis/scripts/
+   chmod +x ~/.config/elis/scripts/{claude-account-swap.py,pane-map-hook.sh}
    ```
 
 2. Sign into each account using Claude's own config directory selection. For example, run these
@@ -49,7 +49,7 @@ The right pane stays available while the command runs. Escape in the picker canc
    configuration, including its settings and transcript directory; the recipe does not change
    credentials or log you in. See Claude Code's [configuration directory reference](https://code.claude.com/docs/en/claude-directory).
 
-3. Create `~/.config/agterm/claude-accounts.json` with the directories you just configured:
+3. Create `~/.config/elis/claude-accounts.json` with the directories you just configured:
 
    ```json
    [
@@ -68,10 +68,10 @@ The right pane stays available while the command runs. Escape in the picker canc
    ```json
    {
      "hooks": {
-       "SessionStart": [{"hooks": [{"type": "command", "command": "\"$HOME/.config/agterm/scripts/pane-map-hook.sh\""}]}],
-       "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "\"$HOME/.config/agterm/scripts/pane-map-hook.sh\""}]}],
-       "PostToolUse": [{"hooks": [{"type": "command", "command": "\"$HOME/.config/agterm/scripts/pane-map-hook.sh\""}]}],
-       "Stop": [{"hooks": [{"type": "command", "command": "\"$HOME/.config/agterm/scripts/pane-map-hook.sh\""}]}]
+       "SessionStart": [{"hooks": [{"type": "command", "command": "\"$HOME/.config/elis/scripts/pane-map-hook.sh\""}]}],
+       "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "\"$HOME/.config/elis/scripts/pane-map-hook.sh\""}]}],
+       "PostToolUse": [{"hooks": [{"type": "command", "command": "\"$HOME/.config/elis/scripts/pane-map-hook.sh\""}]}],
+       "Stop": [{"hooks": [{"type": "command", "command": "\"$HOME/.config/elis/scripts/pane-map-hook.sh\""}]}]
      }
    }
    ```
@@ -81,21 +81,21 @@ The right pane stays available while the command runs. Escape in the picker canc
    writes `/tmp/claude/panes/SESSION.PANE`, remove that recording block: it would erase the process
    metadata this hook adds. Readers that use only the first line remain compatible.
 
-5. Add this palette command to `~/.config/agterm/keymap.conf`:
+5. Add this palette command to `~/.config/elis/keymap.conf`:
 
    ```text
-   command "Swap Claude Account" ~/.config/agterm/scripts/claude-account-swap.py
+   command "Swap Claude Account" ~/.config/elis/scripts/claude-account-swap.py
    ```
 
 6. Reload the keymap:
 
    ```bash
-   agtermctl keymap reload
+   elisctl keymap reload
    ```
 
 7. Restart Claude directly in the left pane with the chosen `CLAUDE_CONFIG_DIR` so its new hooks run.
 
-Optional overrides are `AGTERMCTL`, `CLAUDE_BIN`, and `CODEX_BIN` for executable paths;
+Optional overrides are `ELISCTL`, `CLAUDE_BIN`, and `CODEX_BIN` for executable paths;
 `CLAUDE_SWAP_MODEL` for the summarizing model; and `PANE_MAP_DIR` for the map directory, default
 `/tmp/claude/panes`. Set `PANE_MAP_DIR` in both the hook's environment and the custom command's
 environment. Executable overrides are single paths or names, without arguments. Custom commands
@@ -127,7 +127,7 @@ After the replacement acknowledges the context, tell it what to do next. The sum
 it to wait; it does not authorize the unfinished work.
 
 For a check that neither opens a picker nor calls a model, run
-`~/.config/agterm/scripts/claude-account-swap.py --dry-run` from the sibling pane. It checks the
+`~/.config/elis/scripts/claude-account-swap.py --dry-run` from the sibling pane. It checks the
 left pane's map and input gates and prints the source and available destinations.
 
 ## How it works
@@ -165,7 +165,7 @@ account's directory. A retained packet's path is printed on success and included
 its shell. The original transcript and the temporary summary remain on disk; delete the summary
 when you no longer need it. There is no automatic rollback or retry after typing a command.
 
-This recipe supports a native Claude executable in a local agterm pane with shell job control.
+This recipe supports a native Claude executable in a local Elis pane with shell job control.
 A wrapper must replace itself with Claude using `exec`; keeping the wrapper shell alive fails
 both the foreground-program and process-group checks. Node-based installs, SSH, tmux, nested
 agents, and moving/swapping panes after Claude starts are unsupported. Those can break the

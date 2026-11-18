@@ -1,0 +1,274 @@
+import ArgumentParser
+import Foundation
+import Testing
+@testable import ElisCore
+@testable import elisctlKit
+
+/// The requests the zmx group builds and the human output it renders. Nothing here talks to a socket:
+/// the point is that the CLI cannot send a kill the server would have to refuse, and that a reader can
+/// tell a closed window's resting state from a leak.
+struct ZmxCommandsTests {
+    @Test func attachCarriesTheLocalWindowSeparatelyFromTheRemoteSession() throws {
+        let attach = try Zmx.Attach.parse(["buildbox", "s1", "--window", "local-window"])
+        let request = try attach.makeRequest()
+        #expect(request.cmd == .zmxAttach)
+        #expect(request.target == "s1")
+        #expect(request.args?.host == "buildbox")
+        #expect(request.args?.window == "local-window")
+        #expect(try JSONDecoder().decode(ControlRequest.self, from: JSONEncoder().encode(request)) == request)
+    }
+
+    @Test func presentNamesTheSessionAsItsTarget() throws {
+        let present = try Zmx.Present.parse(["s1", "--socket", "/tmp/x.sock"])
+
+        #expect(present.makeRequest() == ControlRequest(cmd: .zmxPresent, target: "s1"))
+        #expect(present.options.socketPath() == "/tmp/x.sock")
+    }
+
+    @Test func presentRequiresASession() {
+        #expect(throws: (any Error).self) { try Zmx.Present.parse([]) }
+    }
+
+    @Test func treeCarriesItsHostAsAnArgumentNotATarget() throws {
+        let tree = try Zmx.Tree.parse(["buildbox"])
+
+        #expect(try tree.makeRequest().cmd == .zmxTree)
+        #expect(try tree.makeRequest().args?.host == "buildbox")
+        #expect(try tree.makeRequest().target == nil, "a remote host is not a local addressing target")
+    }
+
+    // no host is this app's own attachable sessions, which is the form the remote call runs on the far side
+    @Test func treeWithoutAHostAsksAboutThisApp() throws {
+        let tree = try Zmx.Tree.parse([])
+
+        #expect(try tree.makeRequest().cmd == .zmxTree)
+        #expect(try tree.makeRequest().args?.host == nil)
+    }
+
+    @Test func attachSendsTheHostAsAnArgumentAndTheSessionAsTheTarget() throws {
+        let attach = try Zmx.Attach.parse(["buildbox", "s1"])
+
+        #expect(try attach.makeRequest().cmd == .zmxAttach)
+        #expect(try attach.makeRequest().args?.host == "buildbox")
+        #expect(try attach.makeRequest().target == "s1")
+    }
+
+    @Test func attachWithCompanionsSendsTheGroupCommandWithTheSameArguments() throws {
+        let attach = try Zmx.Attach.parse(["buildbox", "s1", "--companions", "--window", "local-window"])
+        let request = try attach.makeRequest()
+
+        #expect(request == ControlRequest(cmd: .zmxAttachGroup, target: "s1",
+                                          args: ControlArgs(host: "buildbox", window: "local-window")))
+        #expect(try Zmx.Attach.parse(["buildbox", "s1"]).makeRequest().cmd == .zmxAttach)
+    }
+
+    @Test func aGroupAttachPrintsTheParentThenEachCompanionOriginToLocal() {
+        let group = ControlRemoteGroup(membershipKnown: true, companions: [
+            ControlRemoteGroupMember(origin: "c1", id: "L1"), ControlRemoteGroupMember(origin: "pg", id: "L2"),
+        ])
+
+        #expect(SocketClient.formatRemoteGroup(parent: "P", group: group) == "P\n  c1 -> L1\n  pg -> L2")
+        #expect(SocketClient.formatRemoteGroup(parent: "P", group: ControlRemoteGroup(membershipKnown: true, companions: [])) == "P")
+    }
+
+    @Test func theMembershipNoteNamesTheHost() {
+        #expect(SocketClient.remoteGroupNote(host: "buildbox")
+            == "note: buildbox does not report group membership; unlisted companions cannot be detected")
+    }
+
+    @Test(arguments: [[], ["buildbox"]])
+    func attachNeedsBothAHostAndASession(_ arguments: [String]) {
+        #expect(throws: (any Error).self) { try Zmx.Attach.parse(arguments) }
+    }
+
+    @Test func attachEchoesTheLocalSessionItCreated() throws {
+        // it creates a session, so a script can pipe its id onward without --json
+        #expect(try Zmx.Attach.parse(["buildbox", "s1"]).echoesResultID)
+        #expect(try !Zmx.Tree.parse(["buildbox"]).echoesResultID, "a listing creates nothing to echo")
+    }
+
+    @Test func remoteTreeRendersOneRowPerAttachableSession() {
+        let endpoint = ControlZmxEndpoint(executable: "/Applications/Elis.app/zmx", socketDirectory: "/tmp/z")
+        let plain = ControlRemoteSession(
+            id: "s1", name: "build", windowID: "w-1", windowName: "main", workspaceID: "ws-1",
+            workspaceName: "umputun.dev", cwd: "/repo", splitAxis: nil,
+            panes: [ControlRemotePane(pane: "left", daemon: "elis-1")])
+        let split = ControlRemoteSession(
+            id: "s2", name: "logs", windowID: "w-2", windowName: "second", workspaceID: "ws-2",
+            workspaceName: "ops", context: "tailing prod", cwd: "/var", splitAxis: "horizontal",
+            panes: [ControlRemotePane(pane: "left", daemon: "elis-2", foreground: ["/usr/bin/tail", "-f"]),
+                    ControlRemotePane(pane: "right", daemon: "elis-3", foreground: ["/bin/zsh"])])
+        let tree = ControlRemoteTree(host: "buildbox", endpoint: endpoint, sessions: [plain, split])
+
+        let lines = SocketClient.formatRemoteTree(tree).split(separator: "\n").map(String.init)
+
+        #expect(lines.count == 2)
+        #expect(lines[0] == "  main/umputun.dev/build  [s1]  /repo", "no context and no command adds no tail")
+        #expect(lines[1] == "  second/ops/logs (split horizontal)  [s2]  /var  tailing prod  tail | zsh")
+    }
+
+    // the bare form answers about this app, where no ssh destination exists to name
+    @Test func aLocalEmptyListNamesNoHost() {
+        let endpoint = ControlZmxEndpoint(executable: "/Applications/Elis.app/zmx", socketDirectory: "/tmp/z")
+
+        #expect(SocketClient.formatRemoteTree(ControlRemoteTree(host: nil, endpoint: endpoint, sessions: []))
+                == "no attachable sessions")
+    }
+
+    @Test func anEmptyRemoteTreeSaysSoRatherThanPrintingNothing() {
+        let endpoint = ControlZmxEndpoint(executable: "/Applications/Elis.app/zmx", socketDirectory: "/tmp/z")
+        let tree = ControlRemoteTree(host: "buildbox", endpoint: endpoint, sessions: [])
+
+        #expect(SocketClient.formatRemoteTree(tree) == "no attachable sessions on buildbox",
+                "silence reads the same as a failed read")
+    }
+
+    @Test func screenSendsTheDaemonNameAndExtent() throws {
+        let plain = try Zmx.Screen.parse(["elis-a"]).makeRequest()
+        #expect(plain.cmd == .zmxScreen)
+        #expect(plain.target == nil)
+        #expect(plain.args?.name == "elis-a")
+        #expect(plain.args?.all == nil)
+
+        #expect(try Zmx.Screen.parse(["elis-a", "--all"]).makeRequest().args?.all == true)
+        #expect(try Zmx.Screen.parse(["elis-a", "--lines", "20"]).makeRequest().args?.lines == 20)
+    }
+
+    @Test(arguments: [["elis-a", "--all", "--lines", "3"], ["elis-a", "--lines", "0"], []])
+    func screenRefusesABadExtentOrAMissingName(arguments: [String]) {
+        #expect(throws: (any Error).self) { try Zmx.Screen.parse(arguments) }
+    }
+
+    @Test func listAndPruneSendTheirCommandWithNothingToResolve() throws {
+        let list = try Zmx.List.parse([])
+        #expect(try list.makeRequest().cmd == .zmxList)
+        #expect(try list.makeRequest().target == nil)
+
+        let prune = try Zmx.Prune.parse([])
+        #expect(try prune.makeRequest().cmd == .zmxPrune)
+    }
+
+    @Test(arguments: ["left", "primary", "top", "right", "split", "bottom"])
+    func killAcceptsEveryPaneSpellingTheApiTakes(pane: String) throws {
+        let kill = try Zmx.Kill.parse(["--target", "abc", "--pane", pane, "--force"])
+        let request = try kill.makeRequest()
+        #expect(request.cmd == .zmxKill)
+        #expect(request.target == "abc")
+        #expect(request.args?.pane == pane)
+        #expect(request.args?.force == true)
+    }
+
+    @Test func killRefusesLocallyRatherThanSendingSomethingTheServerMustReject() throws {
+        // parse runs validate, so a bad invocation never reaches the socket at all
+        #expect(throws: (any Error).self) { try Zmx.Kill.parse(["--target", "abc", "--pane", "left"]) }
+        #expect(throws: (any Error).self) {
+            try Zmx.Kill.parse(["--target", "abc", "--pane", "scratch", "--force"])
+        }
+        // no --target at all: it must not default to the active session the way every other command does
+        #expect(throws: (any Error).self) { try Zmx.Kill.parse(["--pane", "left", "--force"]) }
+        #expect(throws: (any Error).self) {
+            try Zmx.Kill.parse(["--target", "active", "--pane", "left", "--force"])
+        }
+        #expect(throws: (any Error).self) {
+            try Zmx.Kill.parse(["--target", "abc", "--window", "active", "--pane", "left", "--force"])
+        }
+    }
+
+    @Test func killWithAPaneIDSendsThePinnedKill() throws {
+        let pinned = try Zmx.Kill.parse(["--target", "abc", "--pane", "right", "--pane-id", "tok", "--force"]).makeRequest()
+
+        #expect(pinned == ControlRequest(cmd: .zmxKillPane, target: "abc", args: ControlArgs(force: true, pane: "right", paneID: "tok")))
+        #expect(try Zmx.Kill.parse(["--target", "abc", "--pane", "right", "--force"]).makeRequest().cmd == .zmxKill)
+    }
+
+    @Test(arguments: [ZmxPaneRole.left, .right])
+    func anAttachedPinnedKillParsesOnItsOrigin(pane: ZmxPaneRole) throws {
+        let forward = AttachedForward.killPane(session: "s1", pane: pane, paneID: "tok")
+
+        let parsed = try #require(try Elisctl.parseAsRoot(forward.originArgv) as? any RequestCommand).makeRequest()
+
+        #expect(parsed == ControlRequest(cmd: .zmxKillPane, target: "s1", args: ControlArgs(force: true, pane: pane.rawValue, paneID: "tok")))
+        #expect(parsed.cmd == forward.command)
+    }
+
+    @Test func restoreModeReadsWithNoArgumentAndSetsWithOne() throws {
+        #expect(try Restore.Mode.parse([]).makeRequest().args?.mode == nil)
+        #expect(try Restore.Mode.parse(["live"]).makeRequest().args?.mode == "live")
+        #expect(throws: (any Error).self) { try Restore.Mode.parse(["sideways"]) }
+    }
+
+    @Test func theHumanStatusSeparatesTheNextLaunchFromThisOne() {
+        let needsRestart = ControlRestoreStatus(configured: .live, requestedAtLaunch: .rerun, active: .rerun,
+                                                unavailableReason: nil)
+        let rendered = SocketClient.formatRestoreStatus(needsRestart)
+
+        #expect(rendered.contains("configured: live (next launch)"))
+        #expect(rendered.contains("requested rerun, active rerun"))
+        #expect(rendered.contains("restart Elis to apply the configured mode"))
+    }
+
+    @Test func aClosedWindowsPaneReadsAsClosedRatherThanAsALeak() throws {
+        let pane = UUID()
+        let claim = ZmxPaneClaim(paneIdentity: pane, pane: .left, pendingClose: false, windowID: UUID(),
+                                 windowName: "work", windowState: .closed, workspaceID: UUID(),
+                                 workspaceName: "workspace 1", sessionID: UUID(), sessionName: "build")
+        let result = ZmxInventory.join(
+            observed: [ZmxSessionRecord(name: ZmxSupport.daemonName(for: pane), clients: 0, leaderPID: 1)],
+            claims: [claim], inventoryComplete: true)
+        let status = ControlRestoreStatus(configured: .live, requestedAtLaunch: .live, active: .live,
+                                          unavailableReason: nil)
+
+        let rendered = SocketClient.formatZmx(ControlZmxInventory(restore: status, result: result))
+
+        #expect(rendered.contains("claimed"))
+        #expect(rendered.contains("0 clients"))
+        // the count alone would read as an orphan; the window state is what says otherwise
+        #expect(rendered.contains("[closed window]"))
+        #expect(rendered.contains("running"), "observation stays its own column beside the count")
+        #expect(rendered.contains("work / workspace 1 / build (left)"),
+                "one session name can appear in two workspaces, so the path carries all three")
+        // kill resolves by id, never by name, and a closed row may not appear in `tree` at all
+        #expect(rendered.contains(String(claim.sessionID.uuidString.prefix(8))))
+        #expect(rendered.contains("win \(claim.windowID.uuidString.prefix(8))"))
+    }
+
+    @Test func aDaemonCreatedBeforeTheCutoffIsMarkedOutdated() throws {
+        let old = UUID(), current = UUID()
+        let output = """
+        name=\(ZmxSupport.daemonName(for: old))\tpid=10\tclients=1\tcreated=999\tcwd=/tmp
+        name=\(ZmxSupport.daemonName(for: current))\tpid=11\tclients=1\tcreated=1000\tcwd=/tmp
+        """
+        let result = ZmxInventory.join(observed: try ZmxListParser.parse(output), claims: [], inventoryComplete: false)
+        let status = ControlRestoreStatus(configured: .live, requestedAtLaunch: .live, active: .live, unavailableReason: nil)
+        let inventory = ControlZmxInventory(restore: status, result: result, outdatedBefore: Date(timeIntervalSince1970: 1000))
+
+        let flags = Dictionary(uniqueKeysWithValues: inventory.entries.map { ($0.daemon, $0.outdated) })
+        #expect(flags == [ZmxSupport.daemonName(for: old): true, ZmxSupport.daemonName(for: current): Bool?.none])
+        let rendered = SocketClient.formatZmx(inventory).split(separator: "\n")
+        #expect(rendered.contains { $0.hasPrefix(ZmxSupport.daemonName(for: old)) && $0.contains("running outdated") })
+        #expect(rendered.contains { $0.hasPrefix(ZmxSupport.daemonName(for: current)) && !$0.contains("outdated") })
+    }
+
+    @Test func anIncompleteInventorySaysSoBeforeItsRows() {
+        let status = ControlRestoreStatus(configured: .none, requestedAtLaunch: .none, active: .none,
+                                          unavailableReason: nil)
+        let result = ZmxInventory.join(observed: [], claims: [], inventoryComplete: false)
+
+        let rendered = SocketClient.formatZmx(ControlZmxInventory(restore: status, result: result))
+        #expect(rendered.contains("inventory incomplete"))
+        #expect(rendered.contains("no daemons"))
+    }
+
+    @Test func resetEncodesForce() throws {
+        let request = try Zmx.Reset.parse(["--force"]).makeRequest()
+
+        #expect(request.cmd == .zmxReset)
+        #expect(request.args?.force == true)
+        #expect(request.target == nil, "the reset is app-global and takes no target")
+        #expect(try JSONDecoder().decode(ControlRequest.self, from: JSONEncoder().encode(request)) == request)
+    }
+
+    @Test func resetRefusesWithoutForce() {
+        #expect(throws: (any Error).self) { try Zmx.Reset.parse([]) }
+    }
+}

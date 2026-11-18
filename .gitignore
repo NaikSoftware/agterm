@@ -1,22 +1,22 @@
 # downloaded prebuilt libghostty (never committed — see scripts/setup.sh)
 # no trailing slash so the symlink form (worktree setup) is ignored too, not just the dir
 GhosttyKit.xcframework
-agterm/Resources/ghostty
-agterm/Resources/terminfo
+macos/Elis/Resources/ghostty
+macos/Elis/Resources/terminfo
 .ghostty-build-stamp
-agterm/Resources/zmx
+macos/Elis/Resources/zmx
 .zmx-build-stamp
 *.tar.gz
 
 # build artifacts
 build/
 .build/
-agterm.xcodeproj/
+Elis.xcodeproj/
 .swiftpm/
 
 .DS_Store
 
-# app state / runtime files (only appear if AGTERM_STATE_DIR is pointed at the repo)
+# app state / runtime files (only appear if ELIS_STATE_DIR is pointed at the repo)
 settings.json
 windows.json
 workspaces.json
@@ -37,3 +37,7 @@ __pycache__/
 !.claude/
 .claude/*
 !.claude/rules/
+
+# linux/ (Qt app) build outputs
+linux/build/
+linux/.deps/

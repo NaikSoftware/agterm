@@ -1,0 +1,455 @@
+import Foundation
+import Testing
+@testable import ElisCore
+
+struct RemoteTreeTests {
+    private static let left = ZmxSupport.daemonName(for: UUID())
+    private static let right = ZmxSupport.daemonName(for: UUID())
+    private static let other = ZmxSupport.daemonName(for: UUID())
+
+    private let endpoint = ControlZmxEndpoint(executable: "/Applications/Elis.app/zmx",
+                                              socketDirectory: "/tmp/elis-zmx-abc")
+
+    // MARK: - building the candidate list
+
+    @Test(arguments: [
+        (RemoteCommandResult(status: 64, stdout: "", stderr: "Error: Unknown option '--parent'"), true),
+        (RemoteCommandResult(status: 64, stdout: " \n", stderr: ""), true),
+        (RemoteCommandResult(status: 64, stdout: #"{"ok":false,"error":"x"}"#, stderr: ""), false),
+        (RemoteCommandResult(status: 1, stdout: "", stderr: "Error: Unknown option '--parent'"), false),
+        (RemoteCommandResult(status: 255, stdout: "", stderr: "ssh: connect to host"), false),
+    ])
+    func onlyAUsageExitWithNothingOnStdoutIsAnArgumentRefusal(result: RemoteCommandResult, refused: Bool) {
+        #expect(result.refusedArguments == refused)
+    }
+
+    @Test func aPlainSessionResolvesToOneLeftDaemon() throws {
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [node(id: "s1", name: "build", cwd: "/repo")])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [
+                                                       entry(session: "s1", pane: "left", daemon: Self.left),
+                                                   ]))
+
+        #expect(tree.host == nil, "the local form sshed nowhere, so it names no destination")
+        #expect(tree.endpoint == endpoint)
+        #expect(tree.presentation == PresentationCodec.version)
+        #expect(tree.sessions.count == 1)
+        #expect(tree.sessions[0].panes == [ControlRemotePane(pane: "left", daemon: Self.left)])
+        #expect(tree.sessions[0].splitAxis == nil)
+        #expect(tree.sessions[0].windowName == "main")
+        #expect(tree.sessions[0].workspaceName == "work")
+    }
+
+    @Test func aSessionCarriesItsRunningLiveScratch() throws {
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [node(id: "s1", name: "build", cwd: "/repo"), node(id: "s2", name: "logs", cwd: "/repo")])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows, inventory: inventory(entries: [
+            entry(session: "s1", pane: "left", daemon: Self.left),
+            entry(session: "s1", pane: "scratch", daemon: Self.other),
+            entry(session: "s2", pane: "left", daemon: Self.right),
+        ]))
+
+        #expect(tree.sessions.map(\.scratch) == [ControlRemotePane(pane: "scratch", daemon: Self.other), nil])
+        #expect(tree.sessions[0].panes == [ControlRemotePane(pane: "left", daemon: Self.left)])
+    }
+
+    @Test func aPageCompanionIsListedWithNoPanesOnlyUnderAListedParent() throws {
+        let page = ControlSessionNode(id: "pg", name: "report", cwd: "/srv", active: false, split: false, backedByZmx: nil, parent: "s1", content: "page")
+        let orphan = ControlSessionNode(id: "pg2", name: "lost", cwd: "/srv", active: false, split: false, backedByZmx: nil, parent: "gone", content: "page")
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [node(id: "s1", name: "build", cwd: "/repo"), page, orphan])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [entry(session: "s1", pane: "left", daemon: Self.left)]))
+
+        #expect(tree.sessions.map { $0.id } == ["s1", "pg"])
+        #expect(tree.sessions[1].panes.isEmpty)
+        #expect(tree.sessions[1].parent == "s1")
+        #expect(tree.sessions[1].content == "page")
+    }
+
+    @Test func aTopLevelPageIsListedWithItsWholeGroupWithNoDaemonAtAll() throws {
+        let root = ControlSessionNode(id: "pr", name: "dash", cwd: "/srv", active: false, split: false, backedByZmx: nil,
+                                      status: "active", context: "board", content: "page")
+        let pageChild = ControlSessionNode(id: "pg", name: "report", cwd: "/srv", active: false, split: false, backedByZmx: nil,
+                                           parent: "pr", content: "page")
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [root, node(id: "c1", name: "logs", cwd: "/repo", parent: "pr"), pageChild])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows, inventory: inventory(entries: []))
+
+        #expect(tree.sessions.map(\.id) == ["pr", "pg"])
+        let listed = try #require(tree.sessions.first)
+        #expect(listed.panes.isEmpty && listed.parent == nil && listed.content == "page")
+        #expect(listed.context == "board" && listed.status == "active")
+        #expect(listed.companions == [ControlRemoteMember(id: "c1", name: "logs"), ControlRemoteMember(id: "pg", name: "report")],
+                "a terminal companion with no daemon is still named as a member")
+        #expect(tree.sessions[1].parent == "pr")
+        #expect(tree.endpoint == endpoint)
+    }
+
+    @Test func aTerminalCompanionOfATopLevelPageIsOfferedWhenItsDaemonRuns() throws {
+        let root = ControlSessionNode(id: "pr", name: "dash", cwd: "/srv", active: false, split: false, backedByZmx: nil,
+                                      content: "page")
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [root, node(id: "c1", name: "logs", cwd: "/repo", parent: "pr")])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows, inventory: inventory(entries: [
+            entry(session: "c1", pane: "left", daemon: Self.left),
+        ]))
+
+        #expect(tree.sessions.map(\.id) == ["c1", "pr"])
+        #expect(tree.sessions[0].parent == "pr")
+    }
+
+    @Test func aPageAttachedFromAnotherMacIsNeverOfferedAgain() throws {
+        let replicaRoot = ControlSessionNode(id: "pr", name: "dash", cwd: "/srv", active: false, split: false, backedByZmx: nil,
+                                             remoteHost: "buildbox", content: "page")
+        let replicaChild = ControlSessionNode(id: "pg", name: "report", cwd: "/srv", active: false, split: false,
+                                              backedByZmx: nil, remoteHost: "buildbox", parent: "pr", content: "page")
+        let underTerminal = ControlSessionNode(id: "pg2", name: "notes", cwd: "/srv", active: false, split: false,
+                                               backedByZmx: nil, remoteHost: "buildbox", parent: "s1", content: "page")
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [replicaRoot, replicaChild, node(id: "s1", name: "build", cwd: "/repo"), underTerminal])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows, inventory: inventory(entries: [
+            entry(session: "s1", pane: "left", daemon: Self.left),
+        ]))
+
+        #expect(tree.sessions.map(\.id) == ["s1"])
+    }
+
+    @Test func everyOpenWindowIsOffered() throws {
+        let windows = [window(id: "w-1", name: "main", workspace: "umputun.dev",
+                              sessions: [node(id: "s1", name: "build", cwd: "/repo")]),
+                       window(id: "w-2", name: "second", workspace: "ops",
+                              sessions: [node(id: "s2", name: "logs", cwd: "/var")])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [
+                                                       entry(session: "s1", pane: "left", daemon: Self.left),
+                                                       entry(session: "s2", pane: "left", daemon: Self.right),
+                                                   ]))
+
+        #expect(tree.sessions.map(\.id) == ["s1", "s2"])
+        #expect(tree.sessions.map(\.windowID) == ["w-1", "w-2"])
+        #expect(tree.sessions.map(\.windowName) == ["main", "second"])
+    }
+
+    // neither rename path enforces uniqueness, so a caller grouping by name would merge these two
+    @Test func sameNamedWindowsAndWorkspacesStayApartByID() throws {
+        let windows = [window(id: "w-1", name: "main", workspaceID: "ws-1", workspace: "dev",
+                              sessions: [node(id: "s1", name: "build", cwd: "/a")]),
+                       window(id: "w-2", name: "main", workspaceID: "ws-2", workspace: "dev",
+                              sessions: [node(id: "s2", name: "build", cwd: "/b")])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [
+                                                       entry(session: "s1", pane: "left", daemon: Self.left),
+                                                       entry(session: "s2", pane: "left", daemon: Self.right),
+                                                   ]))
+
+        #expect(Set(tree.sessions.map(\.windowName)) == ["main"])
+        #expect(tree.sessions.map(\.windowID) == ["w-1", "w-2"])
+        #expect(tree.sessions.map(\.workspaceID) == ["ws-1", "ws-2"])
+    }
+
+    @Test func eachSessionCarriesItsOwnWorkspaceRatherThanTheFirstOne() throws {
+        let left = ControlWorkspaceNode(id: "ws-1", name: "umputun.dev", active: true,
+                                        sessions: [node(id: "s1", name: "build", cwd: "/repo")])
+        let right = ControlWorkspaceNode(id: "ws-2", name: "ops", active: false,
+                                         sessions: [node(id: "s2", name: "logs", cwd: "/var")])
+        let windows = [RemoteWindowProjection(id: "w-1", name: "main",
+                                              tree: ControlTree(workspaces: [left, right]))]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [
+                                                       entry(session: "s1", pane: "left", daemon: Self.left),
+                                                       entry(session: "s2", pane: "left", daemon: Self.right),
+                                                   ]))
+
+        #expect(tree.sessions.map(\.workspaceName) == ["umputun.dev", "ops"])
+    }
+
+    @Test func aPaneCarriesWhatIsRunningInItAndTheSessionItsContext() throws {
+        let running = ControlSessionNode(id: "s1", name: "build", cwd: "/repo", active: false, split: false,
+                                         backedByZmx: true, foreground: ["/usr/bin/tail", "-f"],
+                                         context: "release prep")
+        let windows = [window(name: "main", workspace: "work", sessions: [running])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [
+                                                       entry(session: "s1", pane: "left", daemon: Self.left),
+                                                   ]))
+
+        #expect(tree.sessions[0].context == "release prep")
+        #expect(tree.sessions[0].panes[0].foreground == ["/usr/bin/tail", "-f"])
+    }
+
+    @Test func aSessionCarriesItsAgentStatusAndAnIdleOneCarriesNone() throws {
+        let busy = ControlSessionNode(id: "s1", name: "agent", cwd: "/repo", active: false, split: false,
+                                      backedByZmx: true, status: "blocked", statusPane: "left", statusBlink: true,
+                                      statusColor: "#ff8800", statusShape: "star")
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [busy, node(id: "s2", name: "shell", cwd: "/tmp")])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [
+                                                       entry(session: "s1", pane: "left", daemon: Self.left),
+                                                       entry(session: "s2", pane: "left", daemon: Self.right),
+                                                   ]))
+
+        #expect(tree.sessions[0].status == "blocked")
+        #expect(tree.sessions[0].statusColor == "#ff8800")
+        #expect(tree.sessions[0].statusShape == "star")
+        #expect(tree.sessions[1].status == nil)
+        #expect(tree.sessions[1].statusColor == nil)
+        #expect(tree.sessions[1].statusShape == nil)
+    }
+
+    @Test func aSessionFromAnOriginWithoutStatusDecodesWithNone() throws {
+        let stdout = #"{"ok":true,"result":{"remote":{"endpoint":{"executable":"/z","socketDirectory":"/t"},"#
+            + #""sessions":[{"id":"s1","name":"build","windowID":"w","windowName":"main","workspaceID":"ws","#
+            + #""workspaceName":"work","cwd":"/repo","panes":[{"pane":"left","daemon":"d"}]}]}}}"#
+
+        let session = try #require(RemoteTreeMerger.decode(stdout: stdout).sessions.first)
+
+        #expect(session.status == nil)
+        #expect(session.statusColor == nil)
+        #expect(session.statusShape == nil)
+        #expect(session.companions == nil, "an origin that does not report membership leaves it unknown")
+    }
+
+    @Test func aParentListsEveryCompanionInSidebarOrderAttachableOrNot() throws {
+        let page = ControlSessionNode(id: "pg", name: "report", cwd: "/srv", active: false, split: false,
+                                      backedByZmx: nil, parent: "s1", content: "page")
+        let unbacked = ControlSessionNode(id: "c2", name: "watch", cwd: "/repo", active: false, split: false,
+                                          backedByZmx: false, parent: "s1")
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [node(id: "s1", name: "build", cwd: "/repo"),
+                                         node(id: "c1", name: "logs", cwd: "/repo", parent: "s1"), page, unbacked,
+                                         node(id: "s2", name: "other", cwd: "/x")])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows, inventory: inventory(entries: [
+            entry(session: "s1", pane: "left", daemon: Self.left),
+            entry(session: "c1", pane: "left", daemon: Self.right),
+            entry(session: "s2", pane: "left", daemon: Self.other),
+        ]))
+
+        #expect(tree.sessions.map(\.id) == ["s1", "c1", "s2", "pg"])
+        let parent = try #require(tree.sessions.first { $0.id == "s1" })
+        #expect(parent.companions == [ControlRemoteMember(id: "c1", name: "logs"),
+                                      ControlRemoteMember(id: "pg", name: "report"),
+                                      ControlRemoteMember(id: "c2", name: "watch")])
+        #expect(tree.sessions.first { $0.id == "s2" }?.companions == [], "a known-empty group is [], never nil")
+        #expect(tree.sessions.first { $0.id == "c1" }?.companions == nil)
+        #expect(tree.sessions.first { $0.id == "pg" }?.companions == nil)
+    }
+
+    @Test func aSplitSessionCarriesBothDaemonsAndItsAxis() throws {
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [node(id: "s1", name: "build", cwd: "/repo", hasSplit: true)])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [
+                                                       entry(session: "s1", pane: "left", daemon: Self.left),
+                                                       entry(session: "s1", pane: "right", daemon: Self.right),
+                                                   ]))
+
+        #expect(tree.sessions[0].panes.map(\.pane) == ["left", "right"])
+        #expect(tree.sessions[0].panes.map(\.daemon) == [Self.left, Self.right])
+        #expect(tree.sessions[0].splitAxis == "vertical")
+    }
+
+    @Test func aSplitMissingItsSecondDaemonIsDroppedRatherThanOfferedHalfWay() throws {
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [node(id: "s1", name: "build", cwd: "/repo", hasSplit: true)])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [
+                                                       entry(session: "s1", pane: "left", daemon: Self.left),
+                                                   ]))
+
+        #expect(tree.sessions.isEmpty)
+    }
+
+    @Test(arguments: [("orphan", "running"), ("claimed", "absent"), ("claimed", "unreadable")])
+    func onlyAClaimedAndRunningDaemonIsOffered(_ pair: (state: String, observation: String)) throws {
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [node(id: "s1", name: "build", cwd: "/repo")])]
+
+        let tree = try RemoteTreeMerger.candidates(
+            windows: windows,
+            inventory: inventory(entries: [entry(session: "s1", pane: "left", daemon: Self.left,
+                                                 state: pair.state, observation: pair.observation)]))
+
+        #expect(tree.sessions.isEmpty)
+    }
+
+    // a launch that asked for live and fell back keeps its daemons while showing plain shells
+    @Test func aSessionThatIsNotBackedByZmxIsNotOffered() throws {
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [node(id: "s1", name: "build", cwd: "/repo", backedByZmx: false)])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [
+                                                       entry(session: "s1", pane: "left", daemon: Self.left),
+                                                   ]))
+
+        #expect(tree.sessions.isEmpty)
+    }
+
+    @Test func aDaemonNamedOutsideElissSchemeIsNotOffered() throws {
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [node(id: "s1", name: "build", cwd: "/repo")])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [
+                                                       entry(session: "s1", pane: "left", daemon: "notes"),
+                                                   ]))
+
+        #expect(tree.sessions.isEmpty)
+    }
+
+    @Test func rowsNamingNoListedSessionAreIgnored() throws {
+        let windows = [window(name: "main", workspace: "work",
+                              sessions: [node(id: "s1", name: "build", cwd: "/repo")])]
+
+        let tree = try RemoteTreeMerger.candidates(windows: windows,
+                                                   inventory: inventory(entries: [
+                                                       entry(session: "s1", pane: "left", daemon: Self.left),
+                                                       entry(session: "gone", pane: "left", daemon: Self.other),
+                                                   ]))
+
+        #expect(tree.sessions.map(\.id) == ["s1"])
+    }
+
+    @Test func anInventoryWithNoEndpointIsRefusedByName() {
+        #expect(throws: RemoteTreeMerger.MergeError.missingEndpoint) {
+            try RemoteTreeMerger.candidates(windows: [], inventory: inventory(entries: [],
+                                                                              includeEndpoint: false))
+        }
+    }
+
+    @Test func noWindowsIsAnEmptyAnswerRatherThanAFailure() throws {
+        let tree = try RemoteTreeMerger.candidates(windows: [], inventory: inventory(entries: []))
+
+        #expect(tree.sessions.isEmpty)
+        #expect(tree.endpoint == endpoint)
+    }
+
+    // MARK: - reading the far side's answer back
+
+    @Test func theFarSidesAnswerIsDecodedWhole() throws {
+        let session = ControlRemoteSession(id: "s1", name: "build", windowID: "w-1", windowName: "main",
+                                           workspaceID: "ws-1", workspaceName: "work", cwd: "/repo",
+                                           splitAxis: nil,
+                                           panes: [ControlRemotePane(pane: "left", daemon: Self.left)])
+        let payload = ControlRemoteTree(host: nil, endpoint: endpoint, sessions: [session])
+        let stdout = String(decoding: try JSONEncoder().encode(
+            ControlResponse(ok: true, result: ControlResult(remote: payload))), as: UTF8.self)
+
+        #expect(try RemoteTreeMerger.decode(stdout: stdout) == payload)
+    }
+
+    @Test func anAnswerFromAnOriginWithoutPresentationDecodesWithNoVersion() throws {
+        let stdout = #"{"ok":true,"result":{"remote":{"endpoint":{"executable":"/z","socketDirectory":"/t"},"sessions":[]}}}"#
+
+        #expect(try RemoteTreeMerger.decode(stdout: stdout).presentation == nil)
+    }
+
+    @Test func stampingTheHostKeepsEveryOtherField() throws {
+        let session = ControlRemoteSession(id: "s1", name: "build", windowID: "w-1", windowName: "main",
+                                           workspaceID: "ws-1", workspaceName: "work", cwd: "/repo",
+                                           splitAxis: nil,
+                                           panes: [ControlRemotePane(pane: "left", daemon: Self.left)])
+        let remote = ControlRemoteTree(host: nil, endpoint: endpoint, sessions: [session], presentation: 1, headless: true)
+        let stdout = String(decoding: try JSONEncoder().encode(
+            ControlResponse(ok: true, result: ControlResult(remote: remote))), as: UTF8.self)
+
+        let stamped = try RemoteTreeMerger.decode(stdout: stdout).stamped(host: "buildbox")
+
+        #expect(stamped == ControlRemoteTree(host: "buildbox", endpoint: endpoint, sessions: [session],
+                                             presentation: 1, headless: true))
+    }
+
+    @Test func aMacsTreeSaysNothingAboutBeingHeadless() throws {
+        let tree = RemoteTreeMerger.candidates(windows: [], daemons: [:], endpoint: endpoint)
+        let stdout = String(decoding: try JSONEncoder().encode(ControlResponse(ok: true, result: ControlResult(remote: tree))),
+                            as: UTF8.self)
+
+        #expect(!stdout.contains("headless"))
+        #expect(try RemoteTreeMerger.decode(stdout: stdout).headless == nil)
+    }
+
+    @Test func theRemotesOwnRefusalIsReadFromStdoutWhereElisctlPutsIt() {
+        let stdout = #"{"ok":false,"error":"could not read the zmx session list"}"#
+
+        #expect(RemoteTreeMerger.remoteError(stdout: stdout) == "could not read the zmx session list")
+    }
+
+    @Test func anOkAnswerCarriesNoRemoteErrorToReport() {
+        let stdout = #"{"ok":true,"result":{"remote":{"endpoint":{"executable":"/z","socketDirectory":"/t"},"sessions":[]}}}"#
+
+        #expect(RemoteTreeMerger.remoteError(stdout: stdout) == nil)
+    }
+
+    @Test func unreadableOutputIsMalformedRatherThanEmpty() {
+        #expect(throws: RemoteTreeMerger.MergeError.malformedProjection) {
+            try RemoteTreeMerger.decode(stdout: "command not found: elisctl")
+        }
+    }
+
+    // an older far side knows `zmx tree` but answers ok with nothing in it
+    @Test func anOkAnswerWithNoRemoteResultIsMalformed() {
+        #expect(throws: RemoteTreeMerger.MergeError.malformedProjection) {
+            try RemoteTreeMerger.decode(stdout: #"{"ok":true}"#)
+        }
+    }
+
+    @Test func aFailedRemoteReadCarriesItsOwnReason() {
+        #expect(throws: RemoteTreeMerger.MergeError.remoteFailed("zmx is not available")) {
+            try RemoteTreeMerger.decode(stdout: #"{"ok":false,"error":"zmx is not available"}"#)
+        }
+    }
+
+    // MARK: - fixtures
+
+    private func node(id: String, name: String, cwd: String, hasSplit: Bool = false,
+                      axis: String = "vertical", backedByZmx: Bool? = true, parent: String? = nil) -> ControlSessionNode {
+        ControlSessionNode(id: id, name: name, cwd: cwd, active: false, split: hasSplit,
+                           hasSplit: hasSplit ? true : nil, backedByZmx: backedByZmx,
+                           splitAxis: hasSplit ? axis : nil, parent: parent)
+    }
+
+    private func window(id: String = "w-1", name: String, workspaceID: String = "ws-1", workspace: String,
+                        sessions: [ControlSessionNode]) -> RemoteWindowProjection {
+        let node = ControlWorkspaceNode(id: workspaceID, name: workspace, active: true, sessions: sessions)
+        return RemoteWindowProjection(id: id, name: name, tree: ControlTree(workspaces: [node]))
+    }
+
+    private func entry(session: String, pane: String, daemon: String,
+                       state: String = "claimed", observation: String = "running") -> [String: Any] {
+        ["daemon": daemon, "state": state, "observation": observation, "sessionID": session, "pane": pane]
+    }
+
+    /// Built as raw JSON and decoded, so the fixture pins the wire shape rather than whatever the current
+    /// encoder happens to emit. `ControlZmxEntry` has no memberwise init of its own.
+    private func inventory(entries: [[String: Any]], includeEndpoint: Bool = true) -> ControlZmxInventory {
+        var payload: [String: Any] = [
+            "restore": ["configured": "live", "requestedAtLaunch": "live", "active": "live",
+                        "restartRequired": false],
+            "inventoryComplete": true,
+            "entries": entries,
+        ]
+        if includeEndpoint {
+            payload["endpoint"] = ["executable": endpoint.executable,
+                                   "socketDirectory": endpoint.socketDirectory]
+        }
+        let data = try! JSONSerialization.data(withJSONObject: payload)
+        return try! JSONDecoder().decode(ControlZmxInventory.self, from: data)
+    }
+}

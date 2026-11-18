@@ -1,0 +1,3 @@
+import elisctlKit
+
+Elisctl.main()

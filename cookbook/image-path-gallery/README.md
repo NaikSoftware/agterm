@@ -6,26 +6,26 @@ Author: [@wildsurfer](https://github.com/wildsurfer)
 
 ## What it does
 
-An agent such as Claude Code often prints the path of a screenshot it made. In a session attached with `agtermctl zmx attach`, this file is on the other Mac, and ⌘-click does not open a bare path in an attached pane. This recipe adds one chord that finds the image paths on the screen, copies the files to this Mac when the session is attached, and shows them in an overlay with a large image and a thumbnail strip. The chord works in a local session too.
+An agent such as Claude Code often prints the path of a screenshot it made. In a session attached with `elisctl zmx attach`, this file is on the other Mac, and ⌘-click does not open a bare path in an attached pane. This recipe adds one chord that finds the image paths on the screen, copies the files to this Mac when the session is attached, and shows them in an overlay with a large image and a thumbnail strip. The chord works in a local session too.
 
 ## Requirements
 
-agterm 0.36.0 or later, where a page opened with `--js` can close its overlay with `window.close()`. The script also relies on `--chromeless` from 0.35.0, `session overlay open --html` from 0.33.0, `--error-hud` from 0.31.0 and `AGT_SESSION_HOST` from 0.29.0.
+Elis 0.36.0 or later, where a page opened with `--js` can close its overlay with `window.close()`. The script also relies on `--chromeless` from 0.35.0, `session overlay open --html` from 0.33.0, `--error-hud` from 0.31.0 and `AGT_SESSION_HOST` from 0.29.0.
 
 `perl`, which macOS includes. For an attached session, `ssh` and `scp` with key-based login to the host, which `zmx attach` already needs.
 
 ## Setup
 
-1. Copy `image-path-gallery.sh` to `~/.config/agterm/scripts/` and keep it executable.
-2. Add the chord to `~/.config/agterm/keymap.conf`:
+1. Copy `image-path-gallery.sh` to `~/.config/elis/scripts/` and keep it executable.
+2. Add the chord to `~/.config/elis/keymap.conf`:
 
    ```
-   command "image path gallery" cmd+shift+i --error-hud ~/.config/agterm/scripts/image-path-gallery.sh
+   command "image path gallery" cmd+shift+i --error-hud ~/.config/elis/scripts/image-path-gallery.sh
    ```
 
-3. Run `agtermctl keymap reload`.
+3. Run `elisctl keymap reload`.
 
-Pick another chord if cmd+shift+i is already taken in your keymap. To use a different CLI, prefix the script path in the keymap line with `AGTERMCTL=/path/to/agtermctl`.
+Pick another chord if cmd+shift+i is already taken in your keymap. To use a different CLI, prefix the script path in the keymap line with `ELISCTL=/path/to/elisctl`.
 
 ## Usage
 
@@ -35,7 +35,7 @@ In the gallery, the arrow keys move between the images and wrap at the ends, and
 
 ## How it works
 
-Claude Code draws its own mouse selection, so agterm does not see it and `$AGT_SELECTION` stays empty. For this reason the script reads the visible screen with `session text` when there is no terminal selection.
+Claude Code draws its own mouse selection, so Elis does not see it and `$AGT_SELECTION` stays empty. For this reason the script reads the visible screen with `session text` when there is no terminal selection.
 
 Claude Code also wraps long paths with an indent, so the script removes all whitespace before it searches. The match is non-greedy and stops at the first image extension, otherwise two neighbour paths become one.
 

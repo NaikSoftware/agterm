@@ -6,14 +6,14 @@ Author: [@umputun](https://github.com/umputun)
 
 ## What it does
 
-In a session attached with `agtermctl zmx attach`, Claude Code and codex on the far Mac read that Mac's
+In a session attached with `elisctl zmx attach`, Claude Code and codex on the far Mac read that Mac's
 clipboard when you press ctrl+v, so a screenshot you just took here never reaches them. This recipe adds one chord that copies the image on this Mac's clipboard to the remote Mac's clipboard. Press
 it, wait for the "image copied" panel, then press ctrl+v as usual, and Claude Code or codex on the far
 side pastes a real image. In a local session the chord does nothing.
 
 ## Requirements
 
-agterm 0.31.0 or later, which added the `--error-hud` option the keymap line uses. The script also
+Elis 0.31.0 or later, which added the `--error-hud` option the keymap line uses. The script also
 relies on `session hud open --hide-after` from 0.30.1 and `AGT_SESSION_HOST` from 0.29.0.
 
 The remote side is a Mac, since the script sets its clipboard with `osascript`. Key-based ssh to it works
@@ -22,17 +22,17 @@ desktop, since that account's clipboard is the one Claude Code and codex read.
 
 ## Setup
 
-1. Copy `copy-image-to-host.sh` to `~/.config/agterm/scripts/` and keep it executable.
-2. Add the chord to `~/.config/agterm/keymap.conf`:
+1. Copy `copy-image-to-host.sh` to `~/.config/elis/scripts/` and keep it executable.
+2. Add the chord to `~/.config/elis/keymap.conf`:
 
    ```
-   command "copy image to session host" cmd+shift+v --error-hud ~/.config/agterm/scripts/copy-image-to-host.sh
+   command "copy image to session host" cmd+shift+v --error-hud ~/.config/elis/scripts/copy-image-to-host.sh
    ```
 
-3. Run `agtermctl keymap reload`.
+3. Run `elisctl keymap reload`.
 
 Pick another chord if cmd+shift+v is already taken in your keymap. To use a different CLI, prefix the
-script path in the keymap line with `AGTERMCTL=/path/to/agtermctl`.
+script path in the keymap line with `ELISCTL=/path/to/elisctl`.
 
 ## Usage
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Reset the coding agent running in an agterm pane, and nothing else.
+"""Reset the coding agent running in an elis pane, and nothing else.
 
-Run as an agterm keymap custom command: the runner exports $AGT_SESSION_ID, $AGT_PANE and
+Run as an elis keymap custom command: the runner exports $AGT_SESSION_ID, $AGT_PANE and
 $AGT_SOCKET, and spawns this under the app's launch PATH rather than a shell's.
 
 The agent is read from the pane's live foreground argv rather than assumed, so the chord is inert
@@ -27,7 +27,7 @@ import subprocess
 import sys
 import time
 
-AGTERMCTL = os.environ.get("AGTERMCTL", "agtermctl")
+ELISCTL = os.environ.get("ELISCTL", "elisctl")
 
 # a wrapper script is the common case: match any argv element so `sh /usr/local/bin/mywrapper`
 # counts. Override to add your own launcher, e.g. CLAUDE_FG_MATCH='(^|/)(claude|mywrapper)$'
@@ -66,8 +66,8 @@ def inputs_for(argv: list[str]) -> tuple[str, ...]:
 
 
 def run(args: list[str], socket: str) -> subprocess.CompletedProcess:
-    """run calls agtermctl against the app that fired the chord rather than whichever is on PATH."""
-    cmd = [AGTERMCTL] + args + (["--socket", socket] if socket else [])
+    """run calls elisctl against the app that fired the chord rather than whichever is on PATH."""
+    cmd = [ELISCTL] + args + (["--socket", socket] if socket else [])
     return subprocess.run(cmd, capture_output=True, check=False)
 
 

@@ -12,22 +12,22 @@
 /* Canvas and CanvasText follow the viewer's light or dark setting only when a scheme is declared */
 :root { color-scheme: light dark; }
 .doc {
-  --fg: var(--agterm-foreground, CanvasText);
+  --fg: var(--elis-foreground, CanvasText);
   /* a shade darker than the terminal, so the page reads as its own surface */
-  --bg: color-mix(in srgb, var(--agterm-background, Canvas) 80%, black);
-  --ok: var(--agterm-color-2, #2e9e5b);
-  --bad: var(--agterm-color-1, #d0463c);
-  --warn: var(--agterm-color-3, #c8961e);
-  --accent: var(--agterm-color-4, #3b7dd8);
-  --alt: var(--agterm-color-5, #9a5cc6);
-  --info: var(--agterm-color-6, #2a9fb0);
+  --bg: color-mix(in srgb, var(--elis-background, Canvas) 80%, black);
+  --ok: var(--elis-color-2, #2e9e5b);
+  --bad: var(--elis-color-1, #d0463c);
+  --warn: var(--elis-color-3, #c8961e);
+  --accent: var(--elis-color-4, #3b7dd8);
+  --alt: var(--elis-color-5, #9a5cc6);
+  --info: var(--elis-color-6, #2a9fb0);
   --muted: color-mix(in srgb, var(--fg) 62%, transparent);
   --panel: color-mix(in srgb, var(--fg) 5%, transparent);
   --line: color-mix(in srgb, var(--fg) 14%, transparent);
 }
 * { box-sizing: border-box; }
 body {
-  margin: 0; background: color-mix(in srgb, var(--agterm-background, Canvas) 80%, black); color: var(--agterm-foreground, CanvasText);
+  margin: 0; background: color-mix(in srgb, var(--elis-background, Canvas) 80%, black); color: var(--elis-foreground, CanvasText);
   font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
 }
 .doc { max-width: 1080px; margin: 0 auto; padding: 28px 32px 56px; }
@@ -46,7 +46,7 @@ h1 { font-size: 26px; line-height: 1.25; margin: 0 0 8px; }
 html { scroll-behavior: smooth; }
 nav.toc { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center;
   margin: 16px -32px 0; padding: 8px 32px; font-size: 13px; border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--agterm-background, Canvas) 80%, black); }
+  background: color-mix(in srgb, var(--elis-background, Canvas) 80%, black); }
 nav.toc a { padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--fg); }
 nav.toc a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 nav.toc a.top { margin-left: auto; color: var(--muted); }
@@ -105,7 +105,7 @@ details[open] > summary { margin-bottom: 6px; }
 
 figure { margin: 14px 0; } figure svg { max-width: 100%; height: auto; }
 figcaption { color: var(--muted); font-size: 12px; margin-top: 4px; }
-svg text { fill: var(--agterm-foreground, CanvasText); font-family: -apple-system, sans-serif; font-size: 13px; }
+svg text { fill: var(--elis-foreground, CanvasText); font-family: -apple-system, sans-serif; font-size: 13px; }
 svg .box { fill: var(--panel); stroke: var(--line); }
 svg .edge { stroke: var(--muted); fill: none; }
 svg .hl { stroke: var(--accent); }

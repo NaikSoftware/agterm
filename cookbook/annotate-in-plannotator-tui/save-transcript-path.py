@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code Stop hook: record where an agterm pane's Claude transcript lives.
+"""Claude Code Stop hook: record where an elis pane's Claude transcript lives.
 
 `annotate.py replies` hands the path to plannotator-tui, which reads the transcript fresh when the
 chord fires. Only the path is kept: a hook runs when a turn ends, so a copy of the message would be
@@ -19,15 +19,15 @@ from pathlib import Path
 
 
 def cache_dir() -> Path:
-    override = os.environ.get("AGTERM_ANNOTATE_DIR")
-    return Path(override) if override else Path.home() / ".cache" / "agterm-annotate"
+    override = os.environ.get("ELIS_ANNOTATE_DIR")
+    return Path(override) if override else Path.home() / ".cache" / "elis-annotate"
 
 
 def main() -> int:
-    session = os.environ.get("AGTERM_SESSION_ID")
+    session = os.environ.get("ELIS_SESSION_ID")
     if not session:
         return 0
-    pane = os.environ.get("AGTERM_PANE") or "left"
+    pane = os.environ.get("ELIS_PANE") or "left"
 
     try:
         payload = json.load(sys.stdin)

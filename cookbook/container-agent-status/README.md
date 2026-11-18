@@ -6,11 +6,11 @@ Author: [@nquo](https://github.com/nquo)
 
 ## What it does
 
-The installer's `Help ▸ Install Agent Status Hooks…` wires an agent's lifecycle hooks straight to `agtermctl` over the local control socket, which only works when the agent and agterm share an OS — the socket does not exist inside a Linux container. This recipe replaces that one hop with two: a small script inside the container turns each hook event into a JSON line and sends it over TCP to the host, and a listener on the host turns each line back into the same `agtermctl session status` call the installer's hooks would have made directly. The row pulses active while the agent works, goes blocked on a real permission prompt, and flashes completed at the end of a turn — the same behavior as a native session, one network hop removed.
+The installer's `Help ▸ Install Agent Status Hooks…` wires an agent's lifecycle hooks straight to `elisctl` over the local control socket, which only works when the agent and Elis share an OS — the socket does not exist inside a Linux container. This recipe replaces that one hop with two: a small script inside the container turns each hook event into a JSON line and sends it over TCP to the host, and a listener on the host turns each line back into the same `elisctl session status` call the installer's hooks would have made directly. The row pulses active while the agent works, goes blocked on a real permission prompt, and flashes completed at the end of a turn — the same behavior as a native session, one network hop removed.
 
 ## Requirements
 
-- agterm 0.7.1 or later — `AGTERM_PANE` starts being injected into the session environment in that release (#130), which this recipe forwards so the row updates on the pane the container's shell actually runs in.
+- Elis 0.7.1 or later — `ELIS_PANE` starts being injected into the session environment in that release (#130), which this recipe forwards so the row updates on the pane the container's shell actually runs in.
 - `nc` (netcat) on the host and inside the container, plus `timeout` inside the container.
 - A container runtime that can pass environment variables through to the container (Docker, Podman, Apple's `container`, etc.) and reach the host over TCP — a bridge network or `host.containers.internal`-style hostname is enough; no port needs to be published to the outside world.
 - Claude Code (tested) or another agent with the same four hook events used by `Help ▸ Install Agent Status Hooks…` — see that installer's hooks for the exact event/state pairing this recipe mirrors.
@@ -25,17 +25,17 @@ Variables used below: `HOST_IP` is the host's address as seen from inside the co
 
 ```sh
 mkdir -p ~/bin
-cp agterm-remote-receiver.sh ~/bin/
-chmod +x ~/bin/agterm-remote-receiver.sh
+cp elis-remote-receiver.sh ~/bin/
+chmod +x ~/bin/elis-remote-receiver.sh
 
-~/bin/agterm-remote-receiver.sh --port PORT --log-file ~/Library/Logs/agterm-remote.log &
+~/bin/elis-remote-receiver.sh --port PORT --log-file ~/Library/Logs/elis-remote.log &
 ```
 
-`--socket` defaults to `$HOME/Library/Application Support/agterm/agterm.sock`; pass it explicitly if agterm's socket lives somewhere else. This process has to be running whenever you want statuses to show — it is a plain background job here, not a launchd service, so it does not survive a reboot or logout on its own; wrap it in a LaunchAgent if you want that.
+`--socket` defaults to `$HOME/Library/Application Support/elis/elis.sock`; pass it explicitly if Elis's socket lives somewhere else. This process has to be running whenever you want statuses to show — it is a plain background job here, not a launchd service, so it does not survive a reboot or logout on its own; wrap it in a LaunchAgent if you want that.
 
 ### Passing identity into the container
 
-Whatever starts the container needs to forward the session's own `AGTERM_*` variables plus where to send status. `AGTERM_SESSION_ID`, `AGTERM_WINDOW_ID`, `AGTERM_WORKSPACE_ID`, `AGTERM_PANE`, and `AGTERM_PANE_ID` are already exported by agterm into any shell it spawns on the host — a session that opens a Claude Code pane runs that shell with these already set, so a wrapper function only has to pass them through; `AGTERM_PANE_ID` only on releases newer than the floor above, where forwarding an unset variable costs nothing; only `AGTERM_REMOTE_HOST` is new, and it is what tells the container script to use this recipe's TCP path instead of a control socket it does not have.
+Whatever starts the container needs to forward the session's own `ELIS_*` variables plus where to send status. `ELIS_SESSION_ID`, `ELIS_WINDOW_ID`, `ELIS_WORKSPACE_ID`, `ELIS_PANE`, and `ELIS_PANE_ID` are already exported by Elis into any shell it spawns on the host — a session that opens a Claude Code pane runs that shell with these already set, so a wrapper function only has to pass them through; `ELIS_PANE_ID` only on releases newer than the floor above, where forwarding an unset variable costs nothing; only `ELIS_REMOTE_HOST` is new, and it is what tells the container script to use this recipe's TCP path instead of a control socket it does not have.
 
 For example, a `claude` shell function that launches an Apple `container machine` container running Claude Code, with the current session's identity forwarded in (replace `CONTAINER_CLAUDE_BIN_DIR` with wherever the container image installs the `claude` binary, and `HOST_IP:PORT` with the receiver's address):
 
@@ -43,17 +43,17 @@ For example, a `claude` shell function that launches an Apple `container machine
 claude() {
   container machine run -it \
     -e PATH="CONTAINER_CLAUDE_BIN_DIR:$PATH" \
-    -e AGTERM_SESSION_ID="${AGTERM_SESSION_ID:-}" \
-    -e AGTERM_WINDOW_ID="${AGTERM_WINDOW_ID:-}" \
-    -e AGTERM_WORKSPACE_ID="${AGTERM_WORKSPACE_ID:-}" \
-    -e AGTERM_PANE="${AGTERM_PANE:-}" \
-    -e AGTERM_PANE_ID="${AGTERM_PANE_ID:-}" \
-    -e AGTERM_REMOTE_HOST="${AGTERM_REMOTE_HOST:-HOST_IP:PORT}" \
+    -e ELIS_SESSION_ID="${ELIS_SESSION_ID:-}" \
+    -e ELIS_WINDOW_ID="${ELIS_WINDOW_ID:-}" \
+    -e ELIS_WORKSPACE_ID="${ELIS_WORKSPACE_ID:-}" \
+    -e ELIS_PANE="${ELIS_PANE:-}" \
+    -e ELIS_PANE_ID="${ELIS_PANE_ID:-}" \
+    -e ELIS_REMOTE_HOST="${ELIS_REMOTE_HOST:-HOST_IP:PORT}" \
     claude
 }
 ```
 
-Set `AGTERM_REMOTE_HOST` once in the shell that runs this function (e.g. in `~/.zshrc`, above the function) rather than hardcoding it here, so the same function keeps working if the receiver's port ever changes. The same `-e NAME="${NAME:-}"` shape works for any container runtime with an env-passthrough flag (Docker's and Podman's `-e NAME=$NAME` do the same thing).
+Set `ELIS_REMOTE_HOST` once in the shell that runs this function (e.g. in `~/.zshrc`, above the function) rather than hardcoding it here, so the same function keeps working if the receiver's port ever changes. The same `-e NAME="${NAME:-}"` shape works for any container runtime with an env-passthrough flag (Docker's and Podman's `-e NAME=$NAME` do the same thing).
 
 #### A note on Apple's `container` runtime
 
@@ -62,9 +62,9 @@ This was built and tested against Apple's own `container` CLI, not Docker — an
 ### Inside the container
 
 ```sh
-mkdir -p ~/.config/agterm/agent-status
-cp container-status-notify.sh ~/.config/agterm/agent-status/
-chmod +x ~/.config/agterm/agent-status/container-status-notify.sh
+mkdir -p ~/.config/elis/agent-status
+cp container-status-notify.sh ~/.config/elis/agent-status/
+chmod +x ~/.config/elis/agent-status/container-status-notify.sh
 ```
 
 Merge these four hooks into `~/.claude/settings.json` inside the container (the same event/state pairing the installer uses natively, pointed at this recipe's script instead):
@@ -73,16 +73,16 @@ Merge these four hooks into `~/.claude/settings.json` inside the container (the 
 {
   "hooks": {
     "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "~/.config/agterm/agent-status/container-status-notify.sh active --blink" }] }
+      { "hooks": [{ "type": "command", "command": "~/.config/elis/agent-status/container-status-notify.sh active --blink" }] }
     ],
     "PostToolUse": [
-      { "hooks": [{ "type": "command", "command": "~/.config/agterm/agent-status/container-status-notify.sh active --blink" }] }
+      { "hooks": [{ "type": "command", "command": "~/.config/elis/agent-status/container-status-notify.sh active --blink" }] }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "~/.config/agterm/agent-status/container-status-notify.sh completed --auto-reset" }] }
+      { "hooks": [{ "type": "command", "command": "~/.config/elis/agent-status/container-status-notify.sh completed --auto-reset" }] }
     ],
     "Notification": [
-      { "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "~/.config/agterm/agent-status/container-status-notify.sh blocked" }] }
+      { "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "~/.config/elis/agent-status/container-status-notify.sh blocked" }] }
     ]
   }
 }
@@ -94,7 +94,7 @@ Start Claude Code inside the container as usual. The row goes active (pulsing) o
 
 ## How it works
 
-`container-status-notify.sh` builds the same flat JSON shape a native install's control-socket call would carry (`cmd`, `state`, `session_id`, optionally `pane`, plus any extra flags as an `args` array) and writes it as one line to `nc "$remote_host" "$remote_port"` with a two-second timeout, then always exits 0 — a hook that blocks the agent's turn on a network hiccup is worse than a missed status update. `agterm-remote-receiver.sh` on the host runs a single `nc -k -l` (one TCP connection per event, with `-k` keeping the port bound between them so nothing is lost while a connection turns over), greps the fields it needs out of the JSON without a `jq` dependency, and calls `agtermctl session status <state> --target <session_id> [--pane <pane>] [--pane-id <pane_id>] [--blink] [--auto-reset] --socket <path>` — precisely the call the installer's own hooks make, just issued from the host instead of from inside the container. The two flags come from the sender's `args` array but are allowlisted, not forwarded, so a line off the socket cannot choose `agtermctl`'s arguments.
+`container-status-notify.sh` builds the same flat JSON shape a native install's control-socket call would carry (`cmd`, `state`, `session_id`, optionally `pane`, plus any extra flags as an `args` array) and writes it as one line to `nc "$remote_host" "$remote_port"` with a two-second timeout, then always exits 0 — a hook that blocks the agent's turn on a network hiccup is worse than a missed status update. `elis-remote-receiver.sh` on the host runs a single `nc -k -l` (one TCP connection per event, with `-k` keeping the port bound between them so nothing is lost while a connection turns over), greps the fields it needs out of the JSON without a `jq` dependency, and calls `elisctl session status <state> --target <session_id> [--pane <pane>] [--pane-id <pane_id>] [--blink] [--auto-reset] --socket <path>` — precisely the call the installer's own hooks make, just issued from the host instead of from inside the container. The two flags come from the sender's `args` array but are allowlisted, not forwarded, so a line off the socket cannot choose `elisctl`'s arguments.
 
 The gotcha: the two scripts' JSON shape has to agree exactly, because the receiver's parser only recognizes `"cmd":"session-status"` and silently drops anything else — a mismatched or nested payload (e.g. wrapping the state in a nested `args` object) produces no error, no status, and no clue why, since the container side reports success as soon as `nc` delivers the bytes.
 
@@ -102,7 +102,7 @@ The gotcha: the two scripts' JSON shape has to agree exactly, because the receiv
 
 Nothing destructive: this only posts status for the container's own session, the same as a native install.
 
-- `agterm-remote-receiver.sh` trusts anything that reaches its port — any process able to open a TCP connection to the host can post an arbitrary status for any `session_id`. Fine on a private bridge network between a host and its own container; do not expose the port beyond that. Note that `nc -l` binds every interface by default, so on a shared or untrusted network the port is only as closed as your firewall makes it: pass `--bind 127.0.0.1` (or whichever address the container reaches the host on) to narrow it.
+- `elis-remote-receiver.sh` trusts anything that reaches its port — any process able to open a TCP connection to the host can post an arbitrary status for any `session_id`. Fine on a private bridge network between a host and its own container; do not expose the port beyond that. Note that `nc -l` binds every interface by default, so on a shared or untrusted network the port is only as closed as your firewall makes it: pass `--bind 127.0.0.1` (or whichever address the container reaches the host on) to narrow it.
 - The receiver is a foreground loop started by hand in the example above; if it dies (host sleep, terminal closed, crash) statuses silently stop arriving and the sidebar row freezes at its last state until you notice and restart it.
 - `nc -k -l` handles one connection at a time; two events landing in the same instant serialize, and a sender whose two-second `timeout` expires while it waits gives up silently. The JSON stays a single complete line per connection, so a lost event leaves the row on its previous state rather than a wrong one — but a lost `completed` or `blocked` does leave it asserting something no longer true until the next event.
 - Like the kimi recipe's `PermissionRequest`, this depends on the agent's own hook firing exactly when — and only when — a real approval prompt is on screen; an agent whose hook set does not distinguish that from ordinary tool use will not track blocked accurately.

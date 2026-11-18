@@ -1,6 +1,6 @@
 # Scheduled jobs
 
-Let a coding agent install [cronn](https://github.com/umputun/cronn), schedule and inspect jobs on your Mac, and run jobs that open agterm sessions for you.
+Let a coding agent install [cronn](https://github.com/umputun/cronn), schedule and inspect jobs on your Mac, and run jobs that open Elis sessions for you.
 
 Author: [@umputun](https://github.com/umputun)
 
@@ -11,20 +11,20 @@ cronn is a cron replacement with a web dashboard and a local API. This recipe ru
 - "schedule `brew cleanup` every night at 3" adds the job and checks that cronn picked it up.
 - "cronn status" lists every job with its last result and when it runs next.
 - "why did the backup job fail" reads that run's captured output.
-- "show the cronn dashboard" opens it in an agterm overlay over the current session.
+- "show the cronn dashboard" opens it in an Elis overlay over the current session.
 - "run that job now" and "disable that job" go through the dashboard's own endpoints.
 
 When cronn is not installed, the skill says so, explains what the installer will change, and runs it once you agree.
 
-Jobs can drive agterm too. `scripts/agent-session-job.sh` is a job template that opens a background session in a named workspace, starts an agent there on a prompt, sets the title-bar context and badges the row. A weekday 8:30 job can leave a Claude Code session with "summarize what changed since yesterday" already answered in a `scheduled` workspace, waiting for you to read it.
+Jobs can drive Elis too. `scripts/agent-session-job.sh` is a job template that opens a background session in a named workspace, starts an agent there on a prompt, sets the title-bar context and badges the row. A weekday 8:30 job can leave a Claude Code session with "summarize what changed since yesterday" already answered in a `scheduled` workspace, waiting for you to read it.
 
 ## Requirements
 
-- agterm 0.37.0 or later, the release where `session overlay open --url --chromeless` began accepting a page served from this Mac, which the dashboard overlay uses. The job template needs only `session new`, `session context` and `notify`, all older.
+- Elis 0.37.0 or later, the release where `session overlay open --url --chromeless` began accepting a page served from this Mac, which the dashboard overlay uses. The job template needs only `session new`, `session context` and `notify`, all older.
 - Homebrew. The installer adds the `umputun/apps` tap's `cronn` formula; the skill was written against cronn 1.16.2.
 - Claude Code for the skill. The skill is plain instructions, so another agent that loads `SKILL.md` files works the same way.
 - `jq` for the job template and the skill's status query, `curl` and `launchctl`, which macOS ships.
-- `agtermctl` on the PATH the agent's jobs see. **Help ▸ Install Command Line Tool…** puts it in `/usr/local/bin`, which the installer includes.
+- `elisctl` on the PATH the agent's jobs see. **Help ▸ Install Command Line Tool…** puts it in `/usr/local/bin`, which the installer includes.
 
 ## Setup
 
@@ -60,7 +60,7 @@ To use the job template, copy it next to your jobs and make it executable:
 cp scripts/agent-session-job.sh ~/.config/cronn/jobs/ && chmod +x ~/.config/cronn/jobs/agent-session-job.sh
 ```
 
-It takes its settings as variables in the job's command: `JOB_PROMPT` (required), `JOB_NAME` (`scheduled`; the session is named `<JOB_NAME>-MMDD`), `JOB_WORKSPACE` (`scheduled`), `JOB_CWD` (`$HOME`), `JOB_AGENT` (`claude`), `JOB_CONTEXT` for the title bar, `SPAWN_PATH` for the session's PATH, plus `AGTERMCTL` and `JQ` when those binaries are somewhere unusual.
+It takes its settings as variables in the job's command: `JOB_PROMPT` (required), `JOB_NAME` (`scheduled`; the session is named `<JOB_NAME>-MMDD`), `JOB_WORKSPACE` (`scheduled`), `JOB_CWD` (`$HOME`), `JOB_AGENT` (`claude`), `JOB_CONTEXT` for the title bar, `SPAWN_PATH` for the session's PATH, plus `ELISCTL` and `JQ` when those binaries are somewhere unusual.
 
 ## Usage
 
@@ -79,10 +79,10 @@ jobs:
     name: "standup summary"
 ```
 
-The dashboard is at `http://127.0.0.1:9095`. Inside agterm the skill opens it with:
+The dashboard is at `http://127.0.0.1:9095`. Inside Elis the skill opens it with:
 
 ```sh
-agtermctl session overlay open --url "http://127.0.0.1:9095/" --js --chromeless --size-percent 80 --target "$AGTERM_SESSION_ID" --follow
+elisctl session overlay open --url "http://127.0.0.1:9095/" --js --chromeless --size-percent 80 --target "$ELIS_SESSION_ID" --follow
 ```
 
 To remove the agent, keeping your jobs and history:
@@ -103,7 +103,7 @@ cronn identifies a job by the SHA256 of its command string. Two jobs with the sa
 
 The dashboard's `toggle` endpoint flips a job's state rather than setting it. A retried toggle after a timeout can undo the first one, so the skill reads the state before and after and never retries blind.
 
-A job runs under `sh -c` with the agent's PATH, and has no `AGTERM_*` variables because it is not inside a session. That is why the job template finds the window that holds its workspace before creating anything, since every `agtermctl` call otherwise lands in the frontmost window. The session it creates gets agterm's GUI PATH rather than the job's, so the template starts the agent through `/usr/bin/env PATH=...`.
+A job runs under `sh -c` with the agent's PATH, and has no `ELIS_*` variables because it is not inside a session. That is why the job template finds the window that holds its workspace before creating anything, since every `elisctl` call otherwise lands in the frontmost window. The session it creates gets Elis's GUI PATH rather than the job's, so the template starts the agent through `/usr/bin/env PATH=...`.
 
 `session new --command` is not shell input: libghostty splits the line into arguments itself, and a prompt carrying quotes, `$` or newlines would not survive that split as one argument. The template writes the quoted agent line into a one-shot launcher file that `/bin/sh` parses and deletes as it starts, so the session command is only `/bin/sh <launcher>`. It uses `--no-select` so a session appearing at 8:30 does not pull focus from whatever you are typing, and `--wait` so a failed start stays on screen instead of closing the tab.
 
@@ -115,6 +115,6 @@ Jobs run whatever command you, or the agent on your behalf, put in the jobs file
 
 A job scheduled while the Mac sleeps is skipped, not caught up; it runs at its next slot.
 
-The job template needs agterm running when it fires; otherwise it posts a failure notification and exits. Each run opens a new session, and sessions from earlier days stay until you close them. Because of `--wait`, closing one can take a key press after the agent exits. The agent's working directory must already be trusted by that agent, or the session stops on its trust prompt.
+The job template needs Elis running when it fires; otherwise it posts a failure notification and exits. Each run opens a new session, and sessions from earlier days stay until you close them. Because of `--wait`, closing one can take a key press after the agent exits. The agent's working directory must already be trusted by that agent, or the session stops on its trust prompt.
 
-Under the **Re-run commands** restore mode, a scheduled session still open when agterm quits comes back at the next launch showing a `No such file or directory` error, because its launcher deleted itself on the first run. Close these sessions once you have read them.
+Under the **Re-run commands** restore mode, a scheduled session still open when Elis quits comes back at the next launch showing a `No such file or directory` error, because its launcher deleted itself on the first run. Close these sessions once you have read them.

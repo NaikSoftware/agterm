@@ -1,28 +1,27 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "agterm",
+  "name": "elis",
   "owner": {
-    "name": "Umputun",
-    "email": "umputun@gmail.com"
+    "name": "NaikSoftware"
   },
   "metadata": {
-    "description": "The agterm agent skill: drive the agterm macOS terminal over its control socket."
+    "description": "The Elis agent skill: drive the Elis macOS terminal over its control socket."
   },
   "plugins": [
     {
-      "name": "agterm",
-      "source": "./plugins/agterm",
-      "description": "Drive agterm, a native macOS terminal, programmatically via its agtermctl CLI and local control socket.",
+      "name": "elis",
+      "source": "./plugins/elis",
+      "description": "Drive Elis, a native terminal for macOS and Linux, programmatically via its elisctl CLI and local control socket.",
       "version": "0.42.3",
       "author": {
-        "name": "Umputun"
+        "name": "NaikSoftware"
       },
-      "homepage": "https://agterm.com",
-      "repository": "https://github.com/umputun/agterm",
+      "homepage": "https://naiksoftware.github.io/elis",
+      "repository": "https://github.com/NaikSoftware/elis",
       "license": "MIT",
       "category": "productivity",
       "keywords": [
-        "agterm",
+        "elis",
         "terminal",
         "macos",
         "automation",

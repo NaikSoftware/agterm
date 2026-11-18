@@ -59,7 +59,7 @@ class DetectionTests(unittest.TestCase):
 
 class MainTests(unittest.TestCase):
     def run_main(self, pane, left, right, fired_pane_rc=0):
-        """run_main drives main() against stubbed panes, returning the agtermctl argv it ran."""
+        """run_main drives main() against stubbed panes, returning the elisctl argv it ran."""
         calls = []
         self.slept = []
 

@@ -4,35 +4,35 @@
 # usage: agt-new-session.sh          open the picker over the current session
 #        agt-new-session.sh --pick   internal: the picker itself, run inside the overlay's pty
 #
-# Bound to a chord in keymap.conf, the script opens an agterm overlay over the session the key was
+# Bound to a chord in keymap.conf, the script opens an elis overlay over the session the key was
 # pressed in and re-invokes itself there in --pick mode, where it has the real tty that fzf needs.
 
 set -u
 
-AGTERMCTL="${AGTERMCTL:-agtermctl}"
+ELISCTL="${ELISCTL:-elisctl}"
 
 # fzf, and a homebrew jq, are not on the app's launchd PATH — which a custom command and an overlay
 # both inherit. Both standard homebrew prefixes are prepended; set AGT_BIN_PATH to a colon-separated
 # list of your own if the binaries live elsewhere.
 #
 # Resolved into a variable rather than used inline, because the launcher has to hand both this and
-# AGTERMCTL to the overlay explicitly — see the prefix on the overlay command at the bottom.
+# ELISCTL to the overlay explicitly — see the prefix on the overlay command at the bottom.
 AGT_BIN_PATH="${AGT_BIN_PATH:-/opt/homebrew/bin:/usr/local/bin}"
 PATH="$AGT_BIN_PATH:$PATH"
 export PATH
 
-# agtermctl resolves its socket from --socket, else AGTERM_STATE_DIR, else the app-support default.
-# It does NOT read AGTERM_SOCKET. agterm hands a custom command $AGT_SOCKET and an overlay pty
-# $AGTERM_SOCKET, so pass whichever is set through explicitly and let the default stand otherwise.
-AGT_SOCK="${AGT_SOCKET:-${AGTERM_SOCKET:-}}"
+# elisctl resolves its socket from --socket, else ELIS_STATE_DIR, else the app-support default.
+# It does NOT read ELIS_SOCKET. elis hands a custom command $AGT_SOCKET and an overlay pty
+# $ELIS_SOCKET, so pass whichever is set through explicitly and let the default stand otherwise.
+AGT_SOCK="${AGT_SOCKET:-${ELIS_SOCKET:-}}"
 
 # Call the CLI, naming the socket only when the environment gave us one. `--socket` is a
 # per-subcommand option, so it goes after the subcommand — appending it here is correct.
 agt() {
     if [ -n "$AGT_SOCK" ]; then
-        "$AGTERMCTL" "$@" --socket "$AGT_SOCK"
+        "$ELISCTL" "$@" --socket "$AGT_SOCK"
     else
-        "$AGTERMCTL" "$@"
+        "$ELISCTL" "$@"
     fi
 }
 
@@ -71,7 +71,7 @@ if [ "${1:-}" = "--pick" ]; then
         new_ws=yes
     fi
 
-    # 3) Ask for the session name. Blank falls through to agterm's own default.
+    # 3) Ask for the session name. Blank falls through to elis's own default.
     sname=$(fzf --print-query --prompt='Session name > ' \
         --layout=reverse --border --header='Blank = default name · Esc to cancel' </dev/null)
     status=$?
@@ -90,16 +90,16 @@ fi
 # path to itself rather than trusting PATH or a relative name.
 self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 
-# POSIX single-quote a string for embedding in the overlay command, which agterm runs through
+# POSIX single-quote a string for embedding in the overlay command, which elis runs through
 # `sh -c`: wrap it in '...' and turn each embedded ' into the '\'' sequence, so a path holding a
 # space or a quote cannot break out of the quoting. Same helper as the bundled show-image.sh.
 sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
-# AGTERMCTL and AGT_BIN_PATH are carried across as assignments PREFIXED onto the overlay command,
-# not exported. The overlay's shell is spawned by the app from its own environment plus the AGTERM_*
+# ELISCTL and AGT_BIN_PATH are carried across as assignments PREFIXED onto the overlay command,
+# not exported. The overlay's shell is spawned by the app from its own environment plus the ELIS_*
 # set, so nothing this process exports reaches it, and a prefix on the keymap line reaches only the
-# launcher — leaving the half that actually runs fzf, jq and the tree call on the defaults. agterm
+# launcher — leaving the half that actually runs fzf, jq and the tree call on the defaults. elis
 # runs the overlay command through `eval`, so a leading `VAR=value` is honored.
 agt session overlay open \
-    "AGTERMCTL=$(sq "$AGTERMCTL") AGT_BIN_PATH=$(sq "$AGT_BIN_PATH") /bin/sh $(sq "$self") --pick" \
+    "ELISCTL=$(sq "$ELISCTL") AGT_BIN_PATH=$(sq "$AGT_BIN_PATH") /bin/sh $(sq "$self") --pick" \
     --target "${AGT_SESSION_ID:-active}" --follow --size-percent "${AGT_OVERLAY_SIZE:-60}"

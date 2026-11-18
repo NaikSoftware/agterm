@@ -129,7 +129,7 @@ class ClaudeResumeTest(unittest.TestCase):
         return transcript
 
     def memo_path(self, session_id=TAB_ID):
-        return self.state / "agterm-claude-resume" / session_id.lower()
+        return self.state / "elis-claude-resume" / session_id.lower()
 
     def write_memo(self, directory, session_id=TAB_ID):
         memo = self.memo_path(session_id)
@@ -146,7 +146,7 @@ class ClaudeResumeTest(unittest.TestCase):
         env = os.environ.copy()
         env.update(
             {
-                "AGTERM_SESSION_ID": session_id.upper(),
+                "ELIS_SESSION_ID": session_id.upper(),
                 "CLAUDE_CONFIG_DIR": str(self.home / ".claude"),
                 "FAKE_CLAUDE_CONFIG_LOG": str(self.config_log),
                 "FAKE_CLAUDE_LOG": str(self.log),

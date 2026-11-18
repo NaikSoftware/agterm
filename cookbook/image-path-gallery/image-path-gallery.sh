@@ -1,5 +1,5 @@
 #!/bin/sh
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+ELISCTL=${ELISCTL:-elisctl}
 
 # Claude Code wraps long paths with an indent, so drop all whitespace before matching.
 # the character class is also the quoting: the path passes through two shells over ssh, and
@@ -30,7 +30,7 @@ REMOTE
 # pane's visible screen when there is no terminal selection.
 paths=$(printf '%s' "$AGT_SELECTION" | image_paths)
 if [ -z "$paths" ]; then
-  paths=$("$AGTERMCTL" session text --target "$AGT_SESSION_ID" --socket "$AGT_SOCKET" ${AGT_PANE:+--pane "$AGT_PANE"} | image_paths)
+  paths=$("$ELISCTL" session text --target "$AGT_SESSION_ID" --socket "$AGT_SOCKET" ${AGT_PANE:+--pane "$AGT_PANE"} | image_paths)
 fi
 [ -n "$paths" ] || { echo "no image path on the screen" >&2; exit 1; }
 paths=$(existing "$paths") || { echo "cannot reach $host" >&2; exit 1; }
@@ -54,14 +54,14 @@ done
 cat > "$dir/index.html" <<EOF
 <!doctype html><meta charset="utf-8"><title>Image preview</title>
 <style>
-html,body{height:100%;margin:0;background:var(--agterm-background,#222);color:var(--agterm-foreground,#ddd);font:13px -apple-system,sans-serif}
+html,body{height:100%;margin:0;background:var(--elis-background,#222);color:var(--elis-foreground,#ddd);font:13px -apple-system,sans-serif}
 body{display:flex;flex-direction:column}
 #main{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:12px}
 #main img{max-width:100%;max-height:100%;object-fit:contain}
 #caption{text-align:center;opacity:.7;padding-bottom:6px}
 #strip{display:flex;gap:8px;justify-content:safe center;overflow-x:auto;padding:0 12px 12px;flex:none}
 #strip button{flex:none;padding:0;border:2px solid transparent;border-radius:6px;background:none;cursor:pointer;opacity:.6}
-#strip button.on{border-color:var(--agterm-color-4,#6d82f3);opacity:1}
+#strip button.on{border-color:var(--elis-color-4,#6d82f3);opacity:1}
 #strip img{display:block;height:84px;max-width:150px;object-fit:contain;border-radius:4px}
 </style>
 <div id="main"><img id="big" alt=""></div>
@@ -93,7 +93,7 @@ show(0); window.focus();
 </script>
 EOF
 
-"$AGTERMCTL" session overlay open --html "$dir/index.html" --cwd "$dir" --js --chromeless --size-percent 90 --block \
+"$ELISCTL" session overlay open --html "$dir/index.html" --cwd "$dir" --js --chromeless --size-percent 90 --block \
   --target "$AGT_SESSION_ID" --socket "$AGT_SOCKET" >/dev/null
 rc=$?
 # 2 is a page closed unanswered, the normal way out of this one

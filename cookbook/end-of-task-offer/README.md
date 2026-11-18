@@ -18,7 +18,7 @@ It works with Claude Code and codex. In a split the dialog comes from the main p
 
 ## Requirements
 
-- agterm 0.39.0 or later, which shipped `session close --undoable`
+- Elis 0.39.0 or later, which shipped `session close --undoable`
 - [session-context-nudge](../session-context-nudge/) installed, since it is what asks the agent to clear the line
 - Claude Code, codex, or both
 - `jq`
@@ -78,7 +78,7 @@ codex runs a new or changed hook only after you approve it: start codex and revi
 
 Two settings, both optional:
 
-- `AGTERMCTL`: the CLI's full path, if yours sits somewhere unusual.
+- `ELISCTL`: the CLI's full path, if yours sits somewhere unusual.
 - `END_OF_TASK_AGENTS`: the regular expression that decides whether a pane runs an agent Clear may reset, matched against each element of the pane's running command. The default, `(^|/)(claude|codex)$`, matches the binaries themselves. If you start an agent through a wrapper script, add its name, and set it on the `offer` hook, since that is where the dialog starts:
 
   ```json
@@ -91,11 +91,11 @@ Nothing to press until the dialog appears. Work as usual; when the agent finishe
 
 ## How it works
 
-Two hook calls carry one decision across the turn. On every shell command the agent runs, `arm` checks whether it was `agtermctl session context --clear` for this session, and if so leaves a marker file named after the pane. When the turn ends, `offer` finds the marker, deletes it, and starts the dialog in the background so the agent is not held waiting for your answer.
+Two hook calls carry one decision across the turn. On every shell command the agent runs, `arm` checks whether it was `elisctl session context --clear` for this session, and if so leaves a marker file named after the pane. When the turn ends, `offer` finds the marker, deletes it, and starts the dialog in the background so the agent is not held waiting for your answer.
 
 The marker is named after the pane rather than the session. Two agents in one split end their turns separately, and a marker shared by the session would let the other pane's agent open the dialog in the middle of this one's work.
 
-Clear goes through the session's panes one at a time and checks two things before typing into each. First, that the pane runs an agent: `agtermctl tree --json` reports each pane's running command as `foreground` and `splitForeground`, and one of its elements must match `END_OF_TASK_AGENTS`. A pane running a shell or anything else is skipped, because a shell prompt can rest the caret at column 2 too and would run `/clear` as a command. Second, that the caret sits at column 2, where an empty Claude Code or codex composer rests it, just past the `›` prompt. Text you have started typing moves it further right, and then nothing is typed into that pane: a panel saying the prompt has text in it shows over it for four seconds instead.
+Clear goes through the session's panes one at a time and checks two things before typing into each. First, that the pane runs an agent: `elisctl tree --json` reports each pane's running command as `foreground` and `splitForeground`, and one of its elements must match `END_OF_TASK_AGENTS`. A pane running a shell or anything else is skipped, because a shell prompt can rest the caret at column 2 too and would run `/clear` as a command. Second, that the caret sits at column 2, where an empty Claude Code or codex composer rests it, just past the `›` prompt. Text you have started typing moves it further right, and then nothing is typed into that pane: a panel saying the prompt has text in it shows over it for four seconds instead.
 
 The `/clear` and its Enter go as two writes 150 ms apart. codex reads a fast burst of characters as a paste, and an Enter arriving inside it becomes a newline instead of a submit; Claude Code accepts either form.
 

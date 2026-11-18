@@ -3,18 +3,18 @@
 emulate -L zsh
 setopt pipefail
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
-export AGTERMCTL
+ELISCTL=${ELISCTL:-elisctl}
+export ELISCTL
 AGT_BIN_PATH=${AGT_BIN_PATH:-/opt/homebrew/bin:/usr/local/bin}
 export PATH="$AGT_BIN_PATH:$PATH"
-state_file="${XDG_STATE_HOME:-$HOME/.local/state}/agterm/project-session-picker.json"
+state_file="${XDG_STATE_HOME:-$HOME/.local/state}/elis/project-session-picker.json"
 
 agt() {
-  local socket=${AGT_SOCKET:-${AGTERM_SOCKET:-}}
+  local socket=${AGT_SOCKET:-${ELIS_SOCKET:-}}
   if [[ -n $socket ]]; then
-    "$AGTERMCTL" "$@" --socket "$socket"
+    "$ELISCTL" "$@" --socket "$socket"
   else
-    "$AGTERMCTL" "$@"
+    "$ELISCTL" "$@"
   fi
 }
 

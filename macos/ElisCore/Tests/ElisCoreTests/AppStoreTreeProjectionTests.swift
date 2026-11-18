@@ -1,0 +1,1076 @@
+import Foundation
+import Testing
+@testable import ElisCore
+
+// `AppStore.controlTree()` projection coverage: the session/workspace node shape and every field the tree
+// reports. Split out of `AppStoreTests.swift` for the file size limit.
+@MainActor
+struct AppStoreTreeProjectionTests {
+    @Test func controlTreeReportsEachSurfacesPaneIDAndFollowsASwap() {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = store.addSession(toWorkspace: ws.id, cwd: "/a")!
+        session.surface = SpySurface(paneToken: "one")
+        session.hasSplit = true
+        session.isSplit = true
+        session.splitPaneIdentity = UUID()
+        session.splitSurface = SpySurface()
+        func paneIDs() -> [String: String?] {
+            let surfaces = store.controlTree().workspaces[0].sessions[0].surfaces ?? []
+            return Dictionary(uniqueKeysWithValues: surfaces.map { ($0.kind, $0.paneID) })
+        }
+        #expect(paneIDs() == ["left": "one", "right": nil])
+
+        #expect(store.swapPanes(session.id) == nil)
+
+        #expect(paneIDs() == ["left": nil, "right": "one"])
+    }
+
+    @Test func controlTreeReportsTheRunningAgentAndOmitsNone() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/a"))
+        #expect(store.controlTree().workspaces[0].sessions[0].agent == nil)
+        session.runningAgent = .claude
+        let node = store.controlTree().workspaces[0].sessions[0]
+        #expect(node.agent == "claude")
+        #expect(String(decoding: try JSONEncoder().encode(node), as: UTF8.self).contains(#""agent":"claude""#))
+    }
+
+    @Test func controlTreeReportsTheAgentSessionIDAndOmitsNone() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/a"))
+        let encoded = { String(decoding: try JSONEncoder().encode(store.controlTree().workspaces[0].sessions[0]), as: UTF8.self) }
+        #expect(try !encoded().contains("agentSessionId"))
+        session.agentSessionID = "c1"
+        #expect(store.controlTree().workspaces[0].sessions[0].agentSessionId == "c1")
+        #expect(try encoded().contains(#""agentSessionId":"c1""#))
+    }
+
+    @Test func surfaceNodeEncodesItsPaneIDAndOmitsAnAbsentOne() throws {
+        func json(_ paneID: String?) throws -> String {
+            String(decoding: try JSONEncoder().encode(ControlSurfaceNode(
+                id: "s", kind: "left", active: true, visible: true, backedByZmx: true, paneID: paneID)), as: UTF8.self)
+        }
+        #expect(try json("tok").contains(#""paneID":"tok""#))
+        #expect(try !json(nil).contains("paneID"))
+    }
+
+    @Test(arguments: [SessionHost.Attribution.supervisor, .app, .orphaned, .unknown])
+    func liveAttributionProjectsBothPanesIncludingHiddenSplits(_ attribution: SessionHost.Attribution) throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "live")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = SpySurface(backedByZmx: true)
+        session.hasSplit = true
+        session.isSplit = false
+        session.splitPaneIdentity = UUID()
+        session.splitSurface = SpySurface(backedByZmx: true)
+        let tree = store.controlTree(paneForeground: { _ in nil }, liveAttribution: { _ in attribution })
+        let node = try #require(tree.workspaces.first?.sessions.first)
+        #expect(node.liveAttribution == attribution.rawValue)
+        #expect(node.splitLiveAttribution == attribution.rawValue)
+        #expect(!node.split)
+        let decoded = try JSONDecoder().decode(ControlTree.self, from: JSONEncoder().encode(tree))
+        #expect(decoded.workspaces.first?.sessions.first == node)
+    }
+
+    @Test(arguments: [true, false])
+    func hiddenUnrealizedSplitTakesThePrimarysBacking(_ backed: Bool) throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "live")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = SpySurface(backedByZmx: backed)
+        session.hasSplit = true
+        session.isSplit = false
+        session.splitPaneIdentity = UUID()
+        let node = try #require(store.controlTree().workspaces.first?.sessions.first)
+        #expect(node.backedByZmx == backed)
+        #expect(node.surfaces?.first { $0.kind == "right" }?.backedByZmx == backed)
+    }
+
+    @Test func hiddenUnrealizedPrimaryTakesTheFocusedSplitsBacking() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "live")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.hasSplit = true
+        session.isSplit = false
+        session.splitFocused = true
+        session.splitPaneIdentity = UUID()
+        session.splitSurface = SpySurface(backedByZmx: true)
+        #expect(store.controlTree().workspaces.first?.sessions.first?.backedByZmx == true)
+    }
+
+    @Test func realizedUnbackedSplitStillClearsTheSessionBacking() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "live")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = SpySurface(backedByZmx: true)
+        session.hasSplit = true
+        session.isSplit = false
+        session.splitPaneIdentity = UUID()
+        session.splitSurface = SpySurface(backedByZmx: false)
+        #expect(store.controlTree().workspaces.first?.sessions.first?.backedByZmx == false)
+    }
+
+    @Test func surfacelessDaemonBackedPanesProjectAsBacked() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "server")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.hasSplit = true
+        session.splitPaneIdentity = UUID()
+        session.daemonBackedPanes = [session.paneIdentity, session.splitPaneIdentity!]
+
+        let node = try #require(store.controlTree().workspaces.first?.sessions.first)
+        #expect(node.backedByZmx == true)
+        #expect(node.surfaces?.map(\.paneID) == [session.paneIdentity.uuidString, session.splitPaneIdentity!.uuidString])
+    }
+
+    @Test func aSurfacelessSessionWithoutDaemonsStaysUnbacked() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.hasSplit = true
+        session.splitPaneIdentity = UUID()
+        session.daemonBackedPanes = [session.paneIdentity]
+
+        #expect(store.controlTree().workspaces.first?.sessions.first?.backedByZmx == false)
+    }
+
+    @Test func paneBackgroundsProjectOverridesOnlyNeverTheInheritedDefault() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        let tint = BackgroundWatermark(kind: .color, colorHex: "#201414")
+        let peer = BackgroundWatermark(kind: .text, text: "PEER")
+        session.backgroundWatermark = tint
+
+        let defaultOnly = try #require(store.controlTree().workspaces.first?.sessions.first)
+        #expect(defaultOnly.background == tint)
+        #expect(defaultOnly.paneBackgrounds == nil)
+
+        session.paneBackgrounds.right = peer
+        let overridden = try #require(store.controlTree().workspaces.first?.sessions.first)
+        #expect(overridden.background == tint)
+        #expect(overridden.paneBackgrounds == PaneBackgrounds(right: peer))
+    }
+
+    @Test func liveHostStaleIsReportedPerPaneAndOmittedWhenFalse() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "live")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = SpySurface(backedByZmx: true)
+        session.hasSplit = true
+        session.isSplit = true
+        let split = UUID()
+        session.splitPaneIdentity = split
+        session.splitSurface = SpySurface(backedByZmx: true)
+        let tree = store.controlTree(paneForeground: { _ in nil }, liveAttribution: { _ in .supervisor },
+                                     liveHostStale: { $0 == split })
+        let node = try #require(tree.workspaces.first?.sessions.first)
+        #expect(node.liveHostStale == nil)
+        #expect(node.splitLiveHostStale == true)
+        let json = String(decoding: try JSONEncoder().encode(tree), as: UTF8.self)
+        #expect(json.contains(#""splitLiveHostStale":true"#))
+        #expect(!json.contains(#""liveHostStale""#))
+    }
+
+    @Test func liveHostStaleIsOmittedForOrdinaryAndRemotePanes() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "ordinary")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = SpySurface()
+        let remote = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp", remoteHost: "example"))
+        remote.surface = SpySurface(backedByZmx: true)
+        let tree = store.controlTree(paneForeground: { _ in nil }, liveAttribution: { _ in .supervisor },
+                                     liveHostStale: { _ in true })
+        let json = String(decoding: try JSONEncoder().encode(tree), as: UTF8.self)
+        #expect(!json.contains("LiveHostStale"))
+        #expect(!json.contains("liveHostStale"))
+    }
+
+    @Test func attributionIsOmittedForOrdinaryAndRemotePanes() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "ordinary")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = SpySurface()
+        let remote = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp", remoteHost: "example"))
+        remote.surface = SpySurface(backedByZmx: true)
+        var lookups = 0
+        let tree = store.controlTree(paneForeground: { _ in nil }, liveAttribution: { _ in lookups += 1; return .supervisor })
+        #expect(lookups == 0)
+        let json = String(decoding: try JSONEncoder().encode(tree), as: UTF8.self)
+        #expect(!json.contains("liveAttribution"))
+        #expect(!json.contains("splitLiveAttribution"))
+    }
+
+    @Test func attributionFollowsIdentityThroughSwapAndPromotion() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "live")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = SpySurface(backedByZmx: true)
+        session.hasSplit = true
+        session.isSplit = true
+        session.splitPaneIdentity = UUID()
+        session.splitSurface = SpySurface(backedByZmx: true)
+        let primary = session.paneIdentity
+        let split = try #require(session.splitPaneIdentity)
+        let values: [UUID: SessionHost.Attribution] = [primary: .supervisor, split: .orphaned]
+        func node() throws -> ControlSessionNode {
+            try #require(store.controlTree(paneForeground: { _ in nil }, liveAttribution: { values[$0] }).workspaces.first?.sessions.first)
+        }
+        #expect(try node().liveAttribution == "supervisor")
+        #expect(try node().splitLiveAttribution == "orphaned")
+        #expect(store.swapPanes(session.id) == nil)
+        #expect(try node().liveAttribution == "orphaned")
+        #expect(try node().splitLiveAttribution == "supervisor")
+        store.closePrimaryPane(session.id)
+        #expect(try node().liveAttribution == "supervisor")
+        #expect(try node().splitLiveAttribution == nil)
+    }
+
+    @Test func wrappedPaneWithoutAReadbackReportsUnknown() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "live")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = SpySurface(backedByZmx: true)
+        #expect(store.controlTree().workspaces.first?.sessions.first?.liveAttribution == "unknown")
+    }
+
+    @Test func terminalAskProjectionFollowsPaneIdentityAndOmitsResolvedAsks() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        session.surface = SpySurface()
+        store.toggleSplit(session.id)
+        session.splitSurface = SpySurface()
+        let id = UUID().uuidString
+        #expect(session.openAsk(PendingAsk(id: id, title: "Continue?", buttons: []), paneIdentity: session.splitPaneIdentity))
+        #expect(store.controlTree().workspaces[0].sessions[0].ask == ControlSessionAsk(id: id, pane: "right"))
+        #expect(store.controlTree().askPending == nil)
+        #expect(store.swapPanes(session.id) == nil)
+        let node = store.controlTree().workspaces[0].sessions[0]
+        #expect(node.ask?.pane == "left")
+        #expect(try JSONDecoder().decode(ControlSessionNode.self, from: JSONEncoder().encode(node)) == node)
+        session.cancelPendingAsk()
+        let cleared = store.controlTree().workspaces[0].sessions[0]
+        #expect(cleared.ask == nil)
+        let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(cleared)) as? [String: Any])
+        #expect(json["ask"] == nil)
+    }
+
+    @Test func controlTreeProjectsWorkspaceAndSessionShape() throws {
+        let store = makeStore()
+        let work = store.addWorkspace(name: "work")
+        let personal = store.addWorkspace(name: "personal")
+        let a = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/a", name: "alpha"))
+        let b = try #require(store.addSession(toWorkspace: personal.id, cwd: "/repo/b"))
+        b.currentCwd = "/live/b"
+        b.oscTitle = "remote:~/b"
+        b.isSplit = true
+        b.hasSplit = true
+        b.splitSurface = SpySurface() // a live split pane, so the `.right` status below stays valid
+        b.overlayActive = true
+        b.scratchActive = true
+        b.flagged = true
+        b.backgroundWatermark = BackgroundWatermark(kind: .text, text: "PROD")
+        store.setAgentIndicator(AgentIndicator(status: .blocked, statusPane: .right), forSession: b.id)
+        b.statusChangedAt = Date(timeIntervalSince1970: 1_700_000_000) // wall-clock stamp, pinned to compare
+        store.selectSession(b.id)
+        a.lastSelectedAt = Date(timeIntervalSince1970: 1_600_000_000)
+        b.lastSelectedAt = Date(timeIntervalSince1970: 1_700_000_100)
+
+        let tree = store.controlTree()
+
+        #expect(tree.workspaces.map(\.id) == [work.id.uuidString, personal.id.uuidString])
+        #expect(tree.workspaces.map(\.name) == ["work", "personal"])
+        #expect(tree.workspaces.map(\.active) == [false, true])
+        #expect(tree.workspaces[0].sessions == [
+            ControlSessionNode(id: a.id.uuidString, name: "alpha", cwd: "/repo/a",
+                               active: false, split: false,
+                               backedByZmx: false,
+                               activePanes: [],
+                               surfaces: [
+                                ControlSurfaceNode(id: TerminalSurfaceID(sessionID: a.id, surface: .primary).rawValue,
+                                                   kind: "left", active: true, visible: true,
+                                                   backedByZmx: false),
+                               ],
+                               // store-only session: a surface slot with nothing in it has no terminal
+                               realized: false, lastSelectedAt: 1_600_000_000)
+        ])
+        #expect(tree.workspaces[1].sessions == [
+            ControlSessionNode(id: b.id.uuidString, name: "remote:~/b", cwd: "/live/b",
+                               title: "remote:~/b", active: true, split: true,
+                               hasSplit: true, backedByZmx: false,
+                               splitAxis: "vertical", splitFocused: false,
+                               overlay: true, scratch: true, flagged: true,
+                               status: "blocked", statusPane: "right", statusChangedAt: 1_700_000_000, activePanes: [],
+                               background: BackgroundWatermark(kind: .text, text: "PROD"),
+                               surfaces: [
+                                ControlSurfaceNode(id: TerminalSurfaceID(sessionID: b.id, surface: .primary).rawValue,
+                                                   kind: "left", active: false, visible: false,
+                                                   backedByZmx: false),
+                                ControlSurfaceNode(id: TerminalSurfaceID(sessionID: b.id, surface: .split).rawValue,
+                                                   kind: "right", active: false, visible: false,
+                                                   backedByZmx: false),
+                                ControlSurfaceNode(id: TerminalSurfaceID(sessionID: b.id, surface: .scratch).rawValue,
+                                                   kind: "scratch", active: false, visible: false),
+                                ControlSurfaceNode(id: TerminalSurfaceID(sessionID: b.id, surface: .overlay).rawValue,
+                                                   kind: "overlay", active: true, visible: true),
+                               ],
+                               realized: false, splitCwd: "/live/b", lastSelectedAt: 1_700_000_100)
+        ])
+    }
+
+    @Test func selectionStampsTheSessionEnteredAndTheSessionLeft() throws {
+        let store = makeStore()
+        let work = store.addWorkspace(name: "work")
+        let a = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/a"))
+        let b = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/b", select: false))
+        let never = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/c", select: false))
+        a.lastSelectedAt = Date(timeIntervalSince1970: 1)
+        let before = Date()
+
+        store.selectSession(b.id)
+
+        let after = Date()
+        let aStamp = try #require(a.lastSelectedAt)
+        #expect((before...after).contains(aStamp))
+        #expect(b.lastSelectedAt == aStamp)
+        #expect(never.lastSelectedAt == nil)
+        let nodes = store.controlTree().workspaces[0].sessions
+        #expect(nodes.map(\.lastSelectedAt) == [aStamp.timeIntervalSince1970, aStamp.timeIntervalSince1970, nil])
+        let bare = try String(decoding: JSONEncoder().encode(nodes[2]), as: UTF8.self)
+        #expect(!bare.contains("lastSelectedAt"))
+    }
+
+    @Test func controlTreeProjectsSessionContext() throws {
+        let store = makeStore()
+        let work = store.addWorkspace(name: "work")
+        let withContext = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/a"))
+        let without = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/b"))
+        withContext.context = "PR #517: restore reap ordering"
+
+        let sessions = store.controlTree().workspaces[0].sessions
+
+        #expect(sessions[0].context == "PR #517: restore reap ordering")
+        #expect(sessions[1].context == nil)
+        #expect(without.context == nil)
+    }
+
+    @Test func sessionContextIsOmittedFromJSONWhenUnset() throws {
+        let store = makeStore()
+        let work = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/a"))
+
+        let bare = try String(decoding: JSONEncoder().encode(store.controlTree()), as: UTF8.self)
+        #expect(!bare.contains("\"context\""))
+
+        session.context = "PR #517"
+        let set = try String(decoding: JSONEncoder().encode(store.controlTree()), as: UTF8.self)
+        #expect(set.contains("\"context\":\"PR #517\""))
+    }
+
+    @Test func controlTreeProjectsSessionInfoFields() throws {
+        let store = makeStore()
+        let work = store.addWorkspace(name: "work")
+        let plain = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/a"))
+        let timed = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/b"))
+        let mirrored = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/c"))
+        _ = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/d"))
+        store.setInfo(try SessionInfo.make(source: "3 agents", markdown: false, hideAfter: 0).get(), forSession: plain.id)
+        store.setInfo(try SessionInfo.make(source: "**ci**", markdown: true, hideAfter: 60).get(), forSession: timed.id)
+        mirrored.mirroredInfo = try SessionInfo.make(source: "origin", markdown: false, hideAfter: 15).get()
+
+        let sessions = store.controlTree().workspaces[0].sessions
+
+        #expect(sessions[0].info == "3 agents")
+        #expect(sessions[0].infoMarkdown == false)
+        #expect(sessions[0].infoHideAfter == 0)
+        #expect(sessions[1].info == "**ci**")
+        #expect(sessions[1].infoMarkdown == true)
+        #expect(sessions[1].infoHideAfter == 60)
+        #expect(sessions[2].info == "origin")
+        #expect(sessions[2].infoHideAfter == 15)
+        #expect(sessions[3].info == nil)
+        #expect(sessions[3].infoMarkdown == nil)
+        #expect(sessions[3].infoHideAfter == nil)
+    }
+
+    @Test func sessionInfoFieldsAreOmittedFromJSONWhenUnset() throws {
+        let store = makeStore()
+        let work = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/a"))
+
+        let bare = try String(decoding: JSONEncoder().encode(store.controlTree()), as: UTF8.self)
+        #expect(!bare.contains("\"info"))
+
+        store.setInfo(try SessionInfo.make(source: "x", markdown: false, hideAfter: 0).get(), forSession: session.id)
+        let set = try String(decoding: JSONEncoder().encode(store.controlTree()), as: UTF8.self)
+        #expect(set.contains("\"info\":\"x\""))
+        #expect(set.contains("\"infoMarkdown\":false"))
+        #expect(set.contains("\"infoHideAfter\":0"))
+    }
+
+    @Test func aCompanionReportsItsParentAndAFoldedParentReportsCollapsed() throws {
+        let g = try CompanionGroup()
+        g.store.setSessionExpanded(g.parent.id, expanded: false)
+
+        let nodes = try #require(g.store.controlTree().workspaces.first { $0.id == g.work.id.uuidString }?.sessions)
+        let byID = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, $0) })
+
+        #expect(nodes.map(\.id) == g.order.map(\.uuidString))
+        #expect(byID[g.first.id.uuidString]?.parent == g.parent.id.uuidString)
+        #expect(byID[g.parent.id.uuidString]?.parent == nil)
+        #expect(byID[g.parent.id.uuidString]?.collapsed == true)
+        #expect(byID[g.first.id.uuidString]?.collapsed == nil)
+    }
+
+    @Test func aFoldedParentWhoseLastCompanionClosedNoLongerReportsCollapsed() throws {
+        let g = try CompanionGroup()
+        g.store.setSessionExpanded(g.parent.id, expanded: false)
+        g.store.closeSession(g.first.id)
+        g.store.closeSession(g.second.id)
+
+        let node = try #require(g.store.controlTree().workspaces.flatMap(\.sessions).first { $0.id == g.parent.id.uuidString })
+
+        #expect(node.collapsed == nil)
+    }
+
+    @Test func aPageCompanionReportsItsContentAndATerminalOmitsIt() throws {
+        let g = try CompanionGroup()
+        let page = try g.store.addPageCompanion(to: g.parent.id, overlay: HtmlOverlay(source: .file(path: "/tmp/p.html", grantRoot: nil))).get()
+
+        let nodes = g.store.controlTree().workspaces.flatMap(\.sessions)
+
+        #expect(nodes.first { $0.id == page.id.uuidString }?.content == "page")
+        #expect(nodes.first { $0.id == g.parent.id.uuidString }?.content == nil)
+    }
+
+    @Test func parentAndCollapsedAreOmittedFromJSONForAPlainSession() throws {
+        let store = makeStore()
+        let work = store.addWorkspace(name: "work")
+        _ = try #require(store.addSession(toWorkspace: work.id, cwd: "/repo/a"))
+
+        let json = try String(decoding: JSONEncoder().encode(store.controlTree()), as: UTF8.self)
+
+        #expect(!json.contains("\"parent\""))
+        #expect(!json.contains("\"collapsed\""))
+    }
+
+    @Test func controlTreeReportsSidebarVisibility() {
+        let store = makeStore()
+        #expect(store.controlTree().sidebarVisible == true)
+        store.setSidebarVisible(false)
+        #expect(store.controlTree().sidebarVisible == false)
+        store.setSidebarVisible(true)
+        #expect(store.controlTree().sidebarVisible == true)
+    }
+
+    @Test func controlTreeReportsCollapsedWorkspace() {
+        let store = makeStore()
+        let ws2 = store.addWorkspace(name: "second")
+        #expect(store.controlTree().workspaces.allSatisfy { $0.collapsed == nil })
+        store.setWorkspaceExpanded(ws2.id, expanded: false)
+        let nodes = store.controlTree().workspaces
+        #expect(nodes.first { $0.id == ws2.id.uuidString }?.collapsed == true)
+        #expect(nodes.filter { $0.collapsed == true }.count == 1)
+        store.setWorkspaceExpanded(ws2.id, expanded: true)
+        #expect(store.controlTree().workspaces.allSatisfy { $0.collapsed == nil })
+    }
+
+    @Test func controlTreeCollapsedIsIdempotentAndFocusIndependent() {
+        let store = makeStore()
+        let ws2 = store.addWorkspace(name: "second")
+        store.setWorkspaceExpanded(ws2.id, expanded: false)
+        store.setWorkspaceExpanded(ws2.id, expanded: false)
+        let afterTwice = store.controlTree().workspaces
+        #expect(afterTwice.filter { $0.collapsed == true }.count == 1)
+        #expect(afterTwice.first { $0.id == ws2.id.uuidString }?.collapsed == true)
+        // focus-independent: focusing the collapsed workspace force-reveals it in the sidebar but must NOT
+        // flip the persisted model, so the `collapsed` read-back still reports true.
+        store.setFocusedWorkspace(ws2.id)
+        let focused = store.controlTree().workspaces.first { $0.id == ws2.id.uuidString }
+        #expect(focused?.collapsed == true)
+        #expect(focused?.focused == true)
+    }
+
+    @Test func controlTreeReportsSidebarMode() {
+        let store = makeStore()
+        #expect(store.controlTree().sidebarMode == "tree")
+        store.setSidebarMode(.flagged)
+        #expect(store.controlTree().sidebarMode == "flagged")
+        store.setSidebarMode(.tree)
+        #expect(store.controlTree().sidebarMode == "tree")
+    }
+
+    @Test func controlTreeReportsThePassedFlaggedLayoutInEitherSidebarMode() {
+        let store = makeStore()
+        #expect(store.controlTree().sidebarFlaggedLayout == nil)
+        #expect(store.controlTree(paneForeground: { _ in nil }, flaggedLayout: .tree).sidebarFlaggedLayout == "tree")
+        store.setSidebarMode(.flagged)
+        #expect(store.controlTree(paneForeground: { _ in nil }, flaggedLayout: .flat).sidebarFlaggedLayout == "flat")
+    }
+
+    @Test func controlTreeReportsThePassedSidebarDensityInEitherSidebarMode() {
+        let store = makeStore()
+        #expect(store.controlTree().sidebarDensity == nil)
+        #expect(store.controlTree(paneForeground: { _ in nil }, sidebarDensity: .compact).sidebarDensity == "compact")
+        store.setSidebarMode(.flagged)
+        #expect(store.controlTree(paneForeground: { _ in nil }, sidebarDensity: .standard).sidebarDensity == "default")
+    }
+
+    @Test func controlTreeReportsTheSavedFlaggedOrderAndOmitsItWhenNothingIsFlagged() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let a = try #require(store.addSession(toWorkspace: ws.id, cwd: "/a"))
+        let b = try #require(store.addSession(toWorkspace: ws.id, cwd: "/b"))
+        let empty = try #require(String(data: JSONEncoder().encode(store.controlTree()), encoding: .utf8))
+        #expect(store.controlTree().flaggedOrder == nil)
+        #expect(!empty.contains("\"flaggedOrder\""))
+
+        store.setFlag(true, forSession: b.id)
+        store.setFlag(true, forSession: a.id)
+        let tree = store.controlTree()
+
+        #expect(tree.flaggedOrder == [b.id.uuidString, a.id.uuidString])
+        #expect(tree.workspaces.first { $0.id == ws.id.uuidString }?.sessions.map(\.id) == [a.id.uuidString, b.id.uuidString])
+        let json = try #require(String(data: JSONEncoder().encode(tree), encoding: .utf8))
+        #expect(json.contains("\"flaggedOrder\""))
+    }
+
+    @Test func controlTreeReportsQuickVisibleFromClosure() {
+        let store = makeStore()
+        #expect(store.controlTree().quickVisible == nil)
+        // the app supplies the live QuickTerminalController.isVisible via the closure.
+        #expect(store.controlTree(quickVisible: { true }).quickVisible == true)
+        #expect(store.controlTree(quickVisible: { false }).quickVisible == false)
+    }
+
+    @Test func controlTreeReportsZoomedSurfaceFromClosure() {
+        let store = makeStore()
+        #expect(store.controlTree().zoomedSurface == nil)
+        #expect(store.controlTree(zoomedSurface: { nil }).zoomedSurface == nil)
+        // the app supplies the live TerminalZoomController.target?.controlID via the closure.
+        let id = "surface:\(UUID().uuidString):left"
+        #expect(store.controlTree(zoomedSurface: { id }).zoomedSurface == id)
+        #expect(store.controlTree(zoomedSurface: { "quick" }).zoomedSurface == "quick")
+    }
+
+    @Test func controlTreeReportsPickPendingFromClosure() {
+        let store = makeStore()
+        #expect(store.controlTree(pickPending: { "pick-42" }).pickPending == "pick-42")
+    }
+
+    @Test func controlTreeOmitsPickPendingWithoutClosure() {
+        let store = makeStore()
+        #expect(store.controlTree().pickPending == nil)
+        #expect(store.controlTree(pickPending: { nil }).pickPending == nil)
+    }
+
+    @Test(arguments: [Optional("ask-42"), nil])
+    func controlTreeReportsAskPendingThroughBothBuilders(pending: String?) {
+        let store = makeStore()
+        #expect(store.controlTree(paneForeground: { _ in nil }, askPending: { pending }).askPending == pending)
+        #expect(store.controlTree(askPending: { pending }).askPending == pending)
+        #expect(store.controlTree().askPending == nil)
+    }
+
+    @Test func controlTreeReportsDashboardFieldsFromClosures() {
+        let store = makeStore()
+        let bare = store.controlTree()
+        #expect(bare.dashboardMembers == nil)
+        #expect(bare.dashboardHighlighted == nil)
+        #expect(bare.dashboardFontSize == nil)
+        #expect(bare.dashboardFontMode == nil)
+        // members are pane refs (`<uuid>:left`/`:right`), so a split session shows as two cells
+        let members = ["9f3c:left", "9f3c:right", "abcd:left"]
+        let tree = store.controlTree(dashboardMembers: { members }, dashboardHighlighted: { "9f3c:right" },
+                                     dashboardFontSize: { 12 }, dashboardFontMode: { "auto" })
+        #expect(tree.dashboardMembers == members)
+        #expect(tree.dashboardHighlighted == "9f3c:right")
+        #expect(tree.dashboardFontSize == 12)
+        #expect(tree.dashboardFontMode == "auto")
+    }
+
+    @Test func controlTreeDashboardMembersClosurePassesThroughVerbatim() {
+        // an EMPTY array is distinct from nil (omitted). The app side never emits [], so this pins a
+        // boundary nothing else reaches.
+        let store = makeStore()
+        #expect(store.controlTree(dashboardMembers: { [] }).dashboardMembers == [])
+        #expect(store.controlTree(dashboardMembers: { nil }).dashboardMembers == nil)
+    }
+
+    @Test func setSidebarVisiblePostsChangeNotificationOnlyOnChange() {
+        // the app-target ControlServer observes this to refresh window.list's cached sidebarVisible; the
+        // post must fire only on an actual change (queue nil so the synchronous post delivers inline).
+        final class Counter: @unchecked Sendable { var n = 0 }
+        let store = makeStore() // default sidebarVisible == true
+        let counter = Counter()
+        let token = NotificationCenter.default.addObserver(forName: .elisSidebarVisibilityChanged, object: nil,
+                                                           queue: nil) { _ in counter.n += 1 }
+        defer { NotificationCenter.default.removeObserver(token) }
+        store.setSidebarVisible(true)
+        #expect(counter.n == 0)
+        store.setSidebarVisible(false)
+        #expect(counter.n == 1)
+        store.setSidebarVisible(false)
+        #expect(counter.n == 1)
+        store.setSidebarVisible(true)
+        #expect(counter.n == 2)
+    }
+
+    @Test func controlTreeReportsUnseenCountWhenPositive() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/repo"))
+        session.unseenCount = 4
+
+        let node = try #require(store.controlTree().workspaces[0].sessions.first)
+
+        #expect(node.unseen == 4)
+    }
+
+    @Test func controlTreeOmitsUnseenCountWhenZero() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/repo"))
+        session.unseenCount = 0
+
+        let node = try #require(store.controlTree().workspaces[0].sessions.first)
+
+        #expect(node.unseen == nil) // zero reads as "no badge", omitted from the wire
+    }
+
+    @Test func controlTreeReportsStatusPaneForNonIdleSession() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/repo"))
+        session.hasSplit = true
+        session.splitSurface = SpySurface() // a live split, so a `.right` status is valid (not coerced to `.left`)
+        store.setAgentIndicator(AgentIndicator(status: .blocked, statusPane: .right), forSession: session.id)
+
+        let node = try #require(store.controlTree().workspaces[0].sessions.first)
+
+        #expect(node.status == "blocked")
+        #expect(node.statusPane == "right")
+    }
+
+    @Test func controlTreeNilsStatusPaneWhenIdleEvenWithPane() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/repo"))
+        store.setAgentIndicator(AgentIndicator(status: .idle, statusPane: .right), forSession: session.id)
+
+        let node = try #require(store.controlTree().workspaces[0].sessions.first)
+
+        #expect(node.status == nil)
+        #expect(node.statusPane == nil)
+    }
+
+    @Test func controlTreeOmitsStatusPaneWhenNonIdleButUnspecified() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/repo"))
+        store.setAgentIndicator(AgentIndicator(status: .completed), forSession: session.id)
+
+        let node = try #require(store.controlTree().workspaces[0].sessions.first)
+
+        #expect(node.status == "completed")
+        #expect(node.statusPane == nil)
+    }
+
+    @Test func controlTreeReportsStatusShapeOnlyForAPerCallOverride() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let shaped = try #require(store.addSession(toWorkspace: ws.id, cwd: "/shaped"))
+        let plain = try #require(store.addSession(toWorkspace: ws.id, cwd: "/plain"))
+        store.setAgentIndicator(AgentIndicator(status: .blocked, shape: .triangle), forSession: shaped.id)
+        store.setAgentIndicator(AgentIndicator(status: .blocked), forSession: plain.id)
+
+        let sessions = store.controlTree().workspaces[0].sessions
+
+        #expect(sessions[0].statusShape == "triangle")
+        #expect(sessions[1].statusShape == nil) // no per-call shape: the Settings shape / default is not reported
+    }
+
+    @Test func controlTreeDropsStatusShapeOnTheNextSetWithoutOne() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/repo"))
+        // each session.status builds a whole new indicator, so a following set with no shape replaces it
+        store.setAgentIndicator(AgentIndicator(status: .blocked, shape: .triangle), forSession: session.id)
+        #expect(store.controlTree().workspaces[0].sessions[0].statusShape == "triangle")
+
+        store.setAgentIndicator(AgentIndicator(status: .blocked), forSession: session.id)
+
+        #expect(store.controlTree().workspaces[0].sessions[0].statusShape == nil)
+        #expect(store.controlTree().workspaces[0].sessions[0].status == "blocked")
+    }
+
+    @Test func controlTreeNilsStatusShapeWhenIdleEvenWithShape() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: ws.id, cwd: "/repo"))
+        // idle renders no glyph, so a retained shape must not project — mirroring statusPane/statusColor
+        store.setAgentIndicator(AgentIndicator(status: .idle, shape: .star), forSession: session.id)
+
+        let node = try #require(store.controlTree().workspaces[0].sessions.first)
+
+        #expect(node.status == nil)
+        #expect(node.statusShape == nil)
+    }
+
+    @Test func controlTreeUsesForegroundLookups() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let active = try #require(store.addSession(toWorkspace: ws.id, cwd: "/active"))
+        let other = try #require(store.addSession(toWorkspace: ws.id, cwd: "/other"))
+        store.selectSession(active.id)
+
+        let tree = store.controlTree(
+            paneForeground: { session in session.id == active.id ? .program(["ssh", "host"]) : nil },
+            splitPaneForeground: { session in session.id == other.id ? .program(["tail", "-f", "app.log"]) : nil }
+        )
+
+        #expect(tree.workspaces[0].sessions[0].foreground == ["ssh", "host"])
+        #expect(tree.workspaces[0].sessions[0].splitForeground == nil)
+        #expect(tree.workspaces[0].sessions[1].foreground == nil)
+        #expect(tree.workspaces[0].sessions[1].splitForeground == ["tail", "-f", "app.log"])
+    }
+
+    @Test func controlTreeSplitsPaneForegroundIntoCommandAndForegroundShell() {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "one")
+        _ = try! #require(store.addSession(toWorkspace: ws.id, cwd: "/a"))
+
+        var node = store.controlTree(paneForeground: { _ in .foregroundShell("zsh") },
+                                     splitPaneForeground: { _ in .program(["tail", "-f", "/x"]) })
+            .workspaces[0].sessions[0]
+        #expect(node.foreground == nil)
+        #expect(node.foregroundShell == "zsh")
+        #expect(node.splitForeground == ["tail", "-f", "/x"])
+        #expect(node.splitForegroundShell == nil)
+
+        node = store.controlTree(paneForeground: { _ in nil }).workspaces[0].sessions[0]
+        #expect(node.foreground == nil)
+        #expect(node.foregroundShell == nil)
+    }
+
+    @Test func controlTreeCompatibilityOverloadKeepsArgvCallersAndReportsNoForegroundShell() throws {
+        let store = makeStore()
+        let ws = store.addWorkspace(name: "work")
+        _ = try #require(store.addSession(toWorkspace: ws.id, cwd: "/repo"))
+
+        // the argv-shaped lookup an older consumer supplies: it cannot name a shell, so foregroundShell stays nil.
+        let node = store.controlTree(foreground: { _ in ["ssh", "host"] }).workspaces[0].sessions[0]
+
+        #expect(node.foreground == ["ssh", "host"])
+        #expect(node.foregroundShell == nil)
+        #expect(node.splitForegroundShell == nil)
+    }
+
+    @MainActor
+    private final class NullSink: PresentationSink {
+        func offer(_ frame: PresentationFrame) -> Bool { true }
+        func close(_ reason: PresentationHub.CloseReason) {}
+    }
+
+    @Test(arguments: [(RemotePresentationConnection.connecting, "connecting", String?.none),
+                      (.connected, "connected", nil), (.failed("exit 255"), "failed", "exit 255")])
+    func aViewerRowReportsItsStream(_ connection: RemotePresentationConnection, _ state: String,
+                                    _ error: String?) throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp", remoteHost: "buildbox"))
+        store.bindRemote(RemoteBinding(remoteSessionID: "s1", daemonsByLocalPane: [:], presentationVersion: 1),
+                         forSession: session.id)
+        store.setRemoteConnection(connection, forSession: session.id)
+
+        let node = try #require(store.controlTree().workspaces[0].sessions.first)
+
+        #expect(node.presentation == ControlPresentationNode(state: state, mode: "mirror", error: error))
+    }
+
+    @Test func anOriginThatPredatesTheStreamReadsUnsupported() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp", remoteHost: "buildbox"))
+        store.bindRemote(RemoteBinding(remoteSessionID: "s1", daemonsByLocalPane: [:], presentationVersion: nil),
+                         forSession: session.id)
+
+        #expect(store.controlTree().workspaces[0].sessions[0].presentation?.state == "unsupported")
+    }
+
+    @Test func anOriginRowCountsItsMirrorsAndOmitsBothFieldsOtherwise() throws {
+        let store = makeStore()
+        let hub = PresentationHub(staleTimeout: 30)
+        store.presentationHub = hub
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        let plain = String(decoding: try JSONEncoder().encode(store.controlTree()), as: UTF8.self)
+        #expect(!plain.contains("presentation"))
+        #expect(!plain.contains("presenters"))
+
+        for _ in 0..<2 {
+            try hub.subscribe(session: session.id, hello: PresentationHello(version: 1, kinds: [], mode: .mirror),
+                              sink: NullSink()) { store.presentationSnapshot(forSession: session.id) }
+        }
+
+        #expect(store.controlTree().workspaces[0].sessions[0].presenters == ControlPresentersNode(mirrors: 2, viewers: 2))
+    }
+
+    @Test func anOriginSurfaceIsRemoteExactlyWhenItsNextWorkGoesToAViewer() throws {
+        let store = makeStore()
+        let hub = PresentationHub(staleTimeout: 30)
+        store.presentationHub = hub
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        store.toggleSplit(session.id)
+        session.surface = SpySurface(paneToken: "left")
+        session.splitSurface = SpySurface(paneToken: "right")
+        let remote = { () -> [String: Bool?] in
+            Dictionary(uniqueKeysWithValues: (store.controlTree().workspaces[0].sessions[0].surfaces ?? []).map { ($0.kind, $0.remote) })
+        }
+        lead(.follower, pane: session.paneIdentity)
+        lead(.leader, pane: try #require(session.splitPaneIdentity))
+        #expect(remote()["left"] == .some(nil))
+
+        let id = try hub.subscribe(session: session.id, hello: PresentationHello(version: 1, kinds: [], mode: .presenter),
+                                   sink: NullSink()) { store.presentationSnapshot(forSession: session.id) }
+        hub.receive(PresentationFrame(gen: 1, rev: 0, body: .presenterAcquire), from: id)
+
+        #expect(remote()["left"] == .some(true))
+        #expect(remote()["right"] == .some(nil))
+    }
+
+    private func lead(_ role: ZmxLeadRole, pane: UUID) {
+        let attachment = ZmxLeadAttachment(claim: false)
+        ZmxLeadBook.shared.begin(attachment, pane: pane)
+        if let notice = ZmxLeadNotice(title: "zmx-role;\(attachment.nonce):\(role.rawValue):1") {
+            _ = ZmxLeadBook.shared.apply(notice, pane: pane)
+        }
+    }
+
+    @Test func anOriginRowReportsItsPresenterApartFromItsMirrors() throws {
+        let store = makeStore()
+        let hub = PresentationHub(staleTimeout: 30)
+        store.presentationHub = hub
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        let hello = PresentationHello(version: 1, kinds: [], mode: .presenter)
+        let presenter = try hub.subscribe(session: session.id, hello: hello, sink: NullSink()) {
+            store.presentationSnapshot(forSession: session.id)
+        }
+        try hub.subscribe(session: session.id, hello: hello, sink: NullSink()) {
+            store.presentationSnapshot(forSession: session.id)
+        }
+
+        hub.receive(PresentationFrame(gen: 1, rev: 0, body: .presenterAcquire), from: presenter)
+
+        #expect(store.controlTree().workspaces[0].sessions[0].presenters
+            == ControlPresentersNode(mirrors: 1, presenter: true, viewers: 2))
+    }
+
+    @Test func aViewerRowReportsTheModeItWasGranted() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp", remoteHost: "buildbox"))
+        store.bindRemote(RemoteBinding(remoteSessionID: "s1", daemonsByLocalPane: [:], presentationVersion: 1),
+                         forSession: session.id)
+
+        store.setRemoteMode(.presenter, forSession: session.id)
+
+        #expect(store.controlTree().workspaces[0].sessions[0].presentation?.mode == "presenter")
+    }
+
+    @Test func aMarkdownPageProjectsOnlyItsMarkdownSource() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        let page = HtmlOverlay(source: .markdown(path: "/tmp/notes/readme.md"))
+        #expect(store.openHtmlOverlay(session.id, pane: nil, overlay: page, sizePercent: 95) == nil)
+
+        let node = try #require(store.controlTree().workspaces[0].sessions[0].htmlOverlays?.first)
+
+        #expect(node == ControlHtmlOverlayNode(pane: nil, markdown: "/tmp/notes/readme.md", state: "loading", error: nil,
+                                               id: page.id.uuidString))
+        let data = try JSONEncoder().encode(node)
+        #expect(try JSONDecoder().decode(ControlHtmlOverlayNode.self, from: data) == node)
+        #expect(String(decoding: data, as: UTF8.self).contains(#""markdown":"\/tmp\/notes\/readme.md""#))
+        let file = ControlHtmlOverlayNode(pane: nil, file: "/tmp/r.html", state: "loaded", error: nil)
+        #expect(!String(decoding: try JSONEncoder().encode(file), as: UTF8.self).contains("markdown"))
+    }
+
+    @Test func aDocumentPageProjectsOnlyItsDocumentSource() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        let page = HtmlOverlay(source: .document(path: "/tmp/agdoc/pr.html"))
+        #expect(store.openHtmlOverlay(session.id, pane: nil, overlay: page, sizePercent: 95) == nil)
+
+        let node = try #require(store.controlTree().workspaces[0].sessions[0].htmlOverlays?.first)
+
+        #expect(node == ControlHtmlOverlayNode(pane: nil, document: "/tmp/agdoc/pr.html", state: "loading", error: nil,
+                                               id: page.id.uuidString))
+        let data = try JSONEncoder().encode(node)
+        #expect(try JSONDecoder().decode(ControlHtmlOverlayNode.self, from: data) == node)
+        #expect(String(decoding: data, as: UTF8.self).contains(#""document":"\/tmp\/agdoc\/pr.html""#))
+    }
+
+    @Test func aTextPageProjectsItsFileMappedLanguageAndRequestedLine() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        let page = HtmlOverlay(source: .text(path: "/tmp/src/main.go", line: 42))
+        #expect(store.openHtmlOverlay(session.id, pane: nil, overlay: page, sizePercent: 95) == nil)
+
+        let node = try #require(store.controlTree().workspaces[0].sessions[0].htmlOverlays?.first)
+
+        let text = ControlTextOverlayNode(file: "/tmp/src/main.go", language: "go", line: 42)
+        #expect(node == ControlHtmlOverlayNode(pane: nil, text: text, state: "loading", error: nil, id: page.id.uuidString))
+        let data = try JSONEncoder().encode(node)
+        #expect(try JSONDecoder().decode(ControlHtmlOverlayNode.self, from: data) == node)
+        #expect(String(decoding: data, as: UTF8.self).contains(#""text":{"#))
+        let plain = ControlTextOverlayNode(file: "/tmp/notes.txt", language: nil, line: nil)
+        #expect(String(decoding: try JSONEncoder().encode(plain), as: UTF8.self) == #"{"file":"\/tmp\/notes.txt"}"#)
+        let file = ControlHtmlOverlayNode(pane: nil, file: "/tmp/r.html", state: "loaded", error: nil)
+        #expect(!String(decoding: try JSONEncoder().encode(file), as: UTF8.self).contains("text"))
+    }
+
+    @Test func htmlOverlaysProjectEachPageWithItsLoadState() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        store.toggleSplit(session.id)
+        session.surface = SpySurface(paneToken: "left")
+        session.splitSurface = SpySurface(paneToken: "right")
+        #expect(store.controlTree().workspaces[0].sessions[0].htmlOverlays == nil)
+
+        let wide = HtmlOverlay(source: .file(path: "/tmp/a/wide.html", grantRoot: "/tmp/a"), navigation: true, javascript: true)
+        let right = HtmlOverlay(source: .url(try #require(URL(string: "http://localhost:5173/"))), persistent: true,
+                                browse: true, clicked: true)
+        let left = HtmlOverlay(source: .file(path: "/tmp/a/bare.html", grantRoot: nil), chromeless: true)
+        #expect(store.openHtmlOverlay(session.id, pane: .right, overlay: right, sizePercent: nil) == nil)
+        #expect(store.openHtmlOverlay(session.id, pane: .left, overlay: left, sizePercent: nil) == nil)
+        #expect(store.openHtmlOverlay(session.id, pane: nil, overlay: wide, sizePercent: 70) == nil)
+        store.setHtmlLoadState(right.id, state: .failed, error: "not found")
+        store.setHtmlPage(wide.id, HtmlPageInfo(page: "/tmp/a/second.html", title: "Second", canGoBack: true, canGoForward: false))
+
+        let node = store.controlTree().workspaces[0].sessions[0]
+        #expect(node.overlay)
+        #expect(node.overlaySizePercent == 70)
+        #expect(node.paneOverlays == ["left", "right"])
+        #expect(node.htmlOverlays == [
+            ControlHtmlOverlayNode(pane: nil, file: "/tmp/a/wide.html", cwd: "/tmp/a", state: "loading", error: nil,
+                                   page: "/tmp/a/second.html", title: "Second", canGoBack: true, canGoForward: false,
+                                   navigation: true, javascript: true, id: wide.id.uuidString),
+            ControlHtmlOverlayNode(pane: "left", file: "/tmp/a/bare.html", state: "loading", error: nil, chromeless: true,
+                                   id: left.id.uuidString),
+            ControlHtmlOverlayNode(pane: "right", url: "http://localhost:5173/", state: "failed", error: "not found",
+                                   javascript: false, id: right.id.uuidString, persistent: true, browse: true, clicked: true),
+        ])
+        let decoded = try JSONDecoder().decode(ControlTree.self, from: JSONEncoder().encode(store.controlTree()))
+        #expect(decoded.workspaces[0].sessions[0] == node)
+        let json = String(decoding: try JSONEncoder().encode(node.htmlOverlays), as: UTF8.self)
+        #expect(json.contains(#""javascript":false"#))
+        #expect(json.contains(#""chromeless":false"#))
+        #expect(json.contains(#""chromeless":true"#))
+        #expect(json.contains(#""persistent":false"#))
+        #expect(json.contains(#""persistent":true"#))
+        #expect(json.contains(#""browse":false"#))
+        #expect(json.contains(#""browse":true"#))
+        #expect(json.components(separatedBy: #""clicked":true"#).count == 2)
+        #expect(!json.contains(#""clicked":false"#))
+    }
+
+    @Test func aPageNodeFromAnOlderServerDecodesAsNotBrowsing() throws {
+        let node = try JSONDecoder().decode(ControlHtmlOverlayNode.self, from: Data(
+            #"{"url":"http://localhost:5173/","state":"loaded","javascript":false}"#.utf8))
+        #expect(!node.browse)
+        #expect(node.hidden == nil)
+        #expect(node.clicked == nil)
+    }
+
+    @Test func hiddenOverlaysReportHiddenSlotsWhileOccupancyStays() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        store.toggleSplit(session.id)
+        session.surface = SpySurface(paneToken: "left")
+        session.splitSurface = SpySurface(paneToken: "right")
+        let page = HtmlOverlay(source: .file(path: "/tmp/a/p.html", grantRoot: nil))
+        #expect(store.openPaneOverlay(session.id, pane: .right, command: "htop") == nil)
+        #expect(store.openHtmlOverlay(session.id, pane: nil, overlay: page, sizePercent: nil) == nil)
+        #expect(store.controlTree().workspaces[0].sessions[0].hiddenOverlays == nil)
+
+        #expect(store.setOverlaysHidden(session.id, pane: nil, hidden: true) == nil)
+
+        let node = store.controlTree().workspaces[0].sessions[0]
+        #expect(node.hiddenOverlays == ["session", "right"])
+        #expect(node.overlay)
+        #expect(node.paneOverlays == ["right"])
+        #expect(node.htmlOverlays?.first?.hidden == true)
+        let decoded = try JSONDecoder().decode(ControlTree.self, from: JSONEncoder().encode(store.controlTree()))
+        #expect(decoded.workspaces[0].sessions[0] == node)
+    }
+
+    @Test func aSessionNodeFromAnOlderServerDecodesWithNoHiddenOverlays() throws {
+        let node = try JSONDecoder().decode(ControlSessionNode.self, from: Data(
+            #"{"id":"x","name":"n","cwd":"/","active":true,"split":false,"overlay":true,"scratch":false,"flagged":false}"#.utf8))
+        #expect(node.hiddenOverlays == nil)
+        #expect(node.overlay)
+    }
+
+    @Test func controlTreeReportsThePassedLinkOpenMode() throws {
+        let store = makeStore()
+        #expect(store.controlTree().linkOpenMode == nil)
+        for mode in LinkOpenMode.allCases {
+            let tree = store.controlTree(paneForeground: { _ in nil }, linkOpenMode: mode)
+            #expect(tree.linkOpenMode == mode.rawValue)
+            #expect(try JSONDecoder().decode(ControlTree.self, from: JSONEncoder().encode(tree)).linkOpenMode == mode.rawValue)
+        }
+    }
+
+    @Test func htmlOverlaysReportTheAppZoom() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/tmp"))
+        let page = HtmlOverlay(source: .file(path: "/tmp/a/wide.html", grantRoot: "/tmp/a"))
+        #expect(store.openHtmlOverlay(session.id, pane: nil, overlay: page, sizePercent: nil) == nil)
+        #expect(store.controlTree().workspaces[0].sessions[0].htmlOverlays?.first?.zoom == nil)
+        let node = try #require(store.controlTree(paneForeground: { _ in nil }, htmlZoom: 1.25).workspaces[0].sessions[0].htmlOverlays?.first)
+        #expect(node.zoom == 1.25)
+        let json = String(decoding: try JSONEncoder().encode(node), as: UTF8.self)
+        #expect(json.contains(#""zoom":1.25"#))
+    }
+
+    @Test(arguments: [false, true])
+    func scratchCwdReportsTheScratchsOwnOrPrimaryDirectoryEvenWhenHidden(shown: Bool) throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/primary"))
+        session.scratchSurface = SpySurface()
+        session.scratchActive = shown
+        for (reported, expected): (String?, String) in [(nil, "/primary"), ("/primary/docs", "/primary/docs")] {
+            session.scratchCwd = reported
+            let node = store.controlTree().workspaces[0].sessions[0]
+            let data = try JSONEncoder().encode(node)
+            let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(json["scratchCwd"] as? String == expected)
+            #expect(node.cwd == "/primary")
+            #expect(try JSONDecoder().decode(ControlSessionNode.self, from: data) == node)
+        }
+    }
+
+    @Test func noScratchOmitsTheScratchDirectoryEvenWithAStaleValue() throws {
+        let store = makeStore()
+        let workspace = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: workspace.id, cwd: "/primary"))
+        session.scratchCwd = "/stale"
+        let node = store.controlTree().workspaces[0].sessions[0]
+        let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(node)) as? [String: Any])
+        #expect(json["scratchCwd"] == nil)
+    }
+}

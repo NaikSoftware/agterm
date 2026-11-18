@@ -1,0 +1,210 @@
+import Foundation
+import Testing
+@testable import ElisCore
+
+struct SurfaceEnvironmentTests {
+    @Test func terminalIdentityBelongsToElis() {
+        let sessionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let windowID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+
+        let sessionEnv = SurfaceEnvironment.session(
+            sessionID: sessionID,
+            windowID: windowID,
+            workspaceID: nil,
+            socketPath: "/tmp/elis.sock",
+            programVersion: "0.12.0"
+        )
+        let quickEnv = SurfaceEnvironment.quickTerminal(
+            socketPath: "/tmp/elis.sock",
+            programVersion: "0.12.0"
+        )
+
+        for env in [sessionEnv, quickEnv] {
+            #expect(env["TERM_PROGRAM"] == "elis")
+            #expect(env["TERM_PROGRAM_VERSION"] == "0.12.0")
+        }
+    }
+
+    @Test func sessionEnvironmentCarriesAllKnownIdentifiers() {
+        let sessionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let windowID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let workspaceID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
+
+        let env = SurfaceEnvironment.session(
+            sessionID: sessionID,
+            windowID: windowID,
+            workspaceID: workspaceID,
+            socketPath: "/tmp/elis.sock",
+            programVersion: "0.12.0"
+        )
+
+        #expect(env == [
+            "ELIS_ENABLED": "1",
+            "ELIS_SESSION_ID": "11111111-1111-1111-1111-111111111111",
+            "ELIS_WINDOW_ID": "22222222-2222-2222-2222-222222222222",
+            "ELIS_WORKSPACE_ID": "33333333-3333-3333-3333-333333333333",
+            "ELIS_SOCKET": "/tmp/elis.sock",
+            "TERM_PROGRAM": "elis",
+            "TERM_PROGRAM_VERSION": "0.12.0",
+        ])
+    }
+
+    @Test func sessionEnvironmentOmitsUnknownWindowAndWorkspace() {
+        let sessionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+
+        let env = SurfaceEnvironment.session(
+            sessionID: sessionID,
+            windowID: nil,
+            workspaceID: nil,
+            socketPath: "/tmp/elis.sock",
+            programVersion: "0.12.0"
+        )
+
+        #expect(env == [
+            "ELIS_ENABLED": "1",
+            "ELIS_SESSION_ID": "11111111-1111-1111-1111-111111111111",
+            "ELIS_SOCKET": "/tmp/elis.sock",
+            "TERM_PROGRAM": "elis",
+            "TERM_PROGRAM_VERSION": "0.12.0",
+        ])
+    }
+
+    @Test(arguments: [
+        (StatusPane.left, "left"),
+        (StatusPane.right, "right"),
+        (StatusPane.scratch, "scratch"),
+    ])
+    func sessionEnvironmentInjectsPaneWhenGiven(pane: StatusPane, expected: String) {
+        let sessionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+
+        let env = SurfaceEnvironment.session(
+            sessionID: sessionID,
+            windowID: nil,
+            workspaceID: nil,
+            socketPath: "/tmp/elis.sock",
+            programVersion: "0.12.0",
+            pane: pane
+        )
+
+        #expect(env["ELIS_PANE"] == expected)
+        #expect(env["ELIS_ENABLED"] == "1")
+        #expect(env["ELIS_SESSION_ID"] == "11111111-1111-1111-1111-111111111111")
+        #expect(env["ELIS_SOCKET"] == "/tmp/elis.sock")
+    }
+
+    @Test func sessionEnvironmentOmitsPaneWhenNil() {
+        let sessionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let windowID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let workspaceID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
+
+        let env = SurfaceEnvironment.session(
+            sessionID: sessionID,
+            windowID: windowID,
+            workspaceID: workspaceID,
+            socketPath: "/tmp/elis.sock",
+            programVersion: "0.12.0",
+            pane: nil
+        )
+
+        #expect(env["ELIS_PANE"] == nil)
+        #expect(env == [
+            "ELIS_ENABLED": "1",
+            "ELIS_SESSION_ID": "11111111-1111-1111-1111-111111111111",
+            "ELIS_WINDOW_ID": "22222222-2222-2222-2222-222222222222",
+            "ELIS_WORKSPACE_ID": "33333333-3333-3333-3333-333333333333",
+            "ELIS_SOCKET": "/tmp/elis.sock",
+            "TERM_PROGRAM": "elis",
+            "TERM_PROGRAM_VERSION": "0.12.0",
+        ])
+    }
+
+    @Test func sessionEnvironmentInjectsPaneTokenWhenGiven() {
+        let sessionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+
+        let env = SurfaceEnvironment.session(
+            sessionID: sessionID,
+            windowID: nil,
+            workspaceID: nil,
+            socketPath: "/tmp/elis.sock",
+            programVersion: "0.12.0",
+            pane: .right,
+            paneToken: "surface-token-abc"
+        )
+
+        #expect(env["ELIS_PANE_ID"] == "surface-token-abc")
+        #expect(env["ELIS_PANE"] == "right")
+    }
+
+    @Test(arguments: [nil, ""])
+    func sessionEnvironmentOmitsPaneTokenWhenNilOrEmpty(token: String?) {
+        let sessionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+
+        let env = SurfaceEnvironment.session(
+            sessionID: sessionID,
+            windowID: nil,
+            workspaceID: nil,
+            socketPath: "/tmp/elis.sock",
+            programVersion: "0.12.0",
+            pane: .left,
+            paneToken: token
+        )
+
+        #expect(env["ELIS_PANE_ID"] == nil)
+    }
+
+    /// The panel is one per app and belongs to no window, so it carries no window id either — an untargeted
+    /// `elisctl` run from it resolves the active window like any other caller.
+    @Test func quickTerminalEnvironmentOmitsSessionWorkspaceAndWindowIdentifiers() {
+        let env = SurfaceEnvironment.quickTerminal(
+            socketPath: "/tmp/elis.sock",
+            programVersion: "0.12.0"
+        )
+
+        #expect(env == [
+            "ELIS_ENABLED": "1",
+            "ELIS_SOCKET": "/tmp/elis.sock",
+            "TERM_PROGRAM": "elis",
+            "TERM_PROGRAM_VERSION": "0.12.0",
+        ])
+        #expect(env["ELIS_SESSION_ID"] == nil)
+        #expect(env["ELIS_WORKSPACE_ID"] == nil)
+        #expect(env["ELIS_WINDOW_ID"] == nil)
+    }
+
+    @Test func emptySocketPathIsStillEmitted() {
+        let sessionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+
+        let env = SurfaceEnvironment.session(
+            sessionID: sessionID,
+            windowID: nil,
+            workspaceID: nil,
+            socketPath: "",
+            programVersion: "0.12.0"
+        )
+
+        #expect(env["ELIS_SOCKET"] == "")
+    }
+
+    /// both factories must always SET the variable. The shipped status hooks drop `--socket` when it is
+    /// absent, and `elisctl` then resolves the default path — another instance's.
+    @Test func bothFactoriesAlwaysSetTheSocketVariable() {
+        let sessionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let windowID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let unavailable = "/tmp/elis.sock.unavailable"
+
+        let sessionEnv = SurfaceEnvironment.session(
+            sessionID: sessionID,
+            windowID: nil,
+            workspaceID: nil,
+            socketPath: unavailable,
+            programVersion: "0.12.0"
+        )
+        let quickEnv = SurfaceEnvironment.quickTerminal(
+            socketPath: unavailable,
+            programVersion: "0.12.0"
+        )
+
+        #expect(sessionEnv["ELIS_SOCKET"] == unavailable)
+        #expect(quickEnv["ELIS_SOCKET"] == unavailable)
+    }
+}

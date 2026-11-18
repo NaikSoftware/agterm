@@ -12,15 +12,15 @@
 /* Canvas and CanvasText follow the viewer's light or dark setting only when a scheme is declared */
 :root { color-scheme: light dark; }
 .doc {
-  --fg: var(--agterm-foreground, CanvasText);
+  --fg: var(--elis-foreground, CanvasText);
   /* a shade darker than the terminal, so the page reads as its own surface */
-  --bg: color-mix(in srgb, var(--agterm-background, Canvas) 80%, black);
-  --c-red: var(--agterm-color-1, #d0463c);
-  --c-green: var(--agterm-color-2, #2e9e5b);
-  --c-yellow: var(--agterm-color-3, #c8961e);
-  --c-blue: var(--agterm-color-4, #3b7dd8);
-  --c-magenta: var(--agterm-color-5, #9a5cc6);
-  --c-cyan: var(--agterm-color-6, #2a9fb0);
+  --bg: color-mix(in srgb, var(--elis-background, Canvas) 80%, black);
+  --c-red: var(--elis-color-1, #d0463c);
+  --c-green: var(--elis-color-2, #2e9e5b);
+  --c-yellow: var(--elis-color-3, #c8961e);
+  --c-blue: var(--elis-color-4, #3b7dd8);
+  --c-magenta: var(--elis-color-5, #9a5cc6);
+  --c-cyan: var(--elis-color-6, #2a9fb0);
   /* palette slots are tuned for terminal text; pull them toward the foreground so they read in either scheme */
   --accent: color-mix(in srgb, var(--c-blue) 55%, var(--fg));
   --ok: color-mix(in srgb, var(--c-green) 80%, var(--fg));
@@ -39,7 +39,7 @@
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
-body { margin: 0; overflow-x: hidden; background: color-mix(in srgb, var(--agterm-background, Canvas) 80%, black); color: var(--agterm-foreground, CanvasText); }
+body { margin: 0; overflow-x: hidden; background: color-mix(in srgb, var(--elis-background, Canvas) 80%, black); color: var(--elis-foreground, CanvasText); }
 .doc { font: 15.5px/1.62 var(--sans); max-width: 1320px; margin: 0 auto; padding: 0 40px 72px;
   display: grid; grid-template-columns: 210px minmax(0, 1fr); column-gap: 56px; }
 code, .mono { font-family: var(--mono); font-size: .86em; }
@@ -203,7 +203,7 @@ details > :not(summary) { margin: 0 16px 16px; }
 
 figure { margin: 16px 0; } figure svg { max-width: 100%; height: auto; }
 figcaption { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
-svg text { fill: var(--agterm-foreground, CanvasText); font: 13px var(--sans); }
+svg text { fill: var(--elis-foreground, CanvasText); font: 13px var(--sans); }
 svg .box { fill: var(--panel); stroke: var(--line); }
 svg .edge { stroke: var(--muted); fill: none; }
 svg .hl { stroke: var(--accent); }

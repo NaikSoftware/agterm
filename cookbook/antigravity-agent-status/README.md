@@ -10,37 +10,37 @@ Gives Antigravity CLI (`agy`) per-turn sidebar status indicators matching the bu
 
 ## Requirements
 
-- agterm 0.7.1 or later, with the agent-status hooks package installed via **Help ▸ Install Agent Status Hooks…**. That installs `~/.config/agterm/agent-status/agterm-agent-status.sh`, which forwards `AGTERM_PANE` from 0.7.1 onward so split and scratch panes target their own slot; agterm 0.13.0 or later is recommended if you use split panes because it also forwards `AGTERM_PANE_ID`, keeping status writes on the right pane even after a split pane is promoted to main.
+- Elis 0.7.1 or later, with the agent-status hooks package installed via **Help ▸ Install Agent Status Hooks…**. That installs `~/.config/elis/agent-status/elis-agent-status.sh`, which forwards `ELIS_PANE` from 0.7.1 onward so split and scratch panes target their own slot; Elis 0.13.0 or later is recommended if you use split panes because it also forwards `ELIS_PANE_ID`, keeping status writes on the right pane even after a split pane is promoted to main.
 - Antigravity CLI (`agy`) with lifecycle hook support (tested on `agy` 1.4.2).
 - Python 3.8 or later, only to run the bundled `test_agy_status_hook.py`. Using the recipe needs no Python.
 
 ## Setup
 
-Run **Help ▸ Install Agent Status Hooks…** once in agterm if you have not already. That installs `~/.config/agterm/agent-status/agterm-agent-status.sh`, which this recipe calls.
+Run **Help ▸ Install Agent Status Hooks…** once in Elis if you have not already. That installs `~/.config/elis/agent-status/elis-agent-status.sh`, which this recipe calls.
 
 Copy the hook adapter script into place and make it executable:
 
 ```sh
-mkdir -p ~/.config/agterm/hooks/agy
-cp agy-status-hook.sh ~/.config/agterm/hooks/agy/
-chmod +x ~/.config/agterm/hooks/agy/agy-status-hook.sh
+mkdir -p ~/.config/elis/hooks/agy
+cp agy-status-hook.sh ~/.config/elis/hooks/agy/
+chmod +x ~/.config/elis/hooks/agy/agy-status-hook.sh
 ```
 
-Merge the `"agterm-status"` block from `agy-status-hooks.json` into `~/.gemini/config/hooks.json` (create the file if it does not exist, or add the `"agterm-status"` key alongside your existing hook entries). For a workspace-only install, merge it into `<project>/.agents/hooks.json` instead.
+Merge the `"elis-status"` block from `agy-status-hooks.json` into `~/.gemini/config/hooks.json` (create the file if it does not exist, or add the `"elis-status"` key alongside your existing hook entries). For a workspace-only install, merge it into `<project>/.agents/hooks.json` instead.
 
-If you store `agy-status-hook.sh` at a different path, update the `"command"` paths in `hooks.json` to match. You can also override the path to agterm's status script by setting `AGTERM_STATUS_WRAPPER` or `AGTERM_STATUS_SCRIPT` in the hook environment (default: `$HOME/.config/agterm/agent-status/agterm-agent-status.sh`).
+If you store `agy-status-hook.sh` at a different path, update the `"command"` paths in `hooks.json` to match. You can also override the path to Elis's status script by setting `ELIS_STATUS_WRAPPER` or `ELIS_STATUS_SCRIPT` in the hook environment (default: `$HOME/.config/elis/agent-status/elis-agent-status.sh`).
 
-Do **not** also add `agy` to `AGTERM_AGENT_RE` in agterm's shell integration. The shell integration sets `active` when a command starts and `idle` when it exits back to the shell prompt, which for an interactive REPL pins `active` across the entire session, including while `agy` sits idle between turns. The two approaches are alternatives, not layers.
+Do **not** also add `agy` to `ELIS_AGENT_RE` in Elis's shell integration. The shell integration sets `active` when a command starts and `idle` when it exits back to the shell prompt, which for an interactive REPL pins `active` across the entire session, including while `agy` sits idle between turns. The two approaches are alternatives, not layers.
 
 ## Usage
 
-Run `agy` inside agterm as usual. The sidebar row pulses `active` during model invocations and after tool calls, turns `blocked` when `ask_question` or `ask_permission` runs, and turns `completed` at the end of a turn, clearing when you focus or type in the session. Headless runs (`agy -p`, `--print`, `--prompt`) are ignored so one-shot background invocations do not overwrite the pane's interactive status.
+Run `agy` inside Elis as usual. The sidebar row pulses `active` during model invocations and after tool calls, turns `blocked` when `ask_question` or `ask_permission` runs, and turns `completed` at the end of a turn, clearing when you focus or type in the session. Headless runs (`agy -p`, `--print`, `--prompt`) are ignored so one-shot background invocations do not overwrite the pane's interactive status.
 
 ## How it works
 
-The gotcha with `agy` hooks is stdout. agterm's stock `agterm-agent-status.sh` suppresses all stdout and stderr because Claude Code injects hook output into the prompt context. `agy`, by contrast, requires every lifecycle hook to print a single JSON object on stdout, and requires specific fields from `PreToolUse` (`{"decision":"allow"}`) and `Stop` (`{"decision":"stop"}`). Calling `agterm-agent-status.sh` directly from `hooks.json` produces empty stdout and fails the hook parsing in `agy`.
+The gotcha with `agy` hooks is stdout. Elis's stock `elis-agent-status.sh` suppresses all stdout and stderr because Claude Code injects hook output into the prompt context. `agy`, by contrast, requires every lifecycle hook to print a single JSON object on stdout, and requires specific fields from `PreToolUse` (`{"decision":"allow"}`) and `Stop` (`{"decision":"stop"}`). Calling `elis-agent-status.sh` directly from `hooks.json` produces empty stdout and fails the hook parsing in `agy`.
 
-`agy-status-hook.sh` is a thin adapter that drains stdin, prints the exact JSON object `agy` expects for each action, and then invokes `agterm-agent-status.sh`:
+`agy-status-hook.sh` is a thin adapter that drains stdin, prints the exact JSON object `agy` expects for each action, and then invokes `elis-agent-status.sh`:
 
 - `PreInvocation` (`invocation`) and `PostToolUse` (`tool-done`) print `{}` and set `active --blink`.
 - `PreToolUse` (`ask`, matched against `ask_question|ask_permission`) prints `{"decision":"allow"}` and sets `blocked`. Per the [Antigravity CLI hook docs](https://antigravity.google/docs/hooks), returning `allow` passes the call through to the normal permission policy without weakening permissions; returning `auto_approve` would bypass interactive approval prompts and must never be used here.

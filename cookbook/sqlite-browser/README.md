@@ -24,11 +24,11 @@ The repo is whichever one the session sits in, so the same chord in another tab 
 
 ## Requirements
 
-- agterm 0.22.0 or later. `pick` itself shipped in 0.19.0; 0.20.0 is where a caller-supplied picker stopped re-sorting an empty query alphabetically and stopped matching typed text against subtitles, both of which this recipe depends on — newest-first is the order it hands over, and typing `2.4M` must not filter the list by another row's size. 0.22.0 is where `session hud --position` took the nine anchors of a 3x3 grid, which is what puts the "nothing found" panel at the top of the session instead of over the middle of the text.
+- Elis 0.22.0 or later. `pick` itself shipped in 0.19.0; 0.20.0 is where a caller-supplied picker stopped re-sorting an empty query alphabetically and stopped matching typed text against subtitles, both of which this recipe depends on — newest-first is the order it hands over, and typing `2.4M` must not filter the list by another row's size. 0.22.0 is where `session hud --position` took the nine anchors of a 3x3 grid, which is what puts the "nothing found" panel at the top of the session instead of over the middle of the text.
 - Python 3.9 or later, which macOS ships as `/usr/bin/python3`
 - [tabiew](https://github.com/shshemi/tabiew) (`brew install tabiew`), or another viewer you point `SQLITE_VIEWER` at.
 
-Set `AGTERMCTL` if your binary is somewhere unusual; the script otherwise takes the `agtermctl` on `PATH`, which the chord's own widened `PATH` provides. The viewer is looked up differently, in the usual install directories before `PATH`, because it has to reach the overlay as an absolute path.
+Set `ELISCTL` if your binary is somewhere unusual; the script otherwise takes the `elisctl` on `PATH`, which the chord's own widened `PATH` provides. The viewer is looked up differently, in the usual install directories before `PATH`, because it has to reach the overlay as an absolute path.
 
 ## Setup
 
@@ -38,7 +38,7 @@ Copy the script somewhere on your machine, say `~/bin/`, and make it executable:
 mkdir -p ~/bin && cp sqlite-browser.py ~/bin/ && chmod +x ~/bin/sqlite-browser.py
 ```
 
-Add an entry to `~/.config/agterm/keymap.conf` and apply it with File ▸ Reload Keymap or `agtermctl keymap reload`:
+Add an entry to `~/.config/elis/keymap.conf` and apply it with File ▸ Reload Keymap or `elisctl keymap reload`:
 
 ```
 command "SQLite ›" ctrl+a>d ~/bin/sqlite-browser.py
@@ -72,7 +72,7 @@ The script carries its own tests, which is what to run after editing the scan:
 ./sqlite-browser.py --test
 ```
 
-A run that finds nothing to do — no databases under the root, or a viewer that is not installed — posts a panel over the session saying which, and takes it down after three seconds. Real failures exit nonzero, which agterm banners by itself as `SQLite › (exit 1)`, and post a notification naming what went wrong. Files skipped during the scan are in the log and nowhere else.
+A run that finds nothing to do — no databases under the root, or a viewer that is not installed — posts a panel over the session saying which, and takes it down after three seconds. Real failures exit nonzero, which Elis banners by itself as `SQLite › (exit 1)`, and post a notification naming what went wrong. Files skipped during the scan are in the log and nowhere else.
 
 ## How it works
 
@@ -80,19 +80,19 @@ The scan is two filters, and the order is the whole point. The extension is chec
 
 What the scan skips matters more than what it keeps. `node_modules`, `vendor`, `venv`, `__pycache__`, `site-packages`, `target` and `Pods` are pruned, and so is every hidden directory — as a rule rather than a list, because `.mypy_cache` alone put 32 of its own SQLite files ahead of every real one in the first repo this ran in, and `.pytest_cache`, `.tox` and `.venv` are the same shape. Symlinked directories are not followed: a checkout carrying a link back to a parent would otherwise turn the scan into an unbounded walk of the filesystem.
 
-Rows are sorted by mtime, newest first, on the assumption that the database just written is the one being debugged. That order is handed to `agtermctl pick` on stdin as JSON and shown as-is.
+Rows are sorted by mtime, newest first, on the assumption that the database just written is the one being debugged. That order is handed to `elisctl pick` on stdin as JSON and shown as-is.
 
 The file name is treated as hostile, because in a repo you cloned it is someone else's. The viewer's command line is quoted with `shlex`, so `a"; id; :"b.db` reaches `zsh -c` as one argument rather than as a second statement, and a name carrying a control character is refused outright and logged.
 
-PATH is the gotcha, and the two halves of it are not the same. A custom command's own PATH is widened by the runner from 0.22.0 on, with the CLI install directory and Homebrew's prefix, so a bare `agtermctl` resolves from the chord. The overlay it opens is a different matter: nothing widens that one, it is the app's own, and a bare viewer name exits 127 there with the overlay flashing open and vanishing. So the viewer is resolved to an absolute path here and passed as one — which is also why the recipe reports "not installed" up front rather than letting the overlay fail silently.
+PATH is the gotcha, and the two halves of it are not the same. A custom command's own PATH is widened by the runner from 0.22.0 on, with the CLI install directory and Homebrew's prefix, so a bare `elisctl` resolves from the chord. The overlay it opens is a different matter: nothing widens that one, it is the app's own, and a bare viewer name exits 127 there with the overlay flashing open and vanishing. So the viewer is resolved to an absolute path here and passed as one — which is also why the recipe reports "not installed" up front rather than letting the overlay fail silently.
 
 The overlay is opened without `--follow`. It belongs to this session, and pulling focus to it would move the selection out from under whatever you are doing in another one.
 
-Everything the script needs about where it is comes from the environment agterm exports to a custom command: `AGT_SESSION_PWD` for the repo, `AGT_SESSION_ID` for which session gets the overlay, `AGT_WINDOW_ID` for which window shows the picker, and `AGT_SOCKET` for the instance to talk to. The repo root itself is `git rev-parse --show-toplevel` from that directory, so the chord works from a subdirectory.
+Everything the script needs about where it is comes from the environment Elis exports to a custom command: `AGT_SESSION_PWD` for the repo, `AGT_SESSION_ID` for which session gets the overlay, `AGT_WINDOW_ID` for which window shows the picker, and `AGT_SOCKET` for the instance to talk to. The repo root itself is `git rev-parse --show-toplevel` from that directory, so the chord works from a subdirectory.
 
-`AGT_SESSION_PWD` has three states and they are three different situations, which is worth knowing if you port this pattern. Unset means nobody is passing one — a plain shell run, so the shell's own directory is the subject. A real path is a session. **Set but empty is the trap**: agterm exports every `AGT_` token whether or not it resolved, and a chord fired in a window holding no session gets an empty one while the process is left in the app's own working directory, `/` for a Dock-launched bundle. Read that as "no value, use the cwd" and one keypress walks the entire filesystem, raising a macOS permission prompt for every protected folder on the way. The recipe tests the variable rather than its truthiness, and refuses.
+`AGT_SESSION_PWD` has three states and they are three different situations, which is worth knowing if you port this pattern. Unset means nobody is passing one — a plain shell run, so the shell's own directory is the subject. A real path is a session. **Set but empty is the trap**: Elis exports every `AGT_` token whether or not it resolved, and a chord fired in a window holding no session gets an empty one while the process is left in the app's own working directory, `/` for a Dock-launched bundle. Read that as "no value, use the cwd" and one keypress walks the entire filesystem, raising a macOS permission prompt for every protected folder on the way. The recipe tests the variable rather than its truthiness, and refuses.
 
-Refusing is easy; saying so is not. With no session there is no target, so the panel and the desktop notification both resolve `active` to nothing and neither arrives — which is the same absence that sent the chord down this path. What is left is the exit code: agterm banners a custom command's nonzero exit by itself, as `SQLite › (exit 1)`, and that is what the reader actually sees.
+Refusing is easy; saying so is not. With no session there is no target, so the panel and the desktop notification both resolve `active` to nothing and neither arrives — which is the same absence that sent the chord down this path. What is left is the exit code: Elis banners a custom command's nonzero exit by itself, as `SQLite › (exit 1)`, and that is what the reader actually sees.
 
 The other end of the same problem is a session in a directory git does not recognise as a repo, where the scan root is that directory verbatim. A subdirectory is fine and is a normal place to keep a database. The home directory is not: `~/Library` alone holds hundreds of application databases, and reaching `~/Documents` and `~/Desktop` costs a macOS permission prompt each. That one and the filesystem root are refused by name.
 
@@ -106,7 +106,7 @@ The scan walks the whole repo on every press. On a large checkout with a cold pa
 
 Databases are found by extension, so one stored under a name that is not on the list is invisible to the recipe, however valid its header.
 
-The picker takes at most 1000 rows, which is agterm's own cap. Past that the list is cut to the 1000 newest and the prompt says so.
+The picker takes at most 1000 rows, which is Elis's own cap. Past that the list is cut to the 1000 newest and the prompt says so.
 
 The chord does nothing in the home directory, at the filesystem root, or in a window with no session. Those are refusals rather than failures — see *How it works* for why.
 

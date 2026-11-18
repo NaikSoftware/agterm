@@ -1,5 +1,5 @@
 #!/bin/sh
-# pick a project in agterm's native picker and open a new session in it, creating the
+# pick a project in elis's native picker and open a new session in it, creating the
 # project's workspace when it does not exist yet. With a command configured, typing a
 # prompt after the project's name hands it to that command as its first argument.
 #
@@ -11,7 +11,7 @@
 # line run in the new session in place of your login shell.
 set -eu
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+ELISCTL=${ELISCTL:-elisctl}
 ROOTS=${AGT_PROJECT_ROOTS:-$HOME/src}
 CMD=${AGT_PROJECT_COMMAND:-}
 LIMIT=1000
@@ -20,9 +20,9 @@ tilde='~'  # shortens $HOME in a row subtitle; a display string, never expanded 
 # carry the socket when the session names one, so the recipe also works in a second instance
 agt() {
     if [ -n "${AGT_SOCKET:-}" ]; then
-        "$AGTERMCTL" "$@" --socket "$AGT_SOCKET"
+        "$ELISCTL" "$@" --socket "$AGT_SOCKET"
     else
-        "$AGTERMCTL" "$@"
+        "$ELISCTL" "$@"
     fi
 }
 

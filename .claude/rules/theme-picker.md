@@ -1,9 +1,9 @@
 ---
 paths:
-  - "agterm/Views/Palette.swift"
-  - "agterm/SettingsModel.swift"
-  - "agterm/SettingsCatalog.swift"
-  - "agterm/AppActions*.swift"
+  - "macos/Elis/Views/Palette.swift"
+  - "macos/Elis/SettingsModel.swift"
+  - "macos/Elis/SettingsCatalog.swift"
+  - "macos/Elis/AppActions*.swift"
 ---
 
 ## Theme picker
@@ -29,7 +29,7 @@ paths:
 - **`focusActiveSession` must return while any palette mode is open.** Closing the action palette starts
   a roughly 12 x 0.03-second terminal-focus retry; without the guard it outraces the new search field and
   also steals focus during preview reloads.
-- `AppSettings.defaultTheme` is bundled `"agterm"`, seeded only by `SettingsStore.load()` for
+- `AppSettings.defaultTheme` is bundled `"elis"`, seeded only by `SettingsStore.load()` for
   missing/corrupt settings. Keep the memberwise `AppSettings()` default at `theme == nil`, which means no
   config line and Ghostty's built-in theme. Existing files with no theme remain nil; `theme.set` without
   a name also chooses nil.

@@ -1,9 +1,9 @@
 #!/bin/sh
-# agst - run a command under an agterm session status indicator.
+# agst - run a command under an elis session status indicator.
 #
-# Sets the current agterm session's status to `active` while the command runs,
+# Sets the current elis session's status to `active` while the command runs,
 # then `completed --auto-reset` on success or `blocked --auto-reset` on any
-# non-zero exit. When $AGTERM_SESSION_ID is unset, just runs the command.
+# non-zero exit. When $ELIS_SESSION_ID is unset, just runs the command.
 #
 # Flags --blink, --sound, --shape, and --socket are parsed off the front;
 # --blink and --sound apply to the end states only (completed/blocked),
@@ -14,15 +14,15 @@
 #   agst [--blink] [--sound <sound>] [--shape <shape>] [--socket <socket>] <command...>
 #
 # Environment:
-#   AGTERM_SESSION_ID  the session to update (set by agterm).
-#   AGTERM_PANE        the pane role (left|right|scratch); forwarded when set.
-#   AGTERM_PANE_ID     stable pane token; forwarded when set, overrides a stale role.
-#   AGTERM_SOCKET      the control socket; an explicit --socket wins.
-#   AGTERMCTL          override the agtermctl binary (default: agtermctl).
+#   ELIS_SESSION_ID  the session to update (set by elis).
+#   ELIS_PANE        the pane role (left|right|scratch); forwarded when set.
+#   ELIS_PANE_ID     stable pane token; forwarded when set, overrides a stale role.
+#   ELIS_SOCKET      the control socket; an explicit --socket wins.
+#   ELISCTL          override the elisctl binary (default: elisctl).
 
 set -u
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+ELISCTL=${ELISCTL:-elisctl}
 
 usage() {
   echo "usage: ${0##*/} [--blink] [--sound <sound>] [--shape <shape>] [--socket <socket>] <command...>" >&2
@@ -33,7 +33,7 @@ usage() {
 blink=
 sound=
 shape=
-socket=${AGTERM_SOCKET:-}
+socket=${ELIS_SOCKET:-}
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
@@ -57,8 +57,8 @@ if [ $# -eq 0 ]; then
   exit 2
 fi
 
-# Not inside agterm: exec the command directly, no status calls.
-if [ -z "${AGTERM_SESSION_ID:-}" ]; then
+# Not inside elis: exec the command directly, no status calls.
+if [ -z "${ELIS_SESSION_ID:-}" ]; then
   exec "$@"
 fi
 
@@ -70,14 +70,14 @@ status() {
   _end=${2:-}
   set -- "$1"
   [ -n "$_end" ] && set -- "$@" --auto-reset
-  set -- "$@" --target "$AGTERM_SESSION_ID"
-  [ -n "${AGTERM_PANE:-}" ] && set -- "$@" --pane "$AGTERM_PANE"
-  [ -n "${AGTERM_PANE_ID:-}" ] && set -- "$@" --pane-id "$AGTERM_PANE_ID"
+  set -- "$@" --target "$ELIS_SESSION_ID"
+  [ -n "${ELIS_PANE:-}" ] && set -- "$@" --pane "$ELIS_PANE"
+  [ -n "${ELIS_PANE_ID:-}" ] && set -- "$@" --pane-id "$ELIS_PANE_ID"
   [ -n "$shape" ] && set -- "$@" --shape "$shape"
   [ -n "$socket" ] && set -- "$@" --socket "$socket"
   [ -n "$_end" ] && [ -n "$blink" ] && set -- "$@" --blink
   [ -n "$_end" ] && [ -n "$sound" ] && set -- "$@" --sound "$sound"
-  "$AGTERMCTL" session status "$@" >/dev/null 2>&1 || :
+  "$ELISCTL" session status "$@" >/dev/null 2>&1 || :
 }
 
 status active ''

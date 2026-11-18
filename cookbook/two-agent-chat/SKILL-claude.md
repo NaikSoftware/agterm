@@ -1,6 +1,6 @@
 ---
 name: peer-chat
-description: 'Hold a back-and-forth conversation with the Codex TUI running in the other pane of this agterm session''s split, as peers. Use when the user says "chat with codex", "talk to codex", "work with codex", "do this with codex", "build this with codex", "discuss this with codex", "ask codex what it thinks", or when a prompt arrives starting with "Chat from Codex:". Not for a one-shot task handed to codex, and not for a read-only second opinion.'
+description: 'Hold a back-and-forth conversation with the Codex TUI running in the other pane of this Elis session''s split, as peers. Use when the user says "chat with codex", "talk to codex", "work with codex", "do this with codex", "build this with codex", "discuss this with codex", "ask codex what it thinks", or when a prompt arrives starting with "Chat from Codex:". Not for a one-shot task handed to codex, and not for a read-only second opinion.'
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -9,7 +9,7 @@ allowed-tools: Bash, Read, Grep, Glob
 Talk with Codex in the other pane of the split. The user reads both panes, so the conversation
 itself is the result even when code comes out of it.
 
-Everything that touches the pane goes through `peer-chat.py`. Do not drive `agtermctl` directly:
+Everything that touches the pane goes through `peer-chat.py`. Do not drive `elisctl` directly:
 the script checks the target agent, window, composer and cursor, sends the body as bounded, separately
 observed pieces through `session type --stdin`, then sends the submit key after the final piece
 settles. A raw command bypasses those checks.
@@ -36,7 +36,7 @@ whitespace to single spaces before typing, because typing a newline submits the 
 so write for one paragraph.
 
 Before typing, the script confirms the target pane really is running Codex, looking for `codex` in
-what agterm reports for that pane. If this machine starts Codex through a wrapper, add
+what Elis reports for that pane. If this machine starts Codex through a wrapper, add
 `--target-command <name>` with the wrapper's name and the send goes through; the name to use is
 recorded here at setup time. Never guess a name after a refusal and never retry with a different
 one until a human has told you which is right.

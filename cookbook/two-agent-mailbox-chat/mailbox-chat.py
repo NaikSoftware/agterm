@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Let two agents in one agterm split talk through agterm's pane mailboxes.
+"""Let two agents in one elis split talk through elis's pane mailboxes.
 
 `say` puts a message into the other pane's mailbox. A Claude Code receiver picks it up through an
 asyncRewake hook (`claude-hook`). A Codex receiver is registered by its SessionStart hook
-(`codex-hook`), and agterm's `on message` hook (`agterm-hook`) hands its mail to that thread with
+(`codex-hook`), and elis's `on message` hook (`elis-hook`) hands its mail to that thread with
 `codex queue`. Nothing is typed into either composer.
 """
 
@@ -22,8 +22,8 @@ import tempfile
 import time
 from typing import Any
 
-AGTERMCTL = os.environ.get("AGTERMCTL") or "agtermctl"
-STATE_DIR = os.path.join(tempfile.gettempdir(), f"agterm-mailbox-chat-{os.getuid()}")
+ELISCTL = os.environ.get("ELISCTL") or "elisctl"
+STATE_DIR = os.path.join(tempfile.gettempdir(), f"elis-mailbox-chat-{os.getuid()}")
 BODY_LIMIT = 64 * 1024
 LABEL = "[peer chat]"
 REPLY_LINE = "If you answer, use mailbox-chat.py say; do not reply only to acknowledge."
@@ -44,17 +44,17 @@ def run(args: list[str], timeout: float = 30, stdin: str | None = None) -> subpr
 
 
 def ctl_args(*args: str) -> list[str]:
-    cmd = [AGTERMCTL, *args]
-    socket = os.environ.get("AGTERM_SOCKET", "")
+    cmd = [ELISCTL, *args]
+    socket = os.environ.get("ELIS_SOCKET", "")
     if socket:
         cmd += ["--socket", socket]
     return cmd
 
 
-def agtermctl(*args: str, stdin: str | None = None) -> Any:
+def elisctl(*args: str, stdin: str | None = None) -> Any:
     res = run(ctl_args(*args), stdin=stdin)
     if res.returncode != 0:
-        raise ChatError("agtermctl {} failed: {}".format(" ".join(args[:2]), (res.stderr or res.stdout).strip()))
+        raise ChatError("elisctl {} failed: {}".format(" ".join(args[:2]), (res.stderr or res.stdout).strip()))
     return json.loads(res.stdout) if "--json" in args else res.stdout
 
 
@@ -104,8 +104,8 @@ def render(message: dict[str, Any]) -> str:
     body = str(message.get("body", "")).rstrip()
     if body.startswith(LABEL):
         return body
-    return "[agterm mailbox, not a peer chat message] from {}:\n{}".format(
-        message.get("from") or "outside agterm", body)
+    return "[elis mailbox, not a peer chat message] from {}:\n{}".format(
+        message.get("from") or "outside elis", body)
 
 
 def compose(text: str) -> str:
@@ -119,13 +119,13 @@ def compose(text: str) -> str:
     message = f"{LABEL} {body}\n\n{REPLY_LINE}"
     size = len(message.encode("utf-8"))
     if size > BODY_LIMIT:
-        raise ChatError(f"message is {size} bytes, over agterm's {BODY_LIMIT}-byte limit; put the long part in a file "
+        raise ChatError(f"message is {size} bytes, over elis's {BODY_LIMIT}-byte limit; put the long part in a file "
                         "and name its path")
     return message
 
 
 def read_message_file(path: str) -> str:
-    """the message text in `path`, which must be a regular file within agterm's body limit."""
+    """the message text in `path`, which must be a regular file within elis's body limit."""
     # codex's allow rule runs this outside its sandbox, so a fifo or device path must neither block nor flood it
     fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
     if not stat.S_ISREG(os.fstat(fd).st_mode):
@@ -134,7 +134,7 @@ def read_message_file(path: str) -> str:
     with os.fdopen(fd, "rb") as f:
         data = f.read(BODY_LIMIT + 1)
     if len(data) > BODY_LIMIT:
-        raise ChatError(f"{path} is over agterm's {BODY_LIMIT}-byte limit; put the long part in another file "
+        raise ChatError(f"{path} is over elis's {BODY_LIMIT}-byte limit; put the long part in another file "
                         "and name its path")
     try:
         return data.decode("utf-8")
@@ -161,14 +161,14 @@ def find_node(tree: Any, sid: str) -> dict[str, Any] | None:
 def session_node(sid: str) -> dict[str, Any] | None:
     """the tree node of session `sid` in whichever open window holds it."""
     # tree reads one window, the frontmost unless named, and the session may have moved since launch
-    window = os.environ.get("AGTERM_WINDOW_ID", "")
-    node = find_node(agtermctl("tree", "--json", *(["--window", window] if window else [])), sid)
+    window = os.environ.get("ELIS_WINDOW_ID", "")
+    node = find_node(elisctl("tree", "--json", *(["--window", window] if window else [])), sid)
     if node is not None:
         return node
-    windows = (agtermctl("window", "list", "--json").get("result") or {}).get("windows") or []
+    windows = (elisctl("window", "list", "--json").get("result") or {}).get("windows") or []
     for w in windows:
         if isinstance(w, dict) and w.get("open") and w.get("id") and w.get("id") != window:
-            node = find_node(agtermctl("tree", "--json", "--window", str(w["id"])), sid)
+            node = find_node(elisctl("tree", "--json", "--window", str(w["id"])), sid)
             if node is not None:
                 return node
     return None
@@ -178,26 +178,26 @@ def other_pane(sid: str, pane: str) -> str:
     """the pane id across the split from `pane` in session `sid`."""
     node = session_node(sid)
     if node is None:
-        raise ChatError(f"session {sid} is not in any open agterm window")
+        raise ChatError(f"session {sid} is not in any open elis window")
     panes = {s.get("kind"): s.get("paneID") for s in node.get("surfaces") or []
              if isinstance(s, dict) and s.get("kind") in ("left", "right")}
     if pane not in panes.values():
         raise ChatError(f"pane {pane} is not the left or right pane of session {sid}")
     peer = panes.get("right") if panes.get("left") == pane else panes.get("left")
     if not peer:
-        raise ChatError("this session has no split; open one with `agtermctl session split on`")
+        raise ChatError("this session has no split; open one with `elisctl session split on`")
     return peer
 
 
 def own_identity() -> tuple[str, str]:
-    sid = os.environ.get("AGTERM_SESSION_ID", "")
-    pane = os.environ.get("AGTERM_PANE_ID", "")
+    sid = os.environ.get("ELIS_SESSION_ID", "")
+    pane = os.environ.get("ELIS_PANE_ID", "")
     if not sid or not pane:
-        raise ChatError("AGTERM_SESSION_ID and AGTERM_PANE_ID are unset: not inside an agterm pane, "
+        raise ChatError("ELIS_SESSION_ID and ELIS_PANE_ID are unset: not inside an elis pane, "
                         "or the agent strips them from its tool commands (see Setup)")
     pid = find_codex_pid(os.getppid())
     if pid is not None and is_codex_daemon(pid):
-        raise ChatError("running under Codex's shared app-server, whose AGTERM_* ids belong to the pane that "
+        raise ChatError("running under Codex's shared app-server, whose ELIS_* ids belong to the pane that "
                         "started it: start codex with --no-daemon (see Setup)")
     return sid, pane
 
@@ -296,7 +296,7 @@ class Waiter:
             # write before the ack: a pipe Claude closed fails here and leaves the mail in the mailbox
             sys.stderr.write("\n\n".join(render(m) for m in messages) + "\n")
             sys.stderr.flush()
-            agtermctl("msg", "ack", "--as", self.identity(), *[m["id"] for m in messages])
+            elisctl("msg", "ack", "--as", self.identity(), *[m["id"] for m in messages])
             # the turn this starts is Stop-hook feedback, which fires no UserPromptSubmit
             self.mark_busy()
             return WAKE
@@ -376,11 +376,11 @@ class Courier:
 
     def drain(self, reg: dict[str, Any]) -> int:
         identity = f"{self.sid}:{self.pane}"
-        # agterm's event hook runs with the app's PATH, which rarely holds an npm or nvm codex
+        # elis's event hook runs with the app's PATH, which rarely holds an npm or nvm codex
         codex = str(reg.get("codex") or "codex")
         delivered = 0
         while True:
-            out = agtermctl("msg", "read", "--json", "--as", identity)
+            out = elisctl("msg", "read", "--json", "--as", identity)
             messages = (out.get("result") or {}).get("messages") or []
             if not messages:
                 return delivered
@@ -392,7 +392,7 @@ class Courier:
                 if res.returncode != 0:
                     detail = (res.stderr or res.stdout).strip()
                     raise ChatError(f"codex queue failed after {delivered} delivered: {detail}")
-                agtermctl("msg", "ack", "--as", identity, m["id"])
+                elisctl("msg", "ack", "--as", identity, m["id"])
                 delivered += 1
 
 
@@ -409,8 +409,8 @@ def say(text: str) -> dict[str, Any]:
     sid, pane = own_identity()
     message = compose(text)
     peer = other_pane(sid, pane)
-    # delivery to codex is the agterm event hook's job: codex queue fails inside a codex tool sandbox
-    agtermctl("msg", "send", "--stdin", "--to", f"{sid}:{peer}", "--json", stdin=message)
+    # delivery to codex is the elis event hook's job: codex queue fails inside a codex tool sandbox
+    elisctl("msg", "send", "--stdin", "--to", f"{sid}:{peer}", "--json", stdin=message)
     result: dict[str, Any] = {"sent": len(message.encode("utf-8")), "receiver": receiver(sid, peer)}
     if result["receiver"] == "claude":
         result["peerBusy"] = Waiter(sid, peer).busy()
@@ -500,9 +500,9 @@ def hook_event() -> dict[str, Any]:
 
 
 def claude_hook() -> int:
-    sid = os.environ.get("AGTERM_SESSION_ID", "")
-    pane = os.environ.get("AGTERM_PANE_ID", "")
-    # a `claude -p` started from an agterm pane inherits its AGTERM_* and must not take the pane's mail
+    sid = os.environ.get("ELIS_SESSION_ID", "")
+    pane = os.environ.get("ELIS_PANE_ID", "")
+    # a `claude -p` started from an elis pane inherits its ELIS_* and must not take the pane's mail
     if not sid or not pane or os.environ.get("CLAUDE_CODE_ENTRYPOINT") != "cli":
         return 0
     event = hook_event()
@@ -510,8 +510,8 @@ def claude_hook() -> int:
 
 
 def codex_hook() -> int:
-    sid = os.environ.get("AGTERM_SESSION_ID", "")
-    pane = os.environ.get("AGTERM_PANE_ID", "")
+    sid = os.environ.get("ELIS_SESSION_ID", "")
+    pane = os.environ.get("ELIS_PANE_ID", "")
     if not sid or not pane:
         return 0
     try:
@@ -534,8 +534,8 @@ def codex_hook() -> int:
     return 0
 
 
-def agterm_hook() -> int:
-    """the agterm `on message` hook: hand new mail for a registered codex pane to its thread."""
+def elis_hook() -> int:
+    """the elis `on message` hook: hand new mail for a registered codex pane to its thread."""
     event = hook_event()
     payload = event.get("payload")
     sid = str(event.get("session") or "")
@@ -547,10 +547,10 @@ def agterm_hook() -> int:
         return 0
     socket = os.environ.get("AGT_SOCKET", "")
     if not socket:
-        sys.stderr.write("AGT_SOCKET is unset; refusing to guess which agterm to read mail from\n")
+        sys.stderr.write("AGT_SOCKET is unset; refusing to guess which elis to read mail from\n")
         return 1
-    # the app's own socket wins over any AGTERM_SOCKET inherited from where agterm was started
-    os.environ["AGTERM_SOCKET"] = socket
+    # the app's own socket wins over any ELIS_SOCKET inherited from where elis was started
+    os.environ["ELIS_SOCKET"] = socket
     try:
         courier.deliver()
     except (ChatError, OSError, ValueError, subprocess.SubprocessError) as e:
@@ -571,14 +571,14 @@ def main(argv: list[str] | None = None) -> int:
     deliver_cmd.add_argument("--pane", help="pane id, default: this pane")
     sub.add_parser("claude-hook", help="Claude Code hook: deliver this pane's mail")
     sub.add_parser("codex-hook", help="Codex SessionStart hook: register this pane's thread")
-    sub.add_parser("agterm-hook", help="agterm `on message` hook: hand new mail to a registered codex")
+    sub.add_parser("elis-hook", help="elis `on message` hook: hand new mail to a registered codex")
     args = parser.parse_args(argv)
     if args.cmd == "claude-hook":
         return claude_hook()
     if args.cmd == "codex-hook":
         return codex_hook()
-    if args.cmd == "agterm-hook":
-        return agterm_hook()
+    if args.cmd == "elis-hook":
+        return elis_hook()
     try:
         if args.cmd == "say":
             result = say(read_message_file(args.file) if args.file is not None else sys.stdin.read())

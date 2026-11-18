@@ -3,10 +3,10 @@
 
 Listens on a unix socket that `ssh -R` forwards to the host, accepts only a
 `session.status` request, rebuilds it with this tab's fixed target and pane, and
-sends that to agterm's control socket. The host never reaches the socket itself:
+sends that to elis's control socket. The host never reaches the socket itself:
 a request for any other command, target or field is answered `refused` and dropped.
 
-Exits on its own when the parent attach loop is gone, so a hard-killed agterm
+Exits on its own when the parent attach loop is gone, so a hard-killed elis
 leaves no relay behind.
 """
 
@@ -51,10 +51,10 @@ def clean_request(raw, opts):
     return {"cmd": "session.status", "target": opts.target, "args": clean}
 
 
-def forward(req, agterm_socket):
+def forward(req, elis_socket):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
         s.settimeout(3)
-        s.connect(agterm_socket)
+        s.connect(elis_socket)
         s.sendall(json.dumps(req).encode("utf-8") + b"\n")
         resp = json.loads(read_line(s).decode("utf-8"))
     return resp.get("ok") is True
@@ -63,7 +63,7 @@ def forward(req, agterm_socket):
 def serve(conn, opts):
     conn.settimeout(3)
     try:
-        ok = forward(clean_request(read_line(conn), opts), opts.agterm)
+        ok = forward(clean_request(read_line(conn), opts), opts.elis)
         reply = b'{"ok":true}\n' if ok else b'{"ok":false}\n'
     except Exception:  # noqa: BLE001 - any bad input or a dead socket is one answer: refused
         reply = REFUSED
@@ -76,7 +76,7 @@ def serve(conn, opts):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--listen", required=True, help="unix socket to serve, forwarded by ssh -R")
-    p.add_argument("--agterm", required=True, help="agterm's control socket")
+    p.add_argument("--elis", required=True, help="elis's control socket")
     p.add_argument("--target", required=True, help="the session id every status lands on")
     p.add_argument("--pane", default="")
     p.add_argument("--pane-id", default="")

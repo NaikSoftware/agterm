@@ -16,7 +16,7 @@ The snapshot closes nothing. You close the sessions yourself, and that kills wha
 
 ## Requirements
 
-- agterm 0.7.1 or later. `AGTERM_PANE`, which tells a Claude in a split from one in the main pane, shipped in that release, and `session type --pane` in 0.7.0; the rest is older. Two later additions are used when present: the split's own directory (`splitCwd`, 0.28.0), without which a split restores into the main pane's directory, and pane ids in `tree` (0.36.0), without which a split pane promoted to main keeps its old role.
+- Elis 0.7.1 or later. `ELIS_PANE`, which tells a Claude in a split from one in the main pane, shipped in that release, and `session type --pane` in 0.7.0; the rest is older. Two later additions are used when present: the split's own directory (`splitCwd`, 0.28.0), without which a split restores into the main pane's directory, and pane ids in `tree` (0.36.0), without which a split pane promoted to main keeps its old role.
 - `jq`
 - `python3` 3.9 or later, standard library only. The one in macOS's Command Line Tools is enough.
 - Claude Code, only for the conversation part. Without it, sessions restore with their directory and command.
@@ -26,24 +26,24 @@ The snapshot closes nothing. You close the sessions yourself, and that kills wha
 Copy the whole directory, keeping its layout: `snapshot.sh` finds `render.py` and `assets/page.html` next to itself, and writes the path of `restore.sh` into every snippet.
 
 ```sh
-mkdir -p ~/.local/share/agterm
-cp -R session-snapshot ~/.local/share/agterm/
-chmod +x ~/.local/share/agterm/session-snapshot/*.sh
+mkdir -p ~/.local/share/elis
+cp -R session-snapshot ~/.local/share/elis/
+chmod +x ~/.local/share/elis/session-snapshot/*.sh
 ```
 
 Variables, all optional:
 
-- `AGT_SNAP_DIR`: where snapshots go, `~/agterm-snapshots` by default.
+- `AGT_SNAP_DIR`: where snapshots go, `~/elis-snapshots` by default.
 - `AGT_SNAP_TURNS`: how many conversation messages each session keeps, 200 by default. `0` leaves conversation text out; titles, ids and counts are still recorded.
-- `AGTERMCTL`: the full path of `agtermctl` when it is not on `PATH`.
+- `ELISCTL`: the full path of `elisctl` when it is not on `PATH`.
 
-To take a snapshot from the action palette, add to `~/.config/agterm/keymap.conf`:
+To take a snapshot from the action palette, add to `~/.config/elis/keymap.conf`:
 
 ```
-command "snapshot sessions"  ~/.local/share/agterm/session-snapshot/snapshot.sh --open
+command "snapshot sessions"  ~/.local/share/elis/session-snapshot/snapshot.sh --open
 ```
 
-Run from the palette or a chord, the script gets the app's `PATH` rather than your shell's, which is the launchd default: `/usr/local/bin` and the system directories, without `/opt/homebrew/bin`. `agtermctl` resolves there once **Help ▸ Install Command Line Tool…** has linked it, and `jq` and `python3` resolve there when they are the ones macOS ships. A Homebrew-only `jq` does not, so install the system one or run the snapshot from a shell. Variables exported in your shell profile do not reach a palette run either.
+Run from the palette or a chord, the script gets the app's `PATH` rather than your shell's, which is the launchd default: `/usr/local/bin` and the system directories, without `/opt/homebrew/bin`. `elisctl` resolves there once **Help ▸ Install Command Line Tool…** has linked it, and `jq` and `python3` resolve there when they are the ones macOS ships. A Homebrew-only `jq` does not, so install the system one or run the snapshot from a shell. Variables exported in your shell profile do not reach a palette run either.
 
 ## Usage
 
@@ -51,11 +51,11 @@ Run from the palette or a chord, the script gets the app's `PATH` rather than yo
 snapshot.sh --open     # snapshot every open window and open the page
 ```
 
-On the page, click a session to see its details, and press **copy** on a session or a workspace to copy its restore line. Paste the line into a bash or zsh shell in agterm:
+On the page, click a session to see its details, and press **copy** on a session or a workspace to copy its restore line. Paste the line into a bash or zsh shell in Elis:
 
 ```sh
-~/.local/share/agterm/session-snapshot/restore.sh ~/agterm-snapshots/2026-10-13-120000.json <session-id>
-~/.local/share/agterm/session-snapshot/restore.sh ~/agterm-snapshots/2026-10-13-120000.json --workspace <workspace-id>
+~/.local/share/elis/session-snapshot/restore.sh ~/elis-snapshots/2026-10-13-120000.json <session-id>
+~/.local/share/elis/session-snapshot/restore.sh ~/elis-snapshots/2026-10-13-120000.json --workspace <workspace-id>
 ```
 
 Add `--dry-run` after `restore.sh` to print the commands without running them. Pasting a line twice does not create the session twice: one still open, or already restored from that snapshot, is selected instead, and one whose conversation a running Claude already holds is skipped. `latest.html` in the snapshot directory always points at the newest page.
@@ -66,7 +66,7 @@ The details panel also has **copy id** and **copy resume command** (`cd <dir> &&
 
 `snapshot.sh` reads `window list` and, for each open window, `tree --window` and `session text --pane left --lines 60` per session. `render.py` turns that into the JSON and embeds the JSON in a copy of `assets/page.html`, which builds the page in the browser and loads nothing from the network.
 
-Finding a session's conversation is the part that took the most work. Matching by process name misses too much: an npm install of Claude Code runs as `node`, an SDK-hosted one runs under its own path, and one started as `caffeinate -i claude` shows the wrapper as the foreground program. So the snapshot reads Claude Code's own registry instead, `~/.claude/sessions/<pid>.json`, which names the conversation each live Claude process is running. For each live process, `ps eww` reads its environment. `AGTERM_SESSION_ID` ties it to the agterm session, but every surface of a session carries that same id, the split, the scratch terminal and overlays included. `AGTERM_PANE` (`left`, `right` or `scratch`, absent in an overlay) says which surface it is. That value is fixed when the shell starts and goes stale when a split pane is promoted to main, so `AGTERM_PANE_ID` is matched against `surfaces[].paneID` from `tree` first. Only the main pane and the split count; scratch and overlay processes are ignored. A headless `claude -p` or an SDK agent started by a Claude inherits all of its pane's variables and registers itself as well, so an entry with another registered Claude among its process ancestors is dropped: it is a child of the pane's conversation, not the pane's own. For a pane where no Claude is running at the moment of the snapshot, two fallbacks follow: a `--resume` or `--session-id` in the pane's foreground command, then, for the main pane, a transcript file named after the agterm session id, which is what a per-tab wrapper such as the `claude-session-resume` recipe creates. The page says which rule matched. A session with no match lists the five most recent conversations started in its directory, each with its own resume command.
+Finding a session's conversation is the part that took the most work. Matching by process name misses too much: an npm install of Claude Code runs as `node`, an SDK-hosted one runs under its own path, and one started as `caffeinate -i claude` shows the wrapper as the foreground program. So the snapshot reads Claude Code's own registry instead, `~/.claude/sessions/<pid>.json`, which names the conversation each live Claude process is running. For each live process, `ps eww` reads its environment. `ELIS_SESSION_ID` ties it to the Elis session, but every surface of a session carries that same id, the split, the scratch terminal and overlays included. `ELIS_PANE` (`left`, `right` or `scratch`, absent in an overlay) says which surface it is. That value is fixed when the shell starts and goes stale when a split pane is promoted to main, so `ELIS_PANE_ID` is matched against `surfaces[].paneID` from `tree` first. Only the main pane and the split count; scratch and overlay processes are ignored. A headless `claude -p` or an SDK agent started by a Claude inherits all of its pane's variables and registers itself as well, so an entry with another registered Claude among its process ancestors is dropped: it is a child of the pane's conversation, not the pane's own. For a pane where no Claude is running at the moment of the snapshot, two fallbacks follow: a `--resume` or `--session-id` in the pane's foreground command, then, for the main pane, a transcript file named after the Elis session id, which is what a per-tab wrapper such as the `claude-session-resume` recipe creates. The page says which rule matched. A session with no match lists the five most recent conversations started in its directory, each with its own resume command.
 
 Resuming by id, not by `claude --continue`, is what keeps sessions that shared a directory apart: `--continue` picks that directory's newest conversation for all of them.
 

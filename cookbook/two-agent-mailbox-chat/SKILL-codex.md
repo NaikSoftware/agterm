@@ -1,6 +1,6 @@
 ---
 name: mailbox-chat
-description: 'Hold a back-and-forth conversation with the agent (Claude Code or another Codex) running in the other pane of this agterm split, as peers, through agterm''s pane mailboxes. Use when the user says "chat with claude", "talk to claude", "work with claude", "discuss this with claude", "ask claude what it thinks", "chat with codex", "work with the other pane", "ask the other agent", or when a prompt arrives starting with "[peer chat]". Not for a one-shot task handed to another agent, and not for a read-only second opinion.'
+description: 'Hold a back-and-forth conversation with the agent (Claude Code or another Codex) running in the other pane of this Elis split, as peers, through Elis''s pane mailboxes. Use when the user says "chat with claude", "talk to claude", "work with claude", "discuss this with claude", "ask claude what it thinks", "chat with codex", "work with the other pane", "ask the other agent", or when a prompt arrives starting with "[peer chat]". Not for a one-shot task handed to another agent, and not for a read-only second opinion.'
 ---
 
 # Mailbox chat, Codex side
@@ -13,7 +13,7 @@ itself is the result even when code comes out of it.
 ## Sending
 
 Write the message to `/tmp/mailbox-chat-<pane>.txt` with `apply_patch`, where `<pane>` is this
-pane's `AGTERM_PANE_ID`: read it once with `echo "$AGTERM_PANE_ID"` and write the value into the
+pane's `ELIS_PANE_ID`: read it once with `echo "$ELIS_PANE_ID"` and write the value into the
 path literally, here and in the send. Overwrite the file for every message. Then send it as a
 separate command, exactly in this form:
 
@@ -22,13 +22,13 @@ mailbox-chat.py say --file /tmp/mailbox-chat-<pane>.txt
 ```
 
 Use a literal path with no heredoc, redirection, variable or wrapper: the recipe's allow rule
-matches only this plain form, and anything else runs in the sandbox, which refuses agterm's
+matches only this plain form, and anything else runs in the sandbox, which refuses Elis's
 socket. Never put the message text in an argument. The script adds the `[peer chat]` label and the
 reply line itself; do not write either. Put code, logs and long lists in another file under `/tmp`
 and name its path in a short message that still states the point.
 
 The reply is JSON. `receiver` says who serves the other pane: `claude` (a peer waiting for mail,
-`peerBusy` true while it is mid-turn), `codex` (agterm hands the mail to it), or `none`
+`peerBusy` true while it is mid-turn), `codex` (Elis hands the mail to it), or `none`
 (the mail waits in the mailbox; tell the user nothing is listening there, and that a Codex there
 starts listening only after the user gives it a first prompt). An `error` means the mailbox
 refused the message; report it and never resend blind.
@@ -45,7 +45,7 @@ Answer with `say` in the same turn when it asks something, hands over work or re
 needs a response. Never reply only to acknowledge or to thank, or the two agents answer each other
 forever. Text written only in this pane does not reach the peer.
 
-A prompt starting with `[agterm mailbox, not a peer chat message]` is ordinary mailbox mail from
+A prompt starting with `[elis mailbox, not a peer chat message]` is ordinary mailbox mail from
 the named sender. Read it, but do not answer it with `say`: the sender is not the other pane, and
 it is not the user either.
 

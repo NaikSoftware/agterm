@@ -1,5 +1,5 @@
 #!/bin/sh
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+ELISCTL=${ELISCTL:-elisctl}
 
 [ -n "$AGT_SESSION_HOST" ] || exit 0
 osascript -e 'clipboard info' | grep -q PNGf || { echo "no image on the clipboard" >&2; exit 1; }
@@ -18,5 +18,5 @@ rm -f "$1"
 exit $rc
 EOF
 
-"$AGTERMCTL" session hud open --socket "$AGT_SOCKET" --target "$AGT_SESSION_ID" --hide-after 3 \
+"$ELISCTL" session hud open --socket "$AGT_SOCKET" --target "$AGT_SESSION_ID" --hide-after 3 \
   "image copied to $AGT_SESSION_HOST, press ctrl+v" >/dev/null

@@ -8,16 +8,16 @@
 # for, its working directory, and whatever its panes are running.
 set -eu
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+ELISCTL=${ELISCTL:-elisctl}
 HOST=${1:-${AGT_REMOTE_HOST:-}}
 LIMIT=1000
 
 # carry the socket when the session names one, so this also works in a second instance
 agt() {
     if [ -n "${AGT_SOCKET:-}" ]; then
-        "$AGTERMCTL" "$@" --socket "$AGT_SOCKET"
+        "$ELISCTL" "$@" --socket "$AGT_SOCKET"
     else
-        "$AGTERMCTL" "$@"
+        "$ELISCTL" "$@"
     fi
 }
 
@@ -30,7 +30,7 @@ fail() {
 command -v jq >/dev/null 2>&1 || fail "jq is not on PATH"
 [ -n "$HOST" ] || fail "no host. Pass one, or set AGT_REMOTE_HOST in the custom command"
 
-# the local agterm runs the ssh, so a failure here is the far side's or the network's
+# the local elis runs the ssh, so a failure here is the far side's or the network's
 TREE=$(agt zmx tree "$HOST" --json 2>&1) || fail "$HOST: $(printf '%s' "$TREE" | tail -1)"
 
 ERR=$(printf '%s' "$TREE" | jq -r 'if .ok then empty else .error end' 2>/dev/null) \
@@ -51,7 +51,7 @@ ITEMS=$(printf '%s' "$TREE" | jq -c '
 
 COUNT=$(printf '%s' "$ITEMS" | jq 'length') || fail "unreadable session list from $HOST"
 # an empty list does not diagnose the mode: it reads the same whether the far side is not in Live
-# sessions mode or is and has nothing eligible. `agtermctl zmx list` on that machine says which.
+# sessions mode or is and has nothing eligible. `elisctl zmx list` on that machine says which.
 [ "$COUNT" -gt 0 ] || fail "nothing to attach on $HOST"
 # the picker refuses a longer list outright, so count first and explain rather than fail opaquely
 [ "$COUNT" -le "$LIMIT" ] || fail "$COUNT sessions is over the picker's $LIMIT-item limit"

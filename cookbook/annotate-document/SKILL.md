@@ -1,12 +1,12 @@
 ---
 name: webrev
-description: Review any text that is not a diff - a plan, a markdown or text document, or a draft such as a PR body, an issue comment or a commit message - as a rendered page in a chromeless agterm HTML overlay, with notes on blocks, code lines and the whole file handed back as annotation records. Use when the user says "webrev", "/webrev", "web review", "review this file", "review this plan", "review this doc", "let me annotate this", "webrev <file>", "review this draft before posting", "let me review the PR body first", or "let me review the commit message". Not for diffs.
+description: Review any text that is not a diff - a plan, a markdown or text document, or a draft such as a PR body, an issue comment or a commit message - as a rendered page in a chromeless Elis HTML overlay, with notes on blocks, code lines and the whole file handed back as annotation records. Use when the user says "webrev", "/webrev", "web review", "review this file", "review this plan", "review this doc", "let me annotate this", "webrev <file>", "review this draft before posting", "let me review the PR body first", or "let me review the commit message". Not for diffs.
 allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/webrev.py:*)
 ---
 
 # webrev
 
-Requires agterm (`AGTERM_SESSION_ID` set).
+Requires Elis (`ELIS_SESSION_ID` set).
 
 ## Launch
 
@@ -26,8 +26,8 @@ The page opens as a floating panel over this session and the script waits for it
 (default 95) for documents, plans and anything long. Pass `--fit` instead for a short draft such as a commit
 message, a comment or a short PR body: the panel opens at a size estimated from the text.
 A plain-text draft gets 80 columns; markdown gets its longest line within 60..100 columns, and the height
-follows the wrapped rows. agterm limits each side to 80% of the session, and anything taller, a wide table or
-an opened note scrolls. The estimate is for agterm's HTML page zoom of 1.0; agterm reports the zoom only once
+follows the wrapped rows. Elis limits each side to 80% of the session, and anything taller, a wide table or
+an opened note scrolls. The estimate is for Elis's HTML page zoom of 1.0; Elis reports the zoom only once
 a page is open, so at any other zoom the panel resizes once right after it opens, to the estimate times the
 zoom. A zoom changed while the page is up does not resize it. `--pane left|right` puts the page over one
 split pane, always at full size, so neither `--size` nor `--fit` applies.
@@ -51,8 +51,8 @@ Whenever the task ended without that result (killed, timed out, lost), read the 
 annotations once the waiter recorded the answer (empty for no notes), `dismissed` for a cancel, or
 `pending <page-id>`, the last state the waiter recorded. A pending line does not prove the page is still
 open: run `"${CLAUDE_SKILL_DIR}/scripts/webrev.py" result <page-id>`, which may already return the final
-answer, since agterm keeps the outcome after the page closes (same exit codes, 1 while still pending).
-Still pending means the user has not answered: do not relaunch, since agterm refuses a second overlay in
+answer, since Elis keeps the outcome after the page closes (same exit codes, 1 while still pending).
+Still pending means the user has not answered: do not relaunch, since Elis refuses a second overlay in
 the slot, and do not treat the review as finished. A missing file means no recovery record was written.
 Report the task stderr; if it contains a page id, use result to recover that page.
 

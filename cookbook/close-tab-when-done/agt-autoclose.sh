@@ -4,36 +4,36 @@
 # DESTRUCTIVE: firing closes the session, killing every process in it and
 # discarding its scrollback. There is no undo. Read the README's Limits.
 #
-# toggle|on|off|status take a session id, defaulting to $AGTERM_SESSION_ID, so a
+# toggle|on|off|status take a session id, defaulting to $ELIS_SESSION_ID, so a
 # chord passes "{AGT_SESSION_ID}" and a shell inside the session passes nothing.
 # fire is what the agent's stop hook calls; it reads the environment only.
 set -e
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
-STATE_DIR=${AGT_AUTOCLOSE_DIR:-$HOME/.agterm-autoclose}
+ELISCTL=${ELISCTL:-elisctl}
+STATE_DIR=${AGT_AUTOCLOSE_DIR:-$HOME/.elis-autoclose}
 # no colon: an empty AGT_AUTOCLOSE_BADGE means "no badge", not "the default"
 BADGE=${AGT_AUTOCLOSE_BADGE-⏻ }
 GRACE=${AGT_AUTOCLOSE_GRACE:-0.4}
 
 # A chord exports AGT_SOCKET; a session's shell, and every hook it spawns,
-# exports AGTERM_SOCKET. Addressing the socket the caller came from is what
-# keeps a second agterm, running from another state directory, out of it.
-socket=${AGT_SOCKET:-${AGTERM_SOCKET:-}}
+# exports ELIS_SOCKET. Addressing the socket the caller came from is what
+# keeps a second elis, running from another state directory, out of it.
+socket=${AGT_SOCKET:-${ELIS_SOCKET:-}}
 
 # The socket path holds a space on a default install, so it can never be pasted
 # into a command line as bare words. One wrapper keeps every call quoted.
 agt() {
 	if [ -n "$socket" ]; then
-		"$AGTERMCTL" "$@" --socket "$socket"
+		"$ELISCTL" "$@" --socket "$socket"
 	else
-		"$AGTERMCTL" "$@"
+		"$ELISCTL" "$@"
 	fi
 }
 
 # A session id becomes a file name, so it is validated rather than trusted: an id
 # is a UUID and nothing else. Without this, `on ../../notes.md` truncates that
 # file and `off` deletes it - and the id is an advertised argument, so a typo
-# reaches it, not only malice. Upper-cased because agterm reports ids upper-case:
+# reaches it, not only malice. Upper-cased because elis reports ids upper-case:
 # a lower-case id would arm one marker while fire looks for another.
 canonical_id() {
 	printf '%s' "$1" | tr '[:lower:]' '[:upper:]' |
@@ -90,12 +90,12 @@ badge_off() {
 }
 
 # Fail closed. A marker with no badge on it is a tab that closes with no warning
-# at all, so an arm that cannot reach agterm leaves nothing behind: one live read
+# at all, so an arm that cannot reach elis leaves nothing behind: one live read
 # proves the CLI resolves, the socket answers, and jq is there to parse it.
 arm() {
 	if ! windows=$(agt window list --json 2>/dev/null) ||
 		! printf '%s' "$windows" | jq -e '.result.windows' >/dev/null 2>&1; then
-		echo "${0##*/}: cannot reach agterm - check agtermctl, the socket and jq" >&2
+		echo "${0##*/}: cannot reach elis - check elisctl, the socket and jq" >&2
 		return 1
 	fi
 	mkdir -p "$STATE_DIR"
@@ -114,7 +114,7 @@ disarm() {
 
 # Claude Code runs a background or adopted session inside a daemon-hosted worker
 # (`claude daemon run`, `bg-pty-host`, `bg-spare`), and such a worker carries the
-# AGTERM_SESSION_ID of whichever tab first started the daemon - usually a tab
+# ELIS_SESSION_ID of whichever tab first started the daemon - usually a tab
 # that has since been closed, and whose id says nothing about where this agent is
 # running. Firing on that id closes a session that has nothing to do with this
 # turn, so a daemon-hosted run does not fire at all. $CLAUDE_PID is the Claude
@@ -137,12 +137,12 @@ daemon_hosted() {
 
 # Every path out of here exits 0. A stop hook that fails makes the agent report a
 # hook error at the end of a turn that went fine, and there is nothing the user
-# can do about it from there. Outside agterm, or without the CLI, it is a silent
+# can do about it from there. Outside elis, or without the CLI, it is a silent
 # no-op, which is what makes it safe to install once and leave alone.
 fire() {
-	sid=$(canonical_id "${AGTERM_SESSION_ID:-}") || exit 0
+	sid=$(canonical_id "${ELIS_SESSION_ID:-}") || exit 0
 	[ -n "$sid" ] || exit 0
-	command -v "$AGTERMCTL" >/dev/null 2>&1 || exit 0
+	command -v "$ELISCTL" >/dev/null 2>&1 || exit 0
 	m=$(marker_for "$sid")
 	[ -f "$m" ] || exit 0
 	! daemon_hosted || exit 0
@@ -176,8 +176,8 @@ close-later)
 	agt session close --target "$2" >/dev/null 2>&1 || true
 	;;
 toggle | on | off | status)
-	if ! sid=$(canonical_id "${2:-${AGTERM_SESSION_ID:-}}"); then
-		echo "${0##*/}: not a session id: '${2:-${AGTERM_SESSION_ID:-}}'" >&2
+	if ! sid=$(canonical_id "${2:-${ELIS_SESSION_ID:-}}"); then
+		echo "${0##*/}: not a session id: '${2:-${ELIS_SESSION_ID:-}}'" >&2
 		exit 2
 	fi
 	case $cmd in

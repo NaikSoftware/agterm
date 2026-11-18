@@ -1,9 +1,9 @@
 #!/bin/sh
-# window-switcher.sh - jump to an agterm window by number, or pick one from a list that
+# window-switcher.sh - jump to an elis window by number, or pick one from a list that
 # shows which windows have sessions waiting for you.
 #
 #   goto N   raise window number N. A window's number is its position in
-#            `agtermctl window list`, i.e. the library order, closed windows included,
+#            `elisctl window list`, i.e. the library order, closed windows included,
 #            so the number does not depend on which window is frontmost and does not
 #            shift when a window is closed. `goto` on a closed window reopens it.
 #   pick     a native picker over every window: the ⌘N shortcut on the left, ● in place
@@ -13,13 +13,13 @@
 #   items    print the picker rows as JSON, for reading them or tuning the gutter without
 #            opening the picker.
 #
-# "Attention" is agterm's own notion: a session whose agent status is `blocked` (waiting
+# "Attention" is elis's own notion: a session whose agent status is `blocked` (waiting
 # for input) or `completed` (finished, not yet looked at), the set ⌃⌥↑/↓ walk within a
 # window. The session on screen in the current window is left out of that window's badge:
 # you can already see it, and the badge is for what you can't.
 set -eu
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+ELISCTL=${ELISCTL:-elisctl}
 sock=${AGT_SOCKET:-}
 TAB=$(printf '\t')
 
@@ -34,9 +34,9 @@ PAD_NONE=${PAD_NONE:-'          '}    # windows past the ninth, which get no sho
 
 agt() {
 	if [ -n "$sock" ]; then
-		"$AGTERMCTL" "$@" --socket "$sock"
+		"$ELISCTL" "$@" --socket "$sock"
 	else
-		"$AGTERMCTL" "$@"
+		"$ELISCTL" "$@"
 	fi
 }
 
@@ -113,7 +113,7 @@ items() {
 # `pick --select` shipped after 0.29.1. An older CLI rejects the option before it opens
 # anything, and its `--help` does not list it, so the check costs no socket round trip.
 supports_select() {
-	"$AGTERMCTL" pick open --help 2>&1 | grep -q -- '--select'
+	"$ELISCTL" pick open --help 2>&1 | grep -q -- '--select'
 }
 
 case "${1:-pick}" in

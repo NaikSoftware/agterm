@@ -1,0 +1,252 @@
+#!/usr/bin/env bash
+# Build, sign, notarize, and package a release DMG locally, and (with --publish)
+# upload it to a GitHub release.
+#
+# Usage:
+#   scripts/release.sh <version>            # build + sign + notarize + DMG (no publish)
+#   scripts/release.sh <version> --publish  # also: gh release + upload
+#
+# MOBILE_APK=<path> also uploads the phone app as elis-mobile.apk; without it the release has no APK.
+#
+# Signing identity: auto-detected from the keychain ("Developer ID Application"),
+# or override with ELIS_SIGN_IDENTITY. With no identity it produces an AD-HOC
+# DMG (not notarized) — a dry run by default, but set ELIS_ALLOW_UNSIGNED=1 to
+# --publish it as an unsigned release. Notary creds come from a keychain profile created
+# with `xcrun notarytool store-credentials` (default name: elis-notary,
+# override with ELIS_NOTARY_PROFILE).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+ROOT="$PWD"
+BUILD_DIR="$ROOT/build"
+
+VERSION="${1:-}"
+PUBLISH=0
+[ "${2:-}" = "--publish" ] && PUBLISH=1
+
+if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "usage: scripts/release.sh <x.y.z> [--publish]" >&2
+  exit 1
+fi
+
+TAG="v$VERSION"
+DMG="$BUILD_DIR/Elis-$VERSION.dmg"
+GH_REPO=NaikSoftware/elis
+[ -z "${MOBILE_APK:-}" ] || [ -f "$MOBILE_APK" ] || { echo "MOBILE_APK not found: $MOBILE_APK" >&2; exit 1; }
+
+# ── plugin manifest version ───────────────────────────────────────────────────
+# The agent skill also ships as a Claude Code / Codex plugin, and both plugin
+# managers key their install cache on the manifest "version" — an unbumped
+# manifest means an existing install never picks up the new skill, silently.
+# `gh release create` below runs with no --target, so the tag lands on whatever
+# origin/master points at: the bump must be both COMMITTED and PUSHED, and both
+# are checked here. This applies the bump and stops so the diff can be reviewed
+# and committed, rather than rewriting git history from inside a release script.
+REPO_ROOT="$(cd "$ROOT/.." && pwd)"
+PLUGIN_MANIFESTS=(
+  "$REPO_ROOT/plugins/elis/.claude-plugin/plugin.json"
+  "$REPO_ROOT/plugins/elis/.codex-plugin/plugin.json"
+  "$REPO_ROOT/.claude-plugin/marketplace.json"
+)
+for manifest in "${PLUGIN_MANIFESTS[@]}"; do
+  sed -i '' -E "s/(\"version\"[[:space:]]*:[[:space:]]*)\"[^\"]*\"/\1\"$VERSION\"/" "$manifest"
+done
+# against HEAD, not the index — a bare `git diff` compares the worktree to the
+# index, so a bump that was merely `git add`ed reads as clean and publishes stale.
+if ! git diff --quiet HEAD -- "${PLUGIN_MANIFESTS[@]}"; then
+  echo "==> bumped the plugin manifests to $VERSION — review and commit, then re-run:" >&2
+  git --no-pager diff --stat HEAD -- "${PLUGIN_MANIFESTS[@]}" >&2
+  exit 1
+fi
+# committed is not enough: the tag is cut from the remote, so verify the pushed
+# manifests carry this version too.
+if [ "$PUBLISH" = "1" ]; then
+  git fetch -q origin master
+  for manifest in "${PLUGIN_MANIFESTS[@]}"; do
+    rel="${manifest#"$REPO_ROOT"/}"
+    if ! git show "origin/master:$rel" 2>/dev/null | grep -q "\"version\"[[:space:]]*:[[:space:]]*\"$VERSION\""; then
+      echo "==> $rel on origin/master is not at $VERSION — push master first" >&2
+      exit 1
+    fi
+  done
+fi
+APP="$BUILD_DIR/DerivedData/Build/Products/Release/Elis.app"
+NOTARY_PROFILE="${ELIS_NOTARY_PROFILE:-elis-notary}"
+
+# resolve the signing identity: explicit override, else the first Developer ID
+# Application identity in the keychain, else ad-hoc dry-run.
+SIGN_ID="${ELIS_SIGN_IDENTITY:-}"
+if [ -z "$SIGN_ID" ]; then
+  SIGN_ID="$(security find-identity -v -p codesigning | awk -F'"' '/Developer ID Application/{print $2; exit}')"
+fi
+if [ -n "$SIGN_ID" ]; then
+  SIGNED=1
+  echo "==> signing identity: $SIGN_ID"
+else
+  SIGNED=0
+  echo "==> WARNING: no Developer ID Application identity found — building AD-HOC (dry-run, not notarized)"
+fi
+
+if [ "$PUBLISH" = "1" ] && [ "$SIGNED" = "0" ] && [ "${ELIS_ALLOW_UNSIGNED:-0}" != "1" ]; then
+  echo "refusing to --publish an ad-hoc (unsigned) build" >&2
+  echo "set ELIS_ALLOW_UNSIGNED=1 to publish the interim unsigned build (CI does this)" >&2
+  exit 1
+fi
+
+# submit a path to the notary service and wait; fail loudly with the log on reject.
+notarize() {
+  local path="$1" json status id
+  echo "==> notarizing $(basename "$path")"
+  json="$(xcrun notarytool submit "$path" --keychain-profile "$NOTARY_PROFILE" --wait --output-format json)"
+  status="$(printf '%s' "$json" | jq -r '.status')"
+  id="$(printf '%s' "$json" | jq -r '.id')"
+  if [ "$status" != "Accepted" ]; then
+    echo "notarization failed: status=$status" >&2
+    xcrun notarytool log "$id" --keychain-profile "$NOTARY_PROFILE" || true
+    exit 1
+  fi
+}
+
+# build the GitHub release body: the matching CHANGELOG.md section followed by a
+# short install note (signed + notarized; Apple Silicon only, macOS 14+).
+release_notes() {
+  local section
+  section="$(awk -v ver="v$VERSION" '
+    $0 ~ "^## " ver "( |$)" {grab=1; next}
+    grab && /^## / {exit}
+    grab {body[++n]=$0}
+    END {
+      s=1; while (s<=n && body[s] ~ /^[[:space:]]*$/) s++
+      while (n>=s && body[n] ~ /^[[:space:]]*$/) n--
+      for (i=s; i<=n; i++) print body[i]
+    }
+  ' "$ROOT/CHANGELOG.md")"
+  [ -n "$section" ] || echo "WARNING: no CHANGELOG.md section for v$VERSION — release body will be the install note only" >&2
+  [ -n "$section" ] && printf '%s\n\n' "$section"
+  printf -- '---\n\n'
+  if [ "$SIGNED" = "1" ]; then
+    echo "Signed with a Developer ID certificate and notarized by Apple, so macOS Gatekeeper opens it with no extra steps. Apple Silicon (arm64) only, macOS 14 or later."
+  else
+    echo "Not notarized: after installing, run \`xattr -dr com.apple.quarantine /Applications/Elis.app\` once. Apple Silicon (arm64) only, macOS 14 or later."
+  fi
+  cat <<EOF
+
+- **Download:** open the \`.dmg\` and drag \`Elis.app\` into \`/Applications\`.
+EOF
+}
+
+# ── build ────────────────────────────────────────────────────────────────────
+"$ROOT/scripts/setup.sh"
+
+# the Linux server ships with each release, one tarball per architecture; the app carries their checksums, which
+# `elisctl server install` checks a download against
+docker info >/dev/null 2>&1 || { echo "release needs Docker running to build elis-server" >&2; exit 1; }
+"$ROOT/scripts/setup-zmx-linux.sh"
+SERVER_TARBALLS=()
+for arch in aarch64 x86_64; do
+  "$ROOT/scripts/server-package.sh" "$arch" "$VERSION"
+  SERVER_TARBALLS+=("$BUILD_DIR/server/elis-server-$VERSION-linux-$arch.tar.gz")
+done
+
+xcodegen generate >/dev/null
+# plain Release build (NOT archive). The build is left ad-hoc here on purpose:
+# Xcode's own final code-sign runs after the bundle phase and adds no secure
+# timestamp, so trying to inject Developer ID at build time is racy. Instead we
+# re-sign authoritatively below, AFTER xcodebuild returns.
+GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+xcodebuild -project Elis.xcodeproj -scheme Elis -configuration Release \
+  -derivedDataPath "$BUILD_DIR/DerivedData" \
+  MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$VERSION" GIT_COMMIT="$GIT_COMMIT" \
+  ARCHS=arm64 build
+[ -d "$APP" ] || { echo "expected app not found: $APP" >&2; exit 1; }
+# written before the seal below, which then covers it
+(cd "$BUILD_DIR/server" && shasum -a 256 "${SERVER_TARBALLS[@]##*/}") >"$APP/Contents/Resources/elis-server.sha256"
+
+# authoritative Developer ID signing — AFTER xcodebuild so nothing clobbers it,
+# with a secure --timestamp on every Mach-O (notarization requires it). Sign the
+# nested helpers first (inside-out), then re-sign + seal the app bundle. Helpers are signed without
+# entitlements, and --deep must never be added to the app sign below because it would stamp the app's
+# TCC grants onto standalone executables. Same constraint as the build-phase re-seal in project.yml.
+if [ "$SIGNED" = "1" ]; then
+  echo "==> signing Developer ID (timestamped)"
+  for helper in elisctl zmx elis-session-host; do
+    codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$APP/Contents/MacOS/$helper"
+  done
+  codesign --force --options runtime --timestamp \
+    --entitlements "$ROOT/Elis/elis.entitlements" --sign "$SIGN_ID" "$APP"
+  codesign --verify --deep --strict "$APP"
+  for helper in elisctl zmx elis-session-host; do
+    if codesign -d --entitlements - "$APP/Contents/MacOS/$helper" 2>/dev/null | grep -q 'com.apple.security'; then
+      echo "$helper carries entitlements: --deep must not be used on the app sign above" >&2
+      exit 1
+    fi
+  done
+else
+  # the checksum file joined the bundle after the build sealed it; the helpers are untouched, so only the app re-seals
+  codesign --force --entitlements "$ROOT/Elis/elis.entitlements" --sign - "$APP"
+  codesign --verify --deep --strict "$APP"
+fi
+
+# ── notarize + staple the app ─────────────────────────────────────────────────
+if [ "$SIGNED" = "1" ]; then
+  ZIP="$BUILD_DIR/elis-$VERSION.zip"
+  ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+  notarize "$ZIP"
+  rm -f "$ZIP"
+  xcrun stapler staple "$APP"
+  xcrun stapler validate "$APP"
+  spctl -a -vv --type execute "$APP"
+fi
+
+# ── package the DMG ───────────────────────────────────────────────────────────
+STAGING="$BUILD_DIR/dmg-staging"
+rm -rf "$STAGING"; mkdir -p "$STAGING"
+cp -R "$APP" "$STAGING/"
+ln -s /Applications "$STAGING/Applications"
+rm -f "$DMG"
+hdiutil create -volname Elis -srcfolder "$STAGING" -ov -format UDZO "$DMG"
+rm -rf "$STAGING"
+
+# ── sign + notarize + staple the DMG ──────────────────────────────────────────
+# codesign the DMG container itself (create → sign → notarize → staple), so the
+# primary-signature assessment below has a signature to verify. hdiutil produces
+# an unsigned image; without this the DMG notarizes+staples but spctl rejects it.
+if [ "$SIGNED" = "1" ]; then
+  codesign --force --timestamp --sign "$SIGN_ID" "$DMG"
+  notarize "$DMG"
+  xcrun stapler staple "$DMG"
+  xcrun stapler validate "$DMG"
+  spctl -a -vv -t open --context context:primary-signature "$DMG"
+fi
+
+echo "==> built: $DMG"
+
+if [ "$PUBLISH" != "1" ]; then
+  echo "==> dry run complete (pass --publish to upload)"
+  exit 0
+fi
+
+# ── publish: GitHub release ───────────────────────────────────────────────────
+echo "==> publishing $TAG"
+NOTES_FILE="$(mktemp)"
+release_notes >"$NOTES_FILE"
+if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+  gh release edit "$TAG" --repo "$GH_REPO" --title "Version $VERSION" --notes-file "$NOTES_FILE"
+else
+  gh release create "$TAG" --repo "$GH_REPO" --title "Version $VERSION" --notes-file "$NOTES_FILE"
+fi
+rm -f "$NOTES_FILE"
+# the asset name is the file name (`path#label` sets only a display label), so the APK is copied under its asset name
+ASSETS=("$DMG" "${SERVER_TARBALLS[@]}" "$ROOT/scripts/migrate-from-agterm2.sh")
+if [ -n "${MOBILE_APK:-}" ]; then
+  APK_STAGE="$(mktemp -d)"
+  cp "$MOBILE_APK" "$APK_STAGE/elis-mobile.apk"
+  ASSETS+=("$APK_STAGE/elis-mobile.apk")
+fi
+gh release upload "$TAG" --repo "$GH_REPO" "${ASSETS[@]}" --clobber
+[ -z "${APK_STAGE:-}" ] || rm -rf "$APK_STAGE"
+if [ -z "${MOBILE_APK:-}" ]; then
+  echo "==> !!! NO PHONE APP UPLOADED: README and the site link elis-mobile.apk. Re-run with MOBILE_APK=<path> or" >&2
+  echo "==> !!! upload it yourself: gh release upload $TAG --repo $GH_REPO elis-mobile.apk --clobber" >&2
+fi
+
+echo "==> done"

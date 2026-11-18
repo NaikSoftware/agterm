@@ -1,0 +1,143 @@
+#pragma once
+
+#include <QJsonObject>
+#include <QSize>
+#include <QString>
+
+class Store;
+
+// what one pane of a Duplicate as Companion starts: a shell in cwd, or another copy of its program
+struct PanePlan {
+    QString cwd, command; // command "" = a plain shell
+};
+
+// What the dispatcher needs from live terminals; the app implements it over Konsole parts.
+class Terminals
+{
+public:
+    virtual ~Terminals() = default;
+    virtual bool type(const QString &sessionId, const QString &pane, const QString &text, QString *error) = 0; // pane left | right
+    // pane left | right; the visible screen, or the whole history with scrollback
+    virtual QString text(const QString &sessionId, const QString &pane, bool scrollback, QString *error) = 0;
+    // the pane's terminal grid, columns x rows as the program sees it; invalid when unknown
+    virtual QSize gridSize(const QString &sessionId, const QString &pane)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        return {};
+    }
+    // the program's grid set directly, apart from the view (a phone's columns x rows); an invalid size gives it back to the view
+    virtual bool setGrid(const QString &sessionId, const QString &pane, const QSize &grid, QString *error)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        Q_UNUSED(grid);
+        *error = QStringLiteral("no terminals");
+        return false;
+    }
+    // wheel notches into the pane, as a mouse over it would: the program's own scrolling when it tracks the mouse or is
+    // on the alternate screen, else the scrollback; lines < 0 scrolls up (older)
+    virtual bool scroll(const QString &sessionId, const QString &pane, int lines, QString *error)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        Q_UNUSED(lines);
+        *error = QStringLiteral("no terminals");
+        return false;
+    }
+    // the live panes' ids (ELIS_PANE_ID) by role, left first; a respawned pane gets a new one
+    virtual QStringList paneIds(const QString &sessionId) const
+    {
+        Q_UNUSED(sessionId);
+        return {};
+    }
+    virtual void emitEvent(const QString &kind, const QString &sessionId, const QJsonObject &payload)
+    {
+        Q_UNUSED(kind);
+        Q_UNUSED(sessionId);
+        Q_UNUSED(payload);
+    }
+    virtual QJsonObject info(const QString &sessionId) = 0; // live process fields merged into session.info
+    // mode show | hide | toggle, or "" with width > 0 to resize only
+    virtual bool filePanel(const QString &mode, int width, QString *error)
+    {
+        Q_UNUSED(mode);
+        Q_UNUSED(width);
+        *error = QStringLiteral("no file panel");
+        return false;
+    }
+    virtual QJsonObject chromeState() const { return {}; } // chrome read-back merged into `tree`
+    virtual QJsonObject sessionExtras(const QString &sessionId) const // overlay/HUD read-back merged into each session node
+    {
+        Q_UNUSED(sessionId);
+        return {};
+    }
+    // op inc | dec | reset on pane main | right; records the resulting size on the session
+    virtual bool font(const QString &sessionId, const QString &pane, const QString &op, QString *error)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        Q_UNUSED(op);
+        *error = QStringLiteral("no terminals");
+        return false;
+    }
+    // keymap.* hooks.* theme.*: config the app owns; sessionId is resolved for keymap.run only
+    virtual bool appCommand(const QString &cmd, const QString &sessionId, const QJsonObject &args, QJsonObject *result, QString *error)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(args);
+        Q_UNUSED(result);
+        *error = QStringLiteral("unknown command '%1'").arg(cmd);
+        return false;
+    }
+    // the foreground process group leader's argv in pane main | right; empty when it cannot be read
+    virtual QStringList foregroundArgv(const QString &sessionId, const QString &pane)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        return {};
+    }
+    virtual bool saveNow(QString *error) // a checked save, for commands that ack only what reached disk
+    {
+        Q_UNUSED(error);
+        return true;
+    }
+    // pane main | right; false with the reason when the pane's program cannot be copied
+    virtual bool panePlan(const QString &sessionId, const QString &pane, PanePlan *out, QString *error)
+    {
+        Q_UNUSED(sessionId);
+        Q_UNUSED(pane);
+        Q_UNUSED(out);
+        *error = QStringLiteral("no terminals");
+        return false;
+    }
+};
+
+// A companion copying the session's split layout and each pane's program; plans every pane before creating
+// anything, so one refused pane leaves the tree as it was. "" with *error set on refusal.
+QString duplicateAsCompanion(Store &store, Terminals &terminals, const QString &id, QString *error);
+
+// session.overlay.* / session.hud.*: master's argument rules; canonicalizes pane (left|right) and position in place.
+// "" when valid.
+QString overlayArgsError(const QString &cmd, QJsonObject *args);
+
+// Fills each session's captured foreground commands (main, and the split when shown) for re-run restore;
+// returns how many slots hold a command.
+int captureForeground(Store &store, Terminals &terminals);
+
+// Dashboard members as "<session>:left|right" in grid order: a bare id expands to its panes, duplicates and unknown
+// ids drop, at most 9 cells. *notes says what was dropped; "" with *error on a malformed request.
+QStringList dashboardCells(Store &store, const QStringList &targets, bool mru, QString *notes, QString *error);
+// master's grid: cols = ceil(sqrt(n)), rows = ceil(n / cols); and the auto font factor for that shape
+std::pair<int, int> dashboardGrid(int count);
+double dashboardFontFactor(int cols, int rows);
+
+// commands.cpp: the commands added for master's catalog; *handled false when cmd is not one of them
+QJsonObject moreCommands(Store &store, Terminals &terminals, const QString &cmd, const QString &target, const QJsonObject &args, bool *handled);
+// master's "<cmd> is not supported on this platform" with why, for a feature elis lacks; "" for any other command
+QString unsupportedReason(const QString &cmd);
+QString pickArgsError(const QJsonObject &args); // "" when valid
+QString askArgsError(QJsonObject *args);       // "" when valid; adds the default OK/Cancel of an input or choice form
+
+// One request object ({cmd, target, args}) in, one response ({ok, result | error}) out.
+QJsonObject dispatch(Store &store, Terminals &terminals, const QJsonObject &request);

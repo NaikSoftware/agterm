@@ -84,7 +84,7 @@ class TestRecords(Fixture):
         shell = swap.Process(124, 123, 124, 0, "now", "/bin/sh")
         with mock.patch.object(swap.os, "getppid", return_value=124), \
                 mock.patch.object(swap, "process_info", side_effect=[shell, self.proc]), \
-                mock.patch.dict(os.environ, {"AGTERM_SESSION_ID": "manual", "AGTERM_PANE": "right"}):
+                mock.patch.dict(os.environ, {"ELIS_SESSION_ID": "manual", "ELIS_PANE": "right"}):
             swap.record_hook({"transcript_path": str(self.transcript), "session_id": "conversation"})
         lines = swap.map_path("manual", "right").read_text().splitlines()
         self.assertEqual(str(self.transcript), lines[0])
@@ -93,7 +93,7 @@ class TestRecords(Fixture):
     def test_background_hook_does_not_overwrite_map(self) -> None:
         before = swap.map_path("S", "left").read_bytes()
         with mock.patch.object(swap, "process_info", return_value=self.proc._replace(tpgid=456)), \
-                mock.patch.dict(os.environ, {"AGTERM_SESSION_ID": "S", "AGTERM_PANE": "left"}):
+                mock.patch.dict(os.environ, {"ELIS_SESSION_ID": "S", "ELIS_PANE": "left"}):
             swap.record_hook({"transcript_path": str(self.transcript), "session_id": "conversation"})
         self.assertEqual(before, swap.map_path("S", "left").read_bytes())
 

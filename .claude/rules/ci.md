@@ -12,44 +12,46 @@ paths:
 - Every job carries its own `timeout-minutes`, with generous headroom over observed runtime. A job without
   one inherits GitHub's 360-minute default, so a wedge can hold its check pending for six hours. Give a new
   job a cap in the commit that adds it.
-- The `dorny/paths-filter` Swift set includes `**/*.swift`, `agtermCore/**`, `agterm/**`, `plugins/**`,
-  `.claude-plugin/**`, `.agents/**`, `project.yml`, `scripts/**`, both SwiftLint configs, and `ci.yml`.
+- The `dorny/paths-filter` Swift set includes `**/*.swift`, `macos/**`, `plugins/**`,
+  `.claude-plugin/**`, `.agents/**`, and `ci.yml`.
+  The macOS-tree jobs default to `working-directory: macos`; cache, `hashFiles` and artifact paths stay
+  workspace-relative and carry the `macos/` prefix.
   Keep all three plugin paths: `SkillInstallTests` checks the bundled `SKILL.md` command count, every
   manifest path, and agreement among the three versions. A skill/manifest-only release preflight commit
   must run the five Swift jobs.
 - `test`, `build` and `hosted` run in parallel and are each mostly compilation; merging any two puts
   both compiles on the critical path.
-- `test` runs `swift test --enable-code-coverage` in `agtermCore`, exports lcov, and uploads it.
-  It installs fish with Homebrew and sets `AGTERM_REQUIRE_FISH=1`, so a fish test fails rather than skips
+- `test` runs `swift test --enable-code-coverage` in `ElisCore`, exports lcov, and uploads it.
+  It installs fish with Homebrew and sets `ELIS_REQUIRE_FISH=1`, so a fish test fails rather than skips
   when fish is missing.
   It restores the zmx cache and runs `scripts/setup.sh --zmx-only`, which builds zmx on a miss without
   touching libghostty, so `SessionHostServerTests` attach to a real daemon in the same `swift test`.
-  `AGTERM_REQUIRE_ZMX=1` fails `requiredFixturePrerequisitesArePresent` when zmx or the responsibility SPI
+  `ELIS_REQUIRE_ZMX=1` fails `requiredFixturePrerequisitesArePresent` when zmx or the responsibility SPI
   is missing, since the fixtures themselves skip silently.
   It stages the shell integration with `scripts/setup-zmx-linux.sh --shell-integration`, cached by `GHOSTTY_REV`,
-  and points `AGTERM_SHELL_INTEGRATION` at it: the job builds no libghostty, so `agterm/Resources/ghostty` is
+  and points `ELIS_SHELL_INTEGRATION` at it: the job builds no libghostty, so `Elis/Resources/ghostty` is
   absent and the fish server pane would start without integration.
   It runs under `scripts/watchdog.sh`: past 600s the watchdog tries, within a 120s budget, to save the test
   processes' tree, open files and stacks, kills the tree, and the `test-hang` artifact carries what it got.
   A hang otherwise reaches only the job timeout, which records nothing.
-  On any failure the job also saves the last 45 minutes of the `com.umputun.agterm` unified log, capped at
+  On any failure the job also saves the last 45 minutes of the `ua.naiksoftware.elis` unified log, capped at
   120s, into that artifact: the server's presentation streams log their close reasons only there.
   A prior `swift build --build-tests --enable-code-coverage` step compiles outside it, so compile time on a
   slow runner does not count against the 600s; `swift test` with the same flag reuses that build. The
   35-minute job cap leaves room for a slow build plus the watchdog's 600s and 120s.
   `coverage` downloads it for best-effort Coveralls.
   `lint` installs SwiftLint and runs `swiftlint lint --strict`; every warning fails.
-- `linux` builds and tests `agtermCore` in the `swift:6.3.2-noble` container on ubuntu-24.04, the
-  toolchain agterm-server ships on, under the Swift filter. It installs jq, which the Codex status hook reads
+- `linux` builds and tests `ElisCore` in the `swift:6.3.2-noble` container on ubuntu-24.04, the
+  toolchain elis-server ships on, under the Swift filter. It installs jq, which the Codex status hook reads
   JSON with where `/usr/bin/plutil` is absent, and runs as an unprivileged user because root passes the
   permission checks several tests expect to fail.
   It builds the x86_64 musl zmx with a zig 0.16.0 tarball through `scripts/setup.sh --zmx-only` into
   `build/linux/x86_64`, cached by `ZMX_REV` and the patch digest, stages the shell integration from ghostty's
   source at `GHOSTTY_REV` with `scripts/setup-zmx-linux.sh --shell-integration`, installs fish, and runs with
-  `AGTERM_REQUIRE_ZMX=1 AGTERM_REQUIRE_FISH=1` so `ServerLifecycleTests` drive real zsh, fish and bash panes rather
+  `ELIS_REQUIRE_ZMX=1 ELIS_REQUIRE_FISH=1` so `ServerLifecycleTests` drive real zsh, fish and bash panes rather
   than skip.
   Its `swift test` runs under `scripts/watchdog.sh` as container root, with only the test command under
-  `runuser`: past 600s the watchdog takes lldb stacks of `agtermCorePackageTests.xctest` first, within 300s,
+  `runuser`: past 600s the watchdog takes lldb stacks of `ElisCorePackageTests.xctest` first, within 300s,
   and the `test-hang-linux` artifact carries them. lldb needs the container's `--cap-add=SYS_PTRACE` to attach
   to another user's process. The 45-minute cap covers the build plus both watchdog budgets.
   Darwin-only behavior keeps its tests behind
@@ -69,20 +71,20 @@ paths:
   watchdog, at 600s, with `WATCHDOG_RUNNER` naming the DerivedData test host, which xcodebuild launches
   outside the command's process tree. The `hosted-test-hang` artifact adds the xcresult under
   `build/DerivedData/Logs/Test`. The 35-minute job cap mirrors `test`'s. Keep both app builds: Release exercises the whole-module optimizer and its SIL-deserializer
-  failure. Debug provides `ENABLE_TESTABILITY` for `DockMenuTests`'s `@testable import agterm`. Do not
+  failure. Debug provides `ENABLE_TESTABILITY` for `DockMenuTests`'s `@testable import Elis`. Do not
   enable testability in the notarized Release app.
 - `hosted` sets the runner account's login shell to zsh, installs fish, and passes
-  `TEST_RUNNER_AGTERM_REQUIRE_FISH=1` to `scripts/test-app.sh`. Its last step switches the login shell to
+  `TEST_RUNNER_ELIS_REQUIRE_FISH=1` to `scripts/test-app.sh`. Its last step switches the login shell to
   fish with `dscl` and runs only `SessionHostFishSeamTests/testPlainLoginShellStartsIntegratedFish`, without
   rebuilding, with
-  `TEST_RUNNER_AGTERM_REQUIRE_FISH_LOGIN_SHELL=1`. Keep that order: switching before the hosted tests
+  `TEST_RUNNER_ELIS_REQUIRE_FISH_LOGIN_SHELL=1`. Keep that order: switching before the hosted tests
   silently skips the zsh plain-login seam (#574), and the fish seam fails its login-shell check before the
   switch.
 - Three entitlement assertions run, all because a wrong entitlement set stays green. The first two read
   the built Release app. The first guards issue #396: `--deep` with `--entitlements` stamps the app's TCC
   entitlements onto bundled helpers. `scripts/release.sh` repeats it after its
   Developer ID re-sign, which runs after CI's copy and is not covered by it.
-  The helper check covers `agtermctl`, zmx and `agterm-session-host` and also verifies their signatures. Use
+  The helper check covers `elisctl`, zmx and `elis-session-host` and also verifies their signatures. Use
   `codesign -d --entitlements -`; the `:-` spelling is deprecated and warns.
 - The second pins the app's own Release set to the seven TCC keys, so neither a Debug-only hardened-runtime
   exception nor a dropped TCC key can ship. It ignores `com.apple.security.get-task-allow`, which the
@@ -94,11 +96,11 @@ paths:
   from the shipping file: Debug must be the shipping set plus exactly the three exceptions. Without it a
   TCC key added to the shipping file and missed in the Debug one leaves every job green, and Debug
   silently unable to prompt for that permission.
-- Debug and Release sign from different entitlements files. `agterm/agterm-debug.entitlements` adds
+- Debug and Release sign from different entitlements files. `Elis/elis-debug.entitlements` adds
   `disable-library-validation`, `allow-jit` and `allow-unsigned-executable-memory`: Debug is ad-hoc signed
-  and split into a stub plus `agterm.debug.dylib`, and `agtermTests` loads an ad-hoc `.xctest` into that
+  and split into a stub plus `Elis.debug.dylib`, and `ElisTests` loads an ad-hoc `.xctest` into that
   app, so library validation would reject both on a Team-ID mismatch. The Release bundle holds no dylib
-  and JIT-links nothing, so `agterm/agterm.entitlements` carries none of the three. The re-sign in
+  and JIT-links nothing, so `Elis/elis.entitlements` carries none of the three. The re-sign in
   `project.yml` reads `$CODE_SIGN_ENTITLEMENTS` rather than a literal path, so it follows the
   configuration. Restoring a literal path there would re-sign Debug from the shipping file, stripping the
   three exceptions and breaking the ad-hoc `.xctest` load in `make test-app`.
@@ -131,6 +133,6 @@ paths:
   before transfer. A bad rewrite prints `🚨 Nothing to report` but exits green. Lcov upload, artifact
   download, and Coveralls submission all use `continue-on-error`; inspect the Coveralls build/API after
   changing this path. Core and hosted tests still gate their own jobs.
-- CI runs `agtermTests` against the real `TEST_HOST`, with launch-time state/config/socket isolation and
-  `AGTERM_HOSTED_TESTS=1` to suppress shells and the control server. It does not run `agtermUITests`.
-  The badge reports only `agtermCore` coverage.
+- CI runs `ElisTests` against the real `TEST_HOST`, with launch-time state/config/socket isolation and
+  `ELIS_HOSTED_TESTS=1` to suppress shells and the control server. It does not run `ElisUITests`.
+  The badge reports only `ElisCore` coverage.

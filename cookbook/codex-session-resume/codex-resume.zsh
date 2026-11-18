@@ -2,10 +2,10 @@
 # Sourced, not executed: paste both functions into ~/.zshrc, or source this file from there.
 # The mapping they read is written by codex-resume-hook.zsh, a Codex SessionStart hook. See README.md.
 
-# Codex CLI: per-agterm-tab session resume.
-# Maps the tab's own uuid (AGTERM_SESSION_ID) to a codex session id under ~/.codex/agterm/,
+# Codex CLI: per-elis-tab session resume.
+# Maps the tab's own uuid (ELIS_SESSION_ID) to a codex session id under ~/.codex/elis/,
 # so restoring the terminal resumes that tab's own conversation instead of starting fresh.
-# Requires: agterm (exports AGTERM_SESSION_ID, restores running commands) + zsh.
+# Requires: elis (exports ELIS_SESSION_ID, restores running commands) + zsh.
 _codex_rollout_root_id() {
   emulate -L zsh
   local file=$1 line candidate
@@ -23,17 +23,17 @@ _codex_rollout_root_id() {
 codex() {
   emulate -L zsh
   setopt local_options null_glob
-  local sid=${AGTERM_SESSION_ID:l}
+  local sid=${ELIS_SESSION_ID:l}
   [[ -z $sid ]] && { command codex "$@"; return; }
 
   # Every codex this function launches past the passthrough list gets these. The hook records a conversation only for a codex
-  # whose environment carries CODEX_AGTERM_TAB, and the -c blanks it for that codex's own tool
+  # whose environment carries CODEX_ELIS_TAB, and the -c blanks it for that codex's own tool
   # commands, so a `codex exec` started inside the conversation records nothing. --no-daemon keeps
   # the hook in this codex process: a shared background server would run it with the environment
   # of whichever pane started that server.
-  local -a own=(--no-daemon -c 'shell_environment_policy.set.CODEX_AGTERM_TAB=""')
+  local -a own=(--no-daemon -c 'shell_environment_policy.set.CODEX_ELIS_TAB=""')
 
-  # agterm replays the argv the pane was running, which starts with `own`. Drop it, and the
+  # elis replays the argv the pane was running, which starts with `own`. Drop it, and the
   # `resume <id>` this function added after it, so the replay is decided again from the mapping
   # rather than passed through as an explicit resume.
   if [[ $1 == $own[1] && $2 == $own[2] && $3 == $own[3] ]]; then
@@ -57,7 +57,7 @@ codex() {
   local -i end=${@[(i)--]}
   set -- "${(@)${(@)@[1,end-1]}:#--no-daemon}" "${(@)@[end,-1]}"
 
-  local mapf=~/.codex/agterm/$sid
+  local mapf=~/.codex/elis/$sid
   local cid; [[ -f $mapf ]] && cid=$(<$mapf)
   if [[ -n $cid ]]; then
     local -a s=(~/.codex/sessions/**/rollout-*-$cid.jsonl(N))
@@ -66,7 +66,7 @@ codex() {
       local -a roots=(~/.codex/sessions/**/rollout-*-$rid.jsonl{,.zst}(N))
       if [[ -n $rid ]] && (( $#roots )); then
         [[ $rid != $cid ]] && print -r -- $rid > $mapf
-        CODEX_AGTERM_TAB=$sid command codex $own resume "$rid" "$@"; return
+        CODEX_ELIS_TAB=$sid command codex $own resume "$rid" "$@"; return
       fi
     fi
     # Codex can keep a rollout compressed, and its first line cannot be read without decompressing
@@ -74,9 +74,9 @@ codex() {
     # it is, without the child to root repair.
     local -a z=(~/.codex/sessions/**/rollout-*-$cid.jsonl.zst(N))
     if (( $#z )); then
-      CODEX_AGTERM_TAB=$sid command codex $own resume "$cid" "$@"; return
+      CODEX_ELIS_TAB=$sid command codex $own resume "$cid" "$@"; return
     fi
   fi
 
-  CODEX_AGTERM_TAB=$sid command codex $own "$@"
+  CODEX_ELIS_TAB=$sid command codex $own "$@"
 }

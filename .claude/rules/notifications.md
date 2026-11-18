@@ -1,8 +1,8 @@
 ---
 paths:
-  - "agterm/Notifications/NotificationManager.swift"
-  - "agtermCore/Sources/agtermCore/Notifications.swift"
-  - "agtermCore/Sources/agtermCore/AgentStatus.swift"
+  - "macos/Elis/Notifications/NotificationManager.swift"
+  - "macos/ElisCore/Sources/ElisCore/Notifications.swift"
+  - "macos/ElisCore/Sources/ElisCore/AgentStatus.swift"
 ---
 
 ## Notifications
@@ -60,11 +60,11 @@ paths:
 - `DockBadgeController` shows host-free `attentionCount` over `WindowLibrary.allOpenSessions()`: sessions with unseen
   notifications or a blocked/completed status, each once; the badge toggle drops only the unseen part. Use
   `UNUserNotificationCenter.setBadgeCount`, not `NSApp.dockTile.badgeLabel`, which stores but does not draw
-  agterm's value. The modern API preserves the adaptive icon, so never override `applicationIconImage`.
+  Elis's value. The modern API preserves the adaptive icon, so never override `applicationIconImage`.
   Clear the OS-persistent badge in `applicationWillTerminate`; `willClose` cannot do this because
   `isTerminating` makes `closeWindow` a no-op.
 - `apply()` observes and re-arms on that count. Explicitly refresh after window close, control
-  `window.close`, and `ContentView.resolveStore` reopen; observe `.agtermAppearanceChanged` for the
+  `window.close`, and `ContentView.resolveStore` reopen; observe `.elisAppearanceChanged` for the
   non-observable toggle. This derived chrome is keep-in-sync exempt.
 
 ## Bounce and sound
@@ -118,10 +118,10 @@ paths:
   `RowContent.agentIndicator` and the update dependency read restrict reloads to changed rows.
 - Blink adds an opacity `CABasicAnimation` only while visible and when Reduce Motion is off.
   `SystemAccessibilityObserver` translates the workspace notification to
-  `.agtermAccessibilityDisplayOptionsChanged`, and the sidebar reapplies visible glyphs. Dashboard pills
+  `.elisAccessibilityDisplayOptionsChanged`, and the sidebar reapplies visible glyphs. Dashboard pills
   gate their SwiftUI repeat with `accessibilityReduceMotion`. Retain `blink` so both resume when re-enabled.
 - `completed --auto-reset` clears both the session entered and the session left in
-  `AppStore.selectSession`; hooks cannot infer agterm selection.
+  `AppStore.selectSession`; hooks cannot infer Elis selection.
 - Clear Status is the first row-menu item when non-idle and also appears in the menu bar and palette.
   Row menus target their node; global surfaces call `clearActiveSessionStatus`; all set an empty indicator.
 - Mark for Attention is the row-menu item for idle targets, with no menu bar, palette or keymap form.
@@ -170,7 +170,7 @@ paths:
   about six seconds after the last keystroke.
   The main thread's `PostToolUse` reasserts `active --blink` after an answered prompt; a subagent's is
   `--if-idle` and cannot. cmux can observe its
-  own permission UI and herdr scrapes PTY state; agterm does neither.
+  own permission UI and herdr scrapes PTY state; Elis does neither.
 - `AgentIndicator.statusPane` also directs GUI selections needing attention. Attention and ordinary
   navigation, palettes, sidebar and Dock rows, and idle auto-follow use
   `revealActiveBlockedPane` to select split, reveal scratch, or target primary. Idle and active preserve
@@ -197,5 +197,5 @@ paths:
   list. The Dock menu stays scoped to its captured window.
 - The button ID is `attention-button`, with help and value `none`, `attention`, or `blocked`.
   `WindowContentView` mirrors `GhosttyApp.attentionButtonEnabled` into state and refreshes on
-  `.agtermAppearanceChanged`, not `model.settings`. This mouse form of controllable attention selection is
+  `.elisAppearanceChanged`, not `model.settings`. This mouse form of controllable attention selection is
   keep-in-sync exempt.

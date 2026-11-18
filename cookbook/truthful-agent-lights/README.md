@@ -31,10 +31,10 @@ A per-call override beats what you picked in Settings ▸ Agent Status, for as l
 
 ## Requirements
 
-- agterm 0.17.0 or later — `agtermctl session status --shape` and the matching `statusShape` field on `tree` shipped there (#292, selectable status-glyph silhouettes picked per status in Settings or per call). Everything else the recipe uses is older: `--color` in 0.7.1 (#129), `--pane` and the injected `AGTERM_PANE` in 0.7.1 (#130), `--pane-id` in 0.13.0, the `statusBlink` read-back on `tree` in 0.10.0 (#169), and `--blink`, `--auto-reset`, `window list --json` and `tree --json` all predate the earliest tagged release.
+- Elis 0.17.0 or later — `elisctl session status --shape` and the matching `statusShape` field on `tree` shipped there (#292, selectable status-glyph silhouettes picked per status in Settings or per call). Everything else the recipe uses is older: `--color` in 0.7.1 (#129), `--pane` and the injected `ELIS_PANE` in 0.7.1 (#130), `--pane-id` in 0.13.0, the `statusBlink` read-back on `tree` in 0.10.0 (#169), and `--blink`, `--auto-reset`, `window list --json` and `tree --json` all predate the earliest tagged release.
 - `jq`, and a BSD userland: the scripts use `ps -axo`, `ps eww`, `stat -f %m` and `find -mmin` as macOS provides them.
 - Claude Code. The classifier reads a Claude Code implementation detail — see *Limits* — verified against 2.1.235.
-- The agent-status hooks package (Help ▸ Install Agent Status Hooks…), optional but recommended: the recipe posts through the script it installs, so socket, pane and pane-id handling stay upstream's. On agterm 0.26.0 and later that is `agterm-claude-status.sh`, the Claude adapter the package wires the Claude hooks to, which stays silent when a worker agent spawned inside the session fires a hook; on an older package it is the generic `agterm-agent-status.sh`, which has no such guard. Without the package the recipe calls `agtermctl` itself.
+- The agent-status hooks package (Help ▸ Install Agent Status Hooks…), optional but recommended: the recipe posts through the script it installs, so socket, pane and pane-id handling stay upstream's. On Elis 0.26.0 and later that is `elis-claude-status.sh`, the Claude adapter the package wires the Claude hooks to, which stays silent when a worker agent spawned inside the session fires a hook; on an older package it is the generic `elis-agent-status.sh`, which has no such guard. Without the package the recipe calls `elisctl` itself.
 - `launchd` for the sweeper, or any scheduler that can run a command every couple of minutes.
 
 ## Setup
@@ -42,19 +42,19 @@ A per-call override beats what you picked in Settings ▸ Agent Status, for as l
 Copy the recipe somewhere stable and make the scripts executable:
 
 ```sh
-mkdir -p ~/.config/agterm/truthful-lights
-cp truthful-agent-lights/* ~/.config/agterm/truthful-lights/
-chmod +x ~/.config/agterm/truthful-lights/*.sh
-chmod -x ~/.config/agterm/truthful-lights/lights-common.sh
+mkdir -p ~/.config/elis/truthful-lights
+cp truthful-agent-lights/* ~/.config/elis/truthful-lights/
+chmod +x ~/.config/elis/truthful-lights/*.sh
+chmod -x ~/.config/elis/truthful-lights/lights-common.sh
 ```
 
 `lights-common.sh` is sourced by the others, never run, so it is the one file that does not want the executable bit. Everything machine-specific lives in it as a variable with a default:
 
 | variable | default | what it is |
 |---|---|---|
-| `AGTERMCTL` | `agtermctl` | the CLI that talks to the control socket |
-| `AGT_LIGHTS_STATE` | `~/.local/state/agterm-lights` | pid notes, turn stamps, heartbeats |
-| `AGT_STATUS_SCRIPT` | the hooks package's `agterm-claude-status.sh`, or `agterm-agent-status.sh` when the adapter is not installed | the stock script to post through, when it exists |
+| `ELISCTL` | `elisctl` | the CLI that talks to the control socket |
+| `AGT_LIGHTS_STATE` | `~/.local/state/elis-lights` | pid notes, turn stamps, heartbeats |
+| `AGT_STATUS_SCRIPT` | the hooks package's `elis-claude-status.sh`, or `elis-agent-status.sh` when the adapter is not installed | the stock script to post through, when it exists |
 | `AGT_AGENT_PATTERN` | `claude\|codex\|kimi\|opencode\|pi` | command names that count as an agent |
 | `AGT_WORK_COLOR` / `AGT_STUCK_COLOR` | `#4A9EFF` / `#FF3B30` | the two tints |
 | `AGT_SHAPE_RUNNING` / `_MIXED` / `_QUEUED` / `_STUCK` | `square` / `diamond` / `triangle` / `star` | the silhouettes |
@@ -67,12 +67,12 @@ chmod -x ~/.config/agterm/truthful-lights/lights-common.sh
 
 The hooks and the sweeper have to agree on `AGT_LIGHTS_STATE`, and the default is built so they cannot disagree: it hangs off `$HOME`, which is the same for both. `XDG_STATE_HOME` is deliberately not consulted, even though this is exactly the kind of file it names. The hooks run inside your shell, where an `XDG_STATE_HOME` exported from a shell rc is set; the sweeper runs from launchd, which starts with no such environment and would fall back to the default. Honoring the variable would therefore split the two halves across two directories on precisely the machines that set it, leaving the sweeper to read no stamps at all and report every live session as idle. If you do override `AGT_LIGHTS_STATE`, set it in both places, and keep it absolute.
 
-The sweeper talks to agterm's default control socket. If yours is somewhere else, point `AGTERMCTL` at a small wrapper that appends the flag and execs the real binary — the recipe passes no socket flag of its own:
+The sweeper talks to Elis's default control socket. If yours is somewhere else, point `ELISCTL` at a small wrapper that appends the flag and execs the real binary — the recipe passes no socket flag of its own:
 
 ```sh
 #!/bin/sh
-# AGTERMCTL points here; adjust the path and the socket
-exec /usr/local/bin/agtermctl "$@" --socket /path/to/agterm.sock
+# ELISCTL points here; adjust the path and the socket
+exec /usr/local/bin/elisctl "$@" --socket /path/to/elis.sock
 ```
 
 The order matters and is the thing to get right: `--socket` is a per-subcommand option rather than a root one, so it has to land *after* the subcommand. A wrapper built the obvious way, with the flag before `"$@"`, fails on every single call, and every status post in this recipe swallows its own errors so that a failing hook can never block a turn, so it fails silently and the row simply never changes.
@@ -83,25 +83,25 @@ Merge into `~/.claude/settings.json` (paths shown for the location above):
 {
   "hooks": {
     "SessionStart": [
-      { "hooks": [{ "type": "command", "command": "~/.config/agterm/truthful-lights/session-note.sh" }] }
+      { "hooks": [{ "type": "command", "command": "~/.config/elis/truthful-lights/session-note.sh" }] }
     ],
     "UserPromptSubmit": [
       { "hooks": [
-        { "type": "command", "command": "~/.config/agterm/truthful-lights/session-note.sh" },
-        { "type": "command", "command": "~/.config/agterm/truthful-lights/set-status.sh active --blink" }
+        { "type": "command", "command": "~/.config/elis/truthful-lights/session-note.sh" },
+        { "type": "command", "command": "~/.config/elis/truthful-lights/set-status.sh active --blink" }
       ] }
     ],
     "PreToolUse": [
-      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "~/.config/agterm/truthful-lights/machinery-paint.sh" }] }
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "~/.config/elis/truthful-lights/machinery-paint.sh" }] }
     ],
     "PostToolUse": [
-      { "hooks": [{ "type": "command", "command": "~/.config/agterm/truthful-lights/set-status.sh active --blink" }] }
+      { "hooks": [{ "type": "command", "command": "~/.config/elis/truthful-lights/set-status.sh active --blink" }] }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "~/.config/agterm/truthful-lights/turn-end-status.sh completed --auto-reset" }] }
+      { "hooks": [{ "type": "command", "command": "~/.config/elis/truthful-lights/turn-end-status.sh completed --auto-reset" }] }
     ],
     "Notification": [
-      { "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "~/.config/agterm/truthful-lights/set-status.sh blocked" }] }
+      { "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "~/.config/elis/truthful-lights/set-status.sh blocked" }] }
     ]
   }
 }
@@ -111,17 +111,17 @@ If the hooks package already wrote its own entries, **replace** them rather than
 
 Running Help ▸ Install Agent Status Hooks… again after that re-creates the stock entries *beside* these, reopening exactly that race. The installer decides an event is already wired by looking for its own script path inside the command string, and these commands no longer contain it, so all four stock entries come back. If you re-run the installer, remove the duplicates again.
 
-Then schedule the sweeper. Save as `~/Library/LaunchAgents/local.agterm-truthful-lights.plist`, replacing `USERNAME` with your own account:
+Then schedule the sweeper. Save as `~/Library/LaunchAgents/local.elis-truthful-lights.plist`, replacing `USERNAME` with your own account:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>local.agterm-truthful-lights</string>
+  <key>Label</key><string>local.elis-truthful-lights</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/USERNAME/.config/agterm/truthful-lights/status-sweep.sh</string>
+    <string>/Users/USERNAME/.config/elis/truthful-lights/status-sweep.sh</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -134,12 +134,12 @@ Then schedule the sweeper. Save as `~/Library/LaunchAgents/local.agterm-truthful
 ```
 
 ```sh
-launchctl load ~/Library/LaunchAgents/local.agterm-truthful-lights.plist
+launchctl load ~/Library/LaunchAgents/local.elis-truthful-lights.plist
 ```
 
-That `PATH` is load-bearing, and it is the same trap `status-announcer` documents for custom commands. A LaunchAgent runs under launchd's own `PATH` — the system directories plus `/usr/local/bin`, with no `/opt/homebrew/bin` — so `agtermctl` resolves only because **Help ▸ Install Command Line Tool…** symlinks it into `/usr/local/bin`, while a Homebrew `jq` does not resolve at all. The sweeper says so in its log and exits rather than half-working; the line above is what stops it happening. Add any variable you overrode to the same dict, so the sweeper and the hooks see the same values.
+That `PATH` is load-bearing, and it is the same trap `status-announcer` documents for custom commands. A LaunchAgent runs under launchd's own `PATH` — the system directories plus `/usr/local/bin`, with no `/opt/homebrew/bin` — so `elisctl` resolves only because **Help ▸ Install Command Line Tool…** symlinks it into `/usr/local/bin`, while a Homebrew `jq` does not resolve at all. The sweeper says so in its log and exits rather than half-working; the line above is what stops it happening. Add any variable you overrode to the same dict, so the sweeper and the hooks see the same values.
 
-To remove: `launchctl unload ~/Library/LaunchAgents/local.agterm-truthful-lights.plist` and delete the plist, delete the recipe's entries from `settings.json`, then run Help ▸ Install Agent Status Hooks… once. That last step is the same probe working in your favour: with no entry naming the stock script, the installer writes its four stock entries back, so you end up with the standard hook set instead of a session with no status at all. Then delete the state directory and the recipe directory.
+To remove: `launchctl unload ~/Library/LaunchAgents/local.elis-truthful-lights.plist` and delete the plist, delete the recipe's entries from `settings.json`, then run Help ▸ Install Agent Status Hooks… once. That last step is the same probe working in your favour: with no entry naming the stock script, the installer writes its four stock entries back, so you end up with the standard hook set instead of a session with no status at all. Then delete the state directory and the recipe directory.
 
 ## Usage
 
@@ -174,7 +174,7 @@ Three details cost hours to find:
 
 **A busy-looking subtree may only be waiting.** Before the sweeper re-lights a row as machinery it samples the subtree's summed CPU time twice, 1.5 seconds apart, and demands real movement. The turn-end classifier deliberately does not do this: at Stop the cost of a false "still running" is one extra glance, while a sweeper that re-lights on every poll loop would never let a row go quiet.
 
-The sweeper reads `window list --json` and `tree --window --json`, and needs `statusBlink` and `statusShape` from the tree to know what a row is currently claiming, so it can leave a correct glyph alone instead of rewriting it every two minutes. Agents are discovered by scanning `ps eww` for `AGTERM_SESSION_ID`, which covers sessions that started before the hooks were installed, and pid notes are identity-checked before they are trusted, because pids get reused and the state directory outlives a reboot. Surviving a reboot is safe rather than merely tolerable: a pid note is believed only when that pid is alive, still an agent binary, *and* started at the moment the note recorded — so a pid recycled onto a different agent process is rejected rather than mistaken for the original — a heartbeat older than `AGT_HB_STALE_SECS` reads as no heartbeat, and a turn-start stamp from last week loses to any turn-end stamp after it. Stale state fails closed, so there is nothing to clean up between sessions or after a crash. The sweeper still prunes its own directory at the start of each pass, deleting state files older than a week: correctness does not need it, but a machine that opens sessions for a year should not accumulate a file per session per kind forever. The same pass collects the temporary map file a sweep killed with `SIGKILL` leaves behind before its cleanup trap can run.
+The sweeper reads `window list --json` and `tree --window --json`, and needs `statusBlink` and `statusShape` from the tree to know what a row is currently claiming, so it can leave a correct glyph alone instead of rewriting it every two minutes. Agents are discovered by scanning `ps eww` for `ELIS_SESSION_ID`, which covers sessions that started before the hooks were installed, and pid notes are identity-checked before they are trusted, because pids get reused and the state directory outlives a reboot. Surviving a reboot is safe rather than merely tolerable: a pid note is believed only when that pid is alive, still an agent binary, *and* started at the moment the note recorded — so a pid recycled onto a different agent process is rejected rather than mistaken for the original — a heartbeat older than `AGT_HB_STALE_SECS` reads as no heartbeat, and a turn-start stamp from last week loses to any turn-end stamp after it. Stale state fails closed, so there is nothing to clean up between sessions or after a crash. The sweeper still prunes its own directory at the start of each pass, deleting state files older than a week: correctness does not need it, but a machine that opens sessions for a year should not accumulate a file per session per kind forever. The same pass collects the temporary map file a sweep killed with `SIGKILL` leaves behind before its cleanup trap can run.
 
 Stuck detection is deliberately narrow. A row that claims to be working while the scan finds nothing running under it and the transcript has not moved for `AGT_STALL_SECS` is wedged, and gets the stuck glyph to summon you; any resumed write or turn boundary clears it on the next pass. An earlier version tried to detect this from the agent process's CPU time and it does not work — measured over seconds, a wedged agent is indistinguishable from a healthy idle one, because its runtime timers keep ticking. The transcript it stats is the `transcript_path` Claude Code puts in the hook payload, which `session-note.sh` records on the way past: a documented field handed to the hook, not a file path guessed from an internal directory layout, so this costs the recipe no dependency beyond the wrapper shape already named above.
 
@@ -185,10 +185,10 @@ The sweeper writes a status for every session in every open window, so it will o
 - **The classifier depends on an undocumented Claude Code implementation detail.** It discriminates tool subtrees by the `zsh -c source …/shell-snapshots/snapshot-….sh` wrapper Claude Code puts around every tool command. That shape is not part of any documented interface and is free to change between Claude Code versions. It was verified against Claude Code 2.1.235. If a later version drops or renames the wrapper, no subtree is ever recognized: turn-end falls back to the stock `completed --auto-reset`, and the sweeper never re-lights a row — the failure is silent and looks exactly like "nothing was running".
 - **Leaves are classified by shape, so some commands are read wrong.** `rg` over a large tree is counted as a log watcher and reads as waiting although it is doing real work, and `tail -f` on a build log reads as a watcher when it is the only thing you are waiting on. A shell script that spends its time in `git`, `curl` or `jq` reads as a poll loop. The lists are in `work-scan.sh` and are meant to be edited for the commands you actually run.
 - **Sub-state colors and shapes are per-call overrides, and per-call beats Settings.** While one of these statuses stands, the silhouette you configured in Settings ▸ Agent Status for that state is not what you see. Change the shape variables if that collides with your own vocabulary.
-- **A worker agent spawned inside a session inherits the session's `AGTERM_*` environment**, so everything keyed by session id is written by the worker as if it were the session. On agterm 0.26.0 and later the status posts are guarded: the recipe posts through the package's Claude adapter, which stays silent when it finds a second agent binary between the hook and the pane, so a worker's `active` or `completed` does not replace the spawner's glyph while the spawner is still running. The adapter fails open: when the chain above the worker is unreadable, or the spawner has already exited, the worker posts as if it were the pane's agent. The guard covers only the status post. The worker's `session-note.sh` still overwrites the spawner's pid note and transcript note with its own and stamps a turn start the spawner never took, its `turn-end-status.sh` still stamps a turn end, and every one of its posts still touches the heartbeat, so the sweeper reads the spawner's hooks as alive for as long as the worker runs. The pid note repairs itself on the next sweep, because discovery prefers a pane-attached process, but the turn stamps and the transcript note do not — they stay wrong until the spawner's own next turn rewrites them, and in between the sweeper can read the spawner's turn as live when it is not, or as ended when it is not. On an older package the posts are unguarded too, and the worker's `turn-end-status.sh` classifies the *worker's* process tree and paints that answer onto the spawner's row. If you dispatch headless agents from inside a session, this is the cost. The underlying inheritance is a defect in the stock hook package, under discussion in [agterm discussion #456](https://github.com/umputun/agterm/discussions/456), not something this recipe fixes.
-- **A session can own more than one agent, and only the process counts are combined.** A session is matched to its agents by scanning process environments for `AGTERM_SESSION_ID`, so a split running an agent in each half is found twice over, and the counts from both process trees are added up before any glyph is decided. That is deliberate: one row cannot be judged from one half, or an idle pane would clear the glyph a busy pane just earned. Everything else stays per session, which with two agents means per row and shared: the turn stamps, the transcript note, the heartbeat and the Stop hook. A turn ending in one half can green the other. Pane A's Stop posts `completed` over pane B's live turn, and its turn-end stamp then reads as no turn running, so a sweep that catches B between tool calls repeats that `completed` until B's next tool call posts again. A worker spawned inside the session inherits the same id and is normally skipped for having no controlling terminal, but one started under `script`, `expect` or `unbuffer` has one and is counted in too, its subtree landing in the total both under itself and as a running worker under its parent. The row then overstates how much is running rather than understating it, which is the safe direction for a light that means "something is alive here". Only the pid note in the state directory still keeps a single process, the lowest pid, and only the fallback path reads it.
+- **A worker agent spawned inside a session inherits the session's `ELIS_*` environment**, so everything keyed by session id is written by the worker as if it were the session. On Elis 0.26.0 and later the status posts are guarded: the recipe posts through the package's Claude adapter, which stays silent when it finds a second agent binary between the hook and the pane, so a worker's `active` or `completed` does not replace the spawner's glyph while the spawner is still running. The adapter fails open: when the chain above the worker is unreadable, or the spawner has already exited, the worker posts as if it were the pane's agent. The guard covers only the status post. The worker's `session-note.sh` still overwrites the spawner's pid note and transcript note with its own and stamps a turn start the spawner never took, its `turn-end-status.sh` still stamps a turn end, and every one of its posts still touches the heartbeat, so the sweeper reads the spawner's hooks as alive for as long as the worker runs. The pid note repairs itself on the next sweep, because discovery prefers a pane-attached process, but the turn stamps and the transcript note do not — they stay wrong until the spawner's own next turn rewrites them, and in between the sweeper can read the spawner's turn as live when it is not, or as ended when it is not. On an older package the posts are unguarded too, and the worker's `turn-end-status.sh` classifies the *worker's* process tree and paints that answer onto the spawner's row. If you dispatch headless agents from inside a session, this is the cost. The underlying inheritance is a defect in the stock hook package, under discussion in [Elis discussion #456](https://github.com/umputun/agterm/discussions/456), not something this recipe fixes.
+- **A session can own more than one agent, and only the process counts are combined.** A session is matched to its agents by scanning process environments for `ELIS_SESSION_ID`, so a split running an agent in each half is found twice over, and the counts from both process trees are added up before any glyph is decided. That is deliberate: one row cannot be judged from one half, or an idle pane would clear the glyph a busy pane just earned. Everything else stays per session, which with two agents means per row and shared: the turn stamps, the transcript note, the heartbeat and the Stop hook. A turn ending in one half can green the other. Pane A's Stop posts `completed` over pane B's live turn, and its turn-end stamp then reads as no turn running, so a sweep that catches B between tool calls repeats that `completed` until B's next tool call posts again. A worker spawned inside the session inherits the same id and is normally skipped for having no controlling terminal, but one started under `script`, `expect` or `unbuffer` has one and is counted in too, its subtree landing in the total both under itself and as a running worker under its parent. The row then overstates how much is running rather than understating it, which is the safe direction for a light that means "something is alive here". Only the pid note in the state directory still keeps a single process, the lowest pid, and only the fallback path reads it.
 - **Stuck detection only fires when nothing is running under the agent.** A session wedged while it still holds a live tool subtree is never flagged, and a session whose dispatched workers are making progress while it makes none is deliberately not flagged either. It also depends on the transcript path from the hook payload, so a session that started before the hooks were installed is never flagged.
 - **A tool subtree that neither burns CPU nor looks like a wait reads as no work during a sweep** — an I/O-bound download or an idle-but-alive server. The turn-end classifier paints it as machinery; the sweeper, which needs CPU evidence, will not re-light a row that has already gone dark, so it stays dark until the next turn boundary. It will not clear a lit row over one either: the scan still sees the subtree, and no branch that clears a glyph fires while anything at all is running under the agent.
-- **The sweeper is only as good as the stamps in its state directory.** Sessions that were already running when you installed the recipe, or a state directory you cleared, have no turn stamps and no heartbeat, so the sweeper cannot tell "this session's own turn is producing" from "this session is sitting on a background wait" and will prefer the work glyph over the pulse until the session's next turn writes its stamps. Nothing is wrong afterwards; it is the first pass over an old session that reads oddly. If you are adapting this and are on agterm 0.25.0 or later, note that `tree` reports `statusChangedAt` on the session node (#465), which answers "how long has this row claimed what it claims" with no state file at all. The recipe does not use it: the floor here is 0.17.0, the field is never persisted so it is absent after a restart of the app, and it says nothing about whether the session's own turn is live, which is what the turn stamps are for.
+- **The sweeper is only as good as the stamps in its state directory.** Sessions that were already running when you installed the recipe, or a state directory you cleared, have no turn stamps and no heartbeat, so the sweeper cannot tell "this session's own turn is producing" from "this session is sitting on a background wait" and will prefer the work glyph over the pulse until the session's next turn writes its stamps. Nothing is wrong afterwards; it is the first pass over an old session that reads oddly. If you are adapting this and are on Elis 0.25.0 or later, note that `tree` reports `statusChangedAt` on the session node (#465), which answers "how long has this row claimed what it claims" with no state file at all. The recipe does not use it: the floor here is 0.17.0, the field is never persisted so it is absent after a restart of the app, and it says nothing about whether the session's own turn is live, which is what the turn stamps are for.
 - **Non-Claude agents are recognized as workers but not analyzed.** Another agent binary found under a wrapper counts as a running worker, but a Codex or Kimi session's own tool commands do not run under this wrapper, so their sessions get no classification of their own.
 - **A long-running foreground tool call and a hung one look alike** while the call is in flight: both leave a live subtree and a quiet transcript. Only the empty-subtree case is called stuck, so a wedged command is your call to make, not the sidebar's.

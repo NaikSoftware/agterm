@@ -76,7 +76,7 @@ class AgtTests(unittest.TestCase):
             with self.subTest(name), patch.dict(os.environ, {"AGT_SOCKET": socket}), \
                     patch.object(companion.subprocess, "run") as run:
                 companion.agt("tree", "--json")
-                self.assertEqual(run.call_args.args[0], [companion.AGTERMCTL, "tree", "--json", *tail])
+                self.assertEqual(run.call_args.args[0], [companion.ELISCTL, "tree", "--json", *tail])
 
 
 class RunTests(unittest.TestCase):

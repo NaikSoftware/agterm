@@ -1,16 +1,16 @@
 ---
 paths:
-  - "agterm/Views/WorkspaceSidebar*.swift"
-  - "agterm/Views/SidebarRowViews.swift"
-  - "agterm/Views/SidebarOutlineView.swift"
-  - "agterm/Views/SidebarRenameController.swift"
-  - "agtermCore/Sources/agtermCore/SidebarDrop.swift"
-  - "agtermCore/Sources/agtermCore/SidebarMode.swift"
-  - "agtermCore/Sources/agtermCore/Reorder.swift"
-  - "agtermUITests/SidebarUITests.swift"
-  - "agtermUITests/ReorderUITests.swift"
-  - "agtermUITests/FlaggedViewUITests.swift"
-  - "agtermUITests/FocusWorkspaceUITests.swift"
+  - "macos/Elis/Views/WorkspaceSidebar*.swift"
+  - "macos/Elis/Views/SidebarRowViews.swift"
+  - "macos/Elis/Views/SidebarOutlineView.swift"
+  - "macos/Elis/Views/SidebarRenameController.swift"
+  - "macos/ElisCore/Sources/ElisCore/SidebarDrop.swift"
+  - "macos/ElisCore/Sources/ElisCore/SidebarMode.swift"
+  - "macos/ElisCore/Sources/ElisCore/Reorder.swift"
+  - "macos/ElisUITests/SidebarUITests.swift"
+  - "macos/ElisUITests/ReorderUITests.swift"
+  - "macos/ElisUITests/FlaggedViewUITests.swift"
+  - "macos/ElisUITests/FocusWorkspaceUITests.swift"
 ---
 
 ## Sidebar
@@ -49,7 +49,7 @@ paths:
   downward `childIndex - 1` adjustment. A selected-row drag writes all `sidebarSelectionIDs` in visual
   order; an unselected-row drag writes only itself. `resolveSessions` removes the entire mixed-source
   block before inserting it atomically in visual order.
-- Workspace rows use pasteboard type `ua.naiksoftware.agterm2.workspace`, which must remain registered or
+- Workspace rows use pasteboard type `ua.naiksoftware.elis.workspace`, which must remain registered or
   AppKit will not call validate/accept. Do not use AppKit's proposed item/index for workspace moves:
   expanded session rows make every gap appear inside a workspace. Instead, count workspace-row midpoints
   above `draggingLocation`, ignoring sessions.
@@ -80,7 +80,7 @@ paths:
   like the triangle; a bare `expandItem`/`collapseItem` silently drops the animation. Do not gate that on
   Reduce Motion — both hit targets reach the same AppKit animation, so a gate would re-split them. Every
   other expand/collapse site stays unanimated: bulk or programmatic. Control expansion instead persists through
-  `AppActions.setWorkspaceExpanded`, then posts `.agtermSetWorkspaceExpanded` to synchronize a live outline.
+  `AppActions.setWorkspaceExpanded`, then posts `.elisSetWorkspaceExpanded` to synchronize a live outline.
 - A session-row click selects, then asynchronously calls `revealActiveBlockedPane` with the captured
   pre-reset indicator. Blocked/completed pane tags reveal split, scratch, or primary; idle and active use
   ordinary focus and never dismiss a merely shown scratch. `testSidebarClickRevealsBlockedSplitPane`
@@ -134,7 +134,7 @@ paths:
   The link calls `perform(.editFlaggedSessions, in:)`, asking `isEnabled(in:)` at the click, and declines first
   mouse so a background-window click only activates the window.
 - The layout is orthogonal to `SidebarMode`, never a third case: every `sidebarMode == .flagged` check in
-  `agtermCore` means "the flagged set is what is visible", which holds in every layout.
+  `ElisCore` means "the flagged set is what is visible", which holds in every layout.
   `AppStore.rendersWorkspaceRows(flaggedLayout:)` is the one predicate for "the outline has workspace rows".
   Rendering reads `GhosttyApp.flaggedViewLayout`; navigation reads each store's `flaggedLayout` mirror, which
   `WindowLibrary` seeds before restore. `SettingsModel.applyFlaggedViewLayout` is the only setter of both.
@@ -165,7 +165,7 @@ paths:
   See [[control-api]].
 - `InterfaceElement.workspaceIcons`/`.sessionIcons` hide a row kind's leading icon: `setIconVisible` zeroes its
   width and gap so the name takes the slot, on every cell configuration and, through `reapplyRowIconVisibility`,
-  on `.agtermAppearanceChanged`. Everything the icon encodes goes with it; only the remote notice moves, into the
+  on `.elisAppearanceChanged`. Everything the icon encodes goes with it; only the remote notice moves, into the
   name's tooltip, because it is the one fact with nowhere else to show.
 - A row's tint (`Session.tint`, `Workspace.tint`) always colors its icon and name through `SidebarCellView.setColors`,
   selected rows included, whatever parts it stores; `RowContent.tint` reloads that row alone. The Tint submenu has
@@ -233,7 +233,7 @@ paths:
   stack with its front tile filled. The filter toggle draws `focus-frame`, filled while applied. Render membership even while filtering is off.
   `RowContent.focusMember` limits reload to that row.
 - A workspace tint draws a band behind its workspace row and every session and companion row.
-  `SidebarRowView` draws it from the host-free `SidebarBand` edge model in `agtermCore`.
+  `SidebarRowView` draws it from the host-free `SidebarBand` edge model in `ElisCore`.
   It resets on every configure and reapplies on fold, tint, rebuild and appearance change.
   The group's tint also colors the selection pill (`SidebarRowView.selectionTint`).
 - Every group, tinted or not, adds `SidebarRowView.edgeExtras` (4pt half-gap + 3pt padding) above its first row
@@ -274,7 +274,7 @@ paths:
   `flaggedShapeID` group under the flat flagged list. Mode and effective-layout changes always rebuild; the
   effective layout is nil under the ordinary tree, so a setting change there rebuilds nothing.
   Observation must read mode, both focus fields, `flaggedOrder`, and every session flag: membership redraws icons; enabled
-  state reshapes the tree. The layout is not observable and arrives on `.agtermAppearanceChanged`.
+  state reshapes the tree. The layout is not observable and arrives on `.elisAppearanceChanged`.
 - `rebuildAndReload` records what it rendered (`lastMode`, `lastFlaggedLayout`, `lastShape`, the row-content
   snapshot) itself, not `reconcile`: the mount builds directly, and an unrecorded first build makes the next
   reconcile rebuild for a change that never happened.
@@ -323,7 +323,7 @@ paths:
   Closed's `restoresSession` finds a parent inside a closed group or workspace, not only as an entry's root.
   A group hard close finalizes the parked companions of every member, not only of the closed parent.
 - `session.collapse`/`.expand` mirror the workspace pair: `AppActions.setSessionExpanded` persists, then posts
-  `.agtermSetSessionExpanded`, which updates `expandedParentIDs` even when no nested row is shown and drives a
+  `.elisSetSessionExpanded`, which updates `expandedParentIDs` even when no nested row is shown and drives a
   visible row under suppression. It posts on an unchanged value too, since a reveal may have opened the row.
 
 ## Persistence

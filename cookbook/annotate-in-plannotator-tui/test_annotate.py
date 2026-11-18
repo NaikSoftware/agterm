@@ -2,7 +2,7 @@
 """Regression tests for annotate.py: when reply notes are submitted, and the dropped second press.
 
 A Return after the paste runs the notes in whatever holds the pane, so `runs_claude` is the gate
-that keeps them out of a shell. The second-press test runs the script against a fake agtermctl.
+that keeps them out of a shell. The second-press test runs the script against a fake elisctl.
 """
 
 import importlib.util
@@ -55,20 +55,20 @@ class SecondPress(unittest.TestCase):
     def test_a_held_lock_says_where_it_is(self):
         with tempfile.TemporaryDirectory() as tmp:
             calls = Path(tmp) / "calls"
-            fake = Path(tmp) / "agtermctl"
+            fake = Path(tmp) / "elisctl"
             fake.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{calls}"\n', encoding="utf-8")
             fake.chmod(0o755)
             tui = Path(tmp) / "plannotator-tui"
             tui.write_text("#!/bin/sh\n", encoding="utf-8")
             tui.chmod(0o755)
-            lock = Path(tmp) / "agterm-annotate" / "S1.left" / "lock"
+            lock = Path(tmp) / "elis-annotate" / "S1.left" / "lock"
             lock.mkdir(parents=True)
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), "replies"],
                 env={
                     **os.environ,
                     "TMPDIR": tmp,
-                    "AGTERMCTL": str(fake),
+                    "ELISCTL": str(fake),
                     "PLANNOTATOR_TUI": str(tui),
                     "AGT_SESSION_ID": "S1",
                     "AGT_PANE": "left",
@@ -88,14 +88,14 @@ class StaleOutbox(unittest.TestCase):
     def test_an_outbox_left_by_an_earlier_viewer_is_not_pasted(self):
         with tempfile.TemporaryDirectory() as tmp:
             calls = Path(tmp) / "calls"
-            fake = Path(tmp) / "agtermctl"
+            fake = Path(tmp) / "elisctl"
             # Every call succeeds and prints nothing: the viewer closes without sending.
             fake.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{calls}"\n', encoding="utf-8")
             fake.chmod(0o755)
             tui = Path(tmp) / "plannotator-tui"
             tui.write_text("#!/bin/sh\n", encoding="utf-8")
             tui.chmod(0o755)
-            room = Path(tmp) / "agterm-annotate" / "S1.left"
+            room = Path(tmp) / "elis-annotate" / "S1.left"
             room.mkdir(parents=True)
             (room / "outbox.jsonl").write_text('"old notes"\n', encoding="utf-8")
             result = subprocess.run(
@@ -103,7 +103,7 @@ class StaleOutbox(unittest.TestCase):
                 env={
                     **os.environ,
                     "TMPDIR": tmp,
-                    "AGTERMCTL": str(fake),
+                    "ELISCTL": str(fake),
                     "PLANNOTATOR_TUI": str(tui),
                     "AGT_SESSION_ID": "S1",
                     "AGT_PANE": "left",

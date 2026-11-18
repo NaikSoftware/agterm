@@ -23,10 +23,10 @@ from pathlib import Path
 
 SELF = Path(__file__).resolve()
 SHOW = SELF.parent / "show.sh"
-# physical path, so it matches the file path agterm reports for an overlay
+# physical path, so it matches the file path elis reports for an overlay
 ROOT = Path("/tmp").resolve() / "agdoc-share"
 CLOUDFLARED = os.environ.get("CLOUDFLARED", "/opt/homebrew/opt/cloudflared/bin/cloudflared")
-AGTERMCTL = os.environ.get("AGTERMCTL", "agtermctl")
+ELISCTL = os.environ.get("ELISCTL", "elisctl")
 CREDENTIALS = str(Path.home() / ".cloudflared" / "agdoc-share.json")
 APPROVAL_WAIT = 600
 WATCH_INTERVAL = 30
@@ -96,12 +96,12 @@ class Approval:
 
     def __init__(self, runner: Runner, clock: Clock, env: dict[str, str]) -> None:
         self.runner, self.clock = runner, clock
-        self.session = env.get("AGTERM_SESSION_ID", "")
-        self.socket = ["--socket", env["AGTERM_SOCKET"]] if env.get("AGTERM_SOCKET") else []
-        self.window = ["--window", env["AGTERM_WINDOW_ID"]] if env.get("AGTERM_WINDOW_ID") else []
+        self.session = env.get("ELIS_SESSION_ID", "")
+        self.socket = ["--socket", env["ELIS_SOCKET"]] if env.get("ELIS_SOCKET") else []
+        self.window = ["--window", env["ELIS_WINDOW_ID"]] if env.get("ELIS_WINDOW_ID") else []
 
     def ctl(self, *args: str) -> Result[str]:
-        return self.runner.run([AGTERMCTL, *args, *self.socket])
+        return self.runner.run([ELISCTL, *args, *self.socket])
 
     def overlay_file(self) -> str:
         r = self.ctl("tree", "--json", *self.window)
@@ -132,7 +132,7 @@ class Approval:
             if not pending:
                 reason = (r.stderr or r.stdout).strip().removeprefix("error: ")
                 hint = "; switch to this session and share again" if "session not visible" in reason else ""
-                err(f"could not open the approval question: {reason or 'no answer from agterm'}{hint}")
+                err(f"could not open the approval question: {reason or 'no answer from elis'}{hint}")
                 return False
             deadline = self.clock.now() + APPROVAL_WAIT
             while self.clock.now() < deadline:
@@ -157,7 +157,7 @@ class Approval:
 
     def restore(self, stage: Path, prev: str) -> None:
         # the staged copy is renamed or deleted next; put back what was open so reload keeps working.
-        # agterm reports the path it was given, /tmp for a stage under /private/tmp, so compare resolved
+        # elis reports the path it was given, /tmp for a stage under /private/tmp, so compare resolved
         shown = self.overlay_file()
         if not shown or Path(shown).resolve() != stage.resolve():
             return
@@ -376,8 +376,8 @@ class Shares:
         ttl = ttl_seconds(ttl_text)
         if ttl is None or not Path(file).is_file() or Path(file).suffix.lower() not in (".html", ".htm"):
             return usage()
-        if self.env.get("AGTERM_ENABLED") != "1" or not self.env.get("AGTERM_SESSION_ID"):
-            err("sharing needs agterm: the page is approved in this session's overlay before it is published")
+        if self.env.get("ELIS_ENABLED") != "1" or not self.env.get("ELIS_SESSION_ID"):
+            err("sharing needs elis: the page is approved in this session's overlay before it is published")
             return 1
         if not self.host:
             err("set AGDOC_SHARE_HOST to the hostname routed to the tunnel")
@@ -624,7 +624,7 @@ def run_tests() -> int:
                 rc = self.show_rc
                 if rc == 0:
                     self.overlay = argv[1]
-            elif argv[0] == AGTERMCTL:
+            elif argv[0] == ELISCTL:
                 if argv[1:3] == ["ask", "open"] and self.ask_error:
                     return Result(argv, 1, "", f"error: {self.ask_error}\n")
                 out, rc = self.ctl(argv[1:])
@@ -657,10 +657,10 @@ def run_tests() -> int:
             return "", 0
 
         def cancelled(self) -> bool:
-            return any(c[1:3] == ["ask", "cancel"] for c in self.calls if c[0] == AGTERMCTL)
+            return any(c[1:3] == ["ask", "cancel"] for c in self.calls if c[0] == ELISCTL)
 
         def asked(self) -> bool:
-            return any(c[1:3] == ["ask", "open"] for c in self.calls if c[0] == AGTERMCTL)
+            return any(c[1:3] == ["ask", "open"] for c in self.calls if c[0] == ELISCTL)
 
     class ShareTest(unittest.TestCase):
         def setUp(self) -> None:
@@ -672,7 +672,7 @@ def run_tests() -> int:
             self.runner.overlay = str(self.page)
             self.creds = base / "tunnel.json"
             self.creds.write_text('{"AccountTag":"a","TunnelID":"tid-1","TunnelSecret":"s"}')
-            env = {"AGTERM_ENABLED": "1", "AGTERM_SESSION_ID": "S1", "AGDOC_SHARE_CREDENTIALS": str(self.creds),
+            env = {"ELIS_ENABLED": "1", "ELIS_SESSION_ID": "S1", "AGDOC_SHARE_CREDENTIALS": str(self.creds),
                    "AGDOC_SHARE_HOST": "share.example.com"}
             self.shares = Shares(self.runner, self.clock, base / "root", env)
             self.hub = self.shares.hub
@@ -702,7 +702,7 @@ def run_tests() -> int:
         def tunnels(self) -> list[list[str]]:
             return [argv for argv in self.runner.procs.values() if "tunnel" in argv]
 
-        def test_outside_agterm_refused(self) -> None:
+        def test_outside_elis_refused(self) -> None:
             self.shares.env = {}
             self.assertEqual(1, self.share()[0])
             self.assertFalse(self.d.exists())
@@ -743,7 +743,7 @@ def run_tests() -> int:
             self.assertEqual(int(self.clock.now()) // 10, (self.shares.expires(self.d) - 86400) // 10)
 
         def test_publish_restores_overlay_reported_through_symlink(self) -> None:
-            # agterm reported /tmp/... for a stage under /private/tmp/..., so the dead stage stayed shown
+            # elis reported /tmp/... for a stage under /private/tmp/..., so the dead stage stayed shown
             link = Path(self.tmp.name).resolve().parent / f"{Path(self.tmp.name).name}-alias"
             link.symlink_to(Path(self.tmp.name).resolve())
             self.addCleanup(link.unlink)
@@ -919,7 +919,7 @@ def run_tests() -> int:
             self.shares.host = ""
             self.runner.answers = ["publish"]
             self.assertEqual(1, self.share()[0])
-            self.assertFalse(any(c[1:3] == ["ask", "open"] for c in self.runner.calls[asks:] if c[0] == AGTERMCTL))
+            self.assertFalse(any(c[1:3] == ["ask", "open"] for c in self.runner.calls[asks:] if c[0] == ELISCTL))
             self.assertEqual("<p>v1</p>", (self.d / "web" / "index.html").read_text())
 
         def test_list_keeps_share_awaiting_approval(self) -> None:

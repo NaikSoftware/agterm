@@ -1,0 +1,318 @@
+import Foundation
+
+/// Pure, host-free logic for the restore-running-command feature: parsing a macOS `KERN_PROCARGS2` blob
+/// into argv, deciding whether a captured foreground command should be re-run, and rendering an argv
+/// back into a shell command line. The app target owns only the `sysctl`/libghostty calls; every
+/// judgement defers here so it stays unit-tested and off the C boundary.
+public enum CommandRestore {
+    /// The login shells treated as "no program to restore" (a shell held the pane, nothing to re-run).
+    private static let knownShells: Set<String> = ["zsh", "bash", "sh", "fish", "dash", "ksh", "tcsh", "csh"]
+
+    /// Sanity cap on argc: a corrupt header must not drive `reserveCapacity` into a huge allocation.
+    private static let maxArgCount: Int32 = 4096
+
+    /// The last path component of `path` (basename), or `path` itself when it has no slash.
+    public static func basename(_ path: String) -> String {
+        path.split(separator: "/").last.map(String.init) ?? path
+    }
+
+    /// Whether `basename` is a login shell to skip, also matching the user's `$SHELL` basename passed as
+    /// `extra` (so a non-standard login shell counts). A leading `-` is stripped first: macOS dash-marks a
+    /// login shell's argv[0], which survives `basename` for a bare name (`-zsh`) but not a path
+    /// (`-/bin/zsh`, which loses it on the `/` split).
+    public static func isKnownShell(_ basename: String, extra: String? = nil) -> Bool {
+        let name = basename.hasPrefix("-") ? String(basename.dropFirst()) : basename
+        if knownShells.contains(name) { return true }
+        if let extra, !extra.isEmpty, name == extra { return true }
+        return false
+    }
+
+    /// Whether `argv` is shell-shaped with nothing to restore: `argv[0]` is a known shell (or `$SHELL`,
+    /// passed as `extra`) AND only option flags follow it. NOT proof of an interactive prompt, since a
+    /// builtin or a shell loop runs in the shell process and leaves argv untouched. A
+    /// shell RUNNING something is NOT idle and IS captured — a script path (`/bin/sh /usr/local/bin/cld`,
+    /// the foreground of any `#!/bin/sh` wrapper) or a `-c` command leaves a non-flag argument after
+    /// `argv[0]`.
+    public static func isIdleShell(argv: [String], extra: String? = nil) -> Bool {
+        guard let first = argv.first, isKnownShell(basename(first), extra: extra) else { return false }
+        return !argv.dropFirst().contains { !$0.hasPrefix("-") }
+    }
+
+    /// What a pane's foreground argv means to the `tree` read: a program to report, or a recognized shell in
+    /// the foreground. The restore capture collapses `foregroundShell` to nil: otherwise `hadForeground`
+    /// would suppress `initialCommand` in `restorePlan`.
+    public enum PaneForeground: Sendable, Equatable {
+        /// A real foreground program, argv dash-stripped and ready to render.
+        case program([String])
+        /// A RECOGNIZED shell IN THE FOREGROUND, as its basename (`zsh`, `fish`) — not a claim that it sits at
+        /// a prompt, since a builtin runs in the shell process and leaves argv unchanged. A shell matching
+        /// neither the known set nor `$SHELL` is not recognized and reports as `program` instead.
+        case foregroundShell(String)
+
+        /// The argv the tree reports as `foreground`; nil when a shell holds the foreground.
+        public var command: [String]? {
+            if case .program(let argv) = self { return argv }
+            return nil
+        }
+
+        /// The basename the tree reports as `foregroundShell`; nil while a program runs.
+        public var shellName: String? {
+            if case .foregroundShell(let name) = self { return name }
+            return nil
+        }
+    }
+
+    /// Classify a pane's raw foreground argv for the `tree` read. Nil for an empty argv only; the two live
+    /// answers are the cases of `PaneForeground`. `extra` is the user's `$SHELL` basename, widening
+    /// recognition to a non-standard login shell exactly as `isIdleShell` does.
+    ///
+    /// The shell basename is taken AFTER `stripLoginDash`, never before: `basename` splits on `/`, so it
+    /// drops the login mark from a path form (`-/bin/zsh`) but keeps it on the bare form (`-zsh`), which is
+    /// the common case and would otherwise reach callers as `-zsh`.
+    public static func paneForeground(argv: [String], extra: String? = nil) -> PaneForeground? {
+        guard !argv.isEmpty else { return nil }
+        let stripped = stripLoginDash(argv)
+        if isIdleShell(argv: argv, extra: extra) { return .foregroundShell(basename(stripped[0])) }
+        return .program(stripped)
+    }
+
+    /// Drop the leading `-` macOS dash-marks a login process's argv[0] with, so the argv names a program
+    /// that can actually be rendered and re-run (`-sleep` → `sleep`). Only argv[0] carries the mark, and
+    /// only the mark is removed: a path form (`-/bin/zsh`) keeps the rest of the path.
+    public static func stripLoginDash(_ argv: [String]) -> [String] {
+        guard let first = argv.first, first.hasPrefix("-") else { return argv }
+        var result = argv
+        result[0] = String(first.dropFirst())
+        return result
+    }
+
+    /// One process-group member as `KERN_PROC_PGRP` reports it: its own pid and its parent's.
+    public struct ProcessGroupMember: Equatable, Sendable {
+        public let pid: Int32
+        public let ppid: Int32
+        public init(pid: Int32, ppid: Int32) {
+            self.pid = pid
+            self.ppid = ppid
+        }
+    }
+
+    /// The pids to try when a process group's LEADER argv is unreadable: the leader's own children, lowest
+    /// pid first. A pane with no job-control shell (a `--command` session) runs its program as a child of
+    /// setuid-root `login`, whose argv `KERN_PROCARGS2` refuses for a non-root caller, so that child is the
+    /// real answer.
+    ///
+    /// Only DIRECT children qualify while the leader is alive, and parentage rather than pid order is what
+    /// decides. A pipeline under a job-control shell puts every element in one group led by the first,
+    /// while parenting them all to the shell — so `sudo tail … | grep …` must not report `grep`, which is
+    /// a sibling of the leader rather than its child. Ordering on pid alone would also pick the wrong
+    /// process once macOS recycles pids past 99999, where a freshly forked grandchild sorts below the
+    /// program that spawned it.
+    ///
+    /// A leader that has already EXITED is the exception: `cat f | less` keeps the group id of the reaped
+    /// `cat`, so no survivor is its child and the parentage test would report a live pane as idle. With no
+    /// leader in the group there is nothing to check parentage against, so every survivor qualifies.
+    public static func groupDescentCandidates(pgid: Int32, members: [ProcessGroupMember]) -> [Int32] {
+        let others = members.filter { $0.pid != pgid && $0.pid > 0 }
+        guard members.contains(where: { $0.pid == pgid }) else { return others.map(\.pid).sorted() }
+        return others.filter { $0.ppid == pgid }.map(\.pid).sorted()
+    }
+
+    /// shouldRestore says whether a captured `argv` replays as typed into `receivingShell`, the interactive shell,
+    /// nil when nothing types it. Refusing here rather than at capture keeps `hadForeground` true, so
+    /// `restorePlan` still preempts a stale `initialCommand`.
+    public static func shouldRestore(argv: [String], denylist: Set<String>, receivingShell: String? = nil) -> Bool {
+        guard let first = argv.first, !first.isEmpty else { return false }
+        if argv.contains(where: { $0.unicodeScalars.contains(where: isUnreplayable) }) { return false }
+        if let receivingShell, expandsHistoryInsideQuotes(receivingShell), argv.contains(where: { $0.contains("!") }) {
+            return false
+        }
+        return !denylist.contains(basename(first))
+    }
+
+    /// expandsHistoryInsideQuotes: interactive csh and tcsh substitute `!` history even inside single quotes.
+    private static func expandsHistoryInsideQuotes(_ shell: String) -> Bool {
+        ["tcsh", "csh"].contains(basename(shell))
+    }
+
+    /// Two unrelated reasons, one predicate because both end at the same plain shell: a control character
+    /// the line editor acts on, and the U+FFFD `parseProcArgs` leaves where the bytes were not valid
+    /// UTF-8. A genuine U+FFFD is refused with it, the two being indistinguishable once decoded.
+    private static func isUnreplayable(_ scalar: Unicode.Scalar) -> Bool {
+        isControlCharacter(scalar) || scalar.value == 0xFFFD
+    }
+
+    /// C0 and DEL — what a line editor reads as an editing command rather than as text.
+    private static func isControlCharacter(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.value < 0x20 || scalar.value == 0x7F
+    }
+
+    /// The mutually-exclusive surface seed a pane restores/creates with. `command` != nil → the exec path
+    /// (replaces the shell, closes on exit); else `initialInput` is typed into a login shell, or both nil =
+    /// a plain shell. `waitAfterCommand` is effective only on the exec path.
+    public struct RestorePlan: Equatable, Sendable {
+        public let command: String?
+        public let initialInput: String?
+        public let waitAfterCommand: Bool
+        public init(command: String?, initialInput: String?, waitAfterCommand: Bool = false) {
+            self.command = command
+            self.initialInput = initialInput
+            self.waitAfterCommand = waitAfterCommand
+        }
+    }
+
+    /// The inputs `restorePlan` decides from.
+    /// - `wasRestored`: the session came from a restore (a FRESH command session always runs its command, a
+    ///   RESTORED one only in rerun mode).
+    /// - `restoreEnabled`: whether the immutable launch mode is `rerun`.
+    /// - `hadForeground`: a foreground command was CAPTURED, at the last quit or by `restore.capture`. It
+    ///   PREEMPTS `initialCommand` even when suppressed (denylisted/off → `foregroundInput` nil), yielding a
+    ///   plain shell rather than the stale creation command — so gate on capture, not on the input surviving.
+    /// - `foregroundInput`: the rendered foreground command line to type, or nil (none / suppressed).
+    /// - `initialCommand`: the session's persisted `--command`.
+    /// - `restoreOverride`: the pane's pinned restore command (`session.restore`), tri-state — nil = no
+    ///   override, `""` = pinned to nothing, `"cmd"` = run this shell line.
+    /// - `requestedWait`: whether a creation command should hold after exit; ignored without an effective command.
+    public struct RestoreInputs: Equatable, Sendable {
+        public let wasRestored: Bool
+        public let restoreEnabled: Bool
+        public let hadForeground: Bool
+        public let foregroundInput: String?
+        public let initialCommand: String?
+        public let restoreOverride: String?
+        public let requestedWait: Bool
+        public init(wasRestored: Bool, restoreEnabled: Bool, hadForeground: Bool,
+                    foregroundInput: String?, initialCommand: String?, restoreOverride: String?,
+                    requestedWait: Bool = false) {
+            self.wasRestored = wasRestored
+            self.restoreEnabled = restoreEnabled
+            self.hadForeground = hadForeground
+            self.foregroundInput = foregroundInput
+            self.initialCommand = initialCommand
+            self.restoreOverride = restoreOverride
+            self.requestedWait = requestedWait
+        }
+    }
+
+    /// The `initial_input` for a pane: a pinned override (empty → nil, a plain shell) when one exists, else
+    /// the captured foreground input. The override is gated on `restoreEnabled`, keeping rerun mode the
+    /// single switch (like `initialCommand`, the other explicit user-set seed), and is typed
+    /// VERBATIM — never through `shellQuotedLine` — so `cd x && claude --resume y` works as written; the
+    /// captured input arrives already gated + denylist-filtered from the app side.
+    public static func restoreInput(restoreEnabled: Bool, restoreOverride: String?,
+                                    capturedInput: String?) -> String? {
+        guard let restoreOverride else { return capturedInput }
+        guard restoreEnabled, !restoreOverride.isEmpty, !hasControlCharacter(restoreOverride) else { return nil }
+        return restoreOverride + "\n"
+    }
+
+    /// Whether `value` carries a character the line editor would read as an editing command. `session.restore
+    /// set` rejects these on WRITE, but a pin reaching `restoreInput` from a snapshot never passed through
+    /// that check, so the sink the dispatcher's own reasoning names is guarded here too.
+    static func hasControlCharacter(_ value: String) -> Bool {
+        value.unicodeScalars.contains(where: isControlCharacter)
+    }
+
+    /// Decide a pane's seed on create/restore. Pure, so the gate + precedence is unit-tested off the C
+    /// boundary; the app target owns only the libghostty seeding. A present `restoreOverride`
+    /// short-circuits everything: it wins over the captured foreground and `initialCommand`, `command` is
+    /// always nil (an override never takes the exec path), and the input comes from `restoreInput` — so it
+    /// obeys the `restoreEnabled` launch mode while bypassing the denylist, which guards BLIND capture, not a
+    /// deliberately named command. With no override the capture/`initialCommand` precedence applies.
+    public static func restorePlan(_ inputs: RestoreInputs) -> RestorePlan {
+        if inputs.restoreOverride != nil {
+            let input = restoreInput(restoreEnabled: inputs.restoreEnabled, restoreOverride: inputs.restoreOverride,
+                                     capturedInput: inputs.foregroundInput)
+            return RestorePlan(command: nil, initialInput: input)
+        }
+        let mayRunInitial = !inputs.wasRestored || inputs.restoreEnabled
+        let command = (!inputs.hadForeground && mayRunInitial) ? inputs.initialCommand : nil
+        return RestorePlan(command: command, initialInput: command == nil ? inputs.foregroundInput : nil,
+                           waitAfterCommand: command != nil && inputs.requestedWait)
+    }
+
+    /// defaultDenylist is the starter `restore-denylist.conf`'s entries, the terminal multiplexers, which re-run
+    /// only to an empty session. elis-server, which has no such file, applies it.
+    public static let defaultDenylist: Set<String> = ["tmux", "screen", "zellij"]
+
+    /// Parse `restore-denylist.conf` into a set of program basenames NOT to re-run on restore: one entry
+    /// per line, trimmed; blank lines and `#` comments ignored. Nothing is merged in: on the Mac the file is
+    /// the whole source, its starter listing the same multiplexers as `defaultDenylist`.
+    public static func parseDenylist(_ text: String) -> Set<String> {
+        var result: Set<String> = []
+        for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+            result.insert(line)
+        }
+        return result
+    }
+
+    /// Render an argv into one POSIX shell command line, single-quoting each argument (so spaces, `$`,
+    /// globs and quotes survive intact) and space-joining.
+    /// Quoting is a PARSER escape, so it inverts capture only for what `shouldRestore` accepted.
+    public static func shellQuotedLine(_ argv: [String]) -> String {
+        argv.map(shellQuote).joined(separator: " ")
+    }
+
+    /// Quote one word that sh, zsh, tcsh and fish all read alike: an apostrophe or a backslash goes
+    /// outside the quotes, escaped, since fish treats both specially inside single quotes.
+    public static func accountShellQuoted(_ value: String) -> String {
+        var quoted = "'"
+        for scalar in value.unicodeScalars {
+            switch scalar {
+            case "'": quoted += "'\\''"
+            case "\\": quoted += "'\\\\'"
+            default: quoted.unicodeScalars.append(scalar)
+            }
+        }
+        return quoted + "'"
+    }
+
+    /// POSIX single-quote one argument: wrap in `'…'`, and render each embedded `'` as `'\''`.
+    private static func shellQuote(_ arg: String) -> String {
+        "'" + arg.replacingOccurrences(of: "'", with: "'\\''", options: .literal) + "'"
+    }
+
+    /// Parse a macOS `KERN_PROCARGS2` blob into the process's argv. Layout: a host-order `Int32` argc,
+    /// the NUL-terminated executable path, zero or more NUL padding bytes, then `argc` NUL-terminated
+    /// argument strings (env follows, ignored). Returns nil on a truncated or implausible blob.
+    public static func parseProcArgs(_ data: Data) -> [String]? {
+        procArgsFields(data)?.argv
+    }
+
+    /// parseProcEnvironment reads the environment strings that follow argv in a `KERN_PROCARGS2` blob, up to the
+    /// first empty string, which separates them from the kernel's own `key=value` strings. Nil when argv is unreadable.
+    public static func parseProcEnvironment(_ data: Data) -> [String: String]? {
+        guard let fields = procArgsFields(data) else { return nil }
+        var environment: [String: String] = [:]
+        for entry in fields.rest.prefix(while: { !$0.isEmpty }) {
+            guard let equals = entry.firstIndex(of: "="), equals != entry.startIndex else { continue }
+            let key = String(entry[..<equals])
+            if environment[key] == nil { environment[key] = String(entry[entry.index(after: equals)...]) }
+        }
+        return environment
+    }
+
+    private static func procArgsFields(_ data: Data) -> (argv: [String], rest: [String])? {
+        let bytes = [UInt8](data)
+        guard bytes.count > 4 else { return nil }
+        let argc = bytes.prefix(4).withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
+        guard argc > 0, argc < maxArgCount else { return nil }
+
+        var i = 4
+        // skip the executable path up to its NUL...
+        while i < bytes.count, bytes[i] != 0 { i += 1 }
+        // ...then the NUL padding between exec path and argv[0].
+        while i < bytes.count, bytes[i] == 0 { i += 1 }
+
+        var strings: [String] = []
+        while i < bytes.count {
+            let start = i
+            while i < bytes.count, bytes[i] != 0 { i += 1 }
+            strings.append(String(decoding: bytes[start..<i], as: UTF8.self))
+            if i < bytes.count { i += 1 } // step over the terminating NUL
+        }
+        guard strings.count >= Int(argc) else { return nil }
+        return (Array(strings.prefix(Int(argc))), Array(strings.dropFirst(Int(argc))))
+    }
+}

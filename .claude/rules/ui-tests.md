@@ -1,10 +1,10 @@
 ---
 paths:
-  - "agtermUITests/**/*.swift"
-  - "agtermTests/**/*.swift"
+  - "macos/ElisUITests/**/*.swift"
+  - "macos/ElisTests/**/*.swift"
 ---
 
-## Application-hosted tests (`agtermTests/`)
+## Application-hosted tests (`ElisTests/`)
 
 These run inside the app, so a mistake can kill the host instead of failing an assertion.
 
@@ -15,7 +15,7 @@ These run inside the app, so a mistake can kill the host instead of failing an a
   `ImageRenderer`, `WKWebView.takeSnapshot`) are unaffected; a screen-composite capture would be blank.
   A popped-up `NSMenu` is a window-server surface outside `NSApp.windows`, so the hook cannot reach it.
   A hosted test records the popup request instead, as `SidebarControlClickTests` does, and leaves the
-  menu actually opening to `agtermUITests`.
+  menu actually opening to `ElisUITests`.
 - **Set `isReleasedWhenClosed = false` on every test-owned `NSWindow`.** The initializer defaults true;
   `close()` can over-release a window still held by `registeredWindows`/`WindowRegistry`, then crash at
   the main-queue autorelease-pool pop. xcodebuild reports `Restarting after unexpected exit, crash, or
@@ -34,30 +34,30 @@ These run inside the app, so a mistake can kill the host instead of failing an a
   bindings. Suppress the substitution rather than renaming fixtures: `StockMenuChordTests` needs the
   real "Close" to test chord ownership, and the substitution matches invented titles just as readily.
 - Never stub `GhosttyApp`; its handler is the only crash record.
-- `AGTERM_HOSTED_TESTS=1`, set by the `agtermTests` scheme, renders `HostedTestPlaceholder`, skips the
+- `ELIS_HOSTED_TESTS=1`, set by the `ElisTests` scheme, renders `HostedTestPlaceholder`, skips the
   launch `NSApp.activate()`, and skips the scene task that assigns `appDelegate.library`; it stays nil.
   The placeholder makes its window transparent and click-through and keeps it ordered in:
   ordering out the launch window exited the host before XCTest connected.
   SwiftUI's `@NSApplicationDelegateAdaptor` also makes
   `NSApp.delegate as? AppDelegate` nil, so obtain the delegate another way. The local placeholder window
-  exists (`NSApp.windows.count == 1`, title "Agterm2"), but another-process CI launch may hit FB11763863
+  exists (`NSApp.windows.count == 1`, title "Elis"), but another-process CI launch may hit FB11763863
   and create none.
 
 ## UI tests
 
-- `agtermUITests/` launches the real app and drives UI behavior unavailable to host-free tests.
-  Run with `xcodebuild test -project agterm.xcodeproj -scheme agterm -destination 'platform=macOS'`.
+- `ElisUITests/` launches the real app and drives UI behavior unavailable to host-free tests.
+  Run with `xcodebuild test -project Elis.xcodeproj -scheme Elis -destination 'platform=macOS'`.
 - Default UI-test launches bypass live-session wrapping through the existing UI-test sentinel. Only the
-  focused zmx persistence test sets `AGTERM_UITEST_ENABLE_ZMX=1`; it must kill its exact test daemons in
+  focused zmx persistence test sets `ELIS_UITEST_ENABLE_ZMX=1`; it must kill its exact test daemons in
   teardown so they cannot leak into later tests.
-- Pass a temporary `AGTERM_STATE_DIR` in the launch environment; `agtermApp.restoredStore()` honors it.
+- Pass a temporary `ELIS_STATE_DIR` in the launch environment; `elisApp.restoredStore()` honors it.
   Verify the native `Open Directory...` panel manually.
 - **Use `app.launchForUITest()`, never `app.launch()`.** FB11763863 on macOS 15+/Xcode 16+, including
   Xcode 26, can leave a
   process-launched SwiftUI `WindowGroup` with a Dock icon and AX elements but no `NSWindow`, task, or
   `onAppear`; activation/order-front APIs cannot create the missing window.
   `AppDelegate.bringUITestWindowsForward` responds by reopening
-  `Bundle.main.bundleURL`. `launchForUITest()` sets `AGTERM_UITEST_FORCE_SIDEBAR_VISIBLE` in the
+  `Bundle.main.bundleURL`. `launchForUITest()` sets `ELIS_UITEST_FORCE_SIDEBAR_VISIBLE` in the
   environment, not arguments, launches, and activates. Keep Settings non-restorable because reopen
   retriggers restoration. Diagnose with timed `NSApp.windows.count` logging; persistent zero means
   "never created". See [[reference_swiftui-windowgroup-no-window-xcuitest]].
@@ -66,7 +66,7 @@ These run inside the app, so a mistake can kill the host instead of failing an a
 - Add UI coverage for UI behavior. For Metal/transient state absent from AX, assert an observable side
   effect, such as `tty > <file>` identifying the focused pane.
 - `AppearanceFlipUITests` uses XCUITest-only `debug.appearance light|dark`, which sets
-  `NSApp.appearance` and posts `.agtermSystemAppearanceChanged`; production uses app-level KVO.
+  `NSApp.appearance` and posts `.elisSystemAppearanceChanged`; production uses app-level KVO.
   Refuse the command outside XCUITest and exempt it from keep-in-sync. Set a starting side, assert the
   echoed response, and poll the bare form's last-applied side. To catch a zoom-clearing misroute, sample
   `fontSize` continuously: current libghostty `update_config` does not reset runtime zoom, so CELL_SIZE
@@ -86,13 +86,13 @@ These run inside the app, so a mistake can kill the host instead of failing an a
 - **Never run XCUITests while the user is testing a handed-off build.** They activate apps and send real
   keyboard/mouse events even in the background. Run them before handoff or after the user finishes.
   Host-free tests are safe.
-- Always run `cd agtermCore && swift test`, normally about 0.2 seconds. Ask before XCUITest.
+- Always run `cd ElisCore && swift test`, normally about 0.2 seconds. Ask before XCUITest.
   The tree is 44 classes and 429 methods, and a class costs about its own test bodies: 31 seconds for
   EditMenu's four, 7.5 minutes for ControlAPI's 82. Per-method preamble is about 0.1 seconds; if it
   returns to 18-25 seconds the scheme's `preferredScreenCaptureFormat` has regressed to
   `screenRecording`, whose per-method video startup made a full run take 2.5 hours.
   Target exact affected methods with one
-  `-only-testing:agtermUITests/<Class>/<method>` each. A behavior-preserving extraction with unchanged AX
+  `-only-testing:ElisUITests/<Class>/<method>` each. A behavior-preserving extraction with unchanged AX
   identifiers needs `make build` and lint, not UI tests. Recommend a class/broader run only for changed
   cross-cutting behavior such as launch, signing/bundle, eager-deck, or scene/window wiring.
 - After changing a test, run `build-for-testing`; app-only `xcodebuild build` leaves a stale XCUITest
@@ -118,7 +118,7 @@ These run inside the app, so a mistake can kill the host instead of failing an a
   clear covered/minimized/other-Space windows before debugging the test. FB11763863 instead has no
   window/AX tree. The same timeout also came from typing that hid the app under test: on 2026-10-18
   `typeText` keys arrived as Command chords (Cmd-M minimized it, Cmd-H hid it, the rest reached the live
-  agterm the run was launched from and opened its Open Directory panel), while
+  Elis the run was launched from and opened its Open Directory panel), while
   `typeKey(_:modifierFlags: [])` was unaffected. [Unverified] where the stuck Command came from.
   A window ordered out or an unexpected Open panel seconds into typing means stop the run; do not rerun
   it on the same desktop.
@@ -147,22 +147,22 @@ These run inside the app, so a mistake can kill the host instead of failing an a
 
 ## Runs from a shell in the live terminal
 
-- **An XCUITest run started from a shell inside a live agterm window can die at runner init** with
+- **An XCUITest run started from a shell inside a live Elis window can die at runner init** with
   `Failed to initialize for UI testing ... Timed out while enabling automation mode` after 60s, before any
   test case runs. The block is at runner initialization, so app code under test cannot reach it; it is not
   a defect in the diff under test. The timeout is intermittent: one retry passed on the same stale host
   minutes after a failure (2026-09-26), so retry once before treating it as blocking.
   [Unverified] cause: TCC attributes the authorization to the responsible process,
-  `/Applications/agterm.app/Contents/MacOS/agterm-session-host` hosting that shell; when a deploy replaced
+  `/Applications/Elis.app/Contents/MacOS/elis-session-host` hosting that shell; when a deploy replaced
   the app after that process launched, the running image stops matching the file and tccd logs
   `IDENTITY_ATTRIBUTION: Failed to copy signing info for <pid> ... #-67034` (errSecCSStaticCodeChanged) in
   the same window. The correlation is measured; the causal link to the timeout is not. Diagnose with
   `log show --predicate 'subsystem == "com.apple.TCC"' --last 6m --style compact` plus
   `ps -p <pid> -o lstart` against the binary's mtime. If the retry also fails, diagnose the attribution
-  issue before considering a restart; restarting agterm is Eugene's decision, never the agent's.
-  Hosted `agtermTests` can be blocked over the same period (2026-10-02): the host waits in
+  issue before considering a restart; restarting Elis is the owner's decision, never the agent's.
+  Hosted `ElisTests` can be blocked over the same period (2026-10-02): the host waits in
   `_prepareTestConfigurationAndIDESession` with zero test cases started, and `xcodebuild` logs
   `Connection peer refused channel request for "dtxproxy:XCTestManager_IDEInterface:..."` two minutes after
-  connecting. Both runners recovered once Eugene allowed the pending authorization, with the same stale
+  connecting. Both runners recovered once the owner allowed the pending authorization, with the same stale
   session host and the same `testmanagerd` still running, so neither needs a restart. SIP refuses
   `launchctl kickstart -k` on `testmanagerd`. [Unverified] which authorization that was.

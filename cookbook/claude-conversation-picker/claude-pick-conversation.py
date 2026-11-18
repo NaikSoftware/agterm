@@ -2,7 +2,7 @@
 """Pick a past Claude Code conversation of THIS session's directory and resume it in the pane the
 chord fired from.
 
-Runs as an agterm keymap custom command, so the runner exports $AGT_* and starts it in the session's
+Runs as an elis keymap custom command, so the runner exports $AGT_* and starts it in the session's
 directory. No arguments.
 
     claude already running in the pane -> types "/resume <id>" into the TUI
@@ -13,7 +13,7 @@ undocumented, so the typed Return may land on a one-row picker that wants a seco
 conversation another pane has open is refused by claude itself ("currently running as a background
 agent"), which is why this does not try to detect that case.
 
-Rows are named by a model before the picker opens. The cache under ~/.cache/agterm/claude-resume keys
+Rows are named by a model before the picker opens. The cache under ~/.cache/elis/claude-resume keys
 a name to the transcript's mtime, so a press only pays for conversations that changed since the last
 one, usually one and often none. That naming pass is the whole cold start, so it runs behind a
 session hud.
@@ -40,7 +40,7 @@ import time
 from pathlib import Path
 from typing import Any, ClassVar
 
-AGTERMCTL = os.environ.get("AGTERMCTL", "agtermctl")
+ELISCTL = os.environ.get("ELISCTL", "elisctl")
 # a custom command is spawned by the app, which carries launchd's PATH rather than a login shell's,
 # so every tool is resolved rather than assumed
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN") or shutil.which("claude") or str(Path.home() / ".local/bin/claude")
@@ -56,7 +56,7 @@ NAME_MAX = int(os.environ.get("CLAUDE_RESUME_NAME_MAX", "20"))
 # subject in one long sitting, which the clock alone misses.
 NAME_TTL = int(os.environ.get("CLAUDE_RESUME_NAME_TTL", "3600"))
 NAME_GROWTH = int(os.environ.get("CLAUDE_RESUME_NAME_GROWTH", "150000"))
-CACHE_DIR = Path(os.environ.get("CLAUDE_RESUME_CACHE") or Path.home() / ".cache/agterm/claude-resume")
+CACHE_DIR = Path(os.environ.get("CLAUDE_RESUME_CACHE") or Path.home() / ".cache/elis/claude-resume")
 LOG = Path(os.environ.get("CLAUDE_RESUME_LOG", "/tmp/claude-pick-conversation.log"))
 DRY = bool(os.environ.get("CLAUDE_RESUME_DRY"))
 # a file holding the conversation id open in one pane, as {sid} and {pane} placeholders. Claude Code
@@ -120,17 +120,17 @@ def age_label(seconds: float) -> str:
 
 
 class Agt:
-    """Agt is the agterm control channel: agtermctl plus this session's addressing."""
+    """Agt is the elis control channel: elisctl plus this session's addressing."""
 
     def __init__(self) -> None:
-        self.bin = AGTERMCTL
+        self.bin = ELISCTL
         self.socket = os.environ.get("AGT_SOCKET", "")
         self.sid = os.environ.get("AGT_SESSION_ID", "")
         self.window = os.environ.get("AGT_WINDOW_ID", "active")
         self.hud_up = False
 
     def run(self, *args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
-        """run invokes agtermctl with the socket appended, never raising on a nonzero exit."""
+        """run invokes elisctl with the socket appended, never raising on a nonzero exit."""
         cmd = [self.bin, *args]
         if self.socket:
             cmd += ["--socket", self.socket]

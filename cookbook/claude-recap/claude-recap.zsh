@@ -1,17 +1,17 @@
 #!/usr/bin/env zsh
-# claude-recap.zsh — recap what the Claude Code session in an agterm session was working on.
+# claude-recap.zsh — recap what the Claude Code session in an elis session was working on.
 #
 # resolves the target session's cwd, finds the newest Claude Code transcript for that directory,
 # condenses it to user prompts plus trimmed assistant replies, and asks a small model for a short
 # newest-first list of what was done.
 #
-# usage: claude-recap.zsh [agterm-session-id] [pane]
-# meant to run inside an agterm overlay: the arguments are needed because a fresh overlay pty does
+# usage: claude-recap.zsh [elis-session-id] [pane]
+# meant to run inside an elis overlay: the arguments are needed because a fresh overlay pty does
 # not inherit $AGT_*.
 
 set -u
 
-AGTERMCTL="${AGTERMCTL:-agtermctl}"
+ELISCTL="${ELISCTL:-elisctl}"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 # full id, not the "haiku" alias — that is not a recognized alias and silently falls back to the
 # session's default model, which is far slower and dearer for what is six one-line items
@@ -72,12 +72,12 @@ printf '\033[?25l'
 printf '\n  %sclaude recap%s\n\n' "$bold" "$rst"
 phase "resolving session"
 
-# session cwd: ask agterm for the focused pane's directory, fall back to the overlay's own cwd
+# session cwd: ask elis for the focused pane's directory, fall back to the overlay's own cwd
 sid="${1:-}"
 pane="${2:-left}"
 cwd=""
-if [ -n "$sid" ] && command -v "$AGTERMCTL" >/dev/null 2>&1; then
-    cwd=$("$AGTERMCTL" tree --json 2>/dev/null | \
+if [ -n "$sid" ] && command -v "$ELISCTL" >/dev/null 2>&1; then
+    cwd=$("$ELISCTL" tree --json 2>/dev/null | \
         jq -r --arg id "$sid" '.result.tree.workspaces[].sessions[] | select(.id==$id) | .cwd' 2>/dev/null | head -1)
 fi
 [ -n "$cwd" ] || cwd="$PWD"

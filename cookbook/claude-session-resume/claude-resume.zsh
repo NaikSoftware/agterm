@@ -2,14 +2,14 @@
 # Sourced, not executed: paste this function into ~/.zshrc, or source this file from there.
 # See README.md.
 
-# Claude Code: per-agterm-tab session resume.
-# Binds each tab's Claude Code session id to the tab's own uuid (AGTERM_SESSION_ID),
+# Claude Code: per-elis-tab session resume.
+# Binds each tab's Claude Code session id to the tab's own uuid (ELIS_SESSION_ID),
 # so restoring the terminal resumes that tab's own conversation instead of starting fresh.
-# Requires: agterm (exports AGTERM_SESSION_ID, restores running commands) + zsh.
+# Requires: elis (exports ELIS_SESSION_ID, restores running commands) + zsh.
 claude() {
   emulate -L zsh
-  local sid=${AGTERM_SESSION_ID:l}
-  [[ -z $sid ]] && { command claude "$@"; return; }             # not in an agterm tab -> passthrough
+  local sid=${ELIS_SESSION_ID:l}
+  [[ -z $sid ]] && { command claude "$@"; return; }             # not in an elis tab -> passthrough
   local compact=${sid//-/}
   if [[ ${#sid} != 36 || $sid != ????????-????-????-????-???????????? ||
     ${#compact} != 32 || $compact == *[^0-9a-f]* ]]; then
@@ -30,13 +30,13 @@ claude() {
     done
   fi
 
-  # The account. CLAUDE_CONFIG_DIR names it for a launch the user typed, but agterm replays a
+  # The account. CLAUDE_CONFIG_DIR names it for a launch the user typed, but elis replays a
   # pane's argv and not its environment, so the variable is gone from a restored launch and the
   # tab would look for its conversation under the default account. The remembered directory is
   # consulted only when the default account holds nothing for this tab, so it never takes a
   # working default-account resume away.
   local default=$HOME/.claude
-  local memo=${XDG_STATE_HOME:-$HOME/.local/state}/agterm-claude-resume/$sid
+  local memo=${XDG_STATE_HOME:-$HOME/.local/state}/elis-claude-resume/$sid
   local -a roots=(${CLAUDE_CONFIG_DIR:-$default})
   if [[ -z ${CLAUDE_CONFIG_DIR:-} && -r $memo ]]; then
     local remembered

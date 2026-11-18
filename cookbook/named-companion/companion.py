@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Duplicate the session as a tinted companion named from a dialog.
 
-Run as an agterm keymap custom command: the runner exports $AGT_SESSION_ID, $AGT_WINDOW_ID and
-$AGT_SOCKET. A blank name takes the parent's and leaves a marker in ~/.cache/agterm/companion-names,
+Run as an elis keymap custom command: the runner exports $AGT_SESSION_ID, $AGT_WINDOW_ID and
+$AGT_SOCKET. A blank name takes the parent's and leaves a marker in ~/.cache/elis/companion-names,
 which the session-context-nudge hook reads to have the companion's Claude Code rename it once.
 """
 
@@ -14,8 +14,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-AGTERMCTL = os.environ.get("AGTERMCTL", "agtermctl")
-MARKERS = Path.home() / ".cache" / "agterm" / "companion-names"
+ELISCTL = os.environ.get("ELISCTL", "elisctl")
+MARKERS = Path.home() / ".cache" / "elis" / "companion-names"
 TINT = "gray"
 
 
@@ -25,7 +25,7 @@ class Fail(Exception):
 
 def agt(*args: str) -> subprocess.CompletedProcess:
     socket = os.environ.get("AGT_SOCKET", "")
-    cmd = [AGTERMCTL, *args] + (["--socket", socket] if socket else [])
+    cmd = [ELISCTL, *args] + (["--socket", socket] if socket else [])
     return subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 
@@ -55,7 +55,7 @@ def session_name(tree: dict, sid: str) -> str:
 def run() -> None:
     sid = os.environ.get("AGT_SESSION_ID", "")
     if not sid:
-        raise Fail("not inside an agterm session (AGT_SESSION_ID unset)")
+        raise Fail("not inside an elis session (AGT_SESSION_ID unset)")
     window = os.environ.get("AGT_WINDOW_ID", "") or "active"
 
     res = agt("ask", "New companion", "--style", "gui", "--input", "line", "--window", window,

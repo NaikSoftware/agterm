@@ -8,16 +8,16 @@
 # grid overlay comes and goes.
 set -e
 
-AGTERMCTL=${AGTERMCTL:-agtermctl}
+ELISCTL=${ELISCTL:-elisctl}
 
 # The grid's pane limit. Only used to tell a grid trimmed by the cap from one
-# that is short because the flags changed; raise it if a later agterm does.
+# that is short because the flags changed; raise it if a later elis does.
 CAP=9
 
 # One read answers every question: which panes are flagged and busy, which are on
 # the grid, and how many cells it holds. Two reads could disagree if a command
 # finished between them.
-snapshot=$("$AGTERMCTL" tree --json)
+snapshot=$("$ELISCTL" tree --json)
 
 # A pane earns a cell when its session is flagged AND it reports a foreground
 # command. `foreground`/`splitForeground` are omitted for a pane at its shell
@@ -50,7 +50,7 @@ verdict=$(printf '%s' "$snapshot" | jq -r --argjson cap "$CAP" '
 	  end')
 
 if [ "$verdict" = close ]; then
-	"$AGTERMCTL" dashboard --close >/dev/null
+	"$ELISCTL" dashboard --close >/dev/null
 	exit 0
 fi
 
@@ -63,7 +63,7 @@ done
 
 # The grid caps at nine panes and says so in the response when it trims. Fired
 # from a chord that goes nowhere; run the script from a shell to read it.
-note=$("$AGTERMCTL" dashboard "$@" --auto-size --json | jq -r '.result.text // empty')
+note=$("$ELISCTL" dashboard "$@" --auto-size --json | jq -r '.result.text // empty')
 [ -n "$note" ] && echo "${0##*/}: $note" >&2
 
 exit 0

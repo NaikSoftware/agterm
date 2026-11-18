@@ -28,7 +28,7 @@ Two lines of yours in that example, in the order they were made, each next to wh
 
 ## Requirements
 
-- agterm 0.13.0 or later. That is where `$AGT_PANE` began reporting which pane a custom command fired from, which is how the capture stays on the half of a split you pressed in. Everything else it uses is older: `session paste` shipped in 0.11.0 and `session text` in 0.5.0.
+- Elis 0.13.0 or later. That is where `$AGT_PANE` began reporting which pane a custom command fired from, which is how the capture stays on the half of a split you pressed in. Everything else it uses is older: `session paste` shipped in 0.11.0 and `session text` in 0.5.0.
 - [revdiff](https://github.com/umputun/revdiff)
 - `python3`, which macOS ships
 - macOS `pbcopy` and `pbpaste`, which the reply goes through
@@ -41,19 +41,19 @@ Copy `annotate-pane.py` somewhere on your machine, say `~/.local/bin/`, and make
 chmod +x annotate-pane.py
 ```
 
-Bind it in `~/.config/agterm/keymap.conf`, with the full path to wherever you put it:
+Bind it in `~/.config/elis/keymap.conf`, with the full path to wherever you put it:
 
 ```
 command "Annotate" ctrl+a>k ~/.local/bin/annotate-pane.py
 ```
 
-Then **View ▸ Reload Keymap**, or `agtermctl keymap reload`.
+Then **View ▸ Reload Keymap**, or `elisctl keymap reload`.
 
 Nothing is passed on that line: the script reads `$AGT_SESSION_ID`, `$AGT_PANE`, `$AGT_SELECTION` and `$AGT_SOCKET` from the environment the runner gives it, and opens its own overlay.
 
-A custom command runs under the app's `PATH`, not your shell's, and which `PATH` that is depends on the version. From 0.22.0 it is the system directories plus the app bundle's own CLI directory in front and `/usr/local/bin` and `/opt/homebrew/bin` behind, so `agtermctl` and a Homebrew `revdiff` both resolve. Before 0.22.0 it is launchd's bare `/usr/bin:/bin:/usr/sbin:/sbin` — which does not include the `/usr/local/bin` that **Help ▸ Install Command Line Tool…** writes to, so nothing but `python3` resolves. The script covers both: it falls back to `/usr/local/bin/agtermctl`, and for revdiff to `/opt/homebrew/bin` then `~/go/bin`. Set `REVDIFF` or `AGTERMCTL` to a full path when yours is somewhere else; both are checked first.
+A custom command runs under the app's `PATH`, not your shell's, and which `PATH` that is depends on the version. From 0.22.0 it is the system directories plus the app bundle's own CLI directory in front and `/usr/local/bin` and `/opt/homebrew/bin` behind, so `elisctl` and a Homebrew `revdiff` both resolve. Before 0.22.0 it is launchd's bare `/usr/bin:/bin:/usr/sbin:/sbin` — which does not include the `/usr/local/bin` that **Help ▸ Install Command Line Tool…** writes to, so nothing but `python3` resolves. The script covers both: it falls back to `/usr/local/bin/elisctl`, and for revdiff to `/opt/homebrew/bin` then `~/go/bin`. Set `REVDIFF` or `ELISCTL` to a full path when yours is somewhere else; both are checked first.
 
-Two knobs at the top of the script: `CAPTURE_LINES`, how much of the pane to take when nothing is selected, and `OVERLAY_PERCENT` with `OVERLAY_TINT`, the size and color of the panel. `ANNOTATE_LOG` moves the run log, which is `$TMPDIR/agterm-annotate.log` by default and is where a chord that appears to do nothing explains itself.
+Two knobs at the top of the script: `CAPTURE_LINES`, how much of the pane to take when nothing is selected, and `OVERLAY_PERCENT` with `OVERLAY_TINT`, the size and color of the panel. `ANNOTATE_LOG` moves the run log, which is `$TMPDIR/elis-annotate.log` by default and is where a chord that appears to do nothing explains itself.
 
 ## Usage
 
@@ -61,10 +61,10 @@ Press the chord. Either select the lines you care about first, or press it on wh
 
 In revdiff: move to a line, press `a` to write a note, `Ctrl+E` while typing it to open `$EDITOR` for a long one, `A` for a note about the output as a whole, `d` to delete the one under the cursor, `q` to quit and send what you wrote, `Q` to throw it all away. Quitting with no notes does nothing at all — no paste, no empty line at the prompt.
 
-Run it from a shell with `--print` to see the reply on stdout instead of pasting it, which is the way to check the formatting without a prompt catching it. A session's shell is given `AGTERM_*`, while the script expects the `AGT_*` a custom command gets, so map them across:
+Run it from a shell with `--print` to see the reply on stdout instead of pasting it, which is the way to check the formatting without a prompt catching it. A session's shell is given `ELIS_*`, while the script expects the `AGT_*` a custom command gets, so map them across:
 
 ```sh
-AGT_SESSION_ID=$AGTERM_SESSION_ID AGT_PANE=$AGTERM_PANE AGT_SOCKET=$AGTERM_SOCKET \
+AGT_SESSION_ID=$ELIS_SESSION_ID AGT_PANE=$ELIS_PANE AGT_SOCKET=$ELIS_SOCKET \
     ~/.local/bin/annotate-pane.py --print
 ```
 
@@ -78,11 +78,11 @@ The reply goes through the **clipboard**, saved and restored around the paste. T
 
 The script calls `session paste` without `--pane`, so it runs on the session's main surface and a chord fired from a split's right pane or from the scratch would drop the notes at a different prompt than the one you annotated. Those two panes get the notes on the clipboard and a banner saying so, for a manual ⌘V. The capture side has no such limit: `session text` does take `--pane`, so what you annotate is always the pane you pressed in.
 
-A nonzero exit from the overlay call is ambiguous — agtermctl can refuse before revdiff ever starts — so the script carries agtermctl's own sentence out rather than reporting the status as revdiff's.
+A nonzero exit from the overlay call is ambiguous — elisctl can refuse before revdiff ever starts — so the script carries elisctl's own sentence out rather than reporting the status as revdiff's.
 
 ## Limits
 
-Nothing is closed, deleted, or killed. Three things are touched outside the session: the clipboard, restored afterwards; the run log at `$TMPDIR/agterm-annotate.log`; and revdiff's own annotation history, which it auto-saves under `~/.config/revdiff/history/` for any review you quit with `q`, so a durable copy of your notes outlives the temp file the script deletes.
+Nothing is closed, deleted, or killed. Three things are touched outside the session: the clipboard, restored afterwards; the run log at `$TMPDIR/elis-annotate.log`; and revdiff's own annotation history, which it auto-saves under `~/.config/revdiff/history/` for any review you quit with `q`, so a durable copy of your notes outlives the temp file the script deletes.
 
 The reply arrives unsent against a program with bracketed paste on, which is what an agent CLI, a readline shell prompt and any full-screen editor turn on. Bracketed paste is the program's mode, not a property of the paste, so a destination with it off — macOS `/bin/sh`, a `read` loop, a bare REPL — takes the newlines as Return and runs the lines. That is what a manual ⌘V of the same notes would do there, and nothing in the control API can ask which mode a program is in, so the chord cannot check first.
 
@@ -94,4 +94,4 @@ A note lands on one line. revdiff has no visual range select, and its one range 
 
 Only one at a time per session. The overlay slot holds one occupant, so a second press is refused with `overlay already open` and the banner says exactly that; the review already up is untouched.
 
-macOS only, for `pbcopy` and `pbpaste` — which agterm is anyway.
+macOS only, for `pbcopy` and `pbpaste` — which Elis is anyway.
