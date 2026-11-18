@@ -176,6 +176,8 @@ class VtChannel {
     _end(null);
   }
 
+  static bool _sane(int cols, int rows) => cols >= 1 && cols <= 1000 && rows >= 1 && rows <= 1000;
+
   void _onFrame(LinkFrame f) {
     switch (f.kind) {
       case LinkKind.opened:
@@ -188,7 +190,7 @@ class VtChannel {
         }
         if (error != null) return _end('$error');
         if (_opened.isCompleted) return;
-        if ((o['cols'], o['rows']) case (final int cols, final int rows)) {
+        if ((o['cols'], o['rows']) case (final int cols, final int rows) when _sane(cols, rows)) {
           _events.add(Opened(cols, rows));
         } else {
           _mux._add(LinkFrame.json(LinkKind.close, id, {'reason': 'closed'})); // the relay holds it open: free the slot
@@ -200,6 +202,10 @@ class VtChannel {
         _events.add(Data(f.payload));
       case LinkKind.grid:
         final s = f.size!;
+        if (!_sane(s.cols, s.rows)) {
+          _mux._add(LinkFrame.json(LinkKind.close, id, {'reason': 'closed'}));
+          return _end('the relay sent a bad GRID');
+        }
         _events.add(Grid(s.cols, s.rows));
       case LinkKind.resync:
         _stale += _unconsumed;

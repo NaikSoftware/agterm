@@ -116,9 +116,9 @@ class FakeSnapshot implements VtSnapshot {
 
 class FakeVt implements Vt {
   FakeVt(this.cols, this.rows);
-  int cols, rows, resets = 0;
+  int cols, rows, resets = 0, snapshots = 0;
   final written = <int>[];
-  bool disposed = false;
+  bool disposed = false, failSnapshot = false;
 
   @override
   void write(Uint8List bytes) => written.addAll(bytes);
@@ -137,7 +137,11 @@ class FakeVt implements Vt {
   @override
   bool mode(int mode) => false;
   @override
-  VtSnapshot snapshot() => FakeSnapshot(cols, rows);
+  VtSnapshot snapshot() {
+    snapshots++;
+    if (failSnapshot) throw StateError('boom');
+    return FakeSnapshot(cols, rows);
+  }
   @override
   void dispose() => disposed = true;
 }
@@ -229,6 +233,33 @@ void main() {
     expect(fit.onPressed, isNull); // visible and disabled
     expect(h.r.of(LinkKind.resize), isEmpty);
     expect([for (final f in h.r.frames) if (f.channel >= 2 && f.kind == LinkKind.data) f], isEmpty); // watch only
+    await h.stop();
+  });
+
+  testWidgets('aFloodOfDataCostsOneSnapshotPerFrame', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('a')));
+    await t.pump(); // the text view is cleared by now
+    final before = h.vts.single.snapshots;
+    h.r.send([for (var i = 0; i < 20; i++) ...frame(LinkKind.data, 2, utf8.encode('x'))]);
+    await t.pump();
+    expect(h.vts.single.snapshots - before, lessThanOrEqualTo(1));
+    await h.stop();
+  });
+
+  testWidgets('aFailingSnapshotFallsBackToText', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.vts.single.failSnapshot = true;
+    h.r.send(frame(LinkKind.data, 2, utf8.encode('a')));
+    await t.pump();
+    await t.pump();
+    expect(h.vts.single.disposed, isTrue);
+    expect(h.r.closes, contains(2));
+    expect(t.takeException(), isNull);
     await h.stop();
   });
 

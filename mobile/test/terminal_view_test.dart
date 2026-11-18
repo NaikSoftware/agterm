@@ -53,7 +53,7 @@ void main() {
     expect(paragraphs('\x1b[4ma b'), 1); // the underlined space stays in the run
     expect(paragraphs('\x1b[4m   '), 1); // spaces alone still draw their underline
     expect(paragraphs('\x1b[9m  '), 1);
-  });
+  }, skip: missing);
 
   testWidgets('rowCacheRepaintsOnlyChangedRows', (tester) async {
     final vt = make(20, 5)..write(_b('one\r\ntwo\r\nthree\r\nfour'));

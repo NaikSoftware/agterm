@@ -12,7 +12,8 @@ Vt openVt(int cols, int rows) {
   return Vt(cols, rows);
 }
 
-/// Notifies on every change; [snapshot] reads the emulator at most once per change, so a flood costs one read a frame.
+/// Notifies on every change; [snapshot] reads the emulator only when asked and at most once per change. Listeners that
+/// do not ask (the screen, once the text view is cleared) leave the read to the build: one a frame.
 class TermSession extends ChangeNotifier {
   TermSession(this.mux, String target, this.pane, {Vt Function(int cols, int rows) vt = openVt}) : _makeVt = vt {
     mux.open(target, pane: pane).then(_opened, onError: (Object e) => _end(e is ElisError ? e.message : '$e'));
@@ -49,8 +50,17 @@ class TermSession extends ChangeNotifier {
     final vt = _vt;
     if (!_dirty || vt == null) return;
     _dirty = false;
-    _snapshot = vt.snapshot();
-    _hold = vt.mode(2026);
+    try {
+      _snapshot = vt.snapshot();
+      _hold = vt.mode(2026);
+    } catch (err) {
+      // read from build(): end the session now, tell the listeners after the frame
+      unawaited(_ch?.close());
+      ended = 'The terminal view is not available: $err';
+      _snapshot = null;
+      _release();
+      scheduleMicrotask(notifyListeners);
+    }
   }
 
   void _opened(VtChannel ch) {

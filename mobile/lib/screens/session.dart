@@ -161,7 +161,7 @@ class _SessionScreenState extends State<SessionScreen> {
       }
       unawaited(_load());
       unawaited(_syncFit());
-    } else if (t.snapshot != null && text.isNotEmpty) {
+    } else if (text.isNotEmpty && t.snapshot != null) {
       text = ''; // shown from now on; a fallback later starts from a fresh read, not this one
     }
     setState(() {});

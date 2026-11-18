@@ -358,4 +358,29 @@ void main() {
     final last = r.frames.last;
     expect((last.kind, last.channel), (LinkKind.close, 2));
   });
+
+  for (final (cols, rows) in [(0, 24), (80, 1001), (-1, 5)]) {
+    test('anOutOfRangeOpenedIsRefused_${cols}x$rows', () async {
+      final (m, r, _) = await upgraded();
+      final f = m.open('w');
+      await flush();
+      r.send(json(LinkKind.opened, 2, {'cols': cols, 'rows': rows}));
+      await expectLater(f, throwsA(isA<ElisError>()));
+      expect((r.frames.last.kind, r.frames.last.channel), (LinkKind.close, 2));
+    });
+  }
+
+  test('anOutOfRangeGridClosesTheChannel', () async {
+    final (m, r, _) = await upgraded();
+    final f = m.open('w');
+    await flush();
+    r.send(json(LinkKind.opened, 2, {'cols': 80, 'rows': 24}));
+    final ch = await f;
+    final seen = <String>[];
+    ch.events.listen((e) => seen.add(describe(e)));
+    r.send(grid(2, 80, 5000));
+    await flush();
+    expect(seen, ['opened 80x24', 'closed the relay sent a bad GRID']);
+    expect((r.frames.last.kind, r.frames.last.channel), (LinkKind.close, 2));
+  });
 }
