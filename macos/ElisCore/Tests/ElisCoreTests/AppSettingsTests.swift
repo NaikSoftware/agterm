@@ -875,7 +875,7 @@ struct AppSettingsTests {
         for element in InterfaceElement.allCases {
             #expect((element.symbolName == nil) == textOnly.contains(element), "\(element)")
         }
-        let rowIcons: Set<InterfaceElement> = [.sessionIcons, .workspaceIcons]
+        let rowIcons: Set<InterfaceElement> = [.sessionIcons, .workspaceIcons, .workspaceAddSession]
         let symbols = InterfaceElement.allCases.filter { !rowIcons.contains($0) }.compactMap(\.symbolName)
         #expect(Set(symbols).count == symbols.count)
         #expect(InterfaceElement.sessionIcons.symbolName == InterfaceElement.quickTerminal.symbolName)
@@ -884,6 +884,8 @@ struct AppSettingsTests {
         #expect(InterfaceElement.newWorkspace.assetName == InterfaceElement.workspaceIcons.assetName)
         #expect(InterfaceElement.sessionIcons.assetName == "session-terminal")
         #expect(InterfaceElement.focusFilter.assetName == "focus-frame")
+        #expect(InterfaceElement.workspaceAddSession.symbolName == InterfaceElement.newSession.symbolName)
+        #expect(InterfaceElement.workspaceAddSession.assetName == "session-plus")
     }
 
     @Test func settingsOrderListsTextOnlyElementsFirst() {

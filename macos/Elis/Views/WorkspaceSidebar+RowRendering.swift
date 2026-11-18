@@ -371,10 +371,8 @@ extension WorkspaceSidebar.Coordinator {
     private func makeAddSessionButton() -> NSButton {
         let btn = makeRowButton(identifier: "workspace-add-session", label: "New Session…",
                                 action: #selector(addSessionButtonClicked(_:)))
-        let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
-        btn.image = NSImage(systemSymbolName: InterfaceElement.workspaceAddSession.symbolName!, accessibilityDescription: "New Session")?
-            .withSymbolConfiguration(config)
-        btn.image?.isTemplate = true
+        // the same Lucide size as the repeat-launcher button beside it (`SidebarCellView.setAddButtonVisible`).
+        btn.image = NSImage.bundledIcon(InterfaceElement.workspaceAddSession.assetName!, size: 13)
         btn.imageScaling = .scaleNone
         return btn
     }
