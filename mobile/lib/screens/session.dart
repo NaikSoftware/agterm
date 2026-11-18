@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 
 import '../client.dart';
 import '../model.dart';
+import '../terminal/term_session.dart';
+import '../terminal/terminal_view.dart';
+import '../terminal/vt.dart';
 import '../theme.dart';
 import 'actions.dart';
 import 'home.dart' show StatusChip;
@@ -34,9 +37,10 @@ const keys = [
 ];
 
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.model, required this.sessionId});
+  const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt});
   final ElisModel model;
   final String sessionId;
+  final Vt Function(int cols, int rows) vt;
 
   @override
   State<SessionScreen> createState() => _SessionScreenState();
@@ -58,6 +62,8 @@ class _SessionScreenState extends State<SessionScreen> {
   double _dragRows = 0; // a drag's distance in rows not sent yet
   bool _scrolling = false;
   bool polling = false;
+  TermSession? term; // a Live pane watched as a terminal; the text poll stops meanwhile
+  final _refused = <String>{}; // panes whose terminal the relay refused or closed on this visit: text view
 
   ElisModel get m => widget.model;
   Session? get s => m.session(widget.sessionId);
@@ -70,12 +76,14 @@ class _SessionScreenState extends State<SessionScreen> {
     poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _load());
     m.addListener(_onModel);
     _lifecycle = AppLifecycleListener(onPause: () => _setForeground(false), onResume: () => _setForeground(true));
+    _syncTerm();
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncFit()); // the first layout gives the screen's size
     _visit();
   }
 
   void _setForeground(bool on) {
     _foreground = on;
+    _syncTerm();
     _syncFit();
   }
 
@@ -85,6 +93,8 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   void dispose() {
     poll?.cancel();
+    term?.removeListener(_onTerm);
+    term?.close();
     m.removeListener(_onModel);
     _lifecycle.dispose();
     _release(pane);
@@ -102,12 +112,52 @@ class _SessionScreenState extends State<SessionScreen> {
       return;
     }
     if (pane == 'right' && s?.hasSplit != true) pane = 'left';
+    _syncTerm(); // a reconnect brings a new mux; a pane can stop being Live
     setState(() {});
     _syncFit(); // a reconnect cleared the fits the computer gave back
   }
 
+  /// Watch the pane as a terminal when it is Live, the relay has the mux and the screen is in front; else the text view.
+  void _syncTerm() {
+    final want = _foreground &&
+        !m.background &&
+        m.state == LinkState.connected &&
+        m.mux != null &&
+        !scrollback && // shortcut: scrollback is the text view's; the Term view has no history until M5
+        s?.livePanes.contains(pane) == true &&
+        !_refused.contains(pane);
+    final t = term;
+    if (t != null && (!want || t.pane != pane || t.mux != m.mux)) {
+      t.removeListener(_onTerm);
+      t.close(); // CLOSE: the Mac's viewer count drops; a resume opens a fresh channel
+      term = null;
+    }
+    if (want && term == null) term = TermSession(m.mux!, widget.sessionId, pane, vt: widget.vt)..addListener(_onTerm);
+  }
+
+  void _onTerm() {
+    final t = term;
+    if (!mounted || t == null) return;
+    if (t.ended case final reason?) {
+      t.removeListener(_onTerm);
+      term = null;
+      // a lost link shows the disconnected state and reopens on the next mux; anything else falls back to text, said once
+      if (reason != 'Disconnected' && reason != revokedMessage) {
+        _refused.add(t.pane);
+        report(context, reason);
+      }
+      unawaited(_load());
+      unawaited(_syncFit());
+    }
+    setState(() {});
+  }
+
   Future<void> _load() async {
     if (polling || m.state != LinkState.connected || m.background || ModalRoute.of(context)?.isCurrent != true) return;
+    if (term != null) {
+      if (s != null && s!.unseen > 0) unawaited(m.act('session.seen', target: widget.sessionId));
+      return;
+    }
     polling = true;
     try {
       // fitted, the grid has more rows than the computer's view shows; reading the last ones gets all of them
@@ -168,7 +218,8 @@ class _SessionScreenState extends State<SessionScreen> {
   /// Fits or gives back the grid as [autoFit] says for the screen's state now; a change during a call runs after it.
   Future<void> _syncFit() async {
     if (fitting || !mounted) return;
-    final visible = _foreground && !m.background && m.state == LinkState.connected;
+    // shortcut: no Fit to phone on the Term view (it scales the Mac's grid); M5 adds it
+    final visible = _foreground && !m.background && m.state == LinkState.connected && term == null;
     final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible);
     if (on == null) return;
     setState(() => fitting = true);
@@ -233,7 +284,8 @@ class _SessionScreenState extends State<SessionScreen> {
   Widget build(BuildContext context) {
     final s = this.s;
     if (s == null) return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
-    final options = promptOptions(text);
+    final t = term;
+    final options = promptOptions(t == null ? text : t.snapshot?.lines.map((l) => l.text).join('\n') ?? '');
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -264,7 +316,14 @@ class _SessionScreenState extends State<SessionScreen> {
       body: SafeArea(
         child: Column(children: [
           // the buttons float over the screen's top edge, so the terminal takes the whole height
-          Expanded(child: Stack(children: [Positioned.fill(child: _terminal()), Positioned(top: 14, right: 18, child: _toolbar(s))])),
+          Expanded(
+              child: Stack(children: [
+            Positioned.fill(child: _terminal()),
+            Positioned(top: 14, right: 18, child: _toolbar(s)),
+            if (m.state != LinkState.connected)
+              const Center(
+                  child: Text('Disconnected. Reconnecting…', key: Key('disconnected'), style: TextStyle(color: C.danger, fontWeight: FontWeight.w600))),
+          ])),
           if (options.isNotEmpty) _answers(options),
           _keyBar(),
           _composer(),
@@ -297,6 +356,7 @@ class _SessionScreenState extends State<SessionScreen> {
         pane = p;
         text = '';
       });
+      _syncTerm(); // closes the other pane's channel, opens this one's when it is Live
       _load();
       _syncFit();
     }
@@ -307,9 +367,11 @@ class _SessionScreenState extends State<SessionScreen> {
         ],
         seg('Scrollback', scrollback, () {
           setState(() => scrollback = !scrollback);
+          _syncTerm();
           _load();
         }, key: const Key('scrollback')),
-        seg(m.fitted.containsKey(_fitKey) ? 'Restore PC size' : 'Fit to phone', m.fitted.containsKey(_fitKey), fitting ? () {} : toggleFit,
+        if (term == null)
+          seg(m.fitted.containsKey(_fitKey) ? 'Restore PC size' : 'Fit to phone', m.fitted.containsKey(_fitKey), fitting ? () {} : toggleFit,
             key: const Key('fitPhone')),
     ]);
   }
@@ -343,7 +405,22 @@ class _SessionScreenState extends State<SessionScreen> {
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         decoration: BoxDecoration(color: C.term, border: Border.all(color: const Color(0xFF1A1C24)), borderRadius: BorderRadius.circular(12)),
         clipBehavior: Clip.antiAlias,
-        child: LayoutBuilder(builder: (context, box) {
+        child: term != null ? _termView(term!) : _textView(),
+      );
+
+  // the grid scaled to the width; taller than the box, the bottom rows (the cursor's) stay in view
+  Widget _termView(TermSession t) {
+    final snap = t.snapshot;
+    if (snap == null) return const SizedBox.expand(key: Key('term'));
+    return SingleChildScrollView(
+      key: const Key('term'),
+      reverse: true,
+      padding: const EdgeInsets.all(12),
+      child: TerminalView(snapshot: snap, hold: t.hold),
+    );
+  }
+
+  Widget _textView() => LayoutBuilder(builder: (context, box) {
           // the computer's own grid width, so a full-width row fills one phone row exactly; history written at a wider
           // size (before Fit to phone) wraps rather than shrinking everything
           final cols = max(20, _columns ?? text.split('\n').fold<int>(20, (a, l) => max(a, l.runes.length)));
@@ -369,8 +446,7 @@ class _SessionScreenState extends State<SessionScreen> {
             child: SizedBox(width: double.infinity, child: body),
           );
           return _remoteScroll ? GestureDetector(onVerticalDragUpdate: _drag, child: view) : view;
-        }),
-      );
+        });
 
   Widget _answers(List<PromptOption> options) => Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
