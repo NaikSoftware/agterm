@@ -36,13 +36,13 @@ final class PhoneLinkEvents: @unchecked Sendable {
 
     /// The next line for channel 1, newline included. Relay queue only.
     func next() -> Data? {
-        if gap {
-            gap = false
-            return Data("{\"gap\":true}\n".utf8)
-        }
         if dropped > 0 {
             defer { dropped = 0 }
             return Data("{\"dropped\":\(dropped)}\n".utf8)
+        }
+        if gap {
+            gap = false
+            return Data("{\"gap\":true}\n".utf8)
         }
         guard !lines.isEmpty else { return nil }
         let line = lines.removeFirst()
@@ -54,7 +54,9 @@ final class PhoneLinkEvents: @unchecked Sendable {
 
     private func poll() {
         let client = SocketClient(path: socketPath)
-        var state = EventStreamState(kinds: nil, limit: nil) // no cursor: the bootstrap read anchors at the tail
+        // no cursor: the bootstrap read anchors at the tail; events between the upgrade and this read are skipped without
+        // a gap, since the phone reads `tree` after the upgrade
+        var state = EventStreamState(kinds: nil, limit: nil)
         while !isStopped {
             let rows: [Data]
             do {
@@ -78,6 +80,10 @@ final class PhoneLinkEvents: @unchecked Sendable {
 
     private func markGap() {
         guard !isStopped else { return }
+        // the `tree` the gap makes the phone read supersedes rows still queued, so they go as dropped
+        dropped += lines.count
+        lines.removeAll()
+        bytes = 0
         gap = true
         ready()
     }

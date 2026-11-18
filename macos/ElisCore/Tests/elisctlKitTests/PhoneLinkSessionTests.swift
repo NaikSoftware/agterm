@@ -181,6 +181,29 @@ struct PhoneLinkSessionTests {
         #expect(reader.json(from: phone)?["seq"] as? Int == 1)
     }
 
+    /// Rows still queued when the cursor breaks are older than the `tree` the gap makes the phone read, so they go.
+    @Test func aGapSupersedesQueuedEvents() throws {
+        let (fixture, phone) = try Self.upgraded()
+        defer { fixture.stop() }
+        #expect(fixture.server.waitEventRead { $0 == nil })
+        phone.hold()
+        fixture.server.addEvents(1000, padding: 300) // about 360 KiB: past the hand-off, so rows wait in the queue
+        #expect(fixture.server.waitEventRead { $0 == 1000 })
+        fixture.server.failNextEventRead()
+        #expect(fixture.server.waitEventRead { _ in fixture.server.eventReadCursors().filter { $0 == nil }.count >= 2 })
+        fixture.relay.queue.sync {} // the gap's hop ran before the restarted read
+        fixture.server.addEvents(1)
+        phone.release()
+        let reader = MuxReader(channel: 1)
+        var lines: [[String: Any]] = []
+        while lines.last?["seq"] as? Int != 1001 { lines.append(try #require(reader.json(from: phone))) }
+        let gap = try #require(lines.firstIndex { $0["gap"] as? Bool == true })
+        let before = lines[..<gap].compactMap { $0["seq"] as? Int }
+        #expect(lines[(gap + 1)...].compactMap { $0["seq"] as? Int } == [1001])
+        #expect(lines[(gap + 1)...].allSatisfy { $0["dropped"] == nil })
+        #expect(before == before.sorted() && (before.last ?? 0) < 1001)
+    }
+
     @Test func pollerStopsOnClose() throws {
         let (fixture, phone) = try Self.upgraded()
         defer { fixture.stop() }
