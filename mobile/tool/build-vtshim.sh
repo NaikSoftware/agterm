@@ -28,7 +28,8 @@ STAMP="$GHOSTTY_REV $(shasum -a 256 "$SHIM" | cut -c1-16) $(shasum -a 256 tool/b
 ABIS=(arm64-v8a x86_64)
 OUTPUTS=(android/app/src/main/jniLibs/arm64-v8a/libvtshim.so android/app/src/main/jniLibs/x86_64/libvtshim.so
   "$OUT_DIR/libvtshim.dylib")
-FUNCS=(vts_new vts_free vts_write vts_resize vts_reset vts_mode vts_scroll_to vts_snapshot)
+FUNCS=(vts_new vts_free vts_write vts_resize vts_reset vts_mode vts_scroll_to vts_snapshot
+  vts_encode_key vts_encode_paste vts_encode_wheel vts_encode_focus vts_take_replies)
 
 check() {
   local f fn syms ok=0

@@ -157,6 +157,25 @@ class FakeVt implements Vt {
   }
   @override
   void dispose() => disposed = true;
+
+  // canned emulator replies, drained by takeReplies like the shim's buffer
+  final replies = <int>[];
+  @override
+  Uint8List encodeKey(VtKey key, {int mods = 0, String text = ''}) => Uint8List.fromList(utf8.encode(text));
+  @override
+  Uint8List encodeText(String text) => Uint8List.fromList(utf8.encode(text));
+  @override
+  Uint8List encodePaste(String text) => Uint8List.fromList(utf8.encode(text));
+  @override
+  Uint8List encodeWheel({required bool up, required int col, required int row}) => Uint8List(0);
+  @override
+  Uint8List encodeFocus(bool gained) => Uint8List(0);
+  @override
+  Uint8List takeReplies() {
+    final r = Uint8List.fromList(replies);
+    replies.clear();
+    return r;
+  }
 }
 
 class Harness {

@@ -1,9 +1,40 @@
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
 typedef _H = Pointer<Void>;
+typedef _Out = Pointer<Uint8>;
+
+/// The keys the phone sends, with their `GhosttyKey` values from `ghostty/vt/key/event.h`.
+enum VtKey {
+  escape(120),
+  tab(64),
+  enter(58),
+  backspace(53),
+  arrowUp(78),
+  arrowDown(75),
+  arrowLeft(76),
+  arrowRight(77),
+  home(71),
+  end(69),
+  pageUp(74),
+  pageDown(73),
+  c(22),
+  d(23),
+  l(31),
+  r(37),
+  z(45),
+  u(40),
+  unidentified(0);
+
+  const VtKey(this.code);
+  final int code;
+}
+
+/// `GhosttyMods` bits for [Vt.encodeKey].
+const vtShift = 1, vtCtrl = 2, vtAlt = 4;
 
 /// The vtshim functions, bound once per process by [Vt.open].
 class _Lib {
@@ -16,7 +47,17 @@ class _Lib {
         reset = l.lookupFunction<Void Function(_H), void Function(_H)>('vts_reset', isLeaf: true),
         mode = l.lookupFunction<Int32 Function(_H, Uint16), int Function(_H, int)>('vts_mode', isLeaf: true),
         snapshot = l.lookupFunction<Int32 Function(_H, Pointer<Uint32>, Int32), int Function(_H, Pointer<Uint32>, int)>(
-            'vts_snapshot', isLeaf: true);
+            'vts_snapshot', isLeaf: true),
+        encodeKey = l.lookupFunction<Int32 Function(_H, Uint32, Uint32, Uint32, _Out, Size, _Out, Int32),
+            int Function(_H, int, int, int, _Out, int, _Out, int)>('vts_encode_key', isLeaf: true),
+        encodePaste = l.lookupFunction<Int32 Function(_H, _Out, Size, _Out, Int32), int Function(_H, _Out, int, _Out, int)>(
+            'vts_encode_paste', isLeaf: true),
+        encodeWheel = l.lookupFunction<Int32 Function(_H, Int32, Uint16, Uint16, _Out, Int32),
+            int Function(_H, int, int, int, _Out, int)>('vts_encode_wheel', isLeaf: true),
+        encodeFocus = l.lookupFunction<Int32 Function(_H, Int32, _Out, Int32), int Function(_H, int, _Out, int)>(
+            'vts_encode_focus', isLeaf: true),
+        takeReplies = l.lookupFunction<Int32 Function(_H, _Out, Int32), int Function(_H, _Out, int)>(
+            'vts_take_replies', isLeaf: true);
 
   final _H Function(int, int, int) create;
   final void Function(_H) free;
@@ -25,6 +66,11 @@ class _Lib {
   final void Function(_H) reset;
   final int Function(_H, int) mode;
   final int Function(_H, Pointer<Uint32>, int) snapshot;
+  final int Function(_H, int, int, int, _Out, int, _Out, int) encodeKey;
+  final int Function(_H, _Out, int, _Out, int) encodePaste;
+  final int Function(_H, int, int, int, _Out, int) encodeWheel;
+  final int Function(_H, int, _Out, int) encodeFocus;
+  final int Function(_H, _Out, int) takeReplies;
 }
 
 // Snapshot layout: see mobile/native/vtshim.c (header comment above vts_snapshot).
@@ -55,6 +101,8 @@ class Vt {
   late Pointer<Uint32> _buf;
   Pointer<Uint8> _in = nullptr;
   int _inCap = 0;
+  Pointer<Uint8> _out = nullptr;
+  int _outCap = 0;
   bool _disposed = false;
 
   _H get _live => _disposed ? throw StateError('Vt used after dispose') : _h;
@@ -62,6 +110,11 @@ class Vt {
   void write(Uint8List bytes) {
     final h = _live;
     if (bytes.isEmpty) return;
+    _stage(bytes);
+    _bound.write(h, _in, bytes.length);
+  }
+
+  void _stage(List<int> bytes) {
     if (bytes.length > _inCap) {
       final grown = malloc<Uint8>(bytes.length);
       malloc.free(_in);
@@ -69,7 +122,64 @@ class Vt {
       _inCap = bytes.length;
     }
     _in.asTypedList(bytes.length).setAll(0, bytes);
-    _bound.write(h, _in, bytes.length);
+  }
+
+  // Runs a shim encoder into the output buffer, growing it once on -needed (the vts_snapshot convention).
+  Uint8List _encode(int Function(_Out out, int cap) call) {
+    if (_outCap == 0) {
+      _out = malloc<Uint8>(_outCap = 256);
+    }
+    var n = call(_out, _outCap);
+    if (n < 0) {
+      malloc.free(_out);
+      _out = malloc<Uint8>(_outCap = -n);
+      n = call(_out, _outCap);
+    }
+    return n <= 0 ? Uint8List(0) : Uint8List.fromList(_out.asTypedList(n));
+  }
+
+  /// The bytes [key] sends under the program's current modes (cursor keys, kitty flags...); [text] is its UTF-8 text.
+  Uint8List encodeKey(VtKey key, {int mods = 0, String text = ''}) {
+    final h = _live;
+    final utf8Text = utf8.encode(text);
+    // a letter's unshifted codepoint lets ctrl and kitty encode it without text
+    final unshifted = key.name.length == 1 ? key.name.codeUnitAt(0) : 0;
+    return _encode((out, cap) {
+      _stage(utf8Text);
+      return _bound.encodeKey(h, key.code, mods, unshifted, _in, utf8Text.length, out, cap);
+    });
+  }
+
+  /// Typed text as the program expects it, sent as one unidentified key.
+  Uint8List encodeText(String text) => encodeKey(VtKey.unidentified, text: text);
+
+  /// Pasted text: bracketed under mode 2004, newlines as carriage returns otherwise.
+  Uint8List encodePaste(String text) {
+    final h = _live;
+    final bytes = utf8.encode(text);
+    if (bytes.isEmpty) return Uint8List(0);
+    return _encode((out, cap) {
+      _stage(bytes); // the shim rewrites it in place
+      return _bound.encodePaste(h, _in, bytes.length, out, cap);
+    });
+  }
+
+  /// One wheel notch at a zero-based cell; empty when the program does not track the mouse.
+  Uint8List encodeWheel({required bool up, required int col, required int row}) {
+    final h = _live;
+    return _encode((out, cap) => _bound.encodeWheel(h, up ? 1 : 0, col, row, out, cap));
+  }
+
+  /// Focus in/out; empty unless the program set mode 1004.
+  Uint8List encodeFocus(bool gained) {
+    final h = _live;
+    return _encode((out, cap) => _bound.encodeFocus(h, gained ? 1 : 0, out, cap));
+  }
+
+  /// The emulator's replies to queries (DA, cursor position, size) since the last take, to send to the program.
+  Uint8List takeReplies() {
+    final h = _live;
+    return _encode((out, cap) => _bound.takeReplies(h, out, cap));
   }
 
   void resize(int cols, int rows) => _bound.resize(_live, cols, rows);
@@ -107,6 +217,7 @@ class Vt {
     _bound.free(_h);
     malloc.free(_buf);
     malloc.free(_in);
+    malloc.free(_out);
   }
 }
 
