@@ -2,7 +2,7 @@
 
 The phone app for Elis (Flutter, Android): the session tree with status dots (pulsing while an agent works), a
 session's screen with Fit to phone, on while the screen is open (gives the program the phone's columns and rows, so it redraws for the phone and
-nothing wraps, and a drag scrolls the program itself; Restore PC size gives the grid back to the computer), typing into it, the sidebar's row menus, and notifications when an agent blocks or finishes while the app is in the background, over
+nothing wraps, and gives the grid back on leave), typing into it, Take over and Give back of a Live pane, the sidebar's row menus, and notifications when an agent blocks or finishes while the app is in the background, over
 the TLS relay that `elisctl mobile serve` runs on the computer. The project
 README's [Phone app](../linux/README.md#phone-app) section covers the relay and its security model.
 
@@ -13,11 +13,15 @@ point `JAVA_HOME` at it or run `flutter config --jdk-dir <jdk>`.
 
 ```sh
 cd mobile
-./tool/build-vtshim.sh       # once per ghostty pin: libvtshim for Android and the host (needs zig@0.17, NDK 28.2)
+./tool/build-vtshim.sh       # once per ghostty pin or shim change: libvtshim for Android and the host (needs zig@0.17, NDK 28.2)
 flutter pub get
 flutter run                 # on a connected device or emulator
 flutter build apk           # build/app/outputs/flutter-apk/app-release.apk
 ```
+
+`libvtshim` (`native/vtshim.c`) parses the pane's stream and, for Take over, exports the key, paste, wheel and focus
+encoders and the terminal's query replies (`vts_encode_*`, `vts_take_replies`); a new export joins the `FUNCS` list
+in `tool/build-vtshim.sh`.
 
 ## Pairing
 

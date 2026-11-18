@@ -19,7 +19,7 @@ when_to_use: >
   ask the user to type a value or a message, let the user pick one or several items from a list,
   show an image inline, show this markdown file rendered, show this source file or log at a line, show me the diff of a file or the changes as links, tail or follow this log file, search the log or text page in the overlay, wrap long lines in the text or log page, show this HTML page or artifact, make an HTML page or explainer for this and show
   it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, pin a project folder to a workspace, route a session to its project workspace, show status or activity under a session in the sidebar, show or hide the file panel (file tree), make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, make this session a companion, move a companion under another session, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, open a page as its own session row in the sidebar, run my custom command, send a message to the other pane or another agent, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, open a remote window for my Linux server, run sessions on a Linux host with elis-server, watch events or wait for a session on the elis-server host, install elis-server on a Linux host, detach or reattach a remote session, copy this to the clipboard, was Elis upgraded under the running app, upgrade Elis without losing sessions, what recipes are there, connect my phone, pair Elis Mobile, revoke a paired phone, fit a pane to the phone,
-  attach a script to a pane's terminal stream,
+  attach a script to a pane's terminal stream, take over a pane from a script, did the phone take over a pane,
   the keymap editor will not open.
 allowed-tools: Bash(elisctl *)
 ---
@@ -311,7 +311,7 @@ given. Use `--json` for one bare event object per line; filter with repeatable o
 `--kind` over `status`, `notify`, `session.created` (carries `parent` for a companion), `session.closed`, `session.selected` (a window's
 selection moved; carries the session that lost it as `previous`), `tree.changed`, `pane.split`,
 `pane.scratch`, `pane.focused` (a session's selection moved between its two split panes; carries the
-pane and its `paneID`), `remote.opened`, `remote.closed`, `phone.connected|disconnected|refused` (carry `ip`), `phone.attached|detached` (carry `ip`, `paneID`), `app.launched` (once per app run, when hooks and
+pane and its `paneID`), `remote.opened`, `remote.closed`, `phone.connected|disconnected|refused` (carry `ip`), `phone.attached|detached` and `phone.claimed|released` (carry `ip`, `paneID`), `app.launched` (once per app run, when hooks and
 the socket are ready) and `message` (mail queued for a pane; carries `paneID`, `from` and `messageID`, never the body); resume with paired `--run RUN --after SEQ`; and set
 page size with `--limit 1...1000`. The app retains 4,096 events for one process run. Cursor run changes,
 expiry, and ahead-of-tail errors are fatal and are never silently rebaselined. Once the stream holds a
@@ -834,7 +834,7 @@ over the config. The remote needs `tic` (ncurses) and says so when it is missing
 
 **phone** — Elis Mobile (an Android app) reaches this Mac through a TLS relay that is off by default.
 `phone status|on|off|toggle|port|host|revoke|link` drives its Connect a Phone… window, `mobile serve|reset` runs
-the relay and replaces its token, `session grid` / `session scroll` fit and scroll a pane for the phone, and `session attach` attaches a script to a Live pane's terminal as a viewer. The
+the relay and replaces its token, `session grid` / `session scroll` fit and scroll a pane for the phone, and `session attach` attaches a script to a Live pane's terminal as a viewer, or with `--claim` as its lead. `tree` shows the phone's open views as `phoneViewers` and its Take over as `phoneLead`. The
 pairing link holds the token: never print it to a shared surface. Results, rules and the cases that clear a grid
 are in the [command reference](reference.md#phone).
 
