@@ -98,6 +98,21 @@ void main() {
     expect(vt.snapshot().lines[0].text, 'main');
   }, skip: skip);
 
+  test('useAfterDisposeThrows', () {
+    final vt = Vt(10, 3)..dispose();
+    vt.dispose(); // idempotent
+    expect(() => vt.write(_b('x')), throwsStateError);
+    expect(() => vt.resize(5, 2), throwsStateError);
+    expect(vt.reset, throwsStateError);
+    expect(() => vt.mode(2026), throwsStateError);
+    expect(vt.snapshot, throwsStateError);
+  }, skip: skip);
+
+  test('openWithAnotherPathThrows', () {
+    Vt.open(_lib); // same path: no-op
+    expect(() => Vt.open('libvtshim.so'), throwsStateError);
+  }, skip: skip);
+
   test('unknownModeThrows', () {
     expect(() => make(10, 3).mode(65000), throwsArgumentError);
   }, skip: skip);

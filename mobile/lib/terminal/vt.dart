@@ -40,10 +40,15 @@ class Vt {
   }
 
   static _Lib? _lib;
+  static String? _path;
   static _Lib get _bound => _lib ?? (throw StateError('Vt.open was not called'));
 
   /// Loads the shim: `libvtshim.so` on Android, `build/vtshim/libvtshim.dylib` in host tests.
-  static void open([String path = 'libvtshim.so']) => _lib ??= _Lib(DynamicLibrary.open(path));
+  static void open([String path = 'libvtshim.so']) {
+    if (_path != null && _path != path) throw StateError('vtshim already opened from $_path');
+    _lib ??= _Lib(DynamicLibrary.open(path));
+    _path = path;
+  }
 
   final _H _h;
   late int _cap;
@@ -52,37 +57,48 @@ class Vt {
   int _inCap = 0;
   bool _disposed = false;
 
+  _H get _live => _disposed ? throw StateError('Vt used after dispose') : _h;
+
   void write(Uint8List bytes) {
+    final h = _live;
     if (bytes.isEmpty) return;
     if (bytes.length > _inCap) {
+      final grown = malloc<Uint8>(bytes.length);
       malloc.free(_in);
-      _in = malloc<Uint8>(_inCap = bytes.length);
+      _in = grown;
+      _inCap = bytes.length;
     }
     _in.asTypedList(bytes.length).setAll(0, bytes);
-    _bound.write(_h, _in, bytes.length);
+    _bound.write(h, _in, bytes.length);
   }
 
-  void resize(int cols, int rows) => _bound.resize(_h, cols, rows);
+  void resize(int cols, int rows) => _bound.resize(_live, cols, rows);
 
   /// Full reset (RIS).
-  void reset() => _bound.reset(_h);
+  void reset() => _bound.reset(_live);
 
   /// A DEC private mode, e.g. 2026 (synchronized output) or 1049 (alternate screen).
   bool mode(int mode) {
-    final m = _bound.mode(_h, mode);
+    final m = _bound.mode(_live, mode);
     if (m < 0) throw ArgumentError.value(mode, 'mode', 'unknown DEC private mode');
     return m == 1;
   }
 
   VtSnapshot snapshot() {
-    var n = _bound.snapshot(_h, _buf, _cap);
+    final h = _live;
+    var n = _bound.snapshot(h, _buf, _cap);
     if (n < 0) {
+      final grown = malloc<Uint32>(-n);
       malloc.free(_buf);
-      _buf = malloc<Uint32>(_cap = -n);
-      n = _bound.snapshot(_h, _buf, _cap);
+      _buf = grown;
+      _cap = -n;
+      n = _bound.snapshot(h, _buf, _cap);
     }
     if (n <= 0) throw StateError('vts_snapshot failed ($n)');
-    return VtSnapshot._(_buf.asTypedList(n));
+    final s = _buf.asTypedList(n);
+    // the cell grid spans s[12] rows (viewport plus overscan); row r of the viewport starts at r * cols either way
+    if (s[12] < s[1]) throw StateError('vts_snapshot: ${s[12]} grid rows < ${s[1]} viewport rows');
+    return VtSnapshot._(s);
   }
 
   void dispose() {
@@ -102,6 +118,7 @@ class VtSnapshot {
         cursorX = s[2],
         cursorY = s[3],
         cursorVisible = s[4] & 3 == 3,
+        // only the viewport rows: the overscan row below them is not shown (no sub-row scroll in M4b)
         lines = List.generate(s[1], (r) => VtRow._(s, r));
 
   final int cols, rows, cursorX, cursorY;
