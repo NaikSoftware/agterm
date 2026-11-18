@@ -10,16 +10,31 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     struct Link {
         /// Opens the channel in the scheduler and sends OPENED.
         let opened: (_ cols: UInt16, _ rows: UInt16) -> Void
+        /// Resets the channel's queue and credit to the full window, then sends RESYNC and GRID.
+        let resynced: (_ cols: UInt16, _ rows: UInt16) -> Void
         /// Queues output bytes on the channel.
         let output: (Data) -> PhoneLinkScheduler.Enqueue
-        /// Sends a frame that bypasses the scheduler (OPENED with an error, CLOSE).
+        /// Sends a frame that bypasses the scheduler (OPENED with an error, GRID, CLOSE).
         let frame: (PhoneLinkFrame) -> Void
         /// The channel is over: the link closes it in the scheduler and forgets this terminal.
         let ended: () -> Void
+        /// Bytes queued on the channel and not sent yet, for the stall watchdog.
+        let pending: () -> Int
     }
 
     /// A `screen` run that has not finished by then is killed.
     static let screenTimeout: TimeInterval = 5
+    /// A hung app must not hold the attach request's thread forever.
+    static let attachTimeout: TimeInterval = 10
+    /// Re-attaches after an overflow start at most this often.
+    static let reattachInterval: TimeInterval = 1
+    /// An overflow this soon after its attach started counts toward "session too old"; two in a row close.
+    static let earlyOverflow: TimeInterval = 2
+    /// Bytes waiting this long with no CREDIT from the phone close the channel.
+    static let stallTimeout: TimeInterval = 30
+    static let localPoll: TimeInterval = 2
+    /// Each remote poll is a fresh ssh connection.
+    static let remotePoll: TimeInterval = 10
 
     let channel: UInt32
     private let request: PhoneLinkOpen
@@ -28,13 +43,29 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     private let peer: String
     private let log: (String) -> Void
     private let link: Link
-    // the resync and grid-poll timers (Task 6) read these
     let clock: () -> Date
     let after: (TimeInterval, @escaping @Sendable () -> Void) -> Void
     private var pty: PhoneLinkPty?
+    /// Bumped for each attach and at an overflow, so bytes and the exit of a replaced attach are dropped.
+    private var epoch = 0
+    /// Set from the first attach on; until then a failure answers OPENED with an error.
     private var paneID: String?
     private var filter = PhoneLinkTitleFilter()
     private var stopped = false
+    private var screenArgv: [String] = []
+    private var remote = false
+    /// The running `screen` (open, resync or poll), killed by `stop()`; at most one at a time.
+    private var screenProcess: Process?
+    /// The grid the phone last heard.
+    private var grid: (cols: UInt16, rows: UInt16) = (0, 0)
+    private var nextPoll = Date.distantFuture
+    private var attachRequested = Date.distantPast
+    private var attachStarted = Date.distantPast
+    private var earlyOverflows = 0
+    /// From an overflow until the fresh attach runs.
+    private var resyncing = false
+    /// When bytes began to wait with no CREDIT since; nil while nothing waits.
+    private var waitingSince: Date?
 
     init(channel: UInt32, request: PhoneLinkOpen, socketPath: String, queue: DispatchQueue, peer: String,
          log: @escaping (String) -> Void, clock: @escaping () -> Date,
@@ -50,29 +81,11 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         self.link = link
     }
 
-    /// Asks the app for the attach off the relay queue, so it does not wait behind the phone's control requests.
-    func start() {
-        var args: [String: Any] = [:]
-        args["pane"] = request.pane
-        let body = (try? JSONSerialization.data(withJSONObject: ["cmd": Command.sessionAttach.rawValue, "target": request.target,
-                                                                 "args": args], options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
-        let socketPath = socketPath
-        Thread.detachNewThread { [self] in
-            let result: Result<(ControlAttach, ZmxScreen), Refusal>
-            do {
-                let answer = try JSONDecoder().decode(ControlResponse.self, from: SocketClient(path: socketPath).sendRaw(body))
-                guard answer.ok, let attach = answer.result?.attach else {
-                    throw Refusal(answer.error ?? "Elis gave no attach for this pane")
-                }
-                guard let screen = Self.screen(attach.screen) else { throw Refusal("could not read the pane's size") }
-                result = .success((attach, screen))
-            } catch let refusal as Refusal {
-                result = .failure(refusal)
-            } catch {
-                result = .failure(Refusal("Elis is not reachable: \(error)"))
-            }
-            queue.async { [self] in attach(result) }
-        }
+    func start() { requestAttach() }
+
+    /// The phone sent CREDIT on this channel; the scheduler has already sent what it allows.
+    func credited() {
+        waitingSince = resyncing || link.pending() > 0 ? clock() : nil
     }
 
     /// Ends the channel without a word to the phone: the phone closed it, or the link is closing.
@@ -80,32 +93,85 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         guard !stopped else { return }
         stopped = true
         pty?.terminate()
+        if let screenProcess, screenProcess.isRunning { screenProcess.terminate() }
         if let paneID { log("phone detached from \(peer) pane \(paneID)") }
     }
 
-    private func attach(_ result: Result<(ControlAttach, ZmxScreen), Refusal>) {
-        guard !stopped else { return }
-        let attach: ControlAttach, screen: ZmxScreen
-        switch result {
-        case let .success(answer): (attach, screen) = answer
-        case let .failure(refusal): return refuse(refusal.message)
+    /// Asks the app for the attach off the relay queue, so it does not wait behind the phone's control requests.
+    private func requestAttach() {
+        attachRequested = clock()
+        var args: [String: Any] = [:]
+        args["pane"] = request.pane
+        let body = (try? JSONSerialization.data(withJSONObject: ["cmd": Command.sessionAttach.rawValue, "target": request.target,
+                                                                 "args": args], options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+        let socketPath = socketPath
+        Thread.detachNewThread { [self] in
+            let result: Result<ControlAttach, Refusal>
+            do {
+                let line = try SocketClient(path: socketPath).sendRaw(body, timeout: Self.attachTimeout)
+                let answer = try JSONDecoder().decode(ControlResponse.self, from: line)
+                guard answer.ok, let attach = answer.result?.attach else {
+                    throw Refusal(answer.error ?? "Elis gave no attach for this pane")
+                }
+                result = .success(attach)
+            } catch let refusal as Refusal {
+                result = .failure(refusal)
+            } catch {
+                result = .failure(Refusal("Elis is not reachable: \(error)"))
+            }
+            queue.async { [self] in answered(result) }
         }
-        let cols = UInt16(screen.columns), rows = UInt16(screen.rows)
+    }
+
+    private func answered(_ result: Result<ControlAttach, Refusal>) {
+        guard !stopped else { return }
+        let attach: ControlAttach
+        switch result {
+        case let .success(answer): attach = answer
+        case let .failure(refusal): return fail(refusal.message)
+        }
+        screenArgv = attach.screen
+        remote = attach.remote
+        readScreen { [self] screen in
+            guard let screen else { return fail("could not read the pane's size") }
+            spawn(attach, cols: UInt16(screen.columns), rows: UInt16(screen.rows))
+        }
+    }
+
+    private func spawn(_ attach: ControlAttach, cols: UInt16, rows: UInt16) {
+        epoch += 1
+        let epoch = epoch
+        filter = PhoneLinkTitleFilter()
         do {
-            // output and exit hop to the relay queue, so they come after OPENED and the attached line
+            // output and exit hop to the relay queue, so they come after OPENED (or RESYNC) and the attached line
             pty = try PhoneLinkPty.spawn(attach.argv, cols: cols, rows: rows, onOutput: { [weak self, queue] bytes in
                 guard let self else { return }
-                queue.async { self.receive(bytes) }
+                queue.async { self.receive(bytes, epoch: epoch) }
             }, onExit: { [weak self, queue] _ in
                 guard let self else { return }
-                queue.async { self.exited() }
+                queue.async { self.exited(epoch: epoch) }
             })
         } catch {
-            return refuse("could not start the attach: \(error)")
+            return fail("could not start the attach: \(error)")
+        }
+        attachStarted = clock()
+        grid = (cols, rows)
+        if resyncing {
+            resyncing = false
+            link.resynced(cols, rows) // a resync prints no viewer lines
+            return
         }
         link.opened(cols, rows)
         paneID = attach.paneID
         log("phone attached from \(peer) pane \(attach.paneID)")
+        nextPoll = clock() + (remote ? Self.remotePoll : Self.localPoll)
+        tick()
+    }
+
+    /// Before OPENED the phone hears OPENED with the error; after it, CLOSE with it.
+    private func fail(_ message: String) {
+        guard paneID != nil else { return refuse(message) }
+        close(reason: message)
     }
 
     private func refuse(_ message: String) {
@@ -114,20 +180,63 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         link.ended()
     }
 
-    private func receive(_ bytes: Data) {
-        guard !stopped else { return }
+    private func receive(_ bytes: Data, epoch: Int) {
+        guard !stopped, epoch == self.epoch else { return }
         let filtered = filter.filter(bytes)
         guard !filtered.isEmpty else { return }
         switch link.output(filtered) {
-        case .queued, .closed: break
-        // Task 6 replaces this with a resync
-        case .overflowed: close(reason: "overflow")
+        case .queued: if waitingSince == nil, link.pending() > 0 { waitingSince = clock() }
+        case .closed: break
+        case .overflowed: overflowed()
         }
     }
 
-    private func exited() {
-        guard !stopped else { return }
+    /// The phone fell a whole buffer behind: drop this attach and start a fresh one, which repaints the screen.
+    private func overflowed() {
+        epoch += 1 // first: no byte of the old attach may follow RESYNC
+        pty?.terminate()
+        pty = nil
+        let now = clock()
+        earlyOverflows = now.timeIntervalSince(attachStarted) < Self.earlyOverflow ? earlyOverflows + 1 : 0
+        // an old daemon replays its whole scrollback to every viewer: re-attaching would loop
+        if earlyOverflows >= 2 { return close(reason: "session too old for the phone view") }
+        resyncing = true
+        if waitingSince == nil { waitingSince = now }
+        after(max(0, attachRequested.timeIntervalSince(now) + Self.reattachInterval)) { [weak self] in
+            guard let self, !stopped else { return }
+            requestAttach()
+        }
+    }
+
+    private func exited(epoch: Int) {
+        guard !stopped, epoch == self.epoch else { return }
         close(reason: "session ended")
+    }
+
+    /// Once a second from the first attach on: the stall watchdog and the grid poll.
+    private func tick() {
+        after(1) { [weak self] in
+            guard let self, !stopped else { return }
+            let now = clock()
+            if !resyncing, link.pending() == 0 {
+                waitingSince = nil
+            } else {
+                let since = waitingSince ?? now
+                waitingSince = since
+                if now.timeIntervalSince(since) >= Self.stallTimeout { return close(reason: "stalled") }
+            }
+            if !resyncing, screenProcess == nil, now >= nextPoll {
+                nextPoll = now + (remote ? Self.remotePoll : Self.localPoll)
+                readScreen { [self] screen in
+                    guard let screen, !resyncing else { return }
+                    let size = (cols: UInt16(screen.columns), rows: UInt16(screen.rows))
+                    guard size != grid else { return }
+                    grid = size
+                    link.frame(.grid(channel: channel, cols: size.cols, rows: size.rows))
+                }
+            }
+            tick()
+        }
     }
 
     /// Ends the channel and tells the phone why.
@@ -137,27 +246,41 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         link.ended()
     }
 
-    /// Runs `argv` with stdout captured and stderr dropped (an ssh warning must not reach the grid), killed after
-    /// `screenTimeout`; nil when it fails or prints no usable grid. Blocks: call off the relay queue.
-    private static func screen(_ argv: [String]) -> ZmxScreen? {
-        guard let path = argv.first else { return nil }
+    /// Runs `screen` with stdout captured and stderr dropped (an ssh warning must not reach the grid), killed after
+    /// `screenTimeout`; `done` gets nil when it fails or prints no usable grid, and never runs once stopped. An
+    /// earlier run still going is killed, so one runs at a time.
+    private func readScreen(_ done: @escaping @Sendable (ZmxScreen?) -> Void) {
+        if let screenProcess, screenProcess.isRunning { screenProcess.terminate() }
+        screenProcess = nil
+        guard let path = screenArgv.first else { return done(nil) }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = Array(argv.dropFirst())
+        process.arguments = Array(screenArgv.dropFirst())
         let output = Pipe()
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return nil }
-        DispatchQueue.global().asyncAfter(deadline: .now() + screenTimeout) { [process] in
+        // started here, so `stop()` on this queue always sees the process it must kill
+        guard (try? process.run()) != nil else { return done(nil) }
+        screenProcess = process
+        DispatchQueue.global().asyncAfter(deadline: .now() + Self.screenTimeout) { [process] in
             if process.isRunning { process.terminate() }
         }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationReason == .exit, process.terminationStatus == 0,
-              let screen = ZmxScreen(output: String(decoding: data, as: UTF8.self)),
-              (1...Int(UInt16.max)).contains(screen.columns), (1...Int(UInt16.max)).contains(screen.rows) else { return nil }
-        return screen
+        Thread.detachNewThread { [self] in
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            let screen = process.terminationReason == .exit && process.terminationStatus == 0
+                ? ZmxScreen(output: String(decoding: data, as: UTF8.self)) : nil
+            let usable = screen.flatMap {
+                (1...Int(UInt16.max)).contains($0.columns) && (1...Int(UInt16.max)).contains($0.rows) ? $0 : nil
+            }
+            queue.async { [self] in
+                guard screenProcess === process else { return } // replaced, or stopped
+                screenProcess = nil
+                guard !stopped else { return }
+                done(usable)
+            }
+        }
     }
 
     private struct Refusal: Error {

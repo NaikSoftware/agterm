@@ -298,16 +298,22 @@ final class RawStubServer: @unchecked Sendable {
     /// Each `events.read`'s `after`, nil for the bootstrap read.
     private var eventReads: [UInt64?] = []
     private var failNextRead = false
+    private var attachGate: DispatchSemaphore?
 
     /// What `session.attach` answers; by default the fake viewer prints "hi" and echoes what it reads.
     private var attach = ControlResponse(ok: true, result: ControlResult(attach: fakeAttach("printf 'hi'; cat")))
 
     /// A viewer that runs `script` under `sh`, for an 80x24 pane.
-    static func fakeAttach(_ script: String, paneID: String = "pane-1") -> ControlAttach {
-        ControlAttach(argv: ["/bin/sh", "-c", script], paneID: paneID, screen: ["/bin/sh", "-c", "printf '1 80 24 0 0 0\\n'"])
+    static func fakeAttach(_ script: String, paneID: String = "pane-1", screen: String = "printf '1 80 24 0 0 0\\n'",
+                           remote: Bool = false) -> ControlAttach {
+        ControlAttach(argv: ["/bin/sh", "-c", script], paneID: paneID, screen: ["/bin/sh", "-c", screen], remote: remote)
     }
 
     func answerAttach(_ response: ControlResponse) { lock.withLock { attach = response } }
+
+    /// `session.attach` answers only after `releaseAttach()`, or after 30 s.
+    func holdAttach() { lock.withLock { attachGate = DispatchSemaphore(value: 0) } }
+    func releaseAttach() { lock.withLock { () -> DispatchSemaphore? in defer { attachGate = nil }; return attachGate }?.signal() }
 
     func requests() -> [String] { lock.withLock { received } }
     func eventReadCursors() -> [UInt64?] { lock.withLock { eventReads } }
@@ -393,6 +399,7 @@ final class RawStubServer: @unchecked Sendable {
         guard byte == 0x0A, let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return }
         let cmd = object["cmd"] as? String ?? ""
         if cmd != "events.read" { lock.withLock { received.append(String(decoding: line, as: UTF8.self)) } }
+        if cmd == "session.attach", let gate = lock.withLock({ attachGate }) { _ = gate.wait(timeout: .now() + 30) }
         let reply = cmd == "version" ? #"{"ok":true,"result":{"app":{"version":"9.9.9"}}}"#
             : cmd == "events.read" ? eventsReply(object)
             : cmd == "session.attach" ? lock.withLock { String(decoding: (try? JSONEncoder().encode(attach)) ?? Data(), as: UTF8.self) }

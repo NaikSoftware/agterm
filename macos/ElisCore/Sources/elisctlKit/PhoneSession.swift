@@ -161,6 +161,10 @@ final class PhoneSession: @unchecked Sendable {
                             if revoked(token) { return close() }
                             request(line, reply: reply)
                         },
+                        revoked: { [weak self] in
+                            guard let self, let token else { return true }
+                            return revoked(token)
+                        },
                         socketPath: settings.socketPath, queue: queue, peer: connection.peerLabel,
                         window: connection is BlePhoneLink ? 16384 : 262_144, log: settings.log, clock: Date.init)
                     link.onEnd = { [weak self] in self?.close() }

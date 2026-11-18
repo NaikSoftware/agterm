@@ -113,21 +113,88 @@ struct PhoneLinkTerminalTests {
         #expect(Self.waitGone(token))
     }
 
+    /// The phone holds every send, so the 600 KiB burst overflows the relay buffer; the next attach is quiet.
+    @Test func overflowResyncs() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        let marker = NSTemporaryDirectory() + "elis-burst-\(UUID().uuidString.prefix(8))"
+        defer { try? FileManager.default.removeItem(atPath: marker) }
+        fixture.server.answerAttach(Self.answer(
+            "if [ -e '\(marker)' ]; then printf fresh; else touch '\(marker)'; head -c 614400 /dev/zero | tr '\\0' x; fi; exec cat"))
+        let before = fixture.server.requests().count
+        phone.hold()
+        phone.deliver(Self.open(2))
+        #expect(Self.waitAttaches(fixture, 2, after: before))
+        phone.release()
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(cols: 80, rows: 24))
+        let resync = try #require(reader.next(from: phone, channel: 2))
+        #expect(resync.kind == .resync)
+        let grid = try #require(reader.next(from: phone, channel: 2))
+        #expect(grid.kind == .grid && grid.size?.cols == 80 && grid.size?.rows == 24)
+        #expect(reader.text(from: phone, channel: 2, until: "fresh") == "fresh")
+        #expect(fixture.logged().filter { $0.hasPrefix("phone attached") }.count == 1)
+    }
+
+    /// The phone closes the channel while the app still thinks about the attach: nothing starts, the slot is free.
+    @Test func closeBeforeTheAttachAnswerStartsNothing() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        defer { fixture.server.releaseAttach() }
+        let before = fixture.server.requests().count
+        fixture.server.holdAttach()
+        phone.deliver(Self.open(2))
+        #expect(Self.waitAttaches(fixture, 1, after: before))
+        phone.deliver(PhoneLinkFrame.json(.close, channel: 2, PhoneLinkClose(reason: "done")).encoded())
+        phone.deliver(Self.open(2))
+        fixture.relay.queue.sync {} // both ran before the first answer
+        fixture.server.releaseAttach()
+        #expect(FrameReader().opened(from: phone, channel: 2) == PhoneLinkOpened(cols: 80, rows: 24))
+        #expect(fixture.waitLogged("phone attached from mem:1 pane pane-1"))
+        usleep(300_000) // the first answer has landed by now
+        #expect(fixture.logged().filter { $0.hasPrefix("phone attached") }.count == 1)
+        #expect(!fixture.logged().contains { $0.hasPrefix("phone detached") })
+    }
+
+    @Test func revokedPhoneCannotOpen() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { fixture.stop() }
+        let before = fixture.server.requests().count
+        // one relay-queue turn, so the revoke timer cannot close the link first
+        try fixture.relay.queue.sync {
+            _ = try MobilePairing.loadToken(in: fixture.mobileDir, fresh: true)
+            phone.onReceive?(Self.open(2))
+        }
+        #expect(FrameReader().opened(from: phone, channel: 2) == PhoneLinkOpened(error: "revoked"))
+        #expect(phone.waitClosed())
+        #expect(!fixture.server.requests().dropFirst(before).contains { $0.contains("session.attach") })
+    }
+
     // MARK: - helpers
+
+    /// Whether `count` `session.attach` requests arrive after the first `before` requests.
+    private static func waitAttaches(_ fixture: MobileFixture, _ count: Int, after before: Int) -> Bool {
+        let deadline = Date().addingTimeInterval(30)
+        while fixture.server.requests().dropFirst(before).filter({ $0.contains("session.attach") }).count < count {
+            if Date() > deadline { return false }
+            usleep(20_000)
+        }
+        return true
+    }
 
     private static func open(_ channel: UInt32, type: String = "vt", claim: Bool? = nil) -> Data {
         PhoneLinkFrame.json(.open, channel: channel, PhoneLinkOpen(type: type, target: "S1", pane: "left", claim: claim)).encoded()
     }
 
-    private static func answer(_ script: String) -> ControlResponse {
+    static func answer(_ script: String) -> ControlResponse {
         ControlResponse(ok: true, result: ControlResult(attach: RawStubServer.fakeAttach(script)))
     }
 
     /// A word that names this test's fake viewer in `ps`.
-    private static func token() -> String { "elis-fake-\(UUID().uuidString.prefix(8))" }
+    static func token() -> String { "elis-fake-\(UUID().uuidString.prefix(8))" }
 
     /// Whether every process with `token` in its command line is gone, within a slow-runner bound.
-    private static func waitGone(_ token: String) -> Bool {
+    static func waitGone(_ token: String) -> Bool {
         let deadline = Date().addingTimeInterval(30)
         while true {
             let pgrep = Process()
@@ -151,7 +218,7 @@ struct PhoneLinkTerminalTests {
 }
 
 /// Reads the relay's frames back, one channel at a time; frames for other channels wait for their own read.
-private final class FrameReader {
+final class FrameReader {
     private var decoder = PhoneLinkDecoder()
     private var frames: [PhoneLinkFrame] = []
 

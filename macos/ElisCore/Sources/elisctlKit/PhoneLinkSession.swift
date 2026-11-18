@@ -17,6 +17,8 @@ final class PhoneLinkSession {
     private let send: (Data, @escaping () -> Void) -> Void
     /// Answers one channel-0 request line; the answer is a whole line, newline included.
     private let forward: (Data, @escaping (Data) -> Void) -> Void
+    /// Whether the phone's pairing was revoked since it authenticated.
+    private let revoked: () -> Bool
     private let socketPath: String
     private let queue: DispatchQueue
     private let clock: () -> Date
@@ -36,10 +38,11 @@ final class PhoneLinkSession {
     private var closed = false
 
     init(send: @escaping (Data, @escaping () -> Void) -> Void, forward: @escaping (Data, @escaping (Data) -> Void) -> Void,
-         socketPath: String, queue: DispatchQueue, peer: String, window: UInt32, log: @escaping (String) -> Void,
+         revoked: @escaping () -> Bool, socketPath: String, queue: DispatchQueue, peer: String, window: UInt32, log: @escaping (String) -> Void,
          clock: @escaping () -> Date) {
         self.send = send
         self.forward = forward
+        self.revoked = revoked
         self.socketPath = socketPath
         self.queue = queue
         self.peer = peer
@@ -69,6 +72,7 @@ final class PhoneLinkSession {
             case (.credit, _):
                 scheduler.grant(channel: frame.channel, bytes: frame.creditBytes ?? 0)
                 pump()
+                terminals[frame.channel]?.credited()
             case (.close, _):
                 guard let terminal = terminals[frame.channel] else { break }
                 terminal.stop()
@@ -90,6 +94,7 @@ final class PhoneLinkSession {
 
     private func open(_ frame: PhoneLinkFrame) {
         let channel = frame.channel
+        if revoked() { return endAfter(.json(.opened, channel: channel, PhoneLinkOpened(error: "revoked"))) }
         let refusal: String?
         let request = try? frame.decodeJSON(PhoneLinkOpen.self)
         if channel < 2 {
@@ -116,9 +121,15 @@ final class PhoneLinkSession {
                 self?.scheduler.open(channel: channel)
                 self?.sendDirect(.json(.opened, channel: channel, PhoneLinkOpened(cols: cols, rows: rows)))
             },
+            resynced: { [weak self] cols, rows in
+                self?.scheduler.open(channel: channel)
+                self?.sendDirect(.resync(channel: channel))
+                self?.sendDirect(.grid(channel: channel, cols: cols, rows: rows))
+            },
             output: { [weak self] bytes in self?.enqueue(channel: channel, bytes) ?? .closed },
             frame: { [weak self] frame in self?.sendDirect(frame) },
-            ended: { [weak self] in self?.closeChannel(channel) })
+            ended: { [weak self] in self?.closeChannel(channel) },
+            pending: { [weak self] in self?.scheduler.pendingBytes(channel: channel) ?? 0 })
         let terminal = PhoneLinkTerminal(channel: channel, request: request, socketPath: socketPath, queue: queue, peer: peer,
                                          log: log, clock: clock, after: { delay, work in queue.asyncAfter(deadline: .now() + delay, execute: work) },
                                          link: link)
@@ -170,6 +181,13 @@ final class PhoneLinkSession {
             self?.sending = false
             self?.pump()
         }
+    }
+
+    /// Sends `frame` ahead of everything queued, then ends the link.
+    private func endAfter(_ frame: PhoneLinkFrame) {
+        closed = true
+        events.stop()
+        send(frame.encoded()) { [weak self] in self?.onEnd?() }
     }
 
     private func end() {
