@@ -368,13 +368,13 @@ extension elisApp {
                 // no-op (the row menu flips to "Remove from Focus", having a clicked row). membership is
                 // NOT gated on sidebar mode here or in the palette, matching its focus siblings.
                 Button { actions.addActiveWorkspaceToFocus() } label: {
-                    Label("Add Workspace to Focus", systemImage: "square.grid.2x2")
+                    Label("Add Workspace to Focus", systemImage: "square.on.square")
                 }
                 .disabled(!PaletteCommand.addWorkspaceToFocus.isEnabled(in: context))
                 // apply or suspend the filter without losing the marked set — the menu twin of the bottom-bar
-                // grid toggle, disabled on an empty set (the store refuses one); control workspace.filter.
+                // focus toggle, disabled on an empty set (the store refuses one); control workspace.filter.
                 Button { actions.toggleFocusFilter() } label: {
-                    Label("Toggle Workspace Filter", systemImage: "square.grid.2x2")
+                    Label("Toggle Workspace Filter", systemImage: "viewfinder")
                 }
                 .keyboardShortcut(shortcut(for: .toggleWorkspaceFilter))
                 .disabled(!PaletteCommand.toggleWorkspaceFilter.isEnabled(in: context))
@@ -382,7 +382,7 @@ extension elisApp {
                 Button { actions.clearFocus() } label: { Label("Clear Focus", systemImage: "scope") }
                     .disabled(!PaletteCommand.clearFocus.isEnabled(in: context))
                 Button { actions.openFocusEditor() } label: {
-                    Label("Edit Focused Workspaces…", systemImage: "square.grid.2x2")
+                    Label("Edit Focused Workspaces…", systemImage: "viewfinder")
                 }
                 .keyboardShortcut(shortcut(for: .editFocusedWorkspaces))
                 .disabled(!PaletteCommand.editFocusedWorkspaces.isEnabled(in: context))

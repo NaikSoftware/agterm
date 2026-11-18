@@ -229,8 +229,8 @@ paths:
   `reClosingAWorkspaceRebuiltByASessionUndoKeepsItsMembership`, focus undo/reopen tests, and legacy recent
   decode tests pin this contract.
 - Workspace and terminal rows draw the mobile app's Lucide icons (`workspace-stack`, `session-terminal` in
-  `Assets.xcassets`, ISC notice in `docs/third-party/`). A marked workspace draws `workspace-stack-bold`, the same
-  paths at a heavier stroke, so weight identifies focus membership. Render membership even while filtering is off.
+  `Assets.xcassets`, ISC notice in `docs/third-party/`). A marked workspace draws `workspace-stack-focused`, the same
+  stack with its front tile filled. The filter toggle draws `focus-frame`, filled while applied. Render membership even while filtering is off.
   `RowContent.focusMember` limits reload to that row.
 - A workspace tint draws a band behind its workspace row and every session and companion row.
   `SidebarRowView` draws it from the host-free `SidebarBand` edge model in `ElisCore`.

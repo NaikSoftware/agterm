@@ -463,7 +463,7 @@ buys nothing. A caller with no tree uses `version`.
   `workspaceFilter == true` with nothing marked cannot occur, so an applied filter always has at least one
   visible member (the full predicate, including the sidebar-mode term, is on the `focused` field above).
   Read it
-  back from the tree top-level `workspaceFilter`. The GUI half is the sidebar's bottom-bar grid button
+  back from the tree top-level `workspaceFilter`. The GUI half is the sidebar's bottom-bar focus button
   (filled while applied, disabled with nothing marked), View ▸ Toggle Workspace Filter, the ⌃⇧P palette
   entry, and the `toggle_workspace_filter` keymap action.
 - `workspace flag [on|off|toggle] [--target W] [--window W]` — flag or unflag EVERY session of one workspace

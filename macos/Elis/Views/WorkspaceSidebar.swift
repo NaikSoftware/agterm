@@ -895,11 +895,11 @@ struct WorkspaceSidebar: NSViewRepresentable {
         }
 
         /// Leading row icons as monochrome templates `setColors` tints: the Lucide workspace stack and terminal,
-        /// SF Symbols for the rest. A workspace in the focus SET draws the heavier-stroked stack; a flagged session
+        /// SF Symbols for the rest. A workspace in the focus SET draws the stack with its front tile filled; a flagged session
         /// keeps its icon and shows the flag after its name. The icon view is pinned to 16x16, so no swap moves
         /// the row. Cached.
         lazy var workspaceIcon = NSImage.bundledIcon("workspace-stack", size: 15)
-        lazy var focusedWorkspaceIcon = NSImage.bundledIcon("workspace-stack-bold", size: 15)
+        lazy var focusedWorkspaceIcon = NSImage.bundledIcon("workspace-stack-focused", size: 15)
         lazy var splitSessionIcon = Self.rowIcon("rectangle.split.2x1")
         lazy var horizontalSplitSessionIcon = Self.rowIcon("rectangle.split.1x2")
         lazy var sessionIcon = NSImage.bundledIcon("session-terminal", size: 15)

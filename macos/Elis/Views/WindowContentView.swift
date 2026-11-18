@@ -797,7 +797,8 @@ struct WindowContentView: View {
                 Button {
                     actions.toggleFocusFilter()
                 } label: {
-                    Image(systemName: store.focusEnabled ? "square.grid.2x2.fill" : InterfaceElement.focusFilter.symbolName!)
+                    Image(store.focusEnabled ? "focus-frame-fill" : InterfaceElement.focusFilter.assetName!)
+                        .resizable().scaledToFit().frame(width: 15, height: 15)
                 }
                 .buttonStyle(ChromeButtonStyle(foreground: chromeText, isOn: store.focusEnabled))
                 // nothing marked = nothing to filter to, and the store refuses an empty set anyway.

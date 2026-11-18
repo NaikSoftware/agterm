@@ -219,7 +219,7 @@ public enum InterfaceElement: String, Codable, Sendable, CaseIterable {
         case .newWorkspace: return "square.on.square"
         case .newSession: return "plus.rectangle"
         case .flaggedView: return "flag"
-        case .focusFilter: return "square.grid.2x2"
+        case .focusFilter: return "viewfinder"
         case .workspaceAddSession: return "plus"
         case .sessionIcons: return "terminal"
         case .workspaceIcons: return "square.on.square"
@@ -233,6 +233,7 @@ public enum InterfaceElement: String, Codable, Sendable, CaseIterable {
         switch self {
         case .newWorkspace, .workspaceIcons: return "workspace-stack"
         case .sessionIcons: return "session-terminal"
+        case .focusFilter: return "focus-frame"
         default: return nil
         }
     }
