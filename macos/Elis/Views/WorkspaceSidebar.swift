@@ -840,6 +840,8 @@ struct WorkspaceSidebar: NSViewRepresentable {
                 ?? selectedIDs.last
             guard let activeID else {
                 store.setSidebarSelection(selectedIDs)
+                // a click on empty space deselects every row, but the active session stays: show its row again.
+                syncSelection()
                 return
             }
             // a genuine user row click (the applyingSelection guard skips programmatic sync, so auto-follow's
