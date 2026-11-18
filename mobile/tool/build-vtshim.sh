@@ -23,7 +23,8 @@ SHIM="native/vtshim.c"
 OUT_DIR="build/vtshim"
 GHOSTTY_DIR="$OUT_DIR/ghostty"
 STAMP_FILE=".vtshim-build-stamp"
-STAMP="$GHOSTTY_REV $(shasum -a 256 "$SHIM" | cut -c1-16)"
+# the script's own digest: an ABI, API or flag edit rebuilds
+STAMP="$GHOSTTY_REV $(shasum -a 256 "$SHIM" | cut -c1-16) $(shasum -a 256 "$0" | cut -c1-16)"
 ABIS=(arm64-v8a x86_64)
 OUTPUTS=(android/app/src/main/jniLibs/arm64-v8a/libvtshim.so android/app/src/main/jniLibs/x86_64/libvtshim.so
   "$OUT_DIR/libvtshim.dylib")
@@ -39,6 +40,12 @@ check() {
     for fn in "${FUNCS[@]}"; do
       grep -qE " _?$fn\$" <<<"$syms" || { echo "$f: no $fn"; ok=1; }
     done
+    # Android 15 devices use 16 KB pages: every LOAD segment must align to at least 0x4000
+    if [[ "$f" == *.so ]]; then
+      for align in $("$NDK_BIN/llvm-readelf" -lW "$f" | awk '$1 == "LOAD" { print $NF }'); do
+        (( align >= 0x4000 )) || { echo "$f: a LOAD segment aligns to $align, below 16 KB"; ok=1; }
+      done
+    fi
     echo "$f ($(wc -c <"$f" | tr -d ' ') bytes)"
   done
   return $ok
@@ -54,6 +61,10 @@ fi
 
 ZIG="$(brew --prefix "$ZIG_FORMULA")/bin/zig"
 [[ -x "$ZIG" ]] || { echo "error: $ZIG missing; run brew install $ZIG_FORMULA" >&2; exit 1; }
+# as in setup.sh: a versioned alias can still resolve to a stale rolling keg
+zig_ver="$("$ZIG" version)"
+[[ "$zig_ver" == "${ZIG_FORMULA#zig@}".* ]] || {
+  echo "error: $ZIG is zig $zig_ver, need ${ZIG_FORMULA#zig@}; run brew upgrade $ZIG_FORMULA" >&2; exit 1; }
 [[ -x "$NDK_BIN/clang" ]] || { echo "error: no NDK at $NDK; install NDK 28.2.13676358 or set ANDROID_NDK_HOME" >&2; exit 1; }
 
 # the checkout under build/ is reused across runs while it sits at the pinned rev
@@ -74,7 +85,7 @@ lib_vt() {
       ${2:+-Dtarget="$2"} --prefix "out-$1" )
 }
 
-rm -f "$STAMP_FILE"
+rm -f "$STAMP_FILE" "${OUTPUTS[@]}"
 for abi in "${ABIS[@]}"; do
   case "$abi" in
     arm64-v8a) triple=aarch64-linux-android ;;

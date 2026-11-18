@@ -1,5 +1,6 @@
 // Flat-buffer facade over libghostty-vt so Dart FFI reads one uint32 array per frame
 // instead of walking iterators cell by cell across the FFI boundary.
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <ghostty/vt.h>
@@ -70,10 +71,11 @@ static uint32_t rgb(GhosttyColorRgb c) { return 0xFF000000u | (c.r << 16) | (c.g
 
 // Header: cols, rows, cursor_x, cursor_y, cursor_flags(visible|has<<1|style<<4), default fg, default bg,
 // scrollbar total, offset, len, active screen, extras word count, grid rows (rows + overscan below). Cells: cp, extras offset, fg, bg, flags.
-// A multi-codepoint cluster stores its codepoints after the cell grid; the cell holds their word offset.
+// A multi-codepoint cluster (2..16 codepoints) stores its codepoints after the cell grid; the cell holds their
+// word offset in w[1], and w[1] == 0 means "no cluster". A longer cluster keeps only its base codepoint (glen 1).
 // fg/bg alpha 0 = default color. flags: bold 1, italic 2, underline 4, inverse 8, faint 16, strike 32,
 // invisible 64, wide 1<<8, spacer 1<<9, grapheme len << 16.
-// Returns words written, or -needed when cap is too small.
+// Returns words written, or -needed when cap is too small (grid plus every cluster), or 0 on failure.
 int32_t vts_snapshot(Vt* v, uint32_t* out, int32_t cap) {
   GhosttyTerminalScrollbar sbar = {0};
   ghostty_terminal_get(v->t, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &sbar);
@@ -87,8 +89,20 @@ int32_t vts_snapshot(Vt* v, uint32_t* out, int32_t cap) {
   GhosttyRenderStateOverscan cap_os = {0};
   ghostty_render_state_get(v->rs, GHOSTTY_RENDER_STATE_DATA_OVERSCAN, &cap_os);
   uint16_t grid_rows = rows + cap_os.below;
-  int32_t need = HDR_WORDS + cols * grid_rows * CELL_WORDS;
-  if (cap < need) return -need;
+  int64_t need = HDR_WORDS + (int64_t)cols * grid_rows * CELL_WORDS;
+  // first pass: size the clusters, so a short buffer gets the full size back instead of dropped clusters
+  int64_t total = need;
+  ghostty_render_state_get(v->rs, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &v->it);
+  for (int r = 0; r < grid_rows && ghostty_render_state_row_iterator_next(v->it); r++) {
+    ghostty_render_state_row_get(v->it, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &v->cells);
+    for (int c = 0; c < cols && ghostty_render_state_row_cells_next(v->cells); c++) {
+      uint32_t glen = 0;
+      ghostty_render_state_row_cells_get(v->cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN, &glen);
+      if (glen > 1 && glen <= 16) total += glen;
+    }
+  }
+  if (total > INT32_MAX) return 0;
+  if (cap < total) return -(int32_t)total;
 
   GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
   ghostty_render_state_get(v->rs, GHOSTTY_RENDER_STATE_DATA_COLORS, &colors);
@@ -106,7 +120,7 @@ int32_t vts_snapshot(Vt* v, uint32_t* out, int32_t cap) {
 
   ghostty_render_state_get(v->rs, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &v->it);
   uint32_t* p = out + HDR_WORDS;
-  int32_t extras = need;
+  int32_t extras = (int32_t)need;
   int r = 0;
   while (ghostty_render_state_row_iterator_next(v->it) && r < grid_rows) {
     ghostty_render_state_row_get(v->it, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &v->cells);
@@ -116,11 +130,17 @@ int32_t vts_snapshot(Vt* v, uint32_t* out, int32_t cap) {
       w[0] = w[1] = w[2] = w[3] = w[4] = 0;
       uint32_t glen = 0;
       ghostty_render_state_row_cells_get(v->cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN, &glen);
-      if (glen > 0) {
+      GhosttyCell raw = 0;
+      bool has_raw = ghostty_render_state_row_cells_get(v->cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW, &raw) == GHOSTTY_SUCCESS;
+      if (glen > 16) {
+        // dropped cluster: base codepoint only, so no reader takes it for a stored cluster
+        glen = 1;
+        if (has_raw) ghostty_cell_get(raw, GHOSTTY_CELL_DATA_CODEPOINT, &w[0]);
+      } else if (glen > 0) {
         uint32_t cps[16] = {0};
-        if (glen <= 16) ghostty_render_state_row_cells_get(v->cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF, cps);
+        ghostty_render_state_row_cells_get(v->cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF, cps);
         w[0] = cps[0];
-        if (glen > 1 && glen <= 16 && extras + (int32_t)glen <= cap) {
+        if (glen > 1) {  // room is guaranteed by the first pass
           w[1] = (uint32_t)extras;
           for (uint32_t i = 0; i < glen; i++) out[extras++] = cps[i];
         }
@@ -134,8 +154,7 @@ int32_t vts_snapshot(Vt* v, uint32_t* out, int32_t cap) {
         f |= (st.bold ? 1 : 0) | (st.italic ? 2 : 0) | (st.underline ? 4 : 0) | (st.inverse ? 8 : 0) |
              (st.faint ? 16 : 0) | (st.strikethrough ? 32 : 0) | (st.invisible ? 64 : 0);
       }
-      GhosttyCell raw = 0;
-      if (ghostty_render_state_row_cells_get(v->cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW, &raw) == GHOSTTY_SUCCESS) {
+      if (has_raw) {
         GhosttyCellWide wide = GHOSTTY_CELL_WIDE_NARROW;
         ghostty_cell_get(raw, GHOSTTY_CELL_DATA_WIDE, &wide);
         if (wide == GHOSTTY_CELL_WIDE_WIDE) f |= 1u << 8;
@@ -147,6 +166,6 @@ int32_t vts_snapshot(Vt* v, uint32_t* out, int32_t cap) {
     r++;
   }
   ghostty_render_state_clean(v->rs);
-  out[11] = (uint32_t)(extras - need);
+  out[11] = (uint32_t)(extras - (int32_t)need);
   return extras;
 }
