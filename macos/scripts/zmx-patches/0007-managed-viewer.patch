@@ -1,0 +1,356 @@
+diff -ruN zmx-orig/src/daemonize.zig zmx/src/daemonize.zig
+--- zmx-orig/src/daemonize.zig
++++ zmx/src/daemonize.zig
+@@ -75,6 +75,8 @@
+     // it must not opt in on the outer terminal's behalf or learn its nonce
+     _ = cross.c.unsetenv("ZMX_MANAGED");
+     _ = cross.c.unsetenv("ZMX_MANAGED_CLAIM");
++    _ = cross.c.unsetenv("ZMX_MANAGED_SCREEN_ONLY");
++    _ = cross.c.unsetenv("ZMX_MANAGED_FOLLOW");
+     // the record is the daemon's to write; a nested session must not write its own exit into it
+     _ = cross.c.unsetenv("ZMX_EXIT_FILE");
+ 
+diff -ruN zmx-orig/src/ipc.zig zmx/src/ipc.zig
+--- zmx-orig/src/ipc.zig
++++ zmx/src/ipc.zig
+@@ -90,7 +90,11 @@
+ pub const ManageFlags = packed struct(u8) {
+     /// take the lead when this client's Init arrives, even from a live leader
+     claim: bool = false,
+-    _pad: u7 = 0,
++    /// replay only the visible screen on Init, no scrollback
++    screen_only: bool = false,
++    /// never lead, not even a session nobody leads; `claim` wins over it
++    follow: bool = false,
++    _pad: u5 = 0,
+ };
+ 
+ pub const Role = enum(u8) {
+diff -ruN zmx-orig/src/loop.zig zmx/src/loop.zig
+--- zmx-orig/src/loop.zig
++++ zmx/src/loop.zig
+@@ -50,7 +50,11 @@
+     var relay: ?role.Relay = if (role.nonceFromEnv()) |nonce| role.Relay.init(nonce) else null;
+     defer if (relay) |*r| r.deinit();
+     if (relay != null) {
+-        const flags = ipc.ManageFlags{ .claim = role.claimFromEnv() };
++        const flags = ipc.ManageFlags{
++            .claim = role.claimFromEnv(),
++            .screen_only = role.screenOnlyFromEnv(),
++            .follow = role.followFromEnv(),
++        };
+         try ipc.appendMessage(gpa, &sock_write_buf, .Manage, std.mem.asBytes(&flags));
+     }
+ 
+@@ -547,6 +551,8 @@
+     /// sent .Manage: leads only by claiming, never by typing, and is told its role
+     managed: bool = false,
+     claim_on_init: bool = false,
++    screen_only_on_init: bool = false,
++    follow: bool = false,
+     told_role: ?ipc.Role = null,
+     read_buf: ipc.SocketBuffer,
+     write_buf: std.ArrayList(u8),
+@@ -902,6 +908,8 @@
+         const flags = std.mem.bytesToValue(ipc.ManageFlags, payload);
+         client.managed = true;
+         client.claim_on_init = flags.claim;
++        client.screen_only_on_init = flags.screen_only;
++        client.follow = flags.follow;
+     }
+ 
+     /// Queue automation bytes without touching leadership, and say whether they were queued.
+@@ -1067,7 +1075,7 @@
+ 
+         client.is_terminal = true;
+ 
+-        if (self.leader_client_fd == null or client.claim_on_init) {
++        if ((self.leader_client_fd == null and !client.follow) or client.claim_on_init) {
+             try self.setLeader(gpa, client);
+         }
+         // ahead of the snapshot below, so a managed client learns its role before any output
+@@ -1094,7 +1102,7 @@
+                 "cursor before serialize: x={d} y={d} pending_wrap={}",
+                 .{ cursor.x, cursor.y, cursor.pending_wrap },
+             );
+-            if (util.serializeTerminalState(gpa, term)) |term_output| {
++            if (util.serializeTerminalState(gpa, term, !client.screen_only_on_init)) |term_output| {
+                 std.log.debug("serialize terminal state", .{});
+                 // Rewrite OSC 133;A to include redraw=0 so the outer terminal
+                 // does not clear prompt lines on resize (issue #111).
+@@ -1670,9 +1678,12 @@
+ }
+ 
+ fn testManaged(alloc: std.mem.Allocator, daemon: *Daemon, fd: i32, claim: bool) !*Client {
++    return testManagedFlags(alloc, daemon, fd, .{ .claim = claim });
++}
++
++fn testManagedFlags(alloc: std.mem.Allocator, daemon: *Daemon, fd: i32, flags: ipc.ManageFlags) !*Client {
+     const client = try testClient(alloc, fd, false);
+     try daemon.clients.append(alloc, client);
+-    const flags = ipc.ManageFlags{ .claim = claim };
+     daemon.handleManage(client, std.mem.asBytes(&flags));
+     return client;
+ }
+@@ -1755,6 +1766,89 @@
+ 
+     _ = daemon.closeClient(alloc, viewer, 1, false);
+     _ = daemon.closeClient(alloc, origin, 0, false);
++}
++
++fn queuedCount(client: *const Client, tag: ipc.Tag) usize {
++    var count: usize = 0;
++    var rest: []const u8 = client.write_buf.items;
++    while (rest.len >= @sizeOf(ipc.Header)) {
++        const header = std.mem.bytesToValue(ipc.Header, rest[0..@sizeOf(ipc.Header)]);
++        if (header.tag == tag) count += 1;
++        rest = rest[@sizeOf(ipc.Header) + header.len ..];
++    }
++    return count;
++}
++
++test "followClientNeverLeadsAnUnownedDaemon" {
++    const alloc = std.testing.allocator;
++    const cfg = Cfg{ .socket_dir = "", .log_dir = "" };
++    var term = try initTerminal(alloc, std.testing.io, .{ .cols = 80, .rows = 24 }, &cfg);
++    defer term.deinit(alloc);
++    var daemon = testDaemon();
++    defer daemon.clients.deinit(alloc);
++    defer daemon.pty_write_buf.deinit(alloc);
++
++    const a = try lib_posix.pipe2(.{});
++    defer lib_posix.close(a[1]);
++    const b = try lib_posix.pipe2(.{});
++    defer lib_posix.close(b[1]);
++    const pty = b[0];
++    defer lib_posix.close(pty);
++
++    const viewer = try testManagedFlags(alloc, &daemon, a[0], .{ .follow = true });
++    try daemon.handleInit(alloc, viewer, pty, &term, std.mem.asBytes(&ipc.Resize{ .rows = 40, .cols = 50 }));
++
++    try std.testing.expectEqual(@as(?i32, null), daemon.leader_client_fd);
++    try std.testing.expectEqual(@as(usize, 0), queuedCount(viewer, .Resize));
++    try std.testing.expectEqual(ipc.Role.unowned, queuedRoles(viewer).last.?.role);
++    try std.testing.expectEqual(@as(usize, 80), term.cols);
++    _ = daemon.closeClient(alloc, viewer, 0, false);
++}
++
++test "claimWinsOverFollow" {
++    const alloc = std.testing.allocator;
++    const cfg = Cfg{ .socket_dir = "", .log_dir = "" };
++    var term = try initTerminal(alloc, std.testing.io, .{ .cols = 80, .rows = 24 }, &cfg);
++    defer term.deinit(alloc);
++    var daemon = testDaemon();
++    defer daemon.clients.deinit(alloc);
++    defer daemon.pty_write_buf.deinit(alloc);
++
++    const a = try lib_posix.pipe2(.{});
++    defer lib_posix.close(a[1]);
++    const b = try lib_posix.pipe2(.{});
++    defer lib_posix.close(b[1]);
++    const pty = b[0];
++    defer lib_posix.close(pty);
++
++    const client = try testManagedFlags(alloc, &daemon, a[0], .{ .claim = true, .follow = true });
++    try daemon.handleInit(alloc, client, pty, &term, std.mem.asBytes(&ipc.Resize{ .rows = 30, .cols = 100 }));
++
++    try std.testing.expectEqual(@as(?i32, a[0]), daemon.leader_client_fd);
++    try std.testing.expectEqual(ipc.Role.leader, queuedRoles(client).last.?.role);
++    _ = daemon.closeClient(alloc, client, 0, false);
++}
++
++test "manageStoresScreenOnly" {
++    const alloc = std.testing.allocator;
++    var daemon = testDaemon();
++    defer daemon.clients.deinit(alloc);
++
++    const a = try lib_posix.pipe2(.{});
++    defer lib_posix.close(a[1]);
++    const b = try lib_posix.pipe2(.{});
++    defer lib_posix.close(b[1]);
++
++    const plain = try testManagedFlags(alloc, &daemon, a[0], .{});
++    try std.testing.expect(!plain.screen_only_on_init);
++    try std.testing.expect(!plain.follow);
++    const viewer = try testManagedFlags(alloc, &daemon, b[0], .{ .screen_only = true, .follow = true });
++    try std.testing.expect(viewer.screen_only_on_init);
++    try std.testing.expect(viewer.follow);
++    try std.testing.expect(!viewer.claim_on_init);
++
++    _ = daemon.closeClient(alloc, viewer, 1, false);
++    _ = daemon.closeClient(alloc, plain, 0, false);
+ }
+ 
+ test "switch moves a stock leader and leaves a managed one bound to its session" {
+diff -ruN zmx-orig/src/main.zig zmx/src/main.zig
+--- zmx-orig/src/main.zig
++++ zmx/src/main.zig
+@@ -693,6 +693,8 @@
+         \\                       OSC 2;zmx-role;<token>:<unowned|leader|follower>:<generation>
+         \\  ZMX_MANAGED_CLAIM    With ZMX_MANAGED, take the lead on attach even from a live leader
+         \\                       (set to any value). Without it an attach leads only a session nobody leads
++        \\  ZMX_MANAGED_FOLLOW   With ZMX_MANAGED, never lead, not even a session nobody leads
++        \\  ZMX_MANAGED_SCREEN_ONLY  With ZMX_MANAGED, replay only the visible screen on attach
+         \\
+     ;
+     var buf: [8192]u8 = undefined;
+diff -ruN zmx-orig/src/role.zig zmx/src/role.zig
+--- zmx-orig/src/role.zig
++++ zmx/src/role.zig
+@@ -44,6 +44,14 @@
+     return lib_posix.getenv("ZMX_MANAGED_CLAIM") != null;
+ }
+ 
++pub fn screenOnlyFromEnv() bool {
++    return lib_posix.getenv("ZMX_MANAGED_SCREEN_ONLY") != null;
++}
++
++pub fn followFromEnv() bool {
++    return lib_posix.getenv("ZMX_MANAGED_FOLLOW") != null;
++}
++
+ pub const Relay = struct {
+     stream: ghostty_vt.Stream(NoopHandler),
+     nonce: []const u8,
+diff -ruN zmx-orig/src/util.zig zmx/src/util.zig
+--- zmx-orig/src/util.zig
++++ zmx/src/util.zig
+@@ -787,7 +787,7 @@
+     writeDynamicColor(writer, .cursor, colors.cursor);
+ }
+ 
+-pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Terminal) ?[]const u8 {
++pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Terminal, scrollback: bool) ?[]const u8 {
+     var builder: std.Io.Writer.Allocating = .init(alloc);
+     defer builder.deinit();
+ 
+@@ -822,7 +822,7 @@
+     // See: https://github.com/neurosnap/zmx/issues/31
+ 
+     // Phase 1: scrollback only (if any exists)
+-    if (has_scrollback) {
++    if (has_scrollback and scrollback) {
+         if (active_top.up(1)) |sb_bottom_row| {
+             var sb_bottom = sb_bottom_row;
+             sb_bottom.x = @intCast(pages.cols - 1);
+@@ -845,6 +845,9 @@
+         // rows (not the scrollback buffer). \x1b[H homes the cursor. \x1b[0m resets
+         // SGR style so phase 1 styles don't bleed into phase 2.
+         builder.writer.writeAll("\x1b[2J\x1b[H\x1b[0m") catch {};
++    } else if (!scrollback) {
++        // the same screen boundary a replay with scrollback has
++        builder.writer.writeAll("\x1b[2J\x1b[H\x1b[0m") catch {};
+     }
+ 
+     // Phase 2: visible screen with full extras (modes, cursor, keyboard, etc.)
+@@ -1637,7 +1640,7 @@
+     try testing.expect(term.modes.get(.bracketed_paste));
+     try testing.expect(term.modes.get(.synchronized_output));
+ 
+-    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
++    const output = serializeTerminalState(alloc, &term, true) orelse return error.TestUnexpectedNull;
+     defer alloc.free(output);
+ 
+     // The serialized output should contain bracketed paste (DECSET 2004)
+@@ -1662,7 +1665,7 @@
+     stream.nextSlice("\x1b]2;my title\x07");
+     stream.nextSlice("hello");
+ 
+-    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
++    const output = serializeTerminalState(alloc, &term, true) orelse return error.TestUnexpectedNull;
+     defer alloc.free(output);
+ 
+     try testing.expect(std.mem.indexOf(u8, output, "\x1b]2;my title\x07") != null);
+@@ -1683,7 +1686,7 @@
+ 
+     stream.nextSlice("hello");
+ 
+-    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
++    const output = serializeTerminalState(alloc, &term, true) orelse return error.TestUnexpectedNull;
+     defer alloc.free(output);
+ 
+     try testing.expect(std.mem.indexOf(u8, output, "\x1b]2;") == null);
+@@ -1705,7 +1708,7 @@
+     stream.nextSlice("\x1b]7;file://myhost/private/tmp\x1b\\");
+     stream.nextSlice("hello");
+ 
+-    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
++    const output = serializeTerminalState(alloc, &term, true) orelse return error.TestUnexpectedNull;
+     defer alloc.free(output);
+ 
+     try testing.expect(std.mem.indexOf(u8, output, "\x1b]7;file://myhost/private/tmp\x1b\\") != null);
+@@ -1727,7 +1730,7 @@
+ 
+     stream.nextSlice("hello");
+ 
+-    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
++    const output = serializeTerminalState(alloc, &term, true) orelse return error.TestUnexpectedNull;
+     defer alloc.free(output);
+ 
+     try testing.expect(std.mem.indexOf(u8, output, "\x1b]7;") == null);
+@@ -1785,7 +1788,7 @@
+ }
+ 
+ fn serializeRoundtrip(alloc: std.mem.Allocator, io: std.Io, source: *ghostty_vt.Terminal) !ghostty_vt.Terminal {
+-    const serialized = serializeTerminalState(alloc, source) orelse
++    const serialized = serializeTerminalState(alloc, source, true) orelse
+         return error.SerializationFailed;
+     defer alloc.free(serialized);
+ 
+@@ -1897,6 +1900,38 @@
+     try expectCursorAt(&client, 15, 19);
+ }
+ 
++test "serializeTerminalState without scrollback sends only the visible screen" {
++    const alloc = testing.allocator;
++    const io = testing.io;
++
++    var term = try testCreateTerminal(alloc, io, 80, 24, "");
++    defer term.deinit(alloc);
++    var stream = term.vtStream();
++    defer stream.deinit();
++    stream.nextSlice("scrollback-marker\r\n");
++    for (0..40) |_| stream.nextSlice("filler\r\n");
++    stream.nextSlice("visible-marker");
++
++    const full = serializeTerminalState(alloc, &term, true) orelse return error.SerializationFailed;
++    defer alloc.free(full);
++    const visible = serializeTerminalState(alloc, &term, false) orelse return error.SerializationFailed;
++    defer alloc.free(visible);
++
++    try testing.expect(std.mem.indexOf(u8, full, "scrollback-marker") != null);
++    try testing.expect(std.mem.indexOf(u8, visible, "scrollback-marker") == null);
++    try testing.expect(std.mem.indexOf(u8, visible, "visible-marker") != null);
++    // no colour overrides are set, so the screen boundary comes first
++    try testing.expect(std.mem.startsWith(u8, visible, "\x1b[2J\x1b[H\x1b[0m"));
++
++    var client = try ghostty_vt.Terminal.init(io, alloc, .{ .cols = 80, .rows = 24, .max_scrollback_lines = 2_000 });
++    defer client.deinit(alloc);
++    var client_stream = client.vtStream();
++    defer client_stream.deinit();
++    client_stream.nextSlice(visible);
++    try expectScreensMatch(alloc, &term, &client);
++    try expectCursorAt(&client, term.screens.active.cursor.y, term.screens.active.cursor.x);
++}
++
+ test "serializeTerminalState nested roundtrip preserves content" {
+     // Simulates: inner zmx → serialized state → outer ghostty-vt → serialized again → client
+     // This is the exact nested session scenario (zmx → SSH → zmx).
+@@ -1926,7 +1961,7 @@
+     const inner_cursor_y = inner.screens.active.cursor.y;
+ 
+     // Serialize inner (simulates inner daemon re-attach to inner client)
+-    const inner_serialized = serializeTerminalState(alloc, &inner) orelse
++    const inner_serialized = serializeTerminalState(alloc, &inner, true) orelse
+         return error.SerializationFailed;
+     defer alloc.free(inner_serialized);
+ 
+@@ -2022,7 +2057,7 @@
+     const inner_cursor_y = inner.screens.active.cursor.y;
+ 
+     // Inner serialize → outer processes → outer serialize → client
+-    const inner_ser = serializeTerminalState(alloc, &inner) orelse
++    const inner_ser = serializeTerminalState(alloc, &inner, true) orelse
+         return error.SerializationFailed;
+     defer alloc.free(inner_ser);
+ 
