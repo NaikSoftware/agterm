@@ -17,16 +17,28 @@ public struct ZmxLeadAttachment: Equatable, Sendable {
     /// Read by the zmx client, which opts into explicit leadership when it is set.
     public static let nonceVariable = "ZMX_MANAGED"
     public static let claimVariable = "ZMX_MANAGED_CLAIM"
+    public static let screenOnlyVariable = "ZMX_MANAGED_SCREEN_ONLY"
+    public static let followVariable = "ZMX_MANAGED_FOLLOW"
 
     public let nonce: String
     /// False for the automatic re-attach after the leader left: that one leads only if the session is
     /// still unowned when it arrives, so it cannot take a lead someone claimed in the meantime.
     public let claim: Bool
 
-    public init(nonce: String = ZmxLeadAttachment.makeNonce(), claim: Bool) {
+    /// The first burst is the visible screen only, not the scrollback replay.
+    public let screenOnly: Bool
+    /// Never leads, even when the session is unowned; it still gets the screen.
+    public let follow: Bool
+
+    public init(nonce: String = ZmxLeadAttachment.makeNonce(), claim: Bool, screenOnly: Bool = false, follow: Bool = false) {
         self.nonce = nonce
         self.claim = claim
+        self.screenOnly = screenOnly
+        self.follow = follow
     }
+
+    /// A passive client such as the phone: it never takes the lead and skips the replay.
+    public static var viewer: ZmxLeadAttachment { ZmxLeadAttachment(claim: false, screenOnly: true, follow: true) }
 
     public static func makeNonce() -> String {
         UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
@@ -35,6 +47,8 @@ public struct ZmxLeadAttachment: Equatable, Sendable {
     public var environment: [String: String] {
         var environment = [Self.nonceVariable: nonce]
         if claim { environment[Self.claimVariable] = "1" }
+        if screenOnly { environment[Self.screenOnlyVariable] = "1" }
+        if follow { environment[Self.followVariable] = "1" }
         return environment
     }
 
