@@ -45,7 +45,7 @@ extension AppActions {
         setFocusMembership(id, member: true, in: store)
     }
 
-    /// Flip the focus filter on or off WITHOUT touching the marked set — the bottom-bar grid toggle, so
+    /// Flip the focus filter on or off WITHOUT touching the marked set — the bottom-bar focus toggle, so
     /// peeking at the whole tree and back costs one click each way. The store refuses to enable an empty
     /// set, the same state the toggle renders disabled in, so the two agree by construction. Frontmost-scoped
     /// rather than store-taking: its callers are the menu bar and the palette (frontmost by definition) plus

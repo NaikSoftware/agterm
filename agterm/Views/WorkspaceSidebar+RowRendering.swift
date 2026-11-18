@@ -92,7 +92,7 @@ extension WorkspaceSidebar.Coordinator {
             // expose the workspace name so app.staticTexts["workspace 1"] resolves
             field.setAccessibilityLabel(workspace?.name ?? "")
             applyBadge(toCell: cell, count: effectiveUnseen(collapsed ? workspace.map(displayedUnseen(for:)) ?? 0 : 0))
-            // a workspace in the focus set draws the SAME grid glyph at BLACK weight, keyed on MEMBERSHIP
+            // a workspace in the focus set draws the stack with its front tile filled, keyed on MEMBERSHIP
             // alone and NOT on `focusEnabled` — so the marked set stays legible with the filter off, while
             // looking at the whole tree.
             cell.imageView?.image = store.focusedWorkspaceIDs.contains(node.id) ? focusedWorkspaceIcon : workspaceIcon

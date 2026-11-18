@@ -502,7 +502,7 @@ private struct PaletteRow: View {
             (isOn, image) = (on, Image(systemName: on ? "flag.fill" : "flag"))
             value = on ? "flagged" : "unflagged"
         case .focus(let on):
-            (isOn, image) = (on, Image(on ? "workspace-stack-bold" : "workspace-stack").resizable())
+            (isOn, image) = (on, Image(on ? "workspace-stack-focused" : "workspace-stack").resizable())
             value = on ? "focused" : "unfocused"
         }
         return image

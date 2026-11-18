@@ -883,6 +883,7 @@ struct AppSettingsTests {
         #expect(InterfaceElement.workspaceIcons.assetName == "workspace-stack")
         #expect(InterfaceElement.newWorkspace.assetName == InterfaceElement.workspaceIcons.assetName)
         #expect(InterfaceElement.sessionIcons.assetName == "session-terminal")
+        #expect(InterfaceElement.focusFilter.assetName == "focus-frame")
     }
 
     @Test func settingsOrderListsTextOnlyElementsFirst() {
