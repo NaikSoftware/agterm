@@ -1,0 +1,299 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:elis_mobile/client.dart';
+import 'package:elis_mobile/link/decoder.dart';
+import 'package:elis_mobile/link/frame.dart';
+import 'package:elis_mobile/link/messages.dart';
+import 'package:elis_mobile/link/mux.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// The relay's end of the link: answers auth on lines, reads frames after `{"mux":1}` (unless [old]).
+class FakeRelay {
+  FakeRelay({this.old = false});
+
+  final bool old;
+  final _input = StreamController<Uint8List>();
+  final lines = <String>[];
+  final frames = <LinkFrame>[];
+  final _decoder = LinkDecoder();
+  var _buf = <int>[];
+  var _framed = false;
+
+  late final link = Link(_input.stream, _phone, () => unawaited(_input.close()), via: 'Wi-Fi');
+
+  void _phone(List<int> bytes) {
+    if (_framed) return frames.addAll(_decoder.feed(bytes));
+    _buf.addAll(bytes);
+    for (var nl = _buf.indexOf(10); nl >= 0; nl = _buf.indexOf(10)) {
+      final line = utf8.decode(_buf.sublist(0, nl));
+      _buf = _buf.sublist(nl + 1);
+      lines.add(line);
+      if ('$line\n' == linkUpgradeRequest && !old) {
+        _framed = true;
+        frames.addAll(_decoder.feed(_buf));
+        _buf = [];
+        return;
+      }
+      final o = jsonDecode(line) as Map;
+      if (o.containsKey('auth')) send(answer(o['id']));
+    }
+  }
+
+  void send(List<int> bytes) => _input.add(Uint8List.fromList(bytes));
+  void drop() => unawaited(_input.close());
+
+  /// The phone's channel-0 request lines.
+  List<Map> get requests {
+    final bytes = [for (final f in frames) if (f.channel == 0 && f.kind == LinkKind.data) ...f.payload];
+    return [for (final l in const LineSplitter().convert(utf8.decode(bytes))) jsonDecode(l) as Map];
+  }
+
+  List<int?> get credits => [for (final f in frames) if (f.kind == LinkKind.credit) f.creditBytes];
+}
+
+List<int> answer(Object? id, [Map<String, Object> result = const {}]) => utf8.encode('${jsonEncode({'id': id, 'ok': true, 'result': result})}\n');
+List<int> frame(LinkKind k, int ch, [List<int> payload = const []]) => LinkFrame(k, ch, Uint8List.fromList(payload)).encode();
+List<int> json(LinkKind k, int ch, Map<String, Object> o) => LinkFrame.json(k, ch, o).encode();
+List<int> grid(int ch, int cols, int rows) => frame(LinkKind.grid, ch, LinkFrame.resize(ch, cols, rows).payload);
+final upgradeAnswer = utf8.encode('{"ok":true,"mux":1}\n');
+
+String describe(VtEvent e) => switch (e) {
+      Opened(:final cols, :final rows) => 'opened ${cols}x$rows',
+      Data(:final bytes) => 'data ${utf8.decode(bytes)}',
+      Grid(:final cols, :final rows) => 'grid ${cols}x$rows',
+      Resync() => 'resync',
+      Closed(:final reason) => 'closed $reason',
+    };
+
+final pairing = Pairing.parse('elis://pair?h=h&p=2&t=${'t' * 32}&f=${'a' * 64}')!;
+
+Future<void> flush() => Future<void>.delayed(Duration.zero);
+
+Future<(Connection, FakeRelay)> connect({bool old = false}) async {
+  final r = FakeRelay(old: old);
+  return (await Connection.open(pairing, tls: (p, t) async => r.link), r);
+}
+
+Future<(Mux, FakeRelay, Connection)> upgraded() async {
+  final (c, r) = await connect();
+  final m = Mux.upgrade(c);
+  await flush();
+  r.send(upgradeAnswer);
+  return ((await m)!, r, c);
+}
+
+/// Opens a channel the relay accepts at 80x24; [seen] collects its events.
+Future<VtChannel> openLive(Mux m, FakeRelay r, List<String> seen, {void Function()? onDone}) async {
+  final f = m.open('w');
+  await flush();
+  r.send(json(LinkKind.opened, r.frames.last.channel, {'cols': 80, 'rows': 24}));
+  final ch = await f;
+  ch.events.listen((e) => seen.add(describe(e)), onDone: onDone);
+  return ch;
+}
+
+void main() {
+  test('upgradeSwitchesToFrames', () async {
+    final (c, r) = await connect();
+    final a = c.call('a');
+    final m = Mux.upgrade(c);
+    final b = c.call('b'); // held while the upgrade is pending: a line now would reach a relay that reads frames
+    await flush();
+    expect(r.lines.last, linkUpgradeRequest.trim());
+    expect(r.lines.length, 3);
+    final event = frame(LinkKind.data, 1, utf8.encode('{"event":"x"}\n'));
+    // an earlier answer, the upgrade answer and half a frame in one read
+    r.send([...answer(2, {'v': 'a'}), ...upgradeAnswer, ...event.sublist(0, 5)]);
+    expect(await a, {'v': 'a'});
+    final mux = (await m)!;
+    final rows = <Map>[];
+    mux.events.listen(rows.add);
+    await flush();
+    final req = r.requests.single;
+    expect(req['cmd'], 'b');
+    r.send([...event.sublist(5), ...frame(LinkKind.data, 0, answer(req['id'], {'v': 'b'}))]);
+    expect(await b, {'v': 'b'});
+    expect(rows, [{'event': 'x'}]);
+    expect(r.lines.length, 3);
+  });
+
+  testWidgets('noAnswerKeepsTheLineProtocol', (t) async {
+    final (c, r) = await connect(old: true);
+    var closed = false;
+    unawaited(c.closed.then((_) => closed = true));
+    Mux? got;
+    var done = false;
+    unawaited(Mux.upgrade(c).then((v) => (got, done) = (v, true)));
+    await t.pump(const Duration(milliseconds: 4900));
+    expect(done, false);
+    await t.pump(const Duration(milliseconds: 100));
+    expect((done, got), (true, null));
+    final a = c.call('a');
+    await t.pump();
+    final req = jsonDecode(r.lines.last) as Map;
+    expect(req['cmd'], 'a');
+    r.send(answer(req['id'], {'v': 'a'}));
+    await t.pump();
+    expect(await a, {'v': 'a'});
+    // a late answer means the relay speaks frames now, which the line protocol cannot read
+    r.send(upgradeAnswer);
+    await t.pump();
+    expect(closed, true);
+  });
+
+  test('controlCallsMatchById', () async {
+    final (m, r, _) = await upgraded();
+    final x = m.call('x');
+    final y = m.call('y', target: 't', args: {'k': 1});
+    await flush();
+    final [rx, ry] = r.requests;
+    expect(ry, {'cmd': 'y', 'target': 't', 'args': {'k': 1}, 'id': ry['id']});
+    final ya = answer(ry['id'], {'v': 'y'});
+    // y's answer spans two frames, x's follows in the second
+    r.send([...frame(LinkKind.data, 0, ya.sublist(0, 4)), ...frame(LinkKind.data, 0, [...ya.sublist(4), ...answer(rx['id'], {'v': 'x'})])]);
+    expect(await y, {'v': 'y'});
+    expect(await x, {'v': 'x'});
+  });
+
+  test('eventsDroppedOrGapAskForATreeReread', () async {
+    final (m, r, _) = await upgraded();
+    final rows = <Map<String, dynamic>>[];
+    m.events.listen(rows.add);
+    final bytes = utf8.encode('{"event":"x"}\n{"dropped":3}\n{"gap":true}\n');
+    r.send([...frame(LinkKind.data, 1, bytes.sublist(0, 7)), ...frame(LinkKind.data, 1, bytes.sublist(7))]);
+    await flush();
+    expect(rows, [{'event': 'x'}, {'dropped': 3}, {'gap': true}]);
+    expect(rows.map(rereadsTree), [false, true, true]);
+  });
+
+  test('openStreamsData', () async {
+    final (m, r, _) = await upgraded();
+    final f = m.open('w1', pane: 'p2');
+    await flush();
+    final o = r.frames.last;
+    expect((o.kind, o.channel), (LinkKind.open, 2));
+    expect(jsonDecode(utf8.decode(o.payload)), {'type': 'vt', 'target': 'w1', 'pane': 'p2'});
+    // DATA in the same read as OPENED is kept for the listener
+    r.send([...json(LinkKind.opened, 2, {'cols': 80, 'rows': 24}), ...frame(LinkKind.data, 2, utf8.encode('AB')), ...grid(2, 100, 30)]);
+    final ch = await f;
+    final seen = <String>[];
+    ch.events.listen((e) => seen.add(describe(e)));
+    await flush();
+    expect(seen, ['opened 80x24', 'data AB', 'grid 100x30']);
+  });
+
+  test('channelIdsAreUsedOnce', () async {
+    final (m, r, _) = await upgraded();
+    final seen = <String>[];
+    await openLive(m, r, seen);
+    r.send(json(LinkKind.close, 2, {'reason': 'session ended'}));
+    await flush();
+    expect(seen, ['opened 80x24', 'closed session ended']);
+    final refused = m.open('w');
+    await flush();
+    r.send(json(LinkKind.opened, 3, {'error': 'too many open panes'}));
+    await expectLater(refused, throwsA(isA<ElisError>().having((e) => e.message, 'message', 'too many open panes')));
+    unawaited(m.open('w'));
+    await flush();
+    expect([for (final f in r.frames) if (f.kind == LinkKind.open) f.channel], [2, 3, 4]);
+  });
+
+  test('duplicateRefusalDoesNotCloseALiveChannel', () async {
+    final (m, r, _) = await upgraded();
+    final f = m.open('w');
+    await flush();
+    r.send([...json(LinkKind.opened, 2, {'error': 'channel already open'}), ...json(LinkKind.opened, 2, {'cols': 80, 'rows': 24})]);
+    final ch = await f;
+    final seen = <String>[];
+    ch.events.listen((e) => seen.add(describe(e)));
+    r.send([...json(LinkKind.opened, 2, {'error': 'channel already open'}), ...frame(LinkKind.data, 2, utf8.encode('X'))]);
+    await flush();
+    expect(seen, ['opened 80x24', 'data X']);
+  });
+
+  test('creditFollowsConsumption', () async {
+    final (m, r, _) = await upgraded();
+    final ch = await openLive(m, r, []);
+    r.send([...frame(LinkKind.data, 2, List.filled(100, 65)), ...frame(LinkKind.data, 2, List.filled(100, 65))]);
+    await flush();
+    ch.consumed(100);
+    expect(r.credits, isEmpty, reason: 'the consumer has not caught up, and less than 16 KiB waits');
+    ch.consumed(100);
+    expect(r.credits, [200]);
+    r.send(frame(LinkKind.data, 2, List.filled(40000, 65)));
+    await flush();
+    for (var i = 0; i < 40; i++) {
+      ch.consumed(1000);
+    }
+    expect(r.credits, [200, 17000, 17000, 6000]);
+  });
+
+  test('resyncResetsTheEmulator', () async {
+    final (m, r, _) = await upgraded();
+    final seen = <String>[];
+    final ch = await openLive(m, r, seen);
+    r.send([
+      ...frame(LinkKind.data, 2, utf8.encode('old')),
+      ...frame(LinkKind.resync, 2),
+      ...grid(2, 90, 20),
+      ...frame(LinkKind.data, 2, utf8.encode('new')),
+    ]);
+    await flush();
+    expect(seen, ['opened 80x24', 'data old', 'resync', 'grid 90x20', 'data new']);
+    ch.consumed(3); // the bytes before RESYNC belong to the old window
+    expect(r.credits, isEmpty);
+    ch.consumed(3);
+    expect(r.credits, [3]);
+  });
+
+  test('closeIsNotAnswered', () async {
+    final (m, r, _) = await upgraded();
+    final seen = <String>[];
+    var ended = false;
+    final ch = await openLive(m, r, seen, onDone: () => ended = true);
+    await ch.close();
+    final last = r.frames.last;
+    expect((last.kind, last.channel), (LinkKind.close, 2));
+    expect(jsonDecode(utf8.decode(last.payload)), {'reason': 'closed'});
+    await flush();
+    expect(ended, true);
+    r.send(frame(LinkKind.data, 2, utf8.encode('late'))); // in flight before the CLOSE: dropped
+    await flush();
+    expect(seen, ['opened 80x24']);
+  });
+
+  test('revokedClosesTheLink', () async {
+    final (m, r, c) = await upgraded();
+    final seen = <String>[];
+    await openLive(m, r, seen);
+    final linkDone = m.closed.first;
+    final f = m.open('w');
+    await flush();
+    r.send(json(LinkKind.opened, 3, {'error': 'revoked'}));
+    await expectLater(f, throwsA(isA<Revoked>()));
+    await c.closed;
+    await linkDone;
+    expect(seen, ['opened 80x24', 'closed $revokedMessage']);
+  });
+
+  test('linkLossClosesEveryChannel', () async {
+    final (m, r, _) = await upgraded();
+    final a = <String>[], b = <String>[];
+    var ends = 0;
+    await openLive(m, r, a, onDone: () => ends++);
+    await openLive(m, r, b, onDone: () => ends++);
+    final linkDone = m.closed.first;
+    final pending = m.open('w');
+    final call = m.call('x');
+    await flush();
+    final failed = [expectLater(pending, throwsA(isA<ElisError>())), expectLater(call, throwsA(isA<ElisError>()))];
+    r.drop();
+    await Future.wait(failed);
+    await linkDone;
+    await flush();
+    expect([a, b, ends], [['opened 80x24', 'closed Disconnected'], ['opened 80x24', 'closed Disconnected'], 2]);
+    await expectLater(m.open('w'), throwsA(isA<ElisError>()));
+  });
+}

@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import 'ble_transport.dart';
+import 'link/messages.dart';
 
 class Pairing {
   Pairing({required this.name, this.host, this.port, required this.token, required this.fingerprint, this.bluetooth = false});
@@ -114,17 +115,19 @@ int _rank(Object? e) => switch (e) {
 
 class Connection {
   Connection._(this._link) {
-    _link.input
-        .cast<List<int>>()
-        .transform(utf8.decoder) // a SecureSocket is a Stream<Uint8List>, which utf8.decoder refuses
-        .transform(const LineSplitter())
-        .listen(_onLine, onDone: _onDone, onError: (_) => _onDone());
+    // raw bytes, split here: after the mux upgrade answer the rest of the stream is frames
+    _link.input.listen(_onBytes, onDone: _onDone, onError: (_) => _onDone());
   }
 
   final Link _link;
   final _pending = <int, Completer<Map<String, dynamic>>>{};
   final _closed = Completer<void>();
   int _next = 1;
+  var _buffer = <int>[];
+  void Function(List<int> bytes)? _frames; // set once upgraded: every input byte goes to the mux
+  void Function(List<int> line)? _sendLine; // set once upgraded: request lines go out on channel 0
+  void Function()? _onUpgradeAnswer;
+  Future<void>? _upgrading;
 
   Future<void> get closed => _closed.future;
   String get via => _link.via;
@@ -163,13 +166,45 @@ class Connection {
     final id = _next++;
     final done = Completer<Map<String, dynamic>>();
     _pending[id] = done;
-    _link.add(utf8.encode('${jsonEncode({...request, 'id': id})}\n'));
+    final line = utf8.encode('${jsonEncode({...request, 'id': id})}\n');
+    (_sendLine ?? _link.add)(line);
     return done.future;
   }
+
+  /// The mux seam (link/mux.dart). Sends the upgrade request; on its answer every later input byte, those read past the
+  /// answer line included, goes to [frames], and request lines go to [sendLine]. False when the link ended or no answer
+  /// came within [timeout] (an older relay): the line protocol stays. Calls made meanwhile wait for the outcome.
+  Future<bool> switchToFrames(Duration timeout, {required void Function(List<int>) frames, required void Function(List<int>) sendLine}) async {
+    if (_closed.isCompleted || _upgrading != null || _frames != null) return false;
+    final answered = Completer<bool>();
+    final gate = Completer<void>();
+    _upgrading = gate.future;
+    _onUpgradeAnswer = () {
+      _frames = frames;
+      _sendLine = sendLine;
+      answered.complete(true);
+    };
+    _link.add(utf8.encode(linkUpgradeRequest));
+    try {
+      return await Future.any([answered.future, _closed.future.then((_) => false)]).timeout(timeout, onTimeout: () => false);
+    } finally {
+      // a late answer means the relay speaks frames, which the line protocol cannot read
+      if (_frames == null) _onUpgradeAnswer = close;
+      _upgrading = null;
+      gate.complete();
+    }
+  }
+
+  /// The mux seam: raw bytes to the relay.
+  void addBytes(List<int> bytes) => _link.add(bytes);
+
+  /// The mux seam: one channel-0 line from the relay.
+  void controlLine(String line) => _onLine(line);
 
   /// One control command; the result object, or ElisError with the app's message.
   Future<Map<String, dynamic>> call(String cmd, {String? target, Map<String, dynamic>? args, String? window}) async {
     final a = {...?args, 'window': ?window};
+    if (_upgrading case final u?) await u;
     final id = _next;
     final r = await _send({'cmd': cmd, 'target': ?target, if (a.isNotEmpty) 'args': a}).timeout(
       const Duration(seconds: 15),
@@ -180,6 +215,24 @@ class Connection {
     );
     if (r['ok'] != true) throw ElisError('${r['error'] ?? 'request failed'}');
     return (r['result'] as Map?)?.cast<String, dynamic>() ?? {};
+  }
+
+  void _onBytes(List<int> bytes) {
+    if (_frames case final f?) return f(bytes);
+    _buffer.addAll(bytes);
+    for (var nl = _buffer.indexOf(10); nl >= 0; nl = _buffer.indexOf(10)) {
+      final line = utf8.decode(_buffer.sublist(0, nl), allowMalformed: true);
+      _buffer = _buffer.sublist(nl + 1);
+      if (_onUpgradeAnswer case final on? when isLinkUpgradeAnswer(line)) {
+        _onUpgradeAnswer = null;
+        on();
+        final rest = _buffer;
+        _buffer = [];
+        if (_frames case final f? when rest.isNotEmpty) f(rest);
+        return;
+      }
+      _onLine(line);
+    }
   }
 
   void _onLine(String line) {
