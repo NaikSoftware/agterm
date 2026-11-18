@@ -191,6 +191,11 @@ void main() {
     expect(vt.encodeWheel(up: false, col: 2, row: 3), _b('\x1b[<65;3;4M'));
   }, skip: skip);
 
+  test('wheelUnderSgrPixelsMatchesTheReportedCellSize', () {
+    final vt = make(10, 5)..write(_b('\x1b[?1000h\x1b[?1016h'));
+    expect(vt.encodeWheel(up: true, col: 2, row: 3), _b('\x1b[<64;16;48M'));
+  }, skip: skip);
+
   test('focusOnlyUnderMode1004', () {
     final vt = make(10, 3);
     expect(vt.encodeFocus(true), isEmpty);
@@ -201,10 +206,19 @@ void main() {
 
   test('repliesAreCollected', () {
     final vt = make(10, 3)..write(_b('\x1b[c'));
-    final r = latin1.decode(vt.takeReplies());
-    expect(r, startsWith('\x1b[?62'));
-    expect(r, endsWith('c'));
+    expect(vt.takeReplies(), _b('\x1b[?62;22;52c'));
     expect(vt.takeReplies(), isEmpty);
+  }, skip: skip);
+
+  test('resetDropsPendingReplies', () {
+    final vt = make(10, 3)..write(_b('\x1b[c'));
+    vt.reset();
+    expect(vt.takeReplies(), isEmpty);
+  }, skip: skip);
+
+  test('repliesGrowTheBuffer', () {
+    final vt = make(10, 3)..write(_b(List.filled(30, '\x1b[c').join()));
+    expect(vt.takeReplies(), _b(List.filled(30, '\x1b[?62;22;52c').join()));
   }, skip: skip);
 
   test('cursorPositionReportIsCollected', () {

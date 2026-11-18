@@ -98,8 +98,11 @@ void vts_resize(Vt* v, uint16_t cols, uint16_t rows) {
   ghostty_terminal_resize(v->t, cols, rows, 8, 16);
 }
 
-// Full reset (RIS): RESYNC starts the emulator over before the GRID replay.
-void vts_reset(Vt* v) { ghostty_terminal_reset(v->t); }
+// Full reset (RIS): RESYNC starts the emulator over before the GRID replay, and drops replies to the old stream.
+void vts_reset(Vt* v) {
+  ghostty_terminal_reset(v->t);
+  v->reply_len = 0;
+}
 
 // DEC private mode value (e.g. 2026 synchronized output, 1049 alternate screen): 1 set, 0 reset, -1 unknown.
 int32_t vts_mode(Vt* v, uint16_t mode) {
@@ -255,14 +258,14 @@ int32_t vts_encode_paste(Vt* v, char* data, size_t len, uint8_t* out, int32_t ca
 
 int32_t vts_encode_wheel(Vt* v, int32_t up, uint16_t col, uint16_t row, uint8_t* out, int32_t cap) {
   ghostty_mouse_encoder_setopt_from_terminal(v->mouse, v->t);
-  // 1-pixel cells: the position is the cell (SGR-pixels reports cells too)
-  GhosttyMouseEncoderSize sz = { .size = sizeof(sz), .screen_width = v->cols, .screen_height = v->rows,
-                                 .cell_width = 1, .cell_height = 1 };
+  // the 8x16 cells on_size reports, so an SGR-pixels (1016) program maps the position back to this cell
+  GhosttyMouseEncoderSize sz = { .size = sizeof(sz), .screen_width = v->cols * 8u, .screen_height = v->rows * 16u,
+                                 .cell_width = 8, .cell_height = 16 };
   ghostty_mouse_encoder_setopt(v->mouse, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &sz);
   ghostty_mouse_event_set_action(v->wheel, GHOSTTY_MOUSE_ACTION_PRESS);
   ghostty_mouse_event_set_button(v->wheel, up ? GHOSTTY_MOUSE_BUTTON_FOUR : GHOSTTY_MOUSE_BUTTON_FIVE);
   ghostty_mouse_event_set_mods(v->wheel, 0);
-  ghostty_mouse_event_set_position(v->wheel, (GhosttyMousePosition){ .x = col, .y = row });
+  ghostty_mouse_event_set_position(v->wheel, (GhosttyMousePosition){ .x = col * 8.0f, .y = row * 16.0f });
   size_t n = 0;
   return encoded(ghostty_mouse_encoder_encode(v->mouse, v->wheel, (char*)out, (size_t)cap, &n), n);
 }
