@@ -132,6 +132,22 @@ class VtRow {
   /// One cell per column; the right half of a wide character is a [VtCell.spacer].
   final List<VtCell> cells;
 
+  // content equality (the cluster offsets in the raw words are left out): the painter's row cache keys on it
+  @override
+  late final int hashCode = Object.hashAll(cells);
+
+  @override
+  bool operator ==(Object other) =>
+      other is VtRow && other.hashCode == hashCode && _sameCells(other.cells);
+
+  bool _sameCells(List<VtCell> o) {
+    if (o.length != cells.length) return false;
+    for (var i = 0; i < o.length; i++) {
+      if (o[i] != cells[i]) return false;
+    }
+    return true;
+  }
+
   /// The row as plain text, trailing blanks trimmed (the form of `tmux capture-pane -p`).
   String get text {
     final b = StringBuffer();
@@ -167,6 +183,12 @@ class VtCell {
   bool get invisible => flags & 64 != 0;
   bool get wide => flags & (1 << 8) != 0;
   bool get spacer => flags & (1 << 9) != 0;
+
+  @override
+  int get hashCode => Object.hash(text, fg, bg, flags);
+
+  @override
+  bool operator ==(Object other) => other is VtCell && other.text == text && other.fg == fg && other.bg == bg && other.flags == flags;
 
   static int? _color(int v) => v >> 24 == 0 ? null : v;
 

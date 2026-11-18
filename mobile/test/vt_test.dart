@@ -124,4 +124,16 @@ void main() {
     final s = vt.snapshot();
     expect(s.lines[19].cells[39].text, 'é');
   }, skip: skip);
+
+  test('rowEqualityIgnoresClusterOffsets', () {
+    // row 0 differs (a cluster or not), so row 1's cluster sits at another offset in the two buffers
+    final a = make(10, 2)..write(_b('e\u0301\r\nn\u0303x'));
+    final b = make(10, 2)..write(_b('a\r\nn\u0303x'));
+    final ra = a.snapshot().lines, rb = b.snapshot().lines;
+    expect(ra[1], rb[1]);
+    expect(ra[1].hashCode, rb[1].hashCode);
+    expect(ra[0], isNot(rb[0]));
+    final c = make(10, 2)..write(_b('a\r\n\x1b[1mn\u0303x'));
+    expect(c.snapshot().lines[1], isNot(rb[1])); // same text, other flags
+  }, skip: skip);
 }
