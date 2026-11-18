@@ -41,6 +41,20 @@ void main() {
       .widget<CustomPaint>(find.descendant(of: find.byType(TerminalView), matching: find.byType(CustomPaint)))
       .painter! as TerminalPainter;
 
+  testWidgets('underlinedSpacesAreDrawn', (tester) async {
+    int paragraphs(String bytes) {
+      final vt = make(10, 1)..write(_b(bytes));
+      final canvas = TestRecordingCanvas();
+      paintRow(canvas, vt.snapshot().lines[0], CellMetrics.fit(100, 10));
+      return canvas.invocations.where((i) => i.invocation.memberName == #drawParagraph).length;
+    }
+
+    expect(paragraphs('a b'), 2); // plain space splits the run
+    expect(paragraphs('\x1b[4ma b'), 1); // the underlined space stays in the run
+    expect(paragraphs('\x1b[4m   '), 1); // spaces alone still draw their underline
+    expect(paragraphs('\x1b[9m  '), 1);
+  });
+
   testWidgets('rowCacheRepaintsOnlyChangedRows', (tester) async {
     final vt = make(20, 5)..write(_b('one\r\ntwo\r\nthree\r\nfour'));
     final m = CellMetrics.fit(400, 20);

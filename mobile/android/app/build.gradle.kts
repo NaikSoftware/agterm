@@ -29,6 +29,9 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // libvtshim.so exists for these two only; a 32-bit APK would install without it
+        // the Flutter plugin pre-fills armeabi-v7a, so replace the list rather than append
+        ndk { abiFilters.clear(); abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     buildTypes {
