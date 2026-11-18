@@ -39,6 +39,9 @@ class TermSession extends ChangeNotifier {
   /// Why the relay ended the phone's lead; cleared by [takeOver].
   String? leadLost;
 
+  /// Grid reports so far: the one after a release says the Mac leads the pane again.
+  int grids = 0;
+
   bool get leading => _leading;
 
   /// Why the stream ended (a refusal, a relay CLOSE, `Disconnected`); null while it runs or after [close].
@@ -98,6 +101,7 @@ class TermSession extends ChangeNotifier {
           _vt?.reset(); // a Grid follows
           if (_claim != null) _resynced = true; // the relay resyncs only after the leader report that preceded OPENED
         case Grid(:final cols, :final rows):
+          grids++;
           _fit = null; // the relay's report is the truth from now on
           _vt?.resize(cols, rows);
         case Closed(:final reason):

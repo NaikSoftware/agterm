@@ -73,6 +73,10 @@ class _SessionScreenState extends State<SessionScreen> {
   TermSession? _claimed; // the term Take over was asked on: a replaced term (pause, pane, reconnect) is not claimed
   (int, int)? _leadGrid, _seenGrid; // the grid the lead was given, and the one the screen shows now
   Timer? _leadResize;
+  // after Give back, the pane stays covered until zmx hands the lead back, and a fit then is refused: fit once the relay
+  // reports the Mac's grid (the [TermSession.grids] count passes this), or after [_refitTimer]
+  int? _refitAfter;
+  Timer? _refitTimer;
   final _refused = <String>{}; // panes whose terminal the relay refused on this visit: text view until they stop being Live
   final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
 
@@ -105,6 +109,7 @@ class _SessionScreenState extends State<SessionScreen> {
   void dispose() {
     poll?.cancel();
     _leadResize?.cancel();
+    _refitTimer?.cancel();
     term?.removeListener(_onTerm);
     term?.close();
     for (final t in _closedRecently.values) {
@@ -146,6 +151,7 @@ class _SessionScreenState extends State<SessionScreen> {
       t.removeListener(_onTerm);
       t.close(); // CLOSE: the Mac's viewer count drops; a resume opens a fresh channel
       term = null;
+      _refitAfter = null; // another pane, or a fresh visit: nothing covered to wait for
       _alt = null; // the next stream picks the view again
     }
     if (want && term == null) term = TermSession(m.mux!, widget.sessionId, pane, vt: widget.vt)..addListener(_onTerm);
@@ -183,6 +189,7 @@ class _SessionScreenState extends State<SessionScreen> {
         unawaited(_syncFit());
       }
       if (_leadResize?.isActive != true) _resizeLead(); // the screen changed while the claim waited for its LEAD
+      if (_refitAfter case final n? when t.grids > n) _refit();
       if (text.isNotEmpty && _termShown && t.snapshot!.altScreen) {
         text = ''; // shown from now on; a fallback later starts from a fresh read, not this one
       }
@@ -204,9 +211,14 @@ class _SessionScreenState extends State<SessionScreen> {
     final t = term;
     if (t == null) return;
     if (_lead) {
+      final led = t.leading;
       t.release();
       setState(() => _claimed = null);
-      return _syncFit();
+      if (!led) return _syncFit(); // never led: the pane was not covered
+      _refitAfter = t.grids;
+      _refitTimer?.cancel();
+      _refitTimer = Timer(const Duration(seconds: 3), _refit); // shortcut: a Mac grid the size of the lead brings no report
+      return;
     }
     t.leadLost = null; // a lead lost earlier was said then
     setState(() => _claimed = t);
@@ -230,6 +242,12 @@ class _SessionScreenState extends State<SessionScreen> {
     _seenGrid = g;
     _leadResize?.cancel();
     _leadResize = Timer(const Duration(milliseconds: 300), _resizeLead);
+  }
+
+  void _refit() {
+    _refitAfter = null;
+    _refitTimer?.cancel();
+    unawaited(_syncFit());
   }
 
   // only once leading: before that TermSession drops a resize while the claim waits for OPENED
@@ -318,7 +336,7 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<void> _syncFit() async {
     if (fitting || !mounted) return;
     final visible = _foreground && !m.background && m.state == LinkState.connected;
-    final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible && !_lead);
+    final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible && !_lead && _refitAfter == null);
     if (on == null) return;
     setState(() => fitting = true);
     final key = _fitKey;

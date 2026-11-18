@@ -846,7 +846,7 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('giveBackResumesTheFit', (t) async {
+  testWidgets('giveBackRefitsWithoutAGridReport', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
@@ -855,8 +855,11 @@ void main() {
     final grids = h.r.grids.length;
     await t.tap(find.byKey(const Key('takeOver'))); // Give back
     await t.pump();
-    await t.pump();
     expect(h.r.closes, [_claimCh]);
+    await t.pump(const Duration(seconds: 2));
+    expect(h.r.grids, hasLength(grids));
+    await t.pump(const Duration(seconds: 1));
+    await t.pump();
     expect(h.r.grids, hasLength(grids + 1));
     expect(h.r.grids.last['columns'], isNotNull);
     expect(h.m.fitted['s1/left'], isNotNull);
@@ -956,6 +959,31 @@ void main() {
     expect([for (final o in h.r.opens) if (o['claim'] == true) o], isEmpty);
     expect(find.text('closed'), findsNothing);
     expect(_label(t, 'takeOver'), 'Take over');
+    await h.stop();
+  });
+
+  testWidgets('giveBackRefitsOnceTheMacLeadsAgain', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    h.r.refused.add('session.grid'); // the pane is covered until zmx hands the lead back
+    final grids = h.r.grids.length;
+    await t.tap(find.byKey(const Key('takeOver'))); // Give back
+    await t.pump();
+    await t.pump();
+    expect(h.r.closes, [_claimCh]);
+    expect(h.r.grids, hasLength(grids)); // not before the Mac leads again
+    h.r.refused.clear();
+    h.r.send([...frame(LinkKind.resync, 2), ...frame(LinkKind.grid, 2, LinkFrame.resize(2, 144, 59).payload)]);
+    await t.pump();
+    await t.pump();
+    await t.pump();
+    expect(h.r.grids, hasLength(grids + 1));
+    expect(h.r.grids.last['columns'], isNotNull);
+    expect(h.m.fitted['s1/left'], isNotNull);
+    expect((h.vts.single.cols, h.vts.single.rows), h.m.fitted['s1/left']);
+    expect(find.textContaining('refused'), findsNothing);
     await h.stop();
   });
 
