@@ -267,6 +267,23 @@ Future<void> _lead(Harness h) async {
 String _typed(Harness h) => utf8.decode([for (final f in h.r.frames) if (f.channel == _claimCh && f.kind == LinkKind.data) ...f.payload]);
 int _types(Harness h) => h.r.calls.where((c) => c == 'session.type').length;
 String _label(WidgetTester t, String key) => t.widget<Text>(find.descendant(of: find.byKey(Key(key)), matching: find.byType(Text))).data!;
+double _zoom(WidgetTester t) =>
+    t.widget<Transform>(find.descendant(of: find.byKey(const Key('term')), matching: find.byType(Transform)).first).transform.getMaxScaleOnAxis();
+
+/// Two fingers 105 apart once past the recognizer's slop, spread to 210 near [c]: twice the size.
+Future<void> _pinch(WidgetTester t, Offset c) async {
+  final a = await t.startGesture(c - const Offset(40, 0), pointer: 7);
+  final b = await t.startGesture(c + const Offset(40, 0), pointer: 8);
+  await a.moveBy(const Offset(-25, 0));
+  for (var i = 0; i < 4; i++) {
+    await a.moveBy(const Offset(-13.125, 0));
+    await b.moveBy(const Offset(13.125, 0));
+    await t.pump();
+  }
+  await a.up();
+  await b.up();
+  await t.pump(const Duration(milliseconds: 400));
+}
 bool _enabled(WidgetTester t, String key) => t.widget<OutlinedButton>(find.byKey(Key(key))).onPressed != null;
 
 Future<void> _loadFonts() async {
@@ -755,6 +772,48 @@ void main() {
     await t.pump();
     expect(RegExp('wheel up').allMatches(_typed(h)), hasLength(3));
     expect(h.r.scrolls, isEmpty);
+    await h.stop();
+  });
+
+  testWidgets('zoomedWheelHitsTheCellUnderTheFinger', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    h.vts.single.tracksMouse = true;
+    final c = t.getCenter(find.byKey(const Key('term')));
+    await _pinch(t, c);
+    expect(_zoom(t), greaterThan(1.5));
+    final start = c + const Offset(60, 0);
+    final at = t.renderObject<RenderBox>(find.byType(TerminalView)).globalToLocal(start);
+    final cell = CellMetrics.fit(t.getSize(find.byKey(const Key('term'))).width - 24, h.vts.single.cols);
+    final g = await t.startGesture(start);
+    for (var i = 0; i < 4; i++) {
+      await g.moveBy(Offset(0, cell.h));
+      await t.pump();
+    }
+    await g.up();
+    await t.pump();
+    final hits = RegExp(r'wheel up (\d+),(\d+)').allMatches(_typed(h)).toList();
+    expect(hits, isNotEmpty);
+    final row = (at.dy / cell.h).floor();
+    for (final m in hits) {
+      expect(int.parse(m[1]!), (at.dx / cell.w).floor());
+      expect(int.parse(m[2]!), inInclusiveRange(row, row + 3));
+    }
+    await h.stop();
+  });
+
+  testWidgets('paneSwitchResetsTheZoom', (t) async {
+    final h = Harness(t, treeOf(split: true));
+    await h.start();
+    await h.opened();
+    await _pinch(t, t.getCenter(find.byKey(const Key('term'))));
+    expect(_zoom(t), greaterThan(1.5));
+    await t.tap(find.byKey(const Key('rightPane')));
+    await t.pump();
+    await h.opened();
+    expect(_zoom(t), 1);
     await h.stop();
   });
 

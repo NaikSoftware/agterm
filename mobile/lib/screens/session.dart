@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../client.dart';
 import '../model.dart';
 import '../terminal/row_cache.dart';
+import '../terminal/term_gestures.dart';
 import '../terminal/term_session.dart';
 import '../terminal/terminal_view.dart';
 import '../terminal/vt.dart';
@@ -64,6 +65,7 @@ class _SessionScreenState extends State<SessionScreen> {
   late final AppLifecycleListener _lifecycle;
   Timer? poll;
   double _dragRows = 0; // a drag's distance in rows not sent yet
+  Offset _finger = Offset.zero; // where the finger is on the Term view's grid, zoom and pan undone
   bool _scrolling = false;
   bool polling = false;
   TermSession? term; // a Live pane watched as a terminal; the text poll stops meanwhile
@@ -507,8 +509,8 @@ class _SessionScreenState extends State<SessionScreen> {
   // wheel notches (session scroll), which a TUI such as Claude Code reads as its own scrolling
   bool get _remoteScroll => !_history && m.fitted.containsKey(_fitKey);
 
-  void _drag(DragUpdateDetails d, double rowHeight) {
-    _dragRows += d.delta.dy / rowHeight;
+  void _drag(double rows) {
+    _dragRows += rows;
     if (!_scrolling) _sendScroll();
   }
 
@@ -536,41 +538,36 @@ class _SessionScreenState extends State<SessionScreen> {
       );
 
   // the grid scaled to the width; taller than the box, the bottom rows (the cursor's) stay in view
-  // a live stream has no phone-side history, so a drag always scrolls the program
+  // a live stream has no phone-side history, so a drag always scrolls the program; two fingers zoom
   Widget _termView(TermSession t) {
     final columns = _lead ? null : m.fitted[_fitKey]?.$1 ?? (autoFit.wanted ? _fitColumns() : null);
     return LayoutBuilder(builder: (context, box) {
       _width = box.maxWidth - 24;
       _height = box.maxHeight - 24;
       _layoutLead();
-      return GestureDetector(
-        onVerticalDragUpdate: (d) {
-          final cell = CellMetrics.fit(_width, columns ?? t.snapshot?.cols ?? 80);
-          t.leading ? _wheel(t, d, cell) : _drag(d, cell.h);
-        },
-        child: SingleChildScrollView(
-          key: const Key('term'),
-          reverse: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(12),
-          child: TerminalView(snapshot: t.snapshot, hold: t.hold, columns: columns),
+      final cell = CellMetrics.fit(_width, columns ?? t.snapshot!.cols);
+      return TermGestures(
+        key: const Key('term'),
+        content: Size(box.maxWidth, t.snapshot!.rows * cell.h + 24),
+        rowHeight: cell.h,
+        onScroll: (rows) => t.leading ? _wheel(t, rows, cell) : _drag(rows.toDouble()),
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (e) => _finger = e.localPosition,
+          onPointerMove: (e) => _finger = e.localPosition,
+          child: Padding(padding: const EdgeInsets.all(12), child: TerminalView(snapshot: t.snapshot, hold: t.hold, columns: columns)),
         ),
       );
     });
   }
 
-  // leading, the phone is the program's mouse: a notch per row the finger moved, at the cell under it. The grid sits
-  // at the bottom of the box (reverse scroll), so rows count up from there.
-  void _wheel(TermSession t, DragUpdateDetails d, CellMetrics cell) {
-    _dragRows += d.delta.dy / cell.h;
-    final n = _dragRows.truncate(); // dragging down shows older rows: wheel up
-    _dragRows -= n;
-    final snap = t.snapshot;
-    if (n == 0 || snap == null) return;
-    final col = ((d.localPosition.dx - 12) / cell.w).floor().clamp(0, snap.cols - 1);
-    final row = (snap.rows - 1 - ((_height + 12 - d.localPosition.dy) / cell.h).floor()).clamp(0, snap.rows - 1);
-    for (var i = 0; i < n.abs(); i++) {
-      t.wheel(up: n > 0, col: col, row: row);
+  // leading, the phone is the program's mouse: a notch per row the finger moved, at the cell under it
+  void _wheel(TermSession t, int rows, CellMetrics cell) {
+    final snap = t.snapshot!;
+    final col = ((_finger.dx - 12) / cell.w).floor().clamp(0, snap.cols - 1);
+    final row = ((_finger.dy - 12) / cell.h).floor().clamp(0, snap.rows - 1);
+    for (var i = 0; i < rows.abs(); i++) {
+      t.wheel(up: rows > 0, col: col, row: row); // dragging down shows older rows: wheel up
     }
   }
 
@@ -600,7 +597,7 @@ class _SessionScreenState extends State<SessionScreen> {
             padding: const EdgeInsets.all(12),
             child: SizedBox(width: double.infinity, child: body),
           );
-          return _remoteScroll ? GestureDetector(onVerticalDragUpdate: (d) => _drag(d, _fit * 1.3), child: view) : view;
+          return _remoteScroll ? GestureDetector(onVerticalDragUpdate: (d) => _drag(d.delta.dy / (_fit * 1.3)), child: view) : view;
         });
 
   Widget _answers(List<PromptOption> options) => Padding(
