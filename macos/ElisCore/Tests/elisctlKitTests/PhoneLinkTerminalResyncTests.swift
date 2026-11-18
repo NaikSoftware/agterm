@@ -68,7 +68,7 @@ struct PhoneLinkTerminalResyncTests {
     }
 
     /// A phone that takes bytes but never grants: resyncs refill the window and backoff waits pass, yet 30 s after the
-    /// first full window went out the channel closes, here in the middle of a 16 s wait.
+    /// first full window went out the channel closes.
     @Test func noCreditPhoneIsStalledDespiteResyncs() throws {
         let harness = try TerminalHarness()
         defer { harness.finish() }
@@ -79,11 +79,12 @@ struct PhoneLinkTerminalResyncTests {
             #expect(harness.wait { harness.events().filter { $0 == .resync }.count == round + 1 })
         }
         #expect(harness.waitOverflow(count: 5)) // the next re-attach waits 16 s, until 31 s
-        harness.advance(by: 14)
+        // the 1 s tick first sees the window spent at 1 s, so the 30 s run out at 31 s
+        harness.advance(by: 15)
         #expect(!harness.events().contains(.close("stalled")))
         harness.advance(by: 1)
-        #expect(harness.events().suffix(2) == [.close("stalled"), .ended])
-        #expect(harness.attaches() == 5)
+        #expect(harness.events().contains(.close("stalled")))
+        #expect(harness.events().last == .ended)
     }
 
     @Test func failedReattachClosesWithTheAppError() throws {
@@ -139,6 +140,24 @@ struct PhoneLinkTerminalResyncTests {
         harness.start(RawStubServer.fakeAttach("head -c 307200 /dev/zero | tr '\\0' x; exec cat"))
         #expect(harness.wait { harness.outputBytes() == 307_200 })
         harness.credit(10_240) // 10 KiB more go out; 34 KiB still wait
+        harness.advance(by: 40)
+        #expect(!harness.events().contains { if case .close = $0 { true } else { false } })
+    }
+
+    /// No CREDIT for 40 s while idle, then a burst past the remaining window: the window is spent only now, and the
+    /// phone's CREDIT for it comes a moment later, so the channel stays open.
+    @Test func idlePhoneThenBurstIsNotStalled() throws {
+        let harness = try TerminalHarness()
+        defer { harness.finish() }
+        let gate = harness.dir + "/go"
+        harness.start(RawStubServer.fakeAttach(
+            "printf hi; while [ ! -e '\(gate)' ]; do sleep 0.02; done; head -c 307200 /dev/zero | tr '\\0' x; exec cat"))
+        #expect(harness.wait { harness.outputBytes() == 2 })
+        harness.advance(by: 40)
+        FileManager.default.createFile(atPath: gate, contents: nil)
+        #expect(harness.wait { harness.outputBytes() == 307_202 })
+        harness.advance(by: 1) // a tick lands before the phone's CREDIT
+        harness.credit()
         harness.advance(by: 40)
         #expect(!harness.events().contains { if case .close = $0 { true } else { false } })
     }

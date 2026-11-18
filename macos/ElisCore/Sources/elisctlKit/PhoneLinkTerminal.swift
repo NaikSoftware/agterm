@@ -31,7 +31,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     static let reattachInterval: TimeInterval = 1
     static let maxBackoff: TimeInterval = 30
     static let backoffReset: TimeInterval = 10
-    /// This long since the phone's last CREDIT (or OPEN), with a full window sent since then, closes the channel.
+    /// A full window sent and not acknowledged by any CREDIT for this long closes the channel.
     static let stallTimeout: TimeInterval = 30
     static let localPoll: TimeInterval = 2
     /// Each remote poll is a fresh ssh connection.
@@ -65,8 +65,9 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     private var reattached: Date?
     /// From an overflow until the fresh attach runs.
     private var resyncing = false
-    /// The phone's last CREDIT, or OPENED until one comes; a RESYNC does not move it.
-    private var lastCredit = Date.distantFuture
+    /// The first tick that saw a full window sent since the phone's last CREDIT (or OPEN); only a CREDIT clears it,
+    /// not a RESYNC. Counted from the spend, not the CREDIT: an idle phone's old CREDIT must not close it on a burst.
+    private var spentSince: Date?
 
     init(channel: UInt32, request: PhoneLinkOpen, socketPath: String, queue: DispatchQueue, peer: String,
          log: @escaping (String) -> Void, clock: @escaping () -> Date,
@@ -86,7 +87,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
 
     /// The phone sent CREDIT on this channel; the scheduler has already sent what it allows.
     func credited() {
-        lastCredit = clock()
+        spentSince = nil
     }
 
     /// Ends the channel without a word to the phone: the phone closed it, or the link is closing.
@@ -161,7 +162,6 @@ final class PhoneLinkTerminal: @unchecked Sendable {
             return
         }
         link.opened(cols, rows)
-        lastCredit = clock()
         paneID = attach.paneID
         log("phone attached from \(peer) pane \(attach.paneID)")
         nextPoll = clock() + (remote ? Self.remotePoll : Self.localPoll)
@@ -216,8 +216,10 @@ final class PhoneLinkTerminal: @unchecked Sendable {
             guard let self, !stopped else { return }
             let now = clock()
             // unacknowledged bytes, not waiting ones: a backoff wait or a slow phone sent no new window
-            if now.timeIntervalSince(lastCredit) >= Self.stallTimeout, link.windowSpent() {
-                return close(reason: "stalled")
+            if link.windowSpent() {
+                let since = spentSince ?? now
+                spentSince = since
+                if now.timeIntervalSince(since) >= Self.stallTimeout { return close(reason: "stalled") }
             }
             if !resyncing, screenProcess == nil, now >= nextPoll {
                 nextPoll = now + (remote ? Self.remotePoll : Self.localPoll)
