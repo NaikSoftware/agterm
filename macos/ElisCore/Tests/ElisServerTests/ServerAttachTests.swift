@@ -49,6 +49,9 @@ struct ServerAttachTests {
     }
 }
 
+// shortcut: Swift's Glibc module hides posix_openpt/grantpt/unlockpt/ptsname, so this pty test is macOS-only;
+// zmx's own tests cover patch 0007 on Linux. Add a Linux pty helper if the server end-to-end check must run there.
+#if canImport(Darwin)
 /// Runs the served argv against a real daemon, with the fixture `ServerLifecycleTests` uses.
 @MainActor
 @Suite(.serialized, .enabled(if: RealZmx.runs))
@@ -128,3 +131,4 @@ enum PtyCapture {
         return true
     }
 }
+#endif
