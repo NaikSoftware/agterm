@@ -25,6 +25,8 @@
 
 ## Decisions taken in this plan (rulings beyond the spec)
 
+Superseded during execution: old-daemon, resync and watchdog rules — see the spec's M4 notes and control-api.md.
+
 - **Grid source:** `ControlAttach` gains `screen: [String]` (an argv for `zmx screen <daemon>` with the attach's env and ssh) and `remote: Bool`. The relay runs `screen` on OPEN, after each RESYNC, and on a poll: every 2 s for local panes, every 10 s for remote ones (each remote poll is a fresh ssh connection, M3's no-ControlPath shortcut). One poll in flight per channel, 5 s timeout. Parsed with `ZmxScreen(output:)`.
 - **Keepalive:** the remote viewer and screen argvs use the existing `keepAliveCheck` wrapper (`RemoteSession.swift:90` pattern), so a dead link ends ssh.
 - **Control channel:** channel-0 requests go through `PhoneSession.forward` (serial per phone, as today), so typed input keeps its order and Fit-to-phone grids are still released on disconnect. Answers carry the phone's `id`.

@@ -189,22 +189,17 @@ Mockups: the "Elis phone agent UI" design canvas (zsh, Claude Code, agy, vim).
 
 ## Notes for the M4 relay (from the M2 review)
 
-M4a settled these; the code and `control-api.md` (relay mux) own the details:
+M4a settled these. `.claude/rules/control-api.md` (relay mux) owns the relay's behavior and the wire contract
+M4b builds on; this list keeps only what is not stated there.
 
-- Caps: channels 0 and 1 are bounded (events queue 256 KiB, dropped rows counted), open vt channels are capped at 8,
-  and OPEN on 0 and 1 is refused. A phone's own `session.attach` and `phone.*` are refused; the relay resolves attaches itself.
-- On overflow the old attach stops before RESYNC. Credit resets to the full window at RESYNC on both sides,
-  so RESYNC cannot leave the relay spending bytes the phone no longer counts. A stall clears only on CREDIT.
-- A daemon older than the zmx build is refused for a local pane in the `session.attach` answer; a remote one is handled by the re-attach backoff.
-- The remote viewer argv has the ssh keepalive now. Zmx role titles are filtered from the stream.
+- Caps: channel 0 is bounded at 4 MiB of answers waiting and 256 OPENED, RESYNC, GRID and CLOSE frames waiting;
+  past either, the link closes. Channel 1 is bounded at 256 KiB; the oldest rows are dropped and counted.
+- Zmx role titles are filtered from the stream.
 - The relay prints one `phone detached` line per open pane before `phone disconnected`, with the app's `attach.paneID`.
-- Events: after a read error the phone gets `{"dropped":N}` then `{"gap":true}` and re-reads `tree`.
 
 Still open for M4b:
 
 - Take over input needs a receive window in the relay (OPEN with `claim` is refused for now).
-- A duplicate OPEN on a live channel gets OPENED `{error}` and the old stream continues:
-  the phone must read it as "duplicate refused", not "channel failed".
 - OPENED, GRID, LEAD, RESYNC and CLOSE bypass the scheduler, so GRID can overtake queued DATA laid out for the old grid.
 - `phone.attached` carries no session id; resolve it at emit time if hooks need it.
 - A pane never shown since launch answers `session not realized`; decide whether the phone may watch it.
