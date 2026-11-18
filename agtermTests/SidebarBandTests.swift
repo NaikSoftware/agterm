@@ -258,7 +258,7 @@ final class SidebarBandTests: XCTestCase {
     }
 
     func testRowIconsResolveFromTheBundle() throws {
-        for name in ["workspace-stack", "workspace-stack-bold", "session-terminal", "flag-lucide"] {
+        for name in ["workspace-stack", "workspace-stack-focused", "focus-frame", "focus-frame-fill", "session-terminal", "flag-lucide"] {
             let image = try XCTUnwrap(NSImage.bundledIcon(name, size: 15), name)
             XCTAssertTrue(image.isTemplate, name)
         }
