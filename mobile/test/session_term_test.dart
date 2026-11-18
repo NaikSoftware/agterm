@@ -147,8 +147,10 @@ class FakeVt implements Vt {
     written.clear();
   }
 
+  final modes = <int>{};
+  bool tracksMouse = false;
   @override
-  bool mode(int mode) => false;
+  bool mode(int mode) => modes.contains(mode);
   @override
   VtSnapshot snapshot() {
     snapshots++;
@@ -161,15 +163,17 @@ class FakeVt implements Vt {
   // canned emulator replies, drained by takeReplies like the shim's buffer
   final replies = <int>[];
   @override
-  Uint8List encodeKey(VtKey key, {int mods = 0, String text = ''}) => Uint8List.fromList(utf8.encode(text));
+  Uint8List encodeKey(VtKey key, {int mods = 0, String text = ''}) =>
+      Uint8List.fromList(utf8.encode(switch (key) { VtKey.arrowUp => '\x1b[A', VtKey.arrowDown => '\x1b[B', _ => text }));
   @override
   Uint8List encodeText(String text) => Uint8List.fromList(utf8.encode(text));
   @override
   Uint8List encodePaste(String text) => Uint8List.fromList(utf8.encode(text));
   @override
-  Uint8List encodeWheel({required bool up, required int col, required int row}) => Uint8List(0);
+  Uint8List encodeWheel({required bool up, required int col, required int row}) =>
+      Uint8List.fromList(tracksMouse ? utf8.encode('wheel ${up ? 'up' : 'down'} $col,$row') : const []);
   @override
-  Uint8List encodeFocus(bool gained) => Uint8List(0);
+  Uint8List encodeFocus(bool gained) => Uint8List.fromList(modes.contains(1004) ? utf8.encode(gained ? '\x1b[I' : '\x1b[O') : const []);
   @override
   Uint8List takeReplies() {
     final r = Uint8List.fromList(replies);

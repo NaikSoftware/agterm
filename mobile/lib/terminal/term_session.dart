@@ -1,4 +1,4 @@
-// One watched pane: its vt channel feeding an emulator. Watch only: nothing is sent on the channel but CREDIT and CLOSE.
+// One watched pane: its vt channel feeding an emulator, and while the phone leads, a claim channel carrying its input.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -15,12 +15,12 @@ Vt openVt(int cols, int rows) {
 /// Notifies on every change; [snapshot] reads the emulator only when asked and at most once per change. Listeners that
 /// do not ask (the screen, once the text view is cleared) leave the read to the build: one a frame.
 class TermSession extends ChangeNotifier {
-  TermSession(this.mux, String target, this.pane, {Vt Function(int cols, int rows) vt = openVt}) : _makeVt = vt {
+  TermSession(this.mux, this.target, this.pane, {Vt Function(int cols, int rows) vt = openVt}) : _makeVt = vt {
     mux.open(target, pane: pane).then(_opened, onError: (Object e) => _end(e is ElisError ? e.message : '$e'));
   }
 
   final Mux mux;
-  final String pane;
+  final String target, pane;
   final Vt Function(int, int) _makeVt;
   VtChannel? _ch;
   Vt? _vt;
@@ -29,6 +29,17 @@ class TermSession extends ChangeNotifier {
   VtSnapshot? _snapshot;
   bool _hold = false;
   (int, int)? _fit; // the grid the phone asked for, which the relay reports up to 2 s after the program draws at it
+  ClaimChannel? _claim;
+  StreamSubscription<ClaimEvent>? _claimSub;
+  int _claimGen = 0; // bumped to drop a claim still waiting for OPENED, which cannot be cancelled
+  (int, int) _leadSize = (80, 24);
+  bool _leading = false;
+  bool _resynced = false; // the watch channel's Resync after the leader report: earlier queries were the Mac's to answer
+
+  /// Why the relay ended the phone's lead; cleared by [takeOver].
+  String? leadLost;
+
+  bool get leading => _leading;
 
   /// Why the stream ended (a refusal, a relay CLOSE, `Disconnected`); null while it runs or after [close].
   String? ended;
@@ -78,11 +89,14 @@ class TermSession extends ChangeNotifier {
         case Data(:final bytes):
           try {
             _vt?.write(bytes); // bytes before a Resync too: the reset follows
+            final replies = _vt?.takeReplies(); // drained always, or take-over would type stale replies
+            if (replies != null && replies.isNotEmpty && _leading && _resynced) _claim?.send(replies);
           } finally {
             _ch?.consumed(bytes.length); // every Data, in order, or the relay closes the channel `stalled`
           }
         case Resync():
           _vt?.reset(); // a Grid follows
+          if (_claim != null) _resynced = true; // the relay resyncs only after the leader report that preceded OPENED
         case Grid(:final cols, :final rows):
           _fit = null; // the relay's report is the truth from now on
           _vt?.resize(cols, rows);
@@ -108,6 +122,98 @@ class TermSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Claims the pane at [cols]x[rows]; null once the claim is open, else why not. [leading] follows the relay's LEAD.
+  Future<String?> takeOver(int cols, int rows) async {
+    if (_closed) return ended ?? 'closed';
+    release();
+    leadLost = null;
+    final gen = _claimGen;
+    final size = _clamp(cols, rows);
+    final ClaimChannel ch;
+    try {
+      ch = await mux.claim(target, pane: pane, cols: size.$1, rows: size.$2);
+    } catch (e) {
+      return e is ElisError ? e.message : '$e';
+    }
+    if (gen != _claimGen || _closed) {
+      unawaited(ch.close());
+      return 'released';
+    }
+    _claim = ch;
+    _leadSize = size;
+    _resynced = false;
+    _claimSub = ch.events.listen(_onClaim);
+    return null;
+  }
+
+  void _onClaim(ClaimEvent e) {
+    switch (e) {
+      case Lead(role: 'leader'):
+        _leading = true;
+        _send(_vt?.encodeFocus(true));
+        _fit = _leadSize;
+        _vt?.resize(_leadSize.$1, _leadSize.$2);
+        _dirty = true;
+      case Lead():
+        _leading = false;
+      case ClaimClosed(:final reason):
+        _leading = false;
+        _claim = null;
+        leadLost = reason;
+    }
+    notifyListeners();
+  }
+
+  bool _send(Uint8List? bytes) {
+    final ch = _claim;
+    if (!_leading || ch == null || bytes == null) return false;
+    return ch.send(bytes);
+  }
+
+  void key(VtKey key, {int mods = 0}) => _send(_vt?.encodeKey(key, mods: mods));
+
+  void text(String s) => _send(_vt?.encodeText(s));
+
+  /// False when nothing was sent: not leading, or more than 1 MiB of input is waiting.
+  bool paste(String s) => _send(_vt?.encodePaste(s));
+
+  /// One wheel notch; on the alternate screen of a program that does not track the mouse, an arrow key (mode 1007).
+  void wheel({required bool up, required int col, required int row}) {
+    if (!_leading) return;
+    final alt = snapshot?.altScreen ?? false; // may dispose the emulator: read it first
+    final vt = _vt;
+    if (vt == null) return;
+    final bytes = vt.encodeWheel(up: up, col: col, row: row);
+    if (bytes.isNotEmpty) {
+      _send(bytes);
+    } else if (alt && vt.mode(1007)) {
+      _send(vt.encodeKey(up ? VtKey.arrowUp : VtKey.arrowDown));
+    }
+  }
+
+  void resizeLead(int cols, int rows) {
+    final ch = _claim;
+    if (ch == null || _closed) return;
+    _leadSize = _clamp(cols, rows);
+    ch.resize(_leadSize.$1, _leadSize.$2);
+    fitted(_leadSize.$1, _leadSize.$2);
+  }
+
+  static (int, int) _clamp(int cols, int rows) => (cols.clamp(1, 1000), rows.clamp(1, 1000)); // the relay ignores others
+
+  /// Ends the phone's lead (focus out, then CLOSE), or drops a claim still waiting for OPENED.
+  void release() {
+    _claimGen++;
+    final ch = _claim;
+    if (ch == null) return;
+    _send(_vt?.encodeFocus(false));
+    unawaited(_claimSub?.cancel());
+    unawaited(ch.close());
+    _claim = null;
+    _leading = false;
+    if (!_closed) notifyListeners();
+  }
+
   void _end(String reason) {
     if (_closed) return;
     ended = reason;
@@ -123,7 +229,8 @@ class TermSession extends ChangeNotifier {
   }
 
   void _release() {
-    _closed = true;
+    _closed = true; // first: release() must not notify from build (_read)
+    release();
     unawaited(_sub?.cancel());
     _vt?.dispose();
     _vt = null;
