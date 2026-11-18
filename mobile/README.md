@@ -13,6 +13,7 @@ point `JAVA_HOME` at it or run `flutter config --jdk-dir <jdk>`.
 
 ```sh
 cd mobile
+./tool/build-vtshim.sh       # once per ghostty pin: libvtshim for Android and the host (needs zig@0.17, NDK 28.2)
 flutter pub get
 flutter run                 # on a connected device or emulator
 flutter build apk           # build/app/outputs/flutter-apk/app-release.apk

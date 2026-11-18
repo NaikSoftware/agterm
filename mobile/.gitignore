@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# libvtshim, built by tool/build-vtshim.sh (build/vtshim/ falls under /build/)
+/android/app/src/main/jniLibs/
+/.vtshim-build-stamp
