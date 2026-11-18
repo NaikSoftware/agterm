@@ -159,7 +159,7 @@ final class SurfaceFactorySeedTests: XCTestCase {
 
     // MARK: - factory wiring
 
-    // the hosted scheme's isolated state dir latches restore mode `.none`, so both factories build an
+    // the hosted scheme's pre-action seeds restore mode `.none` for the latch, so both factories build an
     // ordinary disposition and a fresh pane's durable command is the seed in force.
     func testPrimaryFactoryDefersItsSeedAndResolvesOnlyTheLeftSlot() {
         let restored = restoredSession()

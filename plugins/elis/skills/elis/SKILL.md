@@ -1,17 +1,17 @@
 ---
 name: elis
 description: >
-  Drive Elis, a terminal for macOS and Linux, via elisctl. Use in an Elis session:
+  Drive Elis, a macOS and Linux terminal, via elisctl. Use in an Elis session:
   manage and move sessions, companions and workspaces; split panes; toggle the scratch or file panel; run, hide or show overlays;
   read exit status; show HTML pages, URLs or dev servers in an overlay with saved logins or as a
   page row;
   post a HUD/caption/notification/sidebar activity line; message panes; show a picker, question or input dialog; show images/markdown/code; type
-  into or restart a pane by id, copy its selection, set the clipboard, search scrollback; manage windows, font size and
+  into or restart a pane by id, copy its selection, set the clipboard, search scrollback; manage windows, font size,
   theme; reload or edit the keymap, event hooks and elis-scoped ghostty config; run a custom command; read
   a closed window's session screen; subscribe to status, lifecycle, tree and other
   events; wait on agent status; pair the phone app.
   Covers window/workspace/session addressing, session links, ELIS_* variables,
-  another Mac's sessions or windows, elis-server hosts, cookbook recipes, version and upgrades, diagnosing
+  another Mac's sessions/windows, elis-server hosts, cookbook recipes, versions/upgrades, diagnosing
   problems, filing a bug or feature request.
 when_to_use: >
   Trigger on: Elis, elisctl, ELIS_SESSION_ID, and, from inside a session, plain requests such as

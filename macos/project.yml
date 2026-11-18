@@ -280,6 +280,12 @@ schemes:
     test:
       config: Debug
       macroExpansion: ElisTests
+      # A missing settings.json seeds Live, and GhosttyApp latches it before setUp; hosted tests assume Fresh shells.
+      preActions:
+        - settingsTarget: ElisTests
+          script: |
+            mkdir -p "$TARGET_TEMP_DIR/ElisTests-state"
+            printf '{"theme":"elis","restoreMode":"none"}' > "$TARGET_TEMP_DIR/ElisTests-state/settings.json"
       environmentVariables:
         # Application-hosted XCTest starts `elisApp.init()` before test `setUp`.
         # Isolate every eager app dependency at process launch, and keep the

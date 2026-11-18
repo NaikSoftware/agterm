@@ -234,7 +234,7 @@ final class AppDelegateCaptureTests: XCTestCase {
         let windowID = try XCTUnwrap(library.activeWindowID)
         let session = try XCTUnwrap(library.activeStore?.activeSession)
         let settings = SettingsModel(library: library, settingsStore: SettingsStore(directory: state))
-        XCTAssertEqual(settings.settings.effectiveRestoreMode, .none)
+        XCTAssertTrue(settings.setRestoreMode(.none))
         let capture = AppDelegate.makeExitCapture(settingsModel: settings, zmxResolver: nil)
         session.pendingForegroundCommand = ["worker", "--first-rerun"]
         XCTAssertTrue(settings.setRestoreMode(.rerun))
@@ -293,7 +293,7 @@ final class AppDelegateCaptureTests: XCTestCase {
         let store = try XCTUnwrap(library.activeStore)
         let session = try XCTUnwrap(store.activeSession)
         let settings = SettingsModel(library: library, settingsStore: SettingsStore(directory: state))
-        XCTAssertEqual(settings.settings.effectiveRestoreMode, .none)
+        XCTAssertTrue(settings.setRestoreMode(.none))
         session.foregroundCommand = ["stale-primary"]
         session.splitForegroundCommand = ["stale-split"]
         session.pendingForegroundCommand = ["pending-primary"]
