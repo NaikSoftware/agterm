@@ -32,7 +32,7 @@ class TermSession extends ChangeNotifier {
   ClaimChannel? _claim;
   StreamSubscription<ClaimEvent>? _claimSub;
   int _claimGen = 0; // bumped to drop a claim still waiting for OPENED, which cannot be cancelled
-  (int, int) _leadSize = (80, 24);
+  (int, int) _leadSize = (80, 24), _claimedSize = (80, 24);
   bool _leading = false;
   bool _resynced = false; // the watch channel's Resync after the leader report: earlier queries were the Mac's to answer
 
@@ -122,7 +122,8 @@ class TermSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Claims the pane at [cols]x[rows]; null once the claim is open, else why not. [leading] follows the relay's LEAD.
+  /// Claims the pane at [cols]x[rows]; null once the claim is open or was dropped by [release], else the refusal.
+  /// [leading] follows the relay's LEAD.
   Future<String?> takeOver(int cols, int rows) async {
     if (_closed) return ended ?? 'closed';
     release();
@@ -137,10 +138,10 @@ class TermSession extends ChangeNotifier {
     }
     if (gen != _claimGen || _closed) {
       unawaited(ch.close());
-      return 'released';
+      return null; // released before OPENED: nothing to show
     }
     _claim = ch;
-    _leadSize = size;
+    _leadSize = _claimedSize = size;
     _resynced = false;
     _claimSub = ch.events.listen(_onClaim);
     return null;
@@ -150,6 +151,7 @@ class TermSession extends ChangeNotifier {
     switch (e) {
       case Lead(role: 'leader'):
         _leading = true;
+        if (_leadSize != _claimedSize) _claim?.resize(_leadSize.$1, _leadSize.$2);
         _send(_vt?.encodeFocus(true));
         _fit = _leadSize;
         _vt?.resize(_leadSize.$1, _leadSize.$2);
@@ -157,6 +159,7 @@ class TermSession extends ChangeNotifier {
       case Lead():
         _leading = false;
       case ClaimClosed(:final reason):
+        unawaited(_claimSub?.cancel());
         _leading = false;
         _claim = null;
         leadLost = reason;
@@ -191,10 +194,12 @@ class TermSession extends ChangeNotifier {
     }
   }
 
+  /// Before the relay's LEAD, only remembered: the phone still shows the Mac's grid.
   void resizeLead(int cols, int rows) {
     final ch = _claim;
     if (ch == null || _closed) return;
     _leadSize = _clamp(cols, rows);
+    if (!_leading) return;
     ch.resize(_leadSize.$1, _leadSize.$2);
     fitted(_leadSize.$1, _leadSize.$2);
   }

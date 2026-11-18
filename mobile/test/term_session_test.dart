@@ -143,7 +143,7 @@ void main() {
     await flush();
     s.release();
     r.send([...json(LinkKind.opened, _claim, {'cols': 60, 'rows': 20}), ...json(LinkKind.lead, _claim, {'role': 'leader'})]);
-    expect(await f, isNotNull);
+    expect(await f, isNull);
     await flush();
     expect(closes(r), [_claim]);
     expect(s.leading, isFalse);
@@ -156,10 +156,11 @@ void main() {
     final second = s.takeOver(70, 20);
     await flush();
     r.send([...json(LinkKind.opened, 3, {'cols': 60, 'rows': 20}), ...json(LinkKind.opened, 4, {'cols': 70, 'rows': 20})]);
-    expect(await first, isNotNull);
+    expect(await first, isNull);
     expect(await second, isNull);
     await flush();
     expect(closes(r), [3]);
+    expect(s.leading, isFalse, reason: 'no LEAD yet');
   });
 
   test('closeReleasesTheClaim', () async {
@@ -175,9 +176,10 @@ void main() {
     await flush();
     s2.close();
     r2.send(json(LinkKind.opened, _claim, {'cols': 60, 'rows': 20}));
-    expect(await f, isNotNull);
+    expect(await f, isNull);
     await flush();
     expect(closes(r2), unorderedEquals([_watch, _claim]));
+    expect(s2.leading, isFalse);
   });
 
   test('wheelFallsBackToArrowsOnTheAlternateScreen', () async {
@@ -209,6 +211,22 @@ void main() {
     final sizes = [for (final f in r.frames) if (f.kind == LinkKind.resize && f.channel == _claim) (f.size!.cols, f.size!.rows)];
     expect(sizes, [(100, 40), (1000, 1)]);
     expect((vt.cols, vt.rows), (1000, 1));
+  });
+
+  test('resizeLeadBeforeLeaderWaitsForTheLead', () async {
+    final (s, r, vt) = await watched();
+    final f = s.takeOver(60, 20);
+    await flush();
+    r.send(json(LinkKind.opened, _claim, {'cols': 60, 'rows': 20}));
+    expect(await f, isNull);
+    s.resizeLead(100, 40);
+    List<(int, int)> sizes() => [for (final f in r.frames) if (f.kind == LinkKind.resize && f.channel == _claim) (f.size!.cols, f.size!.rows)];
+    expect(sizes(), isEmpty);
+    expect((vt.cols, vt.rows), (80, 24));
+    r.send(json(LinkKind.lead, _claim, {'role': 'leader'}));
+    await flush();
+    expect(sizes(), [(100, 40)]);
+    expect((vt.cols, vt.rows), (100, 40));
   });
 
   test('sessionEndWhileLeadingEndsBoth', () async {
