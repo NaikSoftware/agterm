@@ -40,7 +40,7 @@ struct SessionCloseCommandsTests {
         (.terminate(sessions: ["a"], undoable: false), ControlRequest(cmd: .sessionClose, target: "a")),
         (.terminate(sessions: ["a", "b"], undoable: true),
          ControlRequest(cmd: .sessionClose, target: "a", args: ControlArgs(targets: ["a", "b"], undoable: true))),
-        (.duplicate(after: "s", cwd: "-d"), ControlRequest(cmd: .sessionNew, args: ControlArgs(cwd: "-d", noSelect: true, after: "s"))),
+        (.duplicate(after: "s", cwd: "/tmp/-d"), ControlRequest(cmd: .sessionNew, args: ControlArgs(cwd: "/tmp/-d", noSelect: true, after: "s"))),
         (.duplicate(after: "s", cwd: nil), ControlRequest(cmd: .sessionNew, args: ControlArgs(noSelect: true, after: "s"))),
         (.split(session: "s", mode: "on", axis: "horizontal"),
          ControlRequest(cmd: .sessionSplit, target: "s", args: ControlArgs(mode: "on", axis: "horizontal"))),

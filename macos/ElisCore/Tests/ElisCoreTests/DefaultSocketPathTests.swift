@@ -2,6 +2,8 @@ import Foundation
 import Testing
 @testable import ElisCore
 
+// macOS only: the app resolves via Application Support; Linux's elis-server uses `defaultStateDirectory` (XDG state dir).
+#if os(macOS)
 struct DefaultSocketPathTests {
     // The CLI side mirrors `BasicOptions.socketPath`; the app side mirrors `ControlServer.defaultSocketPath`.
     @Test func testCLIAndAppDefaultSocketMatch() {
@@ -13,3 +15,4 @@ struct DefaultSocketPathTests {
         #expect(app == cli)
     }
 }
+#endif
