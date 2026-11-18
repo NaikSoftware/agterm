@@ -1,0 +1,184 @@
+#if os(macOS)
+import Foundation
+import Testing
+import ElisCore
+@testable import elisctlKit
+
+struct PhoneLinkTerminalTests {
+    @Test func openStreamsTheAttach() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        phone.deliver(Self.open(2))
+        let reader = FrameReader()
+        let opened = try #require(reader.opened(from: phone, channel: 2))
+        #expect(opened == PhoneLinkOpened(cols: 80, rows: 24))
+        #expect(reader.text(from: phone, channel: 2, until: "hi") != nil)
+        #expect(fixture.waitLogged("phone attached from mem:1 pane pane-1"))
+        #expect(fixture.server.requests().contains(#"{"args":{"pane":"left"},"cmd":"session.attach","target":"S1"}"#))
+    }
+
+    @Test func attachRefusalAnswersOpenedError() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        fixture.server.answerAttach(ControlResponse(ok: false, error: "session not realized"))
+        phone.deliver(Self.open(2))
+        let opened = try #require(FrameReader().opened(from: phone, channel: 2))
+        #expect(opened == PhoneLinkOpened(error: "session not realized"))
+        #expect(!fixture.logged().contains { $0.hasPrefix("phone attached") })
+    }
+
+    @Test func refusesControlChannelsAndDuplicates() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        // the duplicate comes while the first OPEN still waits for its attach
+        phone.deliver(Self.open(0) + Self.open(1) + Self.open(2) + Self.open(2))
+        let reader = FrameReader()
+        for channel: UInt32 in [0, 1] {
+            let refusal = try #require(reader.opened(from: phone, channel: channel))
+            #expect(refusal == PhoneLinkOpened(error: "channels 0 and 1 are not vt channels"))
+        }
+        let answers = (0..<2).compactMap { _ in reader.opened(from: phone, channel: 2) }
+        #expect(answers.contains(PhoneLinkOpened(error: "channel already open")))
+        #expect(answers.contains(PhoneLinkOpened(cols: 80, rows: 24)))
+        #expect(fixture.waitLogged("phone attached from mem:1 pane pane-1"))
+        #expect(fixture.server.requests().filter { $0.contains("session.attach") }.count == 1)
+    }
+
+    @Test func refusesClaimAndTooManyPanes() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        phone.deliver(Self.open(2, claim: true) + Self.open(3, type: "text") + (4...12).map { Self.open($0) }.reduce(Data(), +))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(error: "take over is not available yet"))
+        #expect(reader.opened(from: phone, channel: 3) == PhoneLinkOpened(error: "unsupported channel type"))
+        // the ninth is refused before the first eight have their attach
+        #expect(reader.opened(from: phone, channel: 12) == PhoneLinkOpened(error: "too many open panes"))
+        for channel: UInt32 in 4...11 {
+            #expect(reader.opened(from: phone, channel: channel) == PhoneLinkOpened(cols: 80, rows: 24))
+        }
+    }
+
+    @Test func roleTitlesNeverReachThePhone() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        fixture.server.answerAttach(Self.answer(#"printf 'a\033]2;zmx-role;n1:viewer\007b'; cat"#))
+        phone.deliver(Self.open(2))
+        let text = try #require(FrameReader().text(from: phone, channel: 2, until: "b"))
+        #expect(text == "ab")
+    }
+
+    @Test func phoneCloseEndsTheAttach() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        let token = Self.token()
+        fixture.server.answerAttach(Self.answer("printf 'hi'; cat; : \(token)"))
+        phone.deliver(Self.open(2))
+        let reader = FrameReader()
+        #expect(reader.text(from: phone, channel: 2, until: "hi") != nil)
+        phone.deliver(PhoneLinkFrame.json(.close, channel: 2, PhoneLinkClose(reason: "done")).encoded())
+        #expect(fixture.waitLogged("phone detached from mem:1 pane pane-1"))
+        #expect(Self.waitGone(token))
+        // the channel number is free again
+        phone.deliver(Self.open(2))
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(cols: 80, rows: 24))
+        #expect(fixture.logged().filter { $0.hasPrefix("phone detached") }.count == 1)
+    }
+
+    @Test func attachExitClosesTheChannel() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        fixture.server.answerAttach(Self.answer("printf 'bye'"))
+        phone.deliver(Self.open(2))
+        let reader = FrameReader()
+        let close = try #require(reader.next(from: phone, channel: 2, kind: .close))
+        #expect((try? close.decodeJSON(PhoneLinkClose.self)) == PhoneLinkClose(reason: "session ended"))
+        #expect(fixture.waitLogged("phone detached from mem:1 pane pane-1"))
+    }
+
+    @Test func disconnectEndsEveryAttach() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { fixture.stop() }
+        let token = Self.token()
+        fixture.server.answerAttach(Self.answer("printf 'hi'; cat; : \(token)"))
+        phone.deliver(Self.open(2) + Self.open(3))
+        let reader = FrameReader()
+        for channel: UInt32 in [2, 3] { #expect(reader.next(from: phone, channel: channel, kind: .opened) != nil) }
+        #expect(fixture.waitLogged("phone attached from mem:1 pane pane-1"))
+        phone.peerLeft()
+        #expect(fixture.waitLogged("phone disconnected from mem:1"))
+        let lines = fixture.logged()
+        let detached = lines.indices.filter { lines[$0] == "phone detached from mem:1 pane pane-1" }
+        #expect(detached.count == 2)
+        #expect(detached.allSatisfy { $0 < lines.firstIndex(of: "phone disconnected from mem:1")! })
+        #expect(Self.waitGone(token))
+    }
+
+    // MARK: - helpers
+
+    private static func open(_ channel: UInt32, type: String = "vt", claim: Bool? = nil) -> Data {
+        PhoneLinkFrame.json(.open, channel: channel, PhoneLinkOpen(type: type, target: "S1", pane: "left", claim: claim)).encoded()
+    }
+
+    private static func answer(_ script: String) -> ControlResponse {
+        ControlResponse(ok: true, result: ControlResult(attach: RawStubServer.fakeAttach(script)))
+    }
+
+    /// A word that names this test's fake viewer in `ps`.
+    private static func token() -> String { "elis-fake-\(UUID().uuidString.prefix(8))" }
+
+    /// Whether every process with `token` in its command line is gone, within a slow-runner bound.
+    private static func waitGone(_ token: String) -> Bool {
+        let deadline = Date().addingTimeInterval(30)
+        while true {
+            let pgrep = Process()
+            pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+            pgrep.arguments = ["-f", token]
+            pgrep.standardOutput = FileHandle.nullDevice
+            guard (try? pgrep.run()) != nil else { return false }
+            pgrep.waitUntilExit()
+            if pgrep.terminationStatus == 1 { return true }
+            if Date() > deadline { return false }
+            usleep(50_000)
+        }
+    }
+
+    /// The phone leaves, so its attaches end, before the fixture goes.
+    private static func finish(_ fixture: MobileFixture, _ phone: MemoryPhone) {
+        phone.peerLeft()
+        _ = fixture.waitLogged("phone disconnected from mem:1")
+        fixture.stop()
+    }
+}
+
+/// Reads the relay's frames back, one channel at a time; frames for other channels wait for their own read.
+private final class FrameReader {
+    private var decoder = PhoneLinkDecoder()
+    private var frames: [PhoneLinkFrame] = []
+
+    /// The next frame on `channel`, of `kind` when given (others on that channel are skipped).
+    func next(from phone: MemoryPhone, channel: UInt32, kind: PhoneLinkKind? = nil) -> PhoneLinkFrame? {
+        while true {
+            while let index = frames.firstIndex(where: { $0.channel == channel }) {
+                let frame = frames.remove(at: index)
+                if kind == nil || frame.kind == kind { return frame }
+            }
+            guard let bytes = phone.readSent(), let decoded = try? decoder.feed(bytes) else { return nil }
+            frames += decoded
+        }
+    }
+
+    func opened(from phone: MemoryPhone, channel: UInt32) -> PhoneLinkOpened? {
+        try? next(from: phone, channel: channel, kind: .opened)?.decodeJSON(PhoneLinkOpened.self)
+    }
+
+    /// DATA on `channel` joined until it contains `text`.
+    func text(from phone: MemoryPhone, channel: UInt32, until text: String) -> String? {
+        var joined = Data()
+        while !String(decoding: joined, as: UTF8.self).contains(text) {
+            guard let frame = next(from: phone, channel: channel, kind: .data) else { return nil }
+            joined.append(frame.payload)
+        }
+        return String(decoding: joined, as: UTF8.self)
+    }
+}
+#endif

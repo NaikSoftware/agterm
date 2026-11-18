@@ -80,6 +80,57 @@ final class MobileFixture: @unchecked Sendable {
     }
 }
 
+extension MobileFixture {
+    /// A fixture and a phone that passed auth.
+    static func authenticated() throws -> (MobileFixture, MemoryPhone) {
+        let fixture = try MobileFixture()
+        let phone = MemoryPhone(queue: fixture.relay.queue)
+        fixture.relay.queue.sync { fixture.relay.accept(phone) }
+        phone.deliver(#"{"auth":"\#(fixture.token)","id":1}"# + "\n")
+        guard phone.readJSON()?["ok"] as? Bool == true else {
+            fixture.stop()
+            throw CocoaError(.fileReadUnknown)
+        }
+        return (fixture, phone)
+    }
+
+    /// A fixture and a phone past `{"mux":1}`.
+    static func upgraded() throws -> (MobileFixture, MemoryPhone) {
+        let (fixture, phone) = try authenticated()
+        phone.deliver(PhoneLinkUpgrade.request)
+        guard phone.readSent() == PhoneLinkUpgrade.answer else {
+            fixture.stop()
+            throw CocoaError(.fileReadUnknown)
+        }
+        return (fixture, phone)
+    }
+}
+
+/// Reads the relay's frames back and joins one channel into lines.
+final class MuxReader {
+    private let channel: UInt32
+    private var decoder = PhoneLinkDecoder()
+    private var line = Data()
+
+    init(channel: UInt32 = 0) { self.channel = channel }
+
+    func json(from phone: MemoryPhone) -> [String: Any]? {
+        line(from: phone).flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+    }
+
+    /// The next whole line, newline excluded.
+    func line(from phone: MemoryPhone) -> Data? {
+        while true {
+            if let newline = line.firstIndex(of: 0x0A) {
+                defer { line = Data(line[line.index(after: newline)...]) }
+                return Data(line[line.startIndex..<newline])
+            }
+            guard let bytes = phone.readSent(), let frames = try? decoder.feed(bytes) else { return nil }
+            for frame in frames where frame.kind == .data && frame.channel == channel { line.append(frame.payload) }
+        }
+    }
+}
+
 /// A blocking line client over TLS that trusts any certificate and records the one it saw.
 final class TLSLineClient: @unchecked Sendable {
     private let connection: NWConnection
@@ -234,8 +285,9 @@ final class LogLines: @unchecked Sendable {
 
 final class FingerprintBox: @unchecked Sendable { var value: String? }
 
-/// A control socket stub that answers `version` with 9.9.9, `events.read` from a scripted ring, and every other
-/// line with `{"echo":cmd}`, keeping the raw lines; `events.read` lines are kept apart, as their cursors.
+/// A control socket stub that answers `version` with 9.9.9, `events.read` from a scripted ring, `session.attach`
+/// with a fake viewer, and every other line with `{"echo":cmd}`, keeping the raw lines; `events.read` lines are kept
+/// apart, as their cursors.
 final class RawStubServer: @unchecked Sendable {
     let path = "/tmp/agm-\(UUID().uuidString.prefix(8)).sock"
     private let lock = NSLock()
@@ -246,6 +298,16 @@ final class RawStubServer: @unchecked Sendable {
     /// Each `events.read`'s `after`, nil for the bootstrap read.
     private var eventReads: [UInt64?] = []
     private var failNextRead = false
+
+    /// What `session.attach` answers; by default the fake viewer prints "hi" and echoes what it reads.
+    private var attach = ControlResponse(ok: true, result: ControlResult(attach: fakeAttach("printf 'hi'; cat")))
+
+    /// A viewer that runs `script` under `sh`, for an 80x24 pane.
+    static func fakeAttach(_ script: String, paneID: String = "pane-1") -> ControlAttach {
+        ControlAttach(argv: ["/bin/sh", "-c", script], paneID: paneID, screen: ["/bin/sh", "-c", "printf '1 80 24 0 0 0\\n'"])
+    }
+
+    func answerAttach(_ response: ControlResponse) { lock.withLock { attach = response } }
 
     func requests() -> [String] { lock.withLock { received } }
     func eventReadCursors() -> [UInt64?] { lock.withLock { eventReads } }
@@ -332,7 +394,9 @@ final class RawStubServer: @unchecked Sendable {
         let cmd = object["cmd"] as? String ?? ""
         if cmd != "events.read" { lock.withLock { received.append(String(decoding: line, as: UTF8.self)) } }
         let reply = cmd == "version" ? #"{"ok":true,"result":{"app":{"version":"9.9.9"}}}"#
-            : cmd == "events.read" ? eventsReply(object) : #"{"ok":true,"result":{"echo":"\#(cmd)"}}"#
+            : cmd == "events.read" ? eventsReply(object)
+            : cmd == "session.attach" ? lock.withLock { String(decoding: (try? JSONEncoder().encode(attach)) ?? Data(), as: UTF8.self) }
+            : #"{"ok":true,"result":{"echo":"\#(cmd)"}}"#
         let data = Data((reply + "\n").utf8)
         data.withUnsafeBytes { _ = UnixSocket.write(conn, $0.baseAddress!, data.count) }
     }

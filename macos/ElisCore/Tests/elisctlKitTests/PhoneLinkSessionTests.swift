@@ -6,7 +6,7 @@ import ElisCore
 
 struct PhoneLinkSessionTests {
     @Test func upgradeAnswersThenSpeaksFrames() throws {
-        let (fixture, phone) = try Self.authenticated()
+        let (fixture, phone) = try MobileFixture.authenticated()
         defer { fixture.stop() }
         phone.deliver(PhoneLinkUpgrade.request)
         #expect(phone.readSent() == PhoneLinkUpgrade.answer)
@@ -17,7 +17,7 @@ struct PhoneLinkSessionTests {
     }
 
     @Test func leftoverBytesAfterUpgradeAreDecoded() throws {
-        let (fixture, phone) = try Self.authenticated()
+        let (fixture, phone) = try MobileFixture.authenticated()
         defer { fixture.stop() }
         phone.deliver(PhoneLinkUpgrade.request + Self.control(#"{"cmd":"tree","id":7}"# + "\n"))
         #expect(phone.readSent() == PhoneLinkUpgrade.answer)
@@ -26,7 +26,7 @@ struct PhoneLinkSessionTests {
     }
 
     @Test func upgradeAnswersAfterEarlierRequests() throws {
-        let (fixture, phone) = try Self.authenticated()
+        let (fixture, phone) = try MobileFixture.authenticated()
         defer { fixture.stop() }
         phone.deliver(#"{"cmd":"tree","id":2}"# + "\n" + String(decoding: PhoneLinkUpgrade.request, as: UTF8.self))
         #expect(phone.readJSON()?["id"] as? Int == 2)
@@ -34,7 +34,7 @@ struct PhoneLinkSessionTests {
     }
 
     @Test func aLongAnswerSpansFrames() throws {
-        let (fixture, phone) = try Self.upgraded()
+        let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }
         // the stub echoes the command name, so a long name makes an answer over one 16 KiB chunk
         let cmd = String(repeating: "x", count: 40000)
@@ -45,7 +45,7 @@ struct PhoneLinkSessionTests {
     }
 
     @Test func aLineMaySpanFrames() throws {
-        let (fixture, phone) = try Self.upgraded()
+        let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }
         phone.deliver(Self.control(#"{"cmd":"tr"#))
         phone.deliver(Self.control(#"ee","id":8}"#) + Self.control("\n"))
@@ -55,7 +55,7 @@ struct PhoneLinkSessionTests {
     }
 
     @Test func controlAnswersKeepRequestOrder() throws {
-        let (fixture, phone) = try Self.upgraded()
+        let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }
         let before = fixture.server.requests().count
         phone.deliver(Self.control(#"{"cmd":"session.type","target":"S1","args":{"text":"a"},"id":2}"# + "\n"
@@ -68,7 +68,7 @@ struct PhoneLinkSessionTests {
     }
 
     @Test func gridSetOverMuxIsResetOnDisconnect() throws {
-        let (fixture, phone) = try Self.upgraded()
+        let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }
         phone.deliver(Self.control(#"{"cmd":"session.grid","target":"S1","args":{"columns":40,"rows":20},"id":2}"# + "\n"))
         let reader = MuxReader()
@@ -81,7 +81,7 @@ struct PhoneLinkSessionTests {
 
     @Test(arguments: [false, true])
     func refusesPhoneAndAttachCommands(_ mux: Bool) throws {
-        let (fixture, phone) = try mux ? Self.upgraded() : Self.authenticated()
+        let (fixture, phone) = try mux ? MobileFixture.upgraded() : MobileFixture.authenticated()
         defer { fixture.stop() }
         let before = fixture.server.requests().count
         let reader = MuxReader()
@@ -97,7 +97,7 @@ struct PhoneLinkSessionTests {
     }
 
     @Test func badFrameClosesTheLink() throws {
-        let (fixture, phone) = try Self.upgraded()
+        let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }
         phone.deliver(Data([99, 0, 0, 0, 0, 0, 0, 0, 0]))
         #expect(phone.waitClosed())
@@ -105,7 +105,7 @@ struct PhoneLinkSessionTests {
     }
 
     @Test func revokeClosesAMuxLink() throws {
-        let (fixture, phone) = try Self.upgraded()
+        let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }
         _ = try MobilePairing.loadToken(in: fixture.mobileDir, fresh: true)
         #expect(phone.waitClosed())
@@ -113,7 +113,7 @@ struct PhoneLinkSessionTests {
     }
 
     @Test func eventsArriveOnChannelOne() throws {
-        let (fixture, phone) = try Self.upgraded()
+        let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }
         #expect(fixture.server.waitEventRead { $0 == nil }) // rows added before it are history
         // over 64 KiB: the hand-off must top channel 1 up again as the transport drains it
@@ -123,7 +123,7 @@ struct PhoneLinkSessionTests {
     }
 
     @Test func startsAfterTheLatestEvent() throws {
-        let (fixture, phone) = try Self.authenticated()
+        let (fixture, phone) = try MobileFixture.authenticated()
         defer { fixture.stop() }
         fixture.server.addEvents(2)
         phone.deliver(PhoneLinkUpgrade.request)
@@ -136,7 +136,7 @@ struct PhoneLinkSessionTests {
 
     /// A phone that takes nothing: the relay keeps at most 256 KiB of rows, drops the oldest and says how many.
     @Test func aSlowPhoneDropsOldEvents() throws {
-        let (fixture, phone) = try Self.upgraded()
+        let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }
         #expect(fixture.server.waitEventRead { $0 == nil })
         phone.hold()
@@ -170,7 +170,7 @@ struct PhoneLinkSessionTests {
 
     /// A broken cursor restarts the read at the tail; the phone hears it missed events before the next row.
     @Test func aRestartedReadSendsAGap() throws {
-        let (fixture, phone) = try Self.upgraded()
+        let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }
         #expect(fixture.server.waitEventRead { $0 != nil })
         fixture.server.failNextEventRead()
@@ -183,7 +183,7 @@ struct PhoneLinkSessionTests {
 
     /// Rows still queued when the cursor breaks are older than the `tree` the gap makes the phone read, so they go.
     @Test func aGapSupersedesQueuedEvents() throws {
-        let (fixture, phone) = try Self.upgraded()
+        let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }
         #expect(fixture.server.waitEventRead { $0 == nil })
         phone.hold()
@@ -205,7 +205,7 @@ struct PhoneLinkSessionTests {
     }
 
     @Test func pollerStopsOnClose() throws {
-        let (fixture, phone) = try Self.upgraded()
+        let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }
         #expect(fixture.server.waitEventRead { $0 != nil })
         phone.peerLeft()
@@ -218,55 +218,9 @@ struct PhoneLinkSessionTests {
 
     // MARK: - helpers
 
-    private static func authenticated() throws -> (MobileFixture, MemoryPhone) {
-        let fixture = try MobileFixture()
-        let phone = MemoryPhone(queue: fixture.relay.queue)
-        fixture.relay.queue.sync { fixture.relay.accept(phone) }
-        phone.deliver(#"{"auth":"\#(fixture.token)","id":1}"# + "\n")
-        guard phone.readJSON()?["ok"] as? Bool == true else {
-            fixture.stop()
-            throw CocoaError(.fileReadUnknown)
-        }
-        return (fixture, phone)
-    }
-
-    private static func upgraded() throws -> (MobileFixture, MemoryPhone) {
-        let (fixture, phone) = try authenticated()
-        phone.deliver(PhoneLinkUpgrade.request)
-        guard phone.readSent() == PhoneLinkUpgrade.answer else {
-            fixture.stop()
-            throw CocoaError(.fileReadUnknown)
-        }
-        return (fixture, phone)
-    }
-
     private static func control(_ text: String) -> Data {
         PhoneLinkFrame.data(channel: 0, Data(text.utf8)).encoded()
     }
 }
 
-/// Reads the relay's frames back and joins one channel into lines.
-private final class MuxReader {
-    private let channel: UInt32
-    private var decoder = PhoneLinkDecoder()
-    private var line = Data()
-
-    init(channel: UInt32 = 0) { self.channel = channel }
-
-    func json(from phone: MemoryPhone) -> [String: Any]? {
-        line(from: phone).flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
-    }
-
-    /// The next whole line, newline excluded.
-    func line(from phone: MemoryPhone) -> Data? {
-        while true {
-            if let newline = line.firstIndex(of: 0x0A) {
-                defer { line = Data(line[line.index(after: newline)...]) }
-                return Data(line[line.startIndex..<newline])
-            }
-            guard let bytes = phone.readSent(), let frames = try? decoder.feed(bytes) else { return nil }
-            for frame in frames where frame.kind == .data && frame.channel == channel { line.append(frame.payload) }
-        }
-    }
-}
 #endif
