@@ -18,8 +18,6 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         let frame: (PhoneLinkFrame) -> Void
         /// The channel is over: the link closes it in the scheduler and forgets this terminal.
         let ended: () -> Void
-        /// Bytes queued on the channel and not sent yet, for the stall watchdog.
-        let pending: () -> Int
         /// A full window went out since the phone's last CREDIT, for the stall watchdog.
         let windowSpent: () -> Bool
     }
@@ -33,7 +31,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     static let reattachInterval: TimeInterval = 1
     static let maxBackoff: TimeInterval = 30
     static let backoffReset: TimeInterval = 10
-    /// This long with no CREDIT from the phone (since OPEN if none came), while it owes one, closes the channel.
+    /// This long since the phone's last CREDIT (or OPEN), with a full window sent since then, closes the channel.
     static let stallTimeout: TimeInterval = 30
     static let localPoll: TimeInterval = 2
     /// Each remote poll is a fresh ssh connection.
@@ -217,8 +215,8 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         after(1) { [weak self] in
             guard let self, !stopped else { return }
             let now = clock()
-            // a pending resync alone owes nothing: during a backoff wait the phone gets no bytes to grant CREDIT for
-            if now.timeIntervalSince(lastCredit) >= Self.stallTimeout, link.windowSpent() || link.pending() > 0 {
+            // unacknowledged bytes, not waiting ones: a backoff wait or a slow phone sent no new window
+            if now.timeIntervalSince(lastCredit) >= Self.stallTimeout, link.windowSpent() {
                 return close(reason: "stalled")
             }
             if !resyncing, screenProcess == nil, now >= nextPoll {
