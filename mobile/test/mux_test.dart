@@ -95,6 +95,25 @@ Future<VtChannel> openLive(Mux m, FakeRelay r, List<String> seen, {void Function
   return ch;
 }
 
+String describeClaim(ClaimEvent e) => switch (e) {
+      Lead(:final role) => 'lead $role',
+      ClaimClosed(:final reason) => 'closed $reason',
+    };
+
+/// Claims a pane the relay accepts at 80x24 and leads; [seen] collects its events.
+Future<ClaimChannel> claimLive(Mux m, FakeRelay r, List<String> seen) async {
+  final f = m.claim('w', cols: 80, rows: 24);
+  await flush();
+  final id = r.frames.last.channel;
+  r.send([...json(LinkKind.opened, id, {'cols': 80, 'rows': 24}), ...json(LinkKind.lead, id, {'role': 'leader'})]);
+  final ch = await f;
+  ch.events.listen((e) => seen.add(describeClaim(e)));
+  await flush();
+  return ch;
+}
+
+List<LinkFrame> dataOn(FakeRelay r, int ch) => [for (final f in r.frames) if (f.channel == ch && f.kind == LinkKind.data) f];
+
 void main() {
   test('upgradeSwitchesToFrames', () async {
     final (c, r) = await connect();
@@ -382,5 +401,102 @@ void main() {
     await flush();
     expect(seen, ['opened 80x24', 'closed the relay sent a bad GRID']);
     expect((r.frames.last.kind, r.frames.last.channel), (LinkKind.close, 2));
+  });
+
+  test('claimOpenCarriesClaimAndSize', () async {
+    final (m, r, _) = await upgraded();
+    unawaited(m.claim('w1', pane: 'p2', cols: 50, rows: 30));
+    await flush();
+    final o = r.frames.last;
+    expect((o.kind, o.channel), (LinkKind.open, 2));
+    expect(utf8.decode(o.payload), '{"claim":true,"cols":50,"pane":"p2","rows":30,"target":"w1","type":"vt"}');
+  });
+
+  test('claimRefusalThrows', () async {
+    final (m, r, _) = await upgraded();
+    final f = m.claim('w', cols: 80, rows: 24);
+    await flush();
+    r.send(json(LinkKind.opened, 2, {'error': 'session not realized'}));
+    await expectLater(f, throwsA(isA<ElisError>().having((e) => e.message, 'message', 'session not realized')));
+  });
+
+  test('leadIsDelivered', () async {
+    final (m, r, _) = await upgraded();
+    final seen = <String>[];
+    await claimLive(m, r, seen);
+    r.send([...json(LinkKind.lead, 2, {'role': 'follower'}), ...json(LinkKind.close, 2, {'reason': 'the computer took the lead back'})]);
+    await flush();
+    expect(seen, ['lead leader', 'lead follower', 'closed the computer took the lead back']);
+  });
+
+  test('pasteIsSentByCredit', () async {
+    final (m, r, _) = await upgraded();
+    final ch = await claimLive(m, r, []);
+    expect(ch.send(Uint8List(40 * 1024)), true);
+    expect(dataOn(r, 2).map((d) => d.payload.length), [16384]);
+    r.send(frame(LinkKind.credit, 2, LinkFrame.credit(2, 10000).payload));
+    await flush();
+    expect(dataOn(r, 2).map((d) => d.payload.length), [16384, 10000]);
+    r.send([...frame(LinkKind.credit, 2, LinkFrame.credit(2, 6384).payload), ...frame(LinkKind.credit, 2, LinkFrame.credit(2, 16384).payload)]);
+    await flush();
+    final sizes = dataOn(r, 2).map((d) => d.payload.length).toList();
+    expect(sizes.every((n) => n <= 16384), true);
+    expect(sizes.fold(0, (a, n) => a + n), 40 * 1024);
+  });
+
+  test('queueCapRefuses', () async {
+    final (m, r, _) = await upgraded();
+    final ch = await claimLive(m, r, []);
+    expect(ch.send(Uint8List(16384 + (1 << 20))), true);
+    expect(ch.send(Uint8List(1)), false);
+    r.send(frame(LinkKind.credit, 2, LinkFrame.credit(2, 1).payload));
+    await flush();
+    expect(ch.send(Uint8List(1)), true);
+  });
+
+  test('resizeSendsAFrame', () async {
+    final (m, r, _) = await upgraded();
+    final ch = await claimLive(m, r, []);
+    ch.resize(100, 40);
+    final f = r.frames.last;
+    expect((f.kind, f.channel, f.size), (LinkKind.resize, 2, (cols: 100, rows: 40)));
+  });
+
+  test('closeSendsCloseAndStopsSending', () async {
+    final (m, r, _) = await upgraded();
+    final ch = await claimLive(m, r, []);
+    ch.send(Uint8List(20000));
+    await ch.close();
+    final last = r.frames.last;
+    expect((last.kind, last.channel), (LinkKind.close, 2));
+    expect(jsonDecode(utf8.decode(last.payload)), {'reason': 'closed'});
+    r.send(frame(LinkKind.credit, 2, LinkFrame.credit(2, 16384).payload));
+    await flush();
+    expect(ch.send(Uint8List(1)), false);
+    ch.resize(90, 30);
+    expect(r.frames.last, same(last));
+  });
+
+  test('linkLossClosesTheClaim', () async {
+    final (m, r, _) = await upgraded();
+    final seen = <String>[];
+    await claimLive(m, r, seen);
+    final pending = m.claim('w', cols: 80, rows: 24);
+    await flush();
+    final failed = expectLater(pending, throwsA(isA<ElisError>()));
+    r.drop();
+    await failed;
+    await m.closed.first;
+    await flush();
+    expect(seen, ['lead leader', 'closed Disconnected']);
+  });
+
+  test('watchChannelIgnoresLead', () async {
+    final (m, r, _) = await upgraded();
+    final seen = <String>[];
+    await openLive(m, r, seen);
+    r.send([...json(LinkKind.lead, 2, {'role': 'leader'}), ...frame(LinkKind.data, 2, utf8.encode('X'))]);
+    await flush();
+    expect(seen, ['opened 80x24', 'data X']);
   });
 }

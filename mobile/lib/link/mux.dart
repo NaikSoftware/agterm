@@ -1,5 +1,5 @@
 // The relay mux (control-api.md "Relay mux"): channel 0 carries the control lines, channel 1 the event rows,
-// channels 2 and up one vt pane each, watched only (the phone never sends DATA or RESIZE on them).
+// channels 2 and up one vt pane each: watched (the phone never sends DATA or RESIZE on them) or claimed (input only).
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -36,11 +36,25 @@ class Closed extends VtEvent {
   final String reason;
 }
 
+sealed class ClaimEvent {}
+
+class Lead extends ClaimEvent {
+  Lead(this.role);
+  final String role;
+}
+
+class ClaimClosed extends ClaimEvent {
+  ClaimClosed(this.reason);
+  final String reason;
+}
+
 /// An event row saying rows were lost (`{"dropped":N}`, `{"gap":true}`): tree rows may be among them, so re-read `tree`.
 bool rereadsTree(Map<String, dynamic> row) => row.containsKey('dropped') || row['gap'] == true;
 
 const _creditBatch = 16 * 1024;
 const _duplicateOpen = 'channel already open';
+const _claimWindow = 16 * 1024; // the relay's receive window: more unacknowledged closes the channel `input overflow`
+const _claimQueueCap = 1 << 20;
 
 class Mux {
   Mux._(this._c);
@@ -50,7 +64,7 @@ class Mux {
   final _control = LineBuffer();
   final _eventLines = LineBuffer();
   final _events = StreamController<Map<String, dynamic>>.broadcast(); // nobody may listen: rows are not kept
-  final _channels = <int, VtChannel>{};
+  final _channels = <int, _Channel>{};
   final _done = Completer<void>();
   var _nextChannel = 2;
   String _lostReason = 'Disconnected';
@@ -76,6 +90,15 @@ class Mux {
     final ch = VtChannel._(this, _nextChannel++); // ids are used once per link
     _channels[ch.id] = ch;
     _add(LinkFrame.json(LinkKind.open, ch.id, {'type': 'vt', 'target': target, 'pane': ?pane}));
+    return ch._opened.future;
+  }
+
+  /// [open] for input: completes on OPENED, after which the relay sends LEAD; a refusal throws as [open] does.
+  Future<ClaimChannel> claim(String target, {String? pane, required int cols, required int rows}) {
+    if (_done.isCompleted) return Future.error(ElisError('Disconnected'));
+    final ch = ClaimChannel._(this, _nextChannel++);
+    _channels[ch.id] = ch;
+    _add(LinkFrame.json(LinkKind.open, ch.id, {'type': 'vt', 'target': target, 'pane': ?pane, 'claim': true, 'cols': cols, 'rows': rows}));
     return ch._opened.future;
   }
 
@@ -140,10 +163,41 @@ Map<String, dynamic>? _jsonLine(String line) {
   }
 }
 
-class VtChannel {
+abstract interface class _Channel {
+  int get id;
+  bool get _isOpened;
+  void _onFrame(LinkFrame f);
+  void _end(String? reason, {bool revoked = false});
+}
+
+bool _sane(int cols, int rows) => cols >= 1 && cols <= 1000 && rows >= 1 && rows <= 1000;
+
+/// OPENED's size; null when there is nothing more to do: a duplicate refusal, a repeat, or the channel ended.
+(int, int)? _openedSize(Mux mux, _Channel ch, LinkFrame f) {
+  final o = _json(f.payload) ?? const {};
+  final error = o['error'];
+  if (error == _duplicateOpen) return null; // a duplicate OPEN refused: this stream continues
+  if (error == 'revoked') {
+    ch._end(revokedMessage, revoked: true); // Revoked, not Disconnected, for this open
+    mux._revoke();
+    return null;
+  }
+  if (error != null) {
+    ch._end('$error');
+    return null;
+  }
+  if (ch._isOpened) return null;
+  if ((o['cols'], o['rows']) case (final int cols, final int rows) when _sane(cols, rows)) return (cols, rows);
+  mux._add(LinkFrame.json(LinkKind.close, ch.id, {'reason': 'closed'})); // the relay holds it open: free the slot
+  ch._end('the relay sent a bad OPENED');
+  return null;
+}
+
+class VtChannel implements _Channel {
   VtChannel._(this._mux, this.id);
 
   final Mux _mux;
+  @override
   final int id;
   final _events = StreamController<VtEvent>(); // single-subscription: DATA in the same read as OPENED is kept
   final _opened = Completer<VtChannel>();
@@ -152,6 +206,9 @@ class VtChannel {
   int _pending = 0; // consumed, not yet credited
 
   Stream<VtEvent> get events => _events.stream;
+
+  @override
+  bool get _isOpened => _opened.isCompleted;
 
   /// The emulator consumed [bytes] of Data: CREDIT once caught up with what arrived, or per 16 KiB.
   /// The caller must report every Data event it received, in order, those before a Resync included: unreported
@@ -176,27 +233,14 @@ class VtChannel {
     _end(null);
   }
 
-  static bool _sane(int cols, int rows) => cols >= 1 && cols <= 1000 && rows >= 1 && rows <= 1000;
-
+  @override
   void _onFrame(LinkFrame f) {
     switch (f.kind) {
       case LinkKind.opened:
-        final o = _json(f.payload) ?? const {};
-        final error = o['error'];
-        if (error == _duplicateOpen) return; // a duplicate OPEN refused: this stream continues
-        if (error == 'revoked') {
-          _end(revokedMessage, revoked: true); // Revoked, not Disconnected, for this open
-          return _mux._revoke();
-        }
-        if (error != null) return _end('$error');
-        if (_opened.isCompleted) return;
-        if ((o['cols'], o['rows']) case (final int cols, final int rows) when _sane(cols, rows)) {
+        if (_openedSize(_mux, this, f) case (final cols, final rows)) {
           _events.add(Opened(cols, rows));
-        } else {
-          _mux._add(LinkFrame.json(LinkKind.close, id, {'reason': 'closed'})); // the relay holds it open: free the slot
-          return _end('the relay sent a bad OPENED');
+          _opened.complete(this);
         }
-        _opened.complete(this);
       case LinkKind.data:
         _unconsumed += f.payload.length;
         _events.add(Data(f.payload));
@@ -220,12 +264,101 @@ class VtChannel {
   }
 
   /// Removes the channel; [reason] null for a phone close. Before OPENED the open fails with the reason instead.
+  @override
   void _end(String? reason, {bool revoked = false}) {
     _mux._channels.remove(id);
     if (!_opened.isCompleted) {
       _opened.completeError(revoked ? Revoked() : ElisError(reason ?? 'closed'));
     } else if (reason != null) {
       _events.add(Closed(reason));
+    }
+    unawaited(_events.close());
+  }
+}
+
+/// A claiming channel: the phone's input goes out as DATA within the relay's window, released by its CREDIT.
+class ClaimChannel implements _Channel {
+  ClaimChannel._(this._mux, this.id);
+
+  final Mux _mux;
+  @override
+  final int id;
+  final _events = StreamController<ClaimEvent>(); // single-subscription: LEAD in the same read as OPENED is kept
+  final _opened = Completer<ClaimChannel>();
+  final _queue = <Uint8List>[];
+  int _queued = 0;
+  int _headAt = 0; // bytes of _queue.first already sent
+  int _unacked = 0;
+
+  Stream<ClaimEvent> get events => _events.stream;
+
+  @override
+  bool get _isOpened => _opened.isCompleted;
+
+  /// Queues [bytes] for the relay; false, sending nothing, when the channel ended or more than 1 MiB would wait.
+  bool send(Uint8List bytes) {
+    // what the window takes now does not wait (a non-empty queue means the window is spent)
+    if (_events.isClosed || _queued + bytes.length - (_claimWindow - _unacked) > _claimQueueCap) return false;
+    if (bytes.isEmpty) return true;
+    _queue.add(bytes);
+    _queued += bytes.length;
+    _pump();
+    return true;
+  }
+
+  void resize(int cols, int rows) {
+    if (!_events.isClosed) _mux._add(LinkFrame.resize(id, cols, rows));
+  }
+
+  /// Sends CLOSE; the relay does not answer it, and unsent input is dropped.
+  Future<void> close() async {
+    if (_mux._channels[id] != this) return;
+    _mux._add(LinkFrame.json(LinkKind.close, id, {'reason': 'closed'}));
+    _end(null);
+  }
+
+  void _pump() {
+    while (_queue.isNotEmpty && _unacked < _claimWindow) {
+      final head = _queue.first;
+      final n = min(head.length - _headAt, _claimWindow - _unacked);
+      _mux._add(LinkFrame(LinkKind.data, id, Uint8List.sublistView(head, _headAt, _headAt + n)));
+      _unacked += n;
+      _queued -= n;
+      _headAt += n;
+      if (_headAt == head.length) {
+        _queue.removeAt(0);
+        _headAt = 0;
+      }
+    }
+  }
+
+  @override
+  void _onFrame(LinkFrame f) {
+    switch (f.kind) {
+      case LinkKind.opened:
+        if (_openedSize(_mux, this, f) == null) return;
+        _opened.complete(this);
+      case LinkKind.lead:
+        _events.add(Lead('${(_json(f.payload) ?? const {})['role']}'));
+      case LinkKind.credit:
+        _unacked = max(0, _unacked - (f.creditBytes ?? 0));
+        _pump();
+      case LinkKind.close:
+        _end('${(_json(f.payload) ?? const {})['reason'] ?? 'closed'}');
+      case LinkKind.open || LinkKind.data || LinkKind.resize || LinkKind.grid || LinkKind.resync:
+        break; // not sent on a claim channel
+    }
+  }
+
+  @override
+  void _end(String? reason, {bool revoked = false}) {
+    _mux._channels.remove(id);
+    _queue.clear();
+    _queued = 0;
+    if (!_opened.isCompleted) {
+      _opened.completeError(revoked ? Revoked() : ElisError(reason ?? 'closed'));
+    } else if (reason != null) {
+      _events.add(ClaimClosed(reason));
     }
     unawaited(_events.close());
   }
