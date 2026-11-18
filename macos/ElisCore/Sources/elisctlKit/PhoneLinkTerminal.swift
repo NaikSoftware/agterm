@@ -26,10 +26,11 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     static let screenTimeout: TimeInterval = 5
     /// A hung app must not hold the attach request's thread forever.
     static let attachTimeout: TimeInterval = 10
-    /// Re-attaches after an overflow start at most this often.
+    /// The wait before a re-attach after an overflow; each overflow within `backoffReset` of the previous re-attach
+    /// doubles it, up to `maxBackoff`, so an old remote daemon that replays its scrollback costs one attach per 30 s.
     static let reattachInterval: TimeInterval = 1
-    /// An overflow this soon after its attach started counts toward "session too old"; two in a row close.
-    static let earlyOverflow: TimeInterval = 2
+    static let maxBackoff: TimeInterval = 30
+    static let backoffReset: TimeInterval = 10
     /// Bytes waiting this long with no CREDIT from the phone close the channel.
     static let stallTimeout: TimeInterval = 30
     static let localPoll: TimeInterval = 2
@@ -59,9 +60,9 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     /// The grid the phone last heard.
     private var grid: (cols: UInt16, rows: UInt16) = (0, 0)
     private var nextPoll = Date.distantFuture
-    private var attachRequested = Date.distantPast
-    private var attachStarted = Date.distantPast
-    private var earlyOverflows = 0
+    private var backoff = PhoneLinkTerminal.reattachInterval
+    /// When the last re-attach after an overflow was asked for.
+    private var reattached: Date?
     /// From an overflow until the fresh attach runs.
     private var resyncing = false
     /// When bytes began to wait with no CREDIT since; nil while nothing waits.
@@ -85,7 +86,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
 
     /// The phone sent CREDIT on this channel; the scheduler has already sent what it allows.
     func credited() {
-        waitingSince = resyncing || link.pending() > 0 ? clock() : nil
+        waitingSince = link.pending() > 0 ? clock() : nil
     }
 
     /// Ends the channel without a word to the phone: the phone closed it, or the link is closing.
@@ -99,7 +100,6 @@ final class PhoneLinkTerminal: @unchecked Sendable {
 
     /// Asks the app for the attach off the relay queue, so it does not wait behind the phone's control requests.
     private func requestAttach() {
-        attachRequested = clock()
         var args: [String: Any] = [:]
         args["pane"] = request.pane
         let body = (try? JSONSerialization.data(withJSONObject: ["cmd": Command.sessionAttach.rawValue, "target": request.target,
@@ -154,10 +154,10 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         } catch {
             return fail("could not start the attach: \(error)")
         }
-        attachStarted = clock()
         grid = (cols, rows)
         if resyncing {
             resyncing = false
+            waitingSince = nil // a fresh window: the stall clock starts again with the next waiting byte
             link.resynced(cols, rows) // a resync prints no viewer lines
             return
         }
@@ -196,14 +196,15 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         epoch += 1 // first: no byte of the old attach may follow RESYNC
         pty?.terminate()
         pty = nil
-        let now = clock()
-        earlyOverflows = now.timeIntervalSince(attachStarted) < Self.earlyOverflow ? earlyOverflows + 1 : 0
-        // an old daemon replays its whole scrollback to every viewer: re-attaching would loop
-        if earlyOverflows >= 2 { return close(reason: "session too old for the phone view") }
+        if let reattached, clock().timeIntervalSince(reattached) < Self.backoffReset {
+            backoff = min(backoff * 2, Self.maxBackoff)
+        } else {
+            backoff = Self.reattachInterval
+        }
         resyncing = true
-        if waitingSince == nil { waitingSince = now }
-        after(max(0, attachRequested.timeIntervalSince(now) + Self.reattachInterval)) { [weak self] in
+        after(backoff) { [weak self] in
             guard let self, !stopped else { return }
+            reattached = clock()
             requestAttach()
         }
     }
@@ -218,12 +219,15 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         after(1) { [weak self] in
             guard let self, !stopped else { return }
             let now = clock()
-            if !resyncing, link.pending() == 0 {
-                waitingSince = nil
-            } else {
-                let since = waitingSince ?? now
-                waitingSince = since
-                if now.timeIntervalSince(since) >= Self.stallTimeout { return close(reason: "stalled") }
+            // the relay's own backoff wait is not the phone's stall: the phone has nothing to grant CREDIT for
+            if !resyncing {
+                if link.pending() == 0 {
+                    waitingSince = nil
+                } else {
+                    let since = waitingSince ?? now
+                    waitingSince = since
+                    if now.timeIntervalSince(since) >= Self.stallTimeout { return close(reason: "stalled") }
+                }
             }
             if !resyncing, screenProcess == nil, now >= nextPoll {
                 nextPoll = now + (remote ? Self.remotePoll : Self.localPoll)

@@ -9,23 +9,23 @@ struct PhoneLinkTerminalResyncTests {
     /// A viewer that sends 600 KiB, over the 512 KiB relay buffer, then reads.
     private static let burst = "head -c 614400 /dev/zero | tr '\\0' x; exec cat"
 
-    @Test func floodResyncsAtMostOncePerSecond() throws {
+    /// A program that floods a phone sending no CREDIT: each overflow within 10 s of the last re-attach doubles the
+    /// wait, up to 30 s. The channel stays open, the queue bounded, and the relay's own wait is no stall.
+    @Test func floodBacksOffResyncs() throws {
         let harness = try TerminalHarness()
         defer { harness.finish() }
-        let token = PhoneLinkTerminalTests.token()
-        harness.start(RawStubServer.fakeAttach("exec yes \(token)"))
-        #expect(harness.waitOverflow())
-        harness.advance(by: 0.5)
-        usleep(300_000)
-        #expect(harness.attaches() == 1)
-        harness.advance(by: 0.5)
-        #expect(harness.wait { harness.events().contains(.resync) })
-        // the second flood overflows within 2 s of its start too
-        #expect(harness.wait { harness.events().contains(.close("session too old for the phone view")) })
-        #expect(harness.attaches() == 2) // after 1 s: at most elapsed seconds + 1
+        harness.start(RawStubServer.fakeAttach("exec yes flood"))
+        for (round, wait) in [1.0, 2, 4, 8, 16, 30, 30].enumerated() {
+            #expect(harness.waitOverflow(count: round + 1))
+            harness.advance(by: wait - 0.1)
+            usleep(200_000)
+            #expect(harness.attaches() == round + 1, "round \(round): re-attached before \(wait) s")
+            harness.advance(by: 0.1)
+            #expect(harness.wait { harness.events().filter { $0 == .resync }.count == round + 1 })
+        }
+        #expect(!harness.events().contains { if case .close = $0 { true } else { false } })
         #expect(harness.maxPending() <= PhoneLinkSession.bufferLimit)
-        #expect(PhoneLinkTerminalTests.waitGone(token))
-        #expect(harness.lines.all().filter { $0.hasPrefix("phone detached") }.count == 1)
+        #expect(harness.lines.all().filter { $0.hasPrefix("phone") } == ["phone attached from mem:1 pane pane-1"])
     }
 
     @Test func noOldBytesAfterResync() throws {
@@ -41,38 +41,29 @@ struct PhoneLinkTerminalResyncTests {
         #expect(harness.lines.all().filter { $0.hasPrefix("phone") } == ["phone attached from mem:1 pane pane-1"])
     }
 
-    @Test func repeatedEarlyOverflowCloses() throws {
+    /// 10 s without an overflow after a re-attach puts the wait back to 1 s.
+    @Test func backoffResetsAfterQuiet() throws {
         let harness = try TerminalHarness()
         defer { harness.finish() }
-        harness.start(RawStubServer.fakeAttach(Self.burst))
-        #expect(harness.waitOverflow())
-        harness.advance(by: 1)
-        #expect(harness.wait { harness.events().contains(.close("session too old for the phone view")) })
-        #expect(harness.events().filter { $0 == .resync }.count == 1)
-        #expect(harness.events().last == .ended)
-        harness.advance(by: 5)
-        usleep(300_000)
-        #expect(harness.attaches() == 2)
-    }
-
-    /// An overflow 2 s or more after the attach started is a plain resync, and resets the early count.
-    @Test func lateOverflowKeepsResyncing() throws {
-        let harness = try TerminalHarness()
-        defer { harness.finish() }
+        // each attach waits for its own go file, so the test decides when it overflows
         let gate = harness.dir + "/go"
-        // each attach waits for its own go file, so the test moves the clock before the burst
         harness.start(RawStubServer.fakeAttach(
             "n=$(ls '\(harness.dir)' | grep -c '^started'); touch '\(harness.dir)/started'$n; "
                 + "while [ ! -e '\(gate)'$n ]; do sleep 0.02; done; " + Self.burst))
-        #expect(harness.wait { harness.events().contains(.opened(80, 24)) }) // the attach started at the frozen time
-        for round in 0..<3 {
-            harness.advance(by: 2.5)
-            FileManager.default.createFile(atPath: "\(gate)\(round)", contents: nil)
-            #expect(harness.waitOverflow(count: round + 1))
-            harness.advance(by: 0)
-            #expect(harness.wait { harness.events().filter { $0 == .resync }.count == round + 1 })
-        }
-        #expect(!harness.events().contains { if case .close = $0 { true } else { false } })
+        #expect(harness.wait { harness.events().contains(.opened(80, 24)) })
+        FileManager.default.createFile(atPath: "\(gate)0", contents: nil)
+        #expect(harness.waitOverflow())
+        harness.advance(by: 1)
+        #expect(harness.wait { harness.events().contains(.resync) })
+        // an overflow right away would wait 2 s; this one comes after 10 s of quiet
+        harness.advance(by: 10)
+        FileManager.default.createFile(atPath: "\(gate)1", contents: nil)
+        #expect(harness.waitOverflow(count: 2))
+        harness.advance(by: 0.9)
+        usleep(200_000)
+        #expect(harness.attaches() == 2)
+        harness.advance(by: 0.1)
+        #expect(harness.wait { harness.events().filter { $0 == .resync }.count == 2 })
     }
 
     @Test func failedReattachClosesWithTheAppError() throws {
