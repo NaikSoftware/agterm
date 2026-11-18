@@ -144,6 +144,20 @@ struct PhoneLinkPtyTests {
         #expect(await eventually { written.counts.count == 16 })
     }
 
+    @Test func idleWriterSleepsAndEndsWithTerminate() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/cat"])
+        let written = Written()
+        pty.write(Data("x".utf8)) { written.add($0) }
+        #expect(await eventually { written.counts == [1] })
+        let idle = pty.writerWakeups
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(pty.writerWakeups == idle)
+        pty.terminate()
+        #expect(await eventually(3) { !pty.writerRunning })
+        #expect(await recorder.waitExit())
+    }
+
     /// Written collects what each `write` reported, in completion order.
     private final class Written: @unchecked Sendable {
         private let lock = NSLock()

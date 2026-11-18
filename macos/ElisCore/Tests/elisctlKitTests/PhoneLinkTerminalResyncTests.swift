@@ -169,6 +169,26 @@ struct PhoneLinkTerminalResyncTests {
         #expect(harness.events().filter { $0 == .resync }.count == 1)
     }
 
+    /// The first early read can land before the daemon applied the change; a second one 2 s later catches it.
+    @Test func pollSoonReadsTwice() throws {
+        let harness = try TerminalHarness()
+        defer { harness.finish() }
+        let grid = harness.dir + "/grid"
+        let reads = harness.dir + "/reads"
+        try "1 80 24 0 0 0\n".write(toFile: grid, atomically: true, encoding: .utf8)
+        harness.start(RawStubServer.fakeAttach("printf hi; exec cat", screen: "cat '\(grid)'; echo >> '\(reads)'", remote: true))
+        #expect(harness.wait { harness.events().contains(.opened(80, 24)) })
+        let count = { (try? String(contentsOfFile: reads, encoding: .utf8))?.count ?? 0 }
+        harness.pollSoon()
+        harness.advance(by: 1)
+        #expect(harness.wait { count() == 2 })
+        usleep(300_000) // the read's answer hops to the relay queue after its file write
+        harness.queueSync()
+        try "1 100 30 0 0 0\n".write(toFile: grid, atomically: true, encoding: .utf8)
+        harness.advance(by: 2)
+        #expect(harness.wait { harness.events().contains(.grid(100, 30)) })
+    }
+
     @Test func noCreditCloses() throws {
         let harness = try TerminalHarness()
         defer { harness.finish() }
@@ -312,6 +332,8 @@ private final class TerminalHarness: @unchecked Sendable {
     }
 
     func resync() { queue.sync { terminal?.resync() } }
+    func pollSoon() { queue.sync { terminal?.pollSoon() } }
+    func queueSync() { queue.sync {} }
 
     private func drain() { while scheduler.next(maxChunk: PhoneLinkSession.maxChunk) != nil {} }
 

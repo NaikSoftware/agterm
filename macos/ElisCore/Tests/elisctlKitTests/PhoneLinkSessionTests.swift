@@ -283,15 +283,35 @@ struct PhoneLinkSessionTests {
         #expect(credited == 7)
     }
 
+    /// DATA on the watch channel of the pane the phone leads reaches no attach and earns no CREDIT.
     @Test func dataOnAWatchChannelIsIgnored() throws {
         let (fixture, phone) = try MobileFixture.upgraded()
         defer { Self.finish(fixture, phone) }
-        phone.deliver(Self.open(2))
+        let claimed = fixture.mobileDir + "/claimed"
+        Self.answerClaims(fixture.server, Self.leader + "exec cat > '\(claimed)'")
+        phone.deliver(Self.open(2) + Self.open(3, claim: true))
         let reader = FrameReader()
-        #expect(reader.text(from: phone, channel: 2, until: "hi") != nil)
-        phone.deliver(PhoneLinkFrame.data(channel: 2, Data("zz\n".utf8)).encoded())
-        usleep(500_000) // an echo would be back by now
-        #expect(!Self.drain(phone).contains { $0.channel == 2 && String(decoding: $0.payload, as: UTF8.self).contains("zz") })
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(cols: 80, rows: 24))
+        #expect(Self.lead(reader.next(from: phone, channel: 3, kind: .lead)) == "leader")
+        phone.deliver(PhoneLinkFrame.data(channel: 2, Data("zz\n".utf8)).encoded() + PhoneLinkFrame.data(channel: 3, Data("ok\n".utf8)).encoded())
+        #expect(Self.waitFile(claimed) == "ok\n")
+        #expect(reader.next(from: phone, channel: 3, kind: .credit)?.creditBytes == 3)
+        #expect(!reader.pending(phone).contains { $0.channel == 2 && ($0.kind == .credit || String(decoding: $0.payload, as: UTF8.self).contains("zz")) })
+    }
+
+    /// A claim closed while its attach request runs keeps its slot until the answer.
+    @Test func closedClaimHoldsItsSlotUntilTheAnswer() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        defer { fixture.server.releaseAttach() }
+        Self.answerClaims(fixture.server, Self.leader + "exec cat >/dev/null")
+        fixture.server.holdAttach()
+        let close = PhoneLinkFrame.json(.close, channel: 2, PhoneLinkClose(reason: "done")).encoded()
+        phone.deliver(Self.open(2, claim: true) + close + (3...10).map { Self.open($0) }.reduce(Data(), +))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 10) == PhoneLinkOpened(error: "too many open panes"))
+        fixture.server.releaseAttach()
+        for channel: UInt32 in 3...9 { #expect(reader.opened(from: phone, channel: channel) == PhoneLinkOpened(cols: 80, rows: 24)) }
     }
 
     @Test func claimCountsTowardTheCap() throws {

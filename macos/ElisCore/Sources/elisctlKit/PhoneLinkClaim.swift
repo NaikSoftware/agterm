@@ -37,6 +37,8 @@ final class PhoneLinkClaim: @unchecked Sendable {
     private var pty: PhoneLinkPty?
     private var filter = PhoneLinkTitleFilter()
     private var lead: ZmxLeadState?
+    /// The pty's size: the OPEN's until a RESIZE, and what OPENED reports.
+    private var size: (cols: UInt16, rows: UInt16) = (0, 0)
     /// Set once `phone leads` is logged; `phone released` follows it exactly once.
     private(set) var paneID: String?
     private var stopped = false
@@ -64,29 +66,33 @@ final class PhoneLinkClaim: @unchecked Sendable {
         guard let cols = request.cols, let rows = request.rows, Self.sizes.contains(cols), Self.sizes.contains(rows) else {
             return refuse("bad size")
         }
+        size = (cols, rows)
         var args: [String: Any] = ["claim": true]
         args["pane"] = request.pane
         asking = true
         PhoneLinkTerminal.requestAttach(target: request.target, args: args, socketPath: socketPath) { [self] result in
             queue.async { [self] in
                 asking = false
-                answered(result, cols: cols, rows: rows)
+                answered(result)
             }
         }
     }
 
+    /// Input before OPENED is dropped: the phone has no window yet, and the attach may never lead.
     func input(_ bytes: Data) {
-        guard !stopped, let pty else { return }
+        guard !stopped, paneID != nil, let pty else { return }
         unacknowledged += bytes.count
         if unacknowledged > Self.window { return close(reason: "input overflow") }
         pty.write(bytes) { [weak self, queue] count in
-            queue.async { self?.written(count) }
+            guard let self else { return }
+            queue.async { self.written(count) }
         }
     }
 
     /// A size outside 1...1000 is ignored.
     func resize(cols: UInt16, rows: UInt16) {
         guard !stopped, Self.sizes.contains(cols), Self.sizes.contains(rows) else { return }
+        size = (cols, rows)
         pty?.resize(cols: cols, rows: rows)
     }
 
@@ -102,7 +108,7 @@ final class PhoneLinkClaim: @unchecked Sendable {
         if !lost { link.released(paneID) }
     }
 
-    private func answered(_ result: Result<ControlAttach, PhoneLinkTerminal.Refusal>, cols: UInt16, rows: UInt16) {
+    private func answered(_ result: Result<ControlAttach, PhoneLinkTerminal.Refusal>) {
         guard !stopped else { return }
         let attach: ControlAttach
         switch result {
@@ -113,10 +119,12 @@ final class PhoneLinkClaim: @unchecked Sendable {
         guard let nonce = attach.nonce else { return refuse("Elis gave no claiming attach for this pane") }
         lead = ZmxLeadState(attachment: ZmxLeadAttachment(nonce: nonce, claim: true))
         do {
-            pty = try PhoneLinkPty.spawn(attach.argv, cols: cols, rows: rows, onOutput: { [weak self, queue] bytes in
-                queue.async { self?.receive(bytes, paneID: attach.paneID, cols: cols, rows: rows) }
+            pty = try PhoneLinkPty.spawn(attach.argv, cols: size.cols, rows: size.rows, onOutput: { [weak self, queue] bytes in
+                guard let self else { return }
+                queue.async { self.receive(bytes, paneID: attach.paneID) }
             }, onExit: { [weak self, queue] _ in
-                queue.async { self?.exited() }
+                guard let self else { return }
+                queue.async { self.exited() }
             })
         } catch {
             return refuse("could not start the attach: \(error)")
@@ -128,7 +136,7 @@ final class PhoneLinkClaim: @unchecked Sendable {
     }
 
     /// Output is discarded; only the role reports of this attach's nonce count.
-    private func receive(_ bytes: Data, paneID pane: String, cols: UInt16, rows: UInt16) {
+    private func receive(_ bytes: Data, paneID pane: String) {
         guard !stopped else { return }
         var notices: [ZmxLeadNotice] = []
         _ = filter.filter(bytes, notices: &notices)
@@ -138,7 +146,7 @@ final class PhoneLinkClaim: @unchecked Sendable {
                 // shortcut: a first report other than leader is ignored and the role timeout refuses; zmx 0001 gives a
                 // claiming attach the lead at once
                 guard role == .leader else { continue }
-                link.frame(.json(.opened, channel: channel, PhoneLinkOpened(cols: cols, rows: rows)))
+                link.frame(.json(.opened, channel: channel, PhoneLinkOpened(cols: size.cols, rows: size.rows)))
                 guard !stopped else { return }
                 link.frame(.json(.lead, channel: channel, PhoneLinkLead(role: role.rawValue)))
                 guard !stopped else { return }

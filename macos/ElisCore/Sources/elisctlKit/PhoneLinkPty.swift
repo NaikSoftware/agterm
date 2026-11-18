@@ -24,6 +24,13 @@ final class PhoneLinkPty: @unchecked Sendable {
     private let writes = NSCondition()
     private var queued: [(bytes: Data, done: @Sendable (Int) -> Void)] = []
     private var writer: Thread?
+    /// Set under `writes` by `terminate()` and the reader's end, so the idle writer wakes and leaves at once.
+    private var writesEnded = false
+    private var wakeups = 0
+
+    /// How often the writer thread woke; read by tests that it sleeps while idle.
+    var writerWakeups: Int { writes.withLock { wakeups } }
+    var writerRunning: Bool { writes.withLock { writer != nil } }
 
     private init(pid: pid_t, controller: Int32, terminalPath: String, onOutput: @escaping @Sendable (Data) -> Void) {
         self.pid = pid
@@ -78,6 +85,7 @@ final class PhoneLinkPty: @unchecked Sendable {
             stopping = true
             if !reaped { kill(-pid, SIGTERM) }
         }
+        endWrites() // outside `lock`: no thread holds one of the two locks while taking the other
     }
 
     /// write hands `bytes` to the program after every earlier write; `done` gets the count written, 0 once stopping,
@@ -110,22 +118,24 @@ final class PhoneLinkPty: @unchecked Sendable {
 
     private func writeUntilEnd() {
         while true {
-            // read before the queue lock: never take `lock` under `writes`
-            let finished = lock.withLock { stopping || closed }
-            let next: (bytes: Data, done: @Sendable (Int) -> Void)?? = writes.withLock {
-                if !queued.isEmpty { return queued.removeFirst() }
-                if finished {
-                    writer = nil // a later write starts a thread of its own, which reports 0
-                    return .some(nil)
+            let next: (bytes: Data, done: @Sendable (Int) -> Void)? = writes.withLock {
+                wakeups += 1
+                while queued.isEmpty, !writesEnded {
+                    writes.wait()
+                    wakeups += 1
                 }
-                writes.wait(until: Date().addingTimeInterval(0.1))
-                return nil
+                if queued.isEmpty { writer = nil } // a later write starts a thread of its own, which reports 0
+                return queued.isEmpty ? nil : queued.removeFirst()
             }
-            switch next {
-            case let .some(.some(item)): item.done(writeAll(item.bytes))
-            case .some(.none): return
-            case .none: continue
-            }
+            guard let next else { return }
+            next.done(writeAll(next.bytes))
+        }
+    }
+
+    private func endWrites() {
+        writes.withLock {
+            writesEnded = true
+            writes.signal()
         }
     }
 
@@ -179,6 +189,7 @@ final class PhoneLinkPty: @unchecked Sendable {
             closed = true
             close(controller)
         }
+        endWrites()
         // shortcut: a child that closes its stdio but keeps running is waited for and never killed; add a kill here
         // if a relay command ever does that
         // wait without reaping, then reap under the lock: terminate() never signals a pgid freed for reuse

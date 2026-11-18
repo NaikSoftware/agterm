@@ -34,6 +34,8 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     /// A full window sent and not acknowledged by any CREDIT for this long closes the channel.
     static let stallTimeout: TimeInterval = 30
     static let localPoll: TimeInterval = 2
+    /// `pollSoon` reads again this long after its first read, which can land before the daemon applied the change.
+    static let followUpPoll: TimeInterval = 2
     /// Each remote poll is a fresh ssh connection.
     static let remotePoll: TimeInterval = 30
 
@@ -60,6 +62,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     /// The grid the phone last heard.
     private var grid: (cols: UInt16, rows: UInt16) = (0, 0)
     private var nextPoll = Date.distantFuture
+    private var followUp: Date?
     private var backoff = PhoneLinkTerminal.reattachInterval
     /// When the last re-attach after an overflow was asked for.
     private var reattached: Date?
@@ -109,9 +112,10 @@ final class PhoneLinkTerminal: @unchecked Sendable {
         requestAttach()
     }
 
-    /// The next tick reads the grid.
+    /// The next tick reads the grid, and one `followUpPoll` later reads it again.
     func pollSoon() {
         nextPoll = clock()
+        followUp = clock() + Self.followUpPoll
     }
 
     /// Ends the channel without a word to the phone: the phone closed it, or the link is closing.
@@ -264,6 +268,10 @@ final class PhoneLinkTerminal: @unchecked Sendable {
             }
             if !resyncing, screenProcess == nil, now >= nextPoll {
                 nextPoll = now + (remote ? Self.remotePoll : Self.localPoll)
+                if let followUp {
+                    self.followUp = nil
+                    if followUp > now { nextPoll = min(nextPoll, followUp) }
+                }
                 readScreen { [self] screen in
                     guard let screen, !resyncing else { return }
                     let size = (cols: UInt16(screen.columns), rows: UInt16(screen.rows))

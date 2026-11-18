@@ -22,6 +22,48 @@ struct PhoneLinkClaimTests {
         #expect(harness.server.requests() == [#"{"args":{"claim":true,"pane":"left"},"cmd":"session.attach","target":"S1"}"#])
     }
 
+    @Test func splitRoleReportOpens() throws {
+        let harness = try ClaimHarness()
+        defer { harness.finish() }
+        harness.start(#"printf '\033]2;zmx-ro'; sleep 0.2; printf 'le;n1:lea'; sleep 0.2; printf 'der:1\007'; exec cat >/dev/null"#)
+        #expect(harness.wait { harness.events().count >= 3 })
+        #expect(harness.events().prefix(3) == [.opened(80, 24), .lead("leader"), .leadChanged("pane-1")])
+    }
+
+    @Test func inputBeforeOpenedIsDropped() throws {
+        let harness = try ClaimHarness()
+        defer { harness.finish() }
+        harness.start(harness.waitGate("lead") + Self.role("leader") + "exec cat > '\(harness.dir)/in'")
+        #expect(harness.wait { harness.timers() == 1 }) // the attach runs
+        harness.queueSync { harness.claim?.input(Data("early".utf8)) }
+        harness.open("lead")
+        #expect(harness.wait { harness.events().contains(.lead("leader")) })
+        harness.queueSync { harness.claim?.input(Data("late\n".utf8)) }
+        #expect(harness.wait { harness.file("in")?.hasSuffix("\n") == true })
+        #expect(harness.file("in") == "late\n")
+        #expect(harness.wait { harness.credits() == [5] })
+    }
+
+    @Test func resizeBeforeOpenedIsReported() throws {
+        let harness = try ClaimHarness()
+        defer { harness.finish() }
+        harness.start(harness.waitGate("lead") + Self.role("leader") + "stty size > '\(harness.dir)/size'; exec cat >/dev/null")
+        #expect(harness.wait { harness.timers() == 1 })
+        harness.queueSync { harness.claim?.resize(cols: 100, rows: 40) }
+        harness.open("lead")
+        #expect(harness.wait { harness.events().contains(.lead("leader")) })
+        #expect(harness.events().first == .opened(100, 40))
+        #expect(harness.wait { harness.file("size") == "40 100\n" })
+    }
+
+    @Test func appWithoutClaimIsRefused() throws {
+        let harness = try ClaimHarness()
+        defer { harness.finish() }
+        harness.start(answer: ControlResponse(ok: true, result: ControlResult(attach: RawStubServer.fakeAttach("exec cat"))))
+        #expect(harness.wait { harness.events().contains(.ended) })
+        #expect(harness.events() == [.refused("Elis gave no claiming attach for this pane"), .ended])
+    }
+
     @Test func noRoleReportRefuses() throws {
         let harness = try ClaimHarness()
         defer { harness.finish() }
