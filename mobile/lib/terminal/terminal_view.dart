@@ -9,10 +9,14 @@ import 'vt.dart';
 /// The emulator's grid scaled to the available width. While [hold] is set (synchronized output, mode 2026) the
 /// last frame stays, for at most 1 s.
 class TerminalView extends StatefulWidget {
-  const TerminalView({super.key, required this.snapshot, required this.hold});
+  const TerminalView({super.key, required this.snapshot, required this.hold, this.columns});
 
   final VtSnapshot? snapshot;
   final bool hold;
+
+  /// The column count to scale to instead of the grid's: the phone's fitted width, which the relay reports up to 2 s
+  /// after the program already draws at it. Columns past the width are clipped meanwhile.
+  final int? columns;
 
   @override
   State<TerminalView> createState() => _TerminalViewState();
@@ -51,7 +55,7 @@ class _TerminalViewState extends State<TerminalView> {
     final s = _shown;
     if (s == null) return const ColoredBox(color: C.term, child: SizedBox.expand());
     return LayoutBuilder(builder: (context, box) {
-      final m = CellMetrics.fit(box.maxWidth, s.cols);
+      final m = CellMetrics.fit(box.maxWidth, widget.columns ?? s.cols);
       return CustomPaint(size: Size(box.maxWidth, s.rows * m.h), painter: TerminalPainter(s, m, _cache));
     });
   }

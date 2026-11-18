@@ -30,10 +30,11 @@ void main() {
     return vt;
   }
 
-  Future<void> show(WidgetTester tester, VtSnapshot? s, {bool hold = false, double width = 400}) => tester.pumpWidget(
+  Future<void> show(WidgetTester tester, VtSnapshot? s, {bool hold = false, double width = 400, int? columns}) => tester.pumpWidget(
         Directionality(
           textDirection: TextDirection.ltr,
-          child: Align(alignment: Alignment.topLeft, child: SizedBox(width: width, child: TerminalView(snapshot: s, hold: hold))),
+          child: Align(
+              alignment: Alignment.topLeft, child: SizedBox(width: width, child: TerminalView(snapshot: s, hold: hold, columns: columns))),
         ),
       );
 
@@ -118,5 +119,11 @@ void main() {
     final c = vt.snapshot();
     await show(tester, c);
     expect(painter(tester).snapshot, same(c));
+  }, skip: missing);
+
+  testWidgets('columnsSetsTheScaleNotTheGrid', (tester) async {
+    final vt = make(100, 3)..write(_b('a'));
+    await show(tester, vt.snapshot(), columns: 40);
+    expect(painter(tester).m, same(CellMetrics.fit(400, 40))); // the fitted size before the grid change arrives
   }, skip: missing);
 }
