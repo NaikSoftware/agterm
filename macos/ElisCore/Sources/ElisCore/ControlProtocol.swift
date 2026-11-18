@@ -64,6 +64,7 @@ public enum Command: String, Codable, Sendable, CaseIterable {
     case sessionText = "session.text"
     case sessionGrid = "session.grid"
     case sessionScroll = "session.scroll"
+    case sessionAttach = "session.attach"
     case sessionSearch = "session.search"
     case sessionOverlayOpen = "session.overlay.open"
     case sessionOverlayClose = "session.overlay.close"
@@ -753,6 +754,8 @@ public struct ControlResult: Codable, Sendable, Equatable {
     public var columns: Int?
     public var rows: Int?
     public var lines: Int?
+    /// attach is the viewer argv `session.attach` resolved for a Live pane.
+    public var attach: ControlAttach?
     /// The light/dark syncing state for `theme.set`/`theme.list`, from the stored theme: `sync` = whether it
     /// is ghostty's dual `light:,dark:` form (the terminal tracks the macOS appearance), `light`/`dark` its
     /// sides. While syncing `theme` is absent; otherwise `theme` is the plain single theme, these absent.
@@ -851,7 +854,8 @@ public struct ControlResult: Codable, Sendable, Equatable {
                 messageID: String? = nil, delivered: [String]? = nil, rejected: [MessageRejection]? = nil,
                 messages: [BusMessage]? = nil, remaining: Int? = nil, acked: [String]? = nil,
                 remoteGroup: ControlRemoteGroup? = nil, macCatalog: CatalogVersions? = nil, columns: Int? = nil, rows: Int? = nil,
-                lines: Int? = nil, phone: ControlPhoneStatus? = nil) {
+                lines: Int? = nil, phone: ControlPhoneStatus? = nil, attach: ControlAttach? = nil) {
+        self.attach = attach
         self.macCatalog = macCatalog
         self.phone = phone
         self.columns = columns

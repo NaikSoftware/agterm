@@ -302,6 +302,10 @@ public extension ControlActions {
         ControlResponse(ok: false, error: "session.scroll is not supported by this host")
     }
 
+    func sessionAttach(target _: String?, pane _: StatusPane, paneID _: String?, window _: String?) async -> ControlResponse {
+        ControlResponse(ok: false, error: "session.attach is not supported by this host")
+    }
+
     /// Not `ControlActionsUnsupported.message`, which says "on this platform": the divider exists wherever
     /// there is a sidebar, so a host refusing this has not implemented the command rather than lacking the
     /// thing it moves.

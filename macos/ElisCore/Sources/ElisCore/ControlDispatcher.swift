@@ -37,7 +37,7 @@ public struct ControlDispatcher {
                 .sessionOverlayResult, .sessionOverlaySubmit, .sessionOverlayCopy, .sessionOverlayText,
                 .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle, .sessionOverlayFollow,
                 .sessionOverlaySearch, .sessionOverlayChanges, .sessionOverlayFiles, .sessionOverlayWrap, .sessionBackground,
-                .sessionText, .sessionGrid, .sessionScroll:
+                .sessionText, .sessionGrid, .sessionScroll, .sessionAttach:
             return await dispatchSessionSurfaceCommand(request)
         case .sessionOverlayJobRun, .sessionOverlayPageServe:
             return dispatchSessionOverlayCommand(request)
@@ -482,6 +482,8 @@ public struct ControlDispatcher {
             return dispatchSessionGrid(request)
         case .sessionScroll:
             return dispatchSessionScroll(request)
+        case .sessionAttach:
+            return await dispatchSessionAttach(request)
         default:
             preconditionFailure("unexpected session surface command: \(request.cmd.rawValue)")
         }

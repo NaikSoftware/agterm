@@ -33,8 +33,8 @@ extension ControlDispatcher {
         return actions.scrollSession(request.target, window: request.args?.window, pane: pane, lines: lines)
     }
 
-    /// The surface selector without scratch: grid and scroll serve a phone's view of a split pane.
-    private func parseGridPane(_ raw: String?) -> PaneSelection<StatusPane> {
+    /// The surface selector without scratch: grid, scroll and attach serve a phone's view of a split pane.
+    func parseGridPane(_ raw: String?) -> PaneSelection<StatusPane> {
         if case .pane(.scratch) = parseSurfacePane(raw) {
             return .rejected(ControlResponse(ok: false, error: "invalid pane: \(raw ?? "")"))
         }

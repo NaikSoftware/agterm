@@ -238,6 +238,8 @@ public protocol ControlActions {
     func setSessionGrid(_ target: String?, window: String?, pane: StatusPane, grid: ControlGrid?) -> ControlResponse
     /// scrollSession wheels the pane like a mouse over it; answers `{id, pane, lines}`.
     func scrollSession(_ target: String?, window: String?, pane: StatusPane, lines: Int) -> ControlResponse
+    /// sessionAttach resolves a Live pane to a viewer attach; answers `{attach: {argv, paneID}}`.
+    func sessionAttach(target: String?, pane: StatusPane, paneID: String?, window: String?) async -> ControlResponse
     func windowNew(name: String?, minimized: Bool) async -> ControlResponse
     func windowList() -> ControlResponse
     func windowSelect(_ target: String?) async -> ControlResponse
