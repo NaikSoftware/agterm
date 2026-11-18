@@ -780,10 +780,13 @@ void main() {
     await h.start();
     await h.opened();
     await _lead(h);
+    final grids = h.r.grids.length;
     h.r.send([...json(LinkKind.lead, _claimCh, {'role': 'follower'}), ...json(LinkKind.close, _claimCh, {'reason': 'the computer took the lead back'})]);
     await t.pump();
     await t.pump();
     expect(find.text('The computer took the lead back.'), findsOneWidget);
+    await t.pump(const Duration(milliseconds: 500));
+    expect(h.r.grids, hasLength(grids)); // not refitted under the Mac's user
     expect(_label(t, 'takeOver'), 'Take over');
     h.r.send(frame(LinkKind.data, 2, utf8.encode('x')));
     await t.pump();

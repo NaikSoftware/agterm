@@ -174,6 +174,7 @@ class _SessionScreenState extends State<SessionScreen> {
       if (t.leadLost case final r? when _claimed == t) {
         _claimed = null;
         if (r != 'Disconnected' && r != revokedMessage && r.isNotEmpty) {
+          autoFit.wanted = false; // the Mac took control: refitting would resize its terminal under its user
           report(context, '${r[0].toUpperCase()}${r.substring(1)}${r.endsWith('.') ? '' : '.'}');
         }
         unawaited(_syncFit());
