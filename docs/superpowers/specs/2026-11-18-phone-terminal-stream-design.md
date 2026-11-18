@@ -192,7 +192,7 @@ Mockups: the "Elis phone agent UI" design canvas (zsh, Claude Code, agy, vim).
 M4a settled these. `.claude/rules/control-api.md` (relay mux) owns the relay's behavior and the wire contract
 M4b builds on; this list keeps only what is not stated there.
 
-- Caps: channel 0 is bounded at 4 MiB of answers waiting and 256 OPENED, RESYNC, GRID and CLOSE frames waiting;
+- Caps: channel 0 at 4 MiB of answers waiting; the direct queue (OPENED, RESYNC, GRID, CLOSE) at 256 frames;
   past either, the link closes. Channel 1 is bounded at 256 KiB; the oldest rows are dropped and counted.
 - Zmx role titles are filtered from the stream.
 - The relay prints one `phone detached` line per open pane before `phone disconnected`, with the app's `attach.paneID`.

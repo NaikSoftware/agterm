@@ -226,6 +226,21 @@ struct PhoneLinkSessionTests {
         #expect(fixture.waitLogged("phone link overflow from mem:1"))
     }
 
+    /// The OPENED that passes the direct bound ends the link: the pane never counts as attached.
+    @Test func openedPastTheBoundLogsNoAttach() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { fixture.stop() }
+        phone.hold()
+        // one refusal in flight and 256 waiting, so the vt channel's OPENED is the 257th
+        let refused = PhoneLinkFrame.json(.open, channel: 0, PhoneLinkOpen(type: "vt", target: "S1", pane: "left")).encoded()
+        let open = PhoneLinkFrame.json(.open, channel: 2, PhoneLinkOpen(type: "vt", target: "S1", pane: "left")).encoded()
+        phone.deliver(Data(Array(repeating: refused, count: 257).joined()) + open)
+        #expect(phone.waitClosed())
+        #expect(fixture.waitLogged("phone disconnected from mem:1"))
+        usleep(300_000) // a late attach line would land by now
+        #expect(!fixture.logged().contains { $0.hasPrefix("phone attached") })
+    }
+
     @Test func pollerStopsOnClose() throws {
         let (fixture, phone) = try MobileFixture.upgraded()
         defer { fixture.stop() }

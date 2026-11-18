@@ -172,6 +172,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
             return
         }
         link.opened(cols, rows)
+        guard !stopped else { return } // OPENED past the direct bound ends the link, which stopped this terminal
         paneID = attach.paneID
         log("phone attached from \(peer) pane \(attach.paneID)")
         nextPoll = clock() + (remote ? Self.remotePoll : Self.localPoll)
