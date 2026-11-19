@@ -104,12 +104,12 @@ extension PresentationHub {
     public func macViewerCount(session: UUID) -> Int          // subscribers without viewer.phone
 }
 ```
-With `.other`, `claimant` skips subscribers listing `viewer.phone`. A `presenterAcquire` from such a subscriber is answered `presenterRefused`.
+The filter lives in one place: the private `claimant(session:pane:work:)` (`:341`) drops subscribers listing `viewer.phone` for `.other`; `route` and `leadClaimant` only pass `work` on. A `presenterAcquire` from such a subscriber is answered `presenterRefused`.
 
 - [ ] **Step 1: Failing tests** in `PresentationHubTests`:
   - `aPhoneClaimantTakesPagesOnly`: phone subscriber (kinds include `viewer.phone`, `lead.report`) reports pane P. `route(pane: P, work: .page) == phone`; `route(pane: P) == nil`; `leadClaimant(pane: P) == nil`.
   - `otherWorkGoesToTheNextClaimantThenTheHolder`: Mac viewer A holds the grant, Mac viewer B reported P earlier, phone reported P last. `route(pane: P) == B`; after B withdraws, `== A`.
-  - `aPhoneIsRefusedTheGrant`: phone sends `presenterAcquire`; its sink's last frame is `.presenterRefused`, `hasPresenter == false`.
+  - `aPhoneNeverBecomesTheGrantHolder`: phone sends `presenterAcquire`: its sink's last frame is `.presenterRefused`, `presenter(of:) == nil`. Then a Mac holder unsubscribes with the phone still connected: the phone gets no `.presenterVacant`, and `route(pane: nil)` for an unled session is nil.
   - `theKindIsNegotiated`: `PresentationHub.supportedKinds.contains("viewer.phone")`, and `isPhone(owner:)` is true only for a subscriber whose hello listed it.
 - [ ] **Step 2:** `swift test --filter PresentationHubTests`. Expected: FAIL to compile (`work:` unknown).
 - [ ] **Step 3:** Implement the interface above. `presentersNode` uses `macViewerCount` for `viewers` and `mirrors`, and returns nil when it is 0.
@@ -135,7 +135,7 @@ extension AppStore {
     func pageRecipient(_ session: Session, paneIdentity: UUID?, source: PresentationPageSource, log: Bool, held: Bool) -> Int?
 }
 ```
-`held: true` applies `takesHeldWork`. Page sites (`openRemotePage`, `offerPendingPage`, `pageRecipient(_:pane:)`) pass `.page` or use `pageRecipient(…source:)`. `place(_:pane:work:)` in `AppStore+OpenWork` takes the work kind; `placePages` asks `.page` and, when the viewer is a phone that fails `presenterShows`, asks `.other`. The non-page sites keep the default and need no edit: `AppStore+Presentation.swift:136`, `AppStore+RemoteAsk.swift:26,48`, `AppStore+RemoteOverlay.swift:51,93`, `SessionPick.swift:434,472`, `AppStore+RemotePresentation.swift:334`, and the ask and pick `place()` calls.
+`held: true` applies `takesHeldWork`. Page sites (`openRemotePage`, `offerPendingPage`, `pageRecipient(_:pane:)`) pass `.page` or use `pageRecipient(…source:)`. `place(_:pane:work:)` in `AppStore+OpenWork` (`:72`, the `leadClaimant` call at `:82`) takes the work kind with no default: `placeSessionAsk`, `placeWindowAsk` and `placePick` pass `.other`, `placePages` passes `.page`. `remoteRecipient(work:)` only forwards it to `route`. `placePages` asks `.page` and, when the viewer is a phone that fails `presenterShows`, asks `.other`. The non-page sites keep the default and need no edit: `AppStore+Presentation.swift:136`, `AppStore+RemoteAsk.swift:26,48`, `AppStore+RemoteOverlay.swift:51,93`, `SessionPick.swift:434,472`, `AppStore+RemotePresentation.swift:334`, and the ask and pick `place()` calls.
 
 In `openRemotePage`, a `.forwarded` or unsupported source no longer returns `.loopback` / `.unsupported` when the first recipient is a phone: the fallback recipient decides, and a nil one on a Mac returns `.local`.
 
@@ -145,7 +145,9 @@ In `openRemotePage`, a `.forwarded` or unsupported source no longer returns `.lo
   - `AppStoreRemoteOverlayTests.aProgramOverlayNeverGoesToThePhone`, `SessionPickTests.aPickNeverGoesToThePhone` (`presentPickRemotely == nil`), `AppStorePresentationTests.aStatusSoundNeverGoesToThePhone` (`presentStatusSoundRemotely == false`): the phone sink gets no frame of that kind.
   - `AppStoreOpenWorkTests.openAskAndPickStayPutAtAPhoneTakeOver`: ask and pick open locally, phone reports the lead, `pass(session)`: the phone sink holds no `askRequest` / `pickRequest`.
   - `…onAHeadlessOriginOtherWorkGoesToTheMacViewer`: `session(headless: true)`, Mac viewer with the grant, phone leads: an ask opened there has the Mac viewer as owner; without the Mac viewer it stays pending (`askRemoteOwner == nil`).
-  - `AppStoreRemotePageTests.aPageKindThePhoneLacksGoesToTheNextRecipient`: phone without `page.content` leads, Mac viewer holds the grant: an image page's request is in the Mac viewer's sink. With no Mac viewer: `openRemotePage == .local`. Same for a loopback URL (`http://127.0.0.1:5173/`): `.local`, not `.loopback`.
+  - `AppStoreOpenWorkTests.aGuiAskInAWindowStaysOffThePhone`: a GUI ask anchored to the session is open in the window's controller (`local(controller, window:)`), the phone reports the lead, `pass(session, local:)`: `controller.pendingAsk != nil`, the phone sink holds no `askRequest`.
+  - `AppStoreOpenWorkTests.aHeldInteractionOnAHeadlessOriginStaysOffThePhone`: `session(headless: true)`, an ask and a pick held pending, only the phone connected and leading; `host.offerPendingInteractions(forSession:now:)`: the phone sink holds no `askRequest` or `pickRequest`, and both stay pending. A held page is offered to it.
+  - `AppStoreRemotePageTests.aPageKindThePhoneLacksGoesToTheNextRecipient`: phone without `page.content` leads, Mac viewer holds the grant: an image page's request is in the Mac viewer's sink. With no next claimant and no grant holder the origin keeps it: `openRemotePage == .local` on a Mac. Same for a loopback URL (`http://127.0.0.1:5173/`): `.local`, not `.loopback`.
 - [ ] **Step 2:** `swift test --filter "AppStoreOpenWorkTests|AppStoreRemotePageTests|AppStoreRemoteAskTests|AppStoreRemoteOverlayTests|AppStorePresentationTests|SessionPickTests"`. Expected: the new tests FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Same command. Expected: PASS, the existing tests included.
@@ -163,6 +165,10 @@ In `openRemotePage`, a `.forwarded` or unsupported source no longer returns `.lo
   - `aPageReturnsHomeWhenThePhoneWithdrawsTheLead`: phone holds a URL page (reported `.loaded`); `lead(phone, [])`, `setLead(.leader, pane:)`, `pass(session)`: `session.htmlOverlayActive`, phone sink's last frame is `.pageClose` with reason `PresentationPageChange.channelLost`.
   - `aPageGoesBackToTheSamePhoneWhenItLeadsAgain`: then `setLead(.follower)`, `lead(phone, [pane])`, `pass`: the phone sink holds a second `.pageRequest` with a new `offer`; its `pageState` echoing that offer commits (`slot.owner == phone.gen`).
   - `aPageThePhoneNeverClaimedComesHome` (Review Focus 3): file page offered to the phone; `hub.unsubscribe(phone.id)`, `setLead(.leader)`, `pass`: the page is mounted here, its outcome still open (`HtmlPageOutcomes.shared` not dismissed).
+  - `aHiddenPageMovesHidden`: a local page hidden with `session.setOverlayHidden(true, slot: nil)`; the phone leads, `pass`: the phone sink holds `.pageRequest` followed by `.pageCommand` with action `.hide` (`offered.hidden`, `AppStore+PageMove.swift`).
+  - `onlyPagesOfTheLedPaneMove`: session with a split; pages in the session-wide slot, `.left` and `.right`; the phone leads the split pane only: its sink holds one `.pageRequest`, for the `.right` page. Leading the primary pane instead offers the `.left` and the session-wide page.
+  - `aPageRowStays`: a session with `content == .page`; the phone leads, `pass`: no `.pageRequest`.
+  - `aMoveKeepsTheBlockingOutcomeOpen`: across phone → Mac → phone, `HtmlPageOutcomes.shared` holds the page as pending each time.
   - `aPhoneWithOfferIdIsNeverRecordedAsGivenUp`: after the first test, `OfferlessHolders.shared.held(job, by: phone.gen) == false`.
   - `aLoadedPageSurvivesThePhoneLeavingWhileThePaneStillFollows`: phone holds a loaded page; `hub.unsubscribe(phone.id)` with the pane still `.follower`, `pass`: the page is mounted here (`remoteOverlayOwnerLost`, `AppStore+RemoteOverlay.swift:199`, then `placePages`), and its outcome is still open.
   - `aLoadingPageWhosePhoneLeavesIsNotDismissed`: file page claimed, no `pageState` yet; `hub.unsubscribe(phone.id)`, then `host.remotePageLost(page)` (the pipe's end arriving second), `pass`: the outcome is still open and the page is mounted here. The reverse order (`remotePageLost` first) ends the page as dismissed today (`AppStore+OpenWork.swift:58-61`); that order is what Task 9's teardown rule prevents, so assert it as the documented current behavior in `aPagePipeLostBeforeItLoadedEnds`.
@@ -381,6 +387,7 @@ Behavior:
 - Every answer to the origin echoes the request's `offer`.
 - `fetch` → `.resource(id: n, path:)`; `head`/`chunk`/`end`/`failure` → `res` lines keyed by the phone's `seq`. `bridge` → `.bridge(id: n, request: line)`; `reply`/`failure` → `reply` line. A bridge line is never written anywhere else.
 - `state` → `.pageState` (load `loaded`/`failed`, title, address = `current`, `canGoBack`, `appliedSeq`, `hidden`, `offer`). `closed` → `.pageClosed(PresentationPageChange(page:, offer:))`, and the pipe closes.
+- A hidden page that moves arrives as `pageRequest` then `pageCommand` `hide`. When the `hide` arrives before the relay has written the `page` line (a file or content page still opening its pipe), the relay sets `PhonePage.hidden`; otherwise it sends the `command`.
 - `pageCommand` → `command` line (`hide`, `show`, `reloadOriginal`/`reloadCurrent` → `reload`, `back`, `forward`, `resize` with `sizePercent`, `browser` as `browser`). The phone applies the actions it knows and counts every `seq` as applied. `pageClose` → `command` `close` and the pipe closes; a `pageClose` with reason `channel-lost` gets no `pageClosed` answer.
 - A page pipe is `resume()`d only while `link.pending() < highWater`.
 - The phone's line over `ControlWire.maxRequestLineBytes`, or one that does not decode, closes the channel with reason `bad page line`.
@@ -493,11 +500,12 @@ Rules:
 - JavaScript mode: unrestricted for `file` and `content`; for `url` only when `javascript`. `file` pages get the prelude and `adapter` on every page finish in the main frame. File access and content access off.
 - Navigation: `url` pages stay on their first origin unless `browse`; `file` pages stay under the server's secret prefix; any other main-frame navigation is prevented. `window.close()` is observed through the prelude (`window.close = () => ElisChannel.postMessage('{"close":true}')`).
 - Close button, Android back while the sheet is open, and `window.close()` call `link.closed(id, dismissed: true)` and remove the sheet at once.
+- A page that arrives with `hidden: true`, or whose first `command` is `hide`, shows the chip and no sheet; `show` or a tap on the chip opens it.
 - Swipe down hides the sheet and shows `PageChip` in the `AppBar` `actions`, before the `lead` tag; a tap shows the sheet again. The WebView stays mounted (`Offstage`) so the page stays live.
 - `command` `hide` / `show` set the same hidden state and are reported in `state.hidden`; `reload`, `back`, `forward`, `resize` act on the controller; every applied command raises `appliedSeq` in the next `report`.
 - `link.page == null` removes the sheet and the chip in the same frame, whatever the cause.
 
-- [ ] **Step 1: Failing widget tests** with a fake `webView` builder: `a page line shows the sheet`; `close sends closed and removes the sheet`; `swipe down leaves the chip and one tap brings the sheet back`; `the chip goes when the page leaves` (origin `close`, then channel CLOSE: `find.byKey(Key('pageChip'))` finds nothing); `sizePercent 50 takes half the body`; in `session_term_test`: `backgrounding keeps the present channel` (the fake mux sees CLOSE on the claim channel only; a `command` `close` then removes the sheet and the chip, and a new `page` line after resume shows the sheet again); `leaving the session closes the present channel`.
+- [ ] **Step 1: Failing widget tests** with a fake `webView` builder: `a page line shows the sheet`; `close sends closed and removes the sheet`; `swipe down leaves the chip and one tap brings the sheet back`; `the chip goes when the page leaves` (origin `close`, then channel CLOSE: `find.byKey(Key('pageChip'))` finds nothing); `sizePercent 50 takes half the body`; `a hidden page shows only the chip`; in `session_term_test`: `backgrounding keeps the present channel` (the fake mux sees CLOSE on the claim channel only; a `command` `close` then removes the sheet and the chip, and a new `page` line after resume shows the sheet again); `leaving the session closes the present channel`.
 - [ ] **Step 2:** `flutter test --no-pub test/page_sheet_test.dart test/session_term_test.dart`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run again and `flutter analyze --no-pub`. Expected: PASS, clean.
