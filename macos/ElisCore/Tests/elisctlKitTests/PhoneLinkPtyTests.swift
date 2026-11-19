@@ -150,6 +150,7 @@ struct PhoneLinkPtyTests {
         let written = Written()
         pty.write(Data("x".utf8)) { written.add($0) }
         #expect(await eventually { written.counts == [1] })
+        #expect(await eventually { pty.writerIdle })
         let idle = pty.writerWakeups
         try await Task.sleep(for: .milliseconds(500))
         #expect(pty.writerWakeups == idle)

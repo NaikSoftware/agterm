@@ -182,8 +182,7 @@ struct PhoneLinkTerminalResyncTests {
         harness.pollSoon()
         harness.advance(by: 1)
         #expect(harness.wait { count() == 2 })
-        usleep(300_000) // the read's answer hops to the relay queue after its file write
-        harness.queueSync()
+        #expect(harness.wait { !harness.readingScreen() })
         try "1 100 30 0 0 0\n".write(toFile: grid, atomically: true, encoding: .utf8)
         harness.advance(by: 2)
         #expect(harness.wait { harness.events().contains(.grid(100, 30)) })
@@ -333,7 +332,7 @@ private final class TerminalHarness: @unchecked Sendable {
 
     func resync() { queue.sync { terminal?.resync() } }
     func pollSoon() { queue.sync { terminal?.pollSoon() } }
-    func queueSync() { queue.sync {} }
+    func readingScreen() -> Bool { queue.sync { terminal?.screenProcess != nil } }
 
     private func drain() { while scheduler.next(maxChunk: PhoneLinkSession.maxChunk) != nil {} }
 

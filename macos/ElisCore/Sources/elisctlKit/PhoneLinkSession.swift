@@ -92,9 +92,8 @@ final class PhoneLinkSession {
                 closeChannel(frame.channel)
             case (.data, _): claims[frame.channel]?.input(frame.payload)
             case (.resize, _):
-                guard let claim = claims[frame.channel], let size = frame.size else { break }
-                claim.resize(cols: size.cols, rows: size.rows)
-                if let paneID = claim.paneID { watching(paneID).forEach { $0.pollSoon() } }
+                guard let size = frame.size else { break }
+                claims[frame.channel]?.resize(cols: size.cols, rows: size.rows)
             default: break // the phone sends nothing on channel 1, and a watch channel takes no input
             }
         }
@@ -165,8 +164,11 @@ final class PhoneLinkSession {
             ended: { [weak self] in self?.closeChannel(channel) },
             // the daemon has resized by the report, so a fresh viewer attach is where old-grid bytes stop
             leadChanged: { [weak self] paneID in self?.watching(paneID).forEach { $0.resync() } },
-            released: { [weak self] paneID in self?.watching(paneID).forEach { $0.pollSoon() } })
-        let claim = PhoneLinkClaim(channel: channel, request: request, socketPath: socketPath, queue: queue, peer: peer, log: log,
+            released: { [weak self] paneID in self?.watching(paneID).forEach { $0.pollSoon() } },
+            // the poll catches a size the daemon applies after the fresh attach read it
+            resized: { [weak self] paneID in self?.watching(paneID).forEach { $0.resync(); $0.pollSoon() } })
+        let watched = terminals.values.first { $0.request.target == request.target && $0.request.pane == request.pane && $0.paneID != nil }
+        let claim = PhoneLinkClaim(channel: channel, request: request, watched: watched?.paneID, socketPath: socketPath, queue: queue, peer: peer, log: log,
                                    after: { delay, work in queue.asyncAfter(deadline: .now() + delay, execute: work) }, link: link)
         claims[channel] = claim
         claim.start()

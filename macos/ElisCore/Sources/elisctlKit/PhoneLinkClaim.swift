@@ -18,6 +18,8 @@ final class PhoneLinkClaim: @unchecked Sendable {
         let leadChanged: (_ paneID: String) -> Void
         /// The claim gave the lead of `paneID` up: the phone closed it, the link closed, or the attach ended.
         let released: (_ paneID: String) -> Void
+        /// The leading claim's last RESIZE was `resyncDelay` ago.
+        let resized: (_ paneID: String) -> Void
     }
 
     /// Input bytes the phone may send ahead of CREDIT.
@@ -25,9 +27,13 @@ final class PhoneLinkClaim: @unchecked Sendable {
     /// A claiming attach that reports no role by then runs on a zmx that cannot hand the lead over.
     static let roleTimeout: TimeInterval = 10
     static let sizes: ClosedRange<UInt16> = 1...1000
+    /// Lets the daemon apply a burst of resizes before the watch channels re-attach.
+    static let resyncDelay: TimeInterval = 0.15
 
     let channel: UInt32
     private let request: PhoneLinkOpen
+    /// The watch channel's pane id: a claim by role could land on the pane that took the role since.
+    private let watched: String?
     private let socketPath: String
     private let queue: DispatchQueue
     private let peer: String
@@ -47,13 +53,16 @@ final class PhoneLinkClaim: @unchecked Sendable {
     /// Bytes written to the pty and not credited yet; one CREDIT waits on the link at a time.
     private var owed = 0
     private var crediting = false
+    /// Bumped by each RESIZE, so only the last of a burst resyncs.
+    private var resizes = 0
     /// From the app request's send until its answer is back on the relay queue, even after `stop()`.
     private(set) var asking = false
 
-    init(channel: UInt32, request: PhoneLinkOpen, socketPath: String, queue: DispatchQueue, peer: String,
+    init(channel: UInt32, request: PhoneLinkOpen, watched: String?, socketPath: String, queue: DispatchQueue, peer: String,
          log: @escaping (String) -> Void, after: @escaping (TimeInterval, @escaping @Sendable () -> Void) -> Void, link: Link) {
         self.channel = channel
         self.request = request
+        self.watched = watched
         self.socketPath = socketPath
         self.queue = queue
         self.peer = peer
@@ -69,6 +78,7 @@ final class PhoneLinkClaim: @unchecked Sendable {
         size = (cols, rows)
         var args: [String: Any] = ["claim": true]
         args["pane"] = request.pane
+        if let watched { args["paneID"] = watched }
         asking = true
         PhoneLinkTerminal.requestAttach(target: request.target, args: args, socketPath: socketPath) { [self] result in
             queue.async { [self] in
@@ -94,6 +104,13 @@ final class PhoneLinkClaim: @unchecked Sendable {
         guard !stopped, Self.sizes.contains(cols), Self.sizes.contains(rows) else { return }
         size = (cols, rows)
         pty?.resize(cols: cols, rows: rows)
+        guard paneID != nil else { return } // the leader report resyncs anyway
+        resizes += 1
+        let resize = resizes
+        after(Self.resyncDelay) { [weak self] in
+            guard let self, !stopped, resizes == resize, let paneID else { return }
+            link.resized(paneID)
+        }
     }
 
     /// Ends the claim without a word to the phone: the phone closed it, or the link is closing.

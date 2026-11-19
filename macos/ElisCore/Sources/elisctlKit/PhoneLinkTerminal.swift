@@ -40,7 +40,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     static let remotePoll: TimeInterval = 30
 
     let channel: UInt32
-    private let request: PhoneLinkOpen
+    let request: PhoneLinkOpen
     private let socketPath: String
     private let queue: DispatchQueue
     private let peer: String
@@ -58,7 +58,7 @@ final class PhoneLinkTerminal: @unchecked Sendable {
     private var screenArgv: [String] = []
     private var remote = false
     /// The running `screen` (open, resync or poll), killed by `stop()`; at most one at a time.
-    private var screenProcess: Process?
+    private(set) var screenProcess: Process?
     /// The grid the phone last heard.
     private var grid: (cols: UInt16, rows: UInt16) = (0, 0)
     private var nextPoll = Date.distantFuture

@@ -56,6 +56,61 @@ struct PhoneLinkClaimTests {
         #expect(harness.wait { harness.file("size") == "40 100\n" })
     }
 
+    @Test func resizeResyncsAfterTheDelay() throws {
+        let harness = try Self.leading()
+        defer { harness.finish() }
+        harness.queueSync { harness.claim?.resize(cols: 100, rows: 40) }
+        harness.advance(by: 0.149)
+        #expect(!harness.events().contains(.resized("pane-1")))
+        harness.advance(by: 0.002)
+        #expect(harness.events().filter { $0 == .resized("pane-1") }.count == 1)
+    }
+
+    @Test func aBurstOfResizesResyncsOnceAfterTheLast() throws {
+        let harness = try Self.leading()
+        defer { harness.finish() }
+        for cols: UInt16 in [90, 95, 100] {
+            harness.queueSync { harness.claim?.resize(cols: cols, rows: 40) }
+            harness.advance(by: 0.05)
+        }
+        harness.advance(by: 0.099) // 149 ms after the third
+        #expect(!harness.events().contains(.resized("pane-1")))
+        harness.advance(by: 0.002)
+        harness.advance(by: 1)
+        #expect(harness.events().filter { $0 == .resized("pane-1") }.count == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func resizeWithoutResync(_ stop: Bool) throws {
+        let harness = try Self.leading()
+        defer { harness.finish() }
+        harness.queueSync {
+            harness.claim?.resize(cols: stop ? 100 : 1001, rows: 40)
+            if stop { harness.claim?.stop() }
+        }
+        harness.advance(by: 1)
+        #expect(!harness.events().contains(.resized("pane-1")))
+    }
+
+    @Test func resizeBeforeTheLeadDoesNotResync() throws {
+        let harness = try ClaimHarness()
+        defer { harness.finish() }
+        harness.start(harness.waitGate("lead") + Self.role("leader") + "exec cat >/dev/null")
+        #expect(harness.wait { harness.timers() == 1 })
+        harness.queueSync { harness.claim?.resize(cols: 100, rows: 40) }
+        harness.open("lead")
+        #expect(harness.wait { harness.events().contains(.lead("leader")) })
+        harness.advance(by: 1)
+        #expect(!harness.events().contains(.resized("pane-1")))
+    }
+
+    private static func leading() throws -> ClaimHarness {
+        let harness = try ClaimHarness()
+        harness.start(role("leader") + "exec cat >/dev/null")
+        #expect(harness.wait { harness.events().contains(.lead("leader")) })
+        return harness
+    }
+
     @Test func appWithoutClaimIsRefused() throws {
         let harness = try ClaimHarness()
         defer { harness.finish() }
@@ -200,7 +255,7 @@ struct PhoneLinkClaimTests {
 
 private final class ClaimHarness: @unchecked Sendable {
     enum Event: Equatable {
-        case opened(UInt16, UInt16), refused(String), lead(String), close(String), ended, leadChanged(String), released(String)
+        case opened(UInt16, UInt16), refused(String), lead(String), close(String), ended, leadChanged(String), released(String), resized(String)
     }
 
     let server = RawStubServer()
@@ -237,9 +292,10 @@ private final class ClaimHarness: @unchecked Sendable {
             },
             ended: { [self] in record(.ended) },
             leadChanged: { [self] pane in record(.leadChanged(pane)) },
-            released: { [self] pane in record(.released(pane)) })
+            released: { [self] pane in record(.released(pane)) },
+            resized: { [self] pane in record(.resized(pane)) })
         let claim = PhoneLinkClaim(
-            channel: 4, request: PhoneLinkOpen(type: "vt", target: "S1", pane: "left", claim: true, cols: cols, rows: rows),
+            channel: 4, request: PhoneLinkOpen(type: "vt", target: "S1", pane: "left", claim: true, cols: cols, rows: rows), watched: nil,
             socketPath: server.path, queue: queue, peer: "mem:1", log: { [lines] in lines.append($0) },
             after: { [self] delay, work in
                 timerCount += 1

@@ -27,10 +27,13 @@ final class PhoneLinkPty: @unchecked Sendable {
     /// Set under `writes` by `terminate()` and the reader's end, so the idle writer wakes and leaves at once.
     private var writesEnded = false
     private var wakeups = 0
+    private var parked = false
 
     /// How often the writer thread woke; read by tests that it sleeps while idle.
     var writerWakeups: Int { writes.withLock { wakeups } }
     var writerRunning: Bool { writes.withLock { writer != nil } }
+    /// The writer thread waits with nothing to write.
+    var writerIdle: Bool { writes.withLock { parked } }
 
     private init(pid: pid_t, controller: Int32, terminalPath: String, onOutput: @escaping @Sendable (Data) -> Void) {
         self.pid = pid
@@ -121,7 +124,9 @@ final class PhoneLinkPty: @unchecked Sendable {
             let next: (bytes: Data, done: @Sendable (Int) -> Void)? = writes.withLock {
                 wakeups += 1
                 while queued.isEmpty, !writesEnded {
+                    parked = true
                     writes.wait()
+                    parked = false
                     wakeups += 1
                 }
                 if queued.isEmpty { writer = nil } // a later write starts a thread of its own, which reports 0
