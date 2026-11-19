@@ -223,7 +223,7 @@ class TermSession extends ChangeNotifier {
 
   /// The queued input as `session.type` strings, in order; clears the queue. An [ended] term keeps it for this.
   List<String> takeUnsent() {
-    final unsent = [for (final i in _queue) i.$1];
+    final unsent = [for (final i in _queue) if (i.$1.isNotEmpty) i.$1]; // a click has no indirect form
     _drop();
     return unsent;
   }
@@ -277,10 +277,8 @@ class TermSession extends ChangeNotifier {
     _queuedBytes = 0;
   }
 
-  /// Sent only while leading, never queued.
-  void click({required int col, required int row}) {
-    if (_leading) _send(_vt?.encodeClick(col: col, row: row));
-  }
+  /// Sent while leading; queued while the lead is pending, encoded in the program's mouse mode when it arrives.
+  void click({required int col, required int row}) => _add([('', (vt) => vt.encodeClick(col: col, row: row), false)]);
 
   /// One wheel notch; on the alternate screen of a program that does not track the mouse, an arrow key (mode 1007).
   void wheel({required bool up, required int col, required int row}) {

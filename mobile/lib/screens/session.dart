@@ -303,14 +303,13 @@ class _SessionScreenState extends State<SessionScreen> {
     unawaited(_syncFit());
   }
 
-  // a layout change (a rotation, not the keyboard) resizes the lead once it settles
-  void _layoutLead() {
-    if (!_lead) return;
+  // a layout change (a rotation, not the keyboard) resizes the lead, or refits, once it settles
+  void _layoutGrid() {
     final g = _phoneGrid();
     if (g == _seenGrid) return;
     _seenGrid = g;
     _leadResize?.cancel();
-    _leadResize = Timer(const Duration(milliseconds: 300), _resizeLead);
+    _leadResize = Timer(const Duration(milliseconds: 300), () => _lead ? _resizeLead() : unawaited(_syncFit()));
   }
 
   // only once leading: before that TermSession drops a resize while the claim waits for OPENED
@@ -419,7 +418,10 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<bool> _fitOnce() async {
     if (!mounted) return false;
     final visible = _foreground && !m.background && m.state == LinkState.connected;
-    final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible && !_lead);
+    final fit = m.fitted[_fitKey];
+    // a fit at another grid than the screen's now (a rotation) is made again
+    final on = autoFit.next(fitted: fit != null, visible: visible && !_lead) ??
+        (fit != null && autoFit.wanted && visible && !_lead && fit != _phoneGrid() ? true : null);
     if (on == null || _fitRetry?.isActive == true || !on && _resetTries == 0) return false;
     final key = _fitKey;
     final quiet = on && _quietFit;
@@ -427,10 +429,7 @@ class _SessionScreenState extends State<SessionScreen> {
     var ok = false;
     try {
       if (on) {
-        // JetBrains Mono advances 0.6 em; a larger system font size asks for fewer, bigger columns
-        final columns = _fitColumns();
-        final size = _sizeFor(columns, 13);
-        final rows = max(5, (_fullHeight / (size * 1.3)).floor()); // the text's line height is 1.3
+        final (columns, rows) = _phoneGrid(); // the lead's grid, so a claim changes nothing the program shows
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'columns': columns, 'rows': rows});
         _coveredTries = 0;
         m.fitted[key] = (columns, rows);
@@ -700,7 +699,7 @@ class _SessionScreenState extends State<SessionScreen> {
       _width = box.maxWidth;
       _height = box.maxHeight;
       _seeComposer();
-      _layoutLead();
+      _layoutGrid();
       final cell = _cell = CellMetrics.fit(_width, columns ?? t.snapshot!.cols);
       return TermGestures(
         key: const Key('term'),
@@ -737,10 +736,11 @@ class _SessionScreenState extends State<SessionScreen> {
     }
   }
 
-  /// Any single tap on the terminal claims; leading on the Term view, it also clicks the cell under the finger.
+  /// Any single tap on the terminal claims; on the Term view it also clicks the cell under the finger, the claiming
+  /// tap once the lead arrives.
   void _tap() {
     _claim();
-    if (_termShown && _leading) {
+    if (_termShown && _lead) {
       final snap = term!.snapshot!;
       final (col, row) = _cellUnder();
       if (col >= 0 && row >= 0 && col < snap.cols && row < snap.rows) term!.click(col: col, row: row);
@@ -776,7 +776,7 @@ class _SessionScreenState extends State<SessionScreen> {
           _width = box.maxWidth;
           _height = box.maxHeight;
           _seeComposer();
-          _layoutLead();
+          _layoutGrid();
           // tiny when the computer's grid is wide, but whole rows, so the layout stays the program's (the fit reads it)
           _fit = _sizeFor(cols, min(13, _width / (cols * 0.6)));
           final size = _fit;
@@ -784,6 +784,7 @@ class _SessionScreenState extends State<SessionScreen> {
             error != null && text.isEmpty ? error! : withGridGlyphs(text),
             key: const Key('screen'),
             focusNode: _textFocus,
+            selectionControls: _noCaretHandle,
             // the size above is already the one whose rows fit; Android's font scale on top would wrap every full row
             textScaler: TextScaler.noScaling,
             // letterSpacing 0: the theme's body text adds 0.25 per glyph, which would wrap every full row
@@ -901,6 +902,16 @@ class _SessionScreenState extends State<SessionScreen> {
           ),
         ]),
       );
+}
+
+// read-only text has no caret, but SelectableText shows a tap's collapsed selection as a caret handle whenever its
+// field lacks the focus, which [_textFocus] always does
+final _noCaretHandle = _NoCaretHandle();
+
+class _NoCaretHandle extends MaterialTextSelectionControls {
+  @override
+  Widget buildHandle(BuildContext context, TextSelectionHandleType type, double textLineHeight, [VoidCallback? onTap]) =>
+      type == TextSelectionHandleType.collapsed ? const SizedBox.shrink() : super.buildHandle(context, type, textLineHeight, onTap);
 }
 
 /// A single tap anywhere in [child], told after the double-tap timeout, as the Term view's: a double tap, a long press,

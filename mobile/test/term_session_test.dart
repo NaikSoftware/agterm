@@ -422,15 +422,23 @@ void main() {
     expect(closes(r), unorderedEquals([_watch, _claim]));
   }));
 
-  test('clickAndWheelAreNotQueued', () async {
+  test('aPendingClickWaitsForTheLeadAndAWheelIsDropped', () async {
     final (s, r, vt) = await watched();
     vt.tracksMouse = true;
     s.arm();
     s.click(col: 1, row: 2);
     s.wheel(up: true, col: 1, row: 2);
-    await lead(s, r);
-    expect(sent(r), '');
     expect(vt.clicks, isEmpty);
+    await lead(s, r);
+    expect(sent(r), 'click 1,2');
+  });
+
+  test('aPendingClickIsNotTypedIndirectly', () async {
+    final (s, _, _) = await watched();
+    s.arm();
+    s.click(col: 1, row: 2);
+    s.text('a');
+    expect(s.takeUnsent(), ['a']);
   });
 
   test('clickSendsTheEncodedBytesWhileLeading', () async {

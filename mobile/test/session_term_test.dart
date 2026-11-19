@@ -1850,20 +1850,6 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('tapClaimsAndIsNotReplayed', (t) async {
-    final h = Harness(t, treeOf());
-    await h.start();
-    await h.opened();
-    h.vts.single.tracksMouse = true;
-    await _tap(t, _cell(h, 3, 2));
-    expect(_claims(h), hasLength(1));
-    await _leader(h);
-    await t.pump(const Duration(milliseconds: 100));
-    expect(h.vts.single.clicks, isEmpty);
-    expect(_typed(h), '');
-    await h.stop();
-  });
-
   testWidgets('tapWithMouseOffClaimsAndSendsNothing', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
@@ -1872,7 +1858,7 @@ void main() {
     expect(_claims(h), hasLength(1));
     await _leader(h);
     await _tap(t, _cell(h, 3, 2));
-    expect(h.vts.single.clicks, [(3, 2)]);
+    expect(h.vts.single.clicks, [(3, 2), (3, 2)]);
     expect(_typed(h), '');
     await h.stop();
   });
@@ -2395,6 +2381,102 @@ void main() {
     expect(h.keyboards, 0);
     await _tap(t, at); // the next tap acts again
     expect(_claims(h), hasLength(1));
+    await h.stop();
+  });
+
+  testWidgets('rotationRefitsAndTheKeyboardDoesNot', (t) async {
+    _phone(t);
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    final portrait = _fits(h).single;
+    addTearDown(t.view.reset);
+    t.view.viewInsets = const FakeViewPadding(bottom: 900);
+    await t.pump();
+    await t.pump(const Duration(seconds: 1));
+    expect(_fits(h), hasLength(1));
+    t.view.resetViewInsets();
+    final s = t.view.physicalSize;
+    t.view.physicalSize = Size(s.height, s.width);
+    await t.pump();
+    await t.pump(const Duration(seconds: 1));
+    final landscape = _fits(h).last;
+    expect(_fits(h), hasLength(2));
+    expect(landscape['columns'], greaterThan(portrait['columns'] as int));
+    expect(landscape['rows'], lessThan(portrait['rows'] as int));
+    expect((h.vts.single.cols, h.vts.single.rows), (landscape['columns'], landscape['rows']));
+    await h.stop();
+  });
+
+  testWidgets('rotationResizesTheLeadOnTheHistory', (t) async {
+    _phone(t);
+    final h = await _shortHistory(t);
+    await _lead(h);
+    final claim = _claims(h).single;
+    addTearDown(t.view.reset);
+    final s = t.view.physicalSize;
+    t.view.physicalSize = Size(s.height, s.width);
+    await t.pump();
+    await t.pump(const Duration(seconds: 1));
+    final resize = h.r.of(LinkKind.resize).single;
+    expect(resize.size!.cols, greaterThan(claim['cols'] as int));
+    expect(resize.size!.rows, lessThan(claim['rows'] as int));
+    await h.stop();
+  });
+
+  testWidgets('theFitAndTheLeadHaveTheSameGrid', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    final fit = _fits(h).single;
+    await _key(t, 'Left');
+    await t.pump();
+    final claim = _claims(h).single;
+    expect((claim['cols'], claim['rows']), (fit['columns'], fit['rows']));
+    await h.stop();
+  });
+
+  testWidgets('theClaimingTapClicksAfterTheLead', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.vts.single.tracksMouse = true;
+    await _tap(t, _cell(h, 3, 2));
+    expect(_claims(h), hasLength(1));
+    expect(h.vts.single.clicks, isEmpty);
+    await _leader(h);
+    expect(h.vts.single.clicks, [(3, 2)]);
+    expect(_typed(h), 'click 3,2');
+    await h.stop();
+  });
+
+  testWidgets('aRefusedClaimTypesNoClick', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.vts.single.tracksMouse = true;
+    await _tap(t, _cell(h, 3, 2));
+    h.r.send(json(LinkKind.opened, _claimCh, {'error': 'session not realized'}));
+    for (var i = 0; i < 10; i++) {
+      await t.pump(const Duration(milliseconds: 10));
+    }
+    expect(h.r.typed, isEmpty);
+    await h.stop();
+  });
+
+  testWidgets('aTapOnTheHistoryDrawsNoCaretHandle', (t) async {
+    final h = Harness(t, treeOf());
+    h.r.text = List.generate(200, (i) => 'line $i').join('\n');
+    await h.start();
+    await h.opened();
+    h.vts.single
+      ..alt = false
+      ..cursorVisible = true;
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    await _tap(t, t.getRect(find.byKey(const Key('screen'))).bottomCenter - const Offset(0, 3));
+    await t.pump(const Duration(seconds: 1));
+    expect(find.byWidgetPredicate((w) => w is CustomPaint && '${w.painter.runtimeType}' == '_TextSelectionHandlePainter'), findsNothing);
     await h.stop();
   });
 }
