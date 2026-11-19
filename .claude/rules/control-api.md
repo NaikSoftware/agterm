@@ -304,8 +304,8 @@ and carries no DATA to the phone.
   A RESIZE or a release polls the grid at once and again 2 s later.
   A RESIZE also resyncs the pane's watch channels 150 ms after the last one;
   the phone sizes its emulator only from RESYNC and GRID.
-- The phone claims by the WATCHED pane id, at its first key, send, paste, scroll or tap,
-  never when a session opens.
+- The phone claims by the WATCHED pane id, when it opens, resumes or switches to a Live pane,
+  and again at its next key, send, paste, scroll or tap after a Mac key took the lead back.
   Input before the leader report is queued and written after it, in order, with a 20 ms gap only before a composer line's Enter.
   A fit the Mac refuses after the phone gives the lead back is retried 3 times, 1 s apart,
   then reported, and auto-fit stops.

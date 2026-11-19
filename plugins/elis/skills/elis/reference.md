@@ -78,7 +78,7 @@ The event kinds and payloads are:
 - `phone.attached` / `phone.detached`: the phone opened or closed a pane view. Payload `ip` and `paneID`. The human line
   reads `HH:MM:SS phone.attached ip=IP pane-id=TOKEN`. When the relay stops or restarts, every viewer detaches with `ip=-`.
   `tree` shows the open count as `surfaces[].phoneViewers`, omitted at zero and never set by elis-server.
-- `phone.claimed` / `phone.released`: the phone took a pane's lead (it leads at its first input) or gave it up. Payload `ip` and
+- `phone.claimed` / `phone.released`: the phone took a pane's lead (it leads when it opens the pane, and again at its next input after a Mac key took the lead back) or gave it up. Payload `ip` and
   `paneID`; the human line reads `HH:MM:SS phone.claimed ip=IP pane-id=TOKEN`, and a release the relay's exit caused
   reads `ip=-`. `tree` shows `surfaces[].phoneLead: true` meanwhile, omitted otherwise and never set by elis-server.
 - `app.launched`: an empty payload and no window, workspace or session. Emitted once per app run, after
