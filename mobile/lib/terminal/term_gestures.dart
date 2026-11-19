@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 
 /// One finger scrolls the program by rows; two fingers zoom (1x to 6x) around their focal point and pan inside
-/// [content]; a double tap resets the zoom. At 1x the bottom of [content] is in view. Not an InteractiveViewer,
-/// which would take a one-finger drag as a pan.
+/// [content]; a double tap resets the zoom; a single tap is [onTap]. At 1x the bottom of [content] is in view.
+/// Not an InteractiveViewer, which would take a one-finger drag as a pan.
 class TermGestures extends StatefulWidget {
   const TermGestures({
     super.key,
@@ -10,6 +10,7 @@ class TermGestures extends StatefulWidget {
     required this.content,
     required this.rowHeight,
     required this.onScroll,
+    this.onTap,
   });
 
   final Widget child;
@@ -20,6 +21,9 @@ class TermGestures extends StatefulWidget {
 
   /// Rows the finger moved, down positive.
   final void Function(int rows) onScroll;
+
+  /// A single tap: not part of a double tap, and no second finger touched.
+  final VoidCallback? onTap;
 
   @override
   State<TermGestures> createState() => _TermGesturesState();
@@ -76,7 +80,10 @@ class _TermGesturesState extends State<TermGestures> {
       _clamp();
       return Listener(
         onPointerDown: (e) {
-          if (_fingers++ > 0) return;
+          if (_fingers++ > 0) {
+            _pinched = true; // also a still second finger, which never reaches onScaleUpdate: not a tap
+            return;
+          }
           _pinched = false;
           _last = e.localPosition;
         },
@@ -86,6 +93,7 @@ class _TermGesturesState extends State<TermGestures> {
           behavior: HitTestBehavior.opaque,
           onScaleStart: _start,
           onScaleUpdate: _update,
+          onTap: widget.onTap == null ? null : () => _pinched ? null : widget.onTap!(),
           onDoubleTap: () => setState(() {
             _scale = 1;
             _x = 0;

@@ -41,10 +41,11 @@ const keys = [
 ];
 
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt});
+  const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt, @visibleForTesting this.onKeyboard});
   final ElisModel model;
   final String sessionId;
   final Vt Function(int cols, int rows) vt;
+  final VoidCallback? onKeyboard; // told each time a tap asks for the soft keyboard
 
   @override
   State<SessionScreen> createState() => _SessionScreenState();
@@ -65,8 +66,11 @@ class _SessionScreenState extends State<SessionScreen> {
   late final AppLifecycleListener _lifecycle;
   Timer? poll;
   double _dragRows = 0; // a drag's distance in rows not sent yet
-  Offset _finger = Offset.zero; // where the finger is on screen; [_wheel] maps it onto the grid, zoom and pan undone
+  Offset _finger = Offset.zero; // where the finger is on screen; [_cellUnder] maps it onto the grid, zoom and pan undone
+  bool _stale = false; // the finger that was down when the Mac took the lead back: its drag claims nothing
   final _grid = GlobalKey();
+  final _text = GlobalKey(); // the history's text
+  late CellMetrics _cell; // the Term view's, as last laid out
   bool _scrolling = false;
   bool polling = false;
   TermSession? term; // a Live pane watched as a terminal; the text poll stops meanwhile
@@ -190,6 +194,7 @@ class _SessionScreenState extends State<SessionScreen> {
         _claimed = null;
         if (r != 'Disconnected' && r != revokedMessage && r.isNotEmpty) {
           autoFit.wanted = false; // the Mac took control: refitting would resize its terminal under its user
+          _stale = true;
           report(context, '${r[0].toUpperCase()}${r.substring(1)}${r.endsWith('.') ? '' : '.'}');
         } else {
           _coveredTries = 3;
@@ -607,7 +612,15 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   // edge to edge, no padding: every pixel counts on a phone
-  Widget _terminal() => ClipRect(child: ColoredBox(color: C.term, child: _termShown ? _termView(term!) : _textView()));
+  // outside the zoom, so a touch beside a short grid still counts
+  Widget _terminal() => Listener(
+        onPointerDown: (e) {
+          _finger = e.position;
+          _stale = false;
+        },
+        onPointerMove: (e) => _finger = e.position,
+        child: ClipRect(child: ColoredBox(color: C.term, child: _termShown ? _termView(term!) : _textView())),
+      );
 
   // the grid scaled to the width; taller than the box, the bottom rows (the cursor's) stay in view
   // a live stream has no phone-side history, so a drag always scrolls the program; two fingers zoom
@@ -617,32 +630,65 @@ class _SessionScreenState extends State<SessionScreen> {
       _width = box.maxWidth;
       _height = box.maxHeight;
       _layoutLead();
-      final cell = CellMetrics.fit(_width, columns ?? t.snapshot!.cols);
-      // outside the zoom, so a touch beside a short grid still counts: the wheel clamps it to the nearest cell
-      return Listener(
-        onPointerDown: (e) => _finger = e.position,
-        onPointerMove: (e) => _finger = e.position,
-        child: TermGestures(
-          key: const Key('term'),
-          content: Size(box.maxWidth, t.snapshot!.rows * cell.h),
-          rowHeight: cell.h,
-          onScroll: (rows) => t.leading ? _wheel(t, rows, cell) : _drag(rows.toDouble()),
-          child: TerminalView(key: _grid, snapshot: t.snapshot, hold: t.hold, columns: columns),
-        ),
+      final cell = _cell = CellMetrics.fit(_width, columns ?? t.snapshot!.cols);
+      return TermGestures(
+        key: const Key('term'),
+        content: Size(box.maxWidth, t.snapshot!.rows * cell.h),
+        rowHeight: cell.h,
+        onScroll: (rows) => _scroll(t, rows),
+        onTap: _tap,
+        child: TerminalView(key: _grid, snapshot: t.snapshot, hold: t.hold, columns: columns),
       );
     });
   }
 
-  // leading, the phone is the program's mouse: a notch per row the finger moved, at the cell under it
-  void _wheel(TermSession t, int rows, CellMetrics cell) {
-    final snap = t.snapshot!;
+  // notches made before the lead are dropped: the reset and the claim change what is under the finger
+  void _scroll(TermSession t, int rows) {
+    if (_stale) return;
+    if (!_direct) return _drag(rows.toDouble());
+    _claim();
+    if (_leading) _wheel(t, rows);
+  }
+
+  /// The cell under the finger, zoom and pan undone; outside the grid when the finger is.
+  (int, int) _cellUnder() {
     final at = (_grid.currentContext!.findRenderObject() as RenderBox).globalToLocal(_finger);
-    final col = (at.dx / cell.w).floor().clamp(0, snap.cols - 1);
-    final row = (at.dy / cell.h).floor().clamp(0, snap.rows - 1);
+    return ((at.dx / _cell.w).floor(), (at.dy / _cell.h).floor());
+  }
+
+  // leading, the phone is the program's mouse: a notch per row the finger moved, at the nearest cell
+  void _wheel(TermSession t, int rows) {
+    final snap = t.snapshot!;
+    final (c, r) = _cellUnder();
+    final col = c.clamp(0, snap.cols - 1), row = r.clamp(0, snap.rows - 1);
     for (var i = 0; i < rows.abs(); i++) {
       t.wheel(up: rows > 0, col: col, row: row); // dragging down shows older rows: wheel up
     }
   }
+
+  /// Any single tap on the terminal claims; leading on the Term view, it also clicks the cell under the finger.
+  void _tap() {
+    _claim();
+    if (_termShown && _leading) {
+      final snap = term!.snapshot!;
+      final (col, row) = _cellUnder();
+      if (col >= 0 && row >= 0 && col < snap.cols && row < snap.rows) term!.click(col: col, row: row);
+    }
+    if (_onCursorRow) _showKeyboard();
+  }
+
+  // the visible caret's whole row (plan decisions 24, 25); the history is reflowed, so there it is the last line,
+  // and only while the history is at its bottom
+  bool get _onCursorRow {
+    final snap = term?.snapshot;
+    if (snap == null || !snap.cursorVisible) return false;
+    if (_termShown) return _cellUnder().$2 == snap.cursorY;
+    final box = _text.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !vScroll.hasClients || vScroll.offset != 0) return false;
+    return box.globalToLocal(_finger).dy >= box.size.height - _fit * 1.3;
+  }
+
+  void _showKeyboard() => widget.onKeyboard?.call();
 
   Widget _textView() => LayoutBuilder(builder: (context, box) {
           // the computer's own grid width, so a full-width row fills one phone row exactly; history written at a wider
@@ -658,6 +704,7 @@ class _SessionScreenState extends State<SessionScreen> {
           final body = SelectableText(
             error != null && text.isEmpty ? error! : withGridGlyphs(text),
             key: const Key('screen'),
+            onTap: _tap,
             // the size above is already the one whose rows fit; Android's font scale on top would wrap every full row
             textScaler: TextScaler.noScaling,
             // letterSpacing 0: the theme's body text adds 0.25 per glyph, which would wrap every full row
@@ -667,7 +714,7 @@ class _SessionScreenState extends State<SessionScreen> {
             controller: vScroll,
             reverse: true, // the newest rows stay in view
             physics: _remoteScroll ? const NeverScrollableScrollPhysics() : null,
-            child: SizedBox(width: double.infinity, child: body),
+            child: SizedBox(key: _text, width: double.infinity, child: body),
           );
           return _remoteScroll ? GestureDetector(onVerticalDragUpdate: (d) => _drag(d.delta.dy / (_fit * 1.3)), child: view) : view;
         });

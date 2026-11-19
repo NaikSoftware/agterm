@@ -128,7 +128,7 @@ Map<String, Object> treeOf({bool live = true, bool split = false}) => {
     };
 
 class FakeSnapshot implements VtSnapshot {
-  FakeSnapshot(this.cols, this.rows, this.altScreen);
+  FakeSnapshot(this.cols, this.rows, this.altScreen, {this.cursorY = 0, this.cursorVisible = false});
   @override
   final int cols, rows;
   @override
@@ -136,9 +136,9 @@ class FakeSnapshot implements VtSnapshot {
   @override
   int get cursorX => 0;
   @override
-  int get cursorY => 0;
+  final int cursorY;
   @override
-  bool get cursorVisible => false;
+  final bool cursorVisible;
   @override
   List<VtRow> get lines => const [];
 }
@@ -149,6 +149,8 @@ class FakeVt implements Vt {
   final written = <int>[];
   bool disposed = false, failSnapshot = false;
   bool alt = true; // a full-screen program: Term, no scrollback
+  int cursorY = 0;
+  bool cursorVisible = false;
 
   @override
   void write(Uint8List bytes) => written.addAll(bytes);
@@ -172,7 +174,7 @@ class FakeVt implements Vt {
   VtSnapshot snapshot() {
     snapshots++;
     if (failSnapshot) throw StateError('boom');
-    return FakeSnapshot(cols, rows, alt);
+    return FakeSnapshot(cols, rows, alt, cursorY: cursorY, cursorVisible: cursorVisible);
   }
   @override
   void dispose() => disposed = true;
@@ -220,6 +222,7 @@ class Harness {
   final List<Relay> relays; // one per connect; a reconnect takes the next
   final nav = GlobalKey<NavigatorState>();
   final vts = <FakeVt>[];
+  var keyboards = 0; // the screen asked for the soft keyboard
   late final ElisModel m;
   Relay get r => relays.last;
 
@@ -234,7 +237,7 @@ class Harness {
     expect(m.mux, isNotNull);
     expect(m.loaded, isTrue);
     unawaited(nav.currentState!.push(MaterialPageRoute<void>(
-        builder: (_) => SessionScreen(model: m, sessionId: 's1', vt: vt ?? (c, r) => FakeVt(c, r)..also(vts.add)))));
+        builder: (_) => SessionScreen(model: m, sessionId: 's1', vt: vt ?? (c, r) => FakeVt(c, r)..also(vts.add), onKeyboard: () => keyboards++))));
     await t.pumpAndSettle(const Duration(milliseconds: 10));
   }
 
@@ -349,6 +352,52 @@ Future<void> _pauseResume(Harness h, {Future<void> Function()? paused}) async {
   for (final s in [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
     h.t.binding.handleAppLifecycleStateChanged(s);
   }
+  await h.t.pump();
+}
+
+/// A key claims and the relay refuses the claim: the pane is indirect for the visit.
+Future<void> _refuse(Harness h) async {
+  await _key(h.t, 'Left');
+  h.r.send(json(LinkKind.opened, _claimCh, {'error': 'session not realized'}));
+  for (var i = 0; i < 10; i++) {
+    await h.t.pump(const Duration(milliseconds: 10));
+  }
+  expect(find.text('session not realized'), findsOneWidget);
+}
+
+/// A single tap, acted on once the double-tap timeout passes.
+Future<void> _tap(WidgetTester t, Offset at) async {
+  await t.tapAt(at);
+  await t.pump(const Duration(milliseconds: 400));
+  await t.pump();
+}
+
+/// The centre of a cell of the Term view, as laid out now (zoom and pan included).
+Offset _cell(Harness h, int col, int row) {
+  final cell = CellMetrics.fit(h.t.getSize(find.byKey(const Key('term'))).width, h.vts.single.cols);
+  return h.t.renderObject<RenderBox>(find.byType(TerminalView)).localToGlobal(Offset((col + 0.5) * cell.w, (row + 0.5) * cell.h));
+}
+
+Future<void> _drag(WidgetTester t, Offset from, double dy, {int steps = 4}) async {
+  final g = await t.startGesture(from);
+  for (var i = 0; i < steps; i++) {
+    await g.moveBy(Offset(0, dy / steps));
+    await t.pump();
+  }
+  await g.up();
+  await t.pump(const Duration(milliseconds: 400));
+}
+
+/// The watch channel shows [n] rows: an empty strip above the grid.
+Future<void> _shortGrid(Harness h, int ch, [int n = 3]) async {
+  h.r.send(frame(LinkKind.grid, ch, LinkFrame.resize(ch, 40, n).payload));
+  await h.t.pump();
+  await h.t.pump();
+}
+
+Future<void> _dirty(Harness h) async {
+  h.r.send(frame(LinkKind.data, 2, utf8.encode('x')));
+  await h.t.pump();
   await h.t.pump();
 }
 
@@ -631,14 +680,13 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('termDragScrollsTheProgram', (t) async {
+  testWidgets('scrollOnARefusedPaneUsesSessionScroll', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
-    await t.pump();
+    await _refuse(h);
     final term = find.byKey(const Key('term'));
-    final cols = h.m.fitted['s1/left']?.$1 ?? h.vts.single.cols;
-    final row = CellMetrics.fit(t.getSize(term).width, cols).h;
+    final row = CellMetrics.fit(t.getSize(term).width, h.vts.single.cols).h;
     final g = await t.startGesture(t.getCenter(term));
     await g.moveBy(Offset(0, 3 * row));
     await g.up();
@@ -646,6 +694,7 @@ void main() {
     expect(h.r.scrolls, [
       {'pane': 'left', 'lines': -3},
     ]);
+    expect(_claims(h), hasLength(1));
     await h.stop();
   });
 
@@ -653,7 +702,7 @@ void main() {
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
-    await t.pump();
+    await _refuse(h);
     h.r.refused.add('session.scroll');
     final g = await t.startGesture(t.getCenter(find.byKey(const Key('term'))));
     await g.moveBy(const Offset(0, 200));
@@ -1582,6 +1631,250 @@ void main() {
     await _leader(h, h.r.lastChannel);
     expect(_typed(h, h.r.lastChannel), '\x1b[B');
     expect(h.r.typed, ['\x1b[A']);
+    await h.stop();
+  });
+
+  testWidgets('tapClicksTheCellUnderTheFinger', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    h.vts.single.tracksMouse = true;
+    await _tap(t, _cell(h, 3, 2));
+    expect(h.vts.single.clicks, [(3, 2)]);
+    expect(_typed(h), contains('click 3,2'));
+    expect(_claims(h), hasLength(1));
+    await h.stop();
+  });
+
+  testWidgets('zoomedTapHitsTheCellUnderTheFinger', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    h.vts.single.tracksMouse = true;
+    final c = t.getCenter(find.byKey(const Key('term')));
+    await _pinch(t, c);
+    expect(_zoom(t), greaterThan(1.5));
+    final at = t.renderObject<RenderBox>(find.byType(TerminalView)).globalToLocal(c + const Offset(60, 0));
+    final cell = CellMetrics.fit(t.getSize(find.byKey(const Key('term'))).width, h.vts.single.cols);
+    await _tap(t, c + const Offset(60, 0));
+    expect(h.vts.single.clicks, [((at.dx / cell.w).floor(), (at.dy / cell.h).floor())]);
+    await h.stop();
+  });
+
+  testWidgets('tapOutsideTheGridClaimsWithoutAClick', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _shortGrid(h, 2);
+    final box = t.getRect(find.byKey(const Key('term')));
+    expect(t.getRect(find.byType(TerminalView)).top, greaterThan(box.top + 10));
+    await _tap(t, box.topCenter + const Offset(0, 4));
+    expect(_claims(h), hasLength(1));
+    await _leader(h);
+    await _shortGrid(h, _claimCh);
+    h.vts.single.tracksMouse = true;
+    await _tap(t, box.topCenter + const Offset(0, 4));
+    expect(h.vts.single.clicks, isEmpty);
+    expect(_typed(h), isNot(contains('click')));
+    await h.stop();
+  });
+
+  testWidgets('tapOnTheHistoryViewClaimsWithoutAClick', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.vts.single.alt = false;
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    await _tap(t, t.getCenter(find.byKey(const Key('screen'))));
+    expect(_claims(h), hasLength(1));
+    await _leader(h);
+    h.vts.single.tracksMouse = true;
+    await _tap(t, t.getCenter(find.byKey(const Key('screen'))));
+    expect(h.vts.single.clicks, isEmpty);
+    expect(_claims(h), hasLength(1));
+    await h.stop();
+  });
+
+  testWidgets('tapClaimsAndIsNotReplayed', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.vts.single.tracksMouse = true;
+    await _tap(t, _cell(h, 3, 2));
+    expect(_claims(h), hasLength(1));
+    await _leader(h);
+    await t.pump(const Duration(milliseconds: 100));
+    expect(h.vts.single.clicks, isEmpty);
+    expect(_typed(h), '');
+    await h.stop();
+  });
+
+  testWidgets('tapWithMouseOffClaimsAndSendsNothing', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _tap(t, _cell(h, 3, 2));
+    expect(_claims(h), hasLength(1));
+    await _leader(h);
+    await _tap(t, _cell(h, 3, 2));
+    expect(h.vts.single.clicks, [(3, 2)]);
+    expect(_typed(h), '');
+    await h.stop();
+  });
+
+  testWidgets('tapOnAnIndirectPaneSendsNothing', (t) async {
+    final h = Harness(t, treeOf(live: false));
+    await h.start();
+    await t.pump(const Duration(seconds: 1));
+    await _tap(t, t.getCenter(find.byKey(const Key('screen'))));
+    expect(_types(h), 0);
+    expect(h.r.opens, isEmpty);
+    expect(h.keyboards, 0); // no live terminal, no cursor
+    await h.stop();
+  });
+
+  testWidgets('scrollClaimsThenSendsWheel', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.vts.single.tracksMouse = true;
+    final term = find.byKey(const Key('term'));
+    final row = CellMetrics.fit(t.getSize(term).width, h.vts.single.cols).h;
+    await _drag(t, t.getCenter(term), 3 * row);
+    expect(_claims(h), hasLength(1));
+    expect(h.r.scrolls, isEmpty);
+    await _leader(h);
+    expect(_typed(h), ''); // the notches before the lead are dropped
+    await _drag(t, t.getCenter(term), 3 * CellMetrics.fit(t.getSize(term).width, h.vts.single.cols).h + 1);
+    expect(RegExp('wheel up').allMatches(_typed(h)), hasLength(3));
+    expect(h.r.scrolls, isEmpty);
+    await h.stop();
+  });
+
+  testWidgets('dragInFlightAtTakeBackDoesNotReclaim', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    h.vts.single.tracksMouse = true;
+    final term = find.byKey(const Key('term'));
+    final row = CellMetrics.fit(t.getSize(term).width, h.vts.single.cols).h;
+    final g = await t.startGesture(t.getCenter(term));
+    await g.moveBy(Offset(0, 2 * row));
+    await t.pump();
+    h.r.send([...json(LinkKind.lead, _claimCh, {'role': 'follower'}), ...json(LinkKind.close, _claimCh, {'reason': 'the computer took the lead back'})]);
+    await t.pump();
+    await t.pump();
+    for (var i = 0; i < 4; i++) {
+      await g.moveBy(Offset(0, row));
+      await t.pump();
+    }
+    await g.up();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(_claims(h), hasLength(1));
+    expect(h.r.scrolls, isEmpty);
+    await _drag(t, t.getCenter(term), 3 * row);
+    expect(_claims(h), hasLength(2));
+    await h.stop();
+  });
+
+  testWidgets('zoomAndDoubleTapDoNotClaim', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    final c = t.getCenter(find.byKey(const Key('term')));
+    await _pinch(t, c);
+    expect(_zoom(t), greaterThan(1.5));
+    await t.tapAt(c);
+    await t.pump(const Duration(milliseconds: 50));
+    await t.tapAt(c);
+    await t.pump(const Duration(milliseconds: 400));
+    expect(_zoom(t), 1);
+    expect(_claims(h), isEmpty);
+    expect(h.keyboards, 0);
+    await h.stop();
+  });
+
+  testWidgets('onlyATapOnTheVisibleCursorRowAsksForTheKeyboard', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    h.vts.single
+      ..cursorY = 5
+      ..cursorVisible = true;
+    await _dirty(h);
+    await _tap(t, _cell(h, 2, 3));
+    expect(h.keyboards, 0);
+    await _tap(t, _cell(h, 30, 5)); // any column of the caret's row
+    expect(h.keyboards, 1);
+    await t.tapAt(_cell(h, 30, 5));
+    await t.pump(const Duration(milliseconds: 50));
+    await t.tapAt(_cell(h, 30, 5));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(h.keyboards, 1); // a double tap is looking
+    h.vts.single.cursorVisible = false;
+    await _dirty(h);
+    await _tap(t, _cell(h, 30, 5));
+    expect(h.keyboards, 1);
+    await h.stop();
+  });
+
+  testWidgets('historyCursorRowIsItsLastLineAtTheBottom', (t) async {
+    final h = Harness(t, treeOf());
+    h.r.text = List.generate(200, (i) => 'line $i').join('\n');
+    await h.start();
+    await h.opened();
+    h.vts.single
+      ..alt = false
+      ..cursorVisible = true;
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    final screen = t.getRect(find.byKey(const Key('screen')));
+    await _tap(t, screen.bottomCenter - const Offset(0, 3)); // the last line
+    expect(h.keyboards, 1);
+    await _tap(t, screen.bottomCenter - const Offset(0, 80));
+    expect(h.keyboards, 1);
+    await t.dragFrom(screen.bottomCenter - const Offset(0, 150), const Offset(0, 200));
+    await t.pump(const Duration(seconds: 1));
+    expect(t.getRect(find.byKey(const Key('screen'))).bottom, greaterThan(screen.bottom));
+    await _tap(t, screen.bottomCenter - const Offset(0, 3)); // scrolled up: the caret is not on screen
+    expect(h.keyboards, 1);
+    await h.stop();
+  });
+
+  testWidgets('historyWithAHiddenCursorNeverAsksForTheKeyboard', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.vts.single.alt = false;
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    await _tap(t, t.getRect(find.byKey(const Key('screen'))).bottomCenter - const Offset(0, 3));
+    expect(_claims(h), hasLength(1));
+    expect(h.keyboards, 0);
+    await h.stop();
+  });
+
+  testWidgets('cursorRowTapOnARefusedPaneAsksForTheKeyboardAndSendsNothing', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _refuse(h);
+    final typed = h.r.typed.length;
+    h.vts.single
+      ..cursorY = 5
+      ..cursorVisible = true
+      ..tracksMouse = true;
+    await _dirty(h);
+    await _tap(t, _cell(h, 3, 5));
+    expect(h.keyboards, 1);
+    expect(h.vts.single.clicks, isEmpty);
+    expect(h.r.typed, hasLength(typed));
+    expect(_claims(h), hasLength(1));
     await h.stop();
   });
 }

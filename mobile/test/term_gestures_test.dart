@@ -9,6 +9,7 @@ class _Box {
   _Box(this.t);
   final WidgetTester t;
   final rows = <int>[];
+  var taps = 0;
 
   Future<void> pump({Size content = const Size(300, 400), Key key = const Key('g')}) => t.pumpWidget(Directionality(
         textDirection: TextDirection.ltr,
@@ -16,7 +17,7 @@ class _Box {
           alignment: Alignment.topLeft,
           child: SizedBox.fromSize(
             size: _view,
-            child: TermGestures(key: key, content: content, rowHeight: _row, onScroll: rows.add, child: const SizedBox.expand(key: Key('content'))),
+            child: TermGestures(key: key, content: content, rowHeight: _row, onScroll: rows.add, onTap: () => taps++, child: const SizedBox.expand(key: Key('content'))),
           ),
         ),
       ));
@@ -166,5 +167,37 @@ void main() {
     expect(b.global(const Offset(0, 1200)), const Offset(0, 400));
     await b.pump(content: const Size(300, 100)); // a short grid sits at the bottom, as the reversed scroll view put it
     expect(b.global(const Offset(0, 100)), const Offset(0, 400));
+  });
+
+  testWidgets('tapFiresOnce', (t) async {
+    final b = _Box(t);
+    await b.pump();
+    await t.tapAt(const Offset(150, 200));
+    expect(b.taps, 0); // it waits for a second tap
+    await t.pump(const Duration(milliseconds: 400));
+    expect(b.taps, 1);
+    expect(b.rows, isEmpty);
+  });
+
+  testWidgets('doubleTapDoesNotFireTap', (t) async {
+    final b = _Box(t);
+    await b.pump();
+    await t.tapAt(const Offset(150, 200));
+    await t.pump(const Duration(milliseconds: 50));
+    await t.tapAt(const Offset(150, 200));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(b.taps, 0);
+  });
+
+  testWidgets('pinchDoesNotFireTap', (t) async {
+    final b = _Box(t);
+    await b.pump();
+    await b.zoom2x();
+    final g1 = await t.startGesture(const Offset(100, 200), pointer: 1);
+    final g2 = await t.startGesture(const Offset(200, 200), pointer: 2);
+    await g1.up();
+    await g2.up();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(b.taps, 0);
   });
 }
