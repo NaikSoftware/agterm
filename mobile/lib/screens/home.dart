@@ -793,29 +793,3 @@ class _WavePainter extends CustomPainter {
   @override
   bool shouldRepaint(_WavePainter old) => old.tint != tint || old.phase != phase;
 }
-
-class StatusChip extends StatelessWidget {
-  const StatusChip(this.status, {super.key, this.blink = false});
-  final String status;
-  final bool blink;
-
-  @override
-  Widget build(BuildContext context) {
-    final (fg, bg) = switch (status) {
-      'blocked' => (C.blockedText, C.blockedChip),
-      'completed' => (C.completedText, const Color(0xFF14241A)),
-      'active' => (C.active, C.surface2),
-      _ => (C.muted, C.surface2),
-    };
-    return Container(
-      height: 28,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        StatusShape(status, size: 8, blink: blink),
-        const SizedBox(width: 6),
-        Text(statusLabel(status), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
-      ]),
-    );
-  }
-}

@@ -15,7 +15,6 @@ import '../terminal/terminal_view.dart';
 import '../terminal/vt.dart';
 import '../theme.dart';
 import 'actions.dart';
-import 'home.dart' show StatusChip;
 import 'prompt.dart';
 
 // what each key-bar key types into the pane: xterm sequences, as Konsole sends them, or while the phone leads, the key
@@ -582,7 +581,11 @@ class _SessionScreenState extends State<SessionScreen> {
         actions: [
           if (_lead) _Tag(_leading ? 'Leading' : 'Leading…', key: const Key('lead')),
           if (m.state == LinkState.connected && m.via.isNotEmpty) _Tag(m.via, key: const Key('via')),
-          StatusChip(s.status, blink: s.blink),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Semantics(
+                key: const Key('status'), label: statusLabel(s.status), child: StatusShape(s.status, size: 10, blink: s.blink)),
+          ),
           IconButton(
             key: const Key('sessionMenu'),
             tooltip: 'Session actions',

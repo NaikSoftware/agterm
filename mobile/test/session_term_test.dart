@@ -582,6 +582,28 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('statusShowsOnlyItsShape', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    expect(find.byKey(const Key('status')), findsOneWidget);
+    expect(find.text('Idle'), findsNothing);
+    expect(find.bySemanticsLabel('Idle'), findsOneWidget);
+    await h.stop();
+  });
+
+  testWidgets('sessionActionsHaveNoSplit', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await t.tap(find.byKey(const Key('sessionMenu')));
+    await t.pumpAndSettle();
+    expect(find.text('Duplicate'), findsOneWidget);
+    expect(find.text('Split side by side'), findsNothing);
+    expect(find.text('Hide split pane'), findsNothing);
+    await h.stop();
+  });
+
   testWidgets('splitToggleReopensTheOtherPane', (t) async {
     final h = Harness(t, treeOf(split: true));
     await h.start();

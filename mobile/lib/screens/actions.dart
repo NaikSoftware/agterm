@@ -143,8 +143,6 @@ Future<void> showSessionActions(BuildContext context, ElisModel m, Session s, {V
               );
               if (w != null && context.mounted) reportOf(context, m.act('session.move', target: s.id, args: {'workspace': w}));
             }),
-            _item(Icons.vertical_split_outlined, s.split ? 'Hide split pane' : 'Split side by side',
-                () => run(() => m.act('session.split', target: s.id, args: {'mode': 'toggle'}))),
             _item(Icons.copy_outlined, 'Duplicate', () => run(() => m.act('session.duplicate', target: s.id, args: {'noSelect': true}))),
             _item(Icons.subdirectory_arrow_right, 'New companion', () async {
               Navigator.pop(sheet);
