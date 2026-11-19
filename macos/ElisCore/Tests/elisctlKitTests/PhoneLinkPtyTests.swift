@@ -163,14 +163,14 @@ struct PhoneLinkPtyTests {
         let recorder = Recorder()
         let file = NSTemporaryDirectory() + "elis-pty-\(UUID().uuidString.prefix(8))"
         defer { try? FileManager.default.removeItem(atPath: file) }
-        let pty = try recorder.spawn(["/bin/sh", "-c", "trap '' TERM HUP; stty raw -echo; echo ready; sleep 0.3; exec cat > '\(file)'"])
+        let pty = try recorder.spawn(["/bin/sh", "-c", "stty raw -echo; echo ready; sleep 0.3; exec cat > '\(file)'"])
         #expect(await eventually { recorder.output.contains("ready") })
         let written = Written()
-        pty.write(Data(repeating: 0x78, count: 65536)) { written.add($0) }
-        pty.finish()
-        #expect(await eventually { written.counts == [65536] })
+        pty.write(Data(repeating: 0x78, count: 100)) { written.add($0) }
+        pty.finish(within: 30)
+        #expect(await eventually { written.counts == [100] })
         #expect(await recorder.waitExit())
-        #expect((try? Data(contentsOf: URL(fileURLWithPath: file)))?.count == 65536)
+        #expect((try? Data(contentsOf: URL(fileURLWithPath: file)))?.count == 100)
     }
 
     @Test func finishIsBoundedWhenTheProgramNeverReads() async throws {

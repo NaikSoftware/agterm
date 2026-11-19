@@ -154,9 +154,11 @@ final class PhoneLinkPty: @unchecked Sendable {
         }
     }
 
-    /// Terminates once the program has read its pending input; `finish`'s deadline bounds the wait.
+    /// Terminates once the program has read its pending input and had a moment to pass it on; `finish`'s deadline
+    /// bounds the wait.
     private func awaitRead() {
         while lock.withLock({ !stopping && !closed && unread() > 0 }) { usleep(10_000) }
+        usleep(50_000)
         terminate()
     }
 
