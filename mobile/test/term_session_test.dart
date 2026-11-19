@@ -52,6 +52,8 @@ void timed(void Function(FakeAsync a, TermSession s, FakeRelay r) body) => fakeA
 });
 
 List<(int, int)> resizes(FakeRelay r) => [for (final f in r.frames) if (f.kind == LinkKind.resize && f.channel == _claim) (f.size!.cols, f.size!.rows)];
+/// The relay acknowledges 2 MiB, so everything the claim channel holds goes out.
+void ackAll(FakeRelay r) => r.send([for (var i = 0; i < 128; i++) ...LinkFrame.credit(_claim, 16384).encode()]);
 String sent(FakeRelay r) => utf8.decode([for (final f in dataOn(r, _claim)) ...f.payload]);
 List<int> closes(FakeRelay r) => [for (final f in r.frames) if (f.kind == LinkKind.close) f.channel];
 List<Map> opens(FakeRelay r) => [for (final f in r.frames) if (f.kind == LinkKind.open) jsonDecode(utf8.decode(f.payload)) as Map];
@@ -436,6 +438,42 @@ void main() {
     await lead(s, r);
     expect(s.paste('x' * (1 << 20)), isTrue);
     expect(s.line('y' * 20000), isFalse);
+    expect(s.takeUnsent(), isEmpty);
+  });
+
+  test('aRefusedSendStopsTheDrain', () => timed((a, s, r) {
+    var notified = 0;
+    s.addListener(() => notified++);
+    expect(s.paste('x' * (1 << 20)), isTrue);
+    expect(s.line('a'), isTrue);
+    expect(s.paste('y' * 20000), isTrue);
+    expect(s.key(VtKey.tab, seq: '\t'), isTrue);
+    a.elapse(const Duration(milliseconds: 20));
+    ackAll(r);
+    a.elapse(Duration.zero);
+    expect(sent(r), '${'x' * (1 << 20)}a\r');
+    expect(notified, 1);
+    expect(s.inputLost, 'The computer has not taken the earlier input yet.');
+    expect(s.inputLost, isNull);
+    expect(s.takeUnsent(), isEmpty);
+  }));
+
+  test('aRefusedSendStopsTheLeadDrain', () async {
+    final (s, r, _) = await watched();
+    await lead(s, r);
+    expect(s.paste('x' * (1 << 20)), isTrue);
+    s.arm();
+    r.send(json(LinkKind.lead, _claim, {'role': 'computer'}));
+    await flush();
+    expect(s.paste('y' * 20000), isTrue);
+    expect(s.text('z'), isTrue);
+    r.send(json(LinkKind.lead, _claim, {'role': 'leader'}));
+    await flush();
+    ackAll(r);
+    await flush();
+    expect(sent(r), 'x' * (1 << 20));
+    expect(s.inputLost, 'The computer has not taken the earlier input yet.');
+    expect(s.inputLost, isNull);
     expect(s.takeUnsent(), isEmpty);
   });
 }

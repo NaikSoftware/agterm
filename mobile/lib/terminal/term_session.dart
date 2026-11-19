@@ -41,6 +41,7 @@ class TermSession extends ChangeNotifier {
   final _queue = ListQueue<_Intent>();
   int _queuedBytes = 0;
   Timer? _gap; // holds the queue between a line's text and its Enter
+  String? _inputLost;
 
   /// Why the relay ended the phone's lead; cleared by [takeOver].
   String? leadLost;
@@ -49,6 +50,13 @@ class TermSession extends ChangeNotifier {
   int grids = 0;
 
   bool get leading => _leading;
+
+  /// Set once when the claim channel refused queued input, which is dropped with everything behind it; cleared when read.
+  String? get inputLost {
+    final lost = _inputLost;
+    _inputLost = null;
+    return lost;
+  }
 
   /// Input queues until the lead arrives: armed or claimed, and not leading.
   bool get pending => (_armed || _claim != null) && !_leading;
@@ -226,12 +234,13 @@ class TermSession extends ChangeNotifier {
     if (_queue.length + intents.length > 256 || _queuedBytes + bytes > 1 << 20) return false;
     _queue.addAll(intents);
     _queuedBytes += bytes;
-    return _drain();
+    return _drain(fresh: intents.length);
   }
 
-  /// Sends the queue while leading, stopping at a line's Enter for the gap unless [gaps] is false; false when a send failed.
-  bool _drain({bool gaps = true, bool gapDone = false}) {
-    var ok = true;
+  /// Sends the queue while leading, stopping at a line's Enter for the gap unless [gaps] is false.
+  /// A refused send drops the rest of the queue, so nothing goes out of order; false when that happened. Losing more
+  /// than the caller's [fresh] intents sets [inputLost].
+  bool _drain({bool gaps = true, bool gapDone = false, int fresh = 0}) {
     while (_leading && _vt != null && _queue.isNotEmpty && (_gap == null || !gaps)) {
       final (unsent, encode, gap) = _queue.first;
       if (gap && gaps && !gapDone) {
@@ -245,10 +254,15 @@ class TermSession extends ChangeNotifier {
       _queue.removeFirst();
       _queuedBytes -= utf8.encode(unsent).length;
       if (_send(encode(_vt!))) continue;
-      ok = false;
-      if (_queue.firstOrNull?.$3 ?? false) _queuedBytes -= utf8.encode(_queue.removeFirst().$1).length; // its line's Enter
+      final lost = _queue.length + 1;
+      _drop();
+      if (lost > fresh && _inputLost == null) {
+        _inputLost = 'The computer has not taken the earlier input yet.';
+        if (!_closed) notifyListeners();
+      }
+      return false;
     }
-    return ok;
+    return true;
   }
 
   void _drop() {
