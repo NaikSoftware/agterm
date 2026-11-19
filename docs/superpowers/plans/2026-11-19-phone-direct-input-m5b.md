@@ -30,6 +30,8 @@
 
 **Owner decision (2026-11-19, fourth message): "not every click shows the keyboard, only clicks on inputs."** One visible rule: a tap opens the soft keyboard only when it lands on the row of the visible text cursor, the caret the user sees. Any other tap only claims and clicks (when the program tracks the mouse). A hidden cursor (`ESC[?25l`) means no tap opens the keyboard. The key bar and the composer work regardless. This narrows the third message's "a tap opens the soft keyboard". Evidence: Claude Code enables mouse modes 1000/1002/1003/1004/1006, never hides the cursor and parks it in its input box; a shell keeps the cursor on its prompt line.
 
+**Owner decision (2026-11-19, fifth message): the session view has no side padding — "every pixel is important on the small screen".** The terminal box (Term view and history view) runs edge to edge: no left or right margin around the box (today `EdgeInsets.fromLTRB(12, 8, 12, 0)`), no left or right inner padding (today `EdgeInsets.all(12)` in both views), and no side border or rounded corners. Vertical gaps above and below the terminal shrink to the minimum that keeps the toolbar, key bar and composer readable (the inner top and bottom padding of the terminal goes to 0 as well). Everything that subtracts the old 24 px or adds the 12 px offset (`_width`, `_height`, the fit's columns and rows, the tap and wheel cell mapping, the history width) uses the new geometry. Task 5 owns this, with its goldens.
+
 ## Global Constraints
 
 - The M5 plan's Global Constraints apply unchanged (paths, `#if os(macOS)`, `flutter test --no-pub test/<file>`, `flutter analyze --no-pub` with 0 issues, `mobile/tool/build-vtshim.sh` and its `FUNCS` list after a `vtshim.c` change, explicit staging, no `macos/CHANGELOG.md`).
