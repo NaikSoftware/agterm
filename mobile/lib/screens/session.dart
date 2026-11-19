@@ -59,7 +59,7 @@ class _SessionScreenState extends State<SessionScreen> {
   bool? _alt; // the screen the last frame showed; scrollback follows each switch
   String text = '';
   String? error;
-  bool fitting = false;
+  Future<void>? _fitCall; // the fit call in flight and the re-runs it chains
   final autoFit = AutoFit();
   bool _foreground = true;
   late final AppLifecycleListener _lifecycle;
@@ -70,7 +70,9 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _scrolling = false;
   bool polling = false;
   TermSession? term; // a Live pane watched as a terminal; the text poll stops meanwhile
-  TermSession? _claimed; // the term Take over was asked on: a replaced term (pause, pane, reconnect) is not claimed
+  TermSession? _claimed; // the term the lead was asked on: a replaced term (pause, pane, reconnect) is not claimed
+  final _noClaim = <String>{}; // panes whose claim was refused on this visit: they type indirectly
+  Future<void>? _replay; // a refused claim's input on its way through session.type; later input waits for it
   (int, int)? _leadGrid, _seenGrid; // the grid the lead was given, and the one the screen shows now
   Timer? _leadResize;
   // after Give back, the pane stays covered until zmx hands the lead back, and a fit then is refused: fit once the relay
@@ -188,6 +190,7 @@ class _SessionScreenState extends State<SessionScreen> {
         }
         unawaited(_syncFit());
       }
+      if (t.inputLost case final lost?) report(context, lost);
       if (_leadResize?.isActive != true) _resizeLead(); // the screen changed while the claim waited for its LEAD
       if (_refitAfter case final n? when t.grids > n) _refit();
       if (text.isNotEmpty && _termShown && t.snapshot!.altScreen) {
@@ -207,29 +210,43 @@ class _SessionScreenState extends State<SessionScreen> {
     return (cols, max(1, (_height / CellMetrics.fit(_width, cols).h).floor()));
   }
 
-  Future<void> toggleLead() async {
+  bool get _direct => term != null && !_noClaim.contains(pane);
+
+  /// The first input on a Live pane asks for the lead; input queues on the term until it leads.
+  void _claim() {
     final t = term;
-    if (t == null) return;
-    if (_lead) {
-      final led = t.leading;
-      t.release();
-      setState(() => _claimed = null);
-      if (!led) return _syncFit(); // never led: the pane was not covered
-      _refitAfter = t.grids;
-      _refitTimer?.cancel();
-      _refitTimer = Timer(const Duration(seconds: 3), _refit); // shortcut: a Mac grid the size of the lead brings no report
-      return;
-    }
+    if (t == null || _lead || _noClaim.contains(pane)) return;
     t.leadLost = null; // a lead lost earlier was said then
+    t.arm();
     setState(() => _claimed = t);
-    // the computer's grid back first (auto-fit stands down while [_lead]): a session grid would fight the phone's
+    unawaited(_takeOver(t));
+  }
+
+  Future<void> _takeOver(TermSession t) async {
+    bool mine() => mounted && _lead && _claimed == t; // a pause or pane switch meanwhile closed [t]: nothing to say
+    // the computer's grid back first, after any fit in flight (auto-fit stands down while [_lead]): a session grid
+    // would fight the phone's
     await _syncFit();
-    bool mine() => _lead && _claimed == t; // a pause or pane switch meanwhile closed [t]: nothing to say
-    if (!mounted || !mine()) return;
+    if (!mine()) return;
+    if (m.fitted.containsKey(_fitKey)) return _abandon(t, null); // the reset was refused, and said
     final g = _leadGrid = _seenGrid = _phoneGrid();
     final err = await t.takeOver(g.$1, g.$2);
-    if (err == null || !mounted || !mine()) return;
+    if (err != null && mine()) _abandon(t, err);
+  }
+
+  /// The pane types indirectly for the rest of the visit; the input queued for the lead goes first, in order.
+  void _abandon(TermSession t, String? err) {
+    _noClaim.add(t.pane);
     setState(() => _claimed = null);
+    final unsent = t.takeUnsent();
+    t.release();
+    _replay = () async {
+      for (final text in unsent) {
+        final e = await m.act('session.type', target: widget.sessionId, args: {'text': text, 'pane': t.pane});
+        if (e != null) return mounted ? report(context, e) : null;
+      }
+    }();
+    if (err == null) return; // a refused reset: a refit now would only be refused and said again
     report(context, err);
     unawaited(_syncFit());
   }
@@ -332,13 +349,31 @@ class _SessionScreenState extends State<SessionScreen> {
     return size;
   }
 
-  /// Fits or gives back the grid as [autoFit] says for the screen's state now; a change during a call runs after it.
-  Future<void> _syncFit() async {
-    if (fitting || !mounted) return;
+  /// Fits or gives back the grid as [autoFit] says for the screen's state now; a change during a call runs after it,
+  /// and a caller during a call gets that call with its re-runs.
+  Future<void> _syncFit() {
+    if (_fitCall case final f?) return f;
+    final done = Completer<void>();
+    _fitCall = done.future;
+    () async {
+      try {
+        // the app paused, resumed or changed pane during a call; after a failure, the next change retries (a refused
+        // reset keeps its record, so leaving still gives the grid back)
+        while (await _fitOnce()) {}
+      } finally {
+        _fitCall = null;
+        done.complete();
+      }
+    }();
+    return done.future;
+  }
+
+  /// True when a call was made and succeeded.
+  Future<bool> _fitOnce() async {
+    if (!mounted) return false;
     final visible = _foreground && !m.background && m.state == LinkState.connected;
     final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible && !_lead && _refitAfter == null);
-    if (on == null) return;
-    setState(() => fitting = true);
+    if (on == null) return false;
     final key = _fitKey;
     var ok = false;
     try {
@@ -364,12 +399,10 @@ class _SessionScreenState extends State<SessionScreen> {
     }
     // the screen closed or moved to the other pane during the call: that fit has no viewer any more
     if (!mounted || key != _fitKey) _release(key.split('/').last);
-    if (!mounted) return;
-    setState(() => fitting = false);
+    if (!mounted) return false;
+    setState(() {});
     Future.delayed(const Duration(milliseconds: 300), _load); // the program redraws at its new width
-    // the app paused, resumed or changed pane during the call; after a failure, the next change retries (a refused reset
-    // keeps its record, so leaving still gives the grid back)
-    if (ok) unawaited(_syncFit());
+    return ok;
   }
 
   /// Gives back [p]'s grid without waiting: the screen is closing or moving to the other pane.
@@ -380,12 +413,17 @@ class _SessionScreenState extends State<SessionScreen> {
 
   String _trimEnd(String t) => t.split('\n').map((l) => l.trimRight()).join('\n').replaceFirst(RegExp(r'\n+$'), '');
 
+  static const _busy = 'The computer has not taken the earlier input yet.';
+
+  void _sent(bool ok) {
+    if (!ok) report(context, _busy);
+  }
+
   Future<void> type(String keys) async {
     HapticFeedback.selectionClick();
-    if (_leading) {
-      term!.text(keys);
-      return;
-    }
+    _claim();
+    if (_direct) return _sent(term!.text(keys));
+    await _replay;
     final err = await m.act('session.type', target: widget.sessionId, args: {'text': keys, 'pane': pane});
     if (mounted) report(context, err);
     Future.delayed(const Duration(milliseconds: 150), _load);
@@ -393,29 +431,31 @@ class _SessionScreenState extends State<SessionScreen> {
 
   void _press(String? seq, VtKey? key, int mods) {
     if (key == null || seq == null) return unawaited(_paste());
-    if (!_leading) return unawaited(type(seq));
+    _claim();
+    if (!_direct) return unawaited(type(seq));
     HapticFeedback.selectionClick();
-    term!.key(key, mods: mods, seq: seq);
+    _sent(term!.key(key, mods: mods, seq: seq));
   }
 
   Future<void> _paste() async {
     final clip = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
     if (clip == null || clip.isEmpty || !mounted) return;
-    if (!_leading) return type(clip);
+    _claim();
+    if (!_direct) return type(clip);
     HapticFeedback.selectionClick();
-    if (!term!.paste(clip)) report(context, 'The program has not read the earlier input yet; paste again in a moment.');
+    _sent(term!.paste(clip));
   }
 
   Future<void> sendInput() async {
     final t = input.text;
-    if (_leading) {
-      // the text, then Enter as a key: the program sees a typed line, not a paste
-      if (t.isNotEmpty) term!.text(t);
-      term!.key(VtKey.enter, seq: '\r');
+    _claim();
+    if (_direct) {
+      if (!term!.line(t)) return report(context, _busy); // the composer keeps the text
       return input.clear();
     }
     if (t.isEmpty) return type('\r');
     setState(() => sending = true);
+    await _replay;
     // the text, then the Enter on its own: Claude Code reads a pasted "...\r" as one paste, not a submit
     final err = await m.act('session.type', target: widget.sessionId, args: {'text': t, 'pane': pane}) ??
         await m.act('session.type', target: widget.sessionId, args: {'text': '\r', 'pane': pane});
@@ -442,14 +482,8 @@ class _SessionScreenState extends State<SessionScreen> {
               style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
         ]),
         actions: [
-          if (m.state == LinkState.connected && m.via.isNotEmpty)
-            Container(
-              key: const Key('via'),
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(border: Border.all(color: C.line), borderRadius: BorderRadius.circular(6)),
-              child: Text(m.via, style: const TextStyle(fontSize: 11, color: C.muted, fontWeight: FontWeight.w600)),
-            ),
+          if (_lead) _Tag(_leading ? 'Phone leads' : 'Taking the lead…', key: const Key('lead')),
+          if (m.state == LinkState.connected && m.via.isNotEmpty) _Tag(m.via, key: const Key('via')),
           StatusChip(s.status, blink: s.blink),
           IconButton(
             key: const Key('sessionMenu'),
@@ -466,7 +500,7 @@ class _SessionScreenState extends State<SessionScreen> {
           Expanded(
               child: Stack(children: [
             Positioned.fill(child: _terminal()),
-            Positioned(top: 14, right: 18, child: _toolbar(s)),
+            Positioned(top: 6, right: 6, child: _toolbar(s)),
             if (m.state != LinkState.connected)
               Center(
                   child: Padding(
@@ -485,7 +519,8 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   Widget _toolbar(Session s) {
-    Widget seg(String label, bool on, VoidCallback? onTap, {Key? key}) => Padding(
+    if (!s.hasSplit) return const SizedBox.shrink();
+    Widget seg(String label, bool on, VoidCallback onTap, {Key? key}) => Padding(
           padding: const EdgeInsets.only(left: 6),
           child: OutlinedButton(
             key: key,
@@ -495,8 +530,6 @@ class _SessionScreenState extends State<SessionScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               backgroundColor: (on ? C.surface2 : C.surface).withValues(alpha: 0.92),
               foregroundColor: on ? C.text : C.muted,
-              disabledBackgroundColor: C.bg.withValues(alpha: 0.6),
-              disabledForegroundColor: C.muted.withValues(alpha: 0.45),
               side: BorderSide(color: on ? C.line : C.surface2),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
@@ -515,12 +548,8 @@ class _SessionScreenState extends State<SessionScreen> {
       _syncFit();
     }
     return Row(key: const Key('toolbar'), mainAxisSize: MainAxisSize.min, children: [
-        if (s.hasSplit) ...[
-          seg('Left pane', pane == 'left', () => setPane('left')),
-          seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
-        ],
-        // Give back cancels at any moment; Take over waits for a fit call in flight, which would race the claim
-        seg(_lead ? 'Give back' : 'Take over', _lead, term == null || (fitting && !_lead) ? null : toggleLead, key: const Key('takeOver')),
+      seg('Left pane', pane == 'left', () => setPane('left')),
+      seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
     ]);
   }
 
@@ -552,20 +581,16 @@ class _SessionScreenState extends State<SessionScreen> {
     _sendScroll(); // what the finger moved meanwhile
   }
 
-  Widget _terminal() => Container(
-        margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-        decoration: BoxDecoration(color: C.term, border: Border.all(color: const Color(0xFF1A1C24)), borderRadius: BorderRadius.circular(12)),
-        clipBehavior: Clip.antiAlias,
-        child: _termShown ? _termView(term!) : _textView(),
-      );
+  // edge to edge, no padding: every pixel counts on a phone
+  Widget _terminal() => ClipRect(child: ColoredBox(color: C.term, child: _termShown ? _termView(term!) : _textView()));
 
   // the grid scaled to the width; taller than the box, the bottom rows (the cursor's) stay in view
   // a live stream has no phone-side history, so a drag always scrolls the program; two fingers zoom
   Widget _termView(TermSession t) {
     final columns = _lead ? null : m.fitted[_fitKey]?.$1 ?? (autoFit.wanted ? _fitColumns() : null);
     return LayoutBuilder(builder: (context, box) {
-      _width = box.maxWidth - 24;
-      _height = box.maxHeight - 24;
+      _width = box.maxWidth;
+      _height = box.maxHeight;
       _layoutLead();
       final cell = CellMetrics.fit(_width, columns ?? t.snapshot!.cols);
       // outside the zoom, so a touch beside a short grid still counts: the wheel clamps it to the nearest cell
@@ -574,10 +599,10 @@ class _SessionScreenState extends State<SessionScreen> {
         onPointerMove: (e) => _finger = e.position,
         child: TermGestures(
           key: const Key('term'),
-          content: Size(box.maxWidth, t.snapshot!.rows * cell.h + 24),
+          content: Size(box.maxWidth, t.snapshot!.rows * cell.h),
           rowHeight: cell.h,
           onScroll: (rows) => t.leading ? _wheel(t, rows, cell) : _drag(rows.toDouble()),
-          child: Padding(padding: const EdgeInsets.all(12), child: TerminalView(key: _grid, snapshot: t.snapshot, hold: t.hold, columns: columns)),
+          child: TerminalView(key: _grid, snapshot: t.snapshot, hold: t.hold, columns: columns),
         ),
       );
     });
@@ -599,8 +624,8 @@ class _SessionScreenState extends State<SessionScreen> {
           // size (before the fit) wraps rather than shrinking everything
           final cols = max(20, _columns ?? text.split('\n').fold<int>(20, (a, l) => max(a, l.runes.length)));
           // JetBrains Mono advances 0.6 em
-          _width = box.maxWidth - 24;
-          _height = box.maxHeight - 24;
+          _width = box.maxWidth;
+          _height = box.maxHeight;
           _layoutLead();
           // tiny when the computer's grid is wide, but whole rows, so the layout stays the program's (the fit reads it)
           _fit = _sizeFor(cols, min(13, _width / (cols * 0.6)));
@@ -617,14 +642,13 @@ class _SessionScreenState extends State<SessionScreen> {
             controller: vScroll,
             reverse: true, // the newest rows stay in view
             physics: _remoteScroll ? const NeverScrollableScrollPhysics() : null,
-            padding: const EdgeInsets.all(12),
             child: SizedBox(width: double.infinity, child: body),
           );
           return _remoteScroll ? GestureDetector(onVerticalDragUpdate: (d) => _drag(d.delta.dy / (_fit * 1.3)), child: view) : view;
         });
 
   Widget _answers(List<PromptOption> options) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
         child: Row(children: [
           for (final (i, o) in options.take(4).indexed) ...[
             if (i > 0) const SizedBox(width: 8),
@@ -659,9 +683,9 @@ class _SessionScreenState extends State<SessionScreen> {
       );
 
   Widget _keyBar() => SizedBox(
-        height: 52,
+        height: 48,
         child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
           scrollDirection: Axis.horizontal,
           itemCount: keys.length,
           separatorBuilder: (_, _) => const SizedBox(width: 6),
@@ -721,5 +745,19 @@ class _SessionScreenState extends State<SessionScreen> {
             ),
           ),
         ]),
+      );
+}
+
+/// A small bordered label in the app bar: the link the phone uses, the lead.
+class _Tag extends StatelessWidget {
+  const _Tag(this.text, {super.key});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(border: Border.all(color: C.line), borderRadius: BorderRadius.circular(6)),
+        child: Text(text, style: const TextStyle(fontSize: 11, color: C.muted, fontWeight: FontWeight.w600)),
       );
 }
