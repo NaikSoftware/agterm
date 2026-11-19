@@ -153,6 +153,20 @@ class BluetoothPref {
   }
 }
 
+/// "Show composer": the session screen's text field under the key row.
+class ComposerPref {
+  static const _storage = FlutterSecureStorage();
+  static const _key = 'showComposer';
+  static bool shown = false;
+
+  static Future<void> load() async => shown = await _storage.read(key: _key) == 'on';
+
+  static Future<void> set(bool v) async {
+    shown = v;
+    await _storage.write(key: _key, value: v ? 'on' : 'off');
+  }
+}
+
 /// What the screen says when no transport connected; [unseen] is how long no Bluetooth scan has matched.
 String connectError(Object e, Pairing p, Duration unseen) => switch (e) {
       ElisError() => e.message,

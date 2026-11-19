@@ -590,7 +590,7 @@ class _SessionScreenState extends State<SessionScreen> {
             key: const Key('sessionMenu'),
             tooltip: 'Session actions',
             icon: const Icon(Icons.more_vert),
-            onPressed: () => showSessionActions(context, m, s, onClosed: () => Navigator.of(context).maybePop()),
+            onPressed: () => showSessionActions(context, m, s, onClosed: () => Navigator.of(context).maybePop(), onComposer: () => setState(() {})),
           ),
         ],
         bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
@@ -614,7 +614,7 @@ class _SessionScreenState extends State<SessionScreen> {
           ])),
           if (options.isNotEmpty) _answers(options),
           _keyBar(),
-          _composer(),
+          if (ComposerPref.shown) _composer(),
         ]),
       ),
     );

@@ -7,6 +7,7 @@ import 'package:elis_mobile/link/decoder.dart';
 import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/link/messages.dart';
 import 'package:elis_mobile/model.dart';
+import 'package:elis_mobile/screens/actions.dart';
 import 'package:elis_mobile/screens/session.dart';
 import 'package:elis_mobile/terminal/row_cache.dart';
 import 'package:elis_mobile/terminal/term_keyboard.dart';
@@ -407,6 +408,9 @@ List<Map> _fits(Harness h) => [for (final g in h.r.grids) if (g['columns'] != nu
 int _resets(Harness h) => h.r.grids.where((g) => g['reset'] == true).length;
 
 void main() {
+  setUp(() => ComposerPref.shown = true);
+  tearDown(() => ComposerPref.shown = false);
+
   testWidgets('livePaneShowsTheTerminal', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
@@ -2501,6 +2505,75 @@ void main() {
     expect(find.byWidgetPredicate((w) => w is CustomPaint && '${w.painter.runtimeType}' == '_TextSelectionHandlePainter'), findsNothing);
     await h.stop();
   });
+
+  testWidgets('composerIsHiddenByDefault', (t) async {
+    ComposerPref.shown = false;
+    final h = Harness(t, treeOf());
+    await h.start();
+    expect(find.text('Type, then send with Enter'), findsNothing);
+    expect(find.byKey(const Key('composer')), findsNothing);
+    expect(find.byKey(const Key('key-Up')), findsOneWidget);
+    await h.stop();
+  });
+
+  testWidgets('menuShowsTheComposerAndRemembers', (t) async {
+    ComposerPref.shown = false;
+    final h = Harness(t, treeOf());
+    await h.start();
+    await _toggleComposer(t, 'Show composer');
+    expect(find.byKey(const Key('composer')), findsOneWidget);
+    expect(ComposerPref.shown, isTrue);
+    await t.tap(find.byKey(const Key('sessionMenu')));
+    await t.pumpAndSettle();
+    expect(_label(t, 'composerToggle'), 'Hide composer');
+    await h.stop();
+  });
+
+  testWidgets('listSheetHasNoComposerToggle', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    unawaited(showSessionActions(h.nav.currentContext!, h.m, h.m.session('s1')!));
+    await t.pumpAndSettle();
+    expect(find.text('Rename'), findsOneWidget);
+    expect(find.byKey(const Key('composerToggle')), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('composerToggleWhileLeadingResizesOnce', (t) async {
+    ComposerPref.shown = false;
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    final claim = _claims(h).single;
+    await _toggleComposer(t, 'Show composer');
+    await t.pump(const Duration(seconds: 1));
+    final resize = h.r.of(LinkKind.resize).single;
+    expect(resize.channel, _claimCh);
+    expect(resize.size!.cols, claim['cols']);
+    expect(resize.size!.rows, lessThan(claim['rows'] as int));
+    await h.stop();
+  });
+
+  testWidgets('hiddenComposerStillTypesIndirectly', (t) async {
+    ComposerPref.shown = false;
+    final h = Harness(t, treeOf(live: false));
+    await h.start();
+    await _key(t, 'Up');
+    await t.pump();
+    expect(h.r.typed, ['\x1b[A']);
+    expect(find.byKey(const Key('composer')), findsNothing);
+    await h.stop();
+  });
+}
+
+/// Taps the session menu's composer item, which reads [label], and lets the sheet close.
+Future<void> _toggleComposer(WidgetTester t, String label) async {
+  await t.tap(find.byKey(const Key('sessionMenu')));
+  await t.pumpAndSettle();
+  expect(_label(t, 'composerToggle'), label);
+  await t.tap(find.byKey(const Key('composerToggle')));
+  await t.pumpAndSettle();
 }
 
 /// The Term view with a visible cursor on row 5.
