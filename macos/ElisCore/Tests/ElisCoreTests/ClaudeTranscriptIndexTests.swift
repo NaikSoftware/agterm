@@ -117,6 +117,17 @@ struct ClaudeTranscriptIndexTests {
         #expect(chainUUIDs(index) == ["u1", "big", "a1"])
     }
 
+    @Test func oversizedToolResultTakesItsTopLevelUUIDBetweenBlobs() throws {
+        let blob = String(repeating: "x", count: 3 << 20)
+        let big = #"{"parentUuid":"u1","isSidechain":false,"type":"user","message":{"content":[{"type":"tool_result","content":"\#(blob)"}]},"#
+            + #""uuid":"big","toolUseResult":{"file":{"uuid":"nested","base64":"\"\#(blob)"}},"sourceToolAssistantUUID":"u1"}"#
+        let fixture = try Fixture([record("user", "u1", parent: nil), big, record("assistant", "a1", parent: "big")])
+        let index = fixture.index()
+        #expect(index.records[1].oversized)
+        #expect(index.records[1].uuid == "big")
+        #expect(chainUUIDs(index) == ["u1", "big", "a1"])
+    }
+
     @Test func undecodableLineCountsAsSkipped() throws {
         let fixture = try Fixture(["{not json", record("user", "u1", parent: nil)])
         let index = fixture.index()

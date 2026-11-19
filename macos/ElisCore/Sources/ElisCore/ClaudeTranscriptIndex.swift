@@ -79,16 +79,16 @@ final class ClaudeTranscriptIndex {
         try? handle.seek(toOffset: UInt64(end))
         var buffer: [UInt8] = []
         var lineStart = end
-        // an oversized line keeps only its head and a rolling tail while it is skipped to its newline
-        var skipping: (head: [UInt8], tail: [UInt8], length: Int)?
+        // an oversized line is streamed through a field scanner to its newline instead of being held
+        var skipping: (fields: TopLevelFieldScanner, length: Int)?
         while let data = try? handle.read(upToCount: Self.chunk), !data.isEmpty {
             buffer.append(contentsOf: data)
             var from = 0
             while let newline = buffer[from...].firstIndex(of: 0x0A) {
                 if var skip = skipping {
-                    skip.tail.append(contentsOf: buffer[from..<newline])
+                    skip.fields.feed(buffer[from..<newline])
                     skip.length += newline - from
-                    addOversized(head: skip.head, tail: skip.tail.suffix(Self.tailLength), offset: lineStart, length: skip.length)
+                    addOversized(skip.fields, offset: lineStart, length: skip.length)
                     lineStart += skip.length + 1
                     skipping = nil
                 } else {
@@ -98,21 +98,16 @@ final class ClaudeTranscriptIndex {
                 from = newline + 1
             }
             buffer.removeFirst(from)
+            if skipping == nil, buffer.count > Self.lineWindow { skipping = (TopLevelFieldScanner(), 0) }
             if var skip = skipping {
+                skip.fields.feed(buffer)
                 skip.length += buffer.count
-                skip.tail = Array((skip.tail + buffer).suffix(Self.tailLength))
                 skipping = skip
-                buffer.removeAll(keepingCapacity: true)
-            } else if buffer.count > Self.lineWindow {
-                skipping = (Array(buffer.prefix(Self.headLength)), Array(buffer.suffix(Self.tailLength)), buffer.count)
                 buffer.removeAll(keepingCapacity: true)
             }
         }
         end = lineStart
     }
-
-    private static let headLength = 1024
-    private static let tailLength = 64 << 10
 
     private func add(line: ArraySlice<UInt8>, offset: Int) {
         guard !line.isEmpty else { return }
@@ -130,22 +125,11 @@ final class ClaudeTranscriptIndex {
         fold(object, message: message, index: records.count - 1)
     }
 
-    // shortcut: ids come from a text match, since parentUuid leads a record and uuid follows its body;
-    // a nested "uuid" key after the body would be mistaken for the record's, so parse if that shows up
-    private func addOversized(head: [UInt8], tail: ArraySlice<UInt8>, offset: Int, length: Int) {
-        let headText = String(decoding: head, as: UTF8.self)
-        let tailText = String(decoding: tail, as: UTF8.self)
+    private func addOversized(_ fields: TopLevelFieldScanner, offset: Int, length: Int) {
         append(TranscriptRecord(
-            uuid: Self.lastValue(of: "uuid", in: tailText), parent: Self.lastValue(of: "parentUuid", in: headText),
-            logicalParent: nil, offset: offset, length: length, type: "",
-            subtype: nil, sidechain: headText.contains(#""isSidechain":true"#), messageID: nil, oversized: true
+            uuid: fields.strings["uuid"], parent: fields.strings["parentUuid"], logicalParent: fields.strings["logicalParentUuid"],
+            offset: offset, length: length, type: "", subtype: nil, sidechain: fields.sidechain, messageID: nil, oversized: true
         ))
-    }
-
-    private static func lastValue(of key: String, in text: String) -> String? {
-        guard let range = text.range(of: "\"\(key)\":\"", options: .backwards),
-              let close = text[range.upperBound...].firstIndex(of: "\"") else { return nil }
-        return String(text[range.upperBound..<close])
     }
 
     private func append(_ record: TranscriptRecord) {
@@ -213,5 +197,49 @@ final class ClaudeTranscriptIndex {
 
     private static func blocks(_ message: [String: Any]?, type: String) -> [[String: Any]] {
         (message?["content"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == type }
+    }
+}
+
+/// The short top-level string fields and `isSidechain` of one JSON object fed in pieces; nested keys never match.
+struct TopLevelFieldScanner {
+    private(set) var strings: [String: String] = [:]
+    private(set) var sidechain = false
+    private var depth = 0
+    private var inString = false
+    private var escaped = false
+    private var expectsKey = true
+    private var key: String?
+    // nil while the current string is nested or too long to be an id
+    private var token: [UInt8]?
+
+    mutating func feed(_ bytes: some Sequence<UInt8>) {
+        for byte in bytes {
+            if inString {
+                if escaped || byte != 0x22 {
+                    escaped = !escaped && byte == 0x5C
+                    if token != nil { token = token!.count < 256 ? token! + [byte] : nil }
+                } else {
+                    inString = false
+                    closeString()
+                }
+                continue
+            }
+            switch byte {
+            case 0x22: inString = true; token = depth == 1 ? [] : nil
+            case 0x7B, 0x5B: depth += 1
+            case 0x7D, 0x5D: depth -= 1
+            case 0x3A where depth == 1: expectsKey = false
+            case 0x2C where depth == 1: expectsKey = true; key = nil
+            case 0x74 where depth == 1 && !expectsKey && key == "isSidechain": sidechain = true; key = nil
+            default: break
+            }
+        }
+    }
+
+    private mutating func closeString() {
+        guard let token, depth == 1 else { return }
+        let text = String(decoding: token, as: UTF8.self)
+        if expectsKey { key = text } else if let key { strings[key] = text }
+        key = expectsKey ? key : nil
     }
 }
