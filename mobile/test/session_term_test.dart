@@ -9,6 +9,7 @@ import 'package:elis_mobile/link/messages.dart';
 import 'package:elis_mobile/model.dart';
 import 'package:elis_mobile/screens/session.dart';
 import 'package:elis_mobile/terminal/row_cache.dart';
+import 'package:elis_mobile/terminal/term_keyboard.dart';
 import 'package:elis_mobile/terminal/terminal_view.dart';
 import 'package:elis_mobile/terminal/vt.dart';
 import 'package:elis_mobile/theme.dart';
@@ -1910,6 +1911,289 @@ void main() {
     expect(_claims(h), hasLength(1));
     await h.stop();
   });
+
+  testWidgets('tapOnTheCursorRowOpensTheKeyboard', (t) async {
+    final h = await _cursorAt5(t);
+    await t.tapAt(_cell(h, 30, 5));
+    await t.pump(const Duration(milliseconds: 50));
+    await t.tapAt(_cell(h, 30, 5));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(t.testTextInput.isVisible, isFalse);
+    await _tap(t, _cell(h, 30, 5));
+    expect(t.testTextInput.isVisible, isTrue);
+    await h.stop();
+  });
+
+  testWidgets('tapOffTheCursorRowOnlyClicks', (t) async {
+    final h = await _cursorAt5(t);
+    await _lead(h);
+    h.vts.single.tracksMouse = true;
+    await _tap(t, _cell(h, 3, 2));
+    expect(h.vts.single.clicks, [(3, 2)]);
+    expect(t.testTextInput.isVisible, isFalse);
+    await h.stop();
+  });
+
+  testWidgets('hiddenCursorNeverOpensTheKeyboard', (t) async {
+    final h = await _cursorAt5(t);
+    await _lead(h);
+    h.vts.single
+      ..cursorVisible = false
+      ..tracksMouse = true;
+    await _dirty(h);
+    await _tap(t, _cell(h, 3, 5));
+    expect(h.vts.single.clicks, [(3, 5)]);
+    expect(t.testTextInput.isVisible, isFalse);
+    await h.stop();
+  });
+
+  testWidgets('historyViewUsesTheLiveCursorRow', (t) async {
+    final h = Harness(t, treeOf());
+    h.r.text = List.generate(200, (i) => 'line $i').join('\n');
+    await h.start();
+    await h.opened();
+    h.vts.single
+      ..alt = false
+      ..cursorVisible = true;
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    final screen = t.getRect(find.byKey(const Key('screen')));
+    await _tap(t, screen.bottomCenter - const Offset(0, 80)); // an earlier line
+    expect(t.testTextInput.isVisible, isFalse);
+    await _tap(t, screen.bottomCenter - const Offset(0, 3)); // the last line
+    expect(t.testTextInput.isVisible, isTrue);
+    await _hide(t);
+    h.vts.single.cursorVisible = false;
+    await _dirty(h);
+    await _tap(t, screen.bottomCenter - const Offset(0, 3));
+    expect(t.testTextInput.isVisible, isFalse);
+    h.vts.single.cursorVisible = true;
+    await _dirty(h);
+    await t.dragFrom(screen.bottomCenter - const Offset(0, 150), const Offset(0, 200));
+    await t.pump(const Duration(seconds: 1));
+    await _tap(t, screen.bottomCenter - const Offset(0, 3)); // scrolled up
+    expect(t.testTextInput.isVisible, isFalse);
+    await h.stop();
+  });
+
+  testWidgets('historyEmptyAreaBelowTheTextOpensTheKeyboard', (t) async {
+    final h = await _shortHistory(t);
+    await _tap(t, _historyBox(t).bottomCenter - const Offset(0, 1));
+    expect(t.testTextInput.isVisible, isTrue);
+    await h.stop();
+  });
+
+  testWidgets('keyBarAndComposerWorkWithAHiddenCursor', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _key(t, 'Up');
+    await _leader(h);
+    await t.enterText(find.byKey(const Key('composer')), 'ls');
+    await t.tap(find.byKey(const Key('send')));
+    await t.pump(const Duration(milliseconds: 30));
+    expect(_typed(h), '\x1b[Als\r');
+    await h.stop();
+  });
+
+  testWidgets('typedKeysGoToTheClaim', (t) async {
+    final h = await _cursorAt5(t);
+    await _tap(t, _cell(h, 30, 5));
+    expect(_claims(h), hasLength(1));
+    await _leader(h);
+    await _soft(t, 'l');
+    await _soft(t, 's');
+    await t.testTextInput.receiveAction(TextInputAction.none);
+    await t.pump();
+    expect(_typed(h), 'ls\r');
+    expect(_types(h), 0);
+    await h.stop();
+  });
+
+  testWidgets('typedKeysOnANonLivePaneUseSessionType', (t) async {
+    final h = Harness(t, treeOf(live: false));
+    await h.start();
+    await t.showKeyboard(find.byType(TermKeyboard));
+    h.r.held['session.type'] = [];
+    await _soft(t, 'l');
+    await _soft(t, 's');
+    await t.testTextInput.receiveAction(TextInputAction.none);
+    await t.pump();
+    final held = h.r.held['session.type']!;
+    for (final want in [['l'], ['l', 's'], ['l', 's', '\r']]) {
+      expect(h.r.typed, want); // one at a time
+      h.r.send(held.removeAt(0));
+      await t.pump();
+      await t.pump();
+    }
+    expect(h.r.opens, isEmpty);
+    await h.stop();
+  });
+
+  testWidgets('aSoftBackspaceOnANonLivePaneIsDel', (t) async {
+    final h = Harness(t, treeOf(live: false));
+    await h.start();
+    await t.showKeyboard(find.byType(TermKeyboard));
+    t.testTextInput.enterText(' ');
+    await t.pump();
+    await t.pump();
+    expect(h.r.typed, ['\x7f']);
+    await h.stop();
+  });
+
+  testWidgets('cursorRowTapAfterHidingShowsTheKeyboardAgain', (t) async {
+    final h = await _cursorAt5(t);
+    await _tap(t, _cell(h, 30, 5));
+    expect(t.testTextInput.isVisible, isTrue);
+    await _hide(t);
+    expect(t.testTextInput.isVisible, isFalse);
+    await _tap(t, _cell(h, 3, 2));
+    expect(t.testTextInput.isVisible, isFalse);
+    await _tap(t, _cell(h, 30, 5));
+    expect(t.testTextInput.isVisible, isTrue);
+    await h.stop();
+  });
+
+  testWidgets('tappingTheProgramKeepsTyping', (t) async {
+    final h = await _cursorAt5(t);
+    await _lead(h);
+    h.vts.single.tracksMouse = true;
+    await _tap(t, _cell(h, 30, 5));
+    await _tap(t, _cell(h, 3, 2));
+    expect(h.vts.single.clicks, [(30, 5), (3, 2)]);
+    expect(t.testTextInput.isVisible, isTrue);
+    await _soft(t, 'x');
+    expect(_typed(h), endsWith('x'));
+    await h.stop();
+  });
+
+  testWidgets('tappingTheHistoryKeepsTyping', (t) async {
+    final h = Harness(t, treeOf());
+    h.r.text = List.generate(200, (i) => 'line $i').join('\n');
+    await h.start();
+    await h.opened();
+    h.vts.single
+      ..alt = false
+      ..cursorVisible = true;
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    final screen = t.getRect(find.byKey(const Key('screen')));
+    await _tap(t, screen.bottomCenter - const Offset(0, 3));
+    await _leader(h);
+    await _tap(t, screen.bottomCenter - const Offset(0, 80));
+    expect(t.testTextInput.isVisible, isTrue);
+    await _soft(t, 'x');
+    expect(_typed(h), 'x');
+    await h.stop();
+  });
+
+  testWidgets('historyTextSelectsWithTheKeyboardUp', (t) async {
+    final h = Harness(t, treeOf());
+    h.r.text = List.generate(200, (i) => 'line $i').join('\n');
+    await h.start();
+    await h.opened();
+    h.vts.single
+      ..alt = false
+      ..cursorVisible = true;
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    final screen = t.getRect(find.byKey(const Key('screen')));
+    await _tap(t, screen.bottomCenter - const Offset(0, 3));
+    await t.longPressAt(screen.bottomLeft + const Offset(10, -80));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.text('Copy'), findsOneWidget);
+    await h.stop();
+  });
+
+  testWidgets('keyboardShownByATapDoesNotResize', (t) async {
+    final h = await _cursorAt5(t);
+    await _lead(h);
+    final grids = h.r.grids.length;
+    await _tap(t, _cell(h, 30, 5));
+    expect(t.testTextInput.isVisible, isTrue);
+    addTearDown(t.view.reset);
+    t.view.viewInsets = const FakeViewPadding(bottom: 900);
+    await t.pump();
+    await t.pump(const Duration(seconds: 1));
+    expect(h.r.of(LinkKind.resize), isEmpty);
+    expect(h.r.grids, hasLength(grids));
+    await h.stop();
+  });
+
+  testWidgets('composerFocusTakesTypingUntilTheNextTap', (t) async {
+    final h = await _cursorAt5(t);
+    await _lead(h);
+    await _tap(t, _cell(h, 30, 5));
+    await t.tap(find.byKey(const Key('composer')));
+    await t.pump();
+    t.testTextInput.enterText('hi');
+    await t.pump();
+    expect(find.text('hi'), findsOneWidget);
+    expect(_typed(h), '');
+    await _tap(t, _cell(h, 30, 5));
+    await _soft(t, 'x');
+    expect(_typed(h), 'x');
+    expect(find.text('hi'), findsOneWidget);
+    await h.stop();
+  });
+
+  testWidgets('aLongPressIsLookingOnTheTermView', (t) async {
+    final h = await _cursorAt5(t);
+    await t.longPressAt(_cell(h, 30, 5));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(_claims(h), isEmpty);
+    expect(h.keyboards, 0);
+    await h.stop();
+  });
+
+  testWidgets('aLongPressIsLookingOnTheHistoryView', (t) async {
+    final h = await _shortHistory(t);
+    await t.longPressAt(_historyBox(t).bottomCenter - const Offset(0, 1));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(_claims(h), isEmpty);
+    expect(h.keyboards, 0);
+    await h.stop();
+  });
+
+  testWidgets('aTripleTapOnTheHistoryIsLooking', (t) async {
+    final h = await _shortHistory(t);
+    final at = t.getRect(find.byKey(const Key('screen'))).bottomCenter - const Offset(0, 3);
+    for (var i = 0; i < 3; i++) {
+      await t.tapAt(at);
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    await t.pump(const Duration(milliseconds: 400));
+    expect(_claims(h), isEmpty);
+    expect(h.keyboards, 0);
+    await _tap(t, at); // the next tap acts again
+    expect(_claims(h), hasLength(1));
+    await h.stop();
+  });
+}
+
+/// The Term view with a visible cursor on row 5.
+Future<Harness> _cursorAt5(WidgetTester t) async {
+  final h = Harness(t, treeOf());
+  await h.start();
+  await h.opened();
+  h.vts.single
+    ..cursorY = 5
+    ..cursorVisible = true;
+  await _dirty(h);
+  return h;
+}
+
+/// A letter typed on the soft keyboard.
+Future<void> _soft(WidgetTester t, String s) async {
+  t.testTextInput.enterText('  $s');
+  await t.pump();
+  await t.pump();
+}
+
+/// The user hides the soft keyboard; the field keeps the focus.
+Future<void> _hide(WidgetTester t) async {
+  await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+  await t.pump();
 }
 
 /// A plain shell's short history with a visible cursor.

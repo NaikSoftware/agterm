@@ -9,6 +9,7 @@ import '../client.dart';
 import '../model.dart';
 import '../terminal/row_cache.dart';
 import '../terminal/term_gestures.dart';
+import '../terminal/term_keyboard.dart';
 import '../terminal/term_session.dart';
 import '../terminal/terminal_view.dart';
 import '../terminal/vt.dart';
@@ -55,6 +56,9 @@ class SessionScreen extends StatefulWidget {
 class _SessionScreenState extends State<SessionScreen> {
   final input = TextEditingController();
   final inputFocus = FocusNode();
+  final _keyboard = FocusNode(); // the hidden field typing goes through
+  // the history's text never takes the focus: a tap on it would close the keyboard; its selection works without
+  final _textFocus = FocusNode(canRequestFocus: false);
   final vScroll = ScrollController();
   String pane = 'left';
   bool scrollback = false, sending = false;
@@ -129,6 +133,8 @@ class _SessionScreenState extends State<SessionScreen> {
     _visit();
     input.dispose();
     inputFocus.dispose();
+    _keyboard.dispose();
+    _textFocus.dispose();
     vScroll.dispose();
     super.dispose();
   }
@@ -477,6 +483,25 @@ class _SessionScreenState extends State<SessionScreen> {
     _sent(term!.paste(clip));
   }
 
+  // the soft keyboard's input routes as the key bar's, without its haptic (the keyboard has its own); indirect, one
+  // session.type at a time so the keystrokes keep their order
+  void _softKey(VtKey key, int mods) {
+    _claim();
+    if (!_direct) return _typeAll([_seq(key, mods)], pane);
+    _sent(term!.key(key, mods: mods, seq: _seq(key, mods)));
+  }
+
+  void _softText(String text, {bool paste = false}) {
+    _claim();
+    if (!_direct) return _typeAll([text], pane);
+    _sent(paste ? term!.paste(text) : term!.text(text));
+  }
+
+  // shortcut: a combination missing from [keys] (shift+arrow, alt+x) sends its plain key indirectly; add rows to [keys]
+  // if a non-Live pane needs them
+  static String _seq(VtKey key, int mods) =>
+      key == VtKey.backspace ? '\x7f' : (keys.where((k) => k.$4 == key && k.$5 == mods).firstOrNull ?? keys.firstWhere((k) => k.$4 == key)).$2!;
+
   Future<void> sendInput() async {
     final t = input.text;
     _claim();
@@ -531,6 +556,7 @@ class _SessionScreenState extends State<SessionScreen> {
           Expanded(
               child: Stack(children: [
             Positioned.fill(child: _terminal()),
+            Positioned(left: 0, bottom: 0, child: TermKeyboard(focus: _keyboard, onKey: _softKey, onText: _softText, onPaste: (t) => _softText(t, paste: true))),
             Positioned(top: 6, right: 6, child: _toolbar(s)),
             if (m.state != LinkState.connected)
               Center(
@@ -689,7 +715,12 @@ class _SessionScreenState extends State<SessionScreen> {
     return box.globalToLocal(_finger).dy >= box.size.height - _fit * 1.3;
   }
 
-  void _showKeyboard() => widget.onKeyboard?.call();
+  // a focused field whose keyboard the user hid gets it back only by asking the platform
+  void _showKeyboard() {
+    widget.onKeyboard?.call();
+    if (!_keyboard.hasPrimaryFocus) return _keyboard.requestFocus();
+    unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
+  }
 
   Widget _textView() => LayoutBuilder(builder: (context, box) {
           // the computer's own grid width, so a full-width row fills one phone row exactly; history written at a wider
@@ -705,6 +736,7 @@ class _SessionScreenState extends State<SessionScreen> {
           final body = SelectableText(
             error != null && text.isEmpty ? error! : withGridGlyphs(text),
             key: const Key('screen'),
+            focusNode: _textFocus,
             // the size above is already the one whose rows fit; Android's font scale on top would wrap every full row
             textScaler: TextScaler.noScaling,
             // letterSpacing 0: the theme's body text adds 0.25 per glyph, which would wrap every full row
@@ -837,13 +869,15 @@ class _SingleTap extends StatefulWidget {
 class _SingleTapState extends State<_SingleTap> {
   int _fingers = 0;
   Offset? _down; // the touch that can still be a tap
-  Duration _at = Duration.zero;
   Offset _last = Offset.zero; // the tap that waits for a second one
-  Timer? _wait;
+  Timer? _wait, _hold, _triple; // timers, not event time stamps, so fake time in tests counts
+  bool _long = false;
 
   @override
   void dispose() {
     _wait?.cancel();
+    _hold?.cancel();
+    _triple?.cancel();
     super.dispose();
   }
 
@@ -852,7 +886,9 @@ class _SingleTapState extends State<_SingleTap> {
         behavior: HitTestBehavior.opaque,
         onPointerDown: (e) {
           _down = _fingers++ == 0 ? e.position : null;
-          _at = e.timeStamp;
+          _long = false;
+          _hold?.cancel();
+          _hold = Timer(kLongPressTimeout, () => _long = true);
         },
         onPointerMove: (e) {
           if (_down case final d? when (e.position - d).distance > kTouchSlop) _down = null;
@@ -861,8 +897,15 @@ class _SingleTapState extends State<_SingleTap> {
           _fingers--;
           final d = _down;
           _down = null;
-          if (d == null || e.timeStamp - _at > kLongPressTimeout) return;
-          if (_wait?.isActive == true && (d - _last).distance < kDoubleTapSlop) return _wait!.cancel();
+          _hold?.cancel();
+          if (d == null || _long) return;
+          // a third tap is the text's paragraph selection: looking too
+          if (_triple?.isActive == true) return _triple!.cancel();
+          if (_wait?.isActive == true && (d - _last).distance < kDoubleTapSlop) {
+            _wait!.cancel();
+            _triple = Timer(kDoubleTapTimeout, () {});
+            return;
+          }
           _last = d;
           _wait = Timer(kDoubleTapTimeout, widget.onTap);
         },
