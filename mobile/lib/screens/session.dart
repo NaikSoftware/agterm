@@ -235,13 +235,21 @@ class _SessionScreenState extends State<SessionScreen> {
   // the program: they cover its top rows. The keyboard also covers the bottom safe area the box leaves out without it
   double get _fullHeight {
     final q = MediaQuery.of(context);
-    double h(GlobalKey k) => switch (k.currentContext?.findRenderObject()) {
-          RenderBox b when b.hasSize => b.size.height,
-          _ => 0,
-        };
-    final composer = h(_composerBox);
-    final line = _composerLine = min(_composerLine ?? composer, composer);
-    return _height + (_answersShown ? h(_answersBox) : 0) + composer - line + q.viewInsets.bottom - (q.viewPadding.bottom - q.padding.bottom);
+    final composer = _seeComposer();
+    final extra = composer > 0 ? composer - _composerLine! : 0;
+    return _height + (_answersShown ? _heightOf(_answersBox) : 0) + extra + q.viewInsets.bottom - (q.viewPadding.bottom - q.padding.bottom);
+  }
+
+  static double _heightOf(GlobalKey k) => switch (k.currentContext?.findRenderObject()) {
+        RenderBox b when b.hasSize => b.size.height,
+        _ => 0,
+      };
+
+  /// The composer's height now, 0 before it is laid out; keeps its one-line height from the first layout on.
+  double _seeComposer() {
+    final h = _heightOf(_composerBox);
+    if (h > 0) _composerLine = min(_composerLine ?? h, h);
+    return h;
   }
 
   bool get _direct => term != null && !_noClaim.contains(pane);
@@ -691,6 +699,7 @@ class _SessionScreenState extends State<SessionScreen> {
     return LayoutBuilder(builder: (context, box) {
       _width = box.maxWidth;
       _height = box.maxHeight;
+      _seeComposer();
       _layoutLead();
       final cell = _cell = CellMetrics.fit(_width, columns ?? t.snapshot!.cols);
       return TermGestures(
@@ -766,6 +775,7 @@ class _SessionScreenState extends State<SessionScreen> {
           // JetBrains Mono advances 0.6 em
           _width = box.maxWidth;
           _height = box.maxHeight;
+          _seeComposer();
           _layoutLead();
           // tiny when the computer's grid is wide, but whole rows, so the layout stays the program's (the fit reads it)
           _fit = _sizeFor(cols, min(13, _width / (cols * 0.6)));

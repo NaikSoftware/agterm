@@ -162,15 +162,18 @@ struct PhoneLinkPtyTests {
     @Test func finishWritesWhatWasQueuedBeforeEnding() async throws {
         let recorder = Recorder()
         let file = NSTemporaryDirectory() + "elis-pty-\(UUID().uuidString.prefix(8))"
-        defer { try? FileManager.default.removeItem(atPath: file) }
-        let pty = try recorder.spawn(["/bin/sh", "-c", "stty raw -echo; echo ready; sleep 0.3; exec cat > '\(file)'"])
+        defer { [file, file + ".early"].forEach { try? FileManager.default.removeItem(atPath: $0) } }
+        // a SIGTERM before the program read its input leaves the marker; after the read, the TERM is ignored
+        let script = "trap 'touch \(file).early; exit 1' TERM; stty raw -echo; echo ready; sleep 0.3; trap '' TERM; exec cat > '\(file)'"
+        let pty = try recorder.spawn(["/bin/sh", "-c", script])
         #expect(await eventually { recorder.output.contains("ready") })
         let written = Written()
         pty.write(Data(repeating: 0x78, count: 100)) { written.add($0) }
         pty.finish(within: 30)
         #expect(await eventually { written.counts == [100] })
         #expect(await recorder.waitExit())
-        #expect((try? Data(contentsOf: URL(fileURLWithPath: file)))?.count == 100)
+        #expect(!FileManager.default.fileExists(atPath: file + ".early"))
+        #expect(await eventually { (try? Data(contentsOf: URL(fileURLWithPath: file)))?.count == 100 })
     }
 
     @Test func finishIsBoundedWhenTheProgramNeverReads() async throws {

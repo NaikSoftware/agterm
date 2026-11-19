@@ -206,6 +206,25 @@ struct PhoneLinkClaimTests {
         #expect(harness.wait { harness.credits() == [16384] })
     }
 
+    @Test func stopBeforeTheAppAnswersAttachesNothing() throws {
+        let harness = try ClaimHarness()
+        defer { harness.finish() }
+        harness.server.holdAttach()
+        harness.start(Self.role("leader") + "touch '\(harness.dir)/spawned'; exec cat >/dev/null")
+        #expect(harness.wait { harness.server.requests().count == 1 })
+        harness.queueSync { harness.claim?.stop() }
+        harness.server.releaseAttach()
+        #expect(harness.wait {
+            var asking = true
+            harness.queueSync { asking = harness.claim?.asking ?? false }
+            return !asking
+        })
+        usleep(300_000)
+        #expect(harness.file("spawned") == nil)
+        #expect(harness.events().isEmpty)
+        #expect(harness.lines.all().isEmpty)
+    }
+
     @Test func inputReceivedBeforeTheCloseReachesTheProgram() throws {
         let harness = try ClaimHarness()
         defer { harness.finish() }

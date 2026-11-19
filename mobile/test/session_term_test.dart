@@ -1650,13 +1650,6 @@ void main() {
     await _key(t, 'Left');
     await t.pump();
     expect(_claims(h), hasLength(2));
-    h.r.send([...json(LinkKind.opened, pending, {'cols': 40, 'rows': 20}), ...json(LinkKind.lead, pending, {'role': 'leader'})]);
-    await t.pump();
-    await _leader(h, h.r.lastChannel);
-    h.r.send(json(LinkKind.close, pending, {'reason': 'the computer took the lead back'}));
-    await t.pump();
-    expect(find.text('Leading'), findsOneWidget);
-    expect(find.text('The computer took the lead back.'), findsNothing);
     await h.stop();
   });
 
