@@ -26,6 +26,8 @@ final class PhoneLinkPty: @unchecked Sendable {
     private var writer: Thread?
     /// Set under `writes` by `terminate()` and the reader's end, so the idle writer wakes and leaves at once.
     private var writesEnded = false
+    /// Set under `writes` by `finish(within:)`: the writer terminates once the queue is empty.
+    private var finishing = false
     private var wakeups = 0
     private var parked = false
 
@@ -91,6 +93,18 @@ final class PhoneLinkPty: @unchecked Sendable {
         endWrites() // outside `lock`: no thread holds one of the two locks while taking the other
     }
 
+    /// finish lets every write queued so far reach the program and waits for the program to read it, then terminates;
+    /// it terminates after `limit` regardless.
+    func finish(within limit: TimeInterval = 1) {
+        let idle = writes.withLock {
+            finishing = true
+            writes.signal()
+            return writer == nil
+        }
+        if idle { return terminate() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + limit) { [self] in terminate() }
+    }
+
     /// write hands `bytes` to the program after every earlier write; `done` gets the count written, 0 once stopping,
     /// and runs on the writer thread with no lock held.
     func write(_ bytes: Data, done: @escaping @Sendable (Int) -> Void) {
@@ -121,20 +135,39 @@ final class PhoneLinkPty: @unchecked Sendable {
 
     private func writeUntilEnd() {
         while true {
-            let next: (bytes: Data, done: @Sendable (Int) -> Void)? = writes.withLock {
+            let (next, finish): ((bytes: Data, done: @Sendable (Int) -> Void)?, Bool) = writes.withLock {
                 wakeups += 1
-                while queued.isEmpty, !writesEnded {
+                while queued.isEmpty, !writesEnded, !finishing {
                     parked = true
                     writes.wait()
                     parked = false
                     wakeups += 1
                 }
                 if queued.isEmpty { writer = nil } // a later write starts a thread of its own, which reports 0
-                return queued.isEmpty ? nil : queued.removeFirst()
+                return queued.isEmpty ? (nil, finishing) : (queued.removeFirst(), false)
             }
-            guard let next else { return }
+            guard let next else {
+                if finish { awaitRead() }
+                return
+            }
             next.done(writeAll(next.bytes))
         }
+    }
+
+    /// Terminates once the program has read its pending input; `finish`'s deadline bounds the wait.
+    private func awaitRead() {
+        while lock.withLock({ !stopping && !closed && unread() > 0 }) { usleep(10_000) }
+        terminate()
+    }
+
+    /// The bytes waiting in the terminal's input queue; call under `lock` with the pty open.
+    private func unread() -> Int32 {
+        let terminal = open(terminalPath, O_RDWR | O_NOCTTY | O_CLOEXEC | O_NONBLOCK)
+        guard terminal >= 0 else { return 0 }
+        defer { close(terminal) }
+        var count: Int32 = 0
+        // FIONREAD is _IOR('f', 127, int), a macro Swift does not import
+        return ioctl(terminal, UInt(0x4004_667f), &count) == 0 ? count : 0
     }
 
     private func endWrites() {

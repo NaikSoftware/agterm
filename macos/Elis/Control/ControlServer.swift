@@ -637,7 +637,7 @@ final class ControlServer {
     /// `session.restart` waits on process exits for seconds, while the shell it starts calls this socket.
     /// The phone relay changes wait for the old relay's exit, which first hands its phones' grids back here.
     nonisolated private static func waitsOnNetwork(_ cmd: Command) -> Bool {
-        // companion creation may ssh to a remote parent's origin, which can be this Mac's own socket; a covered remote pane's text is read over ssh
+        // companion creation may ssh to a remote parent's origin, which can be this Mac's own socket; every session.text leaves the accept thread, as a covered remote pane's is read over ssh
         [.zmxTree, .zmxAttach, .zmxAttachGroup, .sessionRestart, .sessionCompanionNew, .sessionCompanionDuplicate,
          .sessionCompanionPage, .sessionText, .windowRemoteOpen, .phoneEnable, .phonePort, .phoneRevoke].contains(cmd)
     }

@@ -206,6 +206,20 @@ struct PhoneLinkClaimTests {
         #expect(harness.wait { harness.credits() == [16384] })
     }
 
+    @Test func inputReceivedBeforeTheCloseReachesTheProgram() throws {
+        let harness = try ClaimHarness()
+        defer { harness.finish() }
+        harness.start(Self.role("leader") + "trap '' TERM HUP; stty raw -echo; touch '\(harness.dir)/ready'; "
+            + harness.waitGate("read") + "exec cat > '\(harness.dir)/in'")
+        #expect(harness.wait { harness.file("ready") != nil })
+        harness.queueSync {
+            harness.claim?.input(Data(repeating: 0x78, count: PhoneLinkClaim.window))
+            harness.claim?.stop()
+        }
+        harness.open("read")
+        #expect(harness.wait { harness.file("in")?.count == PhoneLinkClaim.window })
+    }
+
     @Test func inputBeyondTheWindowCloses() throws {
         let harness = try ClaimHarness()
         defer { harness.finish() }

@@ -159,6 +159,38 @@ struct PhoneLinkPtyTests {
         #expect(await recorder.waitExit())
     }
 
+    @Test func finishWritesWhatWasQueuedBeforeEnding() async throws {
+        let recorder = Recorder()
+        let file = NSTemporaryDirectory() + "elis-pty-\(UUID().uuidString.prefix(8))"
+        defer { try? FileManager.default.removeItem(atPath: file) }
+        let pty = try recorder.spawn(["/bin/sh", "-c", "trap '' TERM HUP; stty raw -echo; echo ready; sleep 0.3; exec cat > '\(file)'"])
+        #expect(await eventually { recorder.output.contains("ready") })
+        let written = Written()
+        pty.write(Data(repeating: 0x78, count: 65536)) { written.add($0) }
+        pty.finish()
+        #expect(await eventually { written.counts == [65536] })
+        #expect(await recorder.waitExit())
+        #expect((try? Data(contentsOf: URL(fileURLWithPath: file)))?.count == 65536)
+    }
+
+    @Test func finishIsBoundedWhenTheProgramNeverReads() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/sh", "-c", "stty raw -echo; echo ready; exec sleep 60"])
+        #expect(await eventually { recorder.output.contains("ready") })
+        pty.write(Data(repeating: 0x78, count: 65536)) { _ in }
+        let started = Date()
+        pty.finish(within: 0.5)
+        #expect(await recorder.waitExit())
+        #expect(Date().timeIntervalSince(started) < 5)
+    }
+
+    @Test func finishWithNothingQueuedTerminatesAtOnce() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/cat"])
+        pty.finish()
+        #expect(await recorder.waitExit())
+    }
+
     /// Written collects what each `write` reported, in completion order.
     private final class Written: @unchecked Sendable {
         private let lock = NSLock()

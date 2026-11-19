@@ -299,7 +299,7 @@ and carries no DATA to the phone.
   the phone sizes its emulator only from RESYNC and GRID.
 - The phone claims by the WATCHED pane id, at its first key, send, paste, scroll or tap,
   never when a session opens.
-  Input before the leader report is queued and written after it, with a 20 ms gap between the writes.
+  Input before the leader report is queued and written after it, in order, with a 20 ms gap only before a composer line's Enter.
   A fit the Mac refuses after the phone gives the lead back is retried 3 times, 1 s apart,
   then reported, and auto-fit stops.
 - The relay prints `phone leads from <ip> pane <paneID>` once the claim leads,

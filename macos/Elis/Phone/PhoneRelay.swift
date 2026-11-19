@@ -214,10 +214,10 @@ final class PhoneRelay {
             if let event = PhoneRelayLine.controlEvent(text) { onEvent?(event.kind, ControlEventPayload(ip: event.ip)) }
         case let .viewer(attached, ip, paneID):
             if attached { viewers.attach(paneID: paneID) } else if !viewers.detach(paneID: paneID) { return }
-            onEvent?(attached ? .phoneAttached : .phoneDetached, ControlEventPayload(paneID: paneID, ip: ip))
+            onEvent?(attached ? .phoneAttached : .phoneDetached, ControlEventPayload(paneID: paneID, ip: PhoneRelayLine.address(ip)))
         case let .lead(leading, ip, paneID):
             if leading { leads.attach(paneID: paneID) } else if !leads.detach(paneID: paneID) { return }
-            onEvent?(leading ? .phoneClaimed : .phoneReleased, ControlEventPayload(paneID: paneID, ip: ip))
+            onEvent?(leading ? .phoneClaimed : .phoneReleased, ControlEventPayload(paneID: paneID, ip: PhoneRelayLine.address(ip)))
         case .other(let text): lastStderr = text
         case .bluetooth(let value): bluetooth = value // a status, never the error an exit shows
         }

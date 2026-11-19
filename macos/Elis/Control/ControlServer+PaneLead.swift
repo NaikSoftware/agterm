@@ -48,7 +48,8 @@ extension ControlServer {
     /// read-back, with no delivery acknowledgement: a role report trails the daemon by up to 250 ms.
     func coveredRefusal(_ surface: GhosttySurfaceView) -> ControlResponse? {
         guard surface.leadCovered else { return nil }
-        return ControlResponse(ok: false, error: "pane is covered while another Mac leads it; take the lead first (session lead)")
+        let leader = library.phoneLeads(surface.paneToken) ? "pane is in use on your phone" : "pane is covered while another Mac leads it"
+        return ControlResponse(ok: false, error: "\(leader); take the lead first (session lead)")
     }
 
     /// `session.lead`: what a key press on the pane's cover does. A pane that already leads answers ok, so

@@ -361,6 +361,9 @@ final class ControlServerPaneLeadTests: XCTestCase {
         let closed = await server.searchSession(session.id, store: store, text: nil, to: "close")
         XCTAssertTrue(closed.ok, "closing a search is cleanup, not a read of the covered grid")
         XCTAssertEqual(server.coveredRefusal(view)?.ok, false)
+        library.phoneLeads = { $0 == session.paneIdentity.uuidString }
+        XCTAssertEqual(server.pasteSession(id, window: nil, pane: nil).error,
+                       "pane is in use on your phone; take the lead first (session lead)")
     }
 
     func testASearchWhosePaneIsDemotedWhileItWaitsIsRefusedNotAnswered() async throws {

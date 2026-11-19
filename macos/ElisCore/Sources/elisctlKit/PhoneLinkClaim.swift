@@ -119,7 +119,7 @@ final class PhoneLinkClaim: @unchecked Sendable {
     private func stop(lost: Bool) {
         guard !stopped else { return }
         stopped = true
-        pty?.terminate()
+        pty?.finish() // input received before the CLOSE still reaches the program
         guard let paneID else { return }
         log("phone released from \(peer) pane \(paneID)")
         if !lost { link.released(paneID) }
