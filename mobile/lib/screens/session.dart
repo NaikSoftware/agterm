@@ -166,6 +166,8 @@ class _SessionScreenState extends State<SessionScreen> {
       t.removeListener(_onTerm);
       term = null;
       _alt = null; // the next stream picks the view again
+      _claimed = null;
+      _typeAll(t.takeUnsent(), t.pane); // input queued for a lead that will not come: never lost silently
       if (reason == 'Disconnected' || reason == revokedMessage) {
         // the disconnected state shows; the next mux reopens
       } else if (!t.opened) {
@@ -234,18 +236,25 @@ class _SessionScreenState extends State<SessionScreen> {
     if (err != null && mine()) _abandon(t, err);
   }
 
+  /// Types [unsent] through session.type one at a time, in order; later indirect input waits for it.
+  void _typeAll(List<String> unsent, String pane) {
+    if (unsent.isEmpty) return;
+    final before = _replay;
+    _replay = () async {
+      await before;
+      for (final text in unsent) {
+        final e = await m.act('session.type', target: widget.sessionId, args: {'text': text, 'pane': pane});
+        if (e != null) return mounted ? report(context, e) : null;
+      }
+    }();
+  }
+
   /// The pane types indirectly for the rest of the visit; the input queued for the lead goes first, in order.
   void _abandon(TermSession t, String? err) {
     _noClaim.add(t.pane);
     setState(() => _claimed = null);
-    final unsent = t.takeUnsent();
+    _typeAll(t.takeUnsent(), t.pane);
     t.release();
-    _replay = () async {
-      for (final text in unsent) {
-        final e = await m.act('session.type', target: widget.sessionId, args: {'text': text, 'pane': t.pane});
-        if (e != null) return mounted ? report(context, e) : null;
-      }
-    }();
     if (err == null) return; // a refused reset: a refit now would only be refused and said again
     report(context, err);
     unawaited(_syncFit());
@@ -482,7 +491,7 @@ class _SessionScreenState extends State<SessionScreen> {
               style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
         ]),
         actions: [
-          if (_lead) _Tag(_leading ? 'Phone leads' : 'Taking the lead…', key: const Key('lead')),
+          if (_lead) _Tag(_leading ? 'Leading' : 'Leading…', key: const Key('lead')),
           if (m.state == LinkState.connected && m.via.isNotEmpty) _Tag(m.via, key: const Key('via')),
           StatusChip(s.status, blink: s.blink),
           IconButton(

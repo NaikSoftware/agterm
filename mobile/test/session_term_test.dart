@@ -14,6 +14,7 @@ import 'package:elis_mobile/terminal/vt.dart';
 import 'package:elis_mobile/theme.dart';
 import 'package:elis_mobile/watch.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -927,6 +928,63 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('aKeyBeforeARefusedWatchArrivesIndirectly', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await _key(t, 'Up');
+    await t.pump();
+    h.r.send(json(LinkKind.opened, 2, {'error': _refusal}));
+    for (var i = 0; i < 10; i++) {
+      await t.pump(const Duration(milliseconds: 10));
+    }
+    expect(h.r.typed, ['\x1b[A']);
+    await t.pump(const Duration(seconds: 1));
+    expect(h.r.typed, ['\x1b[A']);
+    await h.stop();
+  });
+
+  testWidgets('aKeyBeforeAMidStreamCloseArrivesIndirectly', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _key(t, 'Up');
+    await _key(t, 'Down');
+    await t.pump();
+    expect(h.r.lastChannel, _claimCh);
+    h.r.send(json(LinkKind.close, 2, {'reason': 'stalled'}));
+    for (var i = 0; i < 10; i++) {
+      await t.pump(const Duration(milliseconds: 10));
+    }
+    expect(h.r.typed, ['\x1b[A', '\x1b[B']);
+    expect(_typed(h), '');
+    await h.stop();
+  });
+
+  testWidgets('lostInputIsSaidOnce', (t) async {
+    var clip = 'x' * (1 << 20);
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform,
+        (c) async => c.method == 'Clipboard.getData' ? {'text': clip} : null);
+    addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    await _key(t, 'Paste');
+    await t.pump();
+    await t.enterText(find.byKey(const Key('composer')), 'a');
+    await t.tap(find.byKey(const Key('send')));
+    clip = 'y' * 20000;
+    await t.tap(find.byKey(const Key('key-Paste'))); // still in view; queued behind the line's Enter, inside its gap
+    await t.pump();
+    expect(find.text(_busy), findsNothing);
+    await t.pump(const Duration(milliseconds: 20));
+    await t.pump();
+    expect(find.text(_busy), findsOneWidget);
+    await t.pump(const Duration(seconds: 1));
+    expect(find.text(_busy), findsOneWidget);
+    await h.stop();
+  });
+
   testWidgets('notLivePaneTypesIndirectly', (t) async {
     final h = Harness(t, treeOf(live: false));
     await h.start();
@@ -945,9 +1003,9 @@ void main() {
     expect(find.byKey(const Key('lead')), findsNothing);
     await _key(t, 'Up');
     await t.pump();
-    expect(_label(t, 'lead'), 'Taking the lead…');
+    expect(_label(t, 'lead'), 'Leading…');
     await _leader(h);
-    expect(_label(t, 'lead'), 'Phone leads');
+    expect(_label(t, 'lead'), 'Leading');
     h.r.send([...json(LinkKind.lead, _claimCh, {'role': 'follower'}), ...json(LinkKind.close, _claimCh, {'reason': 'the computer took the lead back'})]);
     await t.pump();
     await t.pump();
@@ -1293,9 +1351,11 @@ void main() {
     await _key(t, 'Up');
     await t.pump(const Duration(milliseconds: 300));
     await expectLater(find.byType(AppBar), matchesGoldenFile('goldens/session_appbar_pending.png'));
+    expect(t.renderObject<RenderParagraph>(find.text('shell')).didExceedMaxLines, isFalse); // the name is not cut
     await _leader(h);
     await t.pump(const Duration(milliseconds: 300));
     await expectLater(find.byType(AppBar), matchesGoldenFile('goldens/session_appbar_lead.png'));
+    expect(t.renderObject<RenderParagraph>(find.text('shell')).didExceedMaxLines, isFalse); // the name is not cut
     await h.stop();
   });
 }

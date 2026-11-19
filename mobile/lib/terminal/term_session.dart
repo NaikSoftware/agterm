@@ -90,7 +90,7 @@ class TermSession extends ChangeNotifier {
       unawaited(_ch?.close());
       ended = 'The terminal view is not available: $err';
       _snapshot = null;
-      _release();
+      _release(keep: true);
       scheduleMicrotask(notifyListeners);
     }
   }
@@ -216,7 +216,7 @@ class TermSession extends ChangeNotifier {
     ('\r', (vt) => vt.encodeKey(VtKey.enter), s.isNotEmpty),
   ]);
 
-  /// The queued input as `session.type` strings, in order; clears the queue.
+  /// The queued input as `session.type` strings, in order; clears the queue. An [ended] term keeps it for this.
   List<String> takeUnsent() {
     final unsent = [for (final i in _queue) i.$1];
     _drop();
@@ -328,7 +328,7 @@ class TermSession extends ChangeNotifier {
   void _end(String reason) {
     if (_closed) return;
     ended = reason;
-    _release();
+    _release(keep: true);
     notifyListeners();
   }
 
@@ -339,9 +339,12 @@ class TermSession extends ChangeNotifier {
     _release();
   }
 
-  void _release() {
+  /// [keep]: the stream ended under the phone, so input that never led stays for [takeUnsent].
+  void _release({bool keep = false}) {
     _closed = true; // first: release() must not notify from build (_read)
-    release();
+    _endClaim();
+    _armed = false;
+    if (!keep) _drop();
     unawaited(_sub?.cancel());
     _vt?.dispose();
     _vt = null;
