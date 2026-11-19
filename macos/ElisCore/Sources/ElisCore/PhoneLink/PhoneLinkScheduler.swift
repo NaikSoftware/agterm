@@ -12,6 +12,9 @@ public struct PhoneLinkScheduler: Sendable {
     private var sentSinceGrant: [UInt32: Int] = [:]
     private var opened: [UInt32] = []
     private var low: Set<UInt32> = []
+    /// Normal frames sent in a row while a low channel could send; at `lowShareEvery` a low frame goes next.
+    private var normalStreak = 0
+    private static let lowShareEvery = 8
     private var cursor = 0
 
     public init(window: UInt32, bufferLimit: Int) {
@@ -37,7 +40,7 @@ public struct PhoneLinkScheduler: Sendable {
     }
 
     /// Starts the channel at the initial window; reopening resets its queue and credit.
-    /// A low channel is served only when no other opened channel has a frame to send.
+    /// A low channel is served when no other opened channel can send, and once after every 8 normal frames.
     public mutating func open(channel: UInt32, low: Bool = false) {
         guard channel >= 2 else { return }
         queues[channel] = nil
@@ -73,7 +76,20 @@ public struct PhoneLinkScheduler: Sendable {
         for channel: UInt32 in 0...1 {
             if let frame = take(channel: channel, limit: cap) { return frame }
         }
-        return nextOpened(cap: cap, low: false) ?? nextOpened(cap: cap, low: true)
+        if normalStreak >= Self.lowShareEvery, let frame = nextOpened(cap: cap, low: true) {
+            normalStreak = 0
+            return frame
+        }
+        if let frame = nextOpened(cap: cap, low: false) {
+            normalStreak = lowCanSend ? normalStreak + 1 : 0
+            return frame
+        }
+        normalStreak = 0
+        return nextOpened(cap: cap, low: true)
+    }
+
+    private var lowCanSend: Bool {
+        low.contains { (credits[$0] ?? 0) > 0 && !(queues[$0]?.isEmpty ?? true) }
     }
 
     private mutating func nextOpened(cap: Int, low isLow: Bool) -> PhoneLinkFrame? {

@@ -67,6 +67,22 @@ import Testing
         #expect(throws: DecodingError.self) { try PhonePageCodec.decode(Data(#"{"t":"nope","id":"p"}"#.utf8)) }
     }
 
+    @Test(arguments: [
+        "nope",
+        #"{"t":"nope","id":"p"}"#,
+        #"{"t":"state","id":"p","load":"loaded","canGoBack":false,"hidden":true}"#,
+        #"{"t":"fetch","id":"p","path":"/a"}"#,
+        #"{"t":"bridge","id":"p","line":"x"}"#,
+    ])
+    func badUpLinesThrow(line: String) {
+        #expect(throws: (any Error).self) { try PhonePageCodec.decode(Data(line.utf8)) }
+    }
+
+    @Test func fetchAndBridgeLinesDecode() throws {
+        #expect(try PhonePageCodec.decode(Data(#"{"t":"fetch","id":"p","seq":4,"path":"/a/b.css"}"#.utf8)) == .fetch(id: "p", seq: 4, path: "/a/b.css"))
+        #expect(try PhonePageCodec.decode(Data(#"{"t":"bridge","id":"p","seq":5,"line":"{}"}"#.utf8)) == .bridge(id: "p", seq: 5, line: "{}"))
+    }
+
     @Test func presentDownLinesRoundTrip() throws {
         let page = PhonePage(id: "p", kind: "file", path: "/a/b.html", url: nil, adapter: "x", javascript: true, chromeless: false,
                              browse: false, hidden: false, title: "b.html", sizePercent: 60)
