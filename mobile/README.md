@@ -2,7 +2,7 @@
 
 The phone app for Elis (Flutter, Android): the session tree with status dots (pulsing while an agent works), a
 session's screen with Fit to phone, on while the screen is open (gives the program the phone's columns and rows, so it redraws for the phone and
-nothing wraps, and gives the grid back on leave), typing into it, Take over and Give back of a Live pane, the sidebar's row menus, and notifications when an agent blocks or finishes while the app is in the background, over
+nothing wraps, and gives the grid back on leave), typing into it, direct input of a Live pane (the phone leads at its first input), the sidebar's row menus, and notifications when an agent blocks or finishes while the app is in the background, over
 the TLS relay that `elisctl mobile serve` runs on the computer. The project
 README's [Phone app](../linux/README.md#phone-app) section covers the relay and its security model.
 
@@ -19,7 +19,7 @@ flutter run                 # on a connected device or emulator
 flutter build apk           # build/app/outputs/flutter-apk/app-release.apk
 ```
 
-`libvtshim` (`native/vtshim.c`) parses the pane's stream and, for Take over, exports the key, paste, wheel and focus
+`libvtshim` (`native/vtshim.c`) parses the pane's stream and, for direct input, exports the key, paste, wheel and focus
 encoders and the terminal's query replies (`vts_encode_*`, `vts_take_replies`); a new export joins the `FUNCS` list
 in `tool/build-vtshim.sh`.
 

@@ -168,14 +168,14 @@ on the computer that runs only while you want it.
 - **A session's screen.** A Live pane as a live terminal while a full-screen program runs, its history otherwise; a key
   bar (esc, tab, ⇧tab, ^C, arrows, paste, …) and a composer that types into it; both panes of a split. One finger
   scrolls the program, two fingers zoom and pan, a double tap resets the zoom.
-- **Take over** gives the phone a Live pane's lead: the program runs at the phone's size and takes the phone's keys,
-  while the Mac shows the pane as in use on your phone. Give back, leaving the screen or a key on the Mac returns it.
-  It is disabled on a pane that is not Live and while a fit is under way.
+- **Direct input.** The phone takes a Live pane's lead at its first key, send, paste, scroll or tap: the program runs at the
+  phone's size and takes the phone's keys, while the Mac shows the pane as in use on your phone. Leaving the screen
+  or a key on the Mac returns the lead. A pane that is not Live is typed into through the Mac.
 - **Fit to phone** is on while a session's screen is open: it gives the program the phone's own grid (`session grid`): as many columns and rows as the phone shows
   at a readable size, so it redraws for the phone and nothing wraps, while the computer's font stays as it was. While
   fitted, dragging the screen scrolls the program itself (wheel notches through `session scroll`), so Claude Code
   scrolls its own transcript. Leaving the screen or sending the app to the background gives the grid back, and coming
-  back fits it again; after the computer takes a pane back from Take over, it stops fitting until you leave. On the computer, Session ▸ Restore Terminal Size
+  back fits it again; after the computer takes a pane back, it stops fitting until you leave. On the computer, Session ▸ Restore Terminal Size
   (also on the row's right-click menu while it applies) does the same, and is disabled once the window has taken the
   grid back by itself (resized or shown).
 - **Alerts in the background.** A notification per session when its agent blocks, finishes or notifies; tapping one

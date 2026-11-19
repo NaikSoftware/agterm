@@ -36,7 +36,7 @@ Claude Code, codex and agy correctly, with native UI around it.
 3. mosh / tmux -CC screen-diff sync. Rejected: duplicates zmx; mosh needs UDP and is GPLv3; neither fits BLE.
 4. Agent protocols (ACP, Claude stream-json, codex app-server). Rejected: cannot read agents already in a pane.
 
-## Modes: Watch and Take over (user decision: keep both)
+## Modes: Watch and Take over (user decision: keep both; superseded by the M5b plan: the Take over and Give back buttons are gone, the phone leads at its first input)
 
 **Watch** (default). The phone's attach never claims; the Mac keeps the lead.
 - Fit to phone (`session.grid`, existing) resizes the Mac surface of a pane the Mac leads; the daemon follows the
@@ -185,7 +185,7 @@ Mockups: [the session view design](assets/2026-11-18-phone-session-view.html) (z
 1. Linux elis relay: text fallback now, port later.
 2. First-burst trim: a small zmx patch (attach flag), not a byte-pattern cut.
 3. Scope: terminal-output streaming is approved; `control-api.md:23` changes with M3.
-4. Take over stays, beside Fit to phone.
+4. Take over stays, beside Fit to phone. (Superseded by the M5b plan: direct input replaces the button.)
 5. Session view: Chat, Text and Term with auto-pick (section above); Term is the fallback, not the goal.
 
 ## Notes for the M4 relay (from the M2 review)
