@@ -99,14 +99,8 @@ final class ControlServer {
     var originCatalogs: [UUID: OriginCatalog] = [:]
     var originSignatures: [UUID: Set<String>] = [:]
     var restartingPanes: Set<UUID> = []
-    /// Runs a `zmx screen` argv on another host within the limit, called off the main actor; nil when it failed.
-    var remoteScreenRead: @Sendable ([String], TimeInterval) -> String? = { argv, limit in
-        try? ZmxClient.run(ZmxClient.Invocation(executablePath: argv[0], arguments: Array(argv.dropFirst()),
-                                                environment: ProcessInfo.processInfo.environment, timeout: limit,
-                                                mergesStderr: false))
-    }
-    /// The remote screen reads in flight by argv, so a second request waits for the same read.
-    var remoteScreenReads: [[String]: Task<String?, Never>] = [:]
+    var remoteScreenRead: @Sendable ([String], TimeInterval) -> String? = ControlServer.runRemoteScreen // tests stub it
+    var remoteScreenReads: [[String]: Task<String?, Never>] = [:] // in flight by argv (`readRemoteScreen`)
     /// originRead is the inventory read in flight, answering whether it succeeded; a request during it rereads.
     var originRead: Task<Bool, Never>?
     var originRereads = false
@@ -627,8 +621,7 @@ final class ControlServer {
         // same execution, so the fast path sees this command's mutations without a second, stallable hop.
         let response = runBlocking { await server.dispatch(request) }
         let written = server.responseWriter(conn, response)
-        // the quit after a confirmed reset waits for THIS reply to be on the wire, decided from this request
-        // and this response so a remote worker finishing another reply in parallel can never trigger it
+        // the quit after a confirmed reset waits for THIS reply on the wire, decided from this request and response so a parallel remote reply never triggers it
         guard request.cmd == .zmxReset, response.ok else { return }
         guard written else {
             logger.error("zmx.reset reply was not written; the reset stays pending for a later quit")
@@ -644,8 +637,7 @@ final class ControlServer {
     /// `session.restart` waits on process exits for seconds, while the shell it starts calls this socket.
     /// The phone relay changes wait for the old relay's exit, which first hands its phones' grids back here.
     nonisolated private static func waitsOnNetwork(_ cmd: Command) -> Bool {
-        // companion creation may ssh to a remote parent's origin, which can be this Mac's own socket;
-        // a covered remote pane's text is read over ssh
+        // companion creation may ssh to a remote parent's origin, which can be this Mac's own socket; a covered remote pane's text is read over ssh
         [.zmxTree, .zmxAttach, .zmxAttachGroup, .sessionRestart, .sessionCompanionNew, .sessionCompanionDuplicate,
          .sessionCompanionPage, .sessionText, .windowRemoteOpen, .phoneEnable, .phonePort, .phoneRevoke].contains(cmd)
     }

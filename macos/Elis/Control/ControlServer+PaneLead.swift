@@ -126,6 +126,13 @@ extension ControlServer {
         return output
     }
 
+    /// Runs a `zmx screen` argv on another host within the limit, off the main actor; nil when it failed.
+    nonisolated static func runRemoteScreen(_ argv: [String], _ limit: TimeInterval) -> String? {
+        try? ZmxClient.run(ZmxClient.Invocation(executablePath: argv[0], arguments: Array(argv.dropFirst()),
+                                                environment: ProcessInfo.processInfo.environment, timeout: limit,
+                                                mergesStderr: false))
+    }
+
     /// A plain thread, so a slow ssh holds neither the main actor nor a cooperative-pool thread.
     private nonisolated static func offMain(_ run: @escaping @Sendable ([String], TimeInterval) -> String?,
                                             _ argv: [String]) async -> String? {
