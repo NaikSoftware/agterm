@@ -34,7 +34,9 @@ extension ControlServer {
             if case .local(_, let daemon) = source, predatesZmxBuild(daemon) {
                 return ControlResponse(ok: false, error: "session predates this version; restart it to watch it on the phone")
             }
-            guard let attach = try? claim ? ControlAttach.claimer(source, paneID: token) : ControlAttach.viewer(source, paneID: token)
+            let origin = attachOrigin(session, identity: identity, source: source)
+            guard let attach = try? claim ? ControlAttach.claimer(source, paneID: token, origin: origin)
+                : ControlAttach.viewer(source, paneID: token, origin: origin)
             else { return refusal }
             return ControlResponse(ok: true, result: ControlResult(attach: attach))
         }
@@ -45,6 +47,17 @@ extension ControlServer {
     private func predatesZmxBuild(_ daemon: String) -> Bool {
         guard let cutoff = zmxOutdatedBefore, let records = zmxClient?.sessionRecords() else { return false }
         return LiveReset.isOutdated(created: records.first { $0.name == daemon }?.createdAt, cutoff: cutoff)
+    }
+
+    /// attachOrigin names the session and pane identity on the host whose presentation hub serves the pane.
+    private func attachOrigin(_ session: Session, identity: UUID, source: LivePaneSource) -> ControlAttachOrigin? {
+        switch source {
+        case .local: return ControlAttachOrigin(session: session.id.uuidString, pane: identity.uuidString, host: nil)
+        case let .remote(host, _, daemon):
+            guard let binding = session.remotePresentation?.binding, let pane = ZmxSupport.paneIdentity(fromDaemonName: daemon)
+            else { return nil }
+            return ControlAttachOrigin(session: binding.remoteSessionID, pane: pane.uuidString, host: host)
+        }
     }
 
     /// A remote row never falls back to this Mac's zmx: its panes run on the origin.

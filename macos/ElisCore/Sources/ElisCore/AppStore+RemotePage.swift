@@ -341,9 +341,12 @@ extension AppStore {
         RemotePageEnds.shared.onEnd?(page.overlay.id)
     }
 
-    /// remotePageNodes pairs each remote page of `session` with its slot, nil standing for the session-wide one.
-    func remotePageNodes(_ session: Session) -> [(pane: OverlayPane?, page: RemotePage)] {
-        session.remoteOverlays.slots.compactMap { slot in slot.page.map { (slot.pane, $0) } }
+    /// remotePageNodes pairs each remote page of `session` with its slot, nil standing for the session-wide one, and
+    /// whether the phone relay owns it.
+    func remotePageNodes(_ session: Session) -> [(pane: OverlayPane?, page: RemotePage, phone: Bool)] {
+        session.remoteOverlays.slots.compactMap { slot in
+            slot.page.map { (slot.pane, $0, slot.owner.map { presentationHub?.isPhone(owner: $0) == true } ?? false) }
+        }
     }
 
     /// presentationSource is how `source` travels to another Mac; nil for a page that is itself a replica or

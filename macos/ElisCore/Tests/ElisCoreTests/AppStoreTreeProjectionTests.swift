@@ -1073,4 +1073,38 @@ struct AppStoreTreeProjectionTests {
         let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(node)) as? [String: Any])
         #expect(json["scratchCwd"] == nil)
     }
+
+    // MARK: htmlOverlays[].phone
+
+    private func remotePage(_ page: HtmlOverlay, phoneLeads: Bool, macViewer: Bool) throws -> ControlHtmlOverlayNode {
+        let store = makeStore(), hub = PresentationHub(staleTimeout: 30)
+        let session = try Viewers.origin(store, hub: hub)
+        if macViewer { _ = try Viewers.viewer(hub, session, acquire: true) }
+        if phoneLeads { _ = try Viewers.phone(hub, session) }
+        #expect(store.openRemotePage(session.id, overlay: page, options: ControlSessionOverlayOpenOptions(
+            command: "", cwd: nil, wait: false, sizePercent: nil, backgroundColor: nil)) == .opened)
+        let node = try #require(store.controlTree().workspaces[0].sessions[0].htmlOverlays?.first)
+        #expect(node.remote == true)
+        return node
+    }
+
+    @Test(arguments: [true, false])
+    func aRemotePageReadsBackPhoneOnlyOnThePhone(phone: Bool) throws {
+        let page = HtmlOverlay(source: .url(try #require(URL(string: "https://example.com/"))))
+        let node = try remotePage(page, phoneLeads: phone, macViewer: !phone)
+        #expect(node.phone == (phone ? true : nil))
+        let json = String(decoding: try JSONEncoder().encode(node), as: UTF8.self)
+        #expect(json.contains("\"phone\"") == phone)
+    }
+
+    @Test(arguments: ["log", "diff", "links"])
+    func theThreeMacOnlyKindsReadBackWithoutPhone(kind: String) throws {
+        let page = switch kind {
+        case "log": HtmlOverlay(source: .text(path: "/tmp/app.log", line: nil), textLog: TextLog(tail: 20, follow: true))
+        case "diff": HtmlOverlay(source: .text(path: "/tmp/a.diff", line: nil))
+        default: HtmlOverlay(source: .markdown(path: "/tmp/docs/a.md"), navigation: true,
+                             markdownLinks: MarkdownLinkGrant(path: "/tmp/docs/a.md", root: "/tmp/docs"))
+        }
+        #expect(try remotePage(page, phoneLeads: true, macViewer: true).phone == nil)
+    }
 }
