@@ -119,13 +119,18 @@ struct ClaudeTranscriptIndexTests {
 
     @Test func oversizedToolResultTakesItsTopLevelUUIDBetweenBlobs() throws {
         let blob = String(repeating: "x", count: 3 << 20)
-        let big = #"{"parentUuid":"u1","isSidechain":false,"type":"user","message":{"content":[{"type":"tool_result","content":"\#(blob)"}]},"#
-            + #""uuid":"big","toolUseResult":{"file":{"uuid":"nested","base64":"\"\#(blob)"}},"sourceToolAssistantUUID":"u1"}"#
-        let fixture = try Fixture([record("user", "u1", parent: nil), big, record("assistant", "a1", parent: "big")])
+        let big = #"{"parentUuid":"a0","isSidechain":false,"type":"user","message":{"content":[{"type":"tool_result","content":"\#(blob)"}]},"#
+            + #""uuid":"big","toolUseResult":{"file":{"uuid":"nested","base64":"\"\#(blob)"}},"sourceToolAssistantUUID":"a0"}"#
+        let use = #","message":{"content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]}"#
+        let fixture = try Fixture([
+            record("user", "u1", parent: nil), record("assistant", "a0", parent: "u1", extra: use), big, record("assistant", "a1", parent: "big")
+        ])
         let index = fixture.index()
-        #expect(index.records[1].oversized)
-        #expect(index.records[1].uuid == "big")
-        #expect(chainUUIDs(index) == ["u1", "big", "a1"])
+        #expect(index.records[2].oversized)
+        #expect(index.records[2].uuid == "big")
+        #expect(chainUUIDs(index) == ["u1", "a0", "big", "a1"])
+        #expect(index.openCalls.isEmpty)
+        #expect(index.resultIndex(forToolUse: "t1") == 2)
     }
 
     @Test func undecodableLineCountsAsSkipped() throws {

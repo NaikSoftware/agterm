@@ -130,6 +130,12 @@ final class ClaudeTranscriptIndex {
             uuid: fields.strings["uuid"], parent: fields.strings["parentUuid"], logicalParent: fields.strings["logicalParentUuid"],
             offset: offset, length: length, type: "", subtype: nil, sidechain: fields.sidechain, messageID: nil, oversized: true
         ))
+        // a tool_result too big to parse closes the calls of the assistant record it names
+        guard !fields.sidechain, let source = fields.strings["sourceToolAssistantUUID"].flatMap({ byUUID[$0] }) else { return }
+        for (id, call) in openCalls where call == source {
+            results[id] = records.count - 1
+            openCalls[id] = nil
+        }
     }
 
     private func append(_ record: TranscriptRecord) {
