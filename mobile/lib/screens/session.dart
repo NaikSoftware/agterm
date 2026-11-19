@@ -798,7 +798,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   // not input: it never claims
   void _toggleKeyboard() {
-    if (_keyboard.hasPrimaryFocus && MediaQuery.viewInsetsOf(context).bottom > 0) return _keyboard.unfocus();
+    if (MediaQuery.viewInsetsOf(context).bottom > 0) return FocusManager.instance.primaryFocus?.unfocus();
     _showKeyboard();
   }
 
