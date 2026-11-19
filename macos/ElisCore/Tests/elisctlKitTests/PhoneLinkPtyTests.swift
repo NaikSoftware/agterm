@@ -129,6 +129,19 @@ struct PhoneLinkPtyTests {
         #expect(recorder.output.contains("40 100"), "output: \(recorder.output)")
     }
 
+    // perl, unlike sh, never takes the terminal as its controlling one, and neither does the zmx attach
+    @Test func resizeSignalsAProgramWithoutAControllingTerminal() async throws {
+        let recorder = Recorder()
+        let script = "$| = 1; $SIG{WINCH} = sub { ioctl(STDIN, 0x40087468, my $size = \"\\0\" x 8); print join(\" \", unpack(\"S2\", $size)), \"\\n\"; exit 0 };"
+            + " print \"ready\\n\"; sleep 20 while 1"
+        let pty = try recorder.spawn(["/usr/bin/perl", "-e", script])
+        #expect(await eventually { recorder.output.contains("ready") })
+        pty.resize(cols: 100, rows: 40)
+        #expect(await eventually(5) { recorder.output.contains("40 100") }, "output: \(recorder.output)")
+        pty.terminate()
+        #expect(await recorder.waitExit())
+    }
+
     @Test func fullPtyDoesNotBlockTerminate() async throws {
         let recorder = Recorder()
         let pty = try recorder.spawn(["/bin/sh", "-c", "stty raw -echo; echo ready; exec sleep 60"])

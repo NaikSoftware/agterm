@@ -357,6 +357,26 @@ struct PhoneLinkSessionTests {
         #expect(!reader.pending(phone).contains { $0.channel == 3 && $0.kind == .resync })
     }
 
+    @Test func theClaimAnswersDeviceQueriesOnlyUntilTheWatchResyncs() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        let dir = fixture.mobileDir
+        let query = "printf '\\033[0c'; "
+        Self.answerClaims(fixture.server, "stty raw -echo; " + Self.leader + query + "dd bs=1 count=9 >'\(dir)/reply' 2>/dev/null; echo >>'\(dir)/reply'; "
+            + "while [ ! -e '\(dir)/again' ]; do sleep 0.02; done; " + query + "echo >'\(dir)/asked'; dd bs=1 count=1 >'\(dir)/typed' 2>/dev/null; echo >>'\(dir)/typed'")
+        phone.deliver(Self.open(2))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(cols: 80, rows: 24))
+        phone.deliver(Self.open(3, claim: true))
+        #expect(Self.waitFile(dir + "/reply") == "\u{1B}[?62;22c\n")
+        #expect(reader.next(from: phone, channel: 2, kind: .resync) != nil)
+        FileManager.default.createFile(atPath: dir + "/again", contents: nil)
+        #expect(Self.waitFile(dir + "/asked") != nil)
+        usleep(200_000)
+        phone.deliver(PhoneLinkFrame.data(channel: 3, Data("x".utf8)).encoded())
+        #expect(Self.waitFile(dir + "/typed") == "x\n")
+    }
+
     /// The watch pane is remote, so its own grid poll is 30 s away: the GRID comes from the poll the claim asked for.
     @Test(arguments: [false, true])
     func phoneCloseOfTheClaimPollsSoon(_ resize: Bool) throws {

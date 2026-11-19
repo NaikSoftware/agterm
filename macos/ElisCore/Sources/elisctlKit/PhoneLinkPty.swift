@@ -120,7 +120,7 @@ final class PhoneLinkPty: @unchecked Sendable {
         }
     }
 
-    /// resize sets the terminal's size, which signals SIGWINCH to its foreground group; nothing once the pty closed.
+    /// resize sets the terminal's size and signals SIGWINCH to the command's group; nothing once the pty closed.
     func resize(cols: UInt16, rows: UInt16) {
         lock.withLock {
             guard !closed, !stopping else { return }
@@ -130,6 +130,8 @@ final class PhoneLinkPty: @unchecked Sendable {
             var size = winsize(ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0)
             _ = ioctl(terminal, UInt(0x8008_7467), &size)
             close(terminal)
+            // the kernel signals only a controlling terminal's foreground group, and the spawned command has none
+            kill(-pid, SIGWINCH)
         }
     }
 
@@ -251,7 +253,7 @@ final class PhoneLinkPty: @unchecked Sendable {
         var actions: posix_spawn_file_actions_t?
         try check(posix_spawn_file_actions_init(&actions), "posix_spawn_file_actions_init")
         defer { posix_spawn_file_actions_destroy(&actions) }
-        // opened after setsid and without O_NOCTTY, so the terminal becomes the controlling tty
+        // macOS makes this no controlling terminal for the child, so `resize` signals its group itself
         try check(posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, terminalPath, O_RDWR, 0), "posix_spawn_file_actions_addopen")
         try check(posix_spawn_file_actions_adddup2(&actions, STDIN_FILENO, STDOUT_FILENO), "posix_spawn_file_actions_adddup2")
         try check(posix_spawn_file_actions_adddup2(&actions, STDIN_FILENO, STDERR_FILENO), "posix_spawn_file_actions_adddup2")

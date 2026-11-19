@@ -180,6 +180,23 @@ struct PhoneLinkClaimTests {
     }
 
     /// A phone that reads no CREDIT yet: whatever the pty takes meanwhile waits in the one CREDIT still to go.
+    @Test func answersDeviceQueriesUntilTheWatchAttachesUnderTheLead() throws {
+        let harness = try ClaimHarness()
+        defer { harness.finish() }
+        let query = "printf '\\033[0c'; "
+        harness.start(harness.waitGate("lead") + Self.role("leader") + "stty raw -echo; " + query + "dd bs=1 count=9 >'\(harness.dir)/reply' 2>/dev/null; "
+            + harness.waitGate("again") + query + "touch '\(harness.dir)/asked'; dd bs=1 count=1 >'\(harness.dir)/typed' 2>/dev/null")
+        harness.queueSync { harness.claim?.watchAttached() } // an attach before the lead does not see what follows it
+        harness.open("lead")
+        #expect(harness.wait { harness.file("reply") == "\u{1B}[?62;22c" })
+        harness.queueSync { harness.claim?.watchAttached() }
+        harness.open("again")
+        #expect(harness.wait { harness.file("asked") != nil })
+        usleep(200_000)
+        harness.queueSync { harness.claim?.input(Data("x".utf8)) }
+        #expect(harness.wait { harness.file("typed") == "x" })
+    }
+
     @Test func creditIsCoalesced() throws {
         let harness = try ClaimHarness()
         defer { harness.finish() }

@@ -31,7 +31,7 @@ final class PhoneLinkClaim: @unchecked Sendable {
     static let resyncDelay: TimeInterval = 0.15
 
     let channel: UInt32
-    private let request: PhoneLinkOpen
+    let request: PhoneLinkOpen
     /// The watch channel's pane id: a claim by role could land on the pane that took the role since.
     private let watched: String?
     private let socketPath: String
@@ -55,6 +55,8 @@ final class PhoneLinkClaim: @unchecked Sendable {
     private var crediting = false
     /// Bumped by each RESIZE, so only the last of a burst resyncs.
     private var resizes = 0
+    /// Answers the program's DA queries from the attach until `watchAttached`; why: control-api.md, Direct input.
+    private var answers: DeviceAttributeResponder? = .init()
     /// From the app request's send until its answer is back on the relay queue, even after `stop()`.
     private(set) var asking = false
 
@@ -113,6 +115,11 @@ final class PhoneLinkClaim: @unchecked Sendable {
         }
     }
 
+    /// The pane's watch channel sent OPENED or RESYNC: under this lead, the phone's emulator answers from here on.
+    func watchAttached() {
+        if paneID != nil { answers = nil }
+    }
+
     /// Ends the claim without a word to the phone: the phone closed it, or the link is closing.
     func stop() { stop(lost: false) }
 
@@ -155,6 +162,8 @@ final class PhoneLinkClaim: @unchecked Sendable {
     /// Output is discarded; only the role reports of this attach's nonce count.
     private func receive(_ bytes: Data, paneID pane: String) {
         guard !stopped else { return }
+        let replies = bytes.withUnsafeBytes { answers?.feed($0.bindMemory(to: UInt8.self)) ?? [] }
+        if !replies.isEmpty { pty?.write(Data(replies)) { _ in } }
         var notices: [ZmxLeadNotice] = []
         _ = filter.filter(bytes, notices: &notices)
         for notice in notices {

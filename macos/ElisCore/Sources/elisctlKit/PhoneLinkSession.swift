@@ -139,11 +139,13 @@ final class PhoneLinkSession {
             opened: { [weak self] cols, rows in
                 self?.scheduler.open(channel: channel)
                 self?.sendDirect(.json(.opened, channel: channel, PhoneLinkOpened(cols: cols, rows: rows)))
+                self?.watchAttached(request)
             },
             resynced: { [weak self] cols, rows in
                 self?.scheduler.open(channel: channel)
                 self?.sendDirect(.resync(channel: channel))
                 self?.sendDirect(.grid(channel: channel, cols: cols, rows: rows))
+                self?.watchAttached(request)
             },
             output: { [weak self] bytes in self?.enqueue(channel: channel, bytes) ?? .closed },
             frame: { [weak self] frame in self?.sendDirect(frame) },
@@ -172,6 +174,10 @@ final class PhoneLinkSession {
                                    after: { delay, work in queue.asyncAfter(deadline: .now() + delay, execute: work) }, link: link)
         claims[channel] = claim
         claim.start()
+    }
+
+    private func watchAttached(_ watch: PhoneLinkOpen) {
+        claims.values.filter { $0.request.target == watch.target && $0.request.pane == watch.pane }.forEach { $0.watchAttached() }
     }
 
     private func watching(_ paneID: String) -> [PhoneLinkTerminal] {

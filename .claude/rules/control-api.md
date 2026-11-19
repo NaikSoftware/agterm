@@ -289,11 +289,18 @@ and carries no DATA to the phone.
   CREDIT goes back per completed pty write, one in flight at a time, so writes coalesce.
   More than a window unacknowledged closes `input overflow`.
   Input before OPENED is dropped. A RESIZE with a size outside 1...1000 is ignored.
+  A RESIZE sets the pty's size and signals SIGWINCH to the attach's group:
+  macOS gives a `posix_spawn` child no controlling terminal, so the kernel signals nobody.
 - A later role sends LEAD `{role}`, ends the attach and CLOSE `the computer took the lead back`.
   The attach's exit closes `session ended`.
   A phone CLOSE or a closed link ends the attach without a word.
 - Taking or losing the lead resyncs every watch channel on the pane:
   the daemon has already resized by the report, so a fresh viewer attach is where old-grid bytes stop.
+  From its attach until the pane's watch channel sends OPENED or RESYNC under the lead,
+  the claim answers the program's DA1/DA2 queries itself (`DeviceAttributeResponder`).
+  No terminal can then: the old watch attach is dropped, the phone answers only what follows RESYNC,
+  and zmx drops the input of the Mac's terminal, now a follower.
+  fish asks at every resize and holds typed input 10 s for the answer.
   A RESIZE or a release polls the grid at once and again 2 s later.
   A RESIZE also resyncs the pane's watch channels 150 ms after the last one;
   the phone sizes its emulator only from RESYNC and GRID.
