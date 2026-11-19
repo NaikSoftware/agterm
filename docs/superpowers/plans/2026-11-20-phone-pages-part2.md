@@ -20,10 +20,12 @@
 
 ## Names reused from Part 1 (exact)
 
-- `PresentationHub.pageForwardKind` (`"page.forward"`), `PresentationPageSource.forwarded(String)`, `AppStore.handedSource`.
+- `PresentationHub.pageForwardKind` (`"page.forward"`), `PresentationPageSource.forwarded(String)`, `AppStore.handedSource`: these already exist on master, not from Part 1 (ruling G6).
+- `PresentationTestSupport.swift` in `ElisCoreTests` (Part 1 ruling F8): the shared `phone(_:)` harness.
 - `PhoneLinkPresenter` (`kinds`, `Link`, `highWater`), `PhoneLinkPresenter+Pages.swift`, `PhoneLinkLineStream`, `PhoneLinkSession`.
 - `PhoneLinkScheduler.open(channel:low:)`, `PhonePage` (`kind`, `url`), `PhonePageDown`, `PhonePageCodec`.
 - Dart: `Mux`, `PresentChannel`, `PageLink`, `PhonePage`, `PageServer`, `PageSheet`, `PageChip`.
+- Part 1 ruling F3: no single `present` line may exceed `PhoneLinkPresenter.highWater`; an `.overflowed` enqueue closes the channel. The same holds for forward output.
 - `RemoteSession.forwardCommand(host:spec:)` (existing, `RemoteSession.swift:85`).
 
 ## Not verified by this plan
@@ -75,11 +77,12 @@ extension PhoneLinkPresenter {
 }
 ```
 A `.forwarded(url)` request becomes a `page` line with `kind: "forward"` and `url`. For a local row `forwardTarget` is the URL's own host and port (default 80). For a remote row the presenter starts `RemoteSession.forwardCommand(host:, spec: "127.0.0.1:<free local port>:<url host>:<url port>")` once per page, waits until the local port accepts, and `forwardTarget` is `("127.0.0.1", <local port>)`; the process ends with the page. A URL that fails `HtmlSource.isLoopback`, or an ssh listener that does not come up in 10 s, answers `pageRejected`.
+Ruling G1: Part 1's `spawn` seam builds a line stream from `(origin, pageToken)` and cannot carry this process. Add a second seam `forwardSpawn: ([String]) throws -> PhoneLinkLineStream`, defaulting to `PhoneLinkLineStream.process(argv:queue:)`: `close()` stops the `ssh -N` child, and `onEnd` means the listener died (its forwards close). Port readiness is a separate poll of the local port, bounded by the 10 s limit.
 
 - [ ] **Step 1: Failing tests.**
   - `AppStoreRemotePageTests.aLoopbackUrlGoesToAPhoneThatForwards`: the Part 1 `phone(_:)` harness plus `page.forward`; `openRemotePage` of `http://127.0.0.1:5173/` is `.opened` and the phone sink holds `.pageRequest` with `.forwarded("http://127.0.0.1:5173/")`. (Part 1's `.local` test keeps a phone without the kind.)
   - `PhoneLinkPresenterPagesTests.aForwardedPageBecomesAForwardLine`: the phone reads `page` with `kind == "forward"`, `url == "http://127.0.0.1:5173/"`; `forwardTarget(page:)` is `("127.0.0.1", 5173)`; after `pageClose` it is nil.
-  - `aRemoteRowStartsOneListenerPerPage`: with the Part 1 `spawn` seam and `origin.host == "h"`, the recorded argv equals `RemoteSession.forwardCommand(host: "h", spec: "127.0.0.1:<port>:127.0.0.1:5173")`, it is started once for two forward channels, and it is terminated on `pageClose`.
+  - `aRemoteRowStartsOneListenerPerPage`: with Part 1's `spawn` seam for the presentation stream, a recording `forwardSpawn` (G1) and `origin.host == "h"`, the argv recorded by `forwardSpawn` equals `RemoteSession.forwardCommand(host: "h", spec: "127.0.0.1:<port>:127.0.0.1:5173")`, it is started once for two forward channels, and its stream is `close()`d on `pageClose`.
   - `aNonLoopbackForwardIsRejected`: `.forwarded("http://example.com/")` → the stub reads `pageRejected`.
 - [ ] **Step 2:** `cd macos/ElisCore && swift test --filter "PhoneLinkPresenterPagesTests|AppStoreRemotePageTests"`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
@@ -92,6 +95,7 @@ A `.forwarded(url)` request becomes a `page` line with `kind: "forward"` and `ur
 - Modify: `macos/ElisCore/Sources/ElisCore/PhoneLink/PhoneLinkMessages.swift` (`PhoneLinkOpen`)
 - Create: `macos/ElisCore/Sources/elisctlKit/PhoneLinkForward.swift`
 - Modify: `macos/ElisCore/Sources/elisctlKit/PhoneLinkSession.swift` (`open`, `receive`, `closeChannel`, `close`)
+- Modify: `macos/ElisCore/Sources/elisctlKit/PhoneLinkPresenter.swift`, `PhoneLinkPresenter+Pages.swift` (`Link.pageEnded`, ruling G2)
 - Test: `macos/ElisCore/Tests/ElisCoreTests/PhoneLinkMessagesTests.swift`
 
 **Interfaces — Produces:**
@@ -119,6 +123,8 @@ final class PhoneLinkForward: @unchecked Sendable {
 The socket is read on a plain thread, one read at a time, and the next read waits for `drained()`. Bytes written to the socket are credited back as `PhoneLinkClaim` does (`sendCredit`). The peer's EOF sends CLOSE with reason `closed`.
 
 `PhoneLinkSession.open`: type `forward` needs `page`, a presenter whose `request.target == request.target`, and a non-nil `forwardTarget(page:)`; else OPENED error `no such page`. A 17th forward gets `too many connections`. Forward channels open with `scheduler.open(channel:, low: true)` and do not count toward `maxTerminals`. When a presenter stops or its page closes, the session stops that page's forwards.
+Ruling G2: Part 1's `PhoneLinkPresenter.Link` has no page-closed signal. Add `let pageEnded: (_ page: String) -> Void`, called once when a page leaves the presenter for any cause (`pageClose`, `closed` from the phone, a pipe's end, `stop()`); the session stops that page's forwards from it.
+Ruling G5: Task 2 ships `PhoneLinkForward` and the session routing with one message test; its behavior tests are Task 3. Dispatch Tasks 2 and 3 to one implementer as one unit, write Task 3's tests first, and review them together.
 
 - [ ] **Step 1: Failing test.** `PhoneLinkOpen` round-trips `page` and omits the key when nil.
 - [ ] **Step 2:** `swift test --filter PhoneLinkMessagesTests`. Expected: FAIL.
@@ -149,7 +155,6 @@ The socket is read on a plain thread, one read at a time, and the next read wait
 **Files:**
 - Modify: `mobile/lib/link/mux.dart`
 - Create: `mobile/lib/pages/page_tunnel.dart`
-- Modify: `mobile/lib/pages/page_link.dart` (drop a page's tunnel when the page goes)
 - Test: `mobile/test/mux_test.dart`, `mobile/test/page_tunnel_test.dart` (new), `mobile/test/wire_names_test.dart`
 
 **Interfaces — Produces:**
@@ -175,7 +180,7 @@ class PageTunnel {
   Future<void> close();           // closes the listener, every socket and every channel
 }
 ```
-Each accepted socket is held until its first request's headers pass the gate (Tunnel gate above); only then it opens one channel and sends the buffered bytes first. Socket bytes go to `send`, channel bytes to the socket, either side's end closes the other. A refused OPEN closes the socket. `PageLink` closes a page's `PageTunnel` when that page leaves, for any cause.
+Each accepted socket is held until its first request's headers pass the gate (Tunnel gate above); only then it opens one channel and sends the buffered bytes first. Socket bytes go to `send`, channel bytes to the socket, either side's end closes the other. A refused OPEN closes the socket. Ruling G4: `PageLink` does not touch tunnels. The sheet owns the tunnel and its cookie (Task 5), and Part 1 Task 13 already removes the sheet in the same frame as `link.page == null`, for any cause.
 
 - [ ] **Step 1: Failing tests.** `mux_test`: `forward opens, carries bytes and credits`. `page_tunnel_test`: a client socket connected to `port` sends bytes that arrive on the fake channel, and the channel's bytes arrive at the client; `a refused channel closes the socket`; `close ends every socket` (Review Focus 5, with two connected clients: both see the end, `connections == 0`); `urlFor(Uri.parse('http://localhost:5173/a?b#c'))` is `http://127.0.0.1:<port>/a?b#c`. Gate (Review Focus 6), each asserting the fake `open` was never called: `no cookie closes the socket`; `a wrong cookie closes the socket`; `headers over 16 KiB close the socket`; `headers not finished before the timeout close the socket`; `a WebSocket upgrade with the cookie passes` (`GET /ws` with `Upgrade: websocket`, `Connection: Upgrade` and the cookie among others in `Cookie:`: the channel receives the request bytes unchanged, then frames both ways); `a request after close is refused` (connect after `close()` fails). Port: `the preferred port is used when free`, and `a busy preferred port falls back to a random one`. `wire_names_test`: the OPEN type `forward` and the page kind `forward`.
 - [ ] **Step 2:** `cd mobile && flutter test --no-pub test/mux_test.dart test/page_tunnel_test.dart test/wire_names_test.dart`. Expected: FAIL.
@@ -191,7 +196,7 @@ Each accepted socket is held until its first request's headers pass the gate (Tu
 
 **Interfaces — Consumes:** `PageTunnel`, `PhonePage.kind == "forward"`, `Mux.forward`.
 
-Rules: a `forward` page starts a `PageTunnel` (preferred port = the URL's port), sets its cookie through the platform channel, and only then loads `urlFor(Uri.parse(page.url))`. The sheet's close, for any cause, clears the cookie and closes the tunnel. JavaScript is unrestricted when the page has `javascript`, as for a `url` page. Navigation stays on `127.0.0.1:<tunnel port>` unless `browse`. No adapter and no prelude: a URL page has no bridge. The identity strip shows the original URL (`page.title`) and the transport tag (`m.via`). While the main frame loads, the strip shows a progress bar; a failed load shows the error and a `Key('pageReload')` button, and reports `state` with `load: "failed"`.
+Rules: a `forward` page starts a `PageTunnel` (preferred port = the URL's port), sets its cookie through the platform channel, and only then loads `urlFor(Uri.parse(page.url))`. The sheet's close, for any cause (its `dispose` included), clears the cookie and closes the tunnel; it is their only owner (ruling G4). JavaScript is unrestricted when the page has `javascript`, as for a `url` page. Navigation stays on `127.0.0.1:<tunnel port>` unless `browse`. No adapter and no prelude: a URL page has no bridge. The identity strip shows the original URL (`page.title`) and the transport tag (`m.via`). While the main frame loads, the strip shows a progress bar; a failed load shows the error and a `Key('pageReload')` button, and reports `state` with `load: "failed"`.
 
 - [ ] **Step 1: Failing widget tests** (fake `webView` builder, fake cookie channel): `a forward page loads through the tunnel` (the cookie is set before the controller is asked for a `127.0.0.1` URL with the page's path); `closing the sheet clears the cookie and closes the tunnel`; `two sheets in turn get different cookie values`; `a failed load shows reload and reports failed`; `the strip shows the original URL and the transport`.
 - [ ] **Step 2:** `flutter test --no-pub test/page_sheet_test.dart`. Expected: FAIL.
@@ -206,7 +211,7 @@ Rules: a `forward` page starts a `PageTunnel` (preferred port = the URL's port),
 
 Content:
 - `docs.html`: a `--url` page on the session host's loopback (a dev server) opens on the phone, hot reload included; it is slow over Bluetooth; only the page's own sheet reaches the server (a per-sheet cookie), other apps and sites on the phone cannot; generated apps (a file manager, a workflow view, a log viewer) are served this way.
-- `SKILL.md`: trigger "show the dev server on my phone"; pattern: start the server on loopback, `elisctl session overlay open --url http://127.0.0.1:PORT --block`, stop the server when the command returns.
+- `SKILL.md`: trigger "show the dev server on my phone"; pattern: start the server on loopback, `elisctl session overlay open --url http://127.0.0.1:PORT --js --block`, stop the server when the command returns. Ruling G3: `--js` is required; a `--url` page runs its own scripts only with it, on the Mac (`HtmlOverlayRegistry.swift:260`) and on the phone, so without it a dev server page is blank. `docs.html` shows the same command.
 
 - [ ] **Step 1:** Write the text.
 - [ ] **Step 2:** Commit `docs: dev servers on the phone`.

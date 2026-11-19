@@ -33,8 +33,8 @@
 ## Deviations from the first spec draft (accepted by the lead; the spec now matches)
 
 1. **Hello kinds.** The relay does not list `page.text`, `page.files` or `page.links`. Listing them obliges the phone to answer text actions with `pageResult`, serve `logTail`, and follow markdown links. Without them a log page, a diff page and a markdown page with `--navigation` go to the Mac viewer (Task 3), a text page shows static, and markdown links render as plain text (Task 10). v1 scope: spec Goals and Non-goals.
-2. **Bridge with page JavaScript off.** The Mac runs the adapter in an isolated `WKContentWorld`; Android has none. The phone enables WebView JavaScript for every file page and blocks the page's own scripts with a `Content-Security-Policy: script-src 'none'` header from its loopback server when the page has no `--js`. Task 12 proves or refutes this on the emulator before the sheet is built; if it fails, stop and report to the lead. Tasks 11 and 12 depend on no earlier task except Task 0; run them first to learn the result early.
-3. **Content pages.** `RemotePageResources.content()` returns a file to read, not HTML. The relay builds the HTML (`MarkdownAssets` moves to ElisCore, Task 7) with `ImagePage.html`, `DocumentPage.page`, `MarkdownPage.html` and `TextPage.html`, and sends the renderer script from the app bundle's `markdown` folder.
+2. **Bridge with page JavaScript off.** The Mac runs the adapter in an isolated `WKContentWorld`; Android has none. The phone enables WebView JavaScript for every file page and blocks the page's own scripts with a `Content-Security-Policy: script-src 'none'` header from its loopback server when the page has no `--js`. Task 12 proves or refutes this on the emulator before the sheet is built; if it fails, stop and report to the lead. Ruling F7: Task 11 depends on Task 6 (`wire_names_test.dart` reads the Swift sources), and Task 12 on Task 11 (`PageServer`). Run Task 6, then 11, then 12, before the other macOS tasks, to learn the result early. Task 12 needs no Swift build: it copies the adapter text and writes the unlink script inline.
+3. **Content pages.** `RemotePageResources.content()` returns a file to read, not HTML. The relay builds the HTML (`MarkdownAssets` moves to ElisCore, Task 7) with `ImagePage.html`, `DocumentPage.page`, `MarkdownPage.html` and `TextPage.html`, and sends the renderer script from the app bundle's `markdown` folder. Ruling F3: neither travels inside the `page` line, which would pass the 512 KiB channel buffer (an inlined image, or the ~308 KiB of renderer scripts); the phone fetches both as chunked `res` lines (Task 10).
 4. **UI test.** Default UI-test launches bypass zmx (`.claude/rules/ui-tests.md:50`), so no pane can follow. The `--block` / dismissed case is a hosted test in `ElisTests/ControlServerPageServeTests`.
 5. **`presenters` read-back.** A phone subscriber is not counted in `presenters.mirrors` or `viewers`; `phoneViewers` already reports it.
 6. **Remote rows.** `htmlOverlays[].phone` shows in the origin's tree only; the Mac that carries the phone has no slot for a page of an attached row. No remote row runs in the emulator task: the remote branch is covered by `aRemoteOriginIsReachedThroughItsArgv` and by the page-serve tests that already run over a socket.
@@ -89,14 +89,14 @@
 ### Task 2: `viewer.phone` and work-kind routing in the hub
 
 **Files:**
-- Modify: `macos/ElisCore/Sources/ElisCore/PresentationHub.swift` (`supportedKinds` `:73`, `receive` `:279`, `route` `:334`, `claimant` `:341`, `leadClaimant` `:365`)
+- Modify: `macos/ElisCore/Sources/ElisCore/PresentationHub.swift` (the hello negotiation `:191`, `receive` `:276`, `route` `:334`, `claimant` `:342`, `leadClaimant` `:365`)
 - Modify: `macos/ElisCore/Sources/ElisCore/AppStore+RemotePresentation.swift:322` (`presentersNode`)
 - Test: `macos/ElisCore/Tests/ElisCoreTests/PresentationHubTests.swift`
 
 **Interfaces — Produces:**
 ```swift
 extension PresentationHub {
-    public static let viewerPhoneKind = "viewer.phone"      // in supportedKinds
+    public static let viewerPhoneKind = "viewer.phone"      // negotiated, never in supportedKinds
     public enum Work: Sendable { case page, other }
     public func route(session: UUID, pane: UUID?, work: Work = .other) -> Int?
     public func leadClaimant(session: UUID, pane: UUID, work: Work = .other) -> Int?
@@ -105,12 +105,13 @@ extension PresentationHub {
 }
 ```
 The filter lives in one place: the private `claimant(session:pane:work:)` (`:341`) drops subscribers listing `viewer.phone` for `.other`; `route` and `leadClaimant` only pass `work` on. A `presenterAcquire` from such a subscriber is answered `presenterRefused`.
+Ruling F1: `viewer.phone` stays out of `supportedKinds`, because that list is also the Mac viewer's own hello (`RemotePresentationClient.swift:353`) and the test helpers' default `kinds`. The hub negotiates with `supportedKinds + [viewerPhoneKind]` at `subscribe` (`:191`) only. A Mac viewer must never list `viewer.phone`.
 
 - [ ] **Step 1: Failing tests** in `PresentationHubTests`:
   - `aPhoneClaimantTakesPagesOnly`: phone subscriber (kinds include `viewer.phone`, `lead.report`) reports pane P. `route(pane: P, work: .page) == phone`; `route(pane: P) == nil`; `leadClaimant(pane: P) == nil`.
   - `otherWorkGoesToTheNextClaimantThenTheHolder`: Mac viewer A holds the grant, Mac viewer B reported P earlier, phone reported P last. `route(pane: P) == B`; after B withdraws, `== A`.
-  - `aPhoneNeverBecomesTheGrantHolder`: phone sends `presenterAcquire`: its sink's last frame is `.presenterRefused`, `presenter(of:) == nil`. Then a Mac holder unsubscribes with the phone still connected: the phone gets no `.presenterVacant`, and `route(pane: nil)` for an unled session is nil.
-  - `theKindIsNegotiated`: `PresentationHub.supportedKinds.contains("viewer.phone")`, and `isPhone(owner:)` is true only for a subscriber whose hello listed it.
+  - `aPhoneNeverBecomesTheGrantHolder`: phone sends `presenterAcquire`: its sink's last frame is `.presenterRefused`, `presenter(of:) == nil`. Then a Mac holder unsubscribes with the phone still connected: the phone gets no `.presenterVacant`, and `route(pane: nil)` for an unled session is nil. This second half pins current behavior and passes without new code; the RED step is `presenterAcquire` → `.presenterRefused`.
+  - `theKindIsNegotiated`: the hub's hello answer to a subscriber that listed `viewer.phone` echoes it; `PresentationHub.supportedKinds` does not contain it, so a viewer built with the default kinds is not a phone; `isPhone(owner:)` is true only for a subscriber whose hello listed it.
 - [ ] **Step 2:** `swift test --filter PresentationHubTests`. Expected: FAIL to compile (`work:` unknown).
 - [ ] **Step 3:** Implement the interface above. `presentersNode` uses `macViewerCount` for `viewers` and `mirrors`, and returns nil when it is 0.
 - [ ] **Step 4:** `swift test --filter PresentationHubTests`. Expected: PASS.
@@ -120,8 +121,10 @@ The filter lives in one place: the private `claimant(session:pane:work:)` (`:341
 
 **Files:**
 - Modify: `macos/ElisCore/Sources/ElisCore/ZmxLead.swift:214-224`
-- Modify: `macos/ElisCore/Sources/ElisCore/AppStore+RemotePage.swift` (`openRemotePage` recipient `:69` and refusals `:71-73`, `offerPendingPage` `:158`, `pageRecipient` `:315`)
+- Modify: `macos/ElisCore/Sources/ElisCore/AppStore+RemotePage.swift` (`openRemotePage` recipient `:69` and refusals `:71-73`, `presenterShows` `:125`, `offerPendingPage` `:158`)
 - Modify: `macos/ElisCore/Sources/ElisCore/AppStore+OpenWork.swift` (`place` `:72`, `placePages` `:167`)
+- Modify: `macos/ElisCore/Sources/ElisCore/AppStore+PageMove.swift` (`offerPageCandidate` `:17`, `candidateOffer` `:44,50`)
+- Create: `macos/ElisCore/Tests/ElisCoreTests/PresentationTestSupport.swift` (shared harness, ruling F8)
 - Test: `macos/ElisCore/Tests/ElisCoreTests/AppStoreOpenWorkTests.swift`, `AppStoreRemotePageTests.swift`, `AppStoreRemoteAskTests.swift`, `AppStoreRemoteOverlayTests.swift`, `AppStorePresentationTests.swift`, `SessionPickTests.swift`
 
 **Interfaces:**
@@ -133,16 +136,17 @@ extension AppStore {
     func pendingRecipient(_ session: Session, paneIdentity: UUID?, work: PresentationHub.Work = .other) -> Int?
     /// The viewer a page goes to: the `.page` recipient, or the `.other` one when that is a phone that cannot show it.
     func pageRecipient(_ session: Session, paneIdentity: UUID?, source: PresentationPageSource, log: Bool, held: Bool) -> Int?
-    /// gains `links` (the request has `markdownLinks`) and `diff` (`TextPage.isDiff`), both default false
-    func presenterShows(_ source: PresentationPageSource, log: Bool, links: Bool = false, diff: Bool = false, owner: Int) -> Bool
+    /// takes the request; reads `log` (`textLog`), links (`markdownLinks`) and diff (a `.text` path with `TextPage.isDiff(file:)`) itself
+    func presenterShows(_ request: PresentationPage, owner: Int) -> Bool
 }
 ```
-A `viewer.phone` owner shows a page only when it lists every kind the page uses: `page.text` for a log, `page.files` for a diff, `page.links` for links. A Mac owner keeps today's downgrade (`sendPageRequest` drops links). `offerPageCandidate` applies the same rule to moves (`AppStore+PageMove.swift:17` already covers links; add the diff case).
-`held: true` applies `takesHeldWork`. Page sites (`openRemotePage`, `offerPendingPage`, `pageRecipient(_:pane:)`) pass `.page` or use `pageRecipient(…source:)`. `place(_:pane:work:)` in `AppStore+OpenWork` (`:72`, the `leadClaimant` call at `:82`) takes the work kind with no default: `placeSessionAsk`, `placeWindowAsk` and `placePick` pass `.other`, `placePages` passes `.page`. `remoteRecipient(work:)` only forwards it to `route`. `placePages` asks `.page` and, when the viewer is a phone that fails `presenterShows`, asks `.other`. The non-page sites keep the default and need no edit: `AppStore+Presentation.swift:136`, `AppStore+RemoteAsk.swift:26,48`, `AppStore+RemoteOverlay.swift:51,93`, `SessionPick.swift:434,472`, `AppStore+RemotePresentation.swift:334`, and the ask and pick `place()` calls.
+A `viewer.phone` owner shows a page only when it lists every kind the page uses: `page.text` for a log, `page.files` for a diff, `page.links` for links. A Mac owner keeps today's downgrade (`sendPageRequest` drops links). Ruling F5: `presenterShows` is internal, so it gets no defaulted parameters: it derives log, links and diff from the request, and every caller obeys the phone rule (`openRemotePage :71`, `offerPendingPage :159`, `candidateOffer` `AppStore+PageMove.swift:44,50`). `offerPageCandidate` (`:17`) applies the same rule to moves; it already covers links, add the diff case.
+`held: true` applies `takesHeldWork`. Page sites (`openRemotePage`, `offerPendingPage`) use `pageRecipient(…source:)`.
+Ruling F2: `pageRecipient(_:pane:)` (`AppStore+RemotePage.swift:312`) is NOT edited and keeps `.other`. Its readers guard the fallback to this Mac: `pageBelongsRemote` (`AppStore+HtmlOverlay.swift:131,285`, `AppStore+ClickedPage.swift:11`, `Elis/Control/ControlServer+ImagePage.swift:43`), `textLogRefusal` (`Elis/Control/ControlServer+TextPage.swift:17,30`) and `ElisServerKit/ServerActions+Overlay.swift:42`. With `.page` they would return the phone, and a page `openRemotePage` answers `.local` for would be refused with `.presenter` or `logRemote`. `place(_:pane:work:)` in `AppStore+OpenWork` (`:72`, the `leadClaimant` call at `:82`) takes the work kind with no default: `placeSessionAsk`, `placeWindowAsk` and `placePick` pass `.other`, `placePages` passes `.page`. `remoteRecipient(work:)` only forwards it to `route`. `placePages` asks `.page` and, when the viewer is a phone that fails `presenterShows`, asks `.other`. The non-page sites keep the default and need no edit: `AppStore+Presentation.swift:136`, `AppStore+RemoteAsk.swift:26,48`, `AppStore+RemoteOverlay.swift:51,93`, `SessionPick.swift:434,472`, `AppStore+RemotePresentation.swift:334`, and the ask and pick `place()` calls.
 
 In `openRemotePage`, a `.forwarded` or unsupported source no longer returns `.loopback` / `.unsupported` when the first recipient is a phone: the fallback recipient decides, and a nil one on a Mac returns `.local`.
 
-- [ ] **Step 1: Failing tests.** Add to the suite harness `phone(_ session:, kinds:)`: `viewer(session, leads: true, kinds: PresentationHub.pageKinds + ["lead.report", "page.content", "page.document", "pending.snapshot", "job.token", "offer.id", "viewer.phone"])`. One test per site, each on a Mac origin with the pane `.follower`:
+- [ ] **Step 1: Failing tests.** Ruling F8: move nothing; add an internal `PresentationTestSupport.swift` with `Sink`, `viewer`, `phone`, `lead` and `setLead` for the new tests in all six suites (and Part 2). Existing tests keep their private helpers. `phone(_ session:, kinds:)` is `viewer(session, leads: true, kinds: PresentationHub.pageKinds + ["lead.report", "page.content", "page.document", "pending.snapshot", "job.token", "offer.id", "viewer.phone"])`. One test per site, each on a Mac origin with the pane `.follower`:
   - `AppStoreOpenWorkTests.aLeadingPhoneGetsThePageRequest`: `openPage(url()) == .opened`, phone sink holds `.pageRequest`.
   - `AppStoreRemoteAskTests.anAskStaysHereWhileOnlyThePhoneLeads`: `openRemoteAsk(...) == .notPresented`; with a Mac viewer holding the grant the ask's `owner` is that viewer.
   - `AppStoreRemoteOverlayTests.aProgramOverlayNeverGoesToThePhone`, `SessionPickTests.aPickNeverGoesToThePhone` (`presentPickRemotely == nil`), `AppStorePresentationTests.aStatusSoundNeverGoesToThePhone` (`presentStatusSoundRemotely == false`): the phone sink gets no frame of that kind.
@@ -151,6 +155,8 @@ In `openRemotePage`, a `.forwarded` or unsupported source no longer returns `.lo
   - `AppStoreOpenWorkTests.aGuiAskInAWindowStaysOffThePhone`: a GUI ask anchored to the session is open in the window's controller (`local(controller, window:)`), the phone reports the lead, `pass(session, local:)`: `controller.pendingAsk != nil`, the phone sink holds no `askRequest`.
   - `AppStoreOpenWorkTests.aHeldInteractionOnAHeadlessOriginStaysOffThePhone`: `session(headless: true)`, an ask and a pick held pending, only the phone connected and leading; `host.offerPendingInteractions(forSession:now:)`: the phone sink holds no `askRequest` or `pickRequest`, and both stay pending. A held page is offered to it.
   - `AppStoreRemotePageTests.aPageKindThePhoneLacksGoesToTheNextRecipient`: phone without `page.content` leads, Mac viewer holds the grant: an image page's request is in the Mac viewer's sink. With no next claimant and no grant holder the origin keeps it: `openRemotePage == .local` on a Mac. Same for a loopback URL (`http://127.0.0.1:5173/`): `.local`, not `.loopback`.
+  - `AppStoreRemotePageTests.thePhoneAloneDoesNotMakeASlotRemote` (F2): only the phone leads: `pageBelongsRemote(session, pane: nil) == false` and `pageRecipient(session, pane: nil) == nil`, so a page `openRemotePage` answers `.local` for opens here.
+  - `AppStoreRemotePageTests.aHeldLinkedMarkdownPageIsNotOfferedToThePhone` (F5): `session(headless: true)`, only the phone connected and leading, a `--markdown --navigation` page held: `offerPendingInteractions`: the phone sink holds no `.pageRequest`, and the page stays held.
   - `AppStoreRemotePageTests.aLogPageGoesToTheMacViewerWhileThePhoneLeads`, `…aDiffPageGoesToTheMacViewer…`, `…aLinkedMarkdownPageGoesToTheMacViewer…`: the phone (Task 9 `kinds`, no `page.text` / `page.files` / `page.links`) leads, a Mac viewer holds the grant; a `--text --follow-file` page, a `.diff` text page and a `--markdown --navigation` page each land in the Mac viewer's sink and never in the phone's. The same three as moves: open on the Mac viewer first, then the phone leads and `pass`: the phone sink holds no `.pageRequest`.
 - [ ] **Step 2:** `swift test --filter "AppStoreOpenWorkTests|AppStoreRemotePageTests|AppStoreRemoteAskTests|AppStoreRemoteOverlayTests|AppStorePresentationTests|SessionPickTests"`. Expected: the new tests FAIL.
 - [ ] **Step 3:** Implement.
@@ -176,6 +182,7 @@ In `openRemotePage`, a `.forwarded` or unsupported source no longer returns `.lo
   - `aPhoneWithOfferIdIsNeverRecordedAsGivenUp`: after the first test, `OfferlessHolders.shared.held(job, by: phone.gen) == false`.
   - `aLoadedPageSurvivesThePhoneLeavingWhileThePaneStillFollows`: phone holds a loaded page; `hub.unsubscribe(phone.id)` with the pane still `.follower`, `pass`: the page is mounted here (`remoteOverlayOwnerLost`, `AppStore+RemoteOverlay.swift:199`, then `placePages`), and its outcome is still open.
   - `aLoadingPageWhosePhoneLeavesIsNotDismissed`: file page claimed, no `pageState` yet; `hub.unsubscribe(phone.id)`, then `host.remotePageLost(page)` (the pipe's end arriving second), `pass`: the outcome is still open and the page is mounted here. The reverse order (`remotePageLost` first) ends the page as dismissed today (`AppStore+OpenWork.swift:58-61`); that order is what Task 9's teardown rule prevents, so assert it as the documented current behavior in `aPagePipeLostBeforeItLoadedEnds`.
+  - `onAHeadlessOriginThePageStaysUntilAnotherViewerLeads` (ruling F9): `session(headless: true)`, a Mac viewer with the grant that reports no lead, the phone holds a loaded page and then withdraws (`lead(phone, [])`), `pass`: the page stays with the phone (`place()` needs a lead claimant, `AppStore+OpenWork.swift:72-84`); after the Mac viewer reports the lead, `pass` offers it there. This is accepted v1 behavior; Task 14 adds it to the docs' limits.
 - [ ] **Step 2:** `swift test --filter AppStoreOpenWorkTests`. Fix what fails in the two source files; record the cause in the commit message.
 - [ ] **Step 3:** Commit `test(core): an open page follows the phone's lead both ways`.
 
@@ -229,12 +236,13 @@ public struct PhonePage: Codable, Equatable, Sendable {
     public var kind: String          // "file" | "url" | "content"
     public var path: String?         // file: the absolute path on the origin
     public var url: String?
-    public var html: String?         // content
-    public var script: String?       // content: the renderer the phone runs after load
+    // content: no html or script here (ruling F3); the phone fetches PhonePage.contentPath and PhonePage.scriptPath
     public var adapter: String?      // file: HtmlBridgeAdapter.script(handler: "window.__elis")
     public var javascript: Bool, chromeless: Bool, browse: Bool, hidden: Bool
     public var title: String         // the identity strip's text
     public var sizePercent: Int?
+    /// Reserved fetch paths the relay answers from memory as `res` chunks; never sent to the origin. No origin path lacks the leading `/`.
+    public static let contentPath = "elis:content", scriptPath = "elis:script"
 }
 /// Phone to relay.
 public enum PhonePageUp: Codable, Equatable, Sendable {
@@ -249,8 +257,10 @@ public enum PhonePageCodec {
 }
 ```
 `res.data` is base64 (JSONEncoder's `Data` default), at most `PageServeCodec.maxChunkBytes` per line.
+Ruling F10: the `command` actions are a superset of the spec's `navigate`; the phone ignores `browser` (the overlay is not a browser) but counts its `seq` as applied.
+Ruling F6: `state` requires `appliedSeq` and `hidden`; the phone always sends both (Task 11).
 
-- [ ] **Step 1: Failing tests.** Scheduler `aLowChannelWaitsForVt`: channels 2 (normal) and 3 (`low: true`) both hold data and credit; `next` returns channel 2 until it is empty, then 3; channels 0 and 1 still go first. Codec: `PhonePageCodec.encode(.command(id: "p", seq: 3, action: "hide", sizePercent: nil))` equals `{"action":"hide","id":"p","seq":3,"t":"command"}\n`; `decode` of `{"t":"closed","id":"p","dismissed":true}` equals `.closed(id: "p", dismissed: true)`; an unknown `t` throws.
+- [ ] **Step 1: Failing tests.** Scheduler `aLowChannelWaitsForVt`: channels 2 (normal) and 3 (`low: true`) both hold data and credit; `next` returns channel 2 until it is empty, then 3; channels 0 and 1 still go first. Codec: `PhonePageCodec.encode(.command(id: "p", seq: 3, action: "hide", sizePercent: nil))` equals `{"action":"hide","id":"p","seq":3,"t":"command"}\n`; `decode` of `{"t":"closed","id":"p","dismissed":true}` equals `.closed(id: "p", dismissed: true)`; `decode` of `{"t":"state","id":"p","load":"loaded","canGoBack":false,"appliedSeq":2,"hidden":true}` equals `.state(id: "p", load: "loaded", title: nil, current: nil, canGoBack: false, appliedSeq: 2, hidden: true, error: nil)` (F6); an unknown `t` throws.
 - [ ] **Step 2:** `swift test --filter "PhoneLinkSchedulerTests|PhoneLinkMessagesTests"`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run again. Expected: PASS.
@@ -319,7 +329,7 @@ Reads and writes run on plain threads (`.claude/rules/tests.md`), writes through
 
 **Files:**
 - Create: `macos/ElisCore/Sources/elisctlKit/PhoneLinkPresenter.swift`
-- Modify: `macos/ElisCore/Sources/elisctlKit/PhoneLinkSession.swift` (`open` `:95`, `receive` `:62`, `closeChannel`, `close`, `openClaim` link closures), `PhoneLinkClaim.swift` (`answered`)
+- Modify: `macos/ElisCore/Sources/elisctlKit/PhoneLinkSession.swift` (`open` `:115`, `receive` `:66`, `closeChannel`, `close`, `openClaim` link closures), `PhoneLinkClaim.swift` (`answered`)
 - Test: `macos/ElisCore/Tests/elisctlKitTests/PhoneLinkPresenterTests.swift` (new), `PhoneLinkSessionTests.swift`
 
 **Interfaces:**
@@ -353,6 +363,7 @@ final class PhoneLinkPresenter: @unchecked Sendable {
 //                       var leading: Bool { paneID != nil && !stopped }
 ```
 `start()`: `requestAttach(target: request.target, args: [:])` → `origin`. No `origin` (an older app) → OPENED with error `Elis is too old to show pages`. Local (`host == nil`) → `PhoneLinkLineStream.socket(path:, request: ControlRequest(cmd: .zmxPresent, target: origin.session))`; remote → `.process(argv: RemoteSession.presentCommand(host:session:))`. It sends `hello` (`PresentationCodec.version`, `kinds`, mode `.mirror`) as `RemotePresentationClient` does (`RemotePresentationClient.swift:353`), takes the generation from the origin's hello, answers `ping` with `ack`, and ignores every other frame except `pageRequest`, `pageClose`, `pageCommand` (Task 10). A headless origin sends held and moved work in batches (`ServerStreams.swift:114`): `pendingChunk` goes into a `PresentationPendingBatch`, and `pendingCommit` applies its entries through the same switch, as `RemotePresentationClient.swift:314-321` does. The presentation stream is `resume()`d at once after every line: only page pipes wait on `highWater`, or the hub drops the phone as stalled. Then OPENED (`PhoneLinkOpened()`, no size). The presentation stream ending sends CLOSE with reason `presentation ended`.
+Ruling F3: `link.output` answering `.overflowed` means the scheduler already dropped the channel's queue mid-line (`PhoneLinkScheduler.swift:30-33`); the presenter then sends CLOSE with reason `overflow` and stops. No single line may exceed `highWater`: content travels as `res` chunks (Task 10).
 
 `PhoneLinkSession`: OPEN type `present` is accepted for channels ≥ 2, at most `maxPresenters`, one per `target` (`channel already open` for a second); it calls `scheduler.open(channel:, low: true)`. `(.data, ch)` goes to the presenter. After each claim `leadChanged`, `released`, claim close and presenter hello, the session calls `presenter.setLeads(Set(claims.values.filter { $0.request.target == target && $0.leading }.compactMap(\.originPane)))`. `pump()` calls `drained()` on every presenter after a send. `close(reason:)` stops presenters.
 
@@ -368,9 +379,10 @@ Test seam: `init` takes `spawn: (ControlAttachOrigin, _ pageToken: String?) thro
   - `noLeadReportToAnOriginWithoutViewerPhone` (Review Focus 1): the stub's hello omits `viewer.phone`; no `lead.report` arrives after the claim leads.
   - `aPingIsAcked`: stub sends `ping`; reads `ack` with the hello's `gen`.
   - `linkCloseEndsThePresenter`: the stub's stream reaches EOF after `close(reason:)`.
-  - `aRemoteOriginIsReachedThroughItsArgv`: the stub's attach answer has `origin.host == "h"`; with the default `spawn` replaced by a recorder, it is called with that origin, and `RemoteSession.presentCommand(host: "h", session: origin.session)` is what the default builds (assert the argv, do not run it).
+  - `aRemoteOriginIsReachedThroughItsArgv`: the stub's attach answer has `origin.host == "h"`; with the default `spawn` replaced by a recorder, it is called with that origin, and `RemoteSession.presentCommand(host: "h", session: origin.session)` is what the default builds (assert the argv, do not run it). Ruling F12: this only pins which builder the default seam calls.
   - `aPendingBatchDeliversItsPage`: the stub sends a `pageRequest` wrapped by `PresentationPendingBatch.chunks` then `pendingCommit`; the phone reads one `page` line.
   - `thePresentationStreamIsReadWhileAPageWaits`: with the channel's pending bytes over `highWater`, a `ping` is still acked.
+  - `anOverflowClosesTheChannel` (F3): `link.output` answers `.overflowed`: the phone reads CLOSE with reason `overflow`, and the stub sees the presentation stream end.
 - [ ] **Step 2:** `swift test --filter "PhoneLinkPresenterTests|PhoneLinkSessionTests"`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run again. Expected: PASS, existing `PhoneLinkSessionTests` included.
@@ -387,8 +399,8 @@ Test seam: `init` takes `spawn: (ControlAttachOrigin, _ pageToken: String?) thro
 - Produces (internal to the presenter): one `PhoneLinkLineStream` per channel page, opened with `ControlRequest(cmd: .sessionOverlayPageServe, target: token)` locally or `pageServeCommand` remotely, held while the page shows.
 
 Behavior:
-- `pageRequest` → by `source`: `.url` → `page` line, kind `url`. `.file` → open the page pipe, then kind `file` with `path` and `adapter` (`HtmlBridgeAdapter.script(handler: "window.__elis")`, plus `helperScript` when `javascript`). `.image`, `.document`, `.markdown`, `.text` → open the pipe, read the page's own file with a `resource` request, build `html` with `ImagePage.html(data:mimeType:)`, `DocumentPage.page(_:)`, `MarkdownPage.html(markdown:images:style:)` (pictures from `MarkdownPage.remoteImageReferences`, each fetched over the pipe) or `TextPage.html(text:language:line:style:)`, and send kind `content` with `script` from `MarkdownAssets(directory:)` of `Bundle.main.resourceURL/markdown`, falling back to `<executable dir>/../Resources/markdown`. `.forwarded` or a pipe that cannot open → `pageRejected` with the offer echoed.
-- A markdown page (always without links on the phone) gets `PhoneLinkPresenter.unlinkScript` appended to `script`: after render it replaces every `a` element with its text, so a link is inactive and not styled as one.
+- `pageRequest` → by `source`: `.url` → `page` line, kind `url`. `.file` → open the page pipe, then kind `file` with `path` and `adapter` (`HtmlBridgeAdapter.script(handler: "window.__elis")`, plus `helperScript` when `javascript`). `.image`, `.document`, `.markdown`, `.text` → open the pipe, read the page's own file with a `resource` request, build the HTML with `ImagePage.html(data:mimeType:)`, `DocumentPage.page(_:)`, `MarkdownPage.html(markdown:images:style:)` (pictures from `MarkdownPage.remoteImageReferences`, each fetched over the pipe) or `TextPage.html(text:language:line:style:)`, take the script from `MarkdownAssets(directory:)` of `Bundle.main.resourceURL/markdown`, falling back to `<executable dir>/../Resources/markdown`, keep both in memory, and send kind `content` with neither. Ruling F3: the phone fetches `PhonePage.contentPath` and `PhonePage.scriptPath`; the relay answers those two paths from memory as `res` lines of at most `PageServeCodec.maxChunkBytes`, enqueuing the next chunk only while `link.pending() < highWater`, and never sends them to the origin. `.forwarded` or a pipe that cannot open → `pageRejected` with the offer echoed.
+- A markdown page (always without links on the phone) gets `PhoneLinkPresenter.unlinkScript` appended to its script (ruling F7: the text is the one Task 12 wrote inline in its spike case 4, copied verbatim): after render it replaces every `a` element with its text, so a link is inactive and not styled as one.
 - Every answer to the origin echoes the request's `offer`.
 - `fetch` → `.resource(id: n, path:)`; `head`/`chunk`/`end`/`failure` → `res` lines keyed by the phone's `seq`. `bridge` → `.bridge(id: n, request: line)`; `reply`/`failure` → `reply` line. A bridge line is never written anywhere else.
 - `state` → `.pageState` (load `loaded`/`failed`, title, address = `current`, `canGoBack`, `appliedSeq`, `hidden`, `offer`). `closed` → `.pageClosed(PresentationPageChange(page:, offer:))`, and the pipe closes.
@@ -406,7 +418,8 @@ Behavior:
   - `aLargeFileDoesNotOverflowTheChannel` (Review Focus 4): the stub streams 2 MiB of chunks while the phone grants credit slowly; the phone receives every byte in order, and vt DATA enqueued meanwhile is read before the page's remaining lines.
   - `stoppingClosesThePresentationStreamBeforeThePagePipe`: with a file page open, `close(reason:)`: the stub sees EOF on the presentation stream before EOF on the page pipe.
   - `aLogPageIsNotOffered`: covered by `kinds`; assert `PhoneLinkPresenter.kinds` contains none of `page.text`, `page.files`, `page.links`.
-  - `aMarkdownPageCarriesTheUnlinkScript`: the `page` line for a markdown request has `script` ending with `unlinkScript`, and its `html` has no `data-links`. Task 12 case 4 checks the result in the WebView.
+  - `aLargeImagePageReachesThePhoneWhole` (F3): a 2 MiB image page; the `page` line is under `highWater` and has no HTML; the phone's `fetch` of `contentPath` yields `res` lines that join into the full HTML, vt DATA enqueued meanwhile is read first, and the channel never overflows.
+  - `aMarkdownPageCarriesTheUnlinkScript`: for a markdown request, the joined `res` of `scriptPath` ends with `unlinkScript`, and the joined `res` of `contentPath` has no `data-links`. Task 12 case 4 checks the result in the WebView.
   - Hosted, `ControlServerPageServeTests.testABlockingPageClosedFromThePhoneEndsDismissed`: pane set `.follower` (as `:164`), a raw socket subscriber with `viewer.phone` reports the lead, `session.overlay.open --html --block` runs off the main thread, the subscriber claims the page and sends `pageClosed`: the command returns with the dismissed exit code, and `tree` shows no `htmlOverlays` entry.
 - [ ] **Step 2:** `swift test --filter PhoneLinkPresenterPagesTests`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
@@ -420,7 +433,9 @@ Behavior:
 - Create: `mobile/lib/pages/page_link.dart`, `mobile/lib/pages/page_server.dart`
 - Test: `mobile/test/mux_test.dart`, `mobile/test/page_link_test.dart` (new), `mobile/test/page_server_test.dart` (new), `mobile/test/wire_names_test.dart`
 
-**Interfaces — Produces:**
+**Interfaces:**
+- Consumes: Task 6 (ruling F7: `wire_names_test.dart` reads `macos/ElisCore/Sources/ElisCore/PhoneLink/PhoneLinkPages.swift`, so Task 6 lands first).
+- Produces:
 ```dart
 // mux.dart
 PresentChannel present(String target);                 // OPEN {"type":"present","target":target}
@@ -432,7 +447,7 @@ class PresentChannel {
   String? get ended;                                    // the CLOSE reason, 'Disconnected' on link loss
 }
 // page_link.dart
-class PhonePage { final String id, kind, title; final String? path, url, html, script, adapter;
+class PhonePage { final String id, kind, title; final String? path, url, adapter;   // content: fetch contentPath / scriptPath (F3)
                   final bool javascript, chromeless, browse; bool hidden; int? sizePercent; int appliedSeq; }
 class PageLink extends ChangeNotifier {
   PageLink(Mux mux, String target);
@@ -442,10 +457,12 @@ class PageLink extends ChangeNotifier {
   Future<PageFile> fetch(String id, String path);       // completes on the first res line; throws ElisError(error)
   Future<String> bridge(String id, String line);        // the origin's raw JSON reply; throws ElisError
   void report(String id, {required String load, String? title, String? current, bool canGoBack = false, String? error});
+                                                        // always sends appliedSeq and hidden from its PhonePage (ruling F6)
   void closed(String id, {required bool dismissed});
   void dispose();                                       // closes the channel; every page is dropped
 }
 class PageFile { final String mime; final Stream<List<int>> bytes; }
+const contentPath = 'elis:content', scriptPath = 'elis:script';   // PhonePage.contentPath / scriptPath in Swift
 class PageCommand { final String id, action; final int seq; final int? sizePercent; }
 // page_server.dart
 class PageServer {
@@ -458,9 +475,9 @@ The secret is 16 bytes from `Random.secure()`, hex. The server answers 404 for a
 
 - [ ] **Step 1: Failing tests.**
   - `mux_test`: `present opens and decodes lines` (OPENED without size completes `opened`; a DATA frame holding `{"t":"page",…}\n` split across two frames yields one map); `an older relay refuses present` (`unsupported channel type` → `opened` throws, `PageLink.supported == false`, no retry).
-  - `page_link_test`: a `page` line sets `page`; `command` `close` clears it; the channel's CLOSE clears it; `closed(id, dismissed: true)` sends `{"t":"closed","id":…,"dismissed":true}`; `fetch` sends `fetch` with a fresh `seq` and completes from `res` lines; a `res.error` fails it.
+  - `page_link_test`: a `page` line sets `page`; `command` `close` clears it; the channel's CLOSE clears it; `closed(id, dismissed: true)` sends `{"t":"closed","id":…,"dismissed":true}`; `fetch` sends `fetch` with a fresh `seq` and completes from `res` lines; a `res.error` fails it; `report(id, load: 'loaded')` after a `hide` command sends a `state` line with `appliedSeq` equal to that command's `seq` and `hidden: true` (F6).
   - `page_server_test` (Review Focus 5): GET with the secret returns the fetched bytes and mime; a wrong secret → 404 and `fetch` is not called; `POST` → 405; `javascript: false` sets the CSP header.
-  - `wire_names_test`: the `t` values `page`, `command`, `res`, `reply`, `fetch`, `bridge`, `state`, `closed` and the OPEN type `present`.
+  - `wire_names_test`: the `t` values `page`, `command`, `res`, `reply`, `fetch`, `bridge`, `state`, `closed`, the keys `appliedSeq` and `hidden`, the reserved paths `elis:content` and `elis:script`, and the OPEN type `present`.
 - [ ] **Step 2:** `cd mobile && flutter test --no-pub test/mux_test.dart test/page_link_test.dart test/page_server_test.dart test/wire_names_test.dart`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run again. Expected: PASS. `flutter analyze --no-pub` clean.
@@ -474,13 +491,16 @@ The secret is 16 bytes from `Random.secure()`, hex. The server answers 404 for a
 
 `network_security_config.xml` permits cleartext for `127.0.0.1` only; the manifest's `<application>` references it. Run only on the agent-owned emulator.
 
-- [ ] **Step 1:** Write `page_webview_test.dart`. It starts a `PageServer` over an in-memory `fetch` and a `WebViewController` with JavaScript unrestricted, a JavaScript channel `ElisChannel`, and this prelude run before the adapter: `window.__elis = { postMessage(body) { … returns a Promise resolved by window.__elisReply(id, ok, value) } }`. Cases:
+Depends on Task 11 (`PageServer`); ruling F7. The adapter text is copied from `macos/Elis/Views/HtmlOverlayBridge.swift` (`adapterScript`, `helperScript`) with `window.__elis` as the handler; no Swift build is needed.
+
+- [ ] **Step 1:** Write `page_webview_test.dart`. It starts a `PageServer` over an in-memory `fetch` and a `WebViewController` with JavaScript unrestricted, a JavaScript channel `ElisChannel`, and this prelude run with `runJavaScript` (main frame only) before the adapter. Ruling F4: the prelude keeps a per-sheet random nonce in its closure, never on `window`: `(() => { const n = '<nonce>'; const post = ElisChannel.postMessage.bind(ElisChannel); window.__elis = { postMessage(body) { … post(JSON.stringify({n, …})), returns a Promise resolved by window.__elisReply(id, ok, value) } }; })()`. The Dart handler drops any message whose `n` is not the nonce. Cases:
   1. `javascript: false`, page `<script>document.title='ran'</script><button type="button" data-elis="notify" data-elis-title="x">b</button>`: the title stays unchanged (page script blocked by the CSP header); after `runJavaScript(adapter)` a tap on the button makes `ElisChannel` receive a body with `cmd == "notify"`.
   2. `javascript: true`: the title becomes `ran`, and `elis.request({cmd:'notify'})` reaches `ElisChannel`.
   3. Content page: `loadHtmlString(MarkdownPage-shaped html)` with its `default-src 'none'` meta, then `runJavaScript(script)`: `#elis-page` has children.
-  4. The same markdown with `[web](https://example.com)` and `[doc](other.md)`, plus `unlinkScript`: `#elis-page` has no `a` element and both link texts are present.
-- [ ] **Step 2:** `flutter test integration_test/page_webview_test.dart -d <emulator>`. Expected: 4 pass.
-- [ ] **Step 3:** If case 1, 3 or 4 fails, stop and report to the lead with the failing case and the WebView's console output; do not pick another mechanism alone. If all pass, restore any temporary `sdk:` change and commit `test(mobile): the page bridge and renderers run in the system WebView`.
+  4. The same markdown with `[web](https://example.com)` and `[doc](other.md)`, plus the unlink script written inline here (after render it replaces every `a` element with its text; Task 10 copies this text verbatim into `PhoneLinkPresenter.unlinkScript`): `#elis-page` has no `a` element and both link texts are present.
+  5. Ruling F4: the case 1 page plus `<iframe srcdoc="<script>ElisChannel.postMessage(JSON.stringify({cmd:'notify'}))</script>">` and a direct `ElisChannel.postMessage('{"cmd":"notify"}')` from `runJavaScript` without the nonce: the Dart handler accepts neither; the adapter's tap on the button is still accepted.
+- [ ] **Step 2:** `flutter test integration_test/page_webview_test.dart -d <emulator>`. Expected: 5 pass.
+- [ ] **Step 3:** If case 1, 3, 4 or 5 fails, stop and report to the lead with the failing case and the WebView's console output; do not pick another mechanism alone. If all pass, restore any temporary `sdk:` change and commit `test(mobile): the page bridge and renderers run in the system WebView`.
 
 ### Task 13: Phone — the page sheet and its chip
 
@@ -490,7 +510,7 @@ The secret is 16 bytes from `Random.secure()`, hex. The server answers 404 for a
 - Test: `mobile/test/page_sheet_test.dart` (new), `mobile/test/session_term_test.dart`
 
 **Interfaces:**
-- Consumes: Task 11 `PageLink`, `PhonePage`, `PageServer`; Task 12 prelude.
+- Consumes: Task 11 `PageLink`, `PhonePage`, `PageServer`, `contentPath`, `scriptPath`; Task 12 prelude with its nonce.
 - Produces:
 ```dart
 class PageSheet extends StatefulWidget {   // key: Key('pageSheet')
@@ -503,16 +523,17 @@ Rules:
 - The session screen owns one `PageLink` while it is mounted and `m.state == LinkState.connected && m.mux != null`; it is rebuilt when `m.mux` changes. Backgrounding does not dispose it: the claim closes, the origin moves the page to the Mac and sends `close`, and the page comes back with a new `page` line when the phone leads again. Pages are independent of the watched pane.
 - The sheet is a child of a `Stack` over the terminal, not a route. Height is the full body for `sizePercent` 100 or null, else that fraction from the bottom. The terminal keeps its edge-to-edge layout.
 - Identity strip (unless `chromeless`): the page's `title` text and a close button `Key('pageClose')`; URL pages add back when `canGoBack`.
-- Loading: `file` → `PageServer.start`, load `urlFor(path)`; `url` → load it; `content` → `loadHtmlString(html)` then `runJavaScript(script)` on finish.
+- Loading: `file` → `PageServer.start`, load `urlFor(path)`; `url` → load it; `content` → `link.fetch(id, contentPath)` and `link.fetch(id, scriptPath)` (ruling F3: neither is in the `page` line), then `loadHtmlString(html)` and `runJavaScript(script)` on finish.
 - JavaScript mode: unrestricted for `file` and `content`; for `url` only when `javascript`. `file` pages get the prelude and `adapter` on every page finish in the main frame. File access and content access off.
-- Navigation: `url` pages stay on their first origin unless `browse`; `file` pages stay under the server's secret prefix; any other main-frame navigation is prevented. `window.close()` is observed through the prelude (`window.close = () => ElisChannel.postMessage('{"close":true}')`).
+- Ruling F4 (security, keep strict): each sheet draws a new 128-bit nonce from `Random.secure()`; the prelude holds it in a closure, never on `window`. The `ElisChannel` handler drops every message without that nonce. It forwards bridge bodies to `link.bridge` only for a `file` page; for `url` and `content` pages it accepts only `close`. Android exposes the channel to every frame and every page, so this check is the only bound.
+- Navigation: `url` pages stay on their first origin unless `browse`; `file` pages stay under the server's secret prefix; any other main-frame navigation is prevented. `window.close()` is observed through the prelude, which sends `{"n":<nonce>,"close":true}`.
 - Close button, Android back while the sheet is open, and `window.close()` call `link.closed(id, dismissed: true)` and remove the sheet at once.
 - A page that arrives with `hidden: true`, or whose first `command` is `hide`, shows the chip and no sheet; `show` or a tap on the chip opens it.
 - Swipe down hides the sheet and shows `PageChip` in the `AppBar` `actions`, before the `lead` tag; a tap shows the sheet again. The WebView stays mounted (`Offstage`) so the page stays live.
 - `command` `hide` / `show` set the same hidden state and are reported in `state.hidden`; `reload`, `back`, `forward`, `resize` act on the controller; every applied command raises `appliedSeq` in the next `report`.
 - `link.page == null` removes the sheet and the chip in the same frame, whatever the cause.
 
-- [ ] **Step 1: Failing widget tests** with a fake `webView` builder: `a page line shows the sheet`; `close sends closed and removes the sheet`; `swipe down leaves the chip and one tap brings the sheet back`; `the chip goes when the page leaves` (origin `close`, then channel CLOSE: `find.byKey(Key('pageChip'))` finds nothing); `sizePercent 50 takes half the body`; `a hidden page shows only the chip`; in `session_term_test`: `backgrounding keeps the present channel` (the fake mux sees CLOSE on the claim channel only; a `command` `close` then removes the sheet and the chip, and a new `page` line after resume shows the sheet again); `leaving the session closes the present channel`.
+- [ ] **Step 1: Failing widget tests** with a fake `webView` builder: `a page line shows the sheet`; `close sends closed and removes the sheet`; `swipe down leaves the chip and one tap brings the sheet back`; `the chip goes when the page leaves` (origin `close`, then channel CLOSE: `find.byKey(Key('pageChip'))` finds nothing); `sizePercent 50 takes half the body`; `a hidden page shows only the chip`; `a channel message without the nonce is dropped` and `a bridge body on a url page is dropped` (F4: `link.bridge` is never called); `a content page loads the fetched html and script` (F3); in `session_term_test`: `backgrounding keeps the present channel` (the fake mux sees CLOSE on the claim channel only; a `command` `close` then removes the sheet and the chip, and a new `page` line after resume shows the sheet again); `leaving the session closes the present channel`.
 - [ ] **Step 2:** `flutter test --no-pub test/page_sheet_test.dart test/session_term_test.dart`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run again and `flutter analyze --no-pub`. Expected: PASS, clean.
@@ -524,7 +545,7 @@ Rules:
 - Modify: `site/docs.html` (`#phone-app`, `:1106`), `site/commands.html` (`htmlOverlays[]` fields; `session.attach` answer), `.claude/rules/control-api.md` (routing bullet `:2384`; relay mux `:239-277`), `docs/superpowers/specs/2026-11-18-phone-terminal-stream-design.md` (pages leave its non-goals), `plugins/elis/skills/elis/SKILL.md` (`description` trigger and the phone section `:835`), `plugins/elis/skills/elis/reference.md`, `site/llms.txt` if it lists phone features
 
 Content, each fact once:
-- `docs.html`: a page a session opens shows on the phone while the phone leads the pane, on the Mac otherwise; it follows the lead both ways; a move reloads the page, so scroll and form state are lost; asks, picks, program overlays, HUDs and sounds stay on the Mac; said plainly: log pages (`--text --follow-file`), diff pages and markdown with `--navigation` open on the Mac even while the phone leads; markdown links on the phone are plain text; the chip. No mention of dev servers.
+- `docs.html`: a page a session opens shows on the phone while the phone leads the pane, on the Mac otherwise; it follows the lead both ways; a move reloads the page, so scroll and form state are lost; asks, picks, program overlays, HUDs and sounds stay on the Mac; said plainly: log pages (`--text --follow-file`), diff pages and markdown with `--navigation` open on the Mac even while the phone leads; markdown links on the phone are plain text; on an elis-server row a page stays on the phone after it stops leading until another viewer leads the pane (ruling F9); the chip. No mention of dev servers.
 - `commands.html`: `htmlOverlays[].phone`, `attach.origin`.
 - `control-api.md`: the placement rule (`viewer.phone`, `Work`, the next-recipient fallback), the `present` channel contract (lines of Task 6, `low` class, `highWater`, caps, refusal texts).
 - `SKILL.md`: trigger "show this on my phone / show a page where I am"; rule: to show a page use `elisctl session overlay open --html FILE --js` (never `open`); it follows the user to the phone. Same plain sentence on the three Mac-only kinds, and a warning: `--block` on such a page waits on a screen the user may not see while driving from the phone.

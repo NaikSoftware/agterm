@@ -78,7 +78,9 @@ PR 1's skill and `site/docs.html` text does not mention dev servers; PR 2 adds i
   `ssh -T <host> elisctl zmx present` for server and other-Mac rows, through the argv builders the relay
   already uses for `session.attach`.
 - Its hello lists `lead.report`, every `PresentationHub.pageKinds` entry, `page.content`, `page.document`,
-  `pending.snapshot`, `job.token`, `offer.id`, and a new `viewer.phone` (added to `supportedKinds`).
+  `pending.snapshot`, `job.token`, `offer.id`, and a new `viewer.phone`.
+  The hub negotiates `viewer.phone` (`supportedKinds + [viewerPhoneKind]`) but keeps it out of `supportedKinds`:
+  that list is also the Mac viewer's own hello (`RemotePresentationClient`), and a Mac must never list it.
   It omits `page.text`, `page.files` and `page.links` (see Non-goals).
   `offer.id` is required, and the relay echoes the offer in its answers: without it `noteGivenUp`
   (`OfferlessHolders.swift:20`) records the phone after its first give-back, and pages never return to it.
@@ -289,6 +291,8 @@ The owner delegated open questions to a stand-in reviewer, who decided from the 
 - Every app switch on the phone moves an open page twice and reloads it.
 - Save PNG/SVG in Board needs a WebView download handler; no task adds one.
 - Remote rows are covered by kit tests only, not on the emulator.
+- On a headless (elis-server) origin a page stays on the phone after the phone stops leading,
+  until another viewer reports the lead of that pane (pre-flight ruling F9).
 
 ## Left to the builder
 
