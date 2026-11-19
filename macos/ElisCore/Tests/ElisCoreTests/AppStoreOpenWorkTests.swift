@@ -83,9 +83,9 @@ struct AppStoreOpenWorkTests {
 
     private func url() throws -> HtmlOverlay { HtmlOverlay(source: .url(try #require(URL(string: "https://example.com/")))) }
 
-    private func openPage(_ page: HtmlOverlay, in session: Session, on host: AppStore? = nil) -> RemotePageOpen {
+    private func openPage(_ page: HtmlOverlay, in session: Session, on host: AppStore? = nil, wait: Bool = false) -> RemotePageOpen {
         (host ?? store).openRemotePage(session.id, overlay: page, options: ControlSessionOverlayOpenOptions(
-            command: "", cwd: nil, wait: false, sizePercent: nil, backgroundColor: nil))
+            command: "", cwd: nil, wait: wait, sizePercent: nil, backgroundColor: nil))
     }
 
     private func report(_ page: HtmlOverlay, in session: Session, from viewer: Viewer, load: HtmlLoadState = .loaded,
@@ -789,8 +789,10 @@ struct AppStoreOpenWorkTests {
         let (_, session) = try session()
         let phone = try Viewers.phone(hub, session)
         let page = try url()
-        #expect(openPage(page, in: session) == .opened)
+        #expect(openPage(page, in: session, wait: true) == .opened)
         report(page, in: session, from: phone)
+        #expect(session.remoteOverlays.slot(nil)?.owner == phone.gen)
+        #expect(pending(page))
 
         Viewers.lead(hub, phone, [])
         setLead(.leader, pane: session.paneIdentity)
@@ -803,6 +805,8 @@ struct AppStoreOpenWorkTests {
 
         #expect(session.htmlOverlayActive)
         #expect(session.htmlOverlay?.id == page.id)
+        #expect(session.remoteOverlays.slot(nil) == nil)
+        #expect(session.remoteOverlays.slots.isEmpty)
         guard case .pageClose(let close)? = phone.sink.bodies.last else { Issue.record("no close on the phone"); return }
         #expect(close.page == page.id.uuidString)
         #expect(close.reason == PresentationPageChange.channelLost)
@@ -830,6 +834,7 @@ struct AppStoreOpenWorkTests {
 
     @Test func aMoveKeepsTheBlockingOutcomeOpen() throws {
         let (session, phone, page) = try phoneGivesBack()
+        #expect(session.htmlOverlay?.id == page.id)
         #expect(pending(page))
 
         setLead(.follower, pane: session.paneIdentity)
