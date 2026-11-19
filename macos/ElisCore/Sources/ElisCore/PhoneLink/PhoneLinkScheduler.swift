@@ -11,6 +11,7 @@ public struct PhoneLinkScheduler: Sendable {
     /// Bytes sent on each vt channel since the phone's last CREDIT there; a reopen keeps it.
     private var sentSinceGrant: [UInt32: Int] = [:]
     private var opened: [UInt32] = []
+    private var low: Set<UInt32> = []
     private var cursor = 0
 
     public init(window: UInt32, bufferLimit: Int) {
@@ -36,10 +37,12 @@ public struct PhoneLinkScheduler: Sendable {
     }
 
     /// Starts the channel at the initial window; reopening resets its queue and credit.
-    public mutating func open(channel: UInt32) {
+    /// A low channel is served only when no other opened channel has a frame to send.
+    public mutating func open(channel: UInt32, low: Bool = false) {
         guard channel >= 2 else { return }
         queues[channel] = nil
         credits[channel] = window
+        if low { self.low.insert(channel) } else { self.low.remove(channel) }
         if !opened.contains(channel) { opened.append(channel) }
     }
 
@@ -58,6 +61,7 @@ public struct PhoneLinkScheduler: Sendable {
         queues[channel] = nil
         credits[channel] = nil
         sentSinceGrant[channel] = nil
+        low.remove(channel)
         if let index = opened.firstIndex(of: channel) {
             opened.remove(at: index)
             if index < cursor { cursor -= 1 }
@@ -69,9 +73,14 @@ public struct PhoneLinkScheduler: Sendable {
         for channel: UInt32 in 0...1 {
             if let frame = take(channel: channel, limit: cap) { return frame }
         }
+        return nextOpened(cap: cap, low: false) ?? nextOpened(cap: cap, low: true)
+    }
+
+    private mutating func nextOpened(cap: Int, low isLow: Bool) -> PhoneLinkFrame? {
         for step in 0..<opened.count {
             let index = (cursor + step) % opened.count
             let channel = opened[index]
+            guard low.contains(channel) == isLow else { continue }
             let limit = min(cap, Int(credits[channel] ?? 0))
             if let frame = take(channel: channel, limit: limit) {
                 credits[channel, default: 0] -= UInt32(frame.payload.count)

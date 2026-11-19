@@ -77,6 +77,19 @@ import Testing
         #expect(scheduler.next(maxChunk: 2) == nil)
     }
 
+    @Test func aLowChannelWaitsForVt() {
+        var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 1000)
+        scheduler.open(channel: 3, low: true)
+        scheduler.open(channel: 2)
+        _ = scheduler.enqueue(channel: 3, bytes(4))
+        _ = scheduler.enqueue(channel: 2, bytes(4))
+        _ = scheduler.enqueue(channel: 1, bytes(1))
+        _ = scheduler.enqueue(channel: 0, bytes(1))
+        let order = (0..<6).compactMap { _ in scheduler.next(maxChunk: 2)?.channel }
+        #expect(order == [0, 1, 2, 2, 3, 3])
+        #expect(scheduler.next(maxChunk: 2) == nil)
+    }
+
     @Test func overflowDropsOnlyThatChannel() {
         var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 8)
         scheduler.open(channel: 2)

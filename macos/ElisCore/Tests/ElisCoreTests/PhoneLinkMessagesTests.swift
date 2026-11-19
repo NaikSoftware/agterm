@@ -57,6 +57,29 @@ import Testing
         #expect(decoded == PhoneLinkOpen(type: "page", target: "s1"))
     }
 
+    @Test func presentLines() throws {
+        let command = PhonePageCodec.encode(.command(id: "p", seq: 3, action: "hide", sizePercent: nil))
+        #expect(String(decoding: command, as: UTF8.self) == "{\"action\":\"hide\",\"id\":\"p\",\"seq\":3,\"t\":\"command\"}\n")
+        #expect(try PhonePageCodec.decode(Data(#"{"t":"closed","id":"p","dismissed":true}"#.utf8)) == .closed(id: "p", dismissed: true))
+        let state = #"{"t":"state","id":"p","load":"loaded","canGoBack":false,"appliedSeq":2,"hidden":true}"#
+        #expect(try PhonePageCodec.decode(Data(state.utf8))
+            == .state(id: "p", load: "loaded", title: nil, current: nil, canGoBack: false, appliedSeq: 2, hidden: true, error: nil))
+        #expect(throws: DecodingError.self) { try PhonePageCodec.decode(Data(#"{"t":"nope","id":"p"}"#.utf8)) }
+    }
+
+    @Test func presentDownLinesRoundTrip() throws {
+        let page = PhonePage(id: "p", kind: "file", path: "/a/b.html", url: nil, adapter: "x", javascript: true, chromeless: false,
+                             browse: false, hidden: false, title: "b.html", sizePercent: 60)
+        let lines: [PhonePageDown] = [.page(page), .res(id: "p", seq: 1, mime: "text/html", data: Data("hi".utf8), end: true, error: nil),
+                                      .reply(id: "p", seq: 2, response: "{}", error: nil)]
+        for line in lines {
+            let data = PhonePageCodec.encode(line)
+            #expect(data.last == 0x0A)
+            #expect(try JSONDecoder().decode(PhonePageDown.self, from: data) == line)
+        }
+        #expect(String(decoding: PhonePageCodec.encode(.page(page)), as: UTF8.self).contains(#""path":"/a/b.html""#))
+    }
+
     @Test func upgradeLines() {
         #expect(PhoneLinkUpgrade.isRequest(PhoneLinkUpgrade.request))
         #expect(PhoneLinkUpgrade.isRequest(Data("{ \"mux\" : 1 }\n".utf8)))
