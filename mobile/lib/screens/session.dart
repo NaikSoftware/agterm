@@ -83,6 +83,7 @@ class _SessionScreenState extends State<SessionScreen> {
   TermSession? term; // a Live pane watched as a terminal; the text poll stops meanwhile
   TermSession? _claimed; // the term the lead was asked on: a replaced term (pause, pane, reconnect) is not claimed
   final _noClaim = <String>{}; // panes whose claim was refused on this visit: they type indirectly
+  bool _macTookBack = false; // a term opened since claims on the next input, not at once
   Future<void>? _replay; // a refused claim's input on its way through session.type; later input waits for it
   (int, int)? _leadGrid, _seenGrid; // the grid the lead was given, and the one the screen shows now
   Timer? _leadResize;
@@ -171,7 +172,14 @@ class _SessionScreenState extends State<SessionScreen> {
       term = null;
       _alt = null; // the next stream picks the view again
     }
-    if (want && term == null) term = TermSession(m.mux!, widget.sessionId, pane, vt: widget.vt)..addListener(_onTerm);
+    if (want && term == null) {
+      final t = term = TermSession(m.mux!, widget.sessionId, pane, vt: widget.vt)..addListener(_onTerm);
+      // after the frame: callers run in initState and during builds, where _claim's setState may not
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && term == t && !_macTookBack) _claim();
+      });
+      WidgetsBinding.instance.ensureVisualUpdate();
+    }
   }
 
   void _onTerm() {
@@ -204,6 +212,7 @@ class _SessionScreenState extends State<SessionScreen> {
         _claimed = null;
         if (r != 'Disconnected' && r != revokedMessage && r.isNotEmpty) {
           autoFit.wanted = false; // the Mac took control: refitting would resize its terminal under its user
+          _macTookBack = true;
           _stale = true;
           report(context, '${r[0].toUpperCase()}${r.substring(1)}${r.endsWith('.') ? '' : '.'}');
         } else {
@@ -223,6 +232,9 @@ class _SessionScreenState extends State<SessionScreen> {
   // asked for, the lead is pending (the relay can wait 10 s for zmx) or held; input goes to it only once [leading]
   bool get _lead => _claimed != null && _claimed == term;
   bool get _leading => _lead && term!.leading;
+  // the lead, or one asked once the term opens: the claim brings the grid, so a fit would only be reset
+  bool get _leadsGrid =>
+      (term != null || m.mux == null && m.muxing && s?.livePanes.contains(pane) == true) && !_macTookBack && !_noClaim.contains(pane);
 
   // the program runs at what the screen shows at a readable size, as the fit sizes it
   (int, int) _phoneGrid() {
@@ -253,8 +265,9 @@ class _SessionScreenState extends State<SessionScreen> {
 
   bool get _direct => term != null && !_noClaim.contains(pane);
 
-  /// The first input on a Live pane asks for the lead; input queues on the term until it leads.
+  /// Opening a Live pane, or input on it, asks for the lead; input queues on the term until it leads.
   void _claim() {
+    _macTookBack = false;
     final t = term;
     if (t == null || _lead || _noClaim.contains(pane)) return;
     t.leadLost = null; // a lead lost earlier was said then
@@ -419,8 +432,8 @@ class _SessionScreenState extends State<SessionScreen> {
     final visible = _foreground && !m.background && m.state == LinkState.connected;
     final fit = m.fitted[_fitKey];
     // a fit at another grid than the screen's now (a rotation) is made again
-    final on = autoFit.next(fitted: fit != null, visible: visible && !_lead) ??
-        (fit != null && autoFit.wanted && visible && !_lead && fit != _phoneGrid() ? true : null);
+    final on = autoFit.next(fitted: fit != null, visible: visible && !_leadsGrid) ??
+        (fit != null && autoFit.wanted && visible && !_leadsGrid && fit != _phoneGrid() ? true : null);
     if (on == null || _fitRetry?.isActive == true || !on && _resetTries == 0) return false;
     final key = _fitKey;
     final quiet = on && _quietFit;

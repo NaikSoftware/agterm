@@ -189,6 +189,7 @@ class ElisModel extends ChangeNotifier {
   late final AppLifecycleListener _lifecycle;
   Connection? _c;
   Mux? mux; // null on a relay before the mux (M4a): screens keep the text view
+  bool muxing = false; // the link has a mux that [mux] is not set to yet
   LinkState state = LinkState.connecting;
   String via = ''; // the live transport's badge: 'Wi-Fi' or 'BT'
   @visibleForTesting
@@ -226,6 +227,7 @@ class ElisModel extends ChangeNotifier {
     _c?.close();
     _c = null;
     mux = null;
+    muxing = false;
   }
 
   void resume() {
@@ -260,6 +262,7 @@ class ElisModel extends ChangeNotifier {
         error = null;
         backoff = 1;
         seen = DateTime.now();
+        muxing = mx != null;
         _set(LinkState.connected);
         await refresh();
         // only now: a screen that saw the mux earlier would open panes from the tree of the link before
@@ -276,6 +279,7 @@ class ElisModel extends ChangeNotifier {
       _c?.close(); // a failure after connecting (e.g. in refresh) must not leak the connection
       _c = null;
       mux = null;
+      muxing = false;
       fitted.clear();
       _set(LinkState.offline);
       await Future.delayed(Duration(seconds: backoff));
