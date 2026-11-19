@@ -382,7 +382,10 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Future<void> type(String keys) async {
     HapticFeedback.selectionClick();
-    if (_leading) return term!.text(keys);
+    if (_leading) {
+      term!.text(keys);
+      return;
+    }
     final err = await m.act('session.type', target: widget.sessionId, args: {'text': keys, 'pane': pane});
     if (mounted) report(context, err);
     Future.delayed(const Duration(milliseconds: 150), _load);
@@ -392,7 +395,7 @@ class _SessionScreenState extends State<SessionScreen> {
     if (key == null || seq == null) return unawaited(_paste());
     if (!_leading) return unawaited(type(seq));
     HapticFeedback.selectionClick();
-    term!.key(key, mods: mods);
+    term!.key(key, mods: mods, seq: seq);
   }
 
   Future<void> _paste() async {
@@ -408,7 +411,7 @@ class _SessionScreenState extends State<SessionScreen> {
     if (_leading) {
       // the text, then Enter as a key: the program sees a typed line, not a paste
       if (t.isNotEmpty) term!.text(t);
-      term!.key(VtKey.enter);
+      term!.key(VtKey.enter, seq: '\r');
       return input.clear();
     }
     if (t.isEmpty) return type('\r');

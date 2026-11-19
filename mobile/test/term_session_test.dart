@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/terminal/term_session.dart';
 import 'package:elis_mobile/terminal/vt.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'mux_test.dart' show FakeRelay, dataOn, flush, frame, grid, json, upgraded;
@@ -22,14 +23,14 @@ Future<(TermSession, FakeRelay, FakeVt)> watched() async {
   return (s, r, vt!);
 }
 
-/// Takes the lead at 60x20; the relay's lead-change RESYNC comes in the same read unless [resync] is false.
-Future<void> lead(TermSession s, FakeRelay r, {bool resync = true}) async {
-  final f = s.takeOver(60, 20);
+/// Takes the lead at [cols]x[rows]; the relay's lead-change RESYNC comes in the same read unless [resync] is false.
+Future<void> lead(TermSession s, FakeRelay r, {bool resync = true, int cols = 60, int rows = 20}) async {
+  final f = s.takeOver(cols, rows);
   await flush();
   r.send([
-    ...json(LinkKind.opened, _claim, {'cols': 60, 'rows': 20}),
+    ...json(LinkKind.opened, _claim, {'cols': cols, 'rows': rows}),
     ...json(LinkKind.lead, _claim, {'role': 'leader'}),
-    if (resync) ...[...frame(LinkKind.resync, _watch), ...grid(_watch, 60, 20)],
+    if (resync) ...[...frame(LinkKind.resync, _watch), ...grid(_watch, cols, rows)],
   ]);
   expect(await f, isNull);
   await flush();
@@ -42,6 +43,15 @@ Future<void> query(FakeRelay r, FakeVt vt) async {
   await flush();
 }
 
+/// Runs [body] under fake time with the session leading at 60x20.
+void timed(void Function(FakeAsync a, TermSession s, FakeRelay r) body) => fakeAsync((a) {
+  late (TermSession, FakeRelay, FakeVt) w;
+  watched().then((v) async => await lead((w = v).$1, v.$2));
+  a.elapse(Duration.zero);
+  body(a, w.$1, w.$2);
+});
+
+List<(int, int)> resizes(FakeRelay r) => [for (final f in r.frames) if (f.kind == LinkKind.resize && f.channel == _claim) (f.size!.cols, f.size!.rows)];
 String sent(FakeRelay r) => utf8.decode([for (final f in dataOn(r, _claim)) ...f.payload]);
 List<int> closes(FakeRelay r) => [for (final f in r.frames) if (f.kind == LinkKind.close) f.channel];
 List<Map> opens(FakeRelay r) => [for (final f in r.frames) if (f.kind == LinkKind.open) jsonDecode(utf8.decode(f.payload)) as Map];
@@ -110,8 +120,8 @@ void main() {
     await flush();
     expect(s.leading, isFalse);
     expect(s.leadLost, 'the computer took the lead back');
-    s.text('x');
-    s.key(VtKey.arrowUp);
+    expect(s.text('x'), isFalse);
+    expect(s.key(VtKey.arrowUp, seq: '\x1b[A'), isFalse);
     expect(s.paste('y'), isFalse);
     await query(r, vt);
     expect(sent(r), '');
@@ -203,14 +213,29 @@ void main() {
     expect(sent(r), '\x1b[A\x1b[Bwheel up 3,4');
   });
 
-  test('resizeLeadSendsResizeAndSizesTheEmulator', () async {
+  test('resizeLeadSendsResizeOnly', () async {
     final (s, r, vt) = await watched();
     await lead(s, r);
     s.resizeLead(100, 40);
     s.resizeLead(5000, 0);
-    final sizes = [for (final f in r.frames) if (f.kind == LinkKind.resize && f.channel == _claim) (f.size!.cols, f.size!.rows)];
-    expect(sizes, [(100, 40), (1000, 1)]);
-    expect((vt.cols, vt.rows), (1000, 1));
+    expect(resizes(r), [(100, 40), (1000, 1)]);
+    expect((vt.cols, vt.rows), (60, 20));
+  });
+
+  test('oldGridBytesAfterAResizeDrawAtTheOldGrid', () async {
+    final (s, r, vt) = await watched();
+    await lead(s, r, cols: 80, rows: 24);
+    s.resizeLead(60, 20);
+    expect(resizes(r), [(60, 20)]);
+    r.send(frame(LinkKind.data, _watch, utf8.encode('old')));
+    await flush();
+    expect((vt.cols, vt.rows), (80, 24));
+    r.send(frame(LinkKind.resync, _watch));
+    await flush();
+    expect((vt.cols, vt.rows), (80, 24));
+    r.send(grid(_watch, 60, 20));
+    await flush();
+    expect((vt.cols, vt.rows), (60, 20));
   });
 
   test('resizeLeadBeforeLeaderWaitsForTheLead', () async {
@@ -220,12 +245,11 @@ void main() {
     r.send(json(LinkKind.opened, _claim, {'cols': 60, 'rows': 20}));
     expect(await f, isNull);
     s.resizeLead(100, 40);
-    List<(int, int)> sizes() => [for (final f in r.frames) if (f.kind == LinkKind.resize && f.channel == _claim) (f.size!.cols, f.size!.rows)];
-    expect(sizes(), isEmpty);
+    expect(resizes(r), isEmpty);
     expect((vt.cols, vt.rows), (80, 24));
     r.send(json(LinkKind.lead, _claim, {'role': 'leader'}));
     await flush();
-    expect(sizes(), [(100, 40)]);
+    expect(resizes(r), [(100, 40)]);
     expect((vt.cols, vt.rows), (100, 40));
   });
 
@@ -237,5 +261,173 @@ void main() {
     expect(s.ended, 'session ended');
     expect(s.leading, isFalse);
     expect(closes(r), [_claim]);
+  });
+
+  test('inputBeforeTheLeadIsSentOnceAtTheLeaderReport', () async {
+    final (s, r, vt) = await watched();
+    vt.modes.add(1004);
+    s.arm();
+    expect(s.pending, isTrue);
+    expect(s.key(VtKey.arrowUp, seq: '\x1b[A'), isTrue);
+    expect(s.text('ls'), isTrue);
+    await lead(s, r);
+    expect(sent(r), '\x1b[I\x1b[Als');
+    expect(s.pending, isFalse);
+    expect(s.takeUnsent(), isEmpty);
+  });
+
+  test('lineSendsEnterAfter20ms', () => timed((a, s, r) {
+    expect(s.line('ls'), isTrue);
+    expect(sent(r), 'ls');
+    a.elapse(const Duration(milliseconds: 19));
+    expect(sent(r), 'ls');
+    a.elapse(const Duration(milliseconds: 1));
+    expect(sent(r), 'ls\r');
+  }));
+
+  test('aKeyInTheGapFollowsTheEnter', () => timed((a, s, r) {
+    s.line('ls');
+    expect(s.key(VtKey.tab, seq: '\t'), isTrue);
+    expect(sent(r), 'ls');
+    a.elapse(const Duration(milliseconds: 20));
+    expect(sent(r), 'ls\r\t');
+  }));
+
+  test('aFlushedLineKeepsTheGap', () => fakeAsync((a) {
+    late FakeRelay r;
+    watched().then((v) async {
+      r = v.$2;
+      v.$1.arm();
+      v.$1.line('ls');
+      await lead(v.$1, r);
+    });
+    a.elapse(Duration.zero);
+    expect(sent(r), 'ls');
+    a.elapse(const Duration(milliseconds: 19));
+    expect(sent(r), 'ls');
+    a.elapse(const Duration(milliseconds: 1));
+    expect(sent(r), 'ls\r');
+  }));
+
+  test('emptyLineSendsOnlyEnter', () async {
+    final (s, r, _) = await watched();
+    await lead(s, r);
+    expect(s.line(''), isTrue);
+    expect(sent(r), '\r');
+  });
+
+  test('refusalKeepsTheQueueForTakeUnsent', () async {
+    final (s, r, _) = await watched();
+    s.arm();
+    s.key(VtKey.escape, seq: '\x1b');
+    s.line('ls');
+    final f = s.takeOver(60, 20);
+    await flush();
+    r.send(json(LinkKind.close, _claim, {'reason': 'pane is not live'}));
+    expect(await f, 'pane is not live');
+    expect(s.pending, isFalse);
+    expect(s.takeUnsent(), ['\x1b', 'ls', '\r']);
+    expect(s.takeUnsent(), isEmpty);
+  });
+
+  test('releaseBeforeTheLeadDropsTheQueue', () async {
+    final (s, r, _) = await watched();
+    s.arm();
+    s.text('ls');
+    final f = s.takeOver(60, 20);
+    await flush();
+    s.release();
+    expect(s.pending, isFalse);
+    expect(s.takeUnsent(), isEmpty);
+    expect(s.text('x'), isFalse);
+    r.send([...json(LinkKind.opened, _claim, {'cols': 60, 'rows': 20}), ...json(LinkKind.lead, _claim, {'role': 'leader'})]);
+    expect(await f, isNull);
+    await flush();
+    expect(dataOn(r, _claim), isEmpty);
+  });
+
+  test('claimClosedDropsTheQueue', () async {
+    final (s, r, _) = await watched();
+    s.arm();
+    final f = s.takeOver(60, 20);
+    await flush();
+    r.send(json(LinkKind.opened, _claim, {'cols': 60, 'rows': 20}));
+    expect(await f, isNull);
+    s.text('ls');
+    r.send(json(LinkKind.close, _claim, {'reason': 'the computer took the lead back'}));
+    await flush();
+    expect(s.pending, isFalse);
+    expect(s.takeUnsent(), isEmpty);
+    expect(s.text('x'), isFalse);
+  });
+
+  test('queueRefusesPastItsBounds', () async {
+    final (s, _, _) = await watched();
+    s.arm();
+    for (var i = 0; i < 256; i++) {
+      expect(s.text('x'), isTrue);
+    }
+    expect(s.text('x'), isFalse);
+    expect(s.takeUnsent(), hasLength(256));
+    expect(s.paste('x' * ((1 << 20) + 1)), isFalse);
+    expect(s.paste('x' * (1 << 20)), isTrue);
+  });
+
+  test('inputWithoutArmOrLeadReturnsFalse', () async {
+    final (s, r, _) = await watched();
+    expect(s.pending, isFalse);
+    expect([s.key(VtKey.enter, seq: '\r'), s.text('a'), s.paste('b'), s.line('c')], [false, false, false, false]);
+    expect(s.takeUnsent(), isEmpty);
+    expect(r.frames.where((f) => f.channel == _claim), isEmpty);
+  });
+
+  test('releaseInTheGapStillSendsEnter', () async {
+    final (s, r, vt) = await watched();
+    vt.modes.add(1004);
+    await lead(s, r);
+    s.line('ls');
+    s.text('x');
+    s.release();
+    expect(sent(r), '\x1b[Ils\rx\x1b[O');
+    expect(closes(r), [_claim]);
+  });
+
+  test('clickAndWheelAreNotQueued', () async {
+    final (s, r, vt) = await watched();
+    vt.tracksMouse = true;
+    s.arm();
+    s.click(col: 1, row: 2);
+    s.wheel(up: true, col: 1, row: 2);
+    await lead(s, r);
+    expect(sent(r), '');
+    expect(vt.clicks, isEmpty);
+  });
+
+  test('clickSendsTheEncodedBytesWhileLeading', () async {
+    final (s, r, vt) = await watched();
+    vt.tracksMouse = true;
+    await lead(s, r);
+    s.click(col: 3, row: 4);
+    expect(sent(r), 'click 3,4');
+    expect(vt.clicks, [(3, 4)]);
+  });
+
+  test('repliesArmWhenTheWatchOpensUnderAHeldClaim', () async {
+    final (m, r, _) = await upgraded();
+    FakeVt? vt;
+    final s = TermSession(m, 's1', 'left', vt: (c, rows) => vt = FakeVt(c, rows));
+    await flush();
+    final f = s.takeOver(60, 20);
+    await flush();
+    r.send([...json(LinkKind.opened, _claim, {'cols': 60, 'rows': 20}), ...json(LinkKind.lead, _claim, {'role': 'leader'})]);
+    expect(await f, isNull);
+    await flush();
+    expect(s.leading, isTrue);
+    expect(s.text('ls'), isTrue);
+    r.send(json(LinkKind.opened, _watch, {'cols': 80, 'rows': 24}));
+    await flush();
+    expect(sent(r), 'ls');
+    await query(r, vt!);
+    expect(sent(r), 'ls$_reply');
   });
 }

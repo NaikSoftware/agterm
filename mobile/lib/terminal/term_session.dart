@@ -1,5 +1,7 @@
 // One watched pane: its vt channel feeding an emulator, and while the phone leads, a claim channel carrying its input.
 import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -35,6 +37,10 @@ class TermSession extends ChangeNotifier {
   (int, int) _leadSize = (80, 24), _claimedSize = (80, 24);
   bool _leading = false;
   bool _resynced = false; // the watch channel's Resync after the leader report: earlier queries were the Mac's to answer
+  bool _armed = false;
+  final _queue = ListQueue<_Intent>();
+  int _queuedBytes = 0;
+  Timer? _gap; // holds the queue between a line's text and its Enter
 
   /// Why the relay ended the phone's lead; cleared by [takeOver].
   String? leadLost;
@@ -43,6 +49,9 @@ class TermSession extends ChangeNotifier {
   int grids = 0;
 
   bool get leading => _leading;
+
+  /// Input queues until the lead arrives: armed or claimed, and not leading.
+  bool get pending => (_armed || _claim != null) && !_leading;
 
   /// Why the stream ended (a refusal, a relay CLOSE, `Disconnected`); null while it runs or after [close].
   String? ended;
@@ -89,6 +98,10 @@ class TermSession extends ChangeNotifier {
       switch (e) {
         case Opened(:final cols, :final rows):
           _vt ??= _makeVt(_fit?.$1 ?? cols, _fit?.$2 ?? rows);
+          if (_claim != null) {
+            _resynced = true; // a fresh watch is past any leader report
+            _drain(); // input that came under a lead that preceded the emulator
+          }
         case Data(:final bytes):
           try {
             _vt?.write(bytes); // bytes before a Resync too: the reset follows
@@ -130,7 +143,7 @@ class TermSession extends ChangeNotifier {
   /// [leading] follows the relay's LEAD.
   Future<String?> takeOver(int cols, int rows) async {
     if (_closed) return ended ?? 'closed';
-    release();
+    _endClaim();
     leadLost = null;
     final gen = _claimGen;
     final size = _clamp(cols, rows);
@@ -138,6 +151,7 @@ class TermSession extends ChangeNotifier {
     try {
       ch = await mux.claim(target, pane: pane, cols: size.$1, rows: size.$2);
     } catch (e) {
+      if (gen == _claimGen) _armed = false; // the queue stays for takeUnsent
       return e is ElisError ? e.message : '$e';
     }
     if (gen != _claimGen || _closed) {
@@ -160,6 +174,7 @@ class TermSession extends ChangeNotifier {
         _fit = _leadSize;
         _vt?.resize(_leadSize.$1, _leadSize.$2);
         _dirty = true;
+        _drain();
       case Lead():
         _leading = false;
       case ClaimClosed(:final reason):
@@ -167,6 +182,8 @@ class TermSession extends ChangeNotifier {
         _leading = false;
         _claim = null;
         leadLost = reason;
+        _armed = false;
+        _drop();
     }
     notifyListeners();
   }
@@ -177,12 +194,72 @@ class TermSession extends ChangeNotifier {
     return ch.send(bytes);
   }
 
-  void key(VtKey key, {int mods = 0}) => _send(_vt?.encodeKey(key, mods: mods));
+  /// Sends [key] while leading, else queues it; [seq] is what [takeUnsent] gives back for it.
+  /// False when neither: not armed and not leading, closed, or past 256 intents or 1 MiB.
+  bool key(VtKey key, {int mods = 0, required String seq}) => _add([(seq, (vt) => vt.encodeKey(key, mods: mods), false)]);
 
-  void text(String s) => _send(_vt?.encodeText(s));
+  bool text(String s) => _add([(s, (vt) => vt.encodeText(s), false)]);
 
-  /// False when nothing was sent: not leading, or more than 1 MiB of input is waiting.
-  bool paste(String s) => _send(_vt?.encodePaste(s));
+  bool paste(String s) => _add([(s, (vt) => vt.encodePaste(s), false)]);
+
+  /// [s] typed, then Enter 20 ms later: a program reading Enter in the same read as the text takes it as a paste.
+  bool line(String s) => _add([
+    if (s.isNotEmpty) (s, (vt) => vt.encodeText(s), false),
+    ('\r', (vt) => vt.encodeKey(VtKey.enter), s.isNotEmpty),
+  ]);
+
+  /// The queued input as `session.type` strings, in order; clears the queue.
+  List<String> takeUnsent() {
+    final unsent = [for (final i in _queue) i.$1];
+    _drop();
+    return unsent;
+  }
+
+  /// Input queues from now; [takeOver] follows.
+  void arm() {
+    if (!_closed) _armed = true;
+  }
+
+  bool _add(List<_Intent> intents) {
+    if (_closed || !(_armed || _leading)) return false;
+    final bytes = intents.fold(0, (n, i) => n + utf8.encode(i.$1).length);
+    if (_queue.length + intents.length > 256 || _queuedBytes + bytes > 1 << 20) return false;
+    _queue.addAll(intents);
+    _queuedBytes += bytes;
+    return _drain();
+  }
+
+  /// Sends the queue while leading, stopping at a line's Enter for the gap unless [gaps] is false; false when a send failed.
+  bool _drain({bool gaps = true, bool gapDone = false}) {
+    var ok = true;
+    while (_leading && _vt != null && _queue.isNotEmpty && (_gap == null || !gaps)) {
+      final (unsent, encode, gap) = _queue.first;
+      if (gap && gaps && !gapDone) {
+        _gap = Timer(const Duration(milliseconds: 20), () {
+          _gap = null;
+          _drain(gapDone: true);
+        });
+        break;
+      }
+      gapDone = false;
+      _queue.removeFirst();
+      _queuedBytes -= utf8.encode(unsent).length;
+      ok = _send(encode(_vt!)) && ok;
+    }
+    return ok;
+  }
+
+  void _drop() {
+    _gap?.cancel();
+    _gap = null;
+    _queue.clear();
+    _queuedBytes = 0;
+  }
+
+  /// Sent only while leading, never queued.
+  void click({required int col, required int row}) {
+    if (_leading) _send(_vt?.encodeClick(col: col, row: row));
+  }
 
   /// One wheel notch; on the alternate screen of a program that does not track the mouse, an arrow key (mode 1007).
   void wheel({required bool up, required int col, required int row}) {
@@ -198,23 +275,32 @@ class TermSession extends ChangeNotifier {
     }
   }
 
-  /// Before the relay's LEAD, only remembered: the phone still shows the Mac's grid.
+  /// Before the relay's LEAD, only remembered: the phone still shows the Mac's grid. While leading, the emulator takes
+  /// the new size from the Resync and Grid that follow, as bytes for the old grid are still in flight.
   void resizeLead(int cols, int rows) {
     final ch = _claim;
     if (ch == null || _closed) return;
     _leadSize = _clamp(cols, rows);
-    if (!_leading) return;
-    ch.resize(_leadSize.$1, _leadSize.$2);
-    fitted(_leadSize.$1, _leadSize.$2);
+    if (_leading) ch.resize(_leadSize.$1, _leadSize.$2);
   }
 
   static (int, int) _clamp(int cols, int rows) => (cols.clamp(1, 1000), rows.clamp(1, 1000)); // the relay ignores others
 
-  /// Ends the phone's lead (focus out, then CLOSE), or drops a claim still waiting for OPENED.
+  /// Ends the phone's lead (the queued input without gaps, focus out, then CLOSE), or drops a claim still waiting for
+  /// OPENED; input that never led is dropped.
   void release() {
+    _endClaim();
+    _armed = false;
+    _drop();
+  }
+
+  void _endClaim() {
     _claimGen++;
     final ch = _claim;
     if (ch == null) return;
+    _gap?.cancel();
+    _gap = null;
+    _drain(gaps: false);
     _send(_vt?.encodeFocus(false));
     unawaited(_claimSub?.cancel());
     unawaited(ch.close());
@@ -245,3 +331,6 @@ class TermSession extends ChangeNotifier {
     _vt = null;
   }
 }
+
+/// What [TermSession.takeUnsent] gives back, its encoding when sent, and whether it waits 20 ms (a line's Enter).
+typedef _Intent = (String, Uint8List Function(Vt), bool);

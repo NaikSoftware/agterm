@@ -175,6 +175,8 @@ class FakeVt implements Vt {
         VtKey.arrowUp => '\x1b[A',
         VtKey.arrowDown => '\x1b[B',
         VtKey.enter => '\r',
+        VtKey.tab => '\t',
+        VtKey.escape => '\x1b',
         VtKey.c when mods == vtCtrl => '\x03',
         _ => text,
       }));
@@ -189,7 +191,7 @@ class FakeVt implements Vt {
   @override
   Uint8List encodeClick({required int col, required int row}) {
     clicks.add((col, row));
-    return Uint8List(0);
+    return Uint8List.fromList(tracksMouse ? utf8.encode('click $col,$row') : const []);
   }
 
   @override
