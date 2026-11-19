@@ -282,7 +282,7 @@ All three must hold; otherwise no card shows:
     Every free-text step depends on open checks 1-2. **[writer]**
 15. Every key goes through the [write gate](#write-gate-lead). **[lead]**
 
-A card turns into a one-line record in the list when its `tool_result` arrives (`is_error` reads "Rejected"), and the docked sheet collapses into it.
+A card turns into a one-line record in the list when its `tool_result` arrives (the item's `rejected` flag reads "Rejected"; a "Chat about this" answer reads "Discussing"), and the docked sheet collapses into it.
 When the anchor has been off screen for two grid updates without a `tool_result`, the card reads "Closed on the computer" until the result arrives,
 or until a file switch, reset or exit clears it.
 
@@ -320,7 +320,7 @@ Anchor:
 - Write and Edit: the `…`-truncated header path is a suffix of `file_path`; the question line holds `basename(file_path)`; content or diff lines are verbatim.
 - MCP: the argument values verbatim; the title is a display name, not `mcp__server__tool`.
 - WebFetch: the `url:` row equals `input.url`.
-- Subagent: the header "· from the <name> agent" matches the pending call's source:
+- Subagent: X in the header "· from the X agent" equals the pending call's `agentType` or `agentName`; none or two matches go to the panel sheet. The pending call's source is
   `subagents/agent-<id>.jsonl` for an in-process subagent, the teammate's own JSONL for a teammate pane.
 
 | Answer | Keys and expected state | Evidence |
@@ -337,7 +337,7 @@ Option lists vary: a teammate Bash prompt has no "always allow" row, and an MCP 
 ### Plan approval (ExitPlanMode)
 
 Card: `input.plan` as markdown (first lines, then More), the option buttons, and a Change field.
-Anchor: the footer's plan basename, joined across the wrap, equals `basename(planFilePath)`; the first heading is a second anchor when visible.
+Anchor: the footer's plan basename, joined across the wrap, equals `basename(planFilePath)` when the input has one; otherwise the first heading of `input.plan` is the anchor.
 The "Exit plan mode?" variant has no plan file and always goes to the panel sheet.
 
 | Answer | Keys and expected state | Evidence |
@@ -466,7 +466,7 @@ The reader folds meta during the index scan and on each extension, so meta never
 | `skillsAt` | byte offset of the last `skill_listing` |
 
 Pending calls: open `tool_use` records on the active chain, plus open ones in `subagents/agent-*.jsonl` whose `.meta.json` `toolUseId` matches an open Agent call.
-Each carries `source` (`main` or the agent id) and the full `input`, capped at 16 KiB.
+Each carries `source` (`main` or the bare agent id), optional `agentType` and `agentName`, and the full `input`, capped at 16 KiB.
 
 ## Control API
 
