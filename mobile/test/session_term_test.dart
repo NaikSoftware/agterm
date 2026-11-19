@@ -478,8 +478,8 @@ void main() {
   testWidgets('aFitSizesTheEmulatorBeforeTheRelayReportsIt', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
-    await _refuse(h); // a pane the phone does not lead is fitted
     await h.opened(cols: 200, rows: 60);
+    await _refuse(h); // a pane the phone does not lead is fitted
     final fit = _fits(h).single;
     expect((h.vts.single.cols, h.vts.single.rows), (fit['columns'], fit['rows']));
     h.r.send(frame(LinkKind.grid, 2, LinkFrame.resize(2, 200, 60).payload)); // the Mac took its grid back
@@ -590,7 +590,7 @@ void main() {
     h.nav.currentState!.pop();
     await t.pumpAndSettle();
     await h.opened();
-    expect(h.r.closes, [2, 3, 4, 5, 7, 6]);
+    expect(h.r.closes, [2, 3, 4, 5, 6]); // no OPENED, so no claim
     await h.stop();
   });
 
@@ -700,7 +700,7 @@ void main() {
     await t.pump();
     await h.retree(treeOf(live: false)); // restarted: not Live for a moment
     await h.retree(treeOf());
-    expect(h.r.lastWatch, 4);
+    expect(h.r.lastChannel, 3); // a refused watch was never claimed
     await h.stop();
   });
 
@@ -797,6 +797,17 @@ void main() {
     await _leader(h);
     expect(_label(t, 'lead'), 'Leading');
     expect((h.vts.single.cols, h.vts.single.rows), (cols, claim['rows']));
+    await h.stop();
+  });
+
+  testWidgets('theClaimWaitsForTheWatchOpened', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await t.pump(const Duration(seconds: 1));
+    expect(_claims(h), isEmpty);
+    expect(h.r.grids, isEmpty); // about to be claimed: not fitted meanwhile
+    await h.opened();
+    expect(_claims(h), hasLength(1));
     await h.stop();
   });
 
@@ -1401,6 +1412,7 @@ void main() {
     await t.pump();
     await t.pump();
     await t.pump(const Duration(milliseconds: 10));
+    await h.opened();
     expect([for (final c in _claims(h)) c['pane']], ['right']);
     expect(find.text('closed'), findsNothing);
     expect(_types(h), 0);
@@ -1727,7 +1739,7 @@ void main() {
     await t.tap(find.text('Left pane'));
     await t.pump();
     await h.opened();
-    expect([for (final c in _claims(h)) c['pane']], ['left', 'right', 'left']);
+    expect([for (final c in _claims(h)) c['pane']], ['left', 'left']); // the right pane never opened
     await h.stop();
   });
 

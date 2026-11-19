@@ -84,6 +84,7 @@ class _SessionScreenState extends State<SessionScreen> {
   TermSession? _claimed; // the term the lead was asked on: a replaced term (pause, pane, reconnect) is not claimed
   final _noClaim = <String>{}; // panes whose claim was refused on this visit: they type indirectly
   bool _macTookBack = false; // a term opened since claims on the next input, not at once
+  TermSession? _openClaim; // the term whose OPENED was answered with a claim, once per term
   Future<void>? _replay; // a refused claim's input on its way through session.type; later input waits for it
   (int, int)? _leadGrid, _seenGrid; // the grid the lead was given, and the one the screen shows now
   Timer? _leadResize;
@@ -172,14 +173,7 @@ class _SessionScreenState extends State<SessionScreen> {
       term = null;
       _alt = null; // the next stream picks the view again
     }
-    if (want && term == null) {
-      final t = term = TermSession(m.mux!, widget.sessionId, pane, vt: widget.vt)..addListener(_onTerm);
-      // after the frame: callers run in initState and during builds, where _claim's setState may not
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && term == t && !_macTookBack) _claim();
-      });
-      WidgetsBinding.instance.ensureVisualUpdate();
-    }
+    if (want && term == null) term = TermSession(m.mux!, widget.sessionId, pane, vt: widget.vt)..addListener(_onTerm);
   }
 
   void _onTerm() {
@@ -208,6 +202,11 @@ class _SessionScreenState extends State<SessionScreen> {
       unawaited(_load());
       unawaited(_syncFit());
     } else {
+      // on OPENED, not before: the relay pins the claim to the pane the watch resolved
+      if (t.opened && _openClaim != t) {
+        _openClaim = t;
+        if (!_macTookBack) _claim();
+      }
       if (t.leadLost case final r? when _claimed == t) {
         _claimed = null;
         if (r != 'Disconnected' && r != revokedMessage && r.isNotEmpty) {
