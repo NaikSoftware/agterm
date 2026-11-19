@@ -4,7 +4,7 @@
 
 **Goal:** A loopback `--url` page (a dev server on the host where the session runs) opens on the phone while the phone leads, with HTTP and WebSocket passing unchanged.
 
-**Architecture:** The relay's presenter lists `page.forward`, so the origin hands it a loopback page as `.forwarded(url)`. The phone listens on `127.0.0.1` and opens one mux channel of a new type `forward` per accepted TCP connection. The relay connects each channel to the loopback port the page names: directly for a local row, through one `ssh -L` listener per page for a remote row.
+**Architecture:** The relay's presenter lists `page.forward`, so the origin hands it a loopback page as `.forwarded(url)`. The phone listens on `127.0.0.1` and opens one mux channel of a new type `forward` per accepted TCP connection that carries the sheet's cookie. The relay connects each channel to the loopback port the page names: directly for a local row, through one `ssh -L` listener per page for a remote row.
 
 **Tech Stack:** Swift 6 (`ElisCore`, `elisctlKit`), Swift Testing, Dart / Flutter (`dart:io` `ServerSocket`), `webview_flutter`.
 
@@ -30,9 +30,12 @@
 
 The remote-row branch (the `ssh -L` listener per page) has a unit test of its argv and no end-to-end run: the emulator task uses a local row.
 
-## Decision for the lead
+## Tunnel gate (owner decision, spec "Part 2")
 
-The tunnel's port on the phone has no path secret: a dev server uses absolute paths and its own WebSocket URL, so a prefix would break it. While the sheet is open, another app on the phone can connect to that port and reach the dev server. The plan accepts this and states it in the docs. The alternative is an HTTP-aware proxy that rewrites nothing but checks a cookie set on the first request; it costs an HTTP parser in the phone and breaks non-browser clients.
+A path secret would break a dev server's absolute URLs, so the tunnel checks a cookie instead. Without a gate any site in Chrome on the phone, or any other app, could reach `127.0.0.1:<port>` and the dev server behind it.
+- Before load the sheet sets cookie `elis_tunnel_<port>=<128-bit random hex>` for `http://127.0.0.1:<port>` through Android `CookieManager`, `HttpOnly; SameSite=Strict; Path=/`. A new value per sheet; the sheet removes it (an expired `Set-Cookie`) when it closes. Cookies ignore ports, so the name carries the port and a value is never reused across sheets. `webview_flutter`'s `WebViewCookie` carries no `HttpOnly` or `SameSite`, so a one-method platform channel calls `CookieManager.getInstance().setCookie(url, value)` and `flush()`.
+- On every accepted connection the tunnel reads the first request's headers (up to `\r\n\r\n`), at most 16 KiB, within 5 s. Without the exact cookie, it closes the socket before it opens the `forward` channel. Fail closed: a parse error, the cap or the timeout closes too. After the check the buffered bytes go first into the channel; later requests on that connection are not parsed.
+- The listener binds `127.0.0.1` only and closes with the sheet. It first binds the port of the page's URL (dev servers bake the port into absolute and HMR WebSocket URLs, and check `Host` and `Origin`), then port 0.
 
 ## Review Focus
 
@@ -41,6 +44,7 @@ The tunnel's port on the phone has no path secret: a dev server uses absolute pa
 3. A long-lived WebSocket while a large asset downloads and the user types: vt goes first, both streams finish. Test in Task 3.
 4. A `forward` OPEN for a page id the origin never handed to this phone, or for a closed page: refused. Test in Task 3.
 5. The page moves to the Mac (claim closes) with connections open: every forward channel closes and the phone's listener stops. Tests in Tasks 3 and 4.
+6. A request without the sheet's cookie (another app, a site in Chrome): closed before any mux channel opens. Tests in Task 4.
 
 ## File Structure
 
@@ -49,7 +53,8 @@ The tunnel's port on the phone has no path secret: a dev server uses absolute pa
 | `macos/ElisCore/Sources/ElisCore/PhoneLink/PhoneLinkMessages.swift` | `PhoneLinkOpen.page` |
 | `macos/ElisCore/Sources/elisctlKit/PhoneLinkForward.swift` (new) | one `forward` channel: a TCP connection and its two credit windows |
 | `macos/ElisCore/Sources/elisctlKit/PhoneLinkPresenter+Forward.swift` (new) | which pages may be forwarded, and the per-page ssh listener |
-| `mobile/lib/pages/page_tunnel.dart` (new) | the phone's listener and its `forward` channels |
+| `mobile/lib/pages/page_tunnel.dart` (new) | the phone's listener, its cookie gate and its `forward` channels |
+| `mobile/android/app/src/main/kotlin/.../MainActivity.kt` | `setCookie` / `clearCookie` method channel over `CookieManager` |
 
 ---
 
@@ -159,16 +164,20 @@ class ForwardChannel {
 }
 // page_tunnel.dart
 class PageTunnel {
-  static Future<PageTunnel> start(ForwardChannel Function() open);   // ServerSocket.bind(InternetAddress.loopbackIPv4, 0)
+  /// Binds 127.0.0.1:`preferredPort`, else 127.0.0.1:0. `cookie` is `name=value` the first request must carry.
+  static Future<PageTunnel> start(ForwardChannel Function() open, {required int preferredPort,
+      required String cookie, Duration headerTimeout = const Duration(seconds: 5)});
+  static const maxHeaderBytes = 16 * 1024;
+  static String newCookie(int port);   // 'elis_tunnel_<port>=' + 16 bytes from Random.secure(), hex
   int get port;
   Uri urlFor(Uri original);       // same path, query and fragment; scheme http, host 127.0.0.1, this port
   int get connections;
   Future<void> close();           // closes the listener, every socket and every channel
 }
 ```
-Each accepted socket opens one channel; socket bytes go to `send`, channel bytes to the socket, either side's end closes the other. A refused OPEN closes the socket. `PageLink` closes a page's `PageTunnel` when that page leaves, for any cause.
+Each accepted socket is held until its first request's headers pass the gate (Tunnel gate above); only then it opens one channel and sends the buffered bytes first. Socket bytes go to `send`, channel bytes to the socket, either side's end closes the other. A refused OPEN closes the socket. `PageLink` closes a page's `PageTunnel` when that page leaves, for any cause.
 
-- [ ] **Step 1: Failing tests.** `mux_test`: `forward opens, carries bytes and credits`. `page_tunnel_test`: a client socket connected to `port` sends bytes that arrive on the fake channel, and the channel's bytes arrive at the client; `a refused channel closes the socket`; `close ends every socket` (Review Focus 5, with two connected clients: both see the end, `connections == 0`); `urlFor(Uri.parse('http://localhost:5173/a?b#c'))` is `http://127.0.0.1:<port>/a?b#c`. `wire_names_test`: the OPEN type `forward` and the page kind `forward`.
+- [ ] **Step 1: Failing tests.** `mux_test`: `forward opens, carries bytes and credits`. `page_tunnel_test`: a client socket connected to `port` sends bytes that arrive on the fake channel, and the channel's bytes arrive at the client; `a refused channel closes the socket`; `close ends every socket` (Review Focus 5, with two connected clients: both see the end, `connections == 0`); `urlFor(Uri.parse('http://localhost:5173/a?b#c'))` is `http://127.0.0.1:<port>/a?b#c`. Gate (Review Focus 6), each asserting the fake `open` was never called: `no cookie closes the socket`; `a wrong cookie closes the socket`; `headers over 16 KiB close the socket`; `headers not finished before the timeout close the socket`; `a WebSocket upgrade with the cookie passes` (`GET /ws` with `Upgrade: websocket`, `Connection: Upgrade` and the cookie among others in `Cookie:`: the channel receives the request bytes unchanged, then frames both ways); `a request after close is refused` (connect after `close()` fails). Port: `the preferred port is used when free`, and `a busy preferred port falls back to a random one`. `wire_names_test`: the OPEN type `forward` and the page kind `forward`.
 - [ ] **Step 2:** `cd mobile && flutter test --no-pub test/mux_test.dart test/page_tunnel_test.dart test/wire_names_test.dart`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run again, `flutter analyze --no-pub`. Expected: PASS, clean.
@@ -177,14 +186,14 @@ Each accepted socket opens one channel; socket bytes go to `send`, channel bytes
 ### Task 5: Phone — the sheet loads a forwarded page
 
 **Files:**
-- Modify: `mobile/lib/pages/page_sheet.dart`
+- Modify: `mobile/lib/pages/page_sheet.dart`, `mobile/android/app/src/main/kotlin/.../MainActivity.kt` (the cookie channel)
 - Test: `mobile/test/page_sheet_test.dart`
 
 **Interfaces — Consumes:** `PageTunnel`, `PhonePage.kind == "forward"`, `Mux.forward`.
 
-Rules: a `forward` page starts a `PageTunnel` and loads `urlFor(Uri.parse(page.url))`. JavaScript is unrestricted when the page has `javascript`, as for a `url` page. Navigation stays on `127.0.0.1:<tunnel port>` unless `browse`. No adapter and no prelude: a URL page has no bridge. The identity strip shows the original URL (`page.title`) and the transport tag (`m.via`). While the main frame loads, the strip shows a progress bar; a failed load shows the error and a `Key('pageReload')` button, and reports `state` with `load: "failed"`.
+Rules: a `forward` page starts a `PageTunnel` (preferred port = the URL's port), sets its cookie through the platform channel, and only then loads `urlFor(Uri.parse(page.url))`. The sheet's close, for any cause, clears the cookie and closes the tunnel. JavaScript is unrestricted when the page has `javascript`, as for a `url` page. Navigation stays on `127.0.0.1:<tunnel port>` unless `browse`. No adapter and no prelude: a URL page has no bridge. The identity strip shows the original URL (`page.title`) and the transport tag (`m.via`). While the main frame loads, the strip shows a progress bar; a failed load shows the error and a `Key('pageReload')` button, and reports `state` with `load: "failed"`.
 
-- [ ] **Step 1: Failing widget tests** (fake `webView` builder): `a forward page loads through the tunnel` (the controller is asked for a `127.0.0.1` URL with the page's path); `a failed load shows reload and reports failed`; `the strip shows the original URL and the transport`.
+- [ ] **Step 1: Failing widget tests** (fake `webView` builder, fake cookie channel): `a forward page loads through the tunnel` (the cookie is set before the controller is asked for a `127.0.0.1` URL with the page's path); `closing the sheet clears the cookie and closes the tunnel`; `two sheets in turn get different cookie values`; `a failed load shows reload and reports failed`; `the strip shows the original URL and the transport`.
 - [ ] **Step 2:** `flutter test --no-pub test/page_sheet_test.dart`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run again. Expected: PASS.
@@ -193,10 +202,10 @@ Rules: a `forward` page starts a `PageTunnel` and loads `urlFor(Uri.parse(page.u
 ### Task 6: Docs and skill
 
 **Files:**
-- Modify: `site/docs.html` (`#phone-app`), `.claude/rules/control-api.md` (the `present` contract from Part 1: add `forward`, `maxForwards`, the window, the refusal texts), `plugins/elis/skills/elis/SKILL.md`, `plugins/elis/skills/elis/reference.md`, `site/llms.txt` if Part 1 touched it
+- Modify: `site/docs.html` (`#phone-app`), `.claude/rules/control-api.md` (the `present` contract from Part 1: add `forward`, `maxForwards`, the window, the refusal texts; the phone's cookie gate, its 16 KiB cap and timeout, and the port choice), `plugins/elis/skills/elis/SKILL.md`, `plugins/elis/skills/elis/reference.md`, `site/llms.txt` if Part 1 touched it
 
 Content:
-- `docs.html`: a `--url` page on the session host's loopback (a dev server) opens on the phone, hot reload included; it is slow over Bluetooth; while the page is open, other apps on the phone can reach that server through the phone's local port; generated apps (a file manager, a workflow view, a log viewer) are served this way.
+- `docs.html`: a `--url` page on the session host's loopback (a dev server) opens on the phone, hot reload included; it is slow over Bluetooth; only the page's own sheet reaches the server (a per-sheet cookie), other apps and sites on the phone cannot; generated apps (a file manager, a workflow view, a log viewer) are served this way.
 - `SKILL.md`: trigger "show the dev server on my phone"; pattern: start the server on loopback, `elisctl session overlay open --url http://127.0.0.1:PORT --block`, stop the server when the command returns.
 
 - [ ] **Step 1:** Write the text.
@@ -207,10 +216,11 @@ Content:
 Verbatim rule: never execute `elis`/`elisctl` against the default socket, never launch or quit `~/Applications/Elis.app`. Agent-owned emulator only.
 
 - [ ] **Step 1:** Bring up the isolated Debug instance, the relay and the paired emulator exactly as Part 1 Task 15 Steps 1-3 (state dir `/tmp/elis-pp2`).
-- [ ] **Step 2:** In the scratchpad write a dev server with WebSocket reload: a Python or Node script that serves `index.html` on `127.0.0.1:5173`, accepts a WebSocket at `/ws`, and sends `reload` to every socket when `index.html` changes; the page's script reconnects to `ws://` + `location.host` + `/ws` and reloads on that message. Start it on a plain background process and record its pid.
+- [ ] **Step 2:** In the scratchpad create a real Vite app (`npm create vite@latest app -- --template vanilla`, `npm install`). Add to its `index.html` `<script type="module" crossorigin src="/extra.js"></script>` (`extra.js` sets `document.body.dataset.extra = 'ok'`). Start `npx vite --host 127.0.0.1 --port 5173 --strictPort` on a plain background process and record its pid. The tunnel logs each refused connection with the reason (`adb logcat`).
 - [ ] **Step 3:** With the emulator leading: `$CTL session overlay open --url http://127.0.0.1:5173/ --js --block --target <id> --socket $S/elis.sock` in the background.
   Expected: the sheet shows the page (screenshot); `tree` shows `htmlOverlays[0].url` and `phone == true`.
-- [ ] **Step 4:** Change the heading in `index.html`. Expected within 5 s: the emulator shows the new heading without any tap (screenshot).
+- [ ] **Step 4:** Change the text in `main.js`. Expected within 5 s: the emulator shows it without any tap (HMR over the WebSocket; screenshot), and `extra.js` ran. `adb logcat` shows no refused connection from the WebView. If the HMR handshake or the `crossorigin` module request arrives without the cookie, do NOT remove the gate: stop and report to the lead with the log.
+- [ ] **Step 4a:** Gate from outside the sheet: `adb shell 'toybox nc 127.0.0.1 <tunnel port>'` sending `GET / HTTP/1.1` without a cookie, and the same URL opened in Chrome on the emulator: both get the connection closed, and the Vite log shows no request.
 - [ ] **Step 5:** `adb shell input keyevent KEYCODE_HOME`: the page shows on the Mac instance (`tree` without `phone`), served there directly. Bring the app back: the sheet shows the page again and Step 4 still works.
 - [ ] **Step 6:** Close the sheet. Expected: the `--block` command returns the dismissed status; the server's log shows its sockets closed. Stop the dev server by pid.
 - [ ] **Step 7:** `kill -TERM <pid>` of the Debug instance; `lsappinfo list | grep -A4 elis.debug`; stop the emulator. Report each expected result as seen or not seen; a failure goes back to its task.

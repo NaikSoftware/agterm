@@ -19,8 +19,9 @@ and it opens on the phone, works there, and goes away when closed.
 
 - The phone is one more presenter of the session's existing HTML overlay.
   A page shows where the session is driven: on the phone while the phone leads the pane, on the Mac otherwise.
-- Every existing page source works: `--html` (with `--cwd`, `--js`, the bridge), `--url`, `--image`,
-  `--markdown`, `--text`, and loopback `--url` dev servers, including WebSocket hot reload.
+- These page sources work on the phone in v1: `--html` (with `--cwd`, `--js`, the bridge), `--url`, `--image`,
+  `--markdown` without `--navigation`, `--text` without `--follow-file` (static),
+  and loopback `--url` dev servers with WebSocket hot reload (part 2).
 - A photo taken on the phone lands as a file next to the session and its path is pasted at the cursor.
 - Local rows and remote rows (another Mac, elis-server) behave the same.
 
@@ -31,6 +32,9 @@ and it opens on the phone, works there, and goes away when closed.
   A program shows a page through `elisctl session overlay open`; the agent skill says so.
 - Asks, picks, program overlays, HUDs and status sounds on the phone. They stay on the Mac as today.
 - A browser: no address bar, tabs, or links followed past the page's bounds (CLAUDE.md overlay rule).
+- In v1, named as a follow-up: `--text --follow-file` log pages (`page.text`), diff and files pages (`page.files`),
+  and markdown with `--navigation` links (`page.links`).
+  The hub filter sends them to the Mac viewer even while the phone leads.
 
 ## Anti-goals
 
@@ -74,11 +78,14 @@ PR 1's skill and `site/docs.html` text does not mention dev servers; PR 2 adds i
   `ssh -T <host> elisctl zmx present` for server and other-Mac rows, through the argv builders the relay
   already uses for `session.attach`.
 - Its hello lists `lead.report`, every `PresentationHub.pageKinds` entry, `page.content`, `page.document`,
-  `page.links`, `page.text`, `page.files`, `pending.snapshot`, `job.token`, `offer.id`, and a new `viewer.phone`.
+  `pending.snapshot`, `job.token`, `offer.id`, and a new `viewer.phone` (added to `supportedKinds`).
+  It omits `page.text`, `page.files` and `page.links` (see Non-goals).
   `offer.id` is required, and the relay echoes the offer in its answers: without it `noteGivenUp`
   (`OfferlessHolders.swift:20`) records the phone after its first give-back, and pages never return to it.
   It never asks for the presenter grant and ignores every other frame (`layout`, status, pick).
-- It sends `lead.report` for a pane while the phone's claim on it is open and withdraws it when the claim closes.
+- It sends `lead.report` for a pane while the phone's claim on it is open and withdraws it when the claim closes,
+  and only after the origin's hello lists `viewer.phone`: an older origin would route asks to it.
+  `session.attach` answers `origin {session, pane, host}`, the ids a `lead.report` names on the origin.
   `PresentationHub.route` already returns the newest claimant (`PresentationHub.swift:334`),
   so routing does not change.
 
@@ -96,7 +103,10 @@ PR 1's skill and `site/docs.html` text does not mention dev servers; PR 2 adds i
   and overlays and sounds go to a viewer that cannot show them.
 - `.page`: `AppStore+RemotePage` and `placePages`. `.other`: `AppStore+Presentation`, `AppStore+RemoteAsk`,
   `AppStore+RemoteOverlay`, `AppStore+RemotePresentation`, `SessionPick`, and the non-page `place()` calls.
-- A page the phone cannot show (a missing kind) goes to the next recipient by the same rule.
+- A page the phone cannot show (a missing kind) goes to the next recipient by the same rule,
+  instead of the `.loopback` / `.unsupported` refusal (`AppStore+RemotePage.swift:71-73`).
+  A phone shows a page only when it lists every kind the page uses: `page.text` for a log page,
+  `page.files` for a diff page, `page.links` for markdown with links. No downgrade as for an older Mac.
   Loopback `--url` pages go to the phone through part 2.
 - Before coding, confirm that a phone claim makes the Mac's `ZmxLeadBook` mark the pane `.follower`;
   `presentsRemotely` depends on it.
@@ -108,8 +118,9 @@ PR 1's skill and `site/docs.html` text does not mention dev servers; PR 2 adds i
   No new frame kind: both decoders treat an unknown kind as fatal.
 - The channel uses its own credit window and sits below vt in the scheduler (0 > 1 > vt > present).
 - Relay to phone (JSON lines): `page` (id, kind, path or url, javascript, chromeless, browse, title, sizePercent),
-  `command` (close, hide, show, reload, navigate), `content` (built by `RemotePageResources.content()`),
-  and answers to `fetch` and `bridge`.
+  `command` (close, hide, show, reload, navigate), and answers to `fetch` and `bridge`.
+  A content page (image, markdown, text) is a `page` line with the HTML the relay renders with `ImagePage`,
+  `MarkdownPage` or `TextPage`, plus the renderer script; `MarkdownAssets` moves into ElisCore for that.
 - Phone to relay: `fetch` (id, seq, path), `bridge` (id, seq, line), `state` (loaded or failed, title, current,
   canGoBack; sent on as `pageState`), `closed` (id, dismissed).
 
@@ -128,11 +139,14 @@ PR 1's skill and `site/docs.html` text does not mention dev servers; PR 2 adds i
 - A page sheet over the session view. Full height for `sizePercent` 100, else that fraction.
   The session screen stays edge to edge (owner preference).
 - File pages load from a Dart `HttpServer` on `127.0.0.1` with a random 128-bit path secret per sheet, GET only,
-  closed with the sheet. Every request becomes a `fetch`. Part 2 reuses this server.
+  closed with the sheet. Every request becomes a `fetch`.
 - URL pages load directly, pinned to their origin; `--browse` lifts the pin.
   Content pages load the relay's HTML.
-- JavaScript only with `--js`. `elis.request` only for `--js` file pages, in the main frame.
-  File and content access off.
+- Android has no isolated content world, so WebView JavaScript is on for every file page to run the bridge adapter.
+  Without `--js` the loopback server sends `Content-Security-Policy: script-src 'none'`, which blocks the page's own
+  scripts. An emulator spike (part 1 Task 12) proves this before the sheet is built; if it fails, work stops for the
+  owner. `elis.request` only for `--js` file pages, in the main frame. File and content access off.
+- Markdown links render as plain text, inactive and not styled as links: never a dead tap.
 - The identity strip mirrors the Mac's.
 - Close, back and `window.close()` send `closed` with `dismissed`. The origin records it and fires `HtmlOverlayReleases`.
 - A sheet swiped down stays live behind a page chip in the session's top bar; one tap brings it back.
@@ -160,6 +174,8 @@ PR 1's skill and `site/docs.html` text does not mention dev servers; PR 2 adds i
   or the origin sends `close`. A chip for a page that is now on the Mac is a defect.
 - When the phone disconnects, the relay ends the subscriber, the lead report goes away,
   and `reconcileOpenWork` moves the page back to the Mac.
+- The `present` channel lives while the session screen is open, not while the app is in the foreground.
+  In the background the claim closes and the origin moves the page; the channel stays and receives it back.
 
 ### Emulator test
 
@@ -174,6 +190,7 @@ Never run integration tests on the owner's phone: `flutter test integration_test
 - No new command: `session.overlay.open` and its lifecycle commands work unchanged.
 - `htmlOverlays[].phone: true` on `ControlHtmlOverlayNode` when the slot's owner lists `viewer.phone`.
   `elisctl tree` prints it; `site/commands.html` lists it.
+- `presenters` in the tree counts no phone; `phoneViewers` already reports it.
 
 ### Tests
 
@@ -181,6 +198,8 @@ Never run integration tests on the owner's phone: `flutter test integration_test
   gets no ask, overlay, pick or sound (one test per call site), and no already open ask or pick at take-over;
   with a Mac viewer also attached, that work goes to the Mac viewer, on a local and on a headless origin;
   a page of a kind it lacks goes to the next recipient;
+  a log page, a diff page and a markdown page with links each go to the Mac viewer while the phone leads,
+  with `htmlOverlays[].phone` absent;
   the page returns to the Mac when the lead is withdrawn, and back to the same subscriber when it reports the lead again;
   a hidden page moves hidden; a `viewer.phone` subscriber never becomes `grant.holder`;
   a GUI ask in a window and a held interaction on a headless origin stay off the phone.
@@ -188,8 +207,9 @@ Never run integration tests on the owner's phone: `flutter test integration_test
   a `bridge` line with `phone.status` refused with `cannot be sent from a page`; `closed` records dismissed.
 - `ControlProjection`: `phone: true`.
 - Flutter: `present` channel decoding; the loopback server refuses a wrong secret; sheet close sends `closed`.
-- One `-only-testing` `ControlAPIUITests` case on an isolated socket: `--html --block`, closed from a fake phone,
-  exit code dismissed.
+- Emulator spike: a markdown page without `--navigation` has no active or link-styled element.
+- One hosted test in `ElisTests/ControlServerPageServeTests`: `--html --block`, closed from a fake phone,
+  exit code dismissed. Not a UI test: default UI-test launches bypass zmx, so no pane can follow.
 
 ### Docs
 
@@ -197,6 +217,9 @@ Never run integration tests on the owner's phone: `flutter test integration_test
   the phone stream spec (pages leave its non-goals).
 - `plugins/elis/skills/elis/SKILL.md`: a trigger and a rule. To show a page, use
   `session overlay open --html FILE --js`, never `open`; it follows the user to the phone.
+- `site/docs.html` and the skill say plainly that log pages, diff pages and markdown with `--navigation`
+  open on the Mac even while the phone leads. The skill warns that `--block` on such a page waits on a screen
+  the user may not see.
 
 ### Board
 
@@ -209,10 +232,23 @@ and the board's theme resets each time, because storage is per page.
 ## Part 2: dev servers on the phone (short)
 
 - A loopback `--url` page routed to `viewer.phone` opens on the phone.
-- The phone's loopback `HttpServer` from part 1 becomes a TCP tunnel for that page: each accepted connection opens a
+- A separate TCP listener on the phone tunnels that page: each accepted connection that passes the gate opens a
   mux channel `forward {page id}`. The relay connects it to the Mac's loopback port, or through ssh to the server
   host's loopback for a server row. HTTP and WebSocket (hot reload) pass unchanged.
 - The relay forwards only to the loopback port the page names, and only for a page the origin handed to this phone.
+- Threat: the tunnel listens on `127.0.0.1` of the phone, so without a gate any site open in Chrome on the phone,
+  or any other app, could reach `127.0.0.1:<port>` and through it the dev server on the Mac.
+- Gate. Before load, the phone sets a cookie with a 128-bit random value for `http://127.0.0.1:<port>` through
+  Android `CookieManager`, `HttpOnly`, `SameSite=Strict`. Each sheet gets a new value, removed when the sheet closes.
+  Cookies ignore ports, so a value is never reused across sheets.
+  On every accepted connection the tunnel reads the first request's headers, with a 16 KiB cap and a timeout.
+  Without the right cookie it closes the connection before it opens the `forward` mux channel. It fails closed.
+- The listener binds `127.0.0.1` only and closes with the sheet.
+  It first tries the port number of the Mac's dev server, then a random one:
+  dev servers bake the port into absolute URLs and HMR WebSocket URLs, and check `Host` and `Origin`.
+- The emulator run checks with a real Vite dev server that Android System WebView sends the cookie on the HMR
+  WebSocket handshake and on `<script type=module crossorigin>` requests. If it does not, the gate stays and work
+  stops for the owner.
 - Works over BLE; slow, and the sheet shows loading and the transport.
 - Stopping the agent's server: the agent opens the page with `--block` and stops its server when that returns.
   The skill documents the pattern.
@@ -244,6 +280,15 @@ The owner delegated open questions to a stand-in reviewer, who decided from the 
 - The bridge works on the phone in v1, with the same refusals as on a second Mac:
   a `data-elis` button that is silently dead on the phone would break "a page works the same wherever it shows".
 - Work the phone does not show goes to the next viewer, not to nil (see Placement guard).
+- v1 scope is the list under Goals; log, diff and linked-markdown pages are a follow-up (owner, 2026-11-20).
+- The part 2 tunnel is gated by a cookie, not accepted open (owner, 2026-11-20).
+
+## v1 limits for the final report
+
+- Log pages (`--text --follow-file`), diff and files pages, and markdown with `--navigation` stay on the Mac.
+- Every app switch on the phone moves an open page twice and reloads it.
+- Save PNG/SVG in Board needs a WebView download handler; no task adds one.
+- Remote rows are covered by kit tests only, not on the emulator.
 
 ## Left to the builder
 

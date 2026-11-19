@@ -30,11 +30,11 @@
 - A pass runs when the Mac's own role flips: `trackOpenWorkPlaces` (`Elis/Control/ControlServer+Presentation.swift:87`) observes `ZmxLeadBook` and calls `scheduleOpenWork`.
 - For a Live pane the pane token equals the pane identity (`ZmxSupport.swift:114`), and a remote daemon name encodes the origin's pane identity (`RemotePresentationState.swift:36`).
 
-## Deviations from the spec (the lead decides; the plan follows the first option)
+## Deviations from the first spec draft (accepted by the lead; the spec now matches)
 
-1. **Hello kinds.** The relay does not list `page.text`, `page.files` or `page.links`. Listing them obliges the phone to answer text actions with `pageResult`, serve `logTail`, and follow markdown links. Without them a log page goes to the Mac by the missing-kind rule, a text page shows static, and a markdown page shows without links.
-2. **Bridge with page JavaScript off.** The Mac runs the adapter in an isolated `WKContentWorld`; Android has none. The phone enables WebView JavaScript for every file page and blocks the page's own scripts with a `Content-Security-Policy: script-src 'none'` header from its loopback server when the page has no `--js`. Task 12 proves or refutes this on the emulator before the sheet is built. Tasks 11 and 12 depend on no earlier task except Task 0; run them first to learn the result early.
-3. **Content pages.** `RemotePageResources.content()` returns a file to read, not HTML. The relay builds the HTML with `ImagePage.html`, `DocumentPage.page`, `MarkdownPage.html` and `TextPage.html`, and sends the renderer script from the app bundle's `markdown` folder.
+1. **Hello kinds.** The relay does not list `page.text`, `page.files` or `page.links`. Listing them obliges the phone to answer text actions with `pageResult`, serve `logTail`, and follow markdown links. Without them a log page, a diff page and a markdown page with `--navigation` go to the Mac viewer (Task 3), a text page shows static, and markdown links render as plain text (Task 10). v1 scope: spec Goals and Non-goals.
+2. **Bridge with page JavaScript off.** The Mac runs the adapter in an isolated `WKContentWorld`; Android has none. The phone enables WebView JavaScript for every file page and blocks the page's own scripts with a `Content-Security-Policy: script-src 'none'` header from its loopback server when the page has no `--js`. Task 12 proves or refutes this on the emulator before the sheet is built; if it fails, stop and report to the lead. Tasks 11 and 12 depend on no earlier task except Task 0; run them first to learn the result early.
+3. **Content pages.** `RemotePageResources.content()` returns a file to read, not HTML. The relay builds the HTML (`MarkdownAssets` moves to ElisCore, Task 7) with `ImagePage.html`, `DocumentPage.page`, `MarkdownPage.html` and `TextPage.html`, and sends the renderer script from the app bundle's `markdown` folder.
 4. **UI test.** Default UI-test launches bypass zmx (`.claude/rules/ui-tests.md:50`), so no pane can follow. The `--block` / dismissed case is a hosted test in `ElisTests/ControlServerPageServeTests`.
 5. **`presenters` read-back.** A phone subscriber is not counted in `presenters.mirrors` or `viewers`; `phoneViewers` already reports it.
 6. **Remote rows.** `htmlOverlays[].phone` shows in the origin's tree only; the Mac that carries the phone has no slot for a page of an attached row. No remote row runs in the emulator task: the remote branch is covered by `aRemoteOriginIsReachedThroughItsArgv` and by the page-serve tests that already run over a socket.
@@ -133,8 +133,11 @@ extension AppStore {
     func pendingRecipient(_ session: Session, paneIdentity: UUID?, work: PresentationHub.Work = .other) -> Int?
     /// The viewer a page goes to: the `.page` recipient, or the `.other` one when that is a phone that cannot show it.
     func pageRecipient(_ session: Session, paneIdentity: UUID?, source: PresentationPageSource, log: Bool, held: Bool) -> Int?
+    /// gains `links` (the request has `markdownLinks`) and `diff` (`TextPage.isDiff`), both default false
+    func presenterShows(_ source: PresentationPageSource, log: Bool, links: Bool = false, diff: Bool = false, owner: Int) -> Bool
 }
 ```
+A `viewer.phone` owner shows a page only when it lists every kind the page uses: `page.text` for a log, `page.files` for a diff, `page.links` for links. A Mac owner keeps today's downgrade (`sendPageRequest` drops links). `offerPageCandidate` applies the same rule to moves (`AppStore+PageMove.swift:17` already covers links; add the diff case).
 `held: true` applies `takesHeldWork`. Page sites (`openRemotePage`, `offerPendingPage`, `pageRecipient(_:pane:)`) pass `.page` or use `pageRecipient(…source:)`. `place(_:pane:work:)` in `AppStore+OpenWork` (`:72`, the `leadClaimant` call at `:82`) takes the work kind with no default: `placeSessionAsk`, `placeWindowAsk` and `placePick` pass `.other`, `placePages` passes `.page`. `remoteRecipient(work:)` only forwards it to `route`. `placePages` asks `.page` and, when the viewer is a phone that fails `presenterShows`, asks `.other`. The non-page sites keep the default and need no edit: `AppStore+Presentation.swift:136`, `AppStore+RemoteAsk.swift:26,48`, `AppStore+RemoteOverlay.swift:51,93`, `SessionPick.swift:434,472`, `AppStore+RemotePresentation.swift:334`, and the ask and pick `place()` calls.
 
 In `openRemotePage`, a `.forwarded` or unsupported source no longer returns `.loopback` / `.unsupported` when the first recipient is a phone: the fallback recipient decides, and a nil one on a Mac returns `.local`.
@@ -148,6 +151,7 @@ In `openRemotePage`, a `.forwarded` or unsupported source no longer returns `.lo
   - `AppStoreOpenWorkTests.aGuiAskInAWindowStaysOffThePhone`: a GUI ask anchored to the session is open in the window's controller (`local(controller, window:)`), the phone reports the lead, `pass(session, local:)`: `controller.pendingAsk != nil`, the phone sink holds no `askRequest`.
   - `AppStoreOpenWorkTests.aHeldInteractionOnAHeadlessOriginStaysOffThePhone`: `session(headless: true)`, an ask and a pick held pending, only the phone connected and leading; `host.offerPendingInteractions(forSession:now:)`: the phone sink holds no `askRequest` or `pickRequest`, and both stay pending. A held page is offered to it.
   - `AppStoreRemotePageTests.aPageKindThePhoneLacksGoesToTheNextRecipient`: phone without `page.content` leads, Mac viewer holds the grant: an image page's request is in the Mac viewer's sink. With no next claimant and no grant holder the origin keeps it: `openRemotePage == .local` on a Mac. Same for a loopback URL (`http://127.0.0.1:5173/`): `.local`, not `.loopback`.
+  - `AppStoreRemotePageTests.aLogPageGoesToTheMacViewerWhileThePhoneLeads`, `…aDiffPageGoesToTheMacViewer…`, `…aLinkedMarkdownPageGoesToTheMacViewer…`: the phone (Task 9 `kinds`, no `page.text` / `page.files` / `page.links`) leads, a Mac viewer holds the grant; a `--text --follow-file` page, a `.diff` text page and a `--markdown --navigation` page each land in the Mac viewer's sink and never in the phone's. The same three as moves: open on the Mac viewer first, then the phone leads and `pass`: the phone sink holds no `.pageRequest`.
 - [ ] **Step 2:** `swift test --filter "AppStoreOpenWorkTests|AppStoreRemotePageTests|AppStoreRemoteAskTests|AppStoreRemoteOverlayTests|AppStorePresentationTests|SessionPickTests"`. Expected: the new tests FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Same command. Expected: PASS, the existing tests included.
@@ -195,7 +199,7 @@ public struct ControlAttachOrigin: Codable, Sendable, Equatable {
 ```
 App: local row → `(session.id, identity, nil)`; remote row → `(binding.remoteSessionID, ZmxSupport.paneIdentity(fromDaemonName: daemon), origin.host)`, for `catalogOwned` rows too.
 
-- [ ] **Step 1: Failing tests.** `ControlAttach` round-trips `origin` and decodes an answer without it as nil. `htmlOverlayNodes` of a session whose remote slot is owned by a `viewer.phone` subscriber has `phone == true`, and `nil` for a Mac viewer's. Hosted: `session.attach` on a local Live session answers `origin.session == session.id.uuidString`, `origin.pane == paneID`, `origin.host == nil`.
+- [ ] **Step 1: Failing tests.** `ControlAttach` round-trips `origin` and decodes an answer without it as nil. `htmlOverlayNodes` of a session whose remote slot is owned by a `viewer.phone` subscriber has `phone == true`, and `nil` for a Mac viewer's. `theThreeMacOnlyKindsReadBackWithoutPhone`: with the phone leading, a log page, a diff page and a linked markdown page each have `phone == nil`. Hosted: `session.attach` on a local Live session answers `origin.session == session.id.uuidString`, `origin.pane == paneID`, `origin.host == nil`.
 - [ ] **Step 2:** Run the three suites filtered. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run again. Expected: PASS.
@@ -384,6 +388,7 @@ Test seam: `init` takes `spawn: (ControlAttachOrigin, _ pageToken: String?) thro
 
 Behavior:
 - `pageRequest` → by `source`: `.url` → `page` line, kind `url`. `.file` → open the page pipe, then kind `file` with `path` and `adapter` (`HtmlBridgeAdapter.script(handler: "window.__elis")`, plus `helperScript` when `javascript`). `.image`, `.document`, `.markdown`, `.text` → open the pipe, read the page's own file with a `resource` request, build `html` with `ImagePage.html(data:mimeType:)`, `DocumentPage.page(_:)`, `MarkdownPage.html(markdown:images:style:)` (pictures from `MarkdownPage.remoteImageReferences`, each fetched over the pipe) or `TextPage.html(text:language:line:style:)`, and send kind `content` with `script` from `MarkdownAssets(directory:)` of `Bundle.main.resourceURL/markdown`, falling back to `<executable dir>/../Resources/markdown`. `.forwarded` or a pipe that cannot open → `pageRejected` with the offer echoed.
+- A markdown page (always without links on the phone) gets `PhoneLinkPresenter.unlinkScript` appended to `script`: after render it replaces every `a` element with its text, so a link is inactive and not styled as one.
 - Every answer to the origin echoes the request's `offer`.
 - `fetch` → `.resource(id: n, path:)`; `head`/`chunk`/`end`/`failure` → `res` lines keyed by the phone's `seq`. `bridge` → `.bridge(id: n, request: line)`; `reply`/`failure` → `reply` line. A bridge line is never written anywhere else.
 - `state` → `.pageState` (load `loaded`/`failed`, title, address = `current`, `canGoBack`, `appliedSeq`, `hidden`, `offer`). `closed` → `.pageClosed(PresentationPageChange(page:, offer:))`, and the pipe closes.
@@ -400,7 +405,8 @@ Behavior:
   - `closedRecordsDismissed`: phone `closed` dismissed → stub reads `pageClosed` with the offer and no reason.
   - `aLargeFileDoesNotOverflowTheChannel` (Review Focus 4): the stub streams 2 MiB of chunks while the phone grants credit slowly; the phone receives every byte in order, and vt DATA enqueued meanwhile is read before the page's remaining lines.
   - `stoppingClosesThePresentationStreamBeforeThePagePipe`: with a file page open, `close(reason:)`: the stub sees EOF on the presentation stream before EOF on the page pipe.
-  - `aLogPageIsNotOffered`: covered by `kinds`; assert `!PhoneLinkPresenter.kinds.contains("page.text")`.
+  - `aLogPageIsNotOffered`: covered by `kinds`; assert `PhoneLinkPresenter.kinds` contains none of `page.text`, `page.files`, `page.links`.
+  - `aMarkdownPageCarriesTheUnlinkScript`: the `page` line for a markdown request has `script` ending with `unlinkScript`, and its `html` has no `data-links`. Task 12 case 4 checks the result in the WebView.
   - Hosted, `ControlServerPageServeTests.testABlockingPageClosedFromThePhoneEndsDismissed`: pane set `.follower` (as `:164`), a raw socket subscriber with `viewer.phone` reports the lead, `session.overlay.open --html --block` runs off the main thread, the subscriber claims the page and sends `pageClosed`: the command returns with the dismissed exit code, and `tree` shows no `htmlOverlays` entry.
 - [ ] **Step 2:** `swift test --filter PhoneLinkPresenterPagesTests`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
@@ -472,8 +478,9 @@ The secret is 16 bytes from `Random.secure()`, hex. The server answers 404 for a
   1. `javascript: false`, page `<script>document.title='ran'</script><button type="button" data-elis="notify" data-elis-title="x">b</button>`: the title stays unchanged (page script blocked by the CSP header); after `runJavaScript(adapter)` a tap on the button makes `ElisChannel` receive a body with `cmd == "notify"`.
   2. `javascript: true`: the title becomes `ran`, and `elis.request({cmd:'notify'})` reaches `ElisChannel`.
   3. Content page: `loadHtmlString(MarkdownPage-shaped html)` with its `default-src 'none'` meta, then `runJavaScript(script)`: `#elis-page` has children.
-- [ ] **Step 2:** `flutter test integration_test/page_webview_test.dart -d <emulator>`. Expected: 3 pass.
-- [ ] **Step 3:** If case 1 or 3 fails, stop and report to the lead with the failing case and the WebView's console output; do not pick another mechanism alone. If all pass, restore any temporary `sdk:` change and commit `test(mobile): the page bridge and renderers run in the system WebView`.
+  4. The same markdown with `[web](https://example.com)` and `[doc](other.md)`, plus `unlinkScript`: `#elis-page` has no `a` element and both link texts are present.
+- [ ] **Step 2:** `flutter test integration_test/page_webview_test.dart -d <emulator>`. Expected: 4 pass.
+- [ ] **Step 3:** If case 1, 3 or 4 fails, stop and report to the lead with the failing case and the WebView's console output; do not pick another mechanism alone. If all pass, restore any temporary `sdk:` change and commit `test(mobile): the page bridge and renderers run in the system WebView`.
 
 ### Task 13: Phone — the page sheet and its chip
 
@@ -517,13 +524,13 @@ Rules:
 - Modify: `site/docs.html` (`#phone-app`, `:1106`), `site/commands.html` (`htmlOverlays[]` fields; `session.attach` answer), `.claude/rules/control-api.md` (routing bullet `:2384`; relay mux `:239-277`), `docs/superpowers/specs/2026-11-18-phone-terminal-stream-design.md` (pages leave its non-goals), `plugins/elis/skills/elis/SKILL.md` (`description` trigger and the phone section `:835`), `plugins/elis/skills/elis/reference.md`, `site/llms.txt` if it lists phone features
 
 Content, each fact once:
-- `docs.html`: a page a session opens shows on the phone while the phone leads the pane, on the Mac otherwise; it follows the lead both ways; a move reloads the page, so scroll and form state are lost; asks, picks, program overlays, HUDs and sounds stay on the Mac; log pages and pages of a kind the phone cannot show open on the Mac; the chip. No mention of dev servers.
+- `docs.html`: a page a session opens shows on the phone while the phone leads the pane, on the Mac otherwise; it follows the lead both ways; a move reloads the page, so scroll and form state are lost; asks, picks, program overlays, HUDs and sounds stay on the Mac; said plainly: log pages (`--text --follow-file`), diff pages and markdown with `--navigation` open on the Mac even while the phone leads; markdown links on the phone are plain text; the chip. No mention of dev servers.
 - `commands.html`: `htmlOverlays[].phone`, `attach.origin`.
 - `control-api.md`: the placement rule (`viewer.phone`, `Work`, the next-recipient fallback), the `present` channel contract (lines of Task 6, `low` class, `highWater`, caps, refusal texts).
-- `SKILL.md`: trigger "show this on my phone / show a page where I am"; rule: to show a page use `elisctl session overlay open --html FILE --js` (never `open`); it follows the user to the phone.
+- `SKILL.md`: trigger "show this on my phone / show a page where I am"; rule: to show a page use `elisctl session overlay open --html FILE --js` (never `open`); it follows the user to the phone. Same plain sentence on the three Mac-only kinds, and a warning: `--block` on such a page waits on a screen the user may not see while driving from the phone.
 
 - [ ] **Step 1:** Write the text. Bump the `?v=` on `style.css` links only if `style.css` changes.
-- [ ] **Step 2:** `grep -n -i "dev server" site/docs.html plugins/elis/skills/elis/SKILL.md | grep -i phone`. Expected: no line added by this task.
+- [ ] **Step 2:** `grep -n -i "dev server" site/docs.html plugins/elis/skills/elis/SKILL.md | grep -i phone`. Expected: no line added by this task. `grep -n "even while the phone leads" site/docs.html plugins/elis/skills/elis/SKILL.md`: one line in each.
 - [ ] **Step 3:** Commit `docs: pages on the phone`.
 
 ### Task 15: Emulator end-to-end
@@ -538,7 +545,7 @@ Verbatim rule: never execute `elis`/`elisctl` against the default socket, never 
 - [ ] **Step 4:** On the emulator open a Live session and tap the terminal (the tag shows `Leading`). `printf '<h1 id=t>hello</h1><button type=button data-elis=notify data-elis-title=hi>n</button>' > /tmp/pp1.html`; `$CTL session overlay open --html /tmp/pp1.html --target <id> --socket $S/elis.sock`.
   Expected: the sheet shows `hello` (screenshot with `adb exec-out screencap -p`); `$CTL tree --json --socket …` shows `htmlOverlays[0].phone == true`; the Mac window shows no page; tapping `n` posts the notification on the Mac instance.
 - [ ] **Step 5:** `adb shell input keyevent KEYCODE_HOME`. Expected within 5 s: `tree` shows the page without `remote`/`phone` (on the Mac). Bring the app back (`adb shell monkey -p ua.naiksoftware.elis 1`). Expected: the sheet shows again, `phone == true`.
-- [ ] **Step 6:** Repeat Step 4 with `--markdown`, `--image`, `--url https://example.com` and `--html … --js --block`; close the last from the sheet and check the command's exit status is the dismissed one. Swipe a sheet down, check the chip, close the page from the Mac side with `session overlay close`, check the chip is gone.
+- [ ] **Step 6:** Repeat Step 4 with `--markdown`, `--image`, `--url https://example.com` and `--html … --js --block`; close the last from the sheet and check the command's exit status is the dismissed one. Swipe a sheet down, check the chip, close the page from the Mac side with `session overlay close`, check the chip is gone. Open `--text /tmp/pp1.log --follow-file` while the emulator leads: the page shows on the Mac instance, `tree` has no `phone`, the emulator shows no sheet or chip. A markdown file with a link shows the link text, not tappable.
 - [ ] **Step 7:** `kill -TERM <pid>`; `lsappinfo list | grep -A4 elis.debug` (handle an entry as CLAUDE.md "Worktrees and local builds" says; tell the lead if a Dock tile lingers). Stop the emulator.
 - [ ] **Step 8:** Report each expected result as seen or not seen. A failure goes back to its task; do not continue to Task 16 with one open.
 
