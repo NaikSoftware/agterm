@@ -1,0 +1,40 @@
+
+[38;5;246m  ⎿  [39mKept model as [38;5;153mHaiku 5.5[39m
+[38;5;153m▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+[39m  [1m[38;5;153mSettings[0m  Status   Config  [1m[38;5;16m[48;5;153m Usage [0m
+            Stats
+
+  [1mCurrent week (all models)[0m[38;5;246m · Resets Nov 21[39m
+  [38;5;246mat 8pm (Europe/Kiev)[39m
+  [38;5;153m[48;5;102m█████████████████████████████            [39m[49m
+  71% used
+
+  [1mWhat's contributing to your usage?[0m
+  [38;5;246mApproximate · sessions on this computer [39m
+  [38;5;246monly[39m
+
+  [38;5;246mLast 24h · shares overlap[39m
+
+  52%  Start fresh when you switch tasks[38;5;246m · [39m
+       [38;5;246mrun /clear[39m
+  49%  Review sessions active over many
+       hours[38;5;246m · whole sessions with requests[39m
+       [38;5;246min 8 or more separate hours[39m
+  19%  Save workflows for big tasks[38;5;246m · 90 [39m
+       [38;5;246magents ran, across 7 projects[39m
+  13%  Review the "superpowers" plugin
+  12%  Check which model "general-purpose"
+       subagents use
+
+  Skills                  [38;5;246m% of usage[39m
+  [38;5;246m/superpowers:systematic-deb…[39m    [38;5;246m1%[39m
+  [38;5;246m/code-review[39m                    [38;5;246m1%[39m
+  [38;5;246m/loop[39m                           [38;5;246m1%[39m
+  [38;5;246m/write[39m                          [38;5;246m1%[39m
+  [38;5;246m/chrome-browser[39m                 [38;5;246m1%[39m
+  [38;5;246m/superpowers:subagent-drive…[39m    [38;5;246m1%[39m
+  [38;5;246m/back-to-main[39m                   [38;5;246m1%[39m
+
+  Subagents               [38;5;246m% of usage[39m
+  [38;5;246mgeneral-purpose[39m                [38;5;246m12%[39m
+  [38;5;246mworkflow-subagent[39m               [38;5;246m9%[39m        [38;5;246m↓
