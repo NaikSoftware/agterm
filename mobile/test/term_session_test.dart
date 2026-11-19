@@ -430,4 +430,12 @@ void main() {
     await query(r, vt!);
     expect(sent(r), 'ls$_reply');
   });
+
+  test('aRefusedLineDropsItsEnter', () async {
+    final (s, r, _) = await watched();
+    await lead(s, r);
+    expect(s.paste('x' * (1 << 20)), isTrue);
+    expect(s.line('y' * 20000), isFalse);
+    expect(s.takeUnsent(), isEmpty);
+  });
 }

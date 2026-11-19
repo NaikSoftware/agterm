@@ -244,7 +244,9 @@ class TermSession extends ChangeNotifier {
       gapDone = false;
       _queue.removeFirst();
       _queuedBytes -= utf8.encode(unsent).length;
-      ok = _send(encode(_vt!)) && ok;
+      if (_send(encode(_vt!))) continue;
+      ok = false;
+      if (_queue.firstOrNull?.$3 ?? false) _queuedBytes -= utf8.encode(_queue.removeFirst().$1).length; // its line's Enter
     }
     return ok;
   }
