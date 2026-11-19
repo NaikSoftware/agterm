@@ -39,7 +39,7 @@
 - Remote rows (attached Mac, elis-server) take the same path: no branch on where the pane runs.
 - Never `flutter test integration_test`, adb or an emulator from a subagent. Delegated agents receive verbatim: "never execute `elis`/`elisctl` against the default socket, never launch or quit the app, static reading only."
 - Tasks 5, 6, 7 and 8 all edit `mobile/lib/screens/session.dart` and run in that order, one at a time. Tasks 1, 2, 3 and 4 are independent of each other.
-- Exact values: Enter gap 20 ms; input queue 256 intents and 1 MiB of text; covered-fit retries 3, 1 s apart; resync 150 ms after the last claim RESIZE; remote history read limit 5 s; keyboard paste threshold 64 characters or any newline; chip texts `Phone leads` and `Taking the lead…`.
+- Exact values: Enter gap 20 ms; input queue 256 intents and 1 MiB of text; covered-fit retries 3, 1 s apart; resync 150 ms after the last claim RESIZE; remote history read limit 5 s; keyboard paste threshold 64 characters or any newline; chip texts `Leading` and `Leading…` (controller ruling: the longer texts truncated the session name).
 
 ## Decisions taken in this plan (planner's calls)
 
@@ -54,7 +54,7 @@
 9. **A double tap is looking:** it resets the zoom, sends no click, does not claim and does not open the keyboard. Reason: it is the existing zoom gesture, and the single tap already waits for it.
 10. **A single tap acts after the double-tap timeout** (about 300 ms): the click and the keyboard both come then. Reason: one detector must tell the two apart.
 11. **A tap anywhere in the terminal box claims; the click is sent only for a touch on a grid cell of the Term view.** A tap on the history view sends no click. Reason: a scrolled, reflowed history has no cell under the finger, and a click on a cell the finger did not touch is a wrong result.
-12. **The chip reads `Taking the lead…` while the claim is pending and `Phone leads` while it leads**, in the same bordered tag as the link chip. Reason: the wait can be 10 s with input queued.
+12. **The chip reads `Leading…` while the claim is pending and `Leading` while it leads** (ruled after Task 5; the first texts truncated the name), in the same bordered tag as the link chip. Reason: the wait can be 10 s with input queued.
 13. **History of a covered remote pane comes from that pane's daemon over ssh:** `session.text` runs `zmx screen <daemon> --all` on the host, off the main actor, at most one read per pane at a time, limit 5 s. Reason: the refusal existed only because that read cannot be synchronous; the daemon's screen has the leader's layout, and the fix serves every caller, not only the phone.
 14. **The wait for the Mac's grid report (`_refitAfter`, `_refitTimer`) is deleted**; I3's bounded retry carries the refit. Reason: only the Give back button reached that wait.
 15. **M2 falls back to the role** when no watch channel of the link has a `paneID` for that target and pane yet. Reason: the claim may open first.
