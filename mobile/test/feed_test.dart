@@ -231,6 +231,23 @@ void main() {
         f.dispose();
       }));
 
+  test('noStaleWhileNotPolling', () => fakeAsync((a) {
+        final (f, h) = _started(a);
+        _firstReply(a, h);
+        h.canPoll = false;
+        a.elapse(const Duration(seconds: 3));
+        expect(f.stale, isFalse);
+        h.canPoll = true;
+        a.elapse(const Duration(milliseconds: 500));
+        expect(h.calls, hasLength(2));
+        expect(f.stale, isFalse);
+        a.elapse(const Duration(milliseconds: 1399));
+        expect(f.stale, isFalse);
+        a.elapse(const Duration(milliseconds: 1));
+        expect(f.stale, isTrue);
+        f.dispose();
+      }));
+
   test('hostTooOldStopsPolling', () => fakeAsync((a) {
         final (f, h) = _started(a);
         h.fail("unknown command 'session.transcript'");
@@ -239,6 +256,7 @@ void main() {
         expect(f.loading, isFalse);
         a.elapse(const Duration(seconds: 5));
         expect(h.calls, hasLength(1));
+        expect(f.stale, isFalse);
         f.retry();
         a.flushMicrotasks();
         expect(f.error, isNull);

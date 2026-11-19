@@ -56,6 +56,8 @@ class TranscriptFeed extends ChangeNotifier {
   Future<void> pollNow() async {
     if (_inFlight || !_running || _disposed || !canPoll()) return;
     _inFlight = true;
+    // a call after an idle stretch (hidden route, stopped feed) gets its own full deadline
+    if (!loading && _staleTimer?.isActive != true) _armStale();
     final gen = _gen;
     final held = transcript;
     var again = false;
@@ -143,8 +145,14 @@ class TranscriptFeed extends ChangeNotifier {
 
   void _answered() {
     loading = stale = false;
+    _armStale();
+  }
+
+  // stale means a call is outstanding past the deadline, never a feed that is not asking
+  void _armStale() {
     _staleTimer?.cancel();
     _staleTimer = Timer(interval * 2, () {
+      if (!_inFlight) return;
       stale = true;
       _notify();
     });
