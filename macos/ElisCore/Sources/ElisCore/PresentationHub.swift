@@ -135,6 +135,12 @@ public final class PresentationHub {
     }
     /// linkClickKind advertises forwarded clicks and the refusal frame that answers one.
     public static let linkClickKind = "link.click"
+    /// viewerPhoneKind marks the phone relay, which takes pages and no other work. It stays out of `supportedKinds`,
+    /// the Mac viewer's own hello, and is accepted only in negotiation.
+    public static let viewerPhoneKind = "viewer.phone"
+
+    /// Work is what a route is asked for: a page, which a phone can show, or anything else, which skips it.
+    public enum Work: Sendable { case page, other }
 
     private let staleTimeout: TimeInterval
     private let now: () -> Date
@@ -188,7 +194,7 @@ public final class PresentationHub {
         if layouts[session] == nil { layouts[session] = state.layout }
         let held = subscriber.held ?? []
         subscriber.held = nil
-        let kinds = Self.supportedKinds.filter(hello.kinds.contains)
+        let kinds = (Self.supportedKinds + [Self.viewerPhoneKind]).filter(hello.kinds.contains)
         subscriber.kinds = Set(kinds)
         // presenter is offered only to a viewer that asked for it, so a slice-1 viewer stays a mirror
         let answer = PresentationHello(version: version, kinds: kinds, mode: hello.mode)
@@ -281,7 +287,7 @@ public final class PresentationHub {
         case .presenterAcquire:
             // a vacancy can cross a viewer's first acquire, so the holder may ask twice; pending work goes out once
             let repeated = grant.holder(of: subscriber.session) == id
-            let granted = grant.acquire(session: subscriber.session, by: id)
+            let granted = !subscriber.kinds.contains(Self.viewerPhoneKind) && grant.acquire(session: subscriber.session, by: id)
             send(granted ? .presenterGranted : .presenterRefused, to: id)
             guard granted, !repeated else { return }
             onPresenterGranted?(subscriber.session)
@@ -331,16 +337,18 @@ public final class PresentationHub {
 
     /// route is the token of the viewer that takes new work for `pane` of `session`, or for the session as a whole when
     /// `pane` is nil: the viewer leading that pane (the primary one for session-wide work), else the grant holder.
-    public func route(session: UUID, pane: UUID?) -> Int? {
-        if let target = pane ?? layouts[session]?.primary, let claimant = claimant(session: session, pane: target) {
+    public func route(session: UUID, pane: UUID?, work: Work = .other) -> Int? {
+        if let target = pane ?? layouts[session]?.primary, let claimant = claimant(session: session, pane: target, work: work) {
             return claimant.generation
         }
         return grant.holder(of: session)?.generation
     }
 
     // the newest report still naming the pane wins, so withdrawing a claim hands the pane back to an older claimant
-    private func claimant(session: UUID, pane: UUID) -> Subscriber? {
-        subscribers.values.filter { $0.session == session && $0.leads.contains(pane) }.max { $0.leadsAt < $1.leadsAt }
+    private func claimant(session: UUID, pane: UUID, work: Work) -> Subscriber? {
+        subscribers.values.filter {
+            $0.session == session && $0.leads.contains(pane) && (work == .page || !$0.kinds.contains(Self.viewerPhoneKind))
+        }.max { $0.leadsAt < $1.leadsAt }
     }
 
     /// Whether a viewer holds `session`'s presenter role.
@@ -362,7 +370,17 @@ public final class PresentationHub {
 
     /// leadClaimant is the token of the viewer newest leading `pane` of `session`, nil when none does; unlike `route`
     /// it never falls back to the grant holder.
-    public func leadClaimant(session: UUID, pane: UUID) -> Int? { claimant(session: session, pane: pane)?.generation }
+    public func leadClaimant(session: UUID, pane: UUID, work: Work = .other) -> Int? {
+        claimant(session: session, pane: pane, work: work)?.generation
+    }
+
+    /// isPhone is whether viewer `owner` is the phone relay.
+    public func isPhone(owner: Int) -> Bool { supports(Self.viewerPhoneKind, owner: owner) }
+
+    /// macViewerCount counts `session`'s viewers other than the phone relay.
+    public func macViewerCount(session: UUID) -> Int {
+        subscribers.values.count { $0.session == session && !$0.kinds.contains(Self.viewerPhoneKind) }
+    }
 
     /// scheduleOpenWork asks for a placement pass over `session`'s open work (`onOpenWork`).
     public func scheduleOpenWork(_ session: UUID) {
