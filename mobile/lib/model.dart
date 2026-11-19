@@ -33,6 +33,10 @@ class Session {
         name = (m['name'] as String?)?.isNotEmpty == true ? m['name'] : 'New session',
         status = m['status'] ?? 'idle',
         agent = (m['agent'] as String?)?.isNotEmpty == true ? m['agent'] : agentOf((m['foreground'] as List?)?.cast<String>() ?? const []),
+        liveAgent = m['agent'] ?? '',
+        agentSessionId = m['agentSessionId'] ?? '',
+        agentPane = m['agentPane'] ?? 'left',
+        remote = (m['remoteHost'] as String?)?.isNotEmpty == true,
         cwd = m['cwd'] ?? '',
         parent = m['parent'] ?? '',
         context = m['context'] ?? '',
@@ -49,6 +53,9 @@ class Session {
         split = m['split'] == true,
         collapsed = m['collapsed'] == true;
 
+  final String liveAgent; // the tree's own `agent`; `agent` above also guesses from the foreground
+  final String agentSessionId, agentPane;
+  final bool remote;
   final String id, name, status, agent, cwd, parent, context, tint, workspaceId, workspaceName;
   final int unseen;
   final bool flagged, active, blink, hasSplit, split, collapsed;

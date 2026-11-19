@@ -1,3 +1,4 @@
+import 'package:elis_mobile/chat/mode.dart';
 import 'package:elis_mobile/client.dart';
 import 'package:elis_mobile/model.dart';
 import 'package:elis_mobile/screens/prompt.dart';
@@ -8,6 +9,40 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('Chat mode', () {
+    test('chatNeedsTheTreesOwnAgentAndAnId', () {
+      Session s(Map m) => Session(m, 'w', 'W');
+      expect(chatAvailable(s({'agent': 'claude', 'agentSessionId': 'a1'}), 'left'), isTrue);
+      expect(chatAvailable(s({'foreground': ['claude'], 'agentSessionId': 'a1'}), 'left'), isFalse); // origin sent no agent
+      expect(chatAvailable(s({'agent': 'claude'}), 'left'), isFalse);
+      expect(chatAvailable(s({'agent': 'claude', 'agentSessionId': 'a1', 'agentPane': 'right'}), 'left'), isFalse);
+    });
+
+    test('autoPicksChatAndAManualPickSticks', () {
+      final c = Session({'id': 'x', 'agent': 'claude', 'agentSessionId': 'a1'}, 'w', 'W');
+      ModePicks.pick('x', null);
+      expect(shownMode(c, 'left'), ViewMode.chat);
+      ModePicks.pick('x', ViewMode.term);
+      expect(shownMode(c, 'left'), ViewMode.term);
+      final gone = Session({'id': 'x'}, 'w', 'W');
+      ModePicks.pick('x', ViewMode.chat);
+      expect(shownMode(gone, 'left'), ViewMode.term); // a pick of an unavailable Chat shows Term
+      ModePicks.pick('x', null);
+    });
+
+    test('a host too old for the transcript turns Chat off', () {
+      final c = Session({'id': 'old', 'agent': 'claude', 'agentSessionId': 'a1'}, 'w', 'W');
+      ModePicks.tooOld.add('old');
+      expect(chatAvailable(c, 'left'), isFalse);
+      ModePicks.tooOld.remove('old');
+    });
+
+    test('remote reads remoteHost', () {
+      expect(Session({'remoteHost': 'mac'}, 'w', 'W').remote, isTrue);
+      expect(Session({}, 'w', 'W').remote, isFalse);
+    });
+  });
+
   group('AutoFit', () {
     test('fits a visible screen and gives the grid back when hidden', () {
       final f = AutoFit();
