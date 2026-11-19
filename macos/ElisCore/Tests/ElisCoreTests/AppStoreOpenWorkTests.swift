@@ -677,4 +677,11 @@ struct AppStoreOpenWorkTests {
         #expect(SessionPickBook.shared.placement(forSession: session.id) == .presenter(owner: first.gen))
         #expect(first.sink.asks.map(\.id) == [pending.id, pending.id])
     }
+
+    @Test func aGrantlessViewerThatReportsTheLeadIsRouted() throws {
+        let (host, session) = try session()
+        let viewer = try viewer(session, leads: true)
+        #expect(hub.route(session: session.id, pane: session.paneIdentity) == viewer.gen)
+        #expect(host.presentsRemotely(session, paneIdentity: session.paneIdentity))
+    }
 }
