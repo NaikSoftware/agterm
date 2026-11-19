@@ -85,6 +85,8 @@ class _SessionScreenState extends State<SessionScreen> {
   final _noClaim = <String>{}; // panes whose claim was refused on this visit: they type indirectly
   bool _macTookBack = false; // a term opened since claims on the next input, not at once
   TermSession? _openClaim; // the term whose OPENED was answered with a claim, once per term
+  TermSession? _quiet; // claimed on OPENED with no input since: a refusal is said at the pane's first input
+  final _unsaid = <String, String>{};
   Future<void>? _replay; // a refused claim's input on its way through session.type; later input waits for it
   (int, int)? _leadGrid, _seenGrid; // the grid the lead was given, and the one the screen shows now
   Timer? _leadResize;
@@ -205,7 +207,7 @@ class _SessionScreenState extends State<SessionScreen> {
       // on OPENED, not before: the relay pins the claim to the pane the watch resolved
       if (t.opened && _openClaim != t) {
         _openClaim = t;
-        if (!_macTookBack) _claim();
+        if (!_macTookBack) _claim(open: true);
       }
       if (t.leadLost case final r? when _claimed == t) {
         _claimed = null;
@@ -257,6 +259,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   /// The composer's height now, 0 before it is laid out; keeps its one-line height from the first layout on.
   double _seeComposer() {
+    if (!ComposerPref.shown) return 0; // a removed composer's key still finds its inactive element during the layout
     final h = _heightOf(_composerBox);
     if (h > 0) _composerLine = min(_composerLine ?? h, h);
     return h;
@@ -265,12 +268,17 @@ class _SessionScreenState extends State<SessionScreen> {
   bool get _direct => term != null && !_noClaim.contains(pane);
 
   /// Opening a Live pane, or input on it, asks for the lead; input queues on the term until it leads.
-  void _claim() {
+  void _claim({bool open = false}) {
     _macTookBack = false;
+    if (!open) {
+      _quiet = null;
+      report(context, _unsaid.remove(pane));
+    }
     final t = term;
     if (t == null || _lead || _noClaim.contains(pane)) return;
     t.leadLost = null; // a lead lost earlier was said then
     t.arm();
+    if (open) _quiet = t;
     setState(() => _claimed = t);
     unawaited(_takeOver(t));
   }
@@ -309,7 +317,11 @@ class _SessionScreenState extends State<SessionScreen> {
     _typeAll(t.takeUnsent(), t.pane);
     t.release();
     if (err == null) return; // a refused reset: a refit now would only be refused and said again
-    report(context, err);
+    if (_quiet == t) {
+      _unsaid[t.pane] = err;
+    } else {
+      report(context, err);
+    }
     _quietFit = true;
     unawaited(_syncFit());
   }
@@ -653,6 +665,7 @@ class _SessionScreenState extends State<SessionScreen> {
     void setPane(String p) {
       if (p == pane) return;
       _release(pane);
+      _macTookBack = false; // a switch claims
       setState(() {
         pane = p;
         text = '';
@@ -783,6 +796,12 @@ class _SessionScreenState extends State<SessionScreen> {
     unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
   }
 
+  // not input: it never claims
+  void _toggleKeyboard() {
+    if (_keyboard.hasPrimaryFocus && MediaQuery.viewInsetsOf(context).bottom > 0) return _keyboard.unfocus();
+    _showKeyboard();
+  }
+
   Widget _textView() => LayoutBuilder(builder: (context, box) {
           // the computer's own grid width, so a full-width row fills one phone row exactly; history written at a wider
           // size (before the fit) wraps rather than shrinking everything
@@ -857,10 +876,21 @@ class _SessionScreenState extends State<SessionScreen> {
         child: ListView.separated(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
           scrollDirection: Axis.horizontal,
-          itemCount: keys.length,
+          itemCount: keys.length + 1,
           separatorBuilder: (_, _) => const SizedBox(width: 6),
           itemBuilder: (context, i) {
-            final (label, seq, name, key, mods) = keys[i];
+            if (i == 0) {
+              return Tooltip(
+                message: 'Keyboard',
+                child: OutlinedButton(
+                  key: const Key('softKeyboard'),
+                  onPressed: _toggleKeyboard,
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(44, 44), padding: const EdgeInsets.symmetric(horizontal: 10), foregroundColor: C.text, backgroundColor: C.surface),
+                  child: const Icon(Icons.keyboard_outlined, size: 18),
+                ),
+              );
+            }
+            final (label, seq, name, key, mods) = keys[i - 1];
             return Semantics(
               label: name,
               button: true,

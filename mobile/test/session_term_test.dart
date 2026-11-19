@@ -372,7 +372,7 @@ Future<void> _refuse(Harness h) async {
   for (var i = 0; i < 10; i++) {
     await h.t.pump(const Duration(milliseconds: 10));
   }
-  expect(find.text('session not realized'), findsOneWidget);
+  expect(find.text('session not realized'), findsNothing); // said at the first input
 }
 
 /// A single tap, acted on once the double-tap timeout passes.
@@ -1596,6 +1596,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 10));
     }
     expect(h.r.refusedFits, 0);
+    await _key(t, 'Up');
     expect(find.text('session not realized'), findsOneWidget);
     expect(find.text('refused session.grid'), findsNothing);
     await t.pump(const Duration(seconds: 5));
@@ -2629,6 +2630,19 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('hidingTheComposerWhileLeadingResizesOnce', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    final claim = _claims(h).single;
+    await _toggleComposer(t, 'Hide composer');
+    await t.pump(const Duration(seconds: 1));
+    final resize = h.r.of(LinkKind.resize).single;
+    expect(resize.size!.rows, greaterThan(claim['rows'] as int));
+    await h.stop();
+  });
+
   testWidgets('hiddenComposerStillTypesIndirectly', (t) async {
     ComposerPref.shown = false;
     final h = Harness(t, treeOf(live: false));
@@ -2637,6 +2651,62 @@ void main() {
     await t.pump();
     expect(h.r.typed, ['\x1b[A']);
     expect(find.byKey(const Key('composer')), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('keyboardKeyOpensTheKeyboardOnANonLivePane', (t) async {
+    ComposerPref.shown = false;
+    final h = Harness(t, treeOf(live: false));
+    await h.start();
+    await t.tap(find.byKey(const Key('softKeyboard')));
+    await t.pump();
+    expect(t.testTextInput.isVisible, isTrue);
+    await _soft(t, 'l');
+    expect(h.r.typed, ['l']);
+    await h.stop();
+  });
+
+  testWidgets('keyboardKeyTogglesTheKeyboardAndNeverClaims', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _takeBack(h);
+    await t.tap(find.byKey(const Key('softKeyboard')));
+    await t.pump();
+    expect(t.testTextInput.isVisible, isTrue);
+    t.view.viewInsets = const FakeViewPadding(bottom: 900);
+    addTearDown(t.view.reset);
+    await t.pump();
+    await t.tap(find.byKey(const Key('softKeyboard')));
+    await t.pump();
+    expect(t.testTextInput.isVisible, isFalse);
+    expect(_claims(h), hasLength(1));
+    await h.stop();
+  });
+
+  testWidgets('aRefusedOpenClaimIsSaidAtTheFirstInput', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _refuse(h);
+    await _key(t, 'Up');
+    expect(find.text('session not realized'), findsOneWidget);
+    await t.pump(const Duration(seconds: 5));
+    await _key(t, 'Down');
+    expect(find.text('session not realized'), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('aPaneSwitchAfterATakeBackClaims', (t) async {
+    final h = Harness(t, treeOf(split: true));
+    await h.start();
+    await h.opened();
+    await _takeBack(h);
+    await t.tap(find.byKey(const Key('rightPane')));
+    await t.pump();
+    await t.pump();
+    await h.opened();
+    expect([for (final c in _claims(h)) c['pane']], ['left', 'right']);
     await h.stop();
   });
 }
