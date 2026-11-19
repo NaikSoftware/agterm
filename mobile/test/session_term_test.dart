@@ -1877,4 +1877,53 @@ void main() {
     expect(_claims(h), hasLength(1));
     await h.stop();
   });
+
+  testWidgets('tapOnTheHistoryEmptyAreaClaims', (t) async {
+    final h = await _shortHistory(t);
+    final view = _historyBox(t);
+    expect(t.getRect(find.byKey(const Key('screen'))).top, greaterThan(view.top + 20)); // the text sits at the bottom
+    await _tap(t, view.topCenter + const Offset(0, 4));
+    expect(_claims(h), hasLength(1));
+    expect(h.keyboards, 0);
+    await h.stop();
+  });
+
+  testWidgets('doubleTapOnTheHistoryDoesNotClaim', (t) async {
+    final h = await _shortHistory(t);
+    final at = t.getRect(find.byKey(const Key('screen'))).bottomCenter - const Offset(0, 3);
+    await t.tapAt(at);
+    await t.pump(const Duration(milliseconds: 50));
+    await t.tapAt(at);
+    await t.pump(const Duration(milliseconds: 400));
+    expect(_claims(h), isEmpty);
+    expect(h.keyboards, 0);
+    await h.stop();
+  });
+
+  testWidgets('historyEmptyAreaBelowTextIsTheCursorRow', (t) async {
+    final h = await _shortHistory(t);
+    final view = _historyBox(t);
+    await _tap(t, view.bottomCenter - const Offset(0, 1)); // the box's last pixel row
+    expect(h.keyboards, 1);
+    await _tap(t, view.topCenter + const Offset(0, 4)); // the empty area above the text is not
+    expect(h.keyboards, 1);
+    expect(_claims(h), hasLength(1));
+    await h.stop();
+  });
 }
+
+/// A plain shell's short history with a visible cursor.
+Future<Harness> _shortHistory(WidgetTester t) async {
+  final h = Harness(t, treeOf());
+  await h.start();
+  await h.opened();
+  h.vts.single
+    ..alt = false
+    ..cursorVisible = true;
+  await _dirty(h);
+  await t.pump(const Duration(seconds: 1));
+  return h;
+}
+
+Rect _historyBox(WidgetTester t) =>
+    t.getRect(find.ancestor(of: find.byKey(const Key('screen')), matching: find.byType(SingleChildScrollView)));

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/gestures.dart' show kDoubleTapSlop, kDoubleTapTimeout, kLongPressTimeout, kTouchSlop;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -704,7 +705,6 @@ class _SessionScreenState extends State<SessionScreen> {
           final body = SelectableText(
             error != null && text.isEmpty ? error! : withGridGlyphs(text),
             key: const Key('screen'),
-            onTap: _tap,
             // the size above is already the one whose rows fit; Android's font scale on top would wrap every full row
             textScaler: TextScaler.noScaling,
             // letterSpacing 0: the theme's body text adds 0.25 per glyph, which would wrap every full row
@@ -716,7 +716,9 @@ class _SessionScreenState extends State<SessionScreen> {
             physics: _remoteScroll ? const NeverScrollableScrollPhysics() : null,
             child: SizedBox(key: _text, width: double.infinity, child: body),
           );
-          return _remoteScroll ? GestureDetector(onVerticalDragUpdate: (d) => _drag(d.delta.dy / (_fit * 1.3)), child: view) : view;
+          return _SingleTap(
+              onTap: _tap,
+              child: _remoteScroll ? GestureDetector(onVerticalDragUpdate: (d) => _drag(d.delta.dy / (_fit * 1.3)), child: view) : view);
         });
 
   Widget _answers(List<PromptOption> options) => Padding(
@@ -817,6 +819,58 @@ class _SessionScreenState extends State<SessionScreen> {
             ),
           ),
         ]),
+      );
+}
+
+/// A single tap anywhere in [child], told after the double-tap timeout, as the Term view's: a double tap, a long press,
+/// a drag or a second finger is not one. A Listener, outside the arena, so the text selection and the scroll inside
+/// keep their gestures; the text's own tap would win the arena at once, before a double tap could be told apart.
+class _SingleTap extends StatefulWidget {
+  const _SingleTap({required this.onTap, required this.child});
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_SingleTap> createState() => _SingleTapState();
+}
+
+class _SingleTapState extends State<_SingleTap> {
+  int _fingers = 0;
+  Offset? _down; // the touch that can still be a tap
+  Duration _at = Duration.zero;
+  Offset _last = Offset.zero; // the tap that waits for a second one
+  Timer? _wait;
+
+  @override
+  void dispose() {
+    _wait?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (e) {
+          _down = _fingers++ == 0 ? e.position : null;
+          _at = e.timeStamp;
+        },
+        onPointerMove: (e) {
+          if (_down case final d? when (e.position - d).distance > kTouchSlop) _down = null;
+        },
+        onPointerUp: (e) {
+          _fingers--;
+          final d = _down;
+          _down = null;
+          if (d == null || e.timeStamp - _at > kLongPressTimeout) return;
+          if (_wait?.isActive == true && (d - _last).distance < kDoubleTapSlop) return _wait!.cancel();
+          _last = d;
+          _wait = Timer(kDoubleTapTimeout, widget.onTap);
+        },
+        onPointerCancel: (_) {
+          _fingers--;
+          _down = null;
+        },
+        child: widget.child,
       );
 }
 
