@@ -75,6 +75,9 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _stale = false; // the finger that was down when the Mac took the lead back: its drag claims nothing
   final _grid = GlobalKey();
   final _text = GlobalKey(); // the history's text
+  final _answersBox = GlobalKey(), _composerBox = GlobalKey();
+  double? _composerLine; // the composer's height at one line
+  bool _answersShown = false; // a removed row's key still finds its inactive element during the layout
   late CellMetrics _cell; // the Term view's, as last laid out
   bool _scrolling = false;
   bool polling = false;
@@ -89,6 +92,7 @@ class _SessionScreenState extends State<SessionScreen> {
   int _coveredTries = 0;
   int? _resetTries; // after a refused reset, the retries left
   Timer? _fitRetry;
+  bool _quietFit = false; // the refit after a refused claim: a refusal of it repeats the claim's, already said
   final _refused = <String>{}; // panes whose terminal the relay refused on this visit: text view until they stop being Live
   final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
 
@@ -227,11 +231,17 @@ class _SessionScreenState extends State<SessionScreen> {
     return (cols, max(1, (_fullHeight / CellMetrics.fit(_width, cols).h).floor()));
   }
 
-  // the box's height without the soft keyboard, which never resizes the program; the keyboard also covers the bottom
-  // safe area the box leaves out without it
+  // the box's height without the soft keyboard, the answer row and the composer's extra lines, none of which resizes
+  // the program: they cover its top rows. The keyboard also covers the bottom safe area the box leaves out without it
   double get _fullHeight {
     final q = MediaQuery.of(context);
-    return _height + q.viewInsets.bottom - (q.viewPadding.bottom - q.padding.bottom);
+    double h(GlobalKey k) => switch (k.currentContext?.findRenderObject()) {
+          RenderBox b when b.hasSize => b.size.height,
+          _ => 0,
+        };
+    final composer = h(_composerBox);
+    final line = _composerLine = min(_composerLine ?? composer, composer);
+    return _height + (_answersShown ? h(_answersBox) : 0) + composer - line + q.viewInsets.bottom - (q.viewPadding.bottom - q.padding.bottom);
   }
 
   bool get _direct => term != null && !_noClaim.contains(pane);
@@ -281,6 +291,7 @@ class _SessionScreenState extends State<SessionScreen> {
     t.release();
     if (err == null) return; // a refused reset: a refit now would only be refused and said again
     report(context, err);
+    _quietFit = true;
     unawaited(_syncFit());
   }
 
@@ -389,6 +400,7 @@ class _SessionScreenState extends State<SessionScreen> {
         while (await _fitOnce()) {}
       } finally {
         _fitCall = null;
+        _quietFit = false;
         done.complete();
       }
     }();
@@ -402,6 +414,8 @@ class _SessionScreenState extends State<SessionScreen> {
     final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible && !_lead);
     if (on == null || _fitRetry?.isActive == true || !on && _resetTries == 0) return false;
     final key = _fitKey;
+    final quiet = on && _quietFit;
+    if (on) _quietFit = false;
     var ok = false;
     try {
       if (on) {
@@ -421,7 +435,9 @@ class _SessionScreenState extends State<SessionScreen> {
       ok = true;
     } on ElisError catch (e) {
       final first = _resetTries == null;
-      if (on && _coveredTries > 0) {
+      if (quiet) {
+        autoFit.wanted = false;
+      } else if (on && _coveredTries > 0) {
         _coveredTries--; // covered just after the phone's own lead: quietly, and still wanted
         _fitRetry = Timer(const Duration(seconds: 1), _syncFit);
       } else {
@@ -452,8 +468,10 @@ class _SessionScreenState extends State<SessionScreen> {
 
   static const _busy = 'The computer has not taken the earlier input yet.';
 
+  // a direct send reads the history back as soon as the indirect path does
   void _sent(bool ok) {
-    if (!ok) report(context, _busy);
+    if (!ok) return report(context, _busy);
+    Future.delayed(const Duration(milliseconds: 150), _load);
   }
 
   Future<void> type(String keys) async {
@@ -520,8 +538,10 @@ class _SessionScreenState extends State<SessionScreen> {
     final t = input.text;
     _claim();
     if (_direct) {
-      if (!term!.line(t)) return report(context, _busy); // the composer keeps the text
-      return input.clear();
+      final ok = term!.line(t);
+      _sent(ok);
+      if (ok) input.clear(); // refused, the composer keeps the text
+      return;
     }
     if (t.isEmpty) return type('\r');
     setState(() => sending = true);
@@ -541,8 +561,9 @@ class _SessionScreenState extends State<SessionScreen> {
     final s = this.s;
     if (s == null) return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
     final t = term;
-    _pickView(t?.snapshot);
+    _pickView(t?.replaying == true ? null : t?.snapshot); // a reset's main screen is not the program's
     final options = promptOptions(_termShown ? t!.snapshot!.lines.map((l) => l.text).join('\n') : text);
+    _answersShown = options.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -770,6 +791,7 @@ class _SessionScreenState extends State<SessionScreen> {
         });
 
   Widget _answers(List<PromptOption> options) => Padding(
+        key: _answersBox,
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
         child: Row(children: [
           for (final (i, o) in options.take(4).indexed) ...[
@@ -834,6 +856,7 @@ class _SessionScreenState extends State<SessionScreen> {
       );
 
   Widget _composer() => Padding(
+        key: _composerBox,
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         child: Row(children: [
           Expanded(

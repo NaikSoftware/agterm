@@ -31,9 +31,9 @@ class TermSession extends ChangeNotifier {
   VtSnapshot? _snapshot;
   bool _hold = false;
   (int, int)? _fit; // the grid the phone asked for, which the relay reports up to 2 s after the program draws at it
-  ClaimChannel? _claim;
+  ClaimChannel? _claim, _opening; // [_opening] waits for OPENED; closing it then keeps the relay from attaching it
   StreamSubscription<ClaimEvent>? _claimSub;
-  int _claimGen = 0; // bumped to drop a claim still waiting for OPENED, which cannot be cancelled
+  int _claimGen = 0; // bumped to drop a claim still waiting for OPENED
   (int, int) _leadSize = (80, 24), _claimedSize = (80, 24);
   bool _leading = false;
   bool _resynced = false; // the watch channel's Resync after the leader report: earlier queries were the Mac's to answer
@@ -42,6 +42,10 @@ class TermSession extends ChangeNotifier {
   int _queuedBytes = 0;
   Timer? _gap; // holds the queue between a line's text and its Enter
   String? _inputLost;
+  bool _replaying = false; // from a Resync to the first Data after it
+
+  /// The emulator holds a Resync's reset, not the program's screen, until the replay's first bytes.
+  bool get replaying => _replaying;
 
   /// Why the relay ended the phone's lead; cleared by [takeOver].
   String? leadLost;
@@ -108,6 +112,7 @@ class TermSession extends ChangeNotifier {
             _drain(); // input that came under a lead that preceded the emulator
           }
         case Data(:final bytes):
+          _replaying = false;
           try {
             _vt?.write(bytes); // bytes before a Resync too: the reset follows
             final replies = _vt?.takeReplies(); // drained always, or take-over would type stale replies
@@ -117,6 +122,7 @@ class TermSession extends ChangeNotifier {
           }
         case Resync():
           _vt?.reset(); // a Grid follows
+          _replaying = true;
           if (_claim != null) _resynced = true; // the relay resyncs only after the leader report that preceded OPENED
         case Grid(:final cols, :final rows):
           _fit = null; // the relay's report is the truth from now on
@@ -151,17 +157,20 @@ class TermSession extends ChangeNotifier {
     leadLost = null;
     final gen = _claimGen;
     final size = _clamp(cols, rows);
-    final ClaimChannel ch;
+    final ch = _opening = mux.claim(target, pane: pane, cols: size.$1, rows: size.$2);
     try {
-      ch = await mux.claim(target, pane: pane, cols: size.$1, rows: size.$2);
+      await ch.opened;
     } catch (e) {
-      if (gen == _claimGen) _armed = false; // the queue stays for takeUnsent
+      if (gen != _claimGen) return null; // released before OPENED: nothing to show
+      _opening = null;
+      _armed = false; // the queue stays for takeUnsent
       return e is ElisError ? e.message : '$e';
     }
     if (gen != _claimGen || _closed) {
       unawaited(ch.close());
-      return null; // released before OPENED: nothing to show
+      return null;
     }
+    _opening = null;
     _claim = ch;
     _leadSize = _claimedSize = size;
     _resynced = false;
@@ -233,13 +242,13 @@ class TermSession extends ChangeNotifier {
     return _drain(fresh: intents.length);
   }
 
-  /// Sends the queue while leading, stopping at a line's Enter for the gap unless [gaps] is false.
+  /// Sends the queue while leading, stopping at a line's Enter for the gap.
   /// A refused send drops the rest of the queue, so nothing goes out of order; false when that happened. Losing more
   /// than the caller's [fresh] intents sets [inputLost].
-  bool _drain({bool gaps = true, bool gapDone = false, int fresh = 0}) {
-    while (_leading && _vt != null && _queue.isNotEmpty && (_gap == null || !gaps)) {
+  bool _drain({bool gapDone = false, int fresh = 0}) {
+    while (_leading && _vt != null && _queue.isNotEmpty && _gap == null) {
       final (unsent, encode, gap) = _queue.first;
-      if (gap && gaps && !gapDone) {
+      if (gap && !gapDone) {
         _gap = Timer(const Duration(milliseconds: 20), () {
           _gap = null;
           _drain(gapDone: true);
@@ -298,8 +307,8 @@ class TermSession extends ChangeNotifier {
 
   static (int, int) _clamp(int cols, int rows) => (cols.clamp(1, 1000), rows.clamp(1, 1000)); // the relay ignores others
 
-  /// Ends the phone's lead (the queued input without gaps, focus out, then CLOSE), or drops a claim still waiting for
-  /// OPENED; input that never led is dropped.
+  /// Ends the phone's lead (the queued input, keeping a line's gap, then focus out and CLOSE), or closes a claim still
+  /// waiting for OPENED; input that never led is dropped.
   void release() {
     _endClaim();
     _armed = false;
@@ -308,17 +317,29 @@ class TermSession extends ChangeNotifier {
 
   void _endClaim() {
     _claimGen++;
+    unawaited(_opening?.close());
+    _opening = null;
     final ch = _claim;
     if (ch == null) return;
-    _gap?.cancel();
-    _gap = null;
-    _drain(gaps: false);
-    _send(_vt?.encodeFocus(false));
+    final vt = _vt;
+    // encoded now: the emulator is freed before a gap ends when the session closes
+    final rest = [
+      if (_leading && vt != null) ...[for (final (_, encode, gap) in _queue) (encode(vt), gap), (vt.encodeFocus(false), false)],
+    ];
+    _drop();
     unawaited(_claimSub?.cancel());
-    unawaited(ch.close());
     _claim = null;
     _leading = false;
+    unawaited(_flush(ch, rest));
     if (!_closed) notifyListeners();
+  }
+
+  static Future<void> _flush(ClaimChannel ch, List<(Uint8List, bool)> rest) async {
+    for (final (bytes, gap) in rest) {
+      if (gap) await Future<void>.delayed(const Duration(milliseconds: 20));
+      if (!ch.send(bytes)) break;
+    }
+    await ch.close();
   }
 
   void _end(String reason) {

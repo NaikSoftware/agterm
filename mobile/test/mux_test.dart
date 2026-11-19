@@ -8,6 +8,7 @@ import 'package:elis_mobile/link/decoder.dart';
 import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/link/messages.dart';
 import 'package:elis_mobile/link/mux.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The relay's end of the link: answers auth on lines, reads frames after `{"mux":1}` (unless [old]).
@@ -102,7 +103,7 @@ String describeClaim(ClaimEvent e) => switch (e) {
 
 /// Claims a pane the relay accepts at 80x24 and leads; [seen] collects its events.
 Future<ClaimChannel> claimLive(Mux m, FakeRelay r, List<String> seen) async {
-  final f = m.claim('w', cols: 80, rows: 24);
+  final f = m.claim('w', cols: 80, rows: 24).opened;
   await flush();
   final id = r.frames.last.channel;
   r.send([...json(LinkKind.opened, id, {'cols': 80, 'rows': 24}), ...json(LinkKind.lead, id, {'role': 'leader'})]);
@@ -405,16 +406,59 @@ void main() {
 
   test('claimOpenCarriesClaimAndSize', () async {
     final (m, r, _) = await upgraded();
-    unawaited(m.claim('w1', pane: 'p2', cols: 50, rows: 30));
+    m.claim('w1', pane: 'p2', cols: 50, rows: 30);
     await flush();
     final o = r.frames.last;
     expect((o.kind, o.channel), (LinkKind.open, 2));
     expect(utf8.decode(o.payload), '{"claim":true,"cols":50,"pane":"p2","rows":30,"target":"w1","type":"vt"}');
   });
 
+  test('claimCloseWaitsForTheQueuedInput', () => fakeAsync((a) {
+    late FakeRelay r;
+    late ClaimChannel ch;
+    upgraded().then((v) async {
+      r = v.$2;
+      ch = await claimLive(v.$1, r, []);
+    });
+    a.elapse(Duration.zero);
+    ch.send(Uint8List(16384 + 10));
+    unawaited(ch.close());
+    a.elapse(Duration.zero);
+    expect(r.frames.where((f) => f.kind == LinkKind.close), isEmpty);
+    r.send(LinkFrame.credit(ch.id, 16384).encode());
+    a.elapse(Duration.zero);
+    expect([for (final f in r.frames) if (f.channel == ch.id && f.kind != LinkKind.open) f.kind].skip(1).toList(),
+        [LinkKind.data, LinkKind.close]);
+  }));
+
+  test('claimCloseIsBoundedWithoutCredit', () => fakeAsync((a) {
+    late FakeRelay r;
+    late ClaimChannel ch;
+    upgraded().then((v) async {
+      r = v.$2;
+      ch = await claimLive(v.$1, r, []);
+    });
+    a.elapse(Duration.zero);
+    ch.send(Uint8List(16384 + 10));
+    unawaited(ch.close());
+    a.elapse(const Duration(milliseconds: 999));
+    expect(r.frames.where((f) => f.kind == LinkKind.close), isEmpty);
+    a.elapse(const Duration(milliseconds: 1));
+    expect(r.frames.where((f) => f.kind == LinkKind.close), hasLength(1));
+  }));
+
+  test('claimClosedBeforeOpenedThrowsAndSendsClose', () async {
+    final (m, r, _) = await upgraded();
+    final ch = m.claim('w', cols: 80, rows: 24);
+    final opened = expectLater(ch.opened, throwsA(isA<ElisError>()));
+    await ch.close();
+    await opened;
+    expect([for (final f in r.frames) if (f.channel == ch.id) f.kind], [LinkKind.open, LinkKind.close]);
+  });
+
   test('claimRefusalThrows', () async {
     final (m, r, _) = await upgraded();
-    final f = m.claim('w', cols: 80, rows: 24);
+    final f = m.claim('w', cols: 80, rows: 24).opened;
     await flush();
     r.send(json(LinkKind.opened, 2, {'error': 'session not realized'}));
     await expectLater(f, throwsA(isA<ElisError>().having((e) => e.message, 'message', 'session not realized')));
@@ -493,7 +537,7 @@ void main() {
     final (m, r, _) = await upgraded();
     final seen = <String>[];
     await claimLive(m, r, seen);
-    final pending = m.claim('w', cols: 80, rows: 24);
+    final pending = m.claim('w', cols: 80, rows: 24).opened;
     await flush();
     final failed = expectLater(pending, throwsA(isA<ElisError>()));
     r.drop();

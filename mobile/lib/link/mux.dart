@@ -94,13 +94,14 @@ class Mux {
     return ch._opened.future;
   }
 
-  /// [open] for input: completes on OPENED, after which the relay sends LEAD; a refusal throws as [open] does.
-  Future<ClaimChannel> claim(String target, {String? pane, required int cols, required int rows}) {
-    if (_done.isCompleted) return Future.error(ElisError('Disconnected'));
+  /// [open] for input: [ClaimChannel.opened] completes on OPENED, after which the relay sends LEAD; a refusal throws as
+  /// [open] does. The channel is returned at once so it can be closed before OPENED.
+  ClaimChannel claim(String target, {String? pane, required int cols, required int rows}) {
     final ch = ClaimChannel._(this, _nextChannel++);
+    if (_done.isCompleted) return ch.._end('Disconnected');
     _channels[ch.id] = ch;
     _add(LinkFrame.json(LinkKind.open, ch.id, {'type': 'vt', 'target': target, 'pane': ?pane, 'claim': true, 'cols': cols, 'rows': rows}));
-    return ch._opened.future;
+    return ch;
   }
 
   void _add(LinkFrame f) => _c.addBytes(f.encode());
@@ -290,8 +291,11 @@ class ClaimChannel implements _Channel {
   int _queued = 0;
   int _headAt = 0; // bytes of _queue.first already sent
   int _unacked = 0;
+  Completer<void>? _drained; // a close waiting for the queue to go out
 
   Stream<ClaimEvent> get events => _events.stream;
+
+  Future<ClaimChannel> get opened => _opened.future;
 
   @override
   bool get _isOpened => _opened.isCompleted;
@@ -311,8 +315,12 @@ class ClaimChannel implements _Channel {
     if (!_events.isClosed) _mux._add(LinkFrame.resize(id, cols, rows));
   }
 
-  /// Sends CLOSE; the relay does not answer it, and unsent input is dropped.
-  Future<void> close() async {
+  /// Sends CLOSE once the queued input is out, waiting at most [limit] for CREDIT; the relay does not answer it. Before
+  /// OPENED, [opened] throws and the relay never attaches the claim.
+  Future<void> close({Duration limit = const Duration(seconds: 1)}) async {
+    if (_queue.isNotEmpty && _mux._channels[id] == this) {
+      await (_drained ??= Completer<void>()).future.timeout(limit, onTimeout: () {});
+    }
     if (_mux._channels[id] != this) return;
     _mux._add(LinkFrame.json(LinkKind.close, id, {'reason': 'closed'}));
     _end(null);
@@ -331,6 +339,11 @@ class ClaimChannel implements _Channel {
         _headAt = 0;
       }
     }
+    if (_queue.isEmpty) _settle();
+  }
+
+  void _settle() {
+    if (_drained case final d? when !d.isCompleted) d.complete();
   }
 
   @override
@@ -356,6 +369,7 @@ class ClaimChannel implements _Channel {
     _mux._channels.remove(id);
     _queue.clear();
     _queued = 0;
+    _settle();
     if (!_opened.isCompleted) {
       _opened.completeError(revoked ? Revoked() : ElisError(reason ?? 'closed'));
     } else if (reason != null) {

@@ -149,11 +149,13 @@ void main() {
     expect(sent(r), '\x1b[I\x1b[O');
   });
 
-  test('aPendingClaimIsClosedWhenItArrivesAfterRelease', () async {
+  test('aPendingClaimIsClosedAtRelease', () async {
     final (s, r, _) = await watched();
     final f = s.takeOver(60, 20);
     await flush();
     s.release();
+    await flush();
+    expect(closes(r), [_claim]);
     r.send([...json(LinkKind.opened, _claim, {'cols': 60, 'rows': 20}), ...json(LinkKind.lead, _claim, {'role': 'leader'})]);
     expect(await f, isNull);
     await flush();
@@ -167,6 +169,7 @@ void main() {
     await flush();
     final second = s.takeOver(70, 20);
     await flush();
+    expect(closes(r), [3], reason: 'closed before its OPENED, so the relay never attaches it');
     r.send([...json(LinkKind.opened, 3, {'cols': 60, 'rows': 20}), ...json(LinkKind.opened, 4, {'cols': 70, 'rows': 20})]);
     expect(await first, isNull);
     expect(await second, isNull);
@@ -197,6 +200,7 @@ void main() {
   test('wheelFallsBackToArrowsOnTheAlternateScreen', () async {
     final (s, r, vt) = await watched();
     await lead(s, r);
+    vt.alt = true; // the replay after the lead's reset
     s.wheel(up: true, col: 3, row: 4);
     expect(sent(r), '', reason: 'no alternate scroll (1007)');
     vt.modes.add(1007);
@@ -383,16 +387,40 @@ void main() {
     expect(r.frames.where((f) => f.channel == _claim), isEmpty);
   });
 
-  test('releaseInTheGapStillSendsEnter', () async {
-    final (s, r, vt) = await watched();
-    vt.modes.add(1004);
-    await lead(s, r);
+  test('releaseInTheGapKeepsTheGapThenCloses', () => fakeAsync((a) {
+    late FakeRelay r;
+    late TermSession s;
+    watched().then((v) async {
+      (s, r) = (v.$1, v.$2);
+      v.$3.modes.add(1004);
+      await lead(s, r);
+    });
+    a.elapse(Duration.zero);
     s.line('ls');
     s.text('x');
     s.release();
+    a.elapse(Duration.zero);
+    expect(sent(r), '\x1b[Ils');
+    expect(closes(r), isEmpty);
+    a.elapse(const Duration(milliseconds: 20));
     expect(sent(r), '\x1b[Ils\rx\x1b[O');
     expect(closes(r), [_claim]);
-  });
+  }));
+
+  test('closeInTheGapStillSendsTheEnter', () => fakeAsync((a) {
+    late FakeRelay r;
+    late TermSession s;
+    watched().then((v) async {
+      (s, r) = (v.$1, v.$2);
+      await lead(s, r);
+    });
+    a.elapse(Duration.zero);
+    s.line('ls');
+    s.close();
+    a.elapse(const Duration(milliseconds: 20));
+    expect(sent(r), 'ls\r');
+    expect(closes(r), unorderedEquals([_watch, _claim]));
+  }));
 
   test('clickAndWheelAreNotQueued', () async {
     final (s, r, vt) = await watched();

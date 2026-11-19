@@ -165,6 +165,7 @@ class FakeVt implements Vt {
   void reset() {
     resets++;
     written.clear();
+    alt = false; // a full reset leaves the alternate screen; the replay enters it again
   }
 
   final modes = <int>{};
@@ -424,6 +425,7 @@ void main() {
     h.r.send([...frame(LinkKind.data, 2, utf8.encode('old')), ...frame(LinkKind.resync, 2), ...frame(LinkKind.grid, 2, LinkFrame.resize(2, 100, 30).payload)]);
     await t.pump();
     expect((h.vts.single.resets, h.vts.single.cols, h.vts.single.rows), (1, 100, 30));
+    h.vts.single.alt = true;
     h.r.send(frame(LinkKind.data, 2, utf8.encode('new')));
     await t.pump();
     expect([for (final f in h.r.of(LinkKind.credit)) f.creditBytes], [5, 3]);
@@ -1484,6 +1486,26 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('aRefusedClaimOnACoveredPaneSaysOneMessage', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _key(t, 'Left');
+    await t.pump();
+    h.r.refusedFits = 1;
+    h.r.send(json(LinkKind.opened, _claimCh, {'error': 'session not realized'}));
+    for (var i = 0; i < 5; i++) {
+      await t.pump(const Duration(milliseconds: 10));
+    }
+    expect(h.r.refusedFits, 0);
+    expect(find.text('session not realized'), findsOneWidget);
+    expect(find.text('refused session.grid'), findsNothing);
+    await t.pump(const Duration(seconds: 5));
+    expect(find.text('refused session.grid'), findsNothing);
+    expect(_fits(h).where((g) => g['columns'] != null), hasLength(2), reason: 'not retried');
+    await h.stop();
+  });
+
   testWidgets('refusedClaimResumesTheFit', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
@@ -1584,6 +1606,142 @@ void main() {
     expect((vt.cols, vt.rows), (resize.size!.cols, resize.size!.rows));
     await t.pump(const Duration(seconds: 1));
     expect(h.r.of(LinkKind.resize), hasLength(1));
+    await h.stop();
+  });
+
+  testWidgets('aResyncKeepsTheViewUntilTheReplay', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    final texts = h.r.texts;
+    h.r.send([...frame(LinkKind.resync, 2), ...grid(2, 40, 20)]);
+    await t.pump();
+    await t.pump();
+    expect(find.byType(TerminalView), findsOneWidget);
+    h.vts.single.alt = true;
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    expect(find.byType(TerminalView), findsOneWidget);
+    expect(h.r.texts, texts, reason: 'no history read for a reset');
+
+    h.r.send([...frame(LinkKind.resync, 2), ...grid(2, 40, 20)]);
+    await t.pump();
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    expect(find.byKey(const Key('screen')), findsOneWidget, reason: 'the replay drew the main screen');
+    await h.stop();
+  });
+
+  testWidgets('aPaneSwitchClosesAPendingClaimBeforeTheNextOne', (t) async {
+    final h = Harness(t, treeOf(split: true));
+    await h.start();
+    await h.opened();
+    await _key(t, 'Left');
+    await t.pump();
+    final pending = h.r.lastChannel;
+    await t.tap(find.byKey(const Key('rightPane')));
+    await t.pump();
+    expect(h.r.closes, contains(pending), reason: 'closed before its OPENED, so the relay never attaches it');
+    await t.tap(find.text('Left pane'));
+    await t.pump();
+    await h.opened();
+    await _key(t, 'Left');
+    await t.pump();
+    expect(_claims(h), hasLength(2));
+    h.r.send([...json(LinkKind.opened, pending, {'cols': 40, 'rows': 20}), ...json(LinkKind.lead, pending, {'role': 'leader'})]);
+    await t.pump();
+    await _leader(h, h.r.lastChannel);
+    h.r.send(json(LinkKind.close, pending, {'reason': 'the computer took the lead back'}));
+    await t.pump();
+    expect(find.text('Leading'), findsOneWidget);
+    expect(find.text('The computer took the lead back.'), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('answerRowDoesNotResizeTheLead', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.vts.single.alt = false;
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    await _lead(h);
+    h.r.text = 'Proceed?\n❯ 1. Yes\n  2. No';
+    await t.pump(const Duration(seconds: 1));
+    await t.pump();
+    expect(find.byKey(const Key('answer-1')), findsOneWidget);
+    await t.pump(const Duration(seconds: 1));
+    expect(h.r.of(LinkKind.resize), isEmpty);
+    expect(t.getRect(find.byKey(const Key('screen'))).bottom, lessThanOrEqualTo(t.getRect(find.byKey(const Key('answer-1'))).top));
+    h.r.text = 'plain text';
+    await t.pump(const Duration(seconds: 1));
+    await t.pump(const Duration(seconds: 1));
+    expect(find.byKey(const Key('answer-1')), findsNothing);
+    expect(h.r.of(LinkKind.resize), isEmpty);
+    await h.stop();
+  });
+
+  testWidgets('aClaimByAnAnswerButtonTakesTheRowsWithoutIt', (t) async {
+    final h = Harness(t, treeOf());
+    h.r.text = 'Proceed?\n❯ 1. Yes\n  2. No';
+    await h.start();
+    await h.opened();
+    h.vts.single.alt = false;
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    await t.pump();
+    await t.tap(find.byKey(const Key('answer-1')));
+    await t.pump();
+    await t.pump();
+    await _leader(h);
+    h.r.text = 'plain text';
+    await t.pump(const Duration(seconds: 1));
+    await t.pump(const Duration(seconds: 1));
+    expect(find.byKey(const Key('answer-1')), findsNothing);
+    expect(h.r.of(LinkKind.resize), isEmpty);
+    await h.stop();
+  });
+
+  testWidgets('aGrowingComposerDoesNotResizeTheLead', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await _lead(h);
+    final composer = t.getRect(find.byKey(const Key('composer')));
+    await t.enterText(find.byKey(const Key('composer')), 'a\nb\nc\nd');
+    await t.pump();
+    await t.pump(const Duration(seconds: 1));
+    expect(t.getRect(find.byKey(const Key('composer'))).top, lessThan(composer.top));
+    expect(h.r.of(LinkKind.resize), isEmpty);
+    expect(t.getRect(find.byType(TerminalView)).bottom, lessThanOrEqualTo(t.getRect(find.byKey(const Key('composer'))).top));
+    await h.stop();
+  });
+
+  testWidgets('directTypingOnTheHistoryReadsItBackSoon', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    h.vts.single.alt = false;
+    await _dirty(h);
+    await t.pump(const Duration(seconds: 1));
+    await _lead(h);
+    await t.pump(const Duration(seconds: 1));
+    final texts = h.r.texts;
+    while (h.r.texts == texts) {
+      await t.pump(const Duration(milliseconds: 10)); // a poll tick: the next is 700 ms away
+    }
+    for (final send in [() => _key(t, 'Up'), () => t.enterText(find.byKey(const Key('composer')), 'ls').then((_) => t.tap(find.byKey(const Key('send'))))]) {
+      final before = h.r.texts;
+      await send();
+      await t.pump(const Duration(milliseconds: 200));
+      expect(h.r.texts, before + 1);
+      await t.pump(const Duration(milliseconds: 500));
+      while (h.r.texts == before + 1) {
+        await t.pump(const Duration(milliseconds: 10));
+      }
+    }
     await h.stop();
   });
 
