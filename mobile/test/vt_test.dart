@@ -180,6 +180,20 @@ void main() {
     expect(make(10, 3).encodePaste(text), _b(text));
   }, skip: skip);
 
+  test('clickIsEmptyWithoutMouseTracking', () {
+    expect(make(10, 5).encodeClick(col: 2, row: 3), isEmpty);
+  }, skip: skip);
+
+  test('clickIsPressThenReleaseInSgr', () {
+    final vt = make(10, 5)..write(_b('\x1b[?1000h\x1b[?1006h'));
+    expect(vt.encodeClick(col: 2, row: 3), _b('\x1b[<0;3;4M\x1b[<0;3;4m'));
+  }, skip: skip);
+
+  test('clickInLegacyEncoding', () {
+    final vt = make(10, 5)..write(_b('\x1b[?1000h'));
+    expect(vt.encodeClick(col: 2, row: 3), _b('\x1b[M #\$\x1b[M##\$'));
+  }, skip: skip);
+
   test('wheelIsEmptyWithoutTracking', () {
     expect(make(10, 5).encodeWheel(up: true, col: 2, row: 3), isEmpty);
   }, skip: skip);
@@ -238,6 +252,7 @@ void main() {
     expect(() => vt.encodeText('a'), throwsStateError);
     expect(() => vt.encodePaste('a'), throwsStateError);
     expect(() => vt.encodeWheel(up: true, col: 0, row: 0), throwsStateError);
+    expect(() => vt.encodeClick(col: 0, row: 0), throwsStateError);
     expect(() => vt.encodeFocus(true), throwsStateError);
     expect(vt.takeReplies, throwsStateError);
   }, skip: skip);

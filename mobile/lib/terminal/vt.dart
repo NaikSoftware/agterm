@@ -54,6 +54,8 @@ class _Lib {
             'vts_encode_paste', isLeaf: true),
         encodeWheel = l.lookupFunction<Int32 Function(_H, Int32, Uint16, Uint16, _Out, Int32),
             int Function(_H, int, int, int, _Out, int)>('vts_encode_wheel', isLeaf: true),
+        encodeClick = l.lookupFunction<Int32 Function(_H, Uint16, Uint16, _Out, Int32),
+            int Function(_H, int, int, _Out, int)>('vts_encode_click', isLeaf: true),
         encodeFocus = l.lookupFunction<Int32 Function(_H, Int32, _Out, Int32), int Function(_H, int, _Out, int)>(
             'vts_encode_focus', isLeaf: true),
         takeReplies = l.lookupFunction<Int32 Function(_H, _Out, Int32), int Function(_H, _Out, int)>(
@@ -69,6 +71,7 @@ class _Lib {
   final int Function(_H, int, int, int, _Out, int, _Out, int) encodeKey;
   final int Function(_H, _Out, int, _Out, int) encodePaste;
   final int Function(_H, int, int, int, _Out, int) encodeWheel;
+  final int Function(_H, int, int, _Out, int) encodeClick;
   final int Function(_H, int, _Out, int) encodeFocus;
   final int Function(_H, _Out, int) takeReplies;
 }
@@ -168,6 +171,12 @@ class Vt {
   Uint8List encodeWheel({required bool up, required int col, required int row}) {
     final h = _live;
     return _encode((out, cap) => _bound.encodeWheel(h, up ? 1 : 0, col, row, out, cap));
+  }
+
+  /// A left press then release at the centre of a zero-based cell; empty when the program does not track the mouse.
+  Uint8List encodeClick({required int col, required int row}) {
+    final h = _live;
+    return _encode((out, cap) => _bound.encodeClick(h, col, row, out, cap));
   }
 
   /// Focus in/out; empty unless the program set mode 1004.

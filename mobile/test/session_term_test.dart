@@ -185,6 +185,13 @@ class FakeVt implements Vt {
   @override
   Uint8List encodeWheel({required bool up, required int col, required int row}) =>
       Uint8List.fromList(tracksMouse ? utf8.encode('wheel ${up ? 'up' : 'down'} $col,$row') : const []);
+  final clicks = <(int, int)>[];
+  @override
+  Uint8List encodeClick({required int col, required int row}) {
+    clicks.add((col, row));
+    return Uint8List(0);
+  }
+
   @override
   Uint8List encodeFocus(bool gained) => Uint8List.fromList(modes.contains(1004) ? utf8.encode(gained ? '\x1b[I' : '\x1b[O') : const []);
   @override

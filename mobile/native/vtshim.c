@@ -256,18 +256,33 @@ int32_t vts_encode_paste(Vt* v, char* data, size_t len, uint8_t* out, int32_t ca
   return encoded(ghostty_paste_encode(data, len, vts_mode(v, 2004) == 1, (char*)out, (size_t)cap, &n), n);
 }
 
-int32_t vts_encode_wheel(Vt* v, int32_t up, uint16_t col, uint16_t row, uint8_t* out, int32_t cap) {
+// One mouse event at pixel (x, y) of the 8x16 cells on_size reports, so an SGR-pixels (1016) program maps it back.
+static int32_t encode_mouse(Vt* v, GhosttyMouseAction action, GhosttyMouseButton button, float x, float y,
+                            uint8_t* out, int32_t cap) {
   ghostty_mouse_encoder_setopt_from_terminal(v->mouse, v->t);
-  // the 8x16 cells on_size reports, so an SGR-pixels (1016) program maps the position back to this cell
   GhosttyMouseEncoderSize sz = { .size = sizeof(sz), .screen_width = v->cols * 8u, .screen_height = v->rows * 16u,
                                  .cell_width = 8, .cell_height = 16 };
   ghostty_mouse_encoder_setopt(v->mouse, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &sz);
-  ghostty_mouse_event_set_action(v->wheel, GHOSTTY_MOUSE_ACTION_PRESS);
-  ghostty_mouse_event_set_button(v->wheel, up ? GHOSTTY_MOUSE_BUTTON_FOUR : GHOSTTY_MOUSE_BUTTON_FIVE);
+  ghostty_mouse_event_set_action(v->wheel, action);
+  ghostty_mouse_event_set_button(v->wheel, button);
   ghostty_mouse_event_set_mods(v->wheel, 0);
-  ghostty_mouse_event_set_position(v->wheel, (GhosttyMousePosition){ .x = col * 8.0f, .y = row * 16.0f });
+  ghostty_mouse_event_set_position(v->wheel, (GhosttyMousePosition){ .x = x, .y = y });
   size_t n = 0;
   return encoded(ghostty_mouse_encoder_encode(v->mouse, v->wheel, (char*)out, (size_t)cap, &n), n);
+}
+
+int32_t vts_encode_wheel(Vt* v, int32_t up, uint16_t col, uint16_t row, uint8_t* out, int32_t cap) {
+  return encode_mouse(v, GHOSTTY_MOUSE_ACTION_PRESS, up ? GHOSTTY_MOUSE_BUTTON_FOUR : GHOSTTY_MOUSE_BUTTON_FIVE,
+                      col * 8.0f, row * 16.0f, out, cap);
+}
+
+// Left press then release at the cell's centre; 0 when the program does not track the mouse.
+int32_t vts_encode_click(Vt* v, uint16_t col, uint16_t row, uint8_t* out, int32_t cap) {
+  float x = col * 8.0f + 4, y = row * 16.0f + 8;
+  int32_t a = encode_mouse(v, GHOSTTY_MOUSE_ACTION_PRESS, GHOSTTY_MOUSE_BUTTON_LEFT, x, y, out, cap);
+  if (a <= 0) return a == 0 ? 0 : 2 * a; // press and release are the same length
+  int32_t b = encode_mouse(v, GHOSTTY_MOUSE_ACTION_RELEASE, GHOSTTY_MOUSE_BUTTON_LEFT, x, y, out + a, cap - a);
+  return b < 0 ? -(a - b) : a + b;
 }
 
 int32_t vts_encode_focus(Vt* v, int32_t gained, uint8_t* out, int32_t cap) {
