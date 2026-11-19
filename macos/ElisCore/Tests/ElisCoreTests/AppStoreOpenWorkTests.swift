@@ -684,4 +684,87 @@ struct AppStoreOpenWorkTests {
         #expect(hub.route(session: session.id, pane: session.paneIdentity) == viewer.gen)
         #expect(host.presentsRemotely(session, paneIdentity: session.paneIdentity))
     }
+
+    @Test func aLeadingPhoneGetsThePageRequest() throws {
+        let (_, session) = try session()
+        let phone = try Viewers.phone(hub, session)
+        let page = try url()
+
+        #expect(openPage(page, in: session) == .opened)
+        #expect(phone.sink.pages.map(\.page) == [page.id.uuidString])
+    }
+
+    @Test func anOpenPageMovesToAPhoneTakingTheLead() throws {
+        let (_, session) = try session()
+        let mac = try viewer(session, acquire: true)
+        let page = try url()
+        #expect(openPage(page, in: session) == .opened)
+        let phone = try Viewers.phone(hub, session)
+
+        pass(session)
+
+        #expect(mac.sink.pages.count == 1)
+        #expect(phone.sink.pages.map(\.page) == [page.id.uuidString])
+    }
+
+    @Test func openAskAndPickStayPutAtAPhoneTakeOver() throws {
+        let (_, session) = try session()
+        setLead(.leader, pane: session.paneIdentity)
+        let pending = ask(), choice = pick()
+        #expect(session.openAsk(pending, paneIdentity: nil, registry: store.askRegistry))
+        #expect(SessionPickBook.shared.openLocal(choice, session: session.id, window: UUID(), controller: PickController()) == nil)
+
+        setLead(.follower, pane: session.paneIdentity)
+        let phone = try Viewers.phone(hub, session)
+        pass(session)
+
+        #expect(phone.sink.asks.isEmpty)
+        #expect(phone.sink.picks.isEmpty)
+        #expect(session.askPending?.id == pending.id)
+        #expect(!session.askPresentedRemotely)
+    }
+
+    @Test(arguments: [true, false])
+    func onAHeadlessOriginOtherWorkGoesToTheMacViewer(macViewer: Bool) throws {
+        let (host, session) = try session(headless: true)
+        let phone = try Viewers.phone(hub, session)
+        let mac = macViewer ? try Viewers.viewer(hub, session, acquire: true) : nil
+
+        host.presentAskRemotely(ask(), in: session, paneIdentity: nil, window: UUID())
+
+        #expect(session.askRemoteOwner == mac?.gen)
+        #expect(phone.sink.asks.isEmpty)
+    }
+
+    @Test func aGuiAskInAWindowStaysOffThePhone() throws {
+        let (_, session) = try session()
+        let window = UUID(), controller = PickController()
+        let gui = ask(style: .gui)
+        #expect(controller.openAsk(gui.anchored(at: AskAnchor(sessionID: session.id))))
+        store.askRegistry.register(id: gui.id, owner: .window(window))
+        let phone = try Viewers.phone(hub, session)
+
+        pass(session, local: local(controller, window: window))
+
+        #expect(controller.pendingAsk != nil)
+        #expect(phone.sink.asks.isEmpty)
+    }
+
+    @Test func aHeldInteractionOnAHeadlessOriginStaysOffThePhone() throws {
+        let (host, session) = try session(headless: true)
+        let pending = ask(), choice = pick(), page = try url()
+        #expect(host.openUnpresentedAsk(pending, in: session, paneIdentity: nil, window: UUID()))
+        #expect(SessionPickBook.shared.openUnpresented(choice, session: session.id, follow: false))
+        #expect(openPage(page, in: session, on: host) == .opened)
+        let phone = try Viewers.phone(hub, session)
+
+        host.offerPendingInteractions(forSession: session.id, now: Date())
+
+        #expect(phone.sink.asks.isEmpty)
+        #expect(phone.sink.picks.isEmpty)
+        #expect(session.askPending?.id == pending.id)
+        #expect(session.askRemoteOwner == nil)
+        #expect(SessionPickBook.shared.placement(forSession: session.id) == .unpresented)
+        #expect(phone.sink.pages.map(\.page) == [page.id.uuidString])
+    }
 }

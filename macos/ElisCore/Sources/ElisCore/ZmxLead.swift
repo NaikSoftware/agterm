@@ -211,16 +211,28 @@ extension AppStore {
 
     /// remoteRecipient is the token of the viewer new work for `paneIdentity` of `session`, or for the whole session
     /// when nil, goes to; nil keeps it on this Mac or, headless, holds it for a viewer to come.
-    func remoteRecipient(_ session: Session, paneIdentity: UUID?) -> Int? {
+    func remoteRecipient(_ session: Session, paneIdentity: UUID?, work: PresentationHub.Work = .other) -> Int? {
         guard let hub = presentationHub, presentsRemotely(session, paneIdentity: paneIdentity) else { return nil }
-        return hub.route(session: session.id, pane: paneIdentity ?? session.paneIdentity)
+        return hub.route(session: session.id, pane: paneIdentity ?? session.paneIdentity, work: work)
     }
 
     /// pendingRecipient is `remoteRecipient` for work a headless origin holds, nil when that viewer cannot take held
     /// work and its job tokens; an older one sees only what opens while it is connected.
-    func pendingRecipient(_ session: Session, paneIdentity: UUID?) -> Int? {
-        guard let owner = remoteRecipient(session, paneIdentity: paneIdentity), takesHeldWork(owner) else { return nil }
+    func pendingRecipient(_ session: Session, paneIdentity: UUID?, work: PresentationHub.Work = .other) -> Int? {
+        guard let owner = remoteRecipient(session, paneIdentity: paneIdentity, work: work), takesHeldWork(owner) else { return nil }
         return owner
+    }
+
+    /// pageRecipient is the viewer `request` goes to: the `.page` recipient, or the `.other` one when that is a phone that
+    /// cannot show it. `held` asks for a viewer that takes held work.
+    func pageRecipient(_ session: Session, paneIdentity: UUID?, request: PresentationPage, held: Bool) -> Int? {
+        let recipient = { (work: PresentationHub.Work) in
+            held ? self.pendingRecipient(session, paneIdentity: paneIdentity, work: work)
+                 : self.remoteRecipient(session, paneIdentity: paneIdentity, work: work)
+        }
+        guard let first = recipient(.page) else { return nil }
+        guard presentationHub?.isPhone(owner: first) == true, !presenterShows(request, owner: first) else { return first }
+        return recipient(.other)
     }
 
     /// takesHeldWork is whether viewer `owner` can be handed work already open, which reaches it in a pending batch

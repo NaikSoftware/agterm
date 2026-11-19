@@ -631,4 +631,13 @@ struct SessionPickTests {
 
         #expect(node?.pick == ControlSessionPick(id: local.id))
     }
+
+    @Test func aPickNeverGoesToThePhone() throws {
+        let session = try Viewers.origin(store, hub: hub)
+        // the pick kinds are listed so only the route keeps it off the phone
+        let phone = try Viewers.phone(hub, session, kinds: Viewers.phoneKinds + PresentationHub.pickKinds)
+
+        #expect(store.presentPickRemotely(pick(), in: session, window: nil) == nil)
+        #expect(phone.sink.picks.isEmpty)
+    }
 }

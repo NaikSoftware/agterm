@@ -66,18 +66,17 @@ extension AppStore {
         let identity = pane.map { $0 == .right ? session.splitPaneIdentity : session.paneIdentity }
         if case .some(nil) = identity { return .paneMissing }
         guard presentsRemotely(session, paneIdentity: identity.flatMap { $0 }) else { return .local }
-        let recipient = options.forwardedTo ?? remoteRecipient(session, paneIdentity: identity.flatMap { $0 })
-        if recipient == nil, !headless { return .local }
-        let shows = recipient.map { presenterShows(source, log: overlay.textLog != nil, owner: $0) } ?? false
-        if case .forwarded = source, recipient != nil, !shows { return .loopback }
-        if !shows, !headless { return .unsupported }
-        let token = UUID().uuidString
         let size = pane == nil ? options.sizePercent.map { min(100, max(1, $0)) } : nil
         let points = size == nil ? OverlayPointSize() : options.points
-        let request = Self.pageRequest(overlay, source: source, token: token, backgroundColor: options.backgroundColor,
-                                       pane: identity.flatMap { $0 }, sizePercent: size,
-                                       points: recipient.map { presentablePoints(points, owner: $0) } ?? OverlayPointSize(),
-                                       follow: options.follow)
+        var request = Self.pageRequest(overlay, source: source, token: UUID().uuidString, backgroundColor: options.backgroundColor,
+                                       pane: identity.flatMap { $0 }, sizePercent: size, follow: options.follow)
+        let recipient = options.forwardedTo ?? pageRecipient(session, paneIdentity: identity.flatMap { $0 }, request: request, held: false)
+        if recipient == nil, !headless { return .local }
+        let shows = recipient.map { presenterShows(request, owner: $0) } ?? false
+        if case .forwarded = source, recipient != nil, !shows { return .loopback }
+        if !shows, !headless { return .unsupported }
+        let token = request.token
+        if let recipient { request.points = presentablePoints(points, owner: recipient) }
         // a frame over the cap fails the offer, and the hub then drops the presenter with every page it shows
         guard (try? PresentationCodec.encode(PresentationFrame(gen: .max, rev: .max, body: .pageRequest(request)))) != nil
         else { return .tooLarge }
@@ -121,10 +120,18 @@ extension AppStore {
     }
 
     /// presenterShows is whether viewer `owner` speaks the page frames and, for a content page, its sources; a log page
-    /// also needs live text pages, which an older viewer would show as a static page.
-    func presenterShows(_ source: PresentationPageSource, log: Bool, owner: Int) -> Bool {
+    /// also needs live text pages, which an older viewer would show as a static page. The phone gets no downgrade: it
+    /// also needs file jumps for a diff and links for a markdown page that follows them.
+    func presenterShows(_ request: PresentationPage, owner: Int) -> Bool {
         guard let hub = presentationHub, PresentationHub.pageKinds.allSatisfy({ hub.supports($0, owner: owner) }) else { return false }
-        if log, !hub.supports(PresentationHub.pageTextKind, owner: owner) { return false }
+        let source = request.source
+        if request.textLog != nil, !hub.supports(PresentationHub.pageTextKind, owner: owner) { return false }
+        if hub.isPhone(owner: owner) {
+            if request.markdownLinks != nil, !hub.supports(PresentationHub.pageLinksKind, owner: owner) { return false }
+            if case .text(let path, _) = source, TextPage.isDiff(file: path), !hub.supports(PresentationHub.pageFilesKind, owner: owner) {
+                return false
+            }
+        }
         if source.isContent, !hub.supports(PresentationHub.pageContentKind, owner: owner) { return false }
         if case .document = source { return hub.supports(PresentationHub.pageDocumentKind, owner: owner) }
         if case .forwarded = source { return hub.supports(PresentationHub.pageForwardKind, owner: owner) }
@@ -155,8 +162,8 @@ extension AppStore {
     @discardableResult
     func offerPendingPage(_ slot: RemoteOverlaySlot, in session: Session, now: Date) -> Bool {
         guard slot.owner == nil, var request = slot.page?.request,
-              let owner = pendingRecipient(session, paneIdentity: request.pane?.identity), mayHandOver(slot.job, to: owner),
-              presenterShows(request.source, log: request.textLog != nil, owner: owner) else { return false }
+              let owner = pageRecipient(session, paneIdentity: request.pane?.identity, request: request, held: true),
+              mayHandOver(slot.job, to: owner), presenterShows(request, owner: owner) else { return false }
         let merged = reoffer(&request, from: slot, token: UUID().uuidString, owner: owner)
         let hidden = slot.page?.effectiveHidden == true
         session.remoteOverlays.update(job: slot.job) { $0.owner = owner }

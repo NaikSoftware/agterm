@@ -69,7 +69,7 @@ extension AppStore {
         return true
     }
 
-    private func place(_ session: Session, pane: UUID?) -> WorkPlace? {
+    private func place(_ session: Session, pane: UUID?, work: PresentationHub.Work) -> WorkPlace? {
         guard let hub = presentationHub else { return nil }
         let pane = pane ?? session.paneIdentity
         if !headless {
@@ -79,7 +79,7 @@ extension AppStore {
             default: return nil
             }
         }
-        guard let claimant = hub.leadClaimant(session: session.id, pane: pane), takesHeldWork(claimant) else { return nil }
+        guard let claimant = hub.leadClaimant(session: session.id, pane: pane, work: work), takesHeldWork(claimant) else { return nil }
         return .viewer(claimant)
     }
 
@@ -91,11 +91,11 @@ extension AppStore {
         guard let ask = session.askPending, !session.askReplica else { return }
         let pane = session.askPaneIdentity
         guard let owner = session.askRemoteOwner else {
-            if !headless, case .viewer(let next)? = place(session, pane: pane) { offerAsk(forSession: session.id, to: next) }
+            if !headless, case .viewer(let next)? = place(session, pane: pane, work: .other) { offerAsk(forSession: session.id, to: next) }
             return
         }
         if connected(owner) {
-            switch place(session, pane: pane) {
+            switch place(session, pane: pane, work: .other) {
             case .viewer(let next)? where next != owner: moveRemoteAsk(forSession: session.id, to: next)
             case .origin?: bringAskHome(session, gui: ask.style == .gui, local: local)
             default: break
@@ -132,7 +132,7 @@ extension AppStore {
     private func placeWindowAsk(_ session: Session, local: OpenWorkLocal?) {
         guard !headless, session.askPending == nil, let target = local?.modal(session),
               let shown = target.controller.pendingAsk, shown.anchor?.sessionID == session.id,
-              case .viewer(let next)? = place(session, pane: shown.anchor?.paneIdentity) else { return }
+              case .viewer(let next)? = place(session, pane: shown.anchor?.paneIdentity, work: .other) else { return }
         _ = handGuiAskToViewer(target.controller, window: target.window, forSession: session.id, to: next)
     }
 
@@ -142,7 +142,7 @@ extension AppStore {
         let book = SessionPickBook.shared
         switch book.placement(forSession: session.id) {
         case .presenter(let owner)? where connected(owner):
-            switch place(session, pane: nil) {
+            switch place(session, pane: nil, work: .other) {
             case .viewer(let next)? where next != owner: movePick(forSession: session.id, to: next)
             case .origin?:
                 guard let target = local?.modal(session), let id = book.pickID(forSession: session.id) else { return }
@@ -156,7 +156,7 @@ extension AppStore {
             let target = local?.modal(session)
             book.handBack(session: session.id, owner: owner, to: target?.controller, window: target?.window)
         case .local?:
-            if case .viewer(let next)? = place(session, pane: nil) { movePick(forSession: session.id, to: next) }
+            if case .viewer(let next)? = place(session, pane: nil, work: .other) { movePick(forSession: session.id, to: next) }
         case .unpresented?, nil:
             break
         }
@@ -181,7 +181,7 @@ extension AppStore {
                 continue
             }
             guard connected(owner) else { continue }
-            let wanted = place(session, pane: page.request?.pane?.identity)
+            let wanted = placePage(session, pane: page.request?.pane?.identity, request: page.request)
             keepCandidate(id, in: session, onlyFor: wanted, holder: owner)
             switch wanted {
             case .viewer(let next)? where next != owner:
@@ -195,12 +195,21 @@ extension AppStore {
         guard !headless, session.content != .page else { return offered }
         for (pane, overlay) in localPages(session) {
             let identity = pane.map { $0 == .right ? session.splitPaneIdentity : session.paneIdentity } ?? session.paneIdentity
-            let wanted = place(session, pane: identity)
+            let request = Self.handedSource(overlay, imagePixels: overlay.imagePixels).map { Self.pageRequest(overlay, source: $0, token: "") }
+            let wanted = placePage(session, pane: identity, request: request)
             keepCandidate(overlay.id, in: session, onlyFor: wanted, holder: nil)
             guard case .viewer(let next)? = wanted else { continue }
             offered = offerPageCandidate(overlay.id, forSession: session.id, to: next, now: now) || offered
         }
         return offered
+    }
+
+    // a phone that cannot show the page, or one that cannot be handed over, leaves it where other work would go
+    private func placePage(_ session: Session, pane: UUID?, request: PresentationPage?) -> WorkPlace? {
+        let wanted = place(session, pane: pane, work: .page)
+        guard case .viewer(let owner)? = wanted, presentationHub?.isPhone(owner: owner) == true,
+              !(request.map { presenterShows($0, owner: owner) } ?? false) else { return wanted }
+        return place(session, pane: pane, work: .other)
     }
 
     // a pending move to a viewer that is no longer where the page belongs is dropped before any new offer is tried,

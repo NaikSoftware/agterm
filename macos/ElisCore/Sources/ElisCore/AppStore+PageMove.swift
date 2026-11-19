@@ -41,17 +41,18 @@ extension AppStore {
         let token = UUID().uuidString
         let deadline = now.addingTimeInterval(Self.pageClaimWindow)
         if let slot = session.remoteOverlays.slot(job: job), let held = slot.page, var request = held.request {
-            guard slot.owner != owner, presenterShows(request.source, log: request.textLog != nil, owner: owner) else { return nil }
+            guard slot.owner != owner, presenterShows(request, owner: owner) else { return nil }
             let merged = reoffer(&request, from: slot, token: token, owner: owner)
             let candidate = PageCandidate(owner: owner, token: token, offer: hub.newOffer(toOwner: owner), claimDeadline: deadline)
             return CandidateOffer(candidate: candidate, request: request, merged: merged, hidden: held.effectiveHidden)
         }
-        guard let local = localPage(job, in: session), let source = Self.handedSource(local.overlay, imagePixels: local.overlay.imagePixels),
-              presenterShows(source, log: local.overlay.textLog != nil, owner: owner) else { return nil }
+        guard let local = localPage(job, in: session), let source = Self.handedSource(local.overlay, imagePixels: local.overlay.imagePixels)
+        else { return nil }
         let identity = local.pane.map { $0 == .right ? session.splitPaneIdentity : session.paneIdentity } ?? nil
         var request = Self.pageRequest(local.overlay, source: source, token: token, backgroundColor: local.backgroundColor,
                                        pane: identity, sizePercent: local.sizePercent,
                                        points: presentablePoints(local.points, owner: owner))
+        guard presenterShows(request, owner: owner) else { return nil }
         request.textSeed = Self.textState(local.overlay)
         var page = RemotePage(overlay: local.overlay, token: token, claimDeadline: deadline)
         page.continueSeq(after: session.remoteOverlays.seqFloors[job] ?? 0)

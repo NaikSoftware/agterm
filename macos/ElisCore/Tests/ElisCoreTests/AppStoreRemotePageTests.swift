@@ -956,6 +956,101 @@ struct AppStoreRemotePageTests {
         return (id, gen, sink)
     }
 
+    // MARK: the phone
+
+    private static let imageOptions = ControlSessionOverlayOpenOptions(command: "", cwd: nil, wait: false, sizePercent: nil,
+                                                                       backgroundColor: nil, imagePixels: ImagePixels(width: 640, height: 480))
+    private static let withoutContent = Viewers.phoneKinds.filter { $0 != PresentationHub.pageContentKind }
+
+    private func phonelessPage(_ kind: String) -> HtmlOverlay {
+        switch kind {
+        case "log": logPage()
+        case "diff": HtmlOverlay(source: .text(path: "/tmp/a.diff", line: nil))
+        default: HtmlOverlay(source: .markdown(path: "/tmp/docs/a.md"), navigation: true,
+                             markdownLinks: MarkdownLinkGrant(path: "/tmp/docs/a.md", root: "/tmp/docs"))
+        }
+    }
+
+    @Test func aPageKindThePhoneLacksGoesToTheNextRecipient() throws {
+        let (session, _) = try origin()
+        let phone = try Viewers.phone(hub, session, kinds: Self.withoutContent)
+        let image = HtmlOverlay(source: .image(path: "/tmp/a.png"))
+
+        #expect(store.openRemotePage(session.id, overlay: image, options: Self.imageOptions, now: Self.start) == .opened)
+        #expect(pageRequests(presenter) == [image.id.uuidString])
+        #expect(phone.sink.pages.isEmpty)
+    }
+
+    @Test func aPageThePhoneCannotShowStaysHereWithNobodyElse() throws {
+        let session = try Viewers.origin(store, hub: hub)
+        let phone = try Viewers.phone(hub, session, kinds: Self.withoutContent)
+
+        #expect(store.openRemotePage(session.id, overlay: HtmlOverlay(source: .image(path: "/tmp/a.png")),
+                                     options: Self.imageOptions, now: Self.start) == .local)
+        #expect(open(session, try url("http://127.0.0.1:5173/")) == .local)
+        #expect(phone.sink.pages.isEmpty)
+    }
+
+    @Test func thePhoneAloneDoesNotMakeASlotRemote() throws {
+        let session = try Viewers.origin(store, hub: hub)
+        _ = try Viewers.phone(hub, session)
+
+        #expect(!store.pageBelongsRemote(session, pane: nil))
+        #expect(store.pageRecipient(session, pane: nil) == nil)
+    }
+
+    @Test func aHeldLinkedMarkdownPageIsNotOfferedToThePhone() throws {
+        let (host, session) = makeHeadlessSession(split: false)
+        host.presentationHub = hub
+        let page = phonelessPage("links")
+        #expect(host.openRemotePage(session.id, overlay: page, options: ControlSessionOverlayOpenOptions(
+            command: "", cwd: nil, wait: false, sizePercent: nil, backgroundColor: nil), now: Self.start) == .opened)
+        let phone = try Viewers.phone(hub, session)
+
+        host.offerPendingInteractions(forSession: session.id, now: Self.start)
+
+        #expect(phone.sink.pages.isEmpty)
+        #expect(session.remoteOverlays.slot(nil)?.owner == nil)
+        #expect(session.remoteOverlays.slot(nil)?.page?.overlay.id == page.id)
+    }
+
+    @Test(arguments: ["log", "diff", "links"])
+    func aPageThePhoneCannotShowGoesToTheMacViewerWhileThePhoneLeads(kind: String) throws {
+        let (session, _) = try origin()
+        let phone = try Viewers.phone(hub, session)
+        let page = phonelessPage(kind)
+
+        #expect(open(session, page) == .opened)
+        #expect(pageRequests(presenter) == [page.id.uuidString])
+        #expect(phone.sink.pages.isEmpty)
+    }
+
+    @Test(arguments: ["log", "diff", "links"])
+    func aPageThePhoneCannotShowStaysOnTheMacViewerWhenThePhoneTakesTheLead(kind: String) throws {
+        let (session, _) = try origin()
+        let page = phonelessPage(kind)
+        #expect(open(session, page) == .opened)
+        let phone = try Viewers.phone(hub, session)
+
+        store.reconcileOpenWork(forSession: session.id, now: Self.start)
+
+        #expect(phone.sink.pages.isEmpty)
+        #expect(session.remoteOverlays.slot(nil)?.owner == presenter.frames[0].gen)
+    }
+
+    @Test func aLogPageFollowsTheMacViewerLeadingBehindThePhone() throws {
+        let (session, _) = try origin()
+        let page = logPage()
+        #expect(open(session, page) == .opened)
+        let mac = try Viewers.viewer(hub, session, leads: true)
+        let phone = try Viewers.phone(hub, session)
+
+        store.reconcileOpenWork(forSession: session.id, now: Self.start)
+
+        #expect(mac.sink.pages.map(\.page) == [page.id.uuidString])
+        #expect(phone.sink.pages.isEmpty)
+    }
+
     private func pageRequests(_ sink: Sink) -> [String] {
         sink.bodies.compactMap { if case .pageRequest(let request) = $0 { request.page } else { nil } }
     }
