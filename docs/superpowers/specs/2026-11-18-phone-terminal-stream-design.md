@@ -154,39 +154,39 @@ same scripts on itself, then merges master.
 - M4: relay mux, attach runner, buffer/resync/watchdog; phone terminal view in Watch, local and remote Live rows.
 - M5: Take over (claiming attach, input encoders, RESIZE, LEAD), zoom/pan; Fit to phone on the terminal view was
   done in M4b. The end-to-end check, Bluetooth included, runs on a device or emulator.
-- M6: Text mode (reflow, live block, command cards) and the mode switcher with auto-pick.
-- M7: Chat mode with the first adapters (Claude Code transcript, codex rollout).
+- M6: Chat mode with the first adapter (Claude Code transcript) and the Chat/Term switcher with auto-pick;
+  codex rollout after it.
 - Later: native asks (own design).
 
-## Session view: Chat, Text, Term (user decision 2026-11-18)
+## Session view: Chat, Text, Term (use## Session view: Chat and Term (user decision 2026-11-18, Text dropped 2026-11-19)
 
 A session can be any program: an agent, a shell, any CLI or TUI. The phone draws every session through one
-switcher with three modes; each is a layout of data the phone already has, never a guess about the program.
-Mockups: [the session view design](assets/2026-11-18-phone-session-view.html) (zsh, Claude Code, agy, vim), a self-contained export of the design canvas.
+switcher with two modes; each is a layout of data the phone already has, never a guess about the program.
+Mockups: [the session view design](assets/2026-11-18-phone-session-view.html) (zsh, Claude Code, agy, vim), a self-contained export of the design canvas;
+its Text mode is no longer planned.
 
 | Mode | Built from | Fits |
 |---|---|---|
-| Term | the attach stream drawn by libghostty-vt: the exact grid, zoom and pan, key bar | every program; the only mode for full-screen apps |
-| Text | the same emulator's main-screen lines, rewrapped to the phone width at a normal font size; rows the program still redraws stay in a pinned live block; one card per command (exit code, duration, folded output) when the shell sends OSC 133 marks, plain lines otherwise | shells, logs, agents that draw on the main screen |
-| Chat | a per-program adapter only (Claude Code transcript JSONL, codex rollout) | programs with an adapter |
+| Term | the attach stream drawn by libghostty-vt: the exact grid on the alternate screen, the scrollable history on the main screen | every program |
+| Chat | a per-program adapter only (Claude Code transcript JSONL first) | programs with an adapter |
 
-- Auto-pick, in order: alternate screen → Term; a program with an adapter → Chat; anything else → Text.
-- A mode that does not fit is disabled, never hidden. A line under the switcher says why Elis picked the mode.
-  A manual pick sticks for the session until Auto is chosen again.
+- Auto-pick: a program with an adapter → Chat; anything else → Term.
+- Chat is disabled, never hidden, when the program has no adapter. A manual pick sticks for the session until
+  Auto is chosen again.
 - Chat never interprets the screen: a prompt the program draws (a permission menu, a picker) shows as the live
   rows of the screen with its keys, and the program answers it.
-- Elis status, asks and notifications come from Elis, not from the screen, so they look the same in every mode.
-- Input in Text and Chat goes through `session.type` (Watch) or the claiming attach (Take over), as in Term.
-- Rejected: a separate Blocks mode (the owner could not tell it from Reader; command cards are part of Text) and
-  an agent-only graphic UI (sessions are any program).
+- Elis status, asks and notifications come from Elis, not from the screen, so they look the same in both modes.
+- Input in Chat goes through the claiming attach, as in Term.
+- Rejected: a Text mode (reflow, live block, OSC 133 command cards). Term's history view already shows
+  main-screen programs as scrollable text, and a third mode costs switcher space on a small screen; reflow, if
+  ever needed, improves the history view instead. Also rejected: a separate Blocks mode and an agent-only
+  graphic UI (sessions are any program).
 
-## Decided by the user (2026-11-18)
-
-1. Linux elis relay: text fallback now, port later.
+. Linux elis relay: text fallback now, port later.
 2. First-burst trim: a small zmx patch (attach flag), not a byte-pattern cut.
 3. Scope: terminal-output streaming is approved; `control-api.md:23` changes with M3.
 4. Take over stays, beside Fit to phone. (Superseded by the M5b plan: direct input replaces the button.)
-5. Session view: Chat, Text and Term with auto-pick (section above); Term is the fallback, not the goal.
+5. Session view: Chat and Term with auto-pick (section above); Text was dropped on 2026-11-19.
 
 ## Notes for the M4 relay (from the M2 review)
 
