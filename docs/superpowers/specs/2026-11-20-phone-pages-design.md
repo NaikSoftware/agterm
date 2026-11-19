@@ -146,7 +146,13 @@ PR 1's skill and `site/docs.html` text does not mention dev servers; PR 2 adds i
   After a Mac take-back the phone claims on its next input, and the page returns then.
 - Keeping the lead report alive while a sheet is open without a claim was rejected:
   placement would depend on state the user cannot see. A page is where "Leading" shows.
+- Only pages of the pane the phone leads move, plus a session-wide page when that pane is the primary one.
+  Pages of other panes and page rows (`session.content == .page`) stay where they are.
+- A hidden page moves hidden (`offered.hidden`): on the phone it sits behind the chip with no sheet.
+- A move does not end `--block`; the outcome stays pending.
 - Known limit, stated in the docs: a move reloads the page, so scroll and form state are lost.
+  Every app switch on the phone moves the page twice. Only a grace period before the claim closes would reduce that,
+  which changes the 2026-11-19 lead decision ("pause releases it"); it is left to the owner.
 
 ### Clearing
 
@@ -175,7 +181,9 @@ Never run integration tests on the owner's phone: `flutter test integration_test
   gets no ask, overlay, pick or sound (one test per call site), and no already open ask or pick at take-over;
   with a Mac viewer also attached, that work goes to the Mac viewer, on a local and on a headless origin;
   a page of a kind it lacks goes to the next recipient;
-  the page returns to the Mac when the lead is withdrawn, and back to the same subscriber when it reports the lead again.
+  the page returns to the Mac when the lead is withdrawn, and back to the same subscriber when it reports the lead again;
+  a hidden page moves hidden; a `viewer.phone` subscriber never becomes `grant.holder`;
+  a GUI ask in a window and a held interaction on a headless origin stay off the phone.
 - elisctlKit `PhoneLinkSession`: OPEN `present` accepted; a `fetch` outside the grant refused;
   a `bridge` line with `phone.status` refused with `cannot be sent from a page`; `closed` records dismissed.
 - `ControlProjection`: `phone: true`.
