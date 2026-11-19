@@ -698,11 +698,9 @@ public struct ControlDispatcher {
             switch parseSurfacePane(request.args?.pane) {
             case .rejected(let rejection): return rejection
             case .pane(let pane):
-                return await actions.readSessionText(request.target, window: request.args?.window,
-                                               options: ControlSessionTextOptions(pane: pane,
-                                                                                  paneID: request.args?.paneID,
-                                                                                  all: all,
-                                                                                  lines: lines))
+                return await actions.readSessionTextAsync(request.target, window: request.args?.window,
+                                                          options: ControlSessionTextOptions(pane: pane, paneID: request.args?.paneID,
+                                                                                             all: all, lines: lines))
             }
         }
     }

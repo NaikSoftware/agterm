@@ -302,6 +302,11 @@ public extension ControlActions {
         ControlResponse(ok: false, error: "session.scroll is not supported by this host")
     }
 
+    /// A host with only the synchronous read keeps answering through it.
+    func readSessionTextAsync(_ target: String?, window: String?, options: ControlSessionTextOptions) async -> ControlResponse {
+        readSessionText(target, window: window, options: options)
+    }
+
     func sessionAttach(target _: String?, pane _: StatusPane, paneID _: String?, window _: String?) async -> ControlResponse {
         ControlResponse(ok: false, error: "session.attach is not supported by this host")
     }

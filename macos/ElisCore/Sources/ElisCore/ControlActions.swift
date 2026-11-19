@@ -233,7 +233,9 @@ public protocol ControlActions {
     func closeHud(_ target: String?, window: String?) -> ControlResponse
     func setSessionBackground(_ target: String?, window: String?,
                               options: ControlSessionBackgroundOptions) -> ControlResponse
-    func readSessionText(_ target: String?, window: String?, options: ControlSessionTextOptions) async -> ControlResponse
+    func readSessionText(_ target: String?, window: String?, options: ControlSessionTextOptions) -> ControlResponse
+    /// readSessionTextAsync is what the dispatcher calls, for a host whose read may wait on another machine.
+    func readSessionTextAsync(_ target: String?, window: String?, options: ControlSessionTextOptions) async -> ControlResponse
     /// setSessionGrid gives the pane a grid apart from its view, or with nil hands it back; answers `{id, pane, columns, rows}`.
     func setSessionGrid(_ target: String?, window: String?, pane: StatusPane, grid: ControlGrid?) -> ControlResponse
     /// scrollSession wheels the pane like a mouse over it; answers `{id, pane, lines}`.

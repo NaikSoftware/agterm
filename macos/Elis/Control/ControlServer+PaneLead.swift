@@ -81,25 +81,33 @@ extension ControlServer {
         }
     }
 
-    /// `session.text` answered by the daemon, here or on the host a covered remote pane runs on; nil when
-    /// the pane's own surface is the source. The grid is the daemon's, which the covered surface does not hold.
-    func coveredText(_ surface: GhosttySurfaceView, all: Bool, lines: Int?, session: Session? = nil) async -> ControlResponse? {
+    /// `session.text` answered by the daemon, nil when the pane's own surface is the source. The grid is the
+    /// daemon's, which a covered surface does not hold. A covered remote pane is refused: its read is async.
+    func coveredText(_ surface: GhosttySurfaceView, all: Bool, lines: Int?) -> ControlResponse? {
         let extent = all || lines != nil
-        let screen: ZmxScreen?
-        let failure: String
-        switch paneSource(surface, viewport: !extent, session: session) {
+        switch paneSource(surface, viewport: !extent) {
         case .surface: return nil
         case .refused(let reason): return ControlResponse(ok: false, error: reason)
+        case .remote: return ControlResponse(ok: false, error: Self.remotePaneRefusal)
         case .daemon(let name, let client):
-            screen = client.screen(name: name, all: extent)
-            failure = "failed to read surface buffer"
-        case .remote(let host, let endpoint, let daemon):
-            failure = "could not read the pane on \(host)"
-            guard let argv = try? RemoteSession.screenCommand(host: host, endpoint: endpoint, daemon: daemon, all: extent) else {
-                return ControlResponse(ok: false, error: failure)
-            }
-            screen = await readRemoteScreen(argv).flatMap(ZmxScreen.init(output:))
+            return screenText(client.screen(name: name, all: extent), lines: lines, failure: "failed to read surface buffer")
         }
+    }
+
+    /// `coveredText` that also reads a covered remote pane from its daemon on the host it runs on.
+    func coveredText(_ surface: GhosttySurfaceView, all: Bool, lines: Int?, session: Session) async -> ControlResponse? {
+        let extent = all || lines != nil
+        guard case .remote(let host, let endpoint, let daemon) = paneSource(surface, viewport: !extent, session: session) else {
+            return coveredText(surface, all: all, lines: lines)
+        }
+        let failure = "could not read the pane on \(host)"
+        guard let argv = try? RemoteSession.screenCommand(host: host, endpoint: endpoint, daemon: daemon, all: extent) else {
+            return ControlResponse(ok: false, error: failure)
+        }
+        return screenText(await readRemoteScreen(argv).flatMap(ZmxScreen.init(output:)), lines: lines, failure: failure)
+    }
+
+    private func screenText(_ screen: ZmxScreen?, lines: Int?, failure: String) -> ControlResponse {
         guard let screen else { return ControlResponse(ok: false, error: failure) }
         var result = ControlResult(text: lines.map(screen.lastLines) ?? screen.text)
         result.columns = screen.columns

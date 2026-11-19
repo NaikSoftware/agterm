@@ -264,13 +264,30 @@ extension ControlServer {
     /// or the on-screen pane when both are omitted. Success names the pane read in `result.pane`. `all` and `lines` are mutually exclusive and `lines`
     /// must be > 0, rejected here as well as in the CLI so a raw socket client can't bypass it.
     /// A genuinely blank screen reads ok with an empty string; a failed read is an error, not a silent empty.
-    func readSessionText(_ target: String?, window: String?, options: ControlSessionTextOptions) async -> ControlResponse {
+    /// The synchronous read refuses a covered remote pane; `readSessionTextAsync`, the dispatched one, reads it.
+    func readSessionText(_ target: String?, window: String?, options: ControlSessionTextOptions) -> ControlResponse {
+        let (refusal, pane) = textPane(target, window: window, options: options)
+        guard let (session, surface) = pane else { return refusal }
+        return textAnswer(coveredText(surface, all: options.all, lines: options.lines), session: session, surface: surface,
+                          options: options)
+    }
+
+    func readSessionTextAsync(_ target: String?, window: String?, options: ControlSessionTextOptions) async -> ControlResponse {
+        let (refusal, pane) = textPane(target, window: window, options: options)
+        guard let (session, surface) = pane else { return refusal }
+        let covered = await coveredText(surface, all: options.all, lines: options.lines, session: session)
+        return textAnswer(covered, session: session, surface: surface, options: options)
+    }
+
+    /// The pane `session.text` reads, or the refusal when there is none to read.
+    private func textPane(_ target: String?, window: String?,
+                          options: ControlSessionTextOptions) -> (ControlResponse, (Session, GhosttySurfaceView)?) {
         let all = options.all, lines = options.lines
         if all, lines != nil {
-            return ControlResponse(ok: false, error: "use either --all or --lines, not both")
+            return (ControlResponse(ok: false, error: "use either --all or --lines, not both"), nil)
         }
         if let lines, lines <= 0 {
-            return ControlResponse(ok: false, error: "--lines must be greater than 0")
+            return (ControlResponse(ok: false, error: "--lines must be greater than 0"), nil)
         }
         var resolved: (Session, GhosttySurfaceView)?
         let refusal = resolver.resolveSession(target, window: window) { store, id in
@@ -314,11 +331,16 @@ extension ControlServer {
             resolved = (session, surface)
             return ControlResponse(ok: true)
         }
-        guard let (session, surface) = resolved else { return refusal }
+        return (refusal, resolved)
+    }
+
+    /// `covered` is the daemon's answer, nil when the pane's own surface is read.
+    private func textAnswer(_ covered: ControlResponse?, session: Session, surface: GhosttySurfaceView,
+                            options: ControlSessionTextOptions) -> ControlResponse {
         let read: StatusPane = surface === session.scratchSurface ? .scratch
             : (surface === session.splitSurface ? .right : .left)
-        var response = await coveredText(surface, all: all, lines: lines, session: session)
-            ?? surface.readScreenText(all: all, lines: lines).map {
+        var response = covered
+            ?? surface.readScreenText(all: options.all, lines: options.lines).map {
                 ControlResponse(ok: true, result: ControlResult(text: $0))
             }
             ?? ControlResponse(ok: false, error: "failed to read surface buffer")
