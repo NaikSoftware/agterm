@@ -48,7 +48,7 @@ extension ControlServer {
     }
 
     /// A remote row never falls back to this Mac's zmx: its panes run on the origin.
-    private func liveSource(_ session: Session, identity: UUID, split: Bool) -> LivePaneSource? {
+    func liveSource(_ session: Session, identity: UUID, split: Bool) -> LivePaneSource? {
         guard let binding = session.remotePresentation?.binding else {
             guard session.zmxBacking(for: split ? .split : .primary) == true, let endpoint = zmxClient?.endpoint else { return nil }
             return .local(endpoint: endpoint, daemon: ZmxSupport.daemonName(for: identity))

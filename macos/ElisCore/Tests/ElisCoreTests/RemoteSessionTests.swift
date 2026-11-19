@@ -52,6 +52,15 @@ struct RemoteSessionTests {
 
     // MARK: - ssh options
 
+    @Test func screenCommandAllAddsTheFlag() throws {
+        let endpoint = ControlZmxEndpoint(executable: "/opt/zmx", socketDirectory: "/run/zmx")
+        let daemon = ZmxSupport.daemonName(for: UUID())
+        #expect(try RemoteSession.zmxScreenArguments(endpoint: endpoint, daemon: daemon, all: true).last == "--all")
+        #expect(try RemoteSession.zmxScreenArguments(endpoint: endpoint, daemon: daemon).last == daemon)
+        #expect(try RemoteSession.screenCommand(host: "box", endpoint: endpoint, daemon: daemon, all: true).last?.contains("--all") == true)
+        #expect(try RemoteSession.screenCommand(host: "box", endpoint: endpoint, daemon: daemon).last?.contains("--all") == false)
+    }
+
     @Test func treeIsNonInteractiveAndBounded() throws {
         let argv = try RemoteSession.treeCommand(host: "buildbox", connectTimeout: 12)
         #expect(argv.prefix(7) == ["ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=12", "buildbox"])

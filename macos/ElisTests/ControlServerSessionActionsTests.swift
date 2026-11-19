@@ -538,7 +538,7 @@ final class ControlServerSessionActionsTests: XCTestCase {
     // a pane parked in the slot with no libghostty surface is the state a display-asleep create leaves
     // behind (#416). It used to answer `failed to read surface buffer`, naming a cause that never happened,
     // while every sibling command called the same state `session not realized`.
-    func testTextOnAnUnrealizedPaneReportsNotRealizedRatherThanAReadFailure() throws {
+    func testTextOnAnUnrealizedPaneReportsNotRealizedRatherThanAReadFailure() async throws {
         let store = try XCTUnwrap(library.activeStore)
         let owner = try XCTUnwrap(store.currentWorkspaceID)
         let target = try XCTUnwrap(store.addSession(toWorkspace: owner, cwd: NSHomeDirectory()))
@@ -546,7 +546,7 @@ final class ControlServerSessionActionsTests: XCTestCase {
         target.surface = parked
         XCTAssertFalse(parked.isRealized, "a detached view never runs createSurface, which is the point here")
 
-        let response = server.readSessionText(target.id.uuidString, window: nil,
+        let response = await server.readSessionText(target.id.uuidString, window: nil,
                                               options: ControlSessionTextOptions(pane: nil, all: false, lines: nil))
 
         XCTAssertFalse(response.ok)
@@ -699,12 +699,12 @@ final class ControlServerSessionActionsTests: XCTestCase {
         XCTAssertNil(server.settingsModel.settings.htmlOverlayZoom)
     }
 
-    func testReadsLeaveAQueuedPaneQueued() throws {
+    func testReadsLeaveAQueuedPaneQueued() async throws {
         let (_, target) = try addSession()
         let queued = queuePane(in: target)
         let id = target.id.uuidString
 
-        let text = server.readSessionText(id, window: nil,
+        let text = await server.readSessionText(id, window: nil,
                                           options: ControlSessionTextOptions(pane: nil, all: false, lines: nil))
         let copy = server.copySelection(id, window: nil)
         let cursor = server.readSurfaceCursor("surface:\(id):left", window: nil)
@@ -753,7 +753,7 @@ final class ControlServerSessionActionsTests: XCTestCase {
                                              env: ["ELIS_PANE_ID": "left-token"])
         let id = session.id.uuidString
 
-        let text = server.readSessionText(id, window: nil,
+        let text = await server.readSessionText(id, window: nil,
                                           options: ControlSessionTextOptions(pane: nil, paneID: "gone", all: false, lines: nil))
         let typed = await server.typeSession(id, window: nil,
                                              options: ControlSessionTypeOptions(text: "x", select: false, pane: nil, paneID: "gone"))
@@ -771,9 +771,9 @@ final class ControlServerSessionActionsTests: XCTestCase {
                                              env: ["ELIS_PANE_ID": "left-token"])
         let id = session.id.uuidString
 
-        let text = server.readSessionText(id, window: nil,
+        let text = await server.readSessionText(id, window: nil,
                                           options: ControlSessionTextOptions(pane: nil, paneID: "right-token", all: false, lines: nil))
-        let fallback = server.readSessionText(id, window: nil,
+        let fallback = await server.readSessionText(id, window: nil,
                                               options: ControlSessionTextOptions(pane: .right, paneID: "gone", all: false, lines: nil))
         let typed = await server.typeSession(id, window: nil,
                                              options: ControlSessionTypeOptions(text: "x", select: false, pane: .right, paneID: "gone"))

@@ -14,18 +14,29 @@ extension ControlServer {
         /// The pane's zmx never reported a role, or the read is of the viewport of a pane that leads.
         case surface
         case daemon(name: String, client: ZmxClient)
+        /// A covered pane of a row attached from another Mac or a server host, read from its daemon there.
+        case remote(host: String, endpoint: ControlZmxEndpoint, daemon: String)
         case refused(String)
     }
 
+    static let remotePaneRefusal = "pane is in use on the Mac it runs on; take the lead to drive it from here"
+    static let remoteScreenLimit: TimeInterval = 5
+
     /// `viewport` is a default `session.text`: the one read whose meaning is the pane's own scrolled view,
     /// kept on the surface while the pane leads.
-    func paneSource(_ surface: GhosttySurfaceView, viewport: Bool = false) -> PaneSource {
+    /// `session` lets a covered remote pane answer `.remote`; without it that pane is refused.
+    func paneSource(_ surface: GhosttySurfaceView, viewport: Bool = false, session: Session? = nil) -> PaneSource {
         let covered = surface.leadCovered
         guard covered || ZmxLeadBook.shared.role(pane: UUID(uuidString: surface.paneToken)) != nil else { return .surface }
         guard let name = surface.zmxSessionName, let client = zmxClient else {
-            // an attached pane's daemon is on another Mac, out of reach of a synchronous read
-            return covered
-                ? .refused("pane is in use on the Mac it runs on; take the lead to drive it from here") : .surface
+            guard covered else { return .surface }
+            let split = surface === session?.splitSurface
+            if let session, split || surface === session.surface,
+               let identity = split ? session.splitPaneIdentity : session.paneIdentity,
+               case .remote(let host, let endpoint, let daemon)? = liveSource(session, identity: identity, split: split) {
+                return .remote(host: host, endpoint: endpoint, daemon: daemon)
+            }
+            return .refused(Self.remotePaneRefusal)
         }
         return !covered && viewport ? .surface : .daemon(name: name, client: client)
     }
@@ -70,16 +81,48 @@ extension ControlServer {
         }
     }
 
-    /// `session.text` answered by the daemon, nil when the pane's own surface is the source.
-    func coveredText(_ surface: GhosttySurfaceView, all: Bool, lines: Int?) -> ControlResponse? {
-        switch paneSource(surface, viewport: !all && lines == nil) {
+    /// `session.text` answered by the daemon, here or on the host a covered remote pane runs on; nil when
+    /// the pane's own surface is the source. The grid is the daemon's, which the covered surface does not hold.
+    func coveredText(_ surface: GhosttySurfaceView, all: Bool, lines: Int?, session: Session? = nil) async -> ControlResponse? {
+        let extent = all || lines != nil
+        let screen: ZmxScreen?
+        let failure: String
+        switch paneSource(surface, viewport: !extent, session: session) {
         case .surface: return nil
         case .refused(let reason): return ControlResponse(ok: false, error: reason)
         case .daemon(let name, let client):
-            guard let screen = client.screen(name: name, all: all || lines != nil) else {
-                return ControlResponse(ok: false, error: "failed to read surface buffer")
+            screen = client.screen(name: name, all: extent)
+            failure = "failed to read surface buffer"
+        case .remote(let host, let endpoint, let daemon):
+            failure = "could not read the pane on \(host)"
+            guard let argv = try? RemoteSession.screenCommand(host: host, endpoint: endpoint, daemon: daemon, all: extent) else {
+                return ControlResponse(ok: false, error: failure)
             }
-            return ControlResponse(ok: true, result: ControlResult(text: lines.map(screen.lastLines) ?? screen.text))
+            screen = await readRemoteScreen(argv).flatMap(ZmxScreen.init(output:))
+        }
+        guard let screen else { return ControlResponse(ok: false, error: failure) }
+        var result = ControlResult(text: lines.map(screen.lastLines) ?? screen.text)
+        result.columns = screen.columns
+        result.rows = screen.rows
+        return ControlResponse(ok: true, result: result)
+    }
+
+    /// One read per argv at a time: a request arriving while it runs waits for the same answer.
+    private func readRemoteScreen(_ argv: [String]) async -> String? {
+        if let running = remoteScreenReads[argv] { return await running.value }
+        let run = remoteScreenRead
+        let read = Task { await Self.offMain(run, argv) }
+        remoteScreenReads[argv] = read
+        let output = await read.value
+        remoteScreenReads[argv] = nil
+        return output
+    }
+
+    /// A plain thread, so a slow ssh holds neither the main actor nor a cooperative-pool thread.
+    private nonisolated static func offMain(_ run: @escaping @Sendable ([String], TimeInterval) -> String?,
+                                            _ argv: [String]) async -> String? {
+        await withCheckedContinuation { continuation in
+            Thread.detachNewThread { continuation.resume(returning: run(argv, remoteScreenLimit)) }
         }
     }
 
@@ -88,6 +131,7 @@ extension ControlServer {
         switch paneSource(surface) {
         case .surface: return nil
         case .refused(let reason): return ControlResponse(ok: false, error: reason)
+        case .remote: return ControlResponse(ok: false, error: Self.remotePaneRefusal)
         case .daemon(let name, let client):
             guard let screen = client.screen(name: name, all: false) else {
                 return ControlResponse(ok: false, error: "failed to read cursor position")
@@ -102,6 +146,7 @@ extension ControlServer {
         switch paneSource(surface) {
         case .surface: return nil
         case .refused(let reason): return ControlResponse(ok: false, error: reason)
+        case .remote: return ControlResponse(ok: false, error: Self.remotePaneRefusal)
         case .daemon(let name, let client):
             // a half-typed word goes first and on the same acknowledged path: left in place it would commit
             // after the scripted line, and committed through the surface the daemon may drop it

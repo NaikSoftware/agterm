@@ -99,6 +99,14 @@ final class ControlServer {
     var originCatalogs: [UUID: OriginCatalog] = [:]
     var originSignatures: [UUID: Set<String>] = [:]
     var restartingPanes: Set<UUID> = []
+    /// Runs a `zmx screen` argv on another host within the limit, called off the main actor; nil when it failed.
+    var remoteScreenRead: @Sendable ([String], TimeInterval) -> String? = { argv, limit in
+        try? ZmxClient.run(ZmxClient.Invocation(executablePath: argv[0], arguments: Array(argv.dropFirst()),
+                                                environment: ProcessInfo.processInfo.environment, timeout: limit,
+                                                mergesStderr: false))
+    }
+    /// The remote screen reads in flight by argv, so a second request waits for the same read.
+    var remoteScreenReads: [[String]: Task<String?, Never>] = [:]
     /// originRead is the inventory read in flight, answering whether it succeeded; a request during it rereads.
     var originRead: Task<Bool, Never>?
     var originRereads = false
@@ -636,9 +644,10 @@ final class ControlServer {
     /// `session.restart` waits on process exits for seconds, while the shell it starts calls this socket.
     /// The phone relay changes wait for the old relay's exit, which first hands its phones' grids back here.
     nonisolated private static func waitsOnNetwork(_ cmd: Command) -> Bool {
-        // companion creation may ssh to a remote parent's origin, which can be this Mac's own socket
+        // companion creation may ssh to a remote parent's origin, which can be this Mac's own socket;
+        // a covered remote pane's text is read over ssh
         [.zmxTree, .zmxAttach, .zmxAttachGroup, .sessionRestart, .sessionCompanionNew, .sessionCompanionDuplicate,
-         .sessionCompanionPage, .windowRemoteOpen, .phoneEnable, .phonePort, .phoneRevoke].contains(cmd)
+         .sessionCompanionPage, .sessionText, .windowRemoteOpen, .phoneEnable, .phonePort, .phoneRevoke].contains(cmd)
     }
 
     // these polling reads cannot change window nodes; skip the AppKit rebuild

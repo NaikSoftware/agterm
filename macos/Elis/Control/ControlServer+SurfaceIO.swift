@@ -264,7 +264,7 @@ extension ControlServer {
     /// or the on-screen pane when both are omitted. Success names the pane read in `result.pane`. `all` and `lines` are mutually exclusive and `lines`
     /// must be > 0, rejected here as well as in the CLI so a raw socket client can't bypass it.
     /// A genuinely blank screen reads ok with an empty string; a failed read is an error, not a silent empty.
-    func readSessionText(_ target: String?, window: String?, options: ControlSessionTextOptions) -> ControlResponse {
+    func readSessionText(_ target: String?, window: String?, options: ControlSessionTextOptions) async -> ControlResponse {
         let all = options.all, lines = options.lines
         if all, lines != nil {
             return ControlResponse(ok: false, error: "use either --all or --lines, not both")
@@ -272,7 +272,8 @@ extension ControlServer {
         if let lines, lines <= 0 {
             return ControlResponse(ok: false, error: "--lines must be greater than 0")
         }
-        return resolver.resolveSession(target, window: window) { store, id in
+        var resolved: (Session, GhosttySurfaceView)?
+        let refusal = resolver.resolveSession(target, window: window) { store, id in
             guard let session = store.session(withID: id) else {
                 return ControlResponse(ok: false, error: "session not realized")
             }
@@ -310,21 +311,26 @@ extension ControlServer {
             guard surface.isRealized else {
                 return ControlResponse(ok: false, error: "session not realized")
             }
-            let read: StatusPane = surface === session.scratchSurface ? .scratch
-                : (surface === session.splitSurface ? .right : .left)
-            var response = self.coveredText(surface, all: all, lines: lines)
-                ?? surface.readScreenText(all: all, lines: lines).map {
-                    ControlResponse(ok: true, result: ControlResult(text: $0))
-                }
-                ?? ControlResponse(ok: false, error: "failed to read surface buffer")
-            if response.ok {
-                response.result?.pane = read.rawValue
+            resolved = (session, surface)
+            return ControlResponse(ok: true)
+        }
+        guard let (session, surface) = resolved else { return refusal }
+        let read: StatusPane = surface === session.scratchSurface ? .scratch
+            : (surface === session.splitSurface ? .right : .left)
+        var response = await coveredText(surface, all: all, lines: lines, session: session)
+            ?? surface.readScreenText(all: all, lines: lines).map {
+                ControlResponse(ok: true, result: ControlResult(text: $0))
+            }
+            ?? ControlResponse(ok: false, error: "failed to read surface buffer")
+        if response.ok {
+            response.result?.pane = read.rawValue
+            if response.result?.columns == nil {
                 let grid = surface.gridSize()
                 response.result?.columns = grid.columns
                 response.result?.rows = grid.rows
             }
-            return response
         }
+        return response
     }
 
     /// The reply carries the grid libghostty reports after the change, which a caller compares with its own.
