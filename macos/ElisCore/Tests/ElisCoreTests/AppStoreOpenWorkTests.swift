@@ -710,9 +710,9 @@ struct AppStoreOpenWorkTests {
     @Test func openAskAndPickStayPutAtAPhoneTakeOver() throws {
         let (_, session) = try session()
         setLead(.leader, pane: session.paneIdentity)
-        let pending = ask(), choice = pick()
+        let pending = ask(), choice = pick(), window = UUID()
         #expect(session.openAsk(pending, paneIdentity: nil, registry: store.askRegistry))
-        #expect(SessionPickBook.shared.openLocal(choice, session: session.id, window: UUID(), controller: PickController()) == nil)
+        #expect(SessionPickBook.shared.openLocal(choice, session: session.id, window: window, controller: PickController()) == nil)
 
         setLead(.follower, pane: session.paneIdentity)
         let phone = try Viewers.phone(hub, session)
@@ -720,6 +720,7 @@ struct AppStoreOpenWorkTests {
 
         #expect(phone.sink.asks.isEmpty)
         #expect(phone.sink.picks.isEmpty)
+        #expect(SessionPickBook.shared.placement(forSession: session.id) == .local(window))
         #expect(session.askPending?.id == pending.id)
         #expect(!session.askPresentedRemotely)
     }

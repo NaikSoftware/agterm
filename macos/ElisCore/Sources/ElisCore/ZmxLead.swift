@@ -226,13 +226,12 @@ extension AppStore {
     /// pageRecipient is the viewer `request` goes to: the `.page` recipient, or the `.other` one when that is a phone that
     /// cannot show it. `held` asks for a viewer that takes held work.
     func pageRecipient(_ session: Session, paneIdentity: UUID?, request: PresentationPage, held: Bool) -> Int? {
-        let recipient = { (work: PresentationHub.Work) in
-            held ? self.pendingRecipient(session, paneIdentity: paneIdentity, work: work)
-                 : self.remoteRecipient(session, paneIdentity: paneIdentity, work: work)
+        guard let first = remoteRecipient(session, paneIdentity: paneIdentity, work: .page) else { return nil }
+        let takes = { (owner: Int) in !held || self.takesHeldWork(owner) }
+        guard presentationHub?.isPhone(owner: first) == true, !presenterShows(request, owner: first) || !takes(first) else {
+            return takes(first) ? first : nil
         }
-        guard let first = recipient(.page) else { return nil }
-        guard presentationHub?.isPhone(owner: first) == true, !presenterShows(request, owner: first) else { return first }
-        return recipient(.other)
+        return remoteRecipient(session, paneIdentity: paneIdentity, work: .other).flatMap { takes($0) ? $0 : nil }
     }
 
     /// takesHeldWork is whether viewer `owner` can be handed work already open, which reaches it in a pending batch

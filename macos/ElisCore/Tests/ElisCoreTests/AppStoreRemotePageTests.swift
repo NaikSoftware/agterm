@@ -1014,6 +1014,22 @@ struct AppStoreRemotePageTests {
         #expect(session.remoteOverlays.slot(nil)?.page?.overlay.id == page.id)
     }
 
+    @Test func aHeldPageSkipsAPhoneThatCannotTakeHeldWork() throws {
+        let (host, session) = makeHeadlessSession(split: false)
+        host.presentationHub = hub
+        let page = try url("https://example.com/")
+        #expect(host.openRemotePage(session.id, overlay: page, options: ControlSessionOverlayOpenOptions(
+            command: "", cwd: nil, wait: false, sizePercent: nil, backgroundColor: nil), now: Self.start) == .opened)
+        let held = [PresentationHub.pendingSnapshotKind, PresentationHub.jobTokenKind]
+        let phone = try Viewers.phone(hub, session, kinds: Viewers.phoneKinds.filter { !held.contains($0) })
+        let mac = try Viewers.viewer(hub, session, acquire: true)
+
+        host.offerPendingInteractions(forSession: session.id, now: Self.start)
+
+        #expect(phone.sink.pages.isEmpty)
+        #expect(mac.sink.pages.map(\.page) == [page.id.uuidString])
+    }
+
     @Test(arguments: ["log", "diff", "links"])
     func aPageThePhoneCannotShowGoesToTheMacViewerWhileThePhoneLeads(kind: String) throws {
         let (session, _) = try origin()
