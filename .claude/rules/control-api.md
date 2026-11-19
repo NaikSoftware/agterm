@@ -297,9 +297,11 @@ and carries no DATA to the phone.
   A RESIZE or a release polls the grid at once and again 2 s later.
   A RESIZE also resyncs the pane's watch channels 150 ms after the last one;
   the phone sizes its emulator only from RESYNC and GRID.
-- The phone claims by the WATCHED pane id, at its first key, send, paste, scroll or tap, never when a session opens.
-  Input before the leader report is queued and written after it, with a 20 ms gap between the queued writes.
-  A fit the Mac refuses for a moment after the phone gives the lead back is retried.
+- The phone claims by the WATCHED pane id, at its first key, send, paste, scroll or tap,
+  never when a session opens.
+  Input before the leader report is queued and written after it, with a 20 ms gap between the writes.
+  A fit the Mac refuses after the phone gives the lead back is retried 3 times, 1 s apart,
+  then reported, and auto-fit stops.
 - The relay prints `phone leads from <ip> pane <paneID>` once the claim leads,
   and `phone released from <ip> pane <paneID>` when it ends.
   The app turns them into `phone.claimed` / `phone.released` and `surfaces[].phoneLead`.
@@ -2700,11 +2702,13 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   the native action and its read-back and NO delivery acknowledgement, the role report trailing the
   daemon by up to 250 ms; paste is not routed through `zmx type`, which is keystrokes and would lose
   bracketed paste.
-- A covered pane ATTACHED from another Mac refuses `surface.cursor` and `session.type` with `pane is in use on the Mac it runs
-  on; take the lead to drive it from here`: its daemon is an ssh away and these calls are synchronous.
-  `session.text --all`/`--lines` there is answered asynchronously by `zmx screen --all` over ssh, off the main
-  thread, under a 5 s limit and a shared read; `ControlActions` keeps the sync requirement and adds an async one
-  beside it, since `agterm-linux` consumes `ElisCore`.
+- A covered pane ATTACHED from another Mac refuses `surface.cursor` and `session.type`
+  with `pane is in use on the Mac it runs on; take the lead to drive it from here`:
+  its daemon is an ssh away and these calls are synchronous.
+  `session.text --all`/`--lines` there is answered asynchronously by `zmx screen --all` over ssh,
+  off the main thread, under a 5 s limit and a shared read;
+  `ControlActions` keeps the sync requirement and adds an async one beside it,
+  since `agterm-linux` consumes `ElisCore`.
 - `session.lead [--pane]` is the control twin of the cover's key. A pane that already leads answers ok;
   one with no reported role answers `pane has no lead to take`; a scratch outside Live sessions is refused.
   Read back `lead`.
