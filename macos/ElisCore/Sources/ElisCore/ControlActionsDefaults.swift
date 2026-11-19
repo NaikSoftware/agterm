@@ -302,8 +302,19 @@ public extension ControlActions {
         ControlResponse(ok: false, error: "session.scroll is not supported by this host")
     }
 
+    /// A host with only the synchronous read keeps answering through it.
+    func readSessionTextAsync(_ target: String?, window: String?, options: ControlSessionTextOptions) async -> ControlResponse {
+        readSessionText(target, window: window, options: options)
+    }
+
     func sessionAttach(target _: String?, pane _: StatusPane, paneID _: String?, window _: String?) async -> ControlResponse {
         ControlResponse(ok: false, error: "session.attach is not supported by this host")
+    }
+
+    /// A host written before take over keeps its viewer attach.
+    func sessionAttach(target: String?, pane: StatusPane, paneID: String?, claim: Bool, window: String?) async -> ControlResponse {
+        guard !claim else { return ControlResponse(ok: false, error: "take over is not supported here") }
+        return await sessionAttach(target: target, pane: pane, paneID: paneID, window: window)
     }
 
     /// Not `ControlActionsUnsupported.message`, which says "on this platform": the divider exists wherever

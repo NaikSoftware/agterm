@@ -84,6 +84,19 @@ struct PhoneDesktopTests {
         #expect(PhoneRelayLine.stderr("elisctl: phone attached from 10.0.0.2 pane ") == .other("phone attached from 10.0.0.2 pane"))
     }
 
+    @Test func parsesLeadLines() {
+        #expect(PhoneRelayLine.stderr("elisctl: phone leads from 10.0.0.2 pane P1") == .lead(leading: true, ip: "10.0.0.2", paneID: "P1"))
+        #expect(PhoneRelayLine.stderr("elisctl: phone released from 10.0.0.2 pane P1") == .lead(leading: false, ip: "10.0.0.2", paneID: "P1"))
+        #expect(PhoneRelayLine.stderr("elisctl: phone leads from 10.0.0.2 pane ") == .other("phone leads from 10.0.0.2 pane"))
+        #expect(!PhoneRelayLine.isEvent("phone leads from 10.0.0.2 pane P1"))
+    }
+
+    @Test func dashAddressReadsAsNil() {
+        #expect(PhoneRelayLine.stderr("elisctl: phone detached from - pane tok") == .viewer(attached: false, ip: "-", paneID: "tok"))
+        #expect(PhoneRelayLine.address("-") == nil)
+        #expect(PhoneRelayLine.address("10.0.0.2") == "10.0.0.2")
+    }
+
     @Test func viewerLinesAreNotStatusEvents() {
         #expect(!PhoneRelayLine.isEvent("phone attached from 10.0.0.2 pane tok"))
         #expect(!PhoneRelayLine.isEvent("phone detached from 10.0.0.2 pane tok"))

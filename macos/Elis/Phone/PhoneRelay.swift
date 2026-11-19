@@ -22,6 +22,8 @@ final class PhoneRelay {
     @ObservationIgnored var onEvent: ((ControlEventKind, ControlEventPayload) -> Void)?
     /// The phone's open panes, which `tree` reads as `phoneViewers`.
     @ObservationIgnored private(set) var viewers = PhoneViewers()
+    /// The panes the phone leads, which `tree` reads as `phoneLead`; observed, since the pane's cover names the phone.
+    private(set) var leads = PhoneViewers()
     @ObservationIgnored private let stateDirectory: URL
     @ObservationIgnored private let tool: URL?
     @ObservationIgnored private var socketPath: String?
@@ -212,7 +214,10 @@ final class PhoneRelay {
             if let event = PhoneRelayLine.controlEvent(text) { onEvent?(event.kind, ControlEventPayload(ip: event.ip)) }
         case let .viewer(attached, ip, paneID):
             if attached { viewers.attach(paneID: paneID) } else if !viewers.detach(paneID: paneID) { return }
-            onEvent?(attached ? .phoneAttached : .phoneDetached, ControlEventPayload(paneID: paneID, ip: ip))
+            onEvent?(attached ? .phoneAttached : .phoneDetached, ControlEventPayload(paneID: paneID, ip: PhoneRelayLine.address(ip)))
+        case let .lead(leading, ip, paneID):
+            if leading { leads.attach(paneID: paneID) } else if !leads.detach(paneID: paneID) { return }
+            onEvent?(leading ? .phoneClaimed : .phoneReleased, ControlEventPayload(paneID: paneID, ip: PhoneRelayLine.address(ip)))
         case .other(let text): lastStderr = text
         case .bluetooth(let value): bluetooth = value // a status, never the error an exit shows
         }
@@ -234,6 +239,7 @@ final class PhoneRelay {
 
     private func detachViewers() {
         for paneID in viewers.reset() { onEvent?(.phoneDetached, ControlEventPayload(paneID: paneID)) }
+        for paneID in leads.reset() { onEvent?(.phoneReleased, ControlEventPayload(paneID: paneID)) }
     }
 
     private nonisolated static func environment(_ stateDirectory: URL) -> [String: String] {

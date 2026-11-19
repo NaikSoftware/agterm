@@ -52,4 +52,19 @@ struct PhoneViewersTests {
         store.phoneViewerCount = { $0 == token ? 2 : 0 }
         #expect(try surfaces().first { $0.paneID == token }?.phoneViewers == 2)
     }
+
+    @MainActor @Test func phoneLeadOmittedUnlessThePhoneLeads() throws {
+        let store = makeStore()
+        let work = store.addWorkspace(name: "work")
+        let session = try #require(store.addSession(toWorkspace: work.id, cwd: "/w"))
+        session.surface = SpySurface(paneToken: session.paneIdentity.uuidString)
+        let token = session.paneIdentity.uuidString
+
+        let surfaces = { try #require(store.controlTree(paneForeground: { _ in nil }).workspaces
+            .flatMap(\.sessions).first { $0.id == session.id.uuidString }?.surfaces) }
+        #expect(try surfaces().first { $0.paneID == token }?.phoneLead == nil)
+
+        store.phoneLeads = { $0 == token }
+        #expect(try surfaces().first { $0.paneID == token }?.phoneLead == true)
+    }
 }

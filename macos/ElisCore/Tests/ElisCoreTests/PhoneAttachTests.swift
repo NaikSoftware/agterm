@@ -102,6 +102,41 @@ struct PhoneAttachTests {
         #expect(script.contains("ZMX_MANAGED_SCREEN_ONLY=1") && script.contains("ZMX_MANAGED_FOLLOW=1"))
     }
 
+    @Test func claimerSetsClaimAndScreenOnlyAndNonce() throws {
+        let attach = try ControlAttach.claimer(.local(endpoint: endpoint, daemon: daemon), paneID: "p1")
+
+        let nonce = try #require(attach.nonce)
+        #expect(attach.argv.contains("ZMX_MANAGED=\(nonce)"))
+        #expect(attach.argv.contains("ZMX_MANAGED_CLAIM=1"))
+        #expect(attach.argv.contains("ZMX_MANAGED_SCREEN_ONLY=1"))
+        #expect(!attach.argv.contains("ZMX_MANAGED_FOLLOW=1"))
+        #expect(attach.paneID == "p1")
+        #expect(attach.screen == (try ControlAttach.viewer(.local(endpoint: endpoint, daemon: daemon), paneID: "p1")).screen)
+        #expect(!attach.remote)
+    }
+
+    @Test func remoteClaimerKeepsTheKeepalive() throws {
+        let attach = try ControlAttach.claimer(.remote(host: "buildbox", endpoint: endpoint, daemon: daemon), paneID: "p2")
+
+        let nonce = try #require(attach.nonce)
+        let script = try #require(attach.argv.last)
+        #expect(Array(attach.argv.prefix(2)) == ["/bin/sh", "-c"])
+        #expect(script.contains("ServerAliveInterval=5"))
+        #expect(script.contains("ZMX_MANAGED=\(nonce)") && script.contains("ZMX_MANAGED_CLAIM=1"))
+        #expect(!script.contains("ZMX_MANAGED_FOLLOW"))
+        #expect(attach.screen.last?.contains("'screen'") == true)
+        #expect(attach.remote)
+    }
+
+    @Test func attachWithoutNonceDecodes() throws {
+        let old = try JSONDecoder().decode(ControlAttach.self, from: Data(#"{"argv":["zmx"],"paneID":"p"}"#.utf8))
+        #expect(old.nonce == nil)
+        #expect(try ControlAttach.viewer(.local(endpoint: endpoint, daemon: daemon), paneID: "p").nonce == nil)
+
+        let claimed = ControlAttach(argv: ["a"], paneID: "p", nonce: "n1")
+        #expect(try JSONDecoder().decode(ControlAttach.self, from: JSONEncoder().encode(claimed)) == claimed)
+    }
+
     @Test func invalidDaemonIsRejected() {
         #expect(throws: RemoteSession.InvocationError.invalidSession) {
             try ControlAttach.viewer(.local(endpoint: endpoint, daemon: "notes"), paneID: "p")

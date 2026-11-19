@@ -3,7 +3,8 @@ extension ControlDispatcher {
         switch parseGridPane(request.args?.pane) {
         case .pane(let parsed):
             return await actions.sessionAttach(target: request.target, pane: parsed ?? .left,
-                                               paneID: request.args?.paneID, window: request.args?.window)
+                                               paneID: request.args?.paneID, claim: request.args?.claim == true,
+                                               window: request.args?.window)
         case .rejected(let rejection): return rejection
         }
     }

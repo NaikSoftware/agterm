@@ -115,7 +115,7 @@ enum EventFormatter {
             return "\(time) \(event.kind.rawValue)"
         case .phoneConnected, .phoneDisconnected, .phoneRefused:
             return "\(time) \(event.kind.rawValue) ip=\(event.payload.ip ?? "-")"
-        case .phoneAttached, .phoneDetached:
+        case .phoneAttached, .phoneDetached, .phoneClaimed, .phoneReleased:
             return "\(time) \(event.kind.rawValue) ip=\(event.payload.ip ?? "-") pane-id=\(event.payload.paneID ?? "-")"
         case .message:
             return "\(time) \(event.kind.rawValue) \(name) pane-id=\(event.payload.paneID ?? "-")"

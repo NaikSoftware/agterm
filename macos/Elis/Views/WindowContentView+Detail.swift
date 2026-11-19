@@ -269,7 +269,7 @@ extension WindowContentView {
                         .id("\(session.id.uuidString)-\(pane == .left ? "primary" : "split")-placeholder")
                 }
                 PaneLeadCover(session: session, pane: pane == .left ? .left : .right, background: terminalColor,
-                              foreground: chromeText, hidden: covered)
+                              foreground: chromeText, hidden: covered, phoneLeads: store.phoneLeads)
                 paneOverlayPanel(session: session, pane: pane, focused: focused, gates: gates)
             }
             .hudPaneAnchor(pane)

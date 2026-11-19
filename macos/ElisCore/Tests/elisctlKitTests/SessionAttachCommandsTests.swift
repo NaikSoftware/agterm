@@ -19,6 +19,18 @@ struct SessionAttachCommandsTests {
         #expect(try parse(["session", "attach", "--target", "9f3c", "--pane", "right"]).makeRequest() == expected)
     }
 
+    @Test func claimFlagSendsClaim() throws {
+        var args = ControlArgs(pane: "right")
+        args.claim = true
+        let expected = ControlRequest(cmd: .sessionAttach, target: "9f3c", args: args)
+        #expect(try parse(["session", "attach", "--target", "9f3c", "--pane", "right", "--claim"]).makeRequest() == expected)
+        #expect(try parse(["session", "attach", "--target", "9f3c"]).makeRequest().args?.claim == nil)
+
+        let attach = ControlAttach(argv: ["zmx", "attach", "d1"], paneID: "p1", nonce: "n")
+        let action = Session.Attach.decide(try reply(ControlResponse(ok: true, result: ControlResult(attach: attach))), json: false, callerPaneID: "p1")
+        #expect(action == .fail("error: cannot attach a pane to itself"))
+    }
+
     private func validationMessage(_ argv: [String]) -> String? {
         do {
             _ = try Elisctl.parseAsRoot(argv)

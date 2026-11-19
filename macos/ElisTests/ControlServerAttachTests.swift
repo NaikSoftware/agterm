@@ -105,6 +105,51 @@ final class ControlServerAttachTests: XCTestCase {
         XCTAssertEqual(masked(byToken.result?.attach), masked(expected), byToken.error ?? "")
     }
 
+    private func claiming(_ pane: String? = nil) -> ControlArgs {
+        var args = ControlArgs(pane: pane)
+        args.claim = true
+        return args
+    }
+
+    func testClaimingAttachForALivePane() async throws {
+        let server = makeServer()
+        let (store, session) = try makeSession(live: true)
+        let paneID = try XCTUnwrap(treePaneID(store, session, kind: "left"))
+
+        let response = await attach(server, session.id.uuidString, args: claiming())
+
+        let attach = try XCTUnwrap(response.result?.attach, response.error ?? "")
+        let nonce = try XCTUnwrap(attach.nonce)
+        let expected = try ControlAttach.claimer(.local(endpoint: client.endpoint, daemon: ZmxSupport.daemonName(for: session.paneIdentity)),
+                                                 paneID: paneID)
+        XCTAssertEqual(masked(attach), masked(expected))
+        XCTAssertTrue(attach.argv.contains("ZMX_MANAGED=\(nonce)"))
+        XCTAssertTrue(attach.argv.contains("ZMX_MANAGED_CLAIM=1"))
+    }
+
+    func testClaimRefusedForAPaneThatIsNotLive() async throws {
+        let server = makeServer()
+        let (_, session) = try makeSession(live: false)
+        let target = session.id.uuidString
+
+        let response = await attach(server, target, args: claiming())
+
+        XCTAssertEqual(response.error, "\(target) is not a Live session")
+        XCTAssertNil(response.result?.attach)
+    }
+
+    func testTreeShowsPhoneLead() throws {
+        let (store, session) = try makeSession(live: true)
+        let paneID = try XCTUnwrap(treePaneID(store, session, kind: "left"))
+        let lead = { store.controlTree(paneForeground: { _ in nil }).workspaces.flatMap(\.sessions)
+            .first { $0.id == session.id.uuidString }?.surfaces?.first { $0.kind == "left" }?.phoneLead }
+        XCTAssertNil(lead())
+
+        library.phoneLeads = { $0 == paneID }
+
+        XCTAssertEqual(lead(), true)
+    }
+
     func testRefusesAPaneThatIsNotLive() async throws {
         let server = makeServer()
         let (_, session) = try makeSession(live: false)

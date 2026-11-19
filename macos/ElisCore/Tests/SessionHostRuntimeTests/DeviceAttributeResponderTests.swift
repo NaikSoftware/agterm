@@ -1,5 +1,5 @@
+import ElisCore
 import Testing
-@testable import SessionHostRuntime
 
 struct DeviceAttributeResponderTests {
     private let queries = ["\u{1B}[c", "\u{1B}[0c", "\u{1B}[>c", "\u{1B}[>0c"]

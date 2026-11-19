@@ -28,6 +28,8 @@ public struct ControlSurfaceNode: Codable, Sendable, Equatable {
     /// phoneViewers counts the paired phone's open views of this pane, omitted at zero. elis-server's own tree
     /// always omits it (approved 2026-11-18): the relay runs only on a Mac, whose tree counts server rows too.
     public let phoneViewers: Int?
+    /// phoneLead is true while the paired phone leads this pane, omitted otherwise; elis-server omits it as `phoneViewers`.
+    public let phoneLead: Bool?
     /// remote is true when this pane's next ask, overlay or page goes to an attached Mac, omitted otherwise.
     public let remote: Bool?
 
@@ -37,7 +39,8 @@ public struct ControlSurfaceNode: Codable, Sendable, Equatable {
 
     public init(id: String, kind: String, active: Bool, visible: Bool, backedByZmx: Bool?,
                 lead: ZmxLeadRole? = nil, reconnect: ControlReconnect? = nil, paneID: String? = nil,
-                pendingMessages: Int? = nil, remote: Bool? = nil, phoneViewers: Int? = nil) {
+                pendingMessages: Int? = nil, remote: Bool? = nil, phoneViewers: Int? = nil,
+                phoneLead: Bool? = nil) {
         self.id = id
         self.kind = kind
         self.active = active
@@ -49,6 +52,7 @@ public struct ControlSurfaceNode: Codable, Sendable, Equatable {
         self.pendingMessages = pendingMessages
         self.remote = remote
         self.phoneViewers = phoneViewers
+        self.phoneLead = phoneLead
     }
 }
 

@@ -42,6 +42,21 @@ struct ServerAttachTests {
         #expect(primary.result?.attach?.paneID == session.paneIdentity.uuidString)
     }
 
+    @Test func serverAnswersAClaimingAttach() async throws {
+        let session = try newSession()
+
+        let reply = await harness.actions.sessionAttach(target: session.id.uuidString, pane: .left, paneID: nil, claim: true, window: nil)
+        let attach = try #require(reply.result?.attach, "\(reply)")
+
+        let nonce = try #require(attach.nonce)
+        #expect(attach.paneID == session.paneIdentity.uuidString)
+        #expect(attach.argv.contains(ZmxSupport.daemonName(for: session.paneIdentity)))
+        #expect(attach.argv.contains("ZMX_MANAGED=\(nonce)"))
+        #expect(attach.argv.contains("ZMX_MANAGED_CLAIM=1"))
+        #expect(!attach.argv.contains("ZMX_MANAGED_FOLLOW=1"))
+        #expect(!attach.screen.isEmpty)
+    }
+
     @Test func refusesAMissingPane() async throws {
         let session = try newSession()
 

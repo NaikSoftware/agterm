@@ -4,6 +4,10 @@ import ElisCore
 extension ServerActions {
     /// sessionAttach maps a pane to a phone viewer attach on the server's own zmx. ElisCore shapes the argv.
     public func sessionAttach(target: String?, pane: StatusPane, paneID: String?, window: String?) async -> ControlResponse {
+        await sessionAttach(target: target, pane: pane, paneID: paneID, claim: false, window: window)
+    }
+
+    public func sessionAttach(target: String?, pane: StatusPane, paneID: String?, claim: Bool, window: String?) async -> ControlResponse {
         withSession(target, window: window) { session in
             var role = pane
             if let paneID, !paneID.isEmpty {
@@ -22,8 +26,9 @@ extension ServerActions {
             let endpoint = ControlZmxEndpoint(executable: panes.configuration.zmxPath,
                                               socketDirectory: panes.configuration.zmxSocketDirectory)
             // a daemon-backed pane's tree token is its identity
-            guard let attach = try? ControlAttach.viewer(.local(endpoint: endpoint, daemon: panes.daemonName(for: identity)),
-                                                         paneID: identity.uuidString) else {
+            let source = LivePaneSource.local(endpoint: endpoint, daemon: panes.daemonName(for: identity))
+            guard let attach = try? claim ? ControlAttach.claimer(source, paneID: identity.uuidString)
+                                          : ControlAttach.viewer(source, paneID: identity.uuidString) else {
                 return ControlResponse(ok: false, error: "\(target ?? "active") is not a Live session")
             }
             return ControlResponse(ok: true, result: ControlResult(attach: attach))

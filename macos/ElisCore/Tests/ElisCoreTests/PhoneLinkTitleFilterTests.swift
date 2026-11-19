@@ -46,4 +46,25 @@ struct PhoneLinkTitleFilterTests {
         #expect(passed == unfinished.count)
         #expect(filter.filter(Data("q".utf8)) == Data("q".utf8))
     }
+
+    @Test func returnsTheNoticesItStrips() throws {
+        var filter = PhoneLinkTitleFilter()
+        var notices: [ZmxLeadNotice] = []
+        let forgedShape = Data("\u{1B}]2;zmx-role;bad\u{07}".utf8)
+        #expect(filter.filter(stream + forgedShape, notices: &notices) == Data("abc".utf8))
+        #expect(notices == [try #require(ZmxLeadNotice(title: "zmx-role;n0nce:leader:1")),
+                            try #require(ZmxLeadNotice(title: "zmx-role;n0nce:follower:2"))])
+    }
+
+    @Test func splitRoleReportIsParsed() throws {
+        let expected = try #require(ZmxLeadNotice(title: "zmx-role;n0nce:leader:1"))
+        let report = Data("x".utf8) + roleBel + Data("y".utf8)
+        for cut in 0...report.count {
+            var filter = PhoneLinkTitleFilter()
+            var notices: [ZmxLeadNotice] = []
+            let out = filter.filter(report.prefix(cut), notices: &notices) + filter.filter(report.dropFirst(cut), notices: &notices)
+            #expect(out == Data("xy".utf8), "cut at \(cut)")
+            #expect(notices == [expected], "cut at \(cut)")
+        }
+    }
 }

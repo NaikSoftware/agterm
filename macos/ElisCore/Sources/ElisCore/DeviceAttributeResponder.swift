@@ -1,17 +1,21 @@
 // DA1/DA2 replies match zmx src/util.zig at ZMX_REV 8bab1f0173b07e79835ea372d749af3dbf0d0842.
-struct DeviceAttributeResponder {
+/// Answers a program's DA1 and DA2 queries where no terminal can: the session host, and the phone relay while a lead changes hands.
+public struct DeviceAttributeResponder: Sendable {
     private static let primaryReply = Array("\u{1B}[?62;22c".utf8)
     private static let secondaryReply = Array("\u{1B}[>1;10;0c".utf8)
-    static let maximumReplyLength = max(primaryReply.count, secondaryReply.count)
+    public static let maximumReplyLength = max(primaryReply.count, secondaryReply.count)
 
     private enum Prefix {
         case none, escape, csi, primary, secondary, secondaryZero
     }
 
     private var prefix = Prefix.none
-    var holdsPartialQuery: Bool { prefix != .none }
 
-    mutating func feed(_ bytes: UnsafeBufferPointer<UInt8>) -> [UInt8] {
+    public init() {}
+
+    public var holdsPartialQuery: Bool { prefix != .none }
+
+    public mutating func feed(_ bytes: UnsafeBufferPointer<UInt8>) -> [UInt8] {
         var replies: [UInt8] = []
         for byte in bytes {
             switch (prefix, byte) {

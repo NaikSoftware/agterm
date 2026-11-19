@@ -88,7 +88,7 @@ Future<String?> pickTint(BuildContext context, String title) => showModalBottomS
       ),
     );
 
-Future<void> showSessionActions(BuildContext context, ElisModel m, Session s, {VoidCallback? onClosed}) {
+Future<void> showSessionActions(BuildContext context, ElisModel m, Session s, {VoidCallback? onClosed, VoidCallback? onComposer}) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -106,6 +106,12 @@ Future<void> showSessionActions(BuildContext context, ElisModel m, Session s, {V
               child: Text(s.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
             _item(Icons.desktop_windows_outlined, 'Show on the computer', () => run(() => m.act('session.select', target: s.id))),
+            if (onComposer != null)
+              _item(Icons.keyboard_outlined, ComposerPref.shown ? 'Hide composer' : 'Show composer', key: const Key('composerToggle'), () {
+                Navigator.pop(sheet);
+                ComposerPref.set(!ComposerPref.shown).catchError((_) {});
+                onComposer();
+              }),
             _item(Icons.edit_outlined, 'Rename', () async {
               Navigator.pop(sheet);
               final name = await promptText(context, 'Rename session', initial: s.name);
@@ -143,8 +149,6 @@ Future<void> showSessionActions(BuildContext context, ElisModel m, Session s, {V
               );
               if (w != null && context.mounted) reportOf(context, m.act('session.move', target: s.id, args: {'workspace': w}));
             }),
-            _item(Icons.vertical_split_outlined, s.split ? 'Hide split pane' : 'Split side by side',
-                () => run(() => m.act('session.split', target: s.id, args: {'mode': 'toggle'}))),
             _item(Icons.copy_outlined, 'Duplicate', () => run(() => m.act('session.duplicate', target: s.id, args: {'noSelect': true}))),
             _item(Icons.subdirectory_arrow_right, 'New companion', () async {
               Navigator.pop(sheet);

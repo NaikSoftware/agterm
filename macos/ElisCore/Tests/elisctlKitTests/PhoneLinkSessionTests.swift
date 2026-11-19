@@ -253,7 +253,286 @@ struct PhoneLinkSessionTests {
         #expect(fixture.server.eventReadCursors().count == reads)
     }
 
+    // MARK: - Take over
+
+    @Test func claimOpenIsRouted() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        Self.answerClaims(fixture.server, Self.leader + "exec cat >/dev/null")
+        phone.deliver(Self.open(2, claim: true, cols: 100, rows: 30))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(cols: 100, rows: 30))
+        #expect(Self.lead(reader.next(from: phone, channel: 2, kind: .lead)) == "leader")
+        #expect(fixture.waitLogged("phone leads from mem:1 pane pane-1"))
+    }
+
+    @Test func dataAndResizeReachTheClaim() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        let dir = fixture.mobileDir
+        Self.answerClaims(fixture.server, Self.leader + #"read line; echo "$line" > '\#(dir)/one'; read x; stty size > '\#(dir)/two'; exec cat >/dev/null"#)
+        phone.deliver(Self.open(2, claim: true))
+        let reader = FrameReader()
+        #expect(Self.lead(reader.next(from: phone, channel: 2, kind: .lead)) == "leader")
+        phone.deliver(PhoneLinkFrame.data(channel: 2, Data("hello\n".utf8)).encoded())
+        #expect(Self.waitFile(dir + "/one") == "hello\n")
+        phone.deliver(PhoneLinkFrame.resize(channel: 2, cols: 100, rows: 40).encoded() + PhoneLinkFrame.data(channel: 2, Data("\n".utf8)).encoded())
+        #expect(Self.waitFile(dir + "/two") == "40 100\n")
+        var credited: UInt32 = 0
+        while credited < 7, let frame = reader.next(from: phone, channel: 2, kind: .credit) { credited += frame.creditBytes ?? 0 }
+        #expect(credited == 7)
+    }
+
+    /// DATA on the watch channel of the pane the phone leads reaches no attach and earns no CREDIT.
+    @Test func dataOnAWatchChannelIsIgnored() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        let claimed = fixture.mobileDir + "/claimed"
+        Self.answerClaims(fixture.server, Self.leader + "exec cat > '\(claimed)'")
+        phone.deliver(Self.open(2) + Self.open(3, claim: true))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(cols: 80, rows: 24))
+        #expect(Self.lead(reader.next(from: phone, channel: 3, kind: .lead)) == "leader")
+        phone.deliver(PhoneLinkFrame.data(channel: 2, Data("zz\n".utf8)).encoded() + PhoneLinkFrame.data(channel: 3, Data("ok\n".utf8)).encoded())
+        #expect(Self.waitFile(claimed) == "ok\n")
+        #expect(reader.next(from: phone, channel: 3, kind: .credit)?.creditBytes == 3)
+        #expect(!reader.pending(phone).contains { $0.channel == 2 && ($0.kind == .credit || String(decoding: $0.payload, as: UTF8.self).contains("zz")) })
+    }
+
+    /// A claim closed while its attach request runs keeps its slot until the answer.
+    @Test func closedClaimHoldsItsSlotUntilTheAnswer() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        defer { fixture.server.releaseAttach() }
+        Self.answerClaims(fixture.server, Self.leader + "exec cat >/dev/null")
+        fixture.server.holdAttach()
+        let close = PhoneLinkFrame.json(.close, channel: 2, PhoneLinkClose(reason: "done")).encoded()
+        phone.deliver(Self.open(2, claim: true) + close + (3...10).map { Self.open($0) }.reduce(Data(), +))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 10) == PhoneLinkOpened(error: "too many open panes"))
+        fixture.server.releaseAttach()
+        for channel: UInt32 in 3...9 { #expect(reader.opened(from: phone, channel: channel) == PhoneLinkOpened(cols: 80, rows: 24)) }
+    }
+
+    @Test func claimCountsTowardTheCap() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        Self.answerClaims(fixture.server, Self.leader + "exec cat >/dev/null")
+        phone.deliver(Self.open(2, claim: true) + Self.open(2) + (3...10).map { Self.open($0) }.reduce(Data(), +))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 10) == PhoneLinkOpened(error: "too many open panes"))
+        let answers = (0..<2).compactMap { _ in reader.opened(from: phone, channel: 2) }
+        #expect(answers.contains(PhoneLinkOpened(error: "channel already open")))
+        for channel: UInt32 in 3...9 { #expect(reader.opened(from: phone, channel: channel) == PhoneLinkOpened(cols: 80, rows: 24)) }
+    }
+
+    @Test func linkCloseEndsTheClaim() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { fixture.stop() }
+        let token = PhoneLinkTerminalTests.token()
+        Self.answerClaims(fixture.server, Self.leader + "exec cat >/dev/null; : \(token)")
+        phone.deliver(Self.open(2, claim: true))
+        #expect(Self.lead(FrameReader().next(from: phone, channel: 2, kind: .lead)) == "leader")
+        phone.peerLeft()
+        #expect(fixture.waitLogged("phone disconnected from mem:1"))
+        let lines = fixture.logged()
+        let released = try #require(lines.firstIndex(of: "phone released from mem:1 pane pane-1"))
+        #expect(released < lines.firstIndex(of: "phone disconnected from mem:1")!)
+        #expect(PhoneLinkTerminalTests.waitGone(token))
+    }
+
+    @Test func leadChangeResyncsTheWatchChannelOfThatPane() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        Self.answerClaims(fixture.server, Self.leader + "exec cat >/dev/null")
+        phone.deliver(Self.open(2) + Self.open(3, pane: "right"))
+        let reader = FrameReader()
+        for channel: UInt32 in [2, 3] { #expect(reader.opened(from: phone, channel: channel) == PhoneLinkOpened(cols: 80, rows: 24)) }
+        #expect(fixture.waitLogged("phone attached from mem:1 pane pane-2"))
+        phone.deliver(Self.open(4, claim: true))
+        #expect(Self.lead(reader.next(from: phone, channel: 4, kind: .lead)) == "leader")
+        #expect(reader.next(from: phone, channel: 2, kind: .resync) != nil)
+        #expect(reader.next(from: phone, channel: 2)?.kind == .grid)
+        usleep(500_000) // a resync of pane-2 would be out by now
+        #expect(!reader.pending(phone).contains { $0.channel == 3 && $0.kind == .resync })
+    }
+
+    @Test func theClaimAnswersDeviceQueriesOnlyUntilTheWatchResyncs() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        let dir = fixture.mobileDir
+        let query = "printf '\\033[0c'; "
+        Self.answerClaims(fixture.server, "stty raw -echo; " + Self.leader + query + "dd bs=1 count=9 >'\(dir)/reply' 2>/dev/null; echo >>'\(dir)/reply'; "
+            + "while [ ! -e '\(dir)/again' ]; do sleep 0.02; done; " + query + "echo >'\(dir)/asked'; dd bs=1 count=1 >'\(dir)/typed' 2>/dev/null; echo >>'\(dir)/typed'")
+        phone.deliver(Self.open(2))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(cols: 80, rows: 24))
+        phone.deliver(Self.open(3, claim: true))
+        #expect(Self.waitFile(dir + "/reply") == "\u{1B}[?62;22c\n")
+        #expect(reader.next(from: phone, channel: 2, kind: .resync) != nil)
+        FileManager.default.createFile(atPath: dir + "/again", contents: nil)
+        #expect(Self.waitFile(dir + "/asked") != nil)
+        usleep(200_000)
+        phone.deliver(PhoneLinkFrame.data(channel: 3, Data("x".utf8)).encoded())
+        #expect(Self.waitFile(dir + "/typed") == "x\n")
+    }
+
+    /// The watch pane is remote, so its own grid poll is 30 s away: the GRID comes from the poll the claim asked for.
+    @Test(arguments: [false, true])
+    func phoneCloseOfTheClaimPollsSoon(_ resize: Bool) throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        let grid = fixture.mobileDir + "/grid"
+        try "1 80 24 0 0 0\n".write(toFile: grid, atomically: true, encoding: .utf8)
+        Self.answerClaims(fixture.server, Self.leader + "exec cat >/dev/null",
+                          viewer: RawStubServer.fakeAttach("printf hi; exec cat", screen: "cat '\(grid)'", remote: true))
+        phone.deliver(Self.open(2))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(cols: 80, rows: 24))
+        phone.deliver(Self.open(3, claim: true))
+        #expect(Self.lead(reader.next(from: phone, channel: 3, kind: .lead)) == "leader")
+        #expect(reader.next(from: phone, channel: 2, kind: .grid)?.size?.cols == 80) // the resync's
+        try "1 100 30 0 0 0\n".write(toFile: grid, atomically: true, encoding: .utf8)
+        let started = Date()
+        phone.deliver(resize ? PhoneLinkFrame.resize(channel: 3, cols: 100, rows: 30).encoded()
+            : PhoneLinkFrame.json(.close, channel: 3, PhoneLinkClose(reason: "done")).encoded())
+        if resize { #expect(reader.next(from: phone, channel: 2, kind: .resync) != nil) }
+        let size = reader.next(from: phone, channel: 2, kind: .grid)?.size
+        #expect(size?.cols == 100 && size?.rows == 30)
+        #expect(Date().timeIntervalSince(started) < 10)
+    }
+
+    @Test func claimNamesTheWatchedPane() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        Self.answerClaims(fixture.server, Self.leader + "exec cat >/dev/null", viewer: RawStubServer.fakeAttach("printf hi; cat", paneID: "P1"))
+        phone.deliver(Self.open(2))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(cols: 80, rows: 24))
+        phone.deliver(Self.open(3, claim: true))
+        #expect(Self.lead(reader.next(from: phone, channel: 3, kind: .lead)) == "leader")
+        #expect(fixture.server.requests().contains(
+            #"{"args":{"claim":true,"pane":"left","paneID":"P1"},"cmd":"session.attach","target":"S1"}"#))
+    }
+
+    @Test func claimWithoutAWatchNamesTheRole() throws {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        defer { Self.finish(fixture, phone) }
+        Self.answerClaims(fixture.server, Self.leader + "exec cat >/dev/null")
+        phone.deliver(Self.open(3, pane: "right") + Self.open(2, claim: true))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 3) == PhoneLinkOpened(cols: 80, rows: 24))
+        #expect(Self.lead(reader.next(from: phone, channel: 2, kind: .lead)) == "leader")
+        #expect(fixture.server.requests().contains(#"{"args":{"claim":true,"pane":"left"},"cmd":"session.attach","target":"S1"}"#))
+    }
+
+    @Test func resizeOfTheClaimResyncsTheWatchChannel() throws {
+        let (fixture, phone, reader) = try Self.watchedClaim()
+        defer { Self.finish(fixture, phone) }
+        try "1 100 40 0 0 0\n".write(toFile: fixture.mobileDir + "/grid", atomically: true, encoding: .utf8)
+        let viewers = Self.viewerAttaches(fixture.server)
+        phone.deliver(PhoneLinkFrame.resize(channel: 3, cols: 100, rows: 40).encoded())
+        #expect(reader.next(from: phone, channel: 2, kind: .resync) != nil)
+        let size = reader.next(from: phone, channel: 2)?.size
+        #expect(size?.cols == 100 && size?.rows == 40)
+        #expect(Self.viewerAttaches(fixture.server) == viewers + 1)
+        #expect(!reader.pending(phone).contains { $0.channel == 2 && $0.kind == .resync })
+    }
+
+    @Test func aBurstOfResizesResyncsOnce() throws {
+        let (fixture, phone, reader) = try Self.watchedClaim()
+        defer { Self.finish(fixture, phone) }
+        phone.deliver([90, 95, 100].map { PhoneLinkFrame.resize(channel: 3, cols: $0, rows: 40).encoded() }.reduce(Data(), +))
+        #expect(reader.next(from: phone, channel: 2, kind: .resync) != nil)
+        #expect(!reader.pending(phone).contains { $0.channel == 2 && $0.kind == .resync })
+    }
+
+    @Test func resizeOutOfRangeDoesNotResync() throws {
+        let (fixture, phone, reader) = try Self.watchedClaim()
+        defer { Self.finish(fixture, phone) }
+        try Self.expectNoResync(fixture, phone, reader, after: PhoneLinkFrame.resize(channel: 3, cols: 0, rows: 40).encoded())
+    }
+
+    @Test func resizeThenCloseDoesNotResync() throws {
+        let (fixture, phone, reader) = try Self.watchedClaim()
+        defer { Self.finish(fixture, phone) }
+        try Self.expectNoResync(fixture, phone, reader, after: PhoneLinkFrame.resize(channel: 3, cols: 100, rows: 40).encoded()
+            + PhoneLinkFrame.json(.close, channel: 3, PhoneLinkClose(reason: "done")).encoded())
+    }
+
     // MARK: - helpers
+
+    /// A watch on `left` (channel 2) with its screen read from `<mobileDir>/grid`, and a leading claim on channel 3,
+    /// past the lead change's resync.
+    private static func watchedClaim() throws -> (MobileFixture, MemoryPhone, FrameReader) {
+        let (fixture, phone) = try MobileFixture.upgraded()
+        let grid = fixture.mobileDir + "/grid"
+        try "1 80 24 0 0 0\n".write(toFile: grid, atomically: true, encoding: .utf8)
+        answerClaims(fixture.server, leader + "exec cat >/dev/null", viewer: RawStubServer.fakeAttach("printf hi; exec cat", screen: "cat '\(grid)'"))
+        phone.deliver(open(2))
+        let reader = FrameReader()
+        #expect(reader.opened(from: phone, channel: 2) == PhoneLinkOpened(cols: 80, rows: 24))
+        phone.deliver(open(3, claim: true))
+        #expect(lead(reader.next(from: phone, channel: 3, kind: .lead)) == "leader")
+        #expect(reader.next(from: phone, channel: 2, kind: .resync) != nil)
+        #expect(reader.next(from: phone, channel: 2)?.kind == .grid)
+        return (fixture, phone, reader)
+    }
+
+    private static func expectNoResync(_ fixture: MobileFixture, _ phone: MemoryPhone, _ reader: FrameReader, after frames: Data) throws {
+        let viewers = viewerAttaches(fixture.server)
+        phone.deliver(frames)
+        usleep(500_000) // a resync would be out by now
+        #expect(!reader.pending(phone).contains { $0.channel == 2 && $0.kind == .resync })
+        #expect(viewerAttaches(fixture.server) == viewers)
+    }
+
+    private static func viewerAttaches(_ server: RawStubServer) -> Int {
+        server.requests().filter { $0.contains("session.attach") && !$0.contains(#""claim":true"#) }.count
+    }
+
+    private static let leader = #"printf '\033]2;zmx-role;n1:leader:1\007'; "#
+
+    /// A claim on any pane answers `claim`; a watch on the right pane is pane-2, every other watch `viewer`.
+    private static func answerClaims(_ server: RawStubServer, _ claim: String,
+                                     viewer: ControlAttach = RawStubServer.fakeAttach("printf 'hi'; cat")) {
+        server.answerAttach { args in
+            let attach = args["claim"] as? Bool == true ? RawStubServer.fakeAttach(claim, nonce: "n1")
+                : args["pane"] as? String == "right" ? RawStubServer.fakeAttach("printf 'hi'; cat", paneID: "pane-2") : viewer
+            return ControlResponse(ok: true, result: ControlResult(attach: attach))
+        }
+    }
+
+    private static func open(_ channel: UInt32, pane: String = "left", claim: Bool? = nil, cols: UInt16? = 80, rows: UInt16? = 24) -> Data {
+        let request = claim == true ? PhoneLinkOpen(type: "vt", target: "S1", pane: pane, claim: true, cols: cols, rows: rows)
+            : PhoneLinkOpen(type: "vt", target: "S1", pane: pane)
+        return PhoneLinkFrame.json(.open, channel: channel, request).encoded()
+    }
+
+    private static func lead(_ frame: PhoneLinkFrame?) -> String? { try? frame?.decodeJSON(PhoneLinkLead.self).role }
+
+    private static func waitFile(_ path: String) -> String? {
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline {
+            if let text = try? String(contentsOfFile: path, encoding: .utf8), text.hasSuffix("\n") { return text }
+            usleep(20_000)
+        }
+        return nil
+    }
+
+    /// Every frame sent until the phone has been quiet for half a second.
+    private static func drain(_ phone: MemoryPhone) -> [PhoneLinkFrame] {
+        var decoder = PhoneLinkDecoder()
+        var frames: [PhoneLinkFrame] = []
+        while let bytes = phone.readSent(timeout: 0.5) { frames += (try? decoder.feed(bytes)) ?? [] }
+        return frames
+    }
+
+    private static func finish(_ fixture: MobileFixture, _ phone: MemoryPhone) {
+        phone.peerLeft()
+        _ = fixture.waitLogged("phone disconnected from mem:1")
+        fixture.stop()
+    }
 
     private static func control(_ text: String) -> Data {
         PhoneLinkFrame.data(channel: 0, Data(text.utf8)).encoded()

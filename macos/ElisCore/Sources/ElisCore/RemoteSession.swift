@@ -138,17 +138,18 @@ public enum RemoteSession {
     }
 
     /// The `env … zmx screen` words that read `daemon`'s own screen, with `zmxAttachArguments`' validation.
-    public static func zmxScreenArguments(endpoint: ControlZmxEndpoint, daemon: String) throws -> [String] {
+    /// `all` adds the scrollback.
+    public static func zmxScreenArguments(endpoint: ControlZmxEndpoint, daemon: String, all: Bool = false) throws -> [String] {
         try validate(endpoint: endpoint, daemon: daemon)
         return ["/usr/bin/env", "ZMX_SESSION=", "ZMX_SESSION_PREFIX=", "ZMX_DIR=" + endpoint.socketDirectory,
-                endpoint.executable, "screen", daemon]
+                endpoint.executable, "screen", daemon] + (all ? ["--all"] : [])
     }
 
     /// One ssh invocation running `zmx screen` for `daemon` on `host`, with the keepalive wrapper.
-    public static func screenCommand(host: String, endpoint: ControlZmxEndpoint, daemon: String,
+    public static func screenCommand(host: String, endpoint: ControlZmxEndpoint, daemon: String, all: Bool = false,
                                      connectTimeout: Int = 5) throws -> [String] {
         try validate(host: host)
-        let remote = CommandRestore.shellQuotedLine(try zmxScreenArguments(endpoint: endpoint, daemon: daemon))
+        let remote = CommandRestore.shellQuotedLine(try zmxScreenArguments(endpoint: endpoint, daemon: daemon, all: all))
         return keepingAlive(sshArguments(host: host, connectTimeout: connectTimeout, interactive: false) + [remote])
     }
 

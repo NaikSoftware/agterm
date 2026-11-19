@@ -266,13 +266,57 @@ Wire contract for the phone (M4b):
 - OPENED `{"error":"revoked"}` is followed by the link closing.
 - The phone sends CREDIT at least once per window consumed, and a zero-byte CREDIT clears the stall clock.
   A CREDIT in flight across RESYNC can let the relay send up to one extra window.
-- LEAD and relay-to-phone CREDIT are not sent in M4a. Channel ids are used once per link.
+- Relay-to-phone CREDIT and LEAD are sent only on a claim channel (Direct input below). Channel ids are used once per link.
 - Priority is strict 0 > 1 > vt: a large `tree` answer on Bluetooth holds every vt channel until it is out.
 - Grid poll: every 2 s for a local pane, every 30 s for a remote one.
 - A relay killed by a signal prints no per-pane detach lines: viewer processes end by SIGHUP,
   and the app resets its viewers.
 
-`session.attach` answers `result.attach = {argv, paneID, screen, remote}`:
+Direct input (M5, M5b), `PhoneLinkClaim`.
+A claim is a vt channel of its own beside the watch channel, counted in the 8,
+and carries no DATA to the phone.
+
+- OPEN `{type:"vt", target, pane?, claim:true, cols, rows}`;
+  each size 1...1000, else OPENED `{"error":"bad size"}`.
+  The relay asks `session.attach` with `claim`, runs the argv on a pty at that size,
+  and reads its output only for role reports carrying the answer's `nonce`.
+- OPENED `{cols, rows}` (the pty's current size) goes only after the leader report,
+  then LEAD `{"role":"leader"}`.
+  No report within 10 s refuses `this host's zmx cannot hand over the lead; update Elis there`.
+  An answer without `nonce` refuses `Elis gave no claiming attach for this pane`.
+  The app's refusals pass through (`session not realized` for a pane never shown).
+- Phone DATA is input written to the pty under a 16384-byte receive window.
+  CREDIT goes back per completed pty write, one in flight at a time, so writes coalesce.
+  More than a window unacknowledged closes `input overflow`.
+  Input before OPENED is dropped. A RESIZE with a size outside 1...1000 is ignored.
+  A RESIZE sets the pty's size and signals SIGWINCH to the attach's group:
+  macOS gives a `posix_spawn` child no controlling terminal, so the kernel signals nobody.
+- A later role sends LEAD `{role}`, ends the attach and CLOSE `the computer took the lead back`.
+  The attach's exit closes `session ended`.
+  A phone CLOSE or a closed link ends the attach without a word.
+- Taking or losing the lead resyncs every watch channel on the pane:
+  the daemon has already resized by the report, so a fresh viewer attach is where old-grid bytes stop.
+  From its attach until the pane's watch channel sends OPENED or RESYNC under the lead,
+  the claim answers the program's DA1/DA2 queries itself (`DeviceAttributeResponder`).
+  No terminal can then: the old watch attach is dropped, the phone answers only what follows RESYNC,
+  and zmx drops the input of the Mac's terminal, now a follower.
+  fish asks at every resize and holds typed input 10 s for the answer.
+  A RESIZE or a release polls the grid at once and again 2 s later.
+  A RESIZE also resyncs the pane's watch channels 150 ms after the last one;
+  the phone sizes its emulator only from RESYNC and GRID.
+- The phone claims by the WATCHED pane id, when it opens, resumes or switches to a Live pane,
+  and again at its next key, send, paste, scroll or tap after a Mac key took the lead back.
+  Input before the leader report is queued and written after it, in order, with a 20 ms gap only before a composer line's Enter.
+  A fit the Mac refuses after the phone gives the lead back is retried 3 times, 1 s apart,
+  then reported, and auto-fit stops.
+- The relay prints `phone leads from <ip> pane <paneID>` once the claim leads,
+  and `phone released from <ip> pane <paneID>` when it ends.
+  The app turns them into `phone.claimed` / `phone.released` and `surfaces[].phoneLead`.
+  Every `phone.*` pane event emits `tree.changed` for the window holding the pane.
+  A relay `-` address leaves `ip` absent from the event payload; the human line prints `ip=-`.
+  elis-server's own tree omits `phoneLead` by the same approved exception as `phoneViewers`.
+
+`session.attach` answers `result.attach = {argv, paneID, screen, remote, nonce?}`:
 `screen` is the zmx `screen` argv for the same daemon (the relay reads the grid with it),
 and `remote` is true for an origin's pane.
 Remote viewer and screen argvs run through the ssh keepalive wrapper.
@@ -288,6 +332,9 @@ a remote one is left to the relay's re-attach backoff.
 The Mac answers it locally for its own Live panes, rows attached from another Mac and elis-server rows,
 and elis-server's socket serves its own panes. No ssh ControlPath: each attach opens its own ssh connection.
 Page rows and the page bridge refuse it. `elisctl session attach` execs the argv; `--json` prints the response and execs nothing.
+With `claim` (`--claim`) it answers a claiming attach instead (`ZmxLeadAttachment(claim: true, screenOnly: true)`)
+and its `nonce`, the `ZMX_MANAGED` value the role reports echo; the same panes qualify, and a host whose
+`ControlActions` predates it refuses `take over is not supported here` (the CLI's own wording).
 The relay (`mobile serve`) prints `phone attached from <ip> pane <paneID>` and `phone detached ...` lines;
 the app turns them into `phone.attached` / `phone.detached` and `surfaces[].phoneViewers`.
 When the relay stops or restarts, every remaining viewer detaches with `ip=-`.
@@ -2604,6 +2651,9 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   the pane's zmx reports. A pane with no daemon never does, which is every local pane outside Live
   sessions mode, and neither does an origin or a zmx without the patch. Such a pane behaves as
   before and is never covered. A role change emits `tree.changed`.
+- A phone's direct input is one more claiming client (Relay mux above).
+  The Mac pane follows, and its cover reads `In use on your phone` while `PhoneRelay.leads` holds the pane.
+  A key on it takes the lead back, as from another Mac.
 - A pane that does not lead is covered (`PaneLeadCover`), by every host of its terminal: the deck, where
   it sits BELOW the pane's own pane overlay and hides while one is up, terminal zoom, and the dashboard.
   The daemon ignores a session switch while its leader is managed: the client's nonce, its generation and
@@ -2618,13 +2668,13 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   first report. An open search owned by the old surface is cleared synchronously, since END_SEARCH
   answers through a callback `destroySurface` clears first; a dashboard cell's transient font is carried
   as the override and never seeds the new surface's own size. `remotePaneStopped` drops the pane's
-  lead state when an attach ends on its exit prompt or waits to reconnect, a failed take-over included,
+  lead state when an attach ends on its exit prompt or waits to reconnect, a failed claim included,
   or the cover would hide the line saying what died and swallow the key that closes it. The launch
   attaches and never creates: a trailing `/bin/sh -c` fails when the daemon is gone, locally as for an
   attached pane, so a vanished session ends the pane. An attached pane is
   rebuilt from `RemoteBinding.Origin`, never from the pane's first command line, which carries that
   attachment's nonce.
-- The takeover key is consumed with its repeats and its release, and a Command chord on a covered pane
+- The lead-taking key is consumed with its repeats and its release, and a Command chord on a covered pane
   is swallowed without taking the lead. Paste, drop, IME and mouse need no app-side guard: the daemon
   drops a managed follower's input.
 - The role the app holds is a REPORT, a main-queue hop and up to 250 ms behind the daemon, so it never
@@ -2659,8 +2709,13 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   the native action and its read-back and NO delivery acknowledgement, the role report trailing the
   daemon by up to 250 ms; paste is not routed through `zmx type`, which is keystrokes and would lose
   bracketed paste.
-- A covered pane ATTACHED from another Mac refuses all three with `pane is in use on the Mac it runs
-  on; take the lead to drive it from here`: its daemon is an ssh away and these reads are synchronous.
+- A covered pane ATTACHED from another Mac refuses `surface.cursor` and `session.type`
+  with `pane is in use on the Mac it runs on; take the lead to drive it from here`:
+  its daemon is an ssh away and these calls are synchronous.
+  `session.text --all`/`--lines` there is answered asynchronously by `zmx screen --all` over ssh,
+  off the main thread, under a 5 s limit and a shared read;
+  `ControlActions` keeps the sync requirement and adds an async one beside it,
+  since `agterm-linux` consumes `ElisCore`.
 - `session.lead [--pane]` is the control twin of the cover's key. A pane that already leads answers ok;
   one with no reported role answers `pane has no lead to take`; a scratch outside Live sessions is refused.
   Read back `lead`.

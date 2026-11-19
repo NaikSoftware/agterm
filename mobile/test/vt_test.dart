@@ -140,4 +140,120 @@ void main() {
     final c = make(10, 2)..write(_b('a\r\n\x1b[1mn\u0303x'));
     expect(c.snapshot().lines[1], isNot(rb[1])); // same text, other flags
   }, skip: skip);
+  test('arrowUpFollowsCursorKeyMode', () {
+    final vt = make(10, 3);
+    expect(vt.encodeKey(VtKey.arrowUp), _b('\x1b[A'));
+    vt.write(_b('\x1b[?1h'));
+    expect(vt.encodeKey(VtKey.arrowUp), _b('\x1bOA'));
+  }, skip: skip);
+
+  test('ctrlCIsEtx', () {
+    expect(make(10, 3).encodeKey(VtKey.c, mods: vtCtrl), [3]);
+  }, skip: skip);
+
+  test('altLetterIsEscPrefixed', () {
+    expect(make(10, 3).encodeKey(VtKey.d, mods: vtAlt, text: 'd'), _b('\x1bd'));
+  }, skip: skip);
+
+  test('shiftTabIsBacktab', () {
+    expect(make(10, 3).encodeKey(VtKey.tab, mods: vtShift), _b('\x1b[Z'));
+  }, skip: skip);
+
+  test('kittyModeEncodesEscape', () {
+    final vt = make(10, 3)..write(_b('\x1b[>1u'));
+    expect(vt.encodeKey(VtKey.escape), _b('\x1b[27u'));
+  }, skip: skip);
+
+  test('textIsUtf8', () {
+    expect(make(10, 3).encodeText('aé日'), _b('aé日'));
+  }, skip: skip);
+
+  test('pasteIsBracketedOnlyUnderMode2004', () {
+    final vt = make(10, 3);
+    expect(vt.encodePaste('a\nb'), _b('a\rb'));
+    vt.write(_b('\x1b[?2004h'));
+    expect(vt.encodePaste('a\nb'), _b('\x1b[200~a\nb\x1b[201~'));
+  }, skip: skip);
+
+  test('longPasteGrowsTheBuffer', () {
+    final text = List.filled(5000, 'x').join();
+    expect(make(10, 3).encodePaste(text), _b(text));
+  }, skip: skip);
+
+  test('clickIsEmptyWithoutMouseTracking', () {
+    expect(make(10, 5).encodeClick(col: 2, row: 3), isEmpty);
+  }, skip: skip);
+
+  test('clickIsPressThenReleaseInSgr', () {
+    final vt = make(10, 5)..write(_b('\x1b[?1000h\x1b[?1006h'));
+    expect(vt.encodeClick(col: 2, row: 3), _b('\x1b[<0;3;4M\x1b[<0;3;4m'));
+  }, skip: skip);
+
+  test('clickInLegacyEncoding', () {
+    final vt = make(10, 5)..write(_b('\x1b[?1000h'));
+    expect(vt.encodeClick(col: 2, row: 3), _b('\x1b[M #\$\x1b[M##\$'));
+  }, skip: skip);
+
+  test('wheelIsEmptyWithoutTracking', () {
+    expect(make(10, 5).encodeWheel(up: true, col: 2, row: 3), isEmpty);
+  }, skip: skip);
+
+  test('wheelUnderSgrTracking', () {
+    final vt = make(10, 5)..write(_b('\x1b[?1000h\x1b[?1006h'));
+    expect(vt.encodeWheel(up: true, col: 2, row: 3), _b('\x1b[<64;3;4M'));
+    expect(vt.encodeWheel(up: true, col: 2, row: 3), _b('\x1b[<64;3;4M'));
+    expect(vt.encodeWheel(up: false, col: 2, row: 3), _b('\x1b[<65;3;4M'));
+  }, skip: skip);
+
+  test('wheelUnderSgrPixelsMatchesTheReportedCellSize', () {
+    final vt = make(10, 5)..write(_b('\x1b[?1000h\x1b[?1016h'));
+    expect(vt.encodeWheel(up: true, col: 2, row: 3), _b('\x1b[<64;16;48M'));
+  }, skip: skip);
+
+  test('focusOnlyUnderMode1004', () {
+    final vt = make(10, 3);
+    expect(vt.encodeFocus(true), isEmpty);
+    vt.write(_b('\x1b[?1004h'));
+    expect(vt.encodeFocus(true), _b('\x1b[I'));
+    expect(vt.encodeFocus(false), _b('\x1b[O'));
+  }, skip: skip);
+
+  test('repliesAreCollected', () {
+    final vt = make(10, 3)..write(_b('\x1b[c'));
+    expect(vt.takeReplies(), _b('\x1b[?62;22;52c'));
+    expect(vt.takeReplies(), isEmpty);
+  }, skip: skip);
+
+  test('resetDropsPendingReplies', () {
+    final vt = make(10, 3)..write(_b('\x1b[c'));
+    vt.reset();
+    expect(vt.takeReplies(), isEmpty);
+  }, skip: skip);
+
+  test('repliesGrowTheBuffer', () {
+    final vt = make(10, 3)..write(_b(List.filled(30, '\x1b[c').join()));
+    expect(vt.takeReplies(), _b(List.filled(30, '\x1b[?62;22;52c').join()));
+  }, skip: skip);
+
+  test('cursorPositionReportIsCollected', () {
+    final vt = make(10, 3)..write(_b('ab\x1b[6n'));
+    expect(vt.takeReplies(), _b('\x1b[1;3R'));
+  }, skip: skip);
+
+  test('sizeReportUsesTheGrid', () {
+    final vt = make(10, 3)..resize(20, 4);
+    vt.write(_b('\x1b[18t'));
+    expect(vt.takeReplies(), _b('\x1b[8;4;20t'));
+  }, skip: skip);
+
+  test('encodersThrowAfterDispose', () {
+    final vt = Vt(10, 3)..dispose();
+    expect(() => vt.encodeKey(VtKey.enter), throwsStateError);
+    expect(() => vt.encodeText('a'), throwsStateError);
+    expect(() => vt.encodePaste('a'), throwsStateError);
+    expect(() => vt.encodeWheel(up: true, col: 0, row: 0), throwsStateError);
+    expect(() => vt.encodeClick(col: 0, row: 0), throwsStateError);
+    expect(() => vt.encodeFocus(true), throwsStateError);
+    expect(vt.takeReplies, throwsStateError);
+  }, skip: skip);
 }

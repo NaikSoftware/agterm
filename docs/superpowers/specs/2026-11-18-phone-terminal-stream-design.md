@@ -36,7 +36,7 @@ Claude Code, codex and agy correctly, with native UI around it.
 3. mosh / tmux -CC screen-diff sync. Rejected: duplicates zmx; mosh needs UDP and is GPLv3; neither fits BLE.
 4. Agent protocols (ACP, Claude stream-json, codex app-server). Rejected: cannot read agents already in a pane.
 
-## Modes: Watch and Take over (user decision: keep both)
+## Modes: Watch and Take over (user decision: keep both; superseded by the M5b plan: the Take over and Give back buttons are gone, the phone leads at its first input)
 
 **Watch** (default). The phone's attach never claims; the Mac keeps the lead.
 - Fit to phone (`session.grid`, existing) resizes the Mac surface of a pane the Mac leads; the daemon follows the
@@ -47,7 +47,7 @@ Claude Code, codex and agy correctly, with native UI around it.
 
 **Take over.** The relay adds a second attach with `ZMX_MANAGED_CLAIM` on a pty sized to the phone. The phone
 leads; the Mac pane shows its existing lead cover.
-- Input: all of it (keys, paste, mouse wheel, focus) goes as DATA on the vt channel into the claiming attach,
+- Input: all of it (keys, paste, mouse wheel, focus) goes as DATA on a claim channel of its own into the claiming attach,
   encoded on the phone by libghostty-vt's encoders against the emulator's current modes. `session.scroll` is
   refused on a covered pane, so wheel events cannot use it here.
 - Size: RESIZE frames become `TIOCSWINSZ` on the claiming pty.
@@ -70,8 +70,8 @@ Frame: `u8 kind | u32 channel | u32 len | payload`, big endian, `len` <= 64 KiB.
 
 | kind | dir | payload |
 |---|---|---|
-| OPEN | phone→relay | JSON `{type:"vt", target, pane?, claim?, cols?, rows?}` |
-| OPENED | relay→phone | JSON `{cols, rows}` or `{error}` |
+| OPEN | phone→relay | JSON `{type:"vt", target, pane?, claim?, cols?, rows?}`; a claim needs `claim:true`, `cols` and `rows` (1...1000 each) |
+| OPENED | relay→phone | JSON `{cols, rows}` or `{error}`; a claim's comes after the leader report, with the pty's size |
 | DATA | both | control/events: JSON lines; vt: VT bytes relay→phone, encoded input phone→relay (Take over only) |
 | RESIZE | phone→relay | u16 cols, u16 rows (Take over only) |
 | LEAD | relay→phone | JSON `{role}` from the claiming attach's role report |
@@ -152,8 +152,8 @@ same scripts on itself, then merges master.
 - M3: zmx visible-screen attach patch; `session.attach` + read-back + events + tests + docs + skill; verify the
   server zmx has the leadership patch.
 - M4: relay mux, attach runner, buffer/resync/watchdog; phone terminal view in Watch, local and remote Live rows.
-- M5: Take over (claiming attach, input encoders, RESIZE, LEAD), zoom/pan, Fit to phone on the terminal view,
-  Bluetooth end-to-end on the emulator.
+- M5: Take over (claiming attach, input encoders, RESIZE, LEAD), zoom/pan; Fit to phone on the terminal view was
+  done in M4b. The end-to-end check, Bluetooth included, runs on a device or emulator.
 - M6: Text mode (reflow, live block, command cards) and the mode switcher with auto-pick.
 - M7: Chat mode with the first adapters (Claude Code transcript, codex rollout).
 - Later: native asks (own design).
@@ -185,7 +185,7 @@ Mockups: [the session view design](assets/2026-11-18-phone-session-view.html) (z
 1. Linux elis relay: text fallback now, port later.
 2. First-burst trim: a small zmx patch (attach flag), not a byte-pattern cut.
 3. Scope: terminal-output streaming is approved; `control-api.md:23` changes with M3.
-4. Take over stays, beside Fit to phone.
+4. Take over stays, beside Fit to phone. (Superseded by the M5b plan: direct input replaces the button.)
 5. Session view: Chat, Text and Term with auto-pick (section above); Term is the fallback, not the goal.
 
 ## Notes for the M4 relay (from the M2 review)
@@ -198,12 +198,12 @@ M4b builds on; this list keeps only what is not stated there.
 - Zmx role titles are filtered from the stream.
 - The relay prints one `phone detached` line per open pane before `phone disconnected`, with the app's `attach.paneID`.
 
-Still open for M4b:
+Still open after M5:
 
-- Take over input needs a receive window in the relay (OPEN with `claim` is refused for now).
-- OPENED, GRID, LEAD, RESYNC and CLOSE bypass the scheduler, so GRID can overtake queued DATA laid out for the old grid.
+- OPENED, GRID, LEAD, RESYNC and CLOSE bypass the scheduler, so a polled GRID can overtake queued DATA laid out for
+  the old grid. A lead change resyncs the watch channel instead, so it does not race.
 - `phone.attached` carries no session id; resolve it at emit time if hooks need it.
-- A pane never shown since launch answers `session not realized`; decide whether the phone may watch it.
+- A pane never shown since launch answers `session not realized`, to a watch and a Take over alike.
 
 ## Left to the builder
 

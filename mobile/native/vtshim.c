@@ -3,14 +3,51 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <ghostty/vt.h>
+
+#define REPLY_CAP 4096
 
 typedef struct {
   GhosttyTerminal t;
   GhosttyRenderState rs;
   GhosttyRenderStateRowIterator it;
   GhosttyRenderStateRowCells cells;
+  GhosttyKeyEncoder keys;
+  GhosttyKeyEvent key;
+  GhosttyMouseEncoder mouse;
+  GhosttyMouseEvent wheel;
+  // cached so the SIZE callback never calls back into the terminal mid-write
+  uint16_t cols, rows;
+  size_t reply_len;
+  uint8_t reply[REPLY_CAP];
 } Vt;
+
+// A chunk past the buffer is dropped whole: a truncated reply would be a broken sequence.
+static void on_write_pty(GhosttyTerminal t, void* ud, const uint8_t* data, size_t len) {
+  Vt* v = ud;
+  if (len > REPLY_CAP - v->reply_len) return;
+  memcpy(v->reply + v->reply_len, data, len);
+  v->reply_len += len;
+}
+
+// What Ghostty's own surface answers (src/termio/stream_handler.zig, clipboard-write defaults to allow).
+static bool on_device_attributes(GhosttyTerminal t, void* ud, GhosttyDeviceAttributes* out) {
+  memset(out, 0, sizeof(*out));
+  out->primary.conformance_level = GHOSTTY_DA_CONFORMANCE_LEVEL_2;
+  out->primary.features[0] = GHOSTTY_DA_FEATURE_ANSI_COLOR;
+  out->primary.features[1] = GHOSTTY_DA_FEATURE_CLIPBOARD;
+  out->primary.num_features = 2;
+  out->secondary.device_type = GHOSTTY_DA_DEVICE_TYPE_VT220;
+  out->secondary.firmware_version = 10;
+  return true;
+}
+
+static bool on_size(GhosttyTerminal t, void* ud, GhosttySizeReportSize* out) {
+  Vt* v = ud;
+  *out = (GhosttySizeReportSize){ .rows = v->rows, .columns = v->cols, .cell_width = 8, .cell_height = 16 };
+  return true;
+}
 
 #define CELL_WORDS 5
 #define HDR_WORDS 16
@@ -29,11 +66,24 @@ Vt* vts_new(uint16_t cols, uint16_t rows, uint32_t scrollback_lines) {
   ghostty_render_state_set(v->rs, GHOSTTY_RENDER_STATE_OPTION_OVERSCAN, &os);
   ghostty_render_state_row_iterator_new(NULL, &v->it);
   ghostty_render_state_row_cells_new(NULL, &v->cells);
+  ghostty_key_encoder_new(NULL, &v->keys);
+  ghostty_key_event_new(NULL, &v->key);
+  ghostty_mouse_encoder_new(NULL, &v->mouse);
+  ghostty_mouse_event_new(NULL, &v->wheel);
+  v->cols = cols; v->rows = rows;
+  ghostty_terminal_set(v->t, GHOSTTY_TERMINAL_OPT_USERDATA, v);
+  ghostty_terminal_set(v->t, GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void*)on_write_pty);
+  ghostty_terminal_set(v->t, GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, (const void*)on_device_attributes);
+  ghostty_terminal_set(v->t, GHOSTTY_TERMINAL_OPT_SIZE, (const void*)on_size);
   return v;
 }
 
 void vts_free(Vt* v) {
   if (!v) return;
+  ghostty_mouse_event_free(v->wheel);
+  ghostty_mouse_encoder_free(v->mouse);
+  ghostty_key_event_free(v->key);
+  ghostty_key_encoder_free(v->keys);
   ghostty_render_state_row_cells_free(v->cells);
   ghostty_render_state_row_iterator_free(v->it);
   ghostty_render_state_free(v->rs);
@@ -43,10 +93,16 @@ void vts_free(Vt* v) {
 
 void vts_write(Vt* v, const uint8_t* data, size_t len) { ghostty_terminal_vt_write(v->t, data, len); }
 
-void vts_resize(Vt* v, uint16_t cols, uint16_t rows) { ghostty_terminal_resize(v->t, cols, rows, 8, 16); }
+void vts_resize(Vt* v, uint16_t cols, uint16_t rows) {
+  v->cols = cols; v->rows = rows;
+  ghostty_terminal_resize(v->t, cols, rows, 8, 16);
+}
 
-// Full reset (RIS): RESYNC starts the emulator over before the GRID replay.
-void vts_reset(Vt* v) { ghostty_terminal_reset(v->t); }
+// Full reset (RIS): RESYNC starts the emulator over before the GRID replay, and drops replies to the old stream.
+void vts_reset(Vt* v) {
+  ghostty_terminal_reset(v->t);
+  v->reply_len = 0;
+}
 
 // DEC private mode value (e.g. 2026 synchronized output, 1049 alternate screen): 1 set, 0 reset, -1 unknown.
 int32_t vts_mode(Vt* v, uint16_t mode) {
@@ -168,4 +224,78 @@ int32_t vts_snapshot(Vt* v, uint32_t* out, int32_t cap) {
   ghostty_render_state_clean(v->rs);
   out[11] = (uint32_t)(extras - (int32_t)need);
   return extras;
+}
+
+// Encoders return bytes written, 0 for nothing to send, or -needed when cap is short.
+static int32_t encoded(GhosttyResult r, size_t n) {
+  if (r == GHOSTTY_OUT_OF_SPACE) return -(int32_t)n;
+  return r == GHOSTTY_SUCCESS ? (int32_t)n : 0;
+}
+
+// mods: shift 1, ctrl 2, alt 4 (GhosttyMods). unshifted: the key's unshifted codepoint, 0 for none.
+int32_t vts_encode_key(Vt* v, uint32_t key, uint32_t mods, uint32_t unshifted, const char* utf8, size_t utf8_len,
+                       uint8_t* out, int32_t cap) {
+  ghostty_key_encoder_setopt_from_terminal(v->keys, v->t);
+  // the host test dylib is macOS, where alt would otherwise be Option and type text; Android ignores it
+  GhosttyOptionAsAlt option_as_alt = GHOSTTY_OPTION_AS_ALT_TRUE;
+  ghostty_key_encoder_setopt(v->keys, GHOSTTY_KEY_ENCODER_OPT_MACOS_OPTION_AS_ALT, &option_as_alt);
+  ghostty_key_event_set_action(v->key, GHOSTTY_KEY_ACTION_PRESS);
+  ghostty_key_event_set_key(v->key, (GhosttyKey)key);
+  ghostty_key_event_set_mods(v->key, (GhosttyMods)mods);
+  ghostty_key_event_set_consumed_mods(v->key, 0);
+  ghostty_key_event_set_composing(v->key, false);
+  ghostty_key_event_set_utf8(v->key, utf8, utf8_len);
+  ghostty_key_event_set_unshifted_codepoint(v->key, unshifted);
+  size_t n = 0;
+  return encoded(ghostty_key_encoder_encode(v->keys, v->key, (char*)out, (size_t)cap, &n), n);
+}
+
+// data is rewritten in place (unsafe control bytes become spaces).
+int32_t vts_encode_paste(Vt* v, char* data, size_t len, uint8_t* out, int32_t cap) {
+  size_t n = 0;
+  return encoded(ghostty_paste_encode(data, len, vts_mode(v, 2004) == 1, (char*)out, (size_t)cap, &n), n);
+}
+
+// One mouse event at pixel (x, y) of the 8x16 cells on_size reports, so an SGR-pixels (1016) program maps it back.
+static int32_t encode_mouse(Vt* v, GhosttyMouseAction action, GhosttyMouseButton button, float x, float y,
+                            uint8_t* out, int32_t cap) {
+  ghostty_mouse_encoder_setopt_from_terminal(v->mouse, v->t);
+  GhosttyMouseEncoderSize sz = { .size = sizeof(sz), .screen_width = v->cols * 8u, .screen_height = v->rows * 16u,
+                                 .cell_width = 8, .cell_height = 16 };
+  ghostty_mouse_encoder_setopt(v->mouse, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &sz);
+  ghostty_mouse_event_set_action(v->wheel, action);
+  ghostty_mouse_event_set_button(v->wheel, button);
+  ghostty_mouse_event_set_mods(v->wheel, 0);
+  ghostty_mouse_event_set_position(v->wheel, (GhosttyMousePosition){ .x = x, .y = y });
+  size_t n = 0;
+  return encoded(ghostty_mouse_encoder_encode(v->mouse, v->wheel, (char*)out, (size_t)cap, &n), n);
+}
+
+int32_t vts_encode_wheel(Vt* v, int32_t up, uint16_t col, uint16_t row, uint8_t* out, int32_t cap) {
+  return encode_mouse(v, GHOSTTY_MOUSE_ACTION_PRESS, up ? GHOSTTY_MOUSE_BUTTON_FOUR : GHOSTTY_MOUSE_BUTTON_FIVE,
+                      col * 8.0f, row * 16.0f, out, cap);
+}
+
+// Left press then release at the cell's centre; 0 when the program does not track the mouse.
+int32_t vts_encode_click(Vt* v, uint16_t col, uint16_t row, uint8_t* out, int32_t cap) {
+  float x = col * 8.0f + 4, y = row * 16.0f + 8;
+  int32_t a = encode_mouse(v, GHOSTTY_MOUSE_ACTION_PRESS, GHOSTTY_MOUSE_BUTTON_LEFT, x, y, out, cap);
+  if (a <= 0) return a == 0 ? 0 : 2 * a; // press and release are the same length
+  int32_t b = encode_mouse(v, GHOSTTY_MOUSE_ACTION_RELEASE, GHOSTTY_MOUSE_BUTTON_LEFT, x, y, out + a, cap - a);
+  return b < 0 ? -(a - b) : a + b;
+}
+
+int32_t vts_encode_focus(Vt* v, int32_t gained, uint8_t* out, int32_t cap) {
+  if (vts_mode(v, 1004) != 1) return 0;
+  size_t n = 0;
+  return encoded(ghostty_focus_encode(gained ? GHOSTTY_FOCUS_GAINED : GHOSTTY_FOCUS_LOST, (char*)out, (size_t)cap, &n), n);
+}
+
+// Drains the replies (DA, CPR, size reports...) WRITE_PTY collected during vts_write.
+int32_t vts_take_replies(Vt* v, uint8_t* out, int32_t cap) {
+  int32_t n = (int32_t)v->reply_len;
+  if (cap < n) return -n;
+  memcpy(out, v->reply, v->reply_len);
+  v->reply_len = 0;
+  return n;
 }

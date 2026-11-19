@@ -1,46 +1,52 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/gestures.dart' show kDoubleTapSlop, kDoubleTapTimeout, kLongPressTimeout, kTouchSlop;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../client.dart';
 import '../model.dart';
+import '../terminal/row_cache.dart';
+import '../terminal/term_gestures.dart';
+import '../terminal/term_keyboard.dart';
 import '../terminal/term_session.dart';
 import '../terminal/terminal_view.dart';
 import '../terminal/vt.dart';
 import '../theme.dart';
 import 'actions.dart';
-import 'home.dart' show StatusChip;
 import 'prompt.dart';
 
-// what each key-bar key types into the pane: xterm sequences, as Konsole sends them
+// what each key-bar key types into the pane: xterm sequences, as Konsole sends them, or while the phone leads, the key
+// the emulator encodes in the program's own modes
 const keys = [
-  ('esc', '\x1b', 'Escape'),
-  ('tab', '\t', 'Tab'),
-  ('⇧tab', '\x1b[Z', 'Shift Tab'),
-  ('^C', '\x03', 'Control C'),
-  ('↑', '\x1b[A', 'Up'),
-  ('↓', '\x1b[B', 'Down'),
-  ('←', '\x1b[D', 'Left'),
-  ('→', '\x1b[C', 'Right'),
-  ('⏎', '\r', 'Enter'),
-  ('^D', '\x04', 'Control D'),
-  ('^L', '\x0c', 'Control L'),
-  ('^R', '\x12', 'Control R'),
-  ('^Z', '\x1a', 'Control Z'),
-  ('^U', '\x15', 'Control U'),
-  ('home', '\x1b[H', 'Home'),
-  ('end', '\x1b[F', 'End'),
-  ('pgup', '\x1b[5~', 'Page up'),
-  ('pgdn', '\x1b[6~', 'Page down'),
+  ('esc', '\x1b', 'Escape', VtKey.escape, 0),
+  ('tab', '\t', 'Tab', VtKey.tab, 0),
+  ('⇧tab', '\x1b[Z', 'Shift Tab', VtKey.tab, vtShift),
+  ('^C', '\x03', 'Control C', VtKey.c, vtCtrl),
+  ('↑', '\x1b[A', 'Up', VtKey.arrowUp, 0),
+  ('↓', '\x1b[B', 'Down', VtKey.arrowDown, 0),
+  ('←', '\x1b[D', 'Left', VtKey.arrowLeft, 0),
+  ('→', '\x1b[C', 'Right', VtKey.arrowRight, 0),
+  ('⏎', '\r', 'Enter', VtKey.enter, 0),
+  ('^D', '\x04', 'Control D', VtKey.d, vtCtrl),
+  ('^L', '\x0c', 'Control L', VtKey.l, vtCtrl),
+  ('^R', '\x12', 'Control R', VtKey.r, vtCtrl),
+  ('^Z', '\x1a', 'Control Z', VtKey.z, vtCtrl),
+  ('^U', '\x15', 'Control U', VtKey.u, vtCtrl),
+  ('home', '\x1b[H', 'Home', VtKey.home, 0),
+  ('end', '\x1b[F', 'End', VtKey.end, 0),
+  ('pgup', '\x1b[5~', 'Page up', VtKey.pageUp, 0),
+  ('pgdn', '\x1b[6~', 'Page down', VtKey.pageDown, 0),
+  ('paste', null, 'Paste', null, 0), // the clipboard
 ];
 
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt});
+  const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt, @visibleForTesting this.onKeyboard});
   final ElisModel model;
   final String sessionId;
   final Vt Function(int cols, int rows) vt;
+  final VoidCallback? onKeyboard; // told each time a tap asks for the soft keyboard
 
   @override
   State<SessionScreen> createState() => _SessionScreenState();
@@ -49,21 +55,47 @@ class SessionScreen extends StatefulWidget {
 class _SessionScreenState extends State<SessionScreen> {
   final input = TextEditingController();
   final inputFocus = FocusNode();
+  final _keyboard = FocusNode(); // the hidden field typing goes through
+  // the history's text never takes the focus: a tap on it would close the keyboard; its selection works without
+  final _textFocus = FocusNode(canRequestFocus: false);
   final vScroll = ScrollController();
   String pane = 'left';
   bool scrollback = false, sending = false;
-  bool? _alt; // the screen the last frame showed; scrollback follows each switch, a tap holds until the next
+  bool? _alt; // the screen the last frame showed; scrollback follows each switch
   String text = '';
   String? error;
-  bool fitting = false;
+  Future<void>? _fitCall; // the fit call in flight and the re-runs it chains
   final autoFit = AutoFit();
   bool _foreground = true;
   late final AppLifecycleListener _lifecycle;
   Timer? poll;
   double _dragRows = 0; // a drag's distance in rows not sent yet
+  Offset _finger = Offset.zero; // where the finger is on screen; [_cellUnder] maps it onto the grid, zoom and pan undone
+  bool _stale = false; // the finger that was down when the Mac took the lead back: its drag claims nothing
+  final _grid = GlobalKey();
+  final _text = GlobalKey(); // the history's text
+  final _answersBox = GlobalKey(), _composerBox = GlobalKey();
+  double? _composerLine; // the composer's height at one line
+  bool _answersShown = false; // a removed row's key still finds its inactive element during the layout
+  late CellMetrics _cell; // the Term view's, as last laid out
   bool _scrolling = false;
   bool polling = false;
   TermSession? term; // a Live pane watched as a terminal; the text poll stops meanwhile
+  TermSession? _claimed; // the term the lead was asked on: a replaced term (pause, pane, reconnect) is not claimed
+  final _noClaim = <String>{}; // panes whose claim was refused on this visit: they type indirectly
+  bool _macTookBack = false; // a term opened since claims on the next input, not at once
+  TermSession? _openClaim; // the term whose OPENED was answered with a claim, once per term
+  TermSession? _quiet; // claimed on OPENED with no input since: a refusal is said at the pane's first input
+  final _unsaid = <String, String>{};
+  Future<void>? _replay; // a refused claim's input on its way through session.type; later input waits for it
+  (int, int)? _leadGrid, _seenGrid; // the grid the lead was given, and the one the screen shows now
+  Timer? _leadResize;
+  // the relay gives the lead back to the Mac only once the claiming attach exits, so a fit right after the phone's own
+  // lead ends can be refused as covered: that many refusals retry quietly, [_fitRetry] apart
+  int _coveredTries = 0;
+  int? _resetTries; // after a refused reset, the retries left
+  Timer? _fitRetry;
+  bool _quietFit = false; // the refit after a refused claim: a refusal of it repeats the claim's, already said
   final _refused = <String>{}; // panes whose terminal the relay refused on this visit: text view until they stop being Live
   final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
 
@@ -95,6 +127,8 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   void dispose() {
     poll?.cancel();
+    _leadResize?.cancel();
+    _fitRetry?.cancel();
     term?.removeListener(_onTerm);
     term?.close();
     for (final t in _closedRecently.values) {
@@ -106,6 +140,8 @@ class _SessionScreenState extends State<SessionScreen> {
     _visit();
     input.dispose();
     inputFocus.dispose();
+    _keyboard.dispose();
+    _textFocus.dispose();
     vScroll.dispose();
     super.dispose();
   }
@@ -133,6 +169,7 @@ class _SessionScreenState extends State<SessionScreen> {
         !_refused.contains(pane);
     final t = term;
     if (t != null && (!want || t.pane != pane || t.mux != m.mux)) {
+      if (_lead) _coveredTries = 3;
       t.removeListener(_onTerm);
       t.close(); // CLOSE: the Mac's viewer count drops; a resume opens a fresh channel
       term = null;
@@ -146,8 +183,11 @@ class _SessionScreenState extends State<SessionScreen> {
     if (!mounted || t == null) return;
     if (t.ended case final reason?) {
       t.removeListener(_onTerm);
+      if (_claimed == t) _coveredTries = 3;
       term = null;
       _alt = null; // the next stream picks the view again
+      _claimed = null;
+      _typeAll(t.takeUnsent(), t.pane); // input queued for a lead that will not come: never lost silently
       if (reason == 'Disconnected' || reason == revokedMessage) {
         // the disconnected state shows; the next mux reopens
       } else if (!t.opened) {
@@ -163,14 +203,151 @@ class _SessionScreenState extends State<SessionScreen> {
       }
       unawaited(_load());
       unawaited(_syncFit());
-    } else if (text.isNotEmpty && _termShown && t.snapshot!.altScreen) {
-      text = ''; // shown from now on; a fallback later starts from a fresh read, not this one
+    } else {
+      // on OPENED, not before: the relay pins the claim to the pane the watch resolved
+      if (t.opened && _openClaim != t) {
+        _openClaim = t;
+        if (!_macTookBack) _claim(open: true);
+      }
+      if (t.leadLost case final r? when _claimed == t) {
+        _claimed = null;
+        if (r != 'Disconnected' && r != revokedMessage && r.isNotEmpty) {
+          autoFit.wanted = false; // the Mac took control: refitting would resize its terminal under its user
+          _macTookBack = true;
+          _stale = true;
+          report(context, '${r[0].toUpperCase()}${r.substring(1)}${r.endsWith('.') ? '' : '.'}');
+        } else {
+          _coveredTries = 3;
+        }
+        unawaited(_syncFit());
+      }
+      if (t.inputLost case final lost?) report(context, lost);
+      if (_leadResize?.isActive != true) _resizeLead(); // the screen changed while the claim waited for its LEAD
+      if (text.isNotEmpty && _termShown && t.snapshot!.altScreen) {
+        text = ''; // shown from now on; a fallback later starts from a fresh read, not this one
+      }
     }
     setState(() {});
   }
 
+  // asked for, the lead is pending (the relay can wait 10 s for zmx) or held; input goes to it only once [leading]
+  bool get _lead => _claimed != null && _claimed == term;
+  bool get _leading => _lead && term!.leading;
+  // the lead, or one asked once the term opens: the claim brings the grid, so a fit would only be reset
+  bool get _leadsGrid =>
+      (term != null || m.mux == null && m.muxing && s?.livePanes.contains(pane) == true) && !_macTookBack && !_noClaim.contains(pane);
+
+  // the program runs at what the screen shows at a readable size, as the fit sizes it
+  (int, int) _phoneGrid() {
+    final cols = _fitColumns();
+    return (cols, max(1, (_fullHeight / CellMetrics.fit(_width, cols).h).floor()));
+  }
+
+  // the box's height without the soft keyboard, the answer row and the composer's extra lines, none of which resizes
+  // the program: they cover its top rows. The keyboard also covers the bottom safe area the box leaves out without it
+  double get _fullHeight {
+    final q = MediaQuery.of(context);
+    final composer = _seeComposer();
+    final extra = composer > 0 ? composer - _composerLine! : 0;
+    return _height + (_answersShown ? _heightOf(_answersBox) : 0) + extra + q.viewInsets.bottom - (q.viewPadding.bottom - q.padding.bottom);
+  }
+
+  static double _heightOf(GlobalKey k) => switch (k.currentContext?.findRenderObject()) {
+        RenderBox b when b.hasSize => b.size.height,
+        _ => 0,
+      };
+
+  /// The composer's height now, 0 before it is laid out; keeps its one-line height from the first layout on.
+  double _seeComposer() {
+    if (!ComposerPref.shown) return 0; // a removed composer's key still finds its inactive element during the layout
+    final h = _heightOf(_composerBox);
+    if (h > 0) _composerLine = min(_composerLine ?? h, h);
+    return h;
+  }
+
+  bool get _direct => term != null && !_noClaim.contains(pane);
+
+  /// Opening a Live pane, or input on it, asks for the lead; input queues on the term until it leads.
+  void _claim({bool open = false}) {
+    _macTookBack = false;
+    if (!open) {
+      _quiet = null;
+      report(context, _unsaid.remove(pane));
+    }
+    final t = term;
+    if (t == null || _lead || _noClaim.contains(pane)) return;
+    t.leadLost = null; // a lead lost earlier was said then
+    t.arm();
+    if (open) _quiet = t;
+    setState(() => _claimed = t);
+    unawaited(_takeOver(t));
+  }
+
+  Future<void> _takeOver(TermSession t) async {
+    bool mine() => mounted && _lead && _claimed == t; // a pause or pane switch meanwhile closed [t]: nothing to say
+    await _replay; // a lead taken before the Mac typed the replay would have zmx drop it
+    if (!mine()) return;
+    // the computer's grid back first, after any fit in flight (auto-fit stands down while [_lead]): a session grid
+    // would fight the phone's
+    await _syncFit();
+    if (!mine()) return;
+    if (m.fitted.containsKey(_fitKey)) return _abandon(t, null); // the reset was refused, and said
+    final g = _leadGrid = _seenGrid = _phoneGrid();
+    final err = await t.takeOver(g.$1, g.$2);
+    if (err != null && mine()) _abandon(t, err);
+  }
+
+  /// Types [unsent] through session.type one at a time, in order; later indirect input waits for it.
+  void _typeAll(List<String> unsent, String pane) {
+    if (unsent.isEmpty) return;
+    final before = _replay;
+    _replay = () async {
+      await before;
+      for (final text in unsent) {
+        final e = await m.act('session.type', target: widget.sessionId, args: {'text': text, 'pane': pane});
+        if (e != null) return mounted ? report(context, e) : null;
+      }
+    }();
+  }
+
+  /// The pane types indirectly for the rest of the visit; the input queued for the lead goes first, in order.
+  void _abandon(TermSession t, String? err) {
+    _noClaim.add(t.pane);
+    setState(() => _claimed = null);
+    _typeAll(t.takeUnsent(), t.pane);
+    t.release();
+    if (err == null) return; // a refused reset: a refit now would only be refused and said again
+    if (_quiet == t) {
+      _unsaid[t.pane] = err;
+    } else {
+      report(context, err);
+    }
+    _quietFit = true;
+    unawaited(_syncFit());
+  }
+
+  // a layout change (a rotation, not the keyboard) resizes the lead, or refits, once it settles
+  void _layoutGrid() {
+    final g = _phoneGrid();
+    if (g == _seenGrid) return;
+    _seenGrid = g;
+    _leadResize?.cancel();
+    _leadResize = Timer(const Duration(milliseconds: 300), () => _lead ? _resizeLead() : unawaited(_syncFit()));
+  }
+
+  // only once leading: before that TermSession drops a resize while the claim waits for OPENED
+  void _resizeLead() {
+    final g = _seenGrid;
+    if (!_leading || g == null || g == _leadGrid) return;
+    _leadGrid = g;
+    term!.resizeLead(g.$1, g.$2);
+  }
+
   // the text view stays until the terminal has a first frame: no blank screen while the channel opens
   bool get _termShown => !scrollback && term?.snapshot != null;
+
+  // without a terminal stream there is no screen to follow: the history, always
+  bool get _history => scrollback || term == null;
 
   // the main screen (a shell, a command printing lines) shows its history; a full-screen program shows Term.
   // Called from build, before anything reads [scrollback]: the frame that shows the switch already picks.
@@ -192,7 +369,7 @@ class _SessionScreenState extends State<SessionScreen> {
     try {
       // fitted, the grid has more rows than the computer's view shows; reading the last ones gets all of them
       final fit = m.fitted[_fitKey];
-      final rows = scrollback ? 2000 : fit?.$2 ?? 0;
+      final rows = _history ? 2000 : fit?.$2 ?? 0;
       final r = await m.call('session.text', target: widget.sessionId, args: {'pane': pane, if (rows > 0) 'lines': rows});
       final t = _trimEnd('${r['text'] ?? ''}');
       final columns = (r['columns'] as num?)?.toInt();
@@ -215,8 +392,8 @@ class _SessionScreenState extends State<SessionScreen> {
     }
   }
 
-  // "Fit to phone": the program's grid becomes what this screen shows at a readable size (session grid), apart from the
-  // computer's view, so it redraws for the phone; the button then gives the grid back to the computer's view
+  // the fit: while this screen shows the pane, the program's grid is what it shows at a readable size (session grid),
+  // apart from the computer's view, so it redraws for the phone; leaving gives the grid back
   static const readable = 12.0;
   String get _fitKey => '${widget.sessionId}/$pane';
   int _fitColumns() => max(20, (_width / _advance(MediaQuery.textScalerOf(context).scale(readable))).floor());
@@ -240,45 +417,75 @@ class _SessionScreenState extends State<SessionScreen> {
     return size;
   }
 
-  void toggleFit() {
-    autoFit.wanted = !m.fitted.containsKey(_fitKey);
-    _syncFit();
+  /// Fits or gives back the grid as [autoFit] says for the screen's state now; a change during a call runs after it,
+  /// and a caller during a call gets that call with its re-runs.
+  Future<void> _syncFit() {
+    if (_fitCall case final f?) return f;
+    final done = Completer<void>();
+    _fitCall = done.future;
+    () async {
+      try {
+        // the app paused, resumed or changed pane during a call; after a failure, the next change retries (a refused
+        // reset keeps its record, so leaving still gives the grid back)
+        while (await _fitOnce()) {}
+      } finally {
+        _fitCall = null;
+        _quietFit = false;
+        done.complete();
+      }
+    }();
+    return done.future;
   }
 
-  /// Fits or gives back the grid as [autoFit] says for the screen's state now; a change during a call runs after it.
-  Future<void> _syncFit() async {
-    if (fitting || !mounted) return;
+  /// True when a call was made and succeeded.
+  Future<bool> _fitOnce() async {
+    if (!mounted) return false;
     final visible = _foreground && !m.background && m.state == LinkState.connected;
-    final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible);
-    if (on == null) return;
-    setState(() => fitting = true);
+    final fit = m.fitted[_fitKey];
+    // a fit at another grid than the screen's now (a rotation) is made again
+    final on = autoFit.next(fitted: fit != null, visible: visible && !_leadsGrid) ??
+        (fit != null && autoFit.wanted && visible && !_leadsGrid && fit != _phoneGrid() ? true : null);
+    if (on == null || _fitRetry?.isActive == true || !on && _resetTries == 0) return false;
     final key = _fitKey;
+    final quiet = on && _quietFit;
+    if (on) _quietFit = false;
+    var ok = false;
     try {
       if (on) {
-        // JetBrains Mono advances 0.6 em; a larger system font size asks for fewer, bigger columns
-        final columns = _fitColumns();
-        final size = _sizeFor(columns, 13);
-        final rows = max(5, (_height / (size * 1.3)).floor()); // the text's line height is 1.3
+        final (columns, rows) = _phoneGrid(); // the lead's grid, so a claim changes nothing the program shows
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'columns': columns, 'rows': rows});
+        _coveredTries = 0;
         m.fitted[key] = (columns, rows);
         if (term case final t? when '${widget.sessionId}/${t.pane}' == key) t.fitted(columns, rows); // not a pane switched to meanwhile
       } else {
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'reset': true});
+        _resetTries = null;
         m.fitted.remove(key);
       }
+      ok = true;
     } on ElisError catch (e) {
-      autoFit.wanted = false; // a refused fit (a pane another Mac leads) is not retried on every change
-      if (mounted) report(context, e.message);
+      final first = _resetTries == null;
+      if (quiet) {
+        autoFit.wanted = false;
+      } else if (on && _coveredTries > 0) {
+        _coveredTries--; // covered just after the phone's own lead: quietly, and still wanted
+        _fitRetry = Timer(const Duration(seconds: 1), _syncFit);
+      } else {
+        autoFit.wanted = false; // a refused fit (a pane another Mac leads) is not retried on every change
+        if (!on) _resetTries = (_resetTries ?? 4) - 1; // a refused reset: said once, retried 3 times
+        if (!on && _resetTries! > 0) _fitRetry = Timer(const Duration(seconds: 1), _syncFit);
+        if (mounted && (on || first)) report(context, e.message);
+      }
     } on TimeoutException {
       autoFit.wanted = false;
       if (mounted) report(context, 'The computer did not answer.');
     }
     // the screen closed or moved to the other pane during the call: that fit has no viewer any more
     if (!mounted || key != _fitKey) _release(key.split('/').last);
-    if (!mounted) return;
-    setState(() => fitting = false);
+    if (!mounted) return false;
+    setState(() {});
     Future.delayed(const Duration(milliseconds: 300), _load); // the program redraws at its new width
-    unawaited(_syncFit()); // the app paused, resumed or changed pane during the call
+    return ok;
   }
 
   /// Gives back [p]'s grid without waiting: the screen is closing or moving to the other pane.
@@ -289,17 +496,86 @@ class _SessionScreenState extends State<SessionScreen> {
 
   String _trimEnd(String t) => t.split('\n').map((l) => l.trimRight()).join('\n').replaceFirst(RegExp(r'\n+$'), '');
 
+  static const _busy = 'The computer has not taken the earlier input yet.';
+
+  // a direct send reads the history back as soon as the indirect path does
+  void _sent(bool ok) {
+    if (!ok) return report(context, _busy);
+    Future.delayed(const Duration(milliseconds: 150), _load);
+  }
+
   Future<void> type(String keys) async {
     HapticFeedback.selectionClick();
+    _claim();
+    if (_direct) return _sent(term!.text(keys));
+    await _replay;
     final err = await m.act('session.type', target: widget.sessionId, args: {'text': keys, 'pane': pane});
     if (mounted) report(context, err);
     Future.delayed(const Duration(milliseconds: 150), _load);
   }
 
+  void _press(String? seq, VtKey? key, int mods) {
+    if (key == null || seq == null) return unawaited(_paste());
+    _claim();
+    if (!_direct) return unawaited(type(seq));
+    HapticFeedback.selectionClick();
+    _sent(term!.key(key, mods: mods, seq: seq));
+  }
+
+  Future<void> _paste() async {
+    final clip = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (clip == null || clip.isEmpty || !mounted) return;
+    _claim();
+    if (!_direct) return type(clip);
+    HapticFeedback.selectionClick();
+    _sent(term!.paste(clip));
+  }
+
+  // the soft keyboard's input routes as the key bar's, without its haptic (the keyboard has its own); indirect, one
+  // session.type at a time so the keystrokes keep their order
+  void _softKey(VtKey key, int mods) {
+    _claim();
+    if (!_direct) return _typeSoft(_seq(key, mods));
+    _sent(term!.key(key, mods: mods, seq: _seq(key, mods)));
+  }
+
+  void _softText(String text, {bool paste = false}) {
+    _claim();
+    if (!_direct) return _typeSoft(text);
+    _sent(paste ? term!.paste(text) : term!.text(text));
+  }
+
+  void _typeSoft(String text) {
+    _typeAll([text], pane);
+    Future.delayed(const Duration(milliseconds: 150), _load);
+  }
+
+  /// What [key] with [mods] types indirectly, as xterm sends it: cursor keys carry the modifiers as `CSI 1;m`, other
+  /// keys take alt as a leading ESC.
+  static String _seq(VtKey key, int mods) {
+    final m = 1 + (mods & vtShift != 0 ? 1 : 0) + (mods & vtAlt != 0 ? 2 : 0) + (mods & vtCtrl != 0 ? 4 : 0);
+    final cursor = const {
+      VtKey.arrowUp: '1;mA', VtKey.arrowDown: '1;mB', VtKey.arrowRight: '1;mC', VtKey.arrowLeft: '1;mD', //
+      VtKey.home: '1;mH', VtKey.end: '1;mF', VtKey.pageUp: '5;m~', VtKey.pageDown: '6;m~',
+    }[key];
+    if (cursor != null && m > 1) return '\x1b[${cursor.replaceFirst('m', '$m')}';
+    final plain = mods & ~vtAlt;
+    final seq = key == VtKey.backspace ? '\x7f' : (keys.where((k) => k.$4 == key && k.$5 == plain).firstOrNull ?? keys.firstWhere((k) => k.$4 == key)).$2!;
+    return mods & vtAlt != 0 ? '\x1b$seq' : seq;
+  }
+
   Future<void> sendInput() async {
     final t = input.text;
+    _claim();
+    if (_direct) {
+      final ok = term!.line(t);
+      _sent(ok);
+      if (ok) input.clear(); // refused, the composer keeps the text
+      return;
+    }
     if (t.isEmpty) return type('\r');
     setState(() => sending = true);
+    await _replay;
     // the text, then the Enter on its own: Claude Code reads a pasted "...\r" as one paste, not a submit
     final err = await m.act('session.type', target: widget.sessionId, args: {'text': t, 'pane': pane}) ??
         await m.act('session.type', target: widget.sessionId, args: {'text': '\r', 'pane': pane});
@@ -315,8 +591,9 @@ class _SessionScreenState extends State<SessionScreen> {
     final s = this.s;
     if (s == null) return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
     final t = term;
-    _pickView(t?.snapshot);
+    _pickView(t?.replaying == true ? null : t?.snapshot); // a reset's main screen is not the program's
     final options = promptOptions(_termShown ? t!.snapshot!.lines.map((l) => l.text).join('\n') : text);
+    _answersShown = options.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -326,20 +603,18 @@ class _SessionScreenState extends State<SessionScreen> {
               style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
         ]),
         actions: [
-          if (m.state == LinkState.connected && m.via.isNotEmpty)
-            Container(
-              key: const Key('via'),
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(border: Border.all(color: C.line), borderRadius: BorderRadius.circular(6)),
-              child: Text(m.via, style: const TextStyle(fontSize: 11, color: C.muted, fontWeight: FontWeight.w600)),
-            ),
-          StatusChip(s.status, blink: s.blink),
+          if (_lead) _Tag(_leading ? 'Leading' : 'Leading…', key: const Key('lead')),
+          if (m.state == LinkState.connected && m.via.isNotEmpty) _Tag(m.via, key: const Key('via')),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Semantics(
+                key: const Key('status'), label: statusLabel(s.status), child: StatusShape(s.status, size: 10, blink: s.blink)),
+          ),
           IconButton(
             key: const Key('sessionMenu'),
             tooltip: 'Session actions',
             icon: const Icon(Icons.more_vert),
-            onPressed: () => showSessionActions(context, m, s, onClosed: () => Navigator.of(context).maybePop()),
+            onPressed: () => showSessionActions(context, m, s, onClosed: () => Navigator.of(context).maybePop(), onComposer: () => setState(() {})),
           ),
         ],
         bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
@@ -350,7 +625,8 @@ class _SessionScreenState extends State<SessionScreen> {
           Expanded(
               child: Stack(children: [
             Positioned.fill(child: _terminal()),
-            Positioned(top: 14, right: 18, child: _toolbar(s)),
+            Positioned(left: 0, bottom: 0, child: TermKeyboard(focus: _keyboard, onKey: _softKey, onText: _softText, onPaste: (t) => _softText(t, paste: true))),
+            Positioned(top: 6, right: 6, child: _toolbar(s)),
             if (m.state != LinkState.connected)
               Center(
                   child: Padding(
@@ -362,14 +638,15 @@ class _SessionScreenState extends State<SessionScreen> {
           ])),
           if (options.isNotEmpty) _answers(options),
           _keyBar(),
-          _composer(),
+          if (ComposerPref.shown) _composer(),
         ]),
       ),
     );
   }
 
   Widget _toolbar(Session s) {
-    Widget seg(String label, bool on, VoidCallback? onTap, {Key? key}) => Padding(
+    if (!s.hasSplit) return const SizedBox.shrink();
+    Widget seg(String label, bool on, VoidCallback onTap, {Key? key}) => Padding(
           padding: const EdgeInsets.only(left: 6),
           child: OutlinedButton(
             key: key,
@@ -388,6 +665,7 @@ class _SessionScreenState extends State<SessionScreen> {
     void setPane(String p) {
       if (p == pane) return;
       _release(pane);
+      _macTookBack = false; // a switch claims
       setState(() {
         pane = p;
         text = '';
@@ -396,20 +674,9 @@ class _SessionScreenState extends State<SessionScreen> {
       _load();
       _syncFit();
     }
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-        if (s.hasSplit) ...[
-          seg('Left pane', pane == 'left', () => setPane('left')),
-          seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
-        ],
-        seg('Scrollback', scrollback, () {
-          setState(() => scrollback = !scrollback);
-          _syncTerm();
-          _load();
-          _syncFit();
-        }, key: const Key('scrollback')),
-        seg(m.fitted.containsKey(_fitKey) ? 'Restore PC size' : 'Fit to phone', m.fitted.containsKey(_fitKey),
-            fitting ? () {} : toggleFit,
-            key: const Key('fitPhone')),
+    return Row(key: const Key('toolbar'), mainAxisSize: MainAxisSize.min, children: [
+      seg('Left pane', pane == 'left', () => setPane('left')),
+      seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
     ]);
   }
 
@@ -418,10 +685,10 @@ class _SessionScreenState extends State<SessionScreen> {
 
   // fitted, the phone shows the program's whole grid, so a drag scrolls the program itself: it reaches the computer as
   // wheel notches (session scroll), which a TUI such as Claude Code reads as its own scrolling
-  bool get _remoteScroll => !scrollback && m.fitted.containsKey(_fitKey);
+  bool get _remoteScroll => !_history && m.fitted.containsKey(_fitKey);
 
-  void _drag(DragUpdateDetails d) {
-    _dragRows += d.delta.dy / (_fit * 1.3);
+  void _drag(double rows) {
+    _dragRows += rows;
     if (!_scrolling) _sendScroll();
   }
 
@@ -433,41 +700,125 @@ class _SessionScreenState extends State<SessionScreen> {
     final err = await m.act('session.scroll', target: widget.sessionId, args: {'pane': pane, 'lines': -rows});
     _scrolling = false;
     if (!mounted) return;
-    if (err != null) return report(context, err);
+    if (err != null) {
+      _dragRows = 0;
+      return report(context, err);
+    }
     unawaited(_load());
     _sendScroll(); // what the finger moved meanwhile
   }
 
-  Widget _terminal() => Container(
-        margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-        decoration: BoxDecoration(color: C.term, border: Border.all(color: const Color(0xFF1A1C24)), borderRadius: BorderRadius.circular(12)),
-        clipBehavior: Clip.antiAlias,
-        child: _termShown ? _termView(term!) : _textView(),
+  // edge to edge, no padding: every pixel counts on a phone
+  // outside the zoom, so a touch beside a short grid still counts
+  Widget _terminal() => Listener(
+        onPointerDown: (e) {
+          _finger = e.position;
+          _stale = false;
+        },
+        onPointerMove: (e) => _finger = e.position,
+        child: ClipRect(child: ColoredBox(color: C.term, child: _termShown ? _termView(term!) : _textView())),
       );
 
   // the grid scaled to the width; taller than the box, the bottom rows (the cursor's) stay in view
+  // a live stream has no phone-side history, so a drag always scrolls the program; two fingers zoom
   Widget _termView(TermSession t) {
-    return SingleChildScrollView(
-      key: const Key('term'),
-      reverse: true,
-      padding: const EdgeInsets.all(12),
-      child: TerminalView(snapshot: t.snapshot, hold: t.hold, columns: m.fitted[_fitKey]?.$1 ?? (autoFit.wanted ? _fitColumns() : null)),
-    );
+    final columns = _lead ? null : m.fitted[_fitKey]?.$1 ?? (autoFit.wanted ? _fitColumns() : null);
+    return LayoutBuilder(builder: (context, box) {
+      _width = box.maxWidth;
+      _height = box.maxHeight;
+      _seeComposer();
+      _layoutGrid();
+      final cell = _cell = CellMetrics.fit(_width, columns ?? t.snapshot!.cols);
+      return TermGestures(
+        key: const Key('term'),
+        content: Size(box.maxWidth, t.snapshot!.rows * cell.h),
+        rowHeight: cell.h,
+        onScroll: (rows) => _scroll(t, rows),
+        onTap: _tap,
+        child: TerminalView(key: _grid, snapshot: t.snapshot, hold: t.hold, columns: columns),
+      );
+    });
+  }
+
+  // notches made before the lead are dropped: the reset and the claim change what is under the finger
+  void _scroll(TermSession t, int rows) {
+    if (_stale) return;
+    if (!_direct) return _drag(rows.toDouble());
+    _claim();
+    if (_leading) _wheel(t, rows);
+  }
+
+  /// The cell under the finger, zoom and pan undone; outside the grid when the finger is.
+  (int, int) _cellUnder() {
+    final at = (_grid.currentContext!.findRenderObject() as RenderBox).globalToLocal(_finger);
+    return ((at.dx / _cell.w).floor(), (at.dy / _cell.h).floor());
+  }
+
+  // leading, the phone is the program's mouse: a notch per row the finger moved, at the nearest cell
+  void _wheel(TermSession t, int rows) {
+    final snap = t.snapshot!;
+    final (c, r) = _cellUnder();
+    final col = c.clamp(0, snap.cols - 1), row = r.clamp(0, snap.rows - 1);
+    for (var i = 0; i < rows.abs(); i++) {
+      t.wheel(up: rows > 0, col: col, row: row); // dragging down shows older rows: wheel up
+    }
+  }
+
+  /// Any single tap on the terminal claims; on the Term view it also clicks the cell under the finger, the claiming
+  /// tap once the lead arrives.
+  void _tap() {
+    _claim();
+    if (_termShown && _lead) {
+      final snap = term!.snapshot!;
+      final (col, row) = _cellUnder();
+      if (col >= 0 && row >= 0 && col < snap.cols && row < snap.rows) term!.click(col: col, row: row);
+    }
+    if (_onCursorRow) return _showKeyboard();
+    // typing comes back from the composer to the program, but a hidden keyboard opens only on the cursor row
+    if (inputFocus.hasFocus && MediaQuery.viewInsetsOf(context).bottom > 0) _keyboard.requestFocus();
+  }
+
+  // the visible caret's whole row (plan decisions 24, 25); the history is reflowed, so there it is the last line,
+  // and only while the history is at its bottom
+  bool get _onCursorRow {
+    final snap = term?.snapshot;
+    if (snap == null || !snap.cursorVisible) return false;
+    if (_termShown) return _cellUnder().$2 == snap.cursorY;
+    final box = _text.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !vScroll.hasClients || vScroll.offset != 0) return false;
+    return box.globalToLocal(_finger).dy >= box.size.height - _fit * 1.3;
+  }
+
+  // a focused field whose keyboard the user hid gets it back only by asking the platform
+  void _showKeyboard() {
+    widget.onKeyboard?.call();
+    if (!_keyboard.hasPrimaryFocus) return _keyboard.requestFocus();
+    unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
+  }
+
+  // not input: it never claims
+  void _toggleKeyboard() {
+    if (_keyboard.hasPrimaryFocus && MediaQuery.viewInsetsOf(context).bottom > 0) return _keyboard.unfocus();
+    _showKeyboard();
   }
 
   Widget _textView() => LayoutBuilder(builder: (context, box) {
           // the computer's own grid width, so a full-width row fills one phone row exactly; history written at a wider
-          // size (before Fit to phone) wraps rather than shrinking everything
+          // size (before the fit) wraps rather than shrinking everything
           final cols = max(20, _columns ?? text.split('\n').fold<int>(20, (a, l) => max(a, l.runes.length)));
           // JetBrains Mono advances 0.6 em
-          _width = box.maxWidth - 24;
-          _height = box.maxHeight - 24;
-          // tiny when the computer's grid is wide, but whole rows, so the layout stays the program's (Fit to phone reads it)
+          _width = box.maxWidth;
+          _height = box.maxHeight;
+          _seeComposer();
+          _layoutGrid();
+          // tiny when the computer's grid is wide, but whole rows, so the layout stays the program's (the fit reads it)
           _fit = _sizeFor(cols, min(13, _width / (cols * 0.6)));
           final size = _fit;
           final body = SelectableText(
             error != null && text.isEmpty ? error! : withGridGlyphs(text),
             key: const Key('screen'),
+            focusNode: _textFocus,
+            selectionControls: _noCaretHandle,
             // the size above is already the one whose rows fit; Android's font scale on top would wrap every full row
             textScaler: TextScaler.noScaling,
             // letterSpacing 0: the theme's body text adds 0.25 per glyph, which would wrap every full row
@@ -477,14 +828,16 @@ class _SessionScreenState extends State<SessionScreen> {
             controller: vScroll,
             reverse: true, // the newest rows stay in view
             physics: _remoteScroll ? const NeverScrollableScrollPhysics() : null,
-            padding: const EdgeInsets.all(12),
-            child: SizedBox(width: double.infinity, child: body),
+            child: SizedBox(key: _text, width: double.infinity, child: body),
           );
-          return _remoteScroll ? GestureDetector(onVerticalDragUpdate: _drag, child: view) : view;
+          return _SingleTap(
+              onTap: _tap,
+              child: _remoteScroll ? GestureDetector(onVerticalDragUpdate: (d) => _drag(d.delta.dy / (_fit * 1.3)), child: view) : view);
         });
 
   Widget _answers(List<PromptOption> options) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+        key: _answersBox,
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
         child: Row(children: [
           for (final (i, o) in options.take(4).indexed) ...[
             if (i > 0) const SizedBox(width: 8),
@@ -519,21 +872,32 @@ class _SessionScreenState extends State<SessionScreen> {
       );
 
   Widget _keyBar() => SizedBox(
-        height: 52,
+        height: 48,
         child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
           scrollDirection: Axis.horizontal,
-          itemCount: keys.length,
+          itemCount: keys.length + 1,
           separatorBuilder: (_, _) => const SizedBox(width: 6),
           itemBuilder: (context, i) {
-            final (label, seq, name) = keys[i];
+            if (i == 0) {
+              return Tooltip(
+                message: 'Keyboard',
+                child: OutlinedButton(
+                  key: const Key('softKeyboard'),
+                  onPressed: _toggleKeyboard,
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(44, 44), padding: const EdgeInsets.symmetric(horizontal: 10), foregroundColor: C.text, backgroundColor: C.surface),
+                  child: const Icon(Icons.keyboard_outlined, size: 18),
+                ),
+              );
+            }
+            final (label, seq, name, key, mods) = keys[i - 1];
             return Semantics(
               label: name,
               button: true,
               excludeSemantics: true,
               child: OutlinedButton(
                 key: Key('key-$name'),
-                onPressed: () => type(seq),
+                onPressed: () => _press(seq, key, mods),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(44, 44),
                   padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -548,6 +912,7 @@ class _SessionScreenState extends State<SessionScreen> {
       );
 
   Widget _composer() => Padding(
+        key: _composerBox,
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         child: Row(children: [
           Expanded(
@@ -581,5 +946,92 @@ class _SessionScreenState extends State<SessionScreen> {
             ),
           ),
         ]),
+      );
+}
+
+// read-only text has no caret, but SelectableText shows a tap's collapsed selection as a caret handle whenever its
+// field lacks the focus, which [_textFocus] always does
+final _noCaretHandle = _NoCaretHandle();
+
+class _NoCaretHandle extends MaterialTextSelectionControls {
+  @override
+  Widget buildHandle(BuildContext context, TextSelectionHandleType type, double textLineHeight, [VoidCallback? onTap]) =>
+      type == TextSelectionHandleType.collapsed ? const SizedBox.shrink() : super.buildHandle(context, type, textLineHeight, onTap);
+}
+
+/// A single tap anywhere in [child], told after the double-tap timeout, as the Term view's: a double tap, a long press,
+/// a drag or a second finger is not one. A Listener, outside the arena, so the text selection and the scroll inside
+/// keep their gestures; the text's own tap would win the arena at once, before a double tap could be told apart.
+class _SingleTap extends StatefulWidget {
+  const _SingleTap({required this.onTap, required this.child});
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_SingleTap> createState() => _SingleTapState();
+}
+
+class _SingleTapState extends State<_SingleTap> {
+  int _fingers = 0;
+  Offset? _down; // the touch that can still be a tap
+  Offset _last = Offset.zero; // the tap that waits for a second one
+  Timer? _wait, _hold, _triple; // timers, not event time stamps, so fake time in tests counts
+  bool _long = false;
+
+  @override
+  void dispose() {
+    _wait?.cancel();
+    _hold?.cancel();
+    _triple?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (e) {
+          _down = _fingers++ == 0 ? e.position : null;
+          _long = false;
+          _hold?.cancel();
+          _hold = Timer(kLongPressTimeout, () => _long = true);
+        },
+        onPointerMove: (e) {
+          if (_down case final d? when (e.position - d).distance > kTouchSlop) _down = null;
+        },
+        onPointerUp: (e) {
+          _fingers--;
+          final d = _down;
+          _down = null;
+          _hold?.cancel();
+          if (d == null || _long) return;
+          // a third tap is the text's paragraph selection: looking too
+          if (_triple?.isActive == true) return _triple!.cancel();
+          if (_wait?.isActive == true && (d - _last).distance < kDoubleTapSlop) {
+            _wait!.cancel();
+            _triple = Timer(kDoubleTapTimeout, () {});
+            return;
+          }
+          _last = d;
+          _wait = Timer(kDoubleTapTimeout, widget.onTap);
+        },
+        onPointerCancel: (_) {
+          _fingers--;
+          _down = null;
+        },
+        child: widget.child,
+      );
+}
+
+/// A small bordered label in the app bar: the link the phone uses, the lead.
+class _Tag extends StatelessWidget {
+  const _Tag(this.text, {super.key});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(border: Border.all(color: C.line), borderRadius: BorderRadius.circular(6)),
+        child: Text(text, style: const TextStyle(fontSize: 11, color: C.muted, fontWeight: FontWeight.w600)),
       );
 }

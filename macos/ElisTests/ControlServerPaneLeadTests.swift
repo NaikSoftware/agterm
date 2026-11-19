@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 @testable import Elis
 import ElisCore
+import os
 
 @MainActor
 final class ControlServerPaneLeadTests: XCTestCase {
@@ -246,6 +247,98 @@ final class ControlServerPaneLeadTests: XCTestCase {
         XCTAssertTrue(invocations.isEmpty)
     }
 
+    /// A row attached from "mini" whose left pane another client leads.
+    private func coveredRemoteRow(server: ControlServer) throws -> (Session, GhosttySurfaceView, String) {
+        let store = try XCTUnwrap(library.activeStore)
+        let session = try XCTUnwrap(store.addSession(toWorkspace: try XCTUnwrap(store.currentWorkspaceID), cwd: NSHomeDirectory()))
+        let daemon = ZmxSupport.daemonName(for: UUID())
+        store.bindRemote(RemoteBinding(remoteSessionID: "r", daemonsByLocalPane: [session.paneIdentity: daemon], presentationVersion: 1,
+                                       origin: .init(host: "mini", endpoint: ControlZmxEndpoint(executable: "/opt/zmx", socketDirectory: "/run/z"),
+                                                     sessionName: "r")),
+                         forSession: session.id)
+        let view = GhosttySurfaceView(workingDirectory: NSTemporaryDirectory(),
+                                      env: ["ELIS_PANE_ID": session.paneIdentity.uuidString], backedByZmx: false)
+        session.surface = view
+        panes.append(session.paneIdentity)
+        ZmxLeadBook.shared.begin(ZmxLeadAttachment(nonce: "n", claim: true), pane: session.paneIdentity)
+        _ = ZmxLeadBook.shared.apply(try XCTUnwrap(ZmxLeadNotice(title: "zmx-role;n:follower:1")), pane: session.paneIdentity)
+        return (session, view, daemon)
+    }
+
+    func testCoveredRemotePaneTextReadsItsDaemon() async throws {
+        let server = makeServer()
+        let (session, view, daemon) = try coveredRemoteRow(server: server)
+        let argvs = OSAllocatedUnfairLock(initialState: [[String]]())
+        server.remoteScreenRead = { argv, _ in
+            argvs.withLock { $0.append(argv) }
+            return "7 47 3 2 1 0\nolder line\n$ make\nok\n"
+        }
+
+        let read = await server.coveredText(view, all: false, lines: 2000, session: session)
+        let response = try XCTUnwrap(read)
+
+        XCTAssertTrue(response.ok, response.error ?? "")
+        XCTAssertEqual(response.result?.text, "older line\n$ make\nok")
+        XCTAssertEqual(response.result?.columns, 47)
+        XCTAssertEqual(response.result?.rows, 3)
+        let argv = try XCTUnwrap(argvs.withLock { $0 }.first)
+        let remote = try XCTUnwrap(argv.last)
+        XCTAssertTrue(remote.contains(daemon) && remote.contains("mini") && remote.contains("--all"), remote)
+    }
+
+    func testCoveredRemoteReadFailureIsRefused() async throws {
+        let server = makeServer()
+        let (session, view, _) = try coveredRemoteRow(server: server)
+        server.remoteScreenRead = { _, _ in nil }
+
+        let response = await server.coveredText(view, all: true, lines: nil, session: session)
+
+        XCTAssertEqual(response, ControlResponse(ok: false, error: "could not read the pane on mini"))
+    }
+
+    func testTwoReadsOfOnePaneShareOneRun() async throws {
+        let server = makeServer()
+        let (session, view, _) = try coveredRemoteRow(server: server)
+        let runs = OSAllocatedUnfairLock(initialState: 0)
+        let release = DispatchSemaphore(value: 0)
+        server.remoteScreenRead = { _, _ in
+            runs.withLock { $0 += 1 }
+            _ = release.wait(timeout: .now() + 30)
+            return "1 47 1 0 0 0\nshared\n"
+        }
+
+        let first = Task { @MainActor in await server.coveredText(view, all: true, lines: nil, session: session) }
+        let second = Task { @MainActor in await server.coveredText(view, all: true, lines: nil, session: session) }
+        // the main queue is FIFO, so both requests reach the read before this resumes
+        await Task.yield()
+        release.signal()
+        let answers = [await first.value, await second.value]
+
+        XCTAssertEqual(answers.map { $0?.result?.text }, ["shared\n", "shared\n"])
+        XCTAssertEqual(runs.withLock { $0 }, 1)
+    }
+
+    func testCoveredRemoteTypeStaysRefused() throws {
+        let server = makeServer()
+        let (session, view, _) = try coveredRemoteRow(server: server)
+        server.remoteScreenRead = { _, _ in XCTFail("typing must not read the daemon"); return nil }
+        let refusal = ControlResponse(ok: false, error: "pane is in use on the Mac it runs on; take the lead to drive it from here")
+
+        XCTAssertEqual(server.coveredType("ls\n", into: view, session: session.id), refusal)
+        XCTAssertEqual(server.coveredCursor(view, controlID: "x"), refusal)
+    }
+
+    func testCoveredLocalTextReportsTheDaemonGrid() throws {
+        let server = makeServer()
+        let (view, _) = try pane(role: .follower)
+        zmxReply = { _ in "2 47 12 0 0 0\nprompt\n" }
+
+        let response = try XCTUnwrap(server.coveredText(view, all: true, lines: nil))
+
+        XCTAssertEqual(response.result?.columns, 47)
+        XCTAssertEqual(response.result?.rows, 12)
+    }
+
     func testCommandsThatActOnThePanesOwnSurfaceAreRefusedWhileItIsCovered() async throws {
         let server = makeServer()
         let store = try XCTUnwrap(library.activeStore)
@@ -268,6 +361,9 @@ final class ControlServerPaneLeadTests: XCTestCase {
         let closed = await server.searchSession(session.id, store: store, text: nil, to: "close")
         XCTAssertTrue(closed.ok, "closing a search is cleanup, not a read of the covered grid")
         XCTAssertEqual(server.coveredRefusal(view)?.ok, false)
+        library.phoneLeads = { $0 == session.paneIdentity.uuidString }
+        XCTAssertEqual(server.pasteSession(id, window: nil, pane: nil).error,
+                       "pane is in use on your phone; take the lead first (session lead)")
     }
 
     func testASearchWhosePaneIsDemotedWhileItWaitsIsRefusedNotAnswered() async throws {

@@ -80,6 +80,7 @@ class _ElisAppState extends State<ElisApp> {
       // no notifications: the app works without background alerts
     }
     await BluetoothPref.load().catchError((_) {});
+    await ComposerPref.load().catchError((_) {});
     await computers.load();
     if (launched != null) openSession(launched);
   }

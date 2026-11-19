@@ -234,12 +234,16 @@ public protocol ControlActions {
     func setSessionBackground(_ target: String?, window: String?,
                               options: ControlSessionBackgroundOptions) -> ControlResponse
     func readSessionText(_ target: String?, window: String?, options: ControlSessionTextOptions) -> ControlResponse
+    /// readSessionTextAsync is what the dispatcher calls, for a host whose read may wait on another machine.
+    func readSessionTextAsync(_ target: String?, window: String?, options: ControlSessionTextOptions) async -> ControlResponse
     /// setSessionGrid gives the pane a grid apart from its view, or with nil hands it back; answers `{id, pane, columns, rows}`.
     func setSessionGrid(_ target: String?, window: String?, pane: StatusPane, grid: ControlGrid?) -> ControlResponse
     /// scrollSession wheels the pane like a mouse over it; answers `{id, pane, lines}`.
     func scrollSession(_ target: String?, window: String?, pane: StatusPane, lines: Int) -> ControlResponse
     /// sessionAttach resolves a Live pane to a viewer attach; answers `{attach: {argv, paneID}}`.
     func sessionAttach(target: String?, pane: StatusPane, paneID: String?, window: String?) async -> ControlResponse
+    /// sessionAttach with `claim` answers a claiming attach (`attach.nonce` set) that takes the pane's lead.
+    func sessionAttach(target: String?, pane: StatusPane, paneID: String?, claim: Bool, window: String?) async -> ControlResponse
     func windowNew(name: String?, minimized: Bool) async -> ControlResponse
     func windowList() -> ControlResponse
     func windowSelect(_ target: String?) async -> ControlResponse

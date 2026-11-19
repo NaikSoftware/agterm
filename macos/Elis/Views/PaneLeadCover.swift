@@ -12,11 +12,14 @@ struct PaneLeadCover: View {
     var foreground = WindowContentView.resolvedChromeText()
     /// The pane sits under its own pane overlay, which draws on a transparent backing.
     var hidden = false
+    /// Whether the paired phone leads a pane token (`AppStore.phoneLeads`).
+    var phoneLeads: (String) -> Bool = { _ in false }
 
     var body: some View {
         let identity = session.paneIdentity(for: pane)
         let book = ZmxLeadBook.shared
         let covered = book.covered(pane: identity) && !hidden
+        let token = CommandContext.Pane(rawValue: pane.rawValue).map(session.paneToken(for:)) ?? ""
         ZStack {
             if covered {
                 background
@@ -24,7 +27,7 @@ struct PaneLeadCover: View {
                     Image(systemName: "rectangle.on.rectangle.slash")
                         .font(.system(size: 28, weight: .light))
                     Text(Self.title(role: book.role(pane: identity), reattaching: book.reattaching(pane: identity),
-                                    remote: session.remoteHost != nil))
+                                    remote: session.remoteHost != nil, phone: phoneLeads(token)))
                         .font(.system(size: 14, weight: .medium))
                     if !book.reattaching(pane: identity) {
                         Text("Press any key to use it here")
@@ -48,9 +51,10 @@ struct PaneLeadCover: View {
         .allowsHitTesting(covered)
     }
 
-    static func title(role: ZmxLeadRole?, reattaching: Bool, remote: Bool) -> String {
+    static func title(role: ZmxLeadRole?, reattaching: Bool, remote: Bool, phone: Bool = false) -> String {
         if reattaching { return "Taking over…" }
         if role == .unowned { return "Reconnecting…" }
+        if phone { return "In use on your phone" }
         return remote ? "In use on the Mac it runs on" : "In use from another Mac"
     }
 

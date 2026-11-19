@@ -78,6 +78,9 @@ The event kinds and payloads are:
 - `phone.attached` / `phone.detached`: the phone opened or closed a pane view. Payload `ip` and `paneID`. The human line
   reads `HH:MM:SS phone.attached ip=IP pane-id=TOKEN`. When the relay stops or restarts, every viewer detaches with `ip=-`.
   `tree` shows the open count as `surfaces[].phoneViewers`, omitted at zero and never set by elis-server.
+- `phone.claimed` / `phone.released`: the phone took a pane's lead (it leads when it opens the pane, and again at its next input after a Mac key took the lead back) or gave it up. Payload `ip` and
+  `paneID`; the human line reads `HH:MM:SS phone.claimed ip=IP pane-id=TOKEN`, and a release the relay's exit caused
+  reads `ip=-`. `tree` shows `surfaces[].phoneLead: true` meanwhile, omitted otherwise and never set by elis-server.
 - `app.launched`: an empty payload and no window, workspace or session. Emitted once per app run, after
   `hooks.conf` is loaded and the control socket accepts connections, so a hook on it can call
   `elisctl` at once. The restored windows and sessions are in the tree by then; their terminals may
@@ -744,7 +747,7 @@ error keeps those names for compatibility.
   `pane`, `columns`, `rows` (the real grid after the change). Read forced panes from `tree`'s `paneGrids`
   (`{left?, right?}` of `{columns, rows}`, omitted when none); `session text` reports the real `columns` and
   `rows`. The cases that clear it are listed at commands.html#session, `session grid`. elis-server does not serve it.
-- `session attach [--pane left|right] [--target] [--window W] [--json]`: attach this terminal as a viewer of a Live pane
+- `session attach [--pane left|right] [--claim] [--target] [--window W] [--json]`: attach this terminal as a viewer of a Live pane
   (protocol `--pane primary|split…`, `--pane-id TOKEN`). It never claims, never leads and skips scrollback, so it
   needs a zmx with patch 0007 (an older zmx sends full scrollback and may lead an unowned daemon). Works for local
   panes, rows attached from another Mac and elis-server rows. Execs the attach argv; `--json` prints
@@ -752,7 +755,9 @@ error keeps those names for compatibility.
   `unknown pane id: TOKEN`, `session has no split pane`, `session not realized` (a pane not shown since launch),
   `invalid pane: scratch`. Page rows refuse it. The CLI refuses the pane it runs in: `cannot attach a pane to itself`.
   The viewer ends when its process is killed or the pane's session ends; keys typed into it are dropped. It does not
-  count in `phoneViewers` and emits no `phone.attached`.
+  count in `phoneViewers` and emits no `phone.attached`. `--claim` attaches as the pane's lead instead: the program
+  runs at this terminal's size and takes its keys, the Mac pane is covered until the command ends or a key there
+  takes the lead back, and `result.attach` adds `nonce`. It does not set `phoneLead`.
 - `session scroll LINES [--pane left|right] [--target] [--window W]`: scroll by wheel notches, negative toward
   older output. `LINES` takes -1000...1000 and not 0. Returns `id`, `pane`, `lines`. A mouse-reporting program
   gets wheel events instead. On a pane another Mac leads, take the lead first (`session lead`). elis-server does not serve it.
@@ -2726,7 +2731,8 @@ for this Mac, as pressing a key on the cover does.
 
 On the Mac the session RUNS on, a covered pane stays fully drivable: `session type`, `session text` and
 `surface cursor` go through the session's daemon and answer for the real layout, so pane-to-pane
-automation is unaffected by who leads. On the ATTACHING Mac a covered pane refuses those three with
+automation is unaffected by who leads. On the ATTACHING Mac a covered pane still answers `session text`
+from the daemon's screen, and refuses `session type` and `surface cursor` with
 `pane is in use on the Mac it runs on`; run `session lead` first.
 
 Both commands run ssh non-interactively (`BatchMode`), so key-based auth must already work for the host —

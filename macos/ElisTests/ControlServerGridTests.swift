@@ -160,17 +160,17 @@ final class ControlServerGridTests: XCTestCase {
         tree.workspaces.flatMap(\.sessions).first { $0.id == session.id.uuidString }
     }
 
-    func testSessionTextReportsThePanesGrid() throws {
+    func testSessionTextReportsThePanesGrid() async throws {
         let server = makeServer()
         let (_, session) = try makeSession()
         let fitted = try view(session).gridSize()
 
-        let text = server.readSessionText(session.id.uuidString, window: nil, options: ControlSessionTextOptions(pane: nil, all: false, lines: nil))
+        let text = await server.readSessionTextAsync(session.id.uuidString, window: nil, options: ControlSessionTextOptions(pane: nil, all: false, lines: nil))
         XCTAssertEqual(text.result?.columns, fitted.columns)
         XCTAssertEqual(text.result?.rows, fitted.rows)
 
         _ = server.setSessionGrid(session.id.uuidString, window: nil, pane: .left, grid: ControlGrid(columns: 40, rows: 10))
-        let forced = server.readSessionText(session.id.uuidString, window: nil, options: ControlSessionTextOptions(pane: nil, all: false, lines: nil))
+        let forced = await server.readSessionTextAsync(session.id.uuidString, window: nil, options: ControlSessionTextOptions(pane: nil, all: false, lines: nil))
         XCTAssertEqual(forced.result?.columns, 40)
         XCTAssertEqual(forced.result?.rows, 10)
     }

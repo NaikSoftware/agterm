@@ -89,6 +89,132 @@ struct PhoneLinkPtyTests {
         #expect(recorder.output == seen)
     }
 
+    @Test func writeReachesTheProgram() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/cat"])
+        let written = Written()
+        pty.write(Data("hello\n".utf8)) { written.add($0) }
+        #expect(await eventually { recorder.output.components(separatedBy: "hello").count == 3 }, "output: \(recorder.output)")
+        #expect(await eventually { written.counts == [6] })
+        pty.terminate()
+        #expect(await recorder.waitExit())
+    }
+
+    @Test func writeAfterTerminateReportsZero() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/cat"])
+        pty.terminate()
+        let written = Written()
+        pty.write(Data("late\n".utf8)) { written.add($0) }
+        #expect(await eventually { written.counts == [0] })
+        #expect(await recorder.waitExit())
+    }
+
+    @Test func writeAndResizeAfterTheChildExitedDoNothing() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/sh", "-c", "exit 0"])
+        #expect(await recorder.waitExit())
+        let written = Written()
+        pty.write(Data("late\n".utf8)) { written.add($0) }
+        pty.resize(cols: 100, rows: 40)
+        #expect(await eventually { written.counts == [0] })
+    }
+
+    @Test func resizeChangesTheWindowSize() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/sh", "-c", "read line; stty size"])
+        pty.resize(cols: 100, rows: 40)
+        pty.write(Data("\n".utf8)) { _ in }
+        #expect(await recorder.waitExit())
+        #expect(recorder.output.contains("40 100"), "output: \(recorder.output)")
+    }
+
+    // perl, unlike sh, never takes the terminal as its controlling one, and neither does the zmx attach
+    @Test func resizeSignalsAProgramWithoutAControllingTerminal() async throws {
+        let recorder = Recorder()
+        let script = "$| = 1; $SIG{WINCH} = sub { ioctl(STDIN, 0x40087468, my $size = \"\\0\" x 8); print join(\" \", unpack(\"S2\", $size)), \"\\n\"; exit 0 };"
+            + " print \"ready\\n\"; sleep 20 while 1"
+        let pty = try recorder.spawn(["/usr/bin/perl", "-e", script])
+        #expect(await eventually { recorder.output.contains("ready") })
+        pty.resize(cols: 100, rows: 40)
+        #expect(await eventually(5) { recorder.output.contains("40 100") }, "output: \(recorder.output)")
+        pty.terminate()
+        #expect(await recorder.waitExit())
+    }
+
+    @Test func fullPtyDoesNotBlockTerminate() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/sh", "-c", "stty raw -echo; echo ready; exec sleep 60"])
+        #expect(await eventually { recorder.output.contains("ready") })
+        let written = Written()
+        for _ in 0..<16 { pty.write(Data(repeating: 0x78, count: 65536)) { written.add($0) } }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(written.counts.isEmpty) // the program reads nothing, so the first write never completes
+        let started = Date()
+        pty.terminate()
+        #expect(Date().timeIntervalSince(started) < 3)
+        #expect(await recorder.waitExit())
+        #expect(await eventually { written.counts.count == 16 })
+    }
+
+    @Test func idleWriterSleepsAndEndsWithTerminate() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/cat"])
+        let written = Written()
+        pty.write(Data("x".utf8)) { written.add($0) }
+        #expect(await eventually { written.counts == [1] })
+        #expect(await eventually { pty.writerIdle })
+        let idle = pty.writerWakeups
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(pty.writerWakeups == idle)
+        pty.terminate()
+        #expect(await eventually(3) { !pty.writerRunning })
+        #expect(await recorder.waitExit())
+    }
+
+    @Test func finishWritesWhatWasQueuedBeforeEnding() async throws {
+        let recorder = Recorder()
+        let file = NSTemporaryDirectory() + "elis-pty-\(UUID().uuidString.prefix(8))"
+        defer { [file, file + ".early"].forEach { try? FileManager.default.removeItem(atPath: $0) } }
+        // a SIGTERM before the program read its input leaves the marker; after the read, the TERM is ignored
+        let script = "trap 'touch \(file).early; exit 1' TERM; stty raw -echo; echo ready; sleep 0.3; trap '' TERM; exec cat > '\(file)'"
+        let pty = try recorder.spawn(["/bin/sh", "-c", script])
+        #expect(await eventually { recorder.output.contains("ready") })
+        let written = Written()
+        pty.write(Data(repeating: 0x78, count: 100)) { written.add($0) }
+        pty.finish(within: 30)
+        #expect(await eventually { written.counts == [100] })
+        #expect(await recorder.waitExit())
+        #expect(!FileManager.default.fileExists(atPath: file + ".early"))
+        #expect(await eventually { (try? Data(contentsOf: URL(fileURLWithPath: file)))?.count == 100 })
+    }
+
+    @Test func finishIsBoundedWhenTheProgramNeverReads() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/sh", "-c", "stty raw -echo; echo ready; exec sleep 60"])
+        #expect(await eventually { recorder.output.contains("ready") })
+        pty.write(Data(repeating: 0x78, count: 65536)) { _ in }
+        let started = Date()
+        pty.finish(within: 0.5)
+        #expect(await recorder.waitExit())
+        #expect(Date().timeIntervalSince(started) < 5)
+    }
+
+    @Test func finishWithNothingQueuedTerminatesAtOnce() async throws {
+        let recorder = Recorder()
+        let pty = try recorder.spawn(["/bin/cat"])
+        pty.finish()
+        #expect(await recorder.waitExit())
+    }
+
+    /// Written collects what each `write` reported, in completion order.
+    private final class Written: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [Int] = []
+        func add(_ count: Int) { lock.withLock { values.append(count) } }
+        var counts: [Int] { lock.withLock { values } }
+    }
+
     private func eventually(_ seconds: Double = 15, _ condition: () -> Bool) async -> Bool {
         let deadline = Date().addingTimeInterval(seconds)
         while Date() < deadline {

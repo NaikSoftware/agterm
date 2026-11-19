@@ -477,7 +477,7 @@ public struct ControlDispatcher {
         case .sessionBackground:
             return dispatchSessionBackground(request)
         case .sessionText:
-            return dispatchSessionText(request)
+            return await dispatchSessionText(request)
         case .sessionGrid:
             return dispatchSessionGrid(request)
         case .sessionScroll:
@@ -690,7 +690,7 @@ public struct ControlDispatcher {
         }
     }
 
-    private func dispatchSessionText(_ request: ControlRequest) -> ControlResponse {
+    private func dispatchSessionText(_ request: ControlRequest) async -> ControlResponse {
         switch parseBufferExtent(request.args) {
         case .rejected(let response): return response
         case .extent(let all, let lines):
@@ -698,11 +698,9 @@ public struct ControlDispatcher {
             switch parseSurfacePane(request.args?.pane) {
             case .rejected(let rejection): return rejection
             case .pane(let pane):
-                return actions.readSessionText(request.target, window: request.args?.window,
-                                               options: ControlSessionTextOptions(pane: pane,
-                                                                                  paneID: request.args?.paneID,
-                                                                                  all: all,
-                                                                                  lines: lines))
+                return await actions.readSessionTextAsync(request.target, window: request.args?.window,
+                                                          options: ControlSessionTextOptions(pane: pane, paneID: request.args?.paneID,
+                                                                                             all: all, lines: lines))
             }
         }
     }

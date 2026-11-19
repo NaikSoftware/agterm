@@ -299,17 +299,21 @@ final class RawStubServer: @unchecked Sendable {
     private var eventReads: [UInt64?] = []
     private var failNextRead = false
     private var attachGate: DispatchSemaphore?
+    private var attachPick: (@Sendable ([String: Any]) -> ControlResponse?)?
 
     /// What `session.attach` answers; by default the fake viewer prints "hi" and echoes what it reads.
     private var attach = ControlResponse(ok: true, result: ControlResult(attach: fakeAttach("printf 'hi'; cat")))
 
     /// A viewer that runs `script` under `sh`, for an 80x24 pane.
     static func fakeAttach(_ script: String, paneID: String = "pane-1", screen: String = "printf '1 80 24 0 0 0\\n'",
-                           remote: Bool = false) -> ControlAttach {
-        ControlAttach(argv: ["/bin/sh", "-c", script], paneID: paneID, screen: ["/bin/sh", "-c", screen], remote: remote)
+                           remote: Bool = false, nonce: String? = nil) -> ControlAttach {
+        ControlAttach(argv: ["/bin/sh", "-c", script], paneID: paneID, screen: ["/bin/sh", "-c", screen], remote: remote, nonce: nonce)
     }
 
     func answerAttach(_ response: ControlResponse) { lock.withLock { attach = response } }
+
+    /// Answers each `session.attach` by its `args`; nil falls back to `answerAttach`'s answer.
+    func answerAttach(by pick: @escaping @Sendable ([String: Any]) -> ControlResponse?) { lock.withLock { attachPick = pick } }
 
     /// `session.attach` answers only after `releaseAttach()`, or after 30 s.
     func holdAttach() { lock.withLock { attachGate = DispatchSemaphore(value: 0) } }
@@ -405,7 +409,10 @@ final class RawStubServer: @unchecked Sendable {
         if cmd == "session.attach", let gate = lock.withLock({ attachGate }) { _ = gate.wait(timeout: .now() + 30) }
         let reply = cmd == "version" ? #"{"ok":true,"result":{"app":{"version":"9.9.9"}}}"#
             : cmd == "events.read" ? eventsReply(object)
-            : cmd == "session.attach" ? lock.withLock { String(decoding: (try? JSONEncoder().encode(attach)) ?? Data(), as: UTF8.self) }
+            : cmd == "session.attach" ? lock.withLock {
+                let answer = attachPick?(object["args"] as? [String: Any] ?? [:]) ?? attach
+                return String(decoding: (try? JSONEncoder().encode(answer)) ?? Data(), as: UTF8.self)
+            }
             : #"{"ok":true,"result":{"echo":"\#(cmd)"}}"#
         let data = Data((reply + "\n").utf8)
         data.withUnsafeBytes { _ = UnixSocket.write(conn, $0.baseAddress!, data.count) }

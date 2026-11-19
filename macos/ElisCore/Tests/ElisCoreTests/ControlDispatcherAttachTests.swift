@@ -18,6 +18,20 @@ struct ControlDispatcherAttachTests {
         #expect(primary.calls == [.sessionAttach(target: "s", pane: .left, paneID: nil, window: nil)])
     }
 
+    /// The mock implements only the old requirement, so the claim reaches the protocol default's refusal.
+    @Test func theDefaultRefusesAClaimAndKeepsTheOldMethodForAPlainAttach() async {
+        var args = ControlArgs(pane: "right")
+        args.claim = true
+        let (claimed, claimer) = await dispatch(args)
+        args.claim = false
+        let (watched, viewer) = await dispatch(args)
+
+        #expect(claimed == ControlResponse(ok: false, error: "take over is not supported here"))
+        #expect(claimer.calls.isEmpty)
+        #expect(watched == ControlResponse(ok: true))
+        #expect(viewer.calls == [.sessionAttach(target: "s", pane: .right, paneID: nil, window: nil)])
+    }
+
     @Test(arguments: ["scratch", "middle"])
     func rejectsAnUnknownPaneValue(pane: String) async {
         let (response, actions) = await dispatch(ControlArgs(pane: pane))
