@@ -2684,6 +2684,21 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('keyboardKeyHidesTheKeyboardOverTheComposer', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    await t.tap(find.byKey(const Key('composer')));
+    await t.pump();
+    t.view.viewInsets = const FakeViewPadding(bottom: 900);
+    addTearDown(t.view.reset);
+    await t.pump();
+    await t.tap(find.byKey(const Key('softKeyboard')));
+    await t.pump();
+    expect(t.testTextInput.isVisible, isFalse);
+    await h.stop();
+  });
+
   testWidgets('aRefusedOpenClaimIsSaidAtTheFirstInput', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
