@@ -166,9 +166,9 @@ on the computer that runs only while you want it.
   workspace on the way. The row and workspace menus (rename, flag, tint, move, split, companion, close) match the
   sidebar's.
 - **A session's screen.** A Live pane as a live terminal while a full-screen program runs, its history otherwise; a key
-  bar (esc, tab, ⇧tab, ^C, arrows, paste, …) and a composer that types into it; both panes of a split. One finger
+  bar (esc, tab, ⇧tab, ^C, arrows, paste, …) and a composer, hidden until the session's ⋯ menu shows it; both panes of a split. One finger
   scrolls the program, two fingers zoom and pan, a double tap resets the zoom.
-- **Direct input.** The phone takes a Live pane's lead at its first key, send, paste, scroll or tap: the program runs at the
+- **Direct input.** The phone takes a Live pane's lead when it opens, resumes or switches to it, and again at its next input after a Mac key took it back: the program runs at the
   phone's size and takes the phone's keys, while the Mac shows the pane as in use on your phone. Leaving the screen
   or a key on the Mac returns the lead. A pane that is not Live is typed into through the Mac.
 - **Fit to phone** is on while a session's screen is open: it gives the program the phone's own grid (`session grid`): as many columns and rows as the phone shows
