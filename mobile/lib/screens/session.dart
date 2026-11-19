@@ -75,10 +75,11 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<void>? _replay; // a refused claim's input on its way through session.type; later input waits for it
   (int, int)? _leadGrid, _seenGrid; // the grid the lead was given, and the one the screen shows now
   Timer? _leadResize;
-  // after Give back, the pane stays covered until zmx hands the lead back, and a fit then is refused: fit once the relay
-  // reports the Mac's grid (the [TermSession.grids] count passes this), or after [_refitTimer]
-  int? _refitAfter;
-  Timer? _refitTimer;
+  // the relay gives the lead back to the Mac only once the claiming attach exits, so a fit right after the phone's own
+  // lead ends can be refused as covered: that many refusals retry quietly, [_fitRetry] apart
+  int _coveredTries = 0;
+  int? _resetTries; // after a refused reset, the retries left
+  Timer? _fitRetry;
   final _refused = <String>{}; // panes whose terminal the relay refused on this visit: text view until they stop being Live
   final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
 
@@ -111,7 +112,7 @@ class _SessionScreenState extends State<SessionScreen> {
   void dispose() {
     poll?.cancel();
     _leadResize?.cancel();
-    _refitTimer?.cancel();
+    _fitRetry?.cancel();
     term?.removeListener(_onTerm);
     term?.close();
     for (final t in _closedRecently.values) {
@@ -150,10 +151,10 @@ class _SessionScreenState extends State<SessionScreen> {
         !_refused.contains(pane);
     final t = term;
     if (t != null && (!want || t.pane != pane || t.mux != m.mux)) {
+      if (_lead) _coveredTries = 3;
       t.removeListener(_onTerm);
       t.close(); // CLOSE: the Mac's viewer count drops; a resume opens a fresh channel
       term = null;
-      _refitAfter = null; // another pane, or a fresh visit: nothing covered to wait for
       _alt = null; // the next stream picks the view again
     }
     if (want && term == null) term = TermSession(m.mux!, widget.sessionId, pane, vt: widget.vt)..addListener(_onTerm);
@@ -164,6 +165,7 @@ class _SessionScreenState extends State<SessionScreen> {
     if (!mounted || t == null) return;
     if (t.ended case final reason?) {
       t.removeListener(_onTerm);
+      if (_claimed == t) _coveredTries = 3;
       term = null;
       _alt = null; // the next stream picks the view again
       _claimed = null;
@@ -189,12 +191,13 @@ class _SessionScreenState extends State<SessionScreen> {
         if (r != 'Disconnected' && r != revokedMessage && r.isNotEmpty) {
           autoFit.wanted = false; // the Mac took control: refitting would resize its terminal under its user
           report(context, '${r[0].toUpperCase()}${r.substring(1)}${r.endsWith('.') ? '' : '.'}');
+        } else {
+          _coveredTries = 3;
         }
         unawaited(_syncFit());
       }
       if (t.inputLost case final lost?) report(context, lost);
       if (_leadResize?.isActive != true) _resizeLead(); // the screen changed while the claim waited for its LEAD
-      if (_refitAfter case final n? when t.grids > n) _refit();
       if (text.isNotEmpty && _termShown && t.snapshot!.altScreen) {
         text = ''; // shown from now on; a fallback later starts from a fresh read, not this one
       }
@@ -209,7 +212,14 @@ class _SessionScreenState extends State<SessionScreen> {
   // the program runs at what the screen shows at a readable size, as the fit sizes it
   (int, int) _phoneGrid() {
     final cols = _fitColumns();
-    return (cols, max(1, (_height / CellMetrics.fit(_width, cols).h).floor()));
+    return (cols, max(1, (_fullHeight / CellMetrics.fit(_width, cols).h).floor()));
+  }
+
+  // the box's height without the soft keyboard, which never resizes the program; the keyboard also covers the bottom
+  // safe area the box leaves out without it
+  double get _fullHeight {
+    final q = MediaQuery.of(context);
+    return _height + q.viewInsets.bottom - (q.viewPadding.bottom - q.padding.bottom);
   }
 
   bool get _direct => term != null && !_noClaim.contains(pane);
@@ -226,6 +236,8 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Future<void> _takeOver(TermSession t) async {
     bool mine() => mounted && _lead && _claimed == t; // a pause or pane switch meanwhile closed [t]: nothing to say
+    await _replay; // a lead taken before the Mac typed the replay would have zmx drop it
+    if (!mine()) return;
     // the computer's grid back first, after any fit in flight (auto-fit stands down while [_lead]): a session grid
     // would fight the phone's
     await _syncFit();
@@ -260,7 +272,7 @@ class _SessionScreenState extends State<SessionScreen> {
     unawaited(_syncFit());
   }
 
-  // a layout change (the keyboard, a rotation) resizes the lead once it settles
+  // a layout change (a rotation, not the keyboard) resizes the lead once it settles
   void _layoutLead() {
     if (!_lead) return;
     final g = _phoneGrid();
@@ -268,12 +280,6 @@ class _SessionScreenState extends State<SessionScreen> {
     _seenGrid = g;
     _leadResize?.cancel();
     _leadResize = Timer(const Duration(milliseconds: 300), _resizeLead);
-  }
-
-  void _refit() {
-    _refitAfter = null;
-    _refitTimer?.cancel();
-    unawaited(_syncFit());
   }
 
   // only once leading: before that TermSession drops a resize while the claim waits for OPENED
@@ -381,8 +387,8 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<bool> _fitOnce() async {
     if (!mounted) return false;
     final visible = _foreground && !m.background && m.state == LinkState.connected;
-    final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible && !_lead && _refitAfter == null);
-    if (on == null) return false;
+    final on = autoFit.next(fitted: m.fitted.containsKey(_fitKey), visible: visible && !_lead);
+    if (on == null || _fitRetry?.isActive == true || !on && _resetTries == 0) return false;
     final key = _fitKey;
     var ok = false;
     try {
@@ -390,18 +396,28 @@ class _SessionScreenState extends State<SessionScreen> {
         // JetBrains Mono advances 0.6 em; a larger system font size asks for fewer, bigger columns
         final columns = _fitColumns();
         final size = _sizeFor(columns, 13);
-        final rows = max(5, (_height / (size * 1.3)).floor()); // the text's line height is 1.3
+        final rows = max(5, (_fullHeight / (size * 1.3)).floor()); // the text's line height is 1.3
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'columns': columns, 'rows': rows});
+        _coveredTries = 0;
         m.fitted[key] = (columns, rows);
         if (term case final t? when '${widget.sessionId}/${t.pane}' == key) t.fitted(columns, rows); // not a pane switched to meanwhile
       } else {
         await m.call('session.grid', target: widget.sessionId, args: {'pane': pane, 'reset': true});
+        _resetTries = null;
         m.fitted.remove(key);
       }
       ok = true;
     } on ElisError catch (e) {
-      autoFit.wanted = false; // a refused fit (a pane another Mac leads) is not retried on every change
-      if (mounted) report(context, e.message);
+      final first = _resetTries == null;
+      if (on && _coveredTries > 0) {
+        _coveredTries--; // covered just after the phone's own lead: quietly, and still wanted
+        _fitRetry = Timer(const Duration(seconds: 1), _syncFit);
+      } else {
+        autoFit.wanted = false; // a refused fit (a pane another Mac leads) is not retried on every change
+        if (!on) _resetTries = (_resetTries ?? 4) - 1; // a refused reset: said once, retried 3 times
+        if (!on && _resetTries! > 0) _fitRetry = Timer(const Duration(seconds: 1), _syncFit);
+        if (mounted && (on || first)) report(context, e.message);
+      }
     } on TimeoutException {
       autoFit.wanted = false;
       if (mounted) report(context, 'The computer did not answer.');
