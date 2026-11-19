@@ -25,8 +25,10 @@ enum VtKey {
   d(23),
   l(31),
   r(37),
+  s(38),
   z(45),
   u(40),
+  x(43),
   unidentified(0);
 
   const VtKey(this.code);

@@ -151,6 +151,12 @@ void main() {
     expect(make(10, 3).encodeKey(VtKey.c, mods: vtCtrl), [3]);
   }, skip: skip);
 
+  test('ctrlXAndCtrlSEncode', () {
+    final vt = make(10, 3);
+    expect(vt.encodeKey(VtKey.x, mods: vtCtrl), [0x18]);
+    expect(vt.encodeKey(VtKey.s, mods: vtCtrl), [0x13]);
+  }, skip: skip);
+
   test('altLetterIsEscPrefixed', () {
     expect(make(10, 3).encodeKey(VtKey.d, mods: vtAlt, text: 'd'), _b('\x1bd'));
   }, skip: skip);
