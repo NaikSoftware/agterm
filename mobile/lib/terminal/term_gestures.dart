@@ -1,11 +1,11 @@
 import 'dart:async';
 
-import 'package:flutter/gestures.dart' show kLongPressTimeout;
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout, kLongPressTimeout;
 import 'package:flutter/widgets.dart';
 
 /// One finger scrolls the program by rows; two fingers zoom (1x to 6x) around their focal point and pan inside
-/// [content]; a double tap resets the zoom; a single tap, not a long press, is [onTap]. At 1x the bottom of [content]
-/// is in view.
+/// [content]; a double tap resets the zoom; a single tap, not a long press nor a third tap, is [onTap]. At 1x the bottom
+/// of [content] is in view.
 /// Not an InteractiveViewer, which would take a one-finger drag as a pan.
 class TermGestures extends StatefulWidget {
   const TermGestures({
@@ -42,12 +42,14 @@ class _TermGesturesState extends State<TermGestures> {
   int _fingers = 0;
   Offset _last = Offset.zero; // where the scrolling finger was last reported: the recognizer drops its slop
   Size _view = Size.zero;
-  Timer? _hold; // runs while the first finger's touch can still be a tap; a timer, so fake time in tests counts
-  bool _long = false;
+  Timer? _hold; // runs while the first finger's touch can still be a tap; timers, so fake time in tests counts
+  Timer? _triple; // runs for the double-tap window after a double tap: a tap starting in it is looking
+  bool _long = false, _third = false;
 
   @override
   void dispose() {
     _hold?.cancel();
+    _triple?.cancel();
     super.dispose();
   }
 
@@ -98,6 +100,7 @@ class _TermGesturesState extends State<TermGestures> {
           }
           _pinched = false;
           _long = false;
+          _third = _triple?.isActive == true;
           _hold = Timer(kLongPressTimeout, () => _long = true);
           _last = e.localPosition;
         },
@@ -110,8 +113,9 @@ class _TermGesturesState extends State<TermGestures> {
           behavior: HitTestBehavior.opaque,
           onScaleStart: _start,
           onScaleUpdate: _update,
-          onTap: widget.onTap == null ? null : () => _pinched || _long ? null : widget.onTap!(),
+          onTap: widget.onTap == null ? null : () => _pinched || _long || _third ? null : widget.onTap!(),
           onDoubleTap: () => setState(() {
+            _triple = Timer(kDoubleTapTimeout, () {});
             _scale = 1;
             _x = 0;
             _up = 0;

@@ -487,20 +487,34 @@ class _SessionScreenState extends State<SessionScreen> {
   // session.type at a time so the keystrokes keep their order
   void _softKey(VtKey key, int mods) {
     _claim();
-    if (!_direct) return _typeAll([_seq(key, mods)], pane);
+    if (!_direct) return _typeSoft(_seq(key, mods));
     _sent(term!.key(key, mods: mods, seq: _seq(key, mods)));
   }
 
   void _softText(String text, {bool paste = false}) {
     _claim();
-    if (!_direct) return _typeAll([text], pane);
+    if (!_direct) return _typeSoft(text);
     _sent(paste ? term!.paste(text) : term!.text(text));
   }
 
-  // shortcut: a combination missing from [keys] (shift+arrow, alt+x) sends its plain key indirectly; add rows to [keys]
-  // if a non-Live pane needs them
-  static String _seq(VtKey key, int mods) =>
-      key == VtKey.backspace ? '\x7f' : (keys.where((k) => k.$4 == key && k.$5 == mods).firstOrNull ?? keys.firstWhere((k) => k.$4 == key)).$2!;
+  void _typeSoft(String text) {
+    _typeAll([text], pane);
+    Future.delayed(const Duration(milliseconds: 150), _load);
+  }
+
+  /// What [key] with [mods] types indirectly, as xterm sends it: cursor keys carry the modifiers as `CSI 1;m`, other
+  /// keys take alt as a leading ESC.
+  static String _seq(VtKey key, int mods) {
+    final m = 1 + (mods & vtShift != 0 ? 1 : 0) + (mods & vtAlt != 0 ? 2 : 0) + (mods & vtCtrl != 0 ? 4 : 0);
+    final cursor = const {
+      VtKey.arrowUp: '1;mA', VtKey.arrowDown: '1;mB', VtKey.arrowRight: '1;mC', VtKey.arrowLeft: '1;mD', //
+      VtKey.home: '1;mH', VtKey.end: '1;mF', VtKey.pageUp: '5;m~', VtKey.pageDown: '6;m~',
+    }[key];
+    if (cursor != null && m > 1) return '\x1b[${cursor.replaceFirst('m', '$m')}';
+    final plain = mods & ~vtAlt;
+    final seq = key == VtKey.backspace ? '\x7f' : (keys.where((k) => k.$4 == key && k.$5 == plain).firstOrNull ?? keys.firstWhere((k) => k.$4 == key)).$2!;
+    return mods & vtAlt != 0 ? '\x1b$seq' : seq;
+  }
 
   Future<void> sendInput() async {
     final t = input.text;
@@ -701,7 +715,9 @@ class _SessionScreenState extends State<SessionScreen> {
       final (col, row) = _cellUnder();
       if (col >= 0 && row >= 0 && col < snap.cols && row < snap.rows) term!.click(col: col, row: row);
     }
-    if (_onCursorRow) _showKeyboard();
+    if (_onCursorRow) return _showKeyboard();
+    // typing comes back from the composer to the program, but a hidden keyboard opens only on the cursor row
+    if (inputFocus.hasFocus && MediaQuery.viewInsetsOf(context).bottom > 0) _keyboard.requestFocus();
   }
 
   // the visible caret's whole row (plan decisions 24, 25); the history is reflowed, so there it is the last line,

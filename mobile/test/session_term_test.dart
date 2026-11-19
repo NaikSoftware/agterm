@@ -2013,7 +2013,7 @@ void main() {
   testWidgets('typedKeysOnANonLivePaneUseSessionType', (t) async {
     final h = Harness(t, treeOf(live: false));
     await h.start();
-    await t.showKeyboard(find.byType(TermKeyboard));
+    await _focusField(t);
     h.r.held['session.type'] = [];
     await _soft(t, 'l');
     await _soft(t, 's');
@@ -2033,10 +2033,8 @@ void main() {
   testWidgets('aSoftBackspaceOnANonLivePaneIsDel', (t) async {
     final h = Harness(t, treeOf(live: false));
     await h.start();
-    await t.showKeyboard(find.byType(TermKeyboard));
-    t.testTextInput.enterText(' ');
-    await t.pump();
-    await t.pump();
+    await _focusField(t);
+    await _soft(t, ''); // a Backspace
     expect(h.r.typed, ['\x7f']);
     await h.stop();
   });
@@ -2137,6 +2135,85 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('aTapOffTheCursorRowTakesTypingBackFromTheComposer', (t) async {
+    final h = await _cursorAt5(t);
+    await _lead(h);
+    await _tap(t, _cell(h, 30, 5));
+    await t.tap(find.byKey(const Key('composer')));
+    await t.pump();
+    addTearDown(t.view.reset);
+    t.view.viewInsets = const FakeViewPadding(bottom: 900); // the keyboard is up
+    await t.pump();
+    await _tap(t, t.getCenter(find.byKey(const Key('term')))); // a row the keyboard leaves in view, not the cursor's
+    expect(h.keyboards, 1);
+    expect(t.testTextInput.isVisible, isTrue);
+    await _soft(t, 'x');
+    expect(_typed(h), 'x');
+    expect(find.text('x'), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('aTapOffTheCursorRowNeverOpensAHiddenKeyboard', (t) async {
+    final h = await _cursorAt5(t);
+    await t.tap(find.byKey(const Key('composer')));
+    await t.pump();
+    await _hide(t);
+    await _tap(t, _cell(h, 3, 2));
+    expect(t.testTextInput.isVisible, isFalse);
+    await h.stop();
+  });
+
+  testWidgets('aTripleTapOnTheTermViewIsLooking', (t) async {
+    final h = await _cursorAt5(t);
+    for (var i = 0; i < 3; i++) {
+      await t.tapAt(_cell(h, 30, 5));
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    await t.pump(const Duration(milliseconds: 400));
+    expect(_claims(h), isEmpty);
+    expect(h.keyboards, 0);
+    await _tap(t, _cell(h, 30, 5)); // the next tap acts again
+    expect(_claims(h), hasLength(1));
+    await h.stop();
+  });
+
+  testWidgets('modifiedKeysOnANonLivePaneSendXtermSequences', (t) async {
+    final h = Harness(t, treeOf(live: false));
+    await h.start();
+    await _focusField(t);
+    Future<void> chord(LogicalKeyboardKey mod, LogicalKeyboardKey key) async {
+      await t.sendKeyDownEvent(mod);
+      await t.sendKeyEvent(key);
+      await t.sendKeyUpEvent(mod);
+      await t.pump();
+      await t.pump();
+    }
+
+    await chord(LogicalKeyboardKey.altLeft, LogicalKeyboardKey.backspace);
+    await chord(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.arrowUp);
+    await chord(LogicalKeyboardKey.shiftLeft, LogicalKeyboardKey.end);
+    await chord(LogicalKeyboardKey.altLeft, LogicalKeyboardKey.pageUp);
+    await chord(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.keyA);
+    await chord(LogicalKeyboardKey.altLeft, LogicalKeyboardKey.keyX);
+    expect(h.r.typed, ['\x1b\x7f', '\x1b[1;5A', '\x1b[1;2F', '\x1b[5;3~', '\x01', '\x1bx']);
+    await h.stop();
+  });
+
+  testWidgets('anIndirectSoftKeyRefreshesTheText', (t) async {
+    final h = Harness(t, treeOf(live: false));
+    await h.start();
+    await _focusField(t);
+    final polled = h.r.texts;
+    while (h.r.texts == polled) {
+      await t.pump(const Duration(milliseconds: 10));
+    }
+    final n = h.r.texts;
+    await _soft(t, 'l');
+    await t.pump(const Duration(milliseconds: 160));
+    expect(h.r.texts, n + 1); // the 700 ms poll is far off
+    await h.stop();
+  });
+
   testWidgets('aLongPressIsLookingOnTheTermView', (t) async {
     final h = await _cursorAt5(t);
     await t.longPressAt(_cell(h, 30, 5));
@@ -2183,10 +2260,27 @@ Future<Harness> _cursorAt5(WidgetTester t) async {
   return h;
 }
 
-/// A letter typed on the soft keyboard.
+/// A letter typed on the soft keyboard, as the IME reports it.
 Future<void> _soft(WidgetTester t, String s) async {
-  t.testTextInput.enterText('  $s');
+  final edit = s.isEmpty
+      ? {'oldText': '  ', 'deltaText': '', 'deltaStart': 1, 'deltaEnd': 2, 'selectionBase': 1, 'selectionExtent': 1}
+      : {'oldText': '  ', 'deltaText': s, 'deltaStart': 2, 'deltaEnd': 2, 'selectionBase': 2 + s.length, 'selectionExtent': 2 + s.length};
+  await t.binding.defaultBinaryMessenger.handlePlatformMessage(
+      SystemChannels.textInput.name,
+      SystemChannels.textInput.codec.encodeMethodCall(MethodCall('TextInputClient.updateEditingStateWithDeltas', [
+        -1,
+        {
+          'deltas': [edit],
+        },
+      ])),
+      (_) {});
   await t.pump();
+  await t.pump();
+}
+
+/// The hidden field takes the focus, as on a pane with no cursor only a test can.
+Future<void> _focusField(WidgetTester t) async {
+  t.widget<Focus>(find.descendant(of: find.byType(TermKeyboard), matching: find.byType(Focus)).first).focusNode!.requestFocus();
   await t.pump();
 }
 
