@@ -365,6 +365,8 @@ void main() {
     await t.pump();
     expect(find.byType(AlertDialog), findsNothing);
     expect(web.urls.last, url.replace(path: '/${url.pathSegments.first}/w/b.html', query: 'q=1'));
+    expect(web.c.allows('http://127.0.0.1:${url.port}'), isFalse); // the bare origin
+    expect(web.urls.last, url.replace(path: '/${url.pathSegments.first}/'));
     await closeFile(h);
   });
 

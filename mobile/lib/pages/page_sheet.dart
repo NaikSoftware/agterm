@@ -231,7 +231,7 @@ class _PageSheetState extends State<PageSheet> {
     final server = _prefix == null ? null : Uri.parse(_prefix!).origin;
     if (server != null && _origin(u) == server) {
       // a root-absolute link names the origin's root, as file:///x does on the Mac; the origin judges the path
-      unawaited(_web.loadUrl(Uri.parse('$_prefix${url.substring(server.length + 1)}')).catchError((Object _) {}));
+      unawaited(_web.loadUrl(Uri.parse('$_prefix${url.substring(server.length).replaceFirst(RegExp('^/'), '')}')).catchError((Object _) {}));
     } else if (_origin(u) != null && _touched && !_silenced && !page.hidden) {
       unawaited(_offerBrowser(url)); // a click, during the first load too, as on the Mac
     } else if (_load == 'loading') {

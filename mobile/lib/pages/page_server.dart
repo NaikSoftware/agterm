@@ -80,6 +80,6 @@ class PageServer {
     if (!placed) yield* Stream.fromIterable(place());
   }
 
-  // bytes as latin1 characters: a UTF-8 byte order mark is three of them
-  static final _doctype = RegExp(r'(?:\xEF\xBB\xBF)?\s*<!doctype[^>]*>', caseSensitive: false);
+  // bytes as latin1 characters: a UTF-8 byte order mark is three of them, and it must stay first to name the encoding
+  static final _doctype = RegExp(r'(?:\xEF\xBB\xBF)?(?:\s*<!doctype[^>]*>)?', caseSensitive: false);
 }

@@ -32,6 +32,7 @@ void main() {
       if (path.endsWith('missing.css')) throw ElisError('not found');
       if (path.endsWith('broken.js')) return PageFile('text/javascript', brokenFile());
       if (path.endsWith('.css')) return PageFile('text/css', Stream.value(utf8.encode('p{}')));
+      if (path.endsWith('bom.html')) return PageFile('text/html', Stream.value([0xEF, 0xBB, 0xBF, ...utf8.encode('<p>é</p>')]));
       if (path.endsWith('doc.html')) {
         return PageFile('text/html; charset=utf-8', Stream.fromIterable([utf8.encode('\uFEFF <!DOCTYPE html>'), utf8.encode('<p>hi</p>')]));
       }
@@ -94,6 +95,14 @@ void main() {
     expect((await request(server.urlFor('/w/doc.html'))).$2, ' <!DOCTYPE html><script>H</script><p>hi</p>');
     expect((await request(server.urlFor('/w/index.html'))).$2, '<script>H</script><p>hi</p>');
     expect((await request(server.urlFor('/w/a.css'))).$2, 'p{}');
+  });
+
+  test('aHeadGoesAfterTheByteOrderMarkOfAPageWithoutADoctype', () async {
+    await start(javascript: true, head: '<script>H</script>');
+    final client = HttpClient();
+    addTearDown(client.close);
+    final bytes = await (await (await client.getUrl(server.urlFor('/w/bom.html'))).close()).expand((c) => c).toList();
+    expect(bytes, [0xEF, 0xBB, 0xBF, ...utf8.encode('<script>H</script><p>é</p>')]); // the mark still names UTF-8
   });
 
   test('eachServerHasItsOwnSecret', () async {
