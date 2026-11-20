@@ -212,8 +212,12 @@ class _ChatViewState extends State<ChatView> {
     if (s.bottomStack) return _clearPanel();
     if (widget.exited || widget.stale) return;
     _dialogReads++;
-    // a dialog drawn once may bring no further frame: a re-read stands in for the second update
-    if (_dialogReads == 1) _reread = Timer(const Duration(milliseconds: 400), _onGrid);
+    // a dialog drawn once may bring no further frame: a re-read stands in for the second update;
+    // its call may be newer than the last poll (2 s on a remote row), so the card need not wait for the next one
+    if (_dialogReads == 1) {
+      _reread = Timer(const Duration(milliseconds: 400), _onGrid);
+      unawaited(feed.pollNow());
+    }
   }
 
   bool get _counts => _dialogReads >= 2 && !widget.exited && !widget.stale;

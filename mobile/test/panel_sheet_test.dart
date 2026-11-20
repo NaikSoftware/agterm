@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:elis_mobile/chat/chat_view.dart';
 import 'package:elis_mobile/chat/feed.dart';
 import 'package:elis_mobile/chat/grid.dart';
+import 'package:elis_mobile/chat/transcript.dart';
 import 'package:elis_mobile/chat/write_gate.dart';
 import 'package:elis_mobile/model.dart';
 import 'package:elis_mobile/terminal/vt.dart';
@@ -29,6 +30,20 @@ class _Writer implements GateWriter {
   bool pasteSafe(String text) => true;
 }
 
+class _Feed extends TranscriptFeed {
+  _Feed() : super(call: (_) async => const {}, canPoll: () => false, remote: false);
+
+  var polls = 0;
+
+  void set(List<PendingCall> p) {
+    pending = p;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> pollNow() async => polls++;
+}
+
 class _P {
   _P(this.t, this.g);
 
@@ -37,7 +52,7 @@ class _P {
   final grids = ValueNotifier(0);
   final writer = _Writer();
   late final gate = WriteGate(grids: grids, grid: () => g, writer: () => writer, remote: () => false, blocked: () => null);
-  final feed = TranscriptFeed(call: (_) async => const {}, canPoll: () => false, remote: false)..loading = false;
+  final feed = _Feed()..loading = false;
   final keys = <(String?, VtKey?, int)>[];
   final typed = <String>[];
   var gateRuns = 0;
@@ -222,6 +237,27 @@ void main() {
     expect(find.byKey(const Key('panelOpen')), findsNothing);
     expect(t.widget<TextField>(find.byKey(const Key('composer'))).enabled, isFalse);
     expect(t.takeException(), isNull);
+  });
+
+  testWidgets('aCardReplacesThePanelWhenItsCallArrivesLate', (t) async {
+    final p = _P(t, _g('dialog-bash-45'))..card = (_, c) => c.pending.isEmpty ? null : const SizedBox(key: Key('stubCard'), height: 40);
+    await p.pump();
+    await p.show('dialog-bash-45');
+    expect(p.panel, isTrue);
+    p.feed.set([PendingCall.fromJson(const {'id': 'toolu_1', 'name': 'Bash', 'input': {'command': 'ls'}})]);
+    await t.pump();
+    expect(p.panel, isFalse);
+    expect(find.byKey(const Key('stubCard')), findsOneWidget);
+  });
+
+  testWidgets('aDialogPollsTheTranscriptAtOnce', (t) async {
+    final p = _P(t, _g('idle-placeholder-45'));
+    await p.pump();
+    await p.show('dialog-bash-45');
+    expect(p.feed.polls, 1);
+    await p.show('dialog-bash-45');
+    expect(p.feed.polls, 1);
+    await t.pump(const Duration(milliseconds: 500));
   });
 
   testWidgets('stoppedMessageUntilClose', (t) async {
