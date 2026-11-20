@@ -2,14 +2,20 @@ import 'dart:async';
 
 import 'package:elis_mobile/chat/chat_view.dart';
 import 'package:elis_mobile/chat/feed.dart';
+import 'package:elis_mobile/chat/mode.dart';
 import 'package:elis_mobile/chat/rows.dart';
 import 'package:elis_mobile/chat/transcript.dart';
 import 'package:elis_mobile/chat/write_gate.dart';
+import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/model.dart';
+import 'package:elis_mobile/terminal/vt.dart';
 import 'package:elis_mobile/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'mux_test.dart' show json;
+import 'session_term_test.dart' show Harness, treeOf;
 
 class _Host {
   final calls = <(Map<String, dynamic>, Completer<Map<String, dynamic>>)>[];
@@ -47,7 +53,10 @@ class _Chat {
   late final feed = TranscriptFeed(call: h.call, canPoll: () => true, remote: false);
   int _next = 100;
 
-  Future<void> start(List<Map<String, dynamic>> items, {Map<String, dynamic> meta = const {}, int start = 0}) async {
+  var terms = 0;
+
+  Future<void> start(List<Map<String, dynamic>>? items,
+      {Map<String, dynamic> meta = const {}, int start = 0, bool exited = false, bool stale = false}) async {
     t.view.physicalSize = const Size(400, 800);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
@@ -64,21 +73,21 @@ class _Chat {
             grids: ChangeNotifier(),
             gate: gate,
             s: s,
-            exited: false,
-            stale: false,
-            onTerm: () {},
+            exited: exited,
+            stale: stale,
+            onTerm: () => terms++,
             switcher: const Text('switcher')),
       ),
     ));
     feed.start();
-    await reply(items, meta: meta, start: start);
+    if (items != null) await reply(items, meta: meta, start: start);
   }
 
   /// Answers the held tail poll with [items] after the cursor.
-  Future<void> reply(List<Map<String, dynamic>> items, {Map<String, dynamic> meta = const {}, int start = 0}) async {
+  Future<void> reply(List<Map<String, dynamic>> items, {Map<String, dynamic> meta = const {}, int start = 0, String transcript = 't1'}) async {
     await t.pump();
     _next += 10;
-    h.held!.$2.complete({'transcript': 't1', 'size': _next, 'start': start, 'next': _next, 'items': items, 'meta': meta});
+    h.held!.$2.complete({'transcript': transcript, 'size': _next, 'start': start, 'next': _next, 'items': items, 'meta': meta});
     await t.pump();
     await t.pump();
     await t.pump(); // the post-frame scroll bookkeeping
@@ -295,5 +304,155 @@ void main() {
     await t.drag(find.byKey(const Key('chatList')), const Offset(0, -100));
     await t.pumpAndSettle();
     expect(shown(), isTrue);
+  });
+
+  group('states', () {
+    tearDown(() {
+      ModePicks.pick('s1', null);
+      ModePicks.tooOld.clear();
+    });
+
+    _chatTest('emptyState', (t, c) async {
+      await c.start([]);
+      expect(find.text('Claude is ready'), findsOneWidget);
+      for (final cmd in ['help', 'model', 'usage']) {
+        expect(find.byKey(Key('emptyCommand-$cmd')), findsOneWidget);
+      }
+      expect(find.byKey(const Key('chatSkeleton')), findsNothing);
+    });
+
+    _chatTest('loadingSkeleton', (t, c) async {
+      await c.start(null);
+      await t.pump();
+      expect(find.byKey(const Key('chatSkeleton')), findsOneWidget);
+      expect(find.text('Claude is ready'), findsNothing);
+      await c.reply([_text('a1')]);
+      expect(find.byKey(const Key('chatSkeleton')), findsNothing);
+      expect(_row('a1'), findsOneWidget);
+    });
+
+    for (final (name, error) in [('NotFound', 'transcript not found'), ('Other', 'boom')]) {
+      _chatTest('unreadableShowsRetryAndTerm$name', (t, c) async {
+        await c.start(null);
+        await t.pump();
+        c.h.held!.$2.completeError(Exception(error));
+        await t.pump();
+        await t.pump();
+        expect(find.byKey(const Key('chatUnreadable')), findsOneWidget);
+        expect(find.byKey(const Key('chatList')), findsNothing);
+        expect(find.text('switcher'), findsOneWidget);
+        await t.tap(find.byKey(const Key('chatTerm')));
+        expect(c.terms, 1);
+        await t.tap(find.byKey(const Key('chatRetry')));
+        await c.reply([_text('a1')]);
+        expect(find.byKey(const Key('chatUnreadable')), findsNothing);
+        expect(_row('a1'), findsOneWidget);
+      });
+    }
+
+    _chatTest('switchClearsTransientMarks', (t, c) async {
+      await c.start([..._history(40), _tool('a1'), {'kind': 'tool', 'uuid': 'ag1', 'name': 'Agent', 'arg': 'probe', 'running': true, 'mark': 'running'}]);
+      expect(find.text('◯ running'), findsOneWidget);
+      await t.drag(find.byKey(const Key('chatList')), const Offset(0, 300));
+      await t.pumpAndSettle();
+      expect(t.getSize(find.byKey(const Key('chatHeader'))).height, 0);
+      await c.tick();
+      await c.reply([], transcript: 't2');
+      expect(find.text('◯ running'), findsNothing);
+      expect(find.byKey(const Key('chatSkeleton')), findsOneWidget);
+      expect(find.text('switcher'), findsOneWidget); // no list left to scroll the header back with
+      await c.reply([_text('n1')], transcript: 't2');
+      expect(_row('n1'), findsOneWidget);
+      expect(find.byKey(const Key('jumpToBottom')), findsNothing);
+      expect(find.text('switcher'), findsOneWidget);
+    });
+
+    _chatTest('staleStopsOpenSubagents', (t, c) async {
+      await c.start([{'kind': 'tool', 'uuid': 'ag1', 'name': 'Agent', 'arg': 'probe', 'running': true, 'mark': 'running'}], stale: true);
+      expect(find.text('Reconnecting…'), findsOneWidget);
+      expect(find.text('stopped'), findsOneWidget);
+    });
+
+    test('blockedReason', () {
+      expect(ChatView.blockedReason(exited: true, stale: true), 'Claude exited');
+      expect(ChatView.blockedReason(exited: false, stale: true), 'Reconnecting…');
+      expect(ChatView.blockedReason(exited: false, stale: false), isNull);
+    });
+
+    ChatView view(WidgetTester t) => t.widget<ChatView>(find.byType(ChatView));
+    // a write that is not blocked would wait on the lead: read the result after one pump instead of awaiting it
+    Future<GateResult?> write(WidgetTester t) async {
+      GateResult? r;
+      unawaited(view(t).gate.run(1, (s) => s.send(GateStep(KeyWrite(VtKey.arrowUp), ready: (_) => true, done: (_) => true))).then((v) => r = v));
+      await t.pump();
+      return r;
+    }
+    const claude = {'agent': 'claude', 'agentSessionId': 'c1'};
+
+    for (final (host, shown) in [('', 'the computer'), ('studio', 'studio')]) {
+      testWidgets('hostTooOldDisablesChat${host.isEmpty ? '' : 'Remote'}', (t) async {
+        final h = Harness(t, treeOf(session: {...claude, if (host.isNotEmpty) 'remoteHost': host}));
+        h.r.errors['session.transcript'] = 'unknown command: session.transcript';
+        await h.start();
+        await t.pump(const Duration(milliseconds: 100));
+        expect(find.byType(ChatView), findsNothing);
+        expect(find.text('Update Elis on $shown'), findsOneWidget);
+        expect(t.widget<OutlinedButton>(find.byKey(const Key('modeChat'))).onPressed, isNull);
+        // the reason stays on the disabled segment after the notice is gone
+        expect(find.byWidgetPredicate((w) => w is Tooltip && w.message == 'Update Elis on $shown'), findsOneWidget);
+        final calls = h.r.transcriptArgs.length;
+        await t.pump(const Duration(seconds: 5));
+        expect(h.r.transcriptArgs.length, calls);
+        await h.stop();
+      });
+    }
+
+    testWidgets('exitedBannerDisablesWrites', (t) async {
+      final h = Harness(t, treeOf(session: claude));
+      h.r.transcript = {'transcript': 't1', 'size': 10, 'start': 0, 'next': 10, 'items': [_text('a1')]};
+      await h.start();
+      await h.opened();
+      expect(_row('a1'), findsOneWidget);
+      await h.retree(treeOf(session: {'agentSessionId': 'c1'}));
+      await t.pump();
+      expect(find.text('Claude exited'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('chatExited')), matching: find.text('Term')), findsOneWidget);
+      final r = await write(t);
+      expect((r?.outcome, r?.reason), (GateOutcome.blocked, 'Claude exited'));
+      h.r.errors['session.transcript'] = 'no adapter';
+      await t.pump(const Duration(seconds: 2));
+      expect(find.byKey(const Key('chatUnreadable')), findsNothing); // the history stays
+      expect(_row('a1'), findsOneWidget);
+      await h.stop();
+    });
+
+    testWidgets('staleDimsAndBlocks', (t) async {
+      final h = Harness(t, treeOf(session: claude));
+      await h.start();
+      await h.opened();
+      expect(view(t).stale, isFalse);
+      h.r.send(json(LinkKind.close, h.r.lastWatch, {'reason': 'stalled'}));
+      await t.pump();
+      await t.pump();
+      expect(view(t).stale, isTrue);
+      expect(find.text('Reconnecting…'), findsOneWidget);
+      final r = await write(t);
+      expect((r?.outcome, r?.reason), (GateOutcome.blocked, 'Reconnecting…'));
+      await h.opened(); // the quiet reopen
+      expect(view(t).stale, isFalse);
+      expect(find.text('Reconnecting…'), findsNothing);
+      await h.stop();
+    });
+
+    testWidgets('connectingIsNotStale', (t) async {
+      final h = Harness(t, treeOf(session: claude));
+      await h.start();
+      for (var i = 0; i < 3; i++) {
+        await t.pump(const Duration(seconds: 1));
+        expect(view(t).stale, isFalse);
+      }
+      expect(find.text('Reconnecting…'), findsNothing);
+      await h.stop();
+    });
   });
 }

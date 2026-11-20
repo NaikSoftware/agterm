@@ -84,6 +84,7 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _quietFit = false; // the refit after a refused claim: a refusal of it repeats the claim's, already said
   final _refused = <String>{}; // panes whose terminal the relay refused on this visit: text view until they stop being Live
   final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
+  final _openedPanes = <String>{}; // panes whose terminal was OPENED on this visit: before that Chat is connecting, not stale
   // latched, not shownMode on each build: Chat stays when Claude exits, until the user leaves it
   bool _inChat = false;
   bool _picked = false; // the opening pane and mode, picked once the session is known
@@ -106,7 +107,7 @@ class _SessionScreenState extends State<SessionScreen> {
     m.addListener(_onModel);
     _lifecycle = AppLifecycleListener(onPause: () => _setForeground(false), onResume: () => _setForeground(true));
     _gate = WriteGate(
-        grids: _grids, grid: _chatGrid, writer: _writer, remote: () => s?.remote ?? false, blocked: () => checks.writeBlockedOn(remote: s?.remote ?? false));
+        grids: _grids, grid: _chatGrid, writer: _writer, remote: () => s?.remote ?? false, blocked: () => _chatBlocked ?? checks.writeBlockedOn(remote: s?.remote ?? false));
     _events = m.events.listen((e) {
       if (e['kind'] == 'status' && e['session'] == widget.sessionId) _feed?.pollNow();
     });
@@ -150,8 +151,25 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   void _onFeed() {
-    if (_feed?.error == TranscriptError.hostTooOld && ModePicks.tooOld.add(widget.sessionId)) _syncMode();
+    if (_feed?.error != TranscriptError.hostTooOld || !ModePicks.tooOld.add(widget.sessionId)) return;
+    _syncMode();
+    if (s case final s?) report(context, _tooOld(s));
   }
+
+  String _tooOld(Session s) => 'Update Elis on ${s.remoteHost.isEmpty ? 'the computer' : s.remoteHost}';
+
+  bool _exited(Session s) => s.liveAgent != 'claude';
+
+  // a Live pane that showed its terminal this visit and has no running one now
+  bool get _termLost =>
+      _openedPanes.contains(pane) && s?.livePanes.contains(pane) == true && !_refused.contains(pane) && term?.opened != true;
+
+  bool get _chatStale => _feed?.stale == true || m.state != LinkState.connected || _termLost;
+
+  String? get _chatBlocked => switch (s) {
+        final s? => ChatView.blockedReason(exited: _exited(s), stale: _chatStale),
+        null => null,
+      };
 
   void _pickMode(ViewMode mode) {
     ModePicks.pick(widget.sessionId, mode);
@@ -269,6 +287,7 @@ class _SessionScreenState extends State<SessionScreen> {
     final t = term;
     if (!mounted || t == null) return;
     _grids.value++;
+    if (t.opened) _openedPanes.add(t.pane);
     if (t.ended case final reason?) {
       t.removeListener(_onTerm);
       if (_claimed == t) _coveredTries = 3;
@@ -751,8 +770,8 @@ class _SessionScreenState extends State<SessionScreen> {
             grids: _grids,
             gate: _gate,
             s: s,
-            exited: s.liveAgent != 'claude',
-            stale: f.stale || m.state != LinkState.connected,
+            exited: _exited(s),
+            stale: _chatStale,
             onTerm: () => _pickMode(ViewMode.term),
             switcher: _toolbar(s)));
   }
@@ -789,7 +808,10 @@ class _SessionScreenState extends State<SessionScreen> {
       _syncFit();
     }
     return Row(key: const Key('toolbar'), mainAxisSize: MainAxisSize.min, children: [
-      seg('Chat', _inChat, chatAvailable(s, pane) ? () => _pickMode(ViewMode.chat) : null, key: const Key('modeChat')),
+      if (ModePicks.tooOld.contains(s.id))
+        Tooltip(message: _tooOld(s), child: seg('Chat', false, null, key: const Key('modeChat')))
+      else
+        seg('Chat', _inChat, chatAvailable(s, pane) ? () => _pickMode(ViewMode.chat) : null, key: const Key('modeChat')),
       seg('Term', !_inChat, () => _pickMode(ViewMode.term), key: const Key('modeTerm')),
       if (s.hasSplit) ...[
         seg('Left pane', pane == 'left', () => setPane('left')),

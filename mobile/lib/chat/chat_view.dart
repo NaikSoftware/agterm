@@ -9,6 +9,7 @@ import 'feed.dart';
 import 'grid.dart';
 import 'items.dart';
 import 'rows.dart';
+import 'transcript.dart';
 import 'write_gate.dart';
 
 Widget _chip(String label, {Key? key, VoidCallback? onTap}) => GestureDetector(
@@ -58,7 +59,13 @@ class ChatView extends StatefulWidget {
       required this.exited,
       required this.stale,
       required this.onTerm,
-      required this.switcher});
+      required this.switcher,
+      this.onCommand});
+
+  static const exitedText = 'Claude exited', staleText = 'Reconnecting…';
+
+  /// Why every Chat write is blocked; the screen's [WriteGate] returns it.
+  static String? blockedReason({required bool exited, required bool stale}) => exited ? exitedText : stale ? staleText : null;
 
   final TranscriptFeed feed;
   final Grid? Function() grid;
@@ -68,6 +75,7 @@ class ChatView extends StatefulWidget {
   final bool exited, stale;
   final VoidCallback onTerm;
   final Widget switcher;
+  final ValueChanged<String>? onCommand; // an empty transcript's built-in command buttons
 
   @override
   State<ChatView> createState() => _ChatViewState();
@@ -83,6 +91,7 @@ class _ChatViewState extends State<ChatView> {
   int _newCount = 0;
   String? _sticky; // a row key: an index would point at another row for the frame after an append
   bool _away = false, _header = true, _todos = false;
+  int _switches = 0;
 
   TranscriptFeed get feed => widget.feed;
 
@@ -90,6 +99,7 @@ class _ChatViewState extends State<ChatView> {
   void initState() {
     super.initState();
     _setRows(chatRows(feed.items));
+    _switches = feed.switches;
     feed.addListener(_changed);
     _scroll.addListener(_onScroll);
   }
@@ -155,9 +165,17 @@ class _ChatViewState extends State<ChatView> {
     // away from the bottom, any change keeps the row the user is reading where it is
     final anchor = _away ? _visible.firstOrNull?.$2 : null;
     final at = anchor == null ? null : _offset(anchor);
+    final switched = feed.switches != _switches;
     setState(() {
       _setRows(rows);
       if (_away) _newCount += added;
+      // a new transcript: nothing above or below the old rows describes it
+      if (switched) {
+        _switches = feed.switches;
+        _away = false;
+        _newCount = 0;
+        _header = true;
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
@@ -280,19 +298,21 @@ class _ChatViewState extends State<ChatView> {
   Widget build(BuildContext context) {
     final n = _index[_sticky], sticky = n == null ? null : _rows[n];
     final todos = _todoStrip();
+    final state = _state();
     final top = [
       AnimatedSize(
         key: const Key('chatHeader'),
         duration: const Duration(milliseconds: 150),
         alignment: Alignment.topCenter,
-        child: _header ? _headerRow() : const SizedBox(width: double.infinity),
+        // without the list there is no scroll to bring the header back
+        child: _header || state != null ? _headerRow() : const SizedBox(width: double.infinity),
       ),
       if (widget.exited)
         ListTile(
             key: const Key('chatExited'),
-            title: const Text('Claude exited'),
+            title: const Text(ChatView.exitedText),
             trailing: TextButton(onPressed: widget.onTerm, child: const Text('Term'))),
-      if (widget.stale) const Padding(padding: EdgeInsets.all(8), child: Text('Reconnecting…', style: TextStyle(color: C.muted))),
+      if (widget.stale) const Padding(padding: EdgeInsets.all(8), child: Text(ChatView.staleText, style: TextStyle(color: C.muted))),
       if (sticky != null)
         InkWell(
           key: const Key('stickyPrompt'),
@@ -341,11 +361,80 @@ class _ChatViewState extends State<ChatView> {
             constraints: BoxConstraints(maxHeight: box.maxHeight / 2),
             child: SingleChildScrollView(primary: false, child: Column(children: top)),
           ),
-          Expanded(child: list),
+          Expanded(child: state ?? list),
         ]),
       ),
     );
   }
+}
+
+/// What shows in place of the list, or null for the list; an exited Claude keeps its history.
+extension on _ChatViewState {
+  Widget? _state() {
+    final error = feed.error;
+    if (!widget.exited && error != null && error != TranscriptError.hostTooOld) return _unreadable(error);
+    if (feed.loading) return const _Skeleton();
+    if (_rows.isEmpty && !widget.exited) return _empty();
+    return null;
+  }
+
+  // both scroll when a landscape keyboard leaves less height than they need
+  Widget _unreadable(TranscriptError error) => Center(
+        key: const Key('chatUnreadable'),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, spacing: 12, children: [
+            Text(error == TranscriptError.notFound ? 'Claude\'s transcript was not found.' : 'Claude\'s transcript could not be read.',
+                textAlign: TextAlign.center, style: const TextStyle(color: C.muted)),
+            Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: [
+              OutlinedButton(key: const Key('chatRetry'), onPressed: feed.retry, child: const Text('Retry')),
+              OutlinedButton(key: const Key('chatTerm'), onPressed: widget.onTerm, child: const Text('Term')),
+            ]),
+          ]),
+        ),
+      );
+
+  Widget _empty() => Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, spacing: 12, children: [
+            const Text('Claude is ready', style: TextStyle(fontSize: 16, color: C.muted)),
+            Wrap(spacing: 8, children: [
+              for (final c in ['help', 'model', 'usage'])
+                OutlinedButton(
+                    key: Key('emptyCommand-$c'),
+                    onPressed: widget.onCommand == null ? null : () => widget.onCommand!(c),
+                    child: Text('/$c', style: const TextStyle(fontFamily: mono))),
+            ]),
+          ]),
+        ),
+      );
+}
+
+/// Placeholder bubbles until the first page; static, so a held page never keeps a frame scheduled.
+class _Skeleton extends StatelessWidget {
+  const _Skeleton();
+
+  @override
+  Widget build(BuildContext context) => ListView(
+        key: const Key('chatSkeleton'),
+        reverse: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(12),
+        children: [
+          for (final (w, right) in [(0.55, true), (0.8, false), (0.4, true), (0.7, false)])
+            Align(
+              alignment: right ? Alignment.centerRight : Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: w,
+                child: Container(
+                    height: right ? 36 : 64,
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(12))),
+              ),
+            ),
+        ],
+      );
 }
 
 /// Reports its row's context while the row is built, so the list can find what is on screen.

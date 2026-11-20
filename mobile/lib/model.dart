@@ -36,6 +36,7 @@ class Session {
         liveAgent = m['agent'] ?? '',
         agentSessionId = m['agentSessionId'] ?? '',
         agentPane = m['agentPane'] ?? 'left',
+        remoteHost = m['remoteHost'] ?? '',
         remote = (m['remoteHost'] as String?)?.isNotEmpty == true,
         cwd = m['cwd'] ?? '',
         parent = m['parent'] ?? '',
@@ -54,7 +55,7 @@ class Session {
         collapsed = m['collapsed'] == true;
 
   final String liveAgent; // the tree's own `agent`; `agent` above also guesses from the foreground
-  final String agentSessionId, agentPane;
+  final String agentSessionId, agentPane, remoteHost;
   final bool remote;
   final String id, name, status, agent, cwd, parent, context, tint, workspaceId, workspaceName;
   final int unseen;
