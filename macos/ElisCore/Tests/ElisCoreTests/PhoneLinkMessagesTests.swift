@@ -57,6 +57,14 @@ import Testing
         #expect(decoded == PhoneLinkOpen(type: "page", target: "s1"))
     }
 
+    @Test func aForwardOpenCarriesItsPage() throws {
+        let open = PhoneLinkFrame.json(.open, channel: 7, PhoneLinkOpen(type: "forward", target: "s1", page: "p1"))
+        #expect(String(decoding: open.payload, as: UTF8.self) == #"{"page":"p1","target":"s1","type":"forward"}"#)
+        #expect(try open.decodeJSON(PhoneLinkOpen.self).page == "p1")
+        #expect(!String(decoding: PhoneLinkFrame.json(.open, channel: 7, PhoneLinkOpen(type: "vt", target: "s1")).payload, as: UTF8.self)
+            .contains("page"))
+    }
+
     @Test func presentLines() throws {
         let command = PhonePageCodec.encode(.command(id: "p", seq: 3, action: "hide", sizePercent: nil))
         #expect(String(decoding: command, as: UTF8.self) == "{\"action\":\"hide\",\"id\":\"p\",\"seq\":3,\"t\":\"command\"}\n")

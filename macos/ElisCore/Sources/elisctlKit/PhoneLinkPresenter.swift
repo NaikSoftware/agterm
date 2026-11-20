@@ -16,6 +16,8 @@ final class PhoneLinkPresenter: @unchecked Sendable {
         let pending: () -> Int
         /// The channel is over: the link forgets this presenter.
         let ended: () -> Void
+        /// A page left the presenter, for any cause; called once per page.
+        let pageEnded: (_ page: String) -> Void
     }
 
     /// Opens the presentation stream for `origin`, or with a page token that page's pipe; runs off the relay queue.
@@ -134,7 +136,9 @@ final class PhoneLinkPresenter: @unchecked Sendable {
         // a forward listener is not the origin's, so nothing waits for the origin to retire it
         pages.values.filter(\.isForwarded).forEach { $0.pipe?.close() }
         let pipes = pages.values.filter { !$0.isForwarded }.compactMap(\.pipe)
+        let ended = pages.keys
         pages = [:]
+        ended.forEach(link.pageEnded)
         serving = []
         guard !pipes.isEmpty else { return }
         queue.asyncAfter(deadline: .now() + Self.pipeGrace) { pipes.forEach { $0.close() } }

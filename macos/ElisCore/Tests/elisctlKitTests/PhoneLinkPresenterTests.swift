@@ -269,7 +269,8 @@ struct PhoneLinkPresenterTests {
                     } ?? .closed
                 },
                 pending: { [weak self] in self?.pending ?? 0 },
-                ended: { [weak self] in self?.lock.withLock { self?.didEnd = true } })
+                ended: { [weak self] in self?.lock.withLock { self?.didEnd = true } },
+                pageEnded: { _ in })
             presenter = PhoneLinkPresenter(channel: 5, request: PhoneLinkOpen(type: "present", target: "S1"), socketPath: server.path,
                                            queue: queue, peer: "mem:1", log: { _ in }, link: link, spawn: spawn,
                                            forwardSpawn: forwardSpawn, markdownDirectory: markdownDirectory)

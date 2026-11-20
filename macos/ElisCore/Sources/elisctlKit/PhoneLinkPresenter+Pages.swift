@@ -90,6 +90,7 @@ extension PhoneLinkPresenter {
 
     func pageRequest(_ request: PresentationPage) {
         if let old = pages.removeValue(forKey: request.page) {
+            link.pageEnded(old.id)
             old.pipe?.close()
             serving.removeAll { $0.page == old.id }
         }
@@ -121,6 +122,7 @@ extension PhoneLinkPresenter {
 
     func pageClose(_ change: PresentationPageChange) {
         guard let page = pages.removeValue(forKey: change.page) else { return }
+        link.pageEnded(page.id)
         page.pipe?.close()
         serving.removeAll { $0.page == page.id }
         if page.shown { output(.command(id: page.id, seq: 0, action: "close", sizePercent: nil)) }
@@ -156,7 +158,10 @@ extension PhoneLinkPresenter {
     }
 
     func reject(_ page: PresentedPage, _ reason: String) {
-        if pages[page.id] === page { pages[page.id] = nil }
+        if pages[page.id] === page {
+            pages[page.id] = nil
+            link.pageEnded(page.id)
+        }
         page.pipe?.close()
         send(.pageRejected(PresentationPageChange(page: page.id, reason: reason, offer: page.request.offer)))
     }
@@ -210,6 +215,7 @@ extension PhoneLinkPresenter {
     func pipeEnded(_ page: PresentedPage) {
         guard !stopped, pages[page.id] === page else { return }
         pages[page.id] = nil
+        link.pageEnded(page.id)
         serving.removeAll { $0.page == page.id }
         guard page.shown else { return reject(page, "the page channel ended") }
         output(.command(id: page.id, seq: 0, action: "close", sizePercent: nil))
@@ -456,6 +462,7 @@ extension PhoneLinkPresenter {
                                                   offer: page.request.offer)))
         case let .closed(id, dismissed):
             guard let page = pages.removeValue(forKey: id) else { return }
+            link.pageEnded(id)
             page.pipe?.close()
             serving.removeAll { $0.page == id }
             // a page the phone lost without the user goes back as a lost channel, never as dismissed
