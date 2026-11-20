@@ -310,9 +310,11 @@ struct ClaudeTranscriptTests {
         ])
         try fixture.write("subagents/agent-abc.meta.json", #"{"toolUseId":"t9"}"#)
         try fixture.write("subagents/agent-abc.jsonl", toolUse("s2", parent: nil, id: "b1", sidechain: true) + "\n")
-        #expect(try fixture.page().pending.map(\.id) == ["b1"])
         let meta = fixture.sessionDirectory.appendingPathComponent("subagents/agent-abc.meta.json").path
-        let stamp = try #require(try FileManager.default.attributesOfItem(atPath: meta)[.modificationDate] as? Date)
+        // a whole-second stamp survives the Date round trip; a nanosecond one does not
+        let stamp = Date(timeIntervalSince1970: 1_700_000_000)
+        try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: meta)
+        #expect(try fixture.page().pending.map(\.id) == ["b1"])
         try fixture.write("subagents/agent-abc.meta.json", #"{"toolUseId":"t8"}"#)
         try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: meta)
         #expect(try fixture.page().pending.map(\.id) == ["b1"])
