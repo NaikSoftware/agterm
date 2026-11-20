@@ -40,7 +40,7 @@ class ChatView extends StatelessWidget {
                   trailing: TextButton(onPressed: onTerm, child: const Text('Term'))),
             if (stale) const Padding(padding: EdgeInsets.all(8), child: Text('Reconnecting…', style: TextStyle(color: C.muted))),
             Expanded(
-              child: ListView(reverse: true, padding: const EdgeInsets.fromLTRB(12, 48, 12, 12), children: [
+              child: ListView(reverse: true, padding: const EdgeInsets.all(12), children: [
                 for (final i in feed.items.reversed)
                   Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(i.text ?? i.name ?? i.kind)),
               ]),

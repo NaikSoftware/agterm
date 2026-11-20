@@ -181,15 +181,17 @@ class _SessionScreenState extends State<SessionScreen> {
     return text.isEmpty ? null : Grid.text(text);
   }
 
-  GateWriter _writer() => _direct
-      ? LeadWriter(() => term, _gateClaim)
-      : TypeWriter((text) async {
-          await _replay;
-          return m.act('session.type', target: widget.sessionId, args: {'text': text, 'pane': pane});
-        });
+  GateWriter _writer() => _PaneWriter(
+      () => _direct,
+      LeadWriter(() => term, _gateClaim),
+      TypeWriter((text) async {
+        await _replay;
+        return m.act('session.type', target: widget.sessionId, args: {'text': text, 'pane': pane});
+      }));
 
   // false as soon as the claim is refused, so the gate does not wait out the lead's deadline
   Future<bool> _gateClaim() async {
+    if (!mounted) return false; // a gate run can outlive the screen
     _claim();
     final t = _claimed;
     await _taking;
@@ -714,7 +716,8 @@ class _SessionScreenState extends State<SessionScreen> {
           // the buttons float over the screen's top edge, so the terminal takes the whole height
           Expanded(
               child: Stack(children: [
-            Positioned.fill(child: chat ? _chatView(s) : _terminal()),
+            // Chat starts below the toolbar, which floats over the terminal's top edge only
+            Positioned.fill(top: chat ? 54 : 0, child: chat ? _chatView(s) : _terminal()),
             if (!chat)
               Positioned(left: 0, bottom: 0, child: TermKeyboard(focus: _keyboard, onKey: _softKey, onText: _softText, onPaste: (t) => _softText(t, paste: true))),
             Positioned(top: 6, right: 6, child: _toolbar(s)),
@@ -1018,6 +1021,25 @@ class _SingleTapState extends State<_SingleTap> {
         },
         child: widget.child,
       );
+}
+
+/// The `_direct` rule at each write: leads while the pane is direct, `session.type` once it is not, so a claim refused
+/// during [lead] sends this write indirectly as Term's input does.
+class _PaneWriter implements GateWriter {
+  _PaneWriter(this._direct, this._leader, this._typer);
+  final bool Function() _direct;
+  final GateWriter _leader, _typer;
+
+  GateWriter get _now => _direct() ? _leader : _typer;
+
+  @override
+  Future<bool> lead() async => !_direct() || await _leader.lead() || !_direct();
+
+  @override
+  Future<bool> write(GateWrite w) => _now.write(w);
+
+  @override
+  bool pasteSafe(String text) => _now.pasteSafe(text);
 }
 
 /// A small bordered label in the app bar: the link the phone uses, the lead.

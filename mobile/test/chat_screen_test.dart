@@ -16,8 +16,14 @@ import 'session_term_test.dart' show FakeVt, Harness, treeOf;
 
 const _claude = {'agent': 'claude', 'agentSessionId': 'c1'};
 
-List<Map> _watches(Harness h) => [for (final o in h.r.opens) if (o['claim'] != true) o];
-List<Map> _claims(Harness h) => [for (final o in h.r.opens) if (o['claim'] == true) o];
+List<Map> _watches(Harness h) => [
+  for (final o in h.r.opens)
+    if (o['claim'] != true) o,
+];
+List<Map> _claims(Harness h) => [
+  for (final o in h.r.opens)
+    if (o['claim'] == true) o,
+];
 bool _chat() => find.byType(ChatView).evaluate().isNotEmpty;
 ChatView _view(WidgetTester t) => t.widget<ChatView>(find.byType(ChatView));
 
@@ -90,37 +96,46 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('chatNeverResizes', (t) async {
-    t.view.physicalSize = const Size(1080, 2340);
-    t.view.devicePixelRatio = 3;
-    addTearDown(t.view.reset);
-    final h = Harness(t, treeOf(session: _claude));
-    await h.start();
-    await h.opened();
-    t.view.viewInsets = const FakeViewPadding(bottom: 900); // the soft keyboard
-    await t.pump(const Duration(milliseconds: 400));
-    t.view.physicalSize = const Size(2340, 1080); // a rotation
-    await t.pump(const Duration(milliseconds: 400));
-    expect(h.r.grids, isEmpty);
-    expect(_claims(h), isEmpty);
-    final result = _view(t).gate.run(1, (s) => s.send(_up()));
-    await t.pump();
-    await t.pump();
-    expect(_claims(h), [
-      {'type': 'vt', 'target': 's1', 'pane': 'left', 'claim': true, 'cols': 80, 'rows': 24},
-    ]);
-    h.r.send([...json(LinkKind.opened, 3, {'cols': 80, 'rows': 24}), ...json(LinkKind.lead, 3, {'role': 'leader'})]);
-    await t.pump();
-    await t.pump();
-    await _redraw(h);
-    expect((await result).outcome, GateOutcome.done);
-    t.view.physicalSize = const Size(1080, 2340);
-    await t.pump(const Duration(milliseconds: 400));
-    expect(h.r.of(LinkKind.resize), isEmpty);
-    expect(h.r.grids, isEmpty);
-    expect(_claims(h), hasLength(1));
-    await h.stop();
-  });
+  for (final viaTerm in [false, true]) {
+    testWidgets('chatNeverResizes${viaTerm ? 'AfterTerm' : ''}', (t) async {
+      t.view.physicalSize = const Size(1080, 2340);
+      t.view.devicePixelRatio = 3;
+      addTearDown(t.view.reset);
+      final h = Harness(t, treeOf(session: _claude));
+      await h.start();
+      if (viaTerm) {
+        await _tapKey(t, 'modeTerm'); // Term lays out the phone grid
+        await _tapKey(t, 'modeChat');
+      }
+      await h.opened();
+      t.view.viewInsets = const FakeViewPadding(bottom: 900); // the soft keyboard
+      await t.pump(const Duration(milliseconds: 400));
+      t.view.physicalSize = const Size(2340, 1080); // a rotation
+      await t.pump(const Duration(milliseconds: 400));
+      expect(h.r.grids, isEmpty);
+      expect(_claims(h), isEmpty);
+      final result = _view(t).gate.run(1, (s) => s.send(_up()));
+      await t.pump();
+      await t.pump();
+      expect(_claims(h), [
+        {'type': 'vt', 'target': 's1', 'pane': 'left', 'claim': true, 'cols': 80, 'rows': 24},
+      ]);
+      h.r.send([
+        ...json(LinkKind.opened, 3, {'cols': 80, 'rows': 24}),
+        ...json(LinkKind.lead, 3, {'role': 'leader'}),
+      ]);
+      await t.pump();
+      await t.pump();
+      await _redraw(h);
+      expect((await result).outcome, GateOutcome.done);
+      t.view.physicalSize = const Size(1080, 2340);
+      await t.pump(const Duration(milliseconds: 400));
+      expect(h.r.of(LinkKind.resize), isEmpty);
+      expect(h.r.grids, isEmpty);
+      expect(_claims(h), hasLength(1));
+      await h.stop();
+    });
+  }
 
   testWidgets('statusEventPollsAtOnce', (t) async {
     final h = Harness(t, treeOf(session: _claude));
@@ -171,6 +186,9 @@ void main() {
     await t.pump();
     expect(_chat(), isTrue);
     expect(_view(t).exited, isTrue);
+    // Chat sits below the toolbar: the exited row's Term button is not under the segments
+    final bar = t.getRect(find.byKey(const Key('toolbar')));
+    expect(t.getRect(find.byKey(const Key('chatExited'))).top, greaterThanOrEqualTo(bar.bottom));
     await h.stop();
   });
 
@@ -186,8 +204,10 @@ void main() {
     for (var i = 0; i < 10; i++) {
       await t.pump(const Duration(milliseconds: 10));
     }
-    expect((await first).outcome, GateOutcome.noLead); // at once, not after the lead's 10 s
-    await t.pump(const Duration(seconds: 1));
+    expect(h.r.typed, ['\x1b[A']); // the refusal turns this write to session.type, not after the lead's 10 s
+    await _redraw(h);
+    expect((await first).outcome, GateOutcome.done);
+    h.r.typed.clear();
     final second = _view(t).gate.run(1, (s) => s.send(_up()));
     for (var i = 0; i < 10; i++) {
       await t.pump(const Duration(milliseconds: 10));
@@ -220,8 +240,13 @@ void main() {
     final calls = h.r.transcriptArgs.length;
     h.nav.currentState!.pop();
     await t.pumpAndSettle(const Duration(milliseconds: 10));
-    unawaited(h.nav.currentState!.push(
-        MaterialPageRoute<void>(builder: (_) => SessionScreen(model: h.m, sessionId: 's1', vt: (c, r) => FakeVt(c, r)))));
+    unawaited(
+      h.nav.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) => SessionScreen(model: h.m, sessionId: 's1', vt: (c, r) => FakeVt(c, r)),
+        ),
+      ),
+    );
     await t.pumpAndSettle(const Duration(milliseconds: 10));
     await t.pump(const Duration(seconds: 2));
     expect(_chat(), isFalse);
