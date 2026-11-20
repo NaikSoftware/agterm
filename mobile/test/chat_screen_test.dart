@@ -137,6 +137,31 @@ void main() {
     });
   }
 
+  for (final viaTerm in [false, true]) {
+    testWidgets('chatWriteBeforeOpenedClaimsNothing${viaTerm ? 'AfterTerm' : ''}', (t) async {
+      final h = Harness(t, treeOf(session: _claude));
+      await h.start();
+      if (viaTerm) {
+        await _tapKey(t, 'modeTerm');
+        await _tapKey(t, 'modeChat');
+      }
+      GateResult? early;
+      unawaited(_view(t).gate.run(1, (s) => s.send(_up())).then((r) => early = r));
+      await t.pump(const Duration(seconds: 11)); // the lead waits for a frame until its deadline
+      expect(early?.outcome, GateOutcome.noLead);
+      expect(_claims(h), isEmpty);
+      expect(h.r.grids, isEmpty);
+      await h.opened();
+      unawaited(_view(t).gate.run(1, (s) => s.send(_up())));
+      await t.pump();
+      await t.pump();
+      expect(_claims(h), [
+        {'type': 'vt', 'target': 's1', 'pane': 'left', 'claim': true, 'cols': 80, 'rows': 24},
+      ]);
+      await h.stop();
+    });
+  }
+
   testWidgets('statusEventPollsAtOnce', (t) async {
     final h = Harness(t, treeOf(session: _claude));
     await h.start();
