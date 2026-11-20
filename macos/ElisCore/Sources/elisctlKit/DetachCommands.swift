@@ -44,7 +44,7 @@ extension Workspace {
     struct Detach: RequestCommand {
         static let configuration = CommandConfiguration(
             abstract: "Hide a remote window's workspace and its sessions on this Mac, leaving them running on the server.")
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
 
         func makeRequest() throws -> ControlRequest {

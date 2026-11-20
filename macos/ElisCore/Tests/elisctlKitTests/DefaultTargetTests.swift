@@ -42,7 +42,7 @@ struct DefaultTargetTests {
         #expect(CallerEnvironment.$values.withValue(CallerEnvironment.scoped(pane, for: move)) { move.companionMoveRequest().target } == own)
     }
 
-    @Test(arguments: [["workspace", "rename", "x"], ["workspace", "tint", "red"], ["surface", "zoom"]])
+    @Test(arguments: [["workspace", "rename", "x"], ["workspace", "tint", "red"], ["workspace", "detach"], ["surface", "zoom"]])
     func workspaceAndSurfaceCommandsKeepActiveInsideAPane(argv: [String]) throws {
         #expect(try target(argv, env: pane) == "active")
     }
