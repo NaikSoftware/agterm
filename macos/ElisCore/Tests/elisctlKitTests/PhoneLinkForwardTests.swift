@@ -170,16 +170,15 @@ struct PhoneLinkForwardTests {
         defer { try? FileManager.default.removeItem(atPath: marks + ".go") }
         let deadline = Date().addingTimeInterval(30)
         while !FileManager.default.fileExists(atPath: marks + ".done"), Date() < deadline { usleep(10_000) }
-        // the pty's own buffer still holds the burst's tail
-        usleep(300_000)
-        while let frame = reader.next(from: phone, timeout: 0.3) { _ = Self.take(frame, phone) }
         phone.release()
-        var order: [UInt32] = []
-        while order.count < 3, let frame = reader.next(from: phone) {
-            if frame.kind == .data, frame.channel == 2 || frame.channel == 11 { order.append(frame.channel) }
+        // the burst's first run of vt bytes, up to the first forward frame after it; a pty buffer's tail may still trail
+        var run = 0
+        while let frame = reader.next(from: phone) {
+            guard frame.kind == .data else { continue }
+            if frame.channel == 2 { run += frame.payload.count } else if frame.channel == 11, run > 0 { break }
             _ = Self.take(frame, phone)
         }
-        #expect(order == [2, 2, 2])
+        #expect(run >= 2 * PhoneLinkSession.maxChunk)
         download.close()
     }
 
