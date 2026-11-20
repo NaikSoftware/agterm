@@ -134,7 +134,7 @@ class _PageSheetState extends State<PageSheet> {
           final tunnel = await PageTunnel.start(() => widget.link.forward(page.id), preferredPort: original.port);
           if (!mounted) return unawaited(tunnel.close());
           _tunnel = tunnel;
-          await _setCookie('${tunnel.cookie}; Path=/; HttpOnly; SameSite=Strict');
+          if (await _setCookie('${tunnel.cookie}; Path=/; HttpOnly; SameSite=Strict') != true) throw ElisError('could not set the page cookie');
           if (!mounted) return; // dispose cleared it
           final url = tunnel.urlFor(original);
           _main = '$url';
@@ -325,7 +325,10 @@ class _PageSheetState extends State<PageSheet> {
     _error = null;
     _report();
     setState(() {});
-    unawaited(_web.reload().catchError((Object _) {}));
+    if (_main != null) return unawaited(_web.reload().catchError((Object _) {}));
+    unawaited(_tunnel?.close()); // nothing loaded: the page starts again
+    _tunnel = null;
+    unawaited(_start());
   }
 
   void _report() {

@@ -10,7 +10,7 @@ import 'page_link.dart';
 /// Any app or site on the phone can reach 127.0.0.1, so a connection gets a channel only when its first request
 /// carries the sheet's cookie.
 class PageTunnel {
-  PageTunnel._(this._server, this._open, this._headerTimeout) : cookie = newCookie(_server.port) {
+  PageTunnel._(this._server, this._open, this._headerTimeout) : port = _server.port, cookie = newCookie(_server.port) {
     _server.listen(_accept);
   }
 
@@ -22,11 +22,16 @@ class PageTunnel {
   final Duration _headerTimeout;
   final _drops = <Socket, void Function()>{};
 
+  /// Listeners closing, by port: a page sent again mounts its new sheet before the old one disposes.
+  static final _closing = <int, Future<void>>{};
+
   static const maxHeaderBytes = 16 * 1024;
 
   /// Binds 127.0.0.1:[preferredPort], else 127.0.0.1:0.
   static Future<PageTunnel> start(ForwardChannel Function() open,
       {required int preferredPort, Duration headerTimeout = const Duration(seconds: 5)}) async {
+    await Future<void>.value(); // lets a sheet replaced in this frame start closing first
+    await _closing[preferredPort];
     ServerSocket server;
     try {
       server = await ServerSocket.bind(InternetAddress.loopbackIPv4, preferredPort);
@@ -38,7 +43,7 @@ class PageTunnel {
 
   static String newCookie(int port) => 'elis_tunnel_$port=${randomHex128()}';
 
-  int get port => _server.port;
+  final int port;
 
   Uri urlFor(Uri original) => original.replace(scheme: 'http', host: '127.0.0.1', port: port);
 
@@ -47,7 +52,12 @@ class PageTunnel {
 
   /// Closes the listener, every socket and every channel.
   Future<void> close() async {
-    await _server.close();
+    final closed = _server.close();
+    final done = _closing[port] = closed.then((_) {}, onError: (Object _) {});
+    unawaited(done.whenComplete(() {
+      if (_closing[port] == done) _closing.remove(port);
+    }));
+    await closed;
     for (final drop in _drops.values.toList()) {
       drop();
     }

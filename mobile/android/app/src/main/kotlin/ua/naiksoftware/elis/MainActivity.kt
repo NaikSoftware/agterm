@@ -25,8 +25,10 @@ class MainActivity : FlutterActivity() {
             }
         }
         // a page tunnel's cookie: HttpOnly and SameSite, which webview_flutter's cookie API cannot set
+        val cookies = CookieManager.getInstance()
+        cookies.removeSessionCookies(null) // a killed app cleared no tunnel cookie
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "elis/cookie").setMethodCallHandler { call, result ->
-            val cookies = CookieManager.getInstance()
+            if (call.method != "set") return@setMethodCallHandler result.notImplemented()
             cookies.setCookie(call.argument<String>("url"), call.argument<String>("cookie")) { ok ->
                 cookies.flush()
                 result.success(ok)

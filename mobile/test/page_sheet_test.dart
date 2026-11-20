@@ -412,10 +412,36 @@ void main() {
         };
     // each cookie set, with the number of loads the web view had been asked for by then
     late List<({String url, String cookie, int loads})> cookies;
+    late bool cookieOk; // what the platform answers
     final cookieRe = RegExp(r'^elis_tunnel_(\d+)=([0-9a-f]{32}); Path=/; HttpOnly; SameSite=Strict$');
+    String cleared(int port) => 'elis_tunnel_$port=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict';
+    List<String> sets() => [for (final c in cookies) if (cookieRe.hasMatch(c.cookie)) c.cookie];
 
-    Future<Harness> devShown(WidgetTester t) async {
+    Future<void> until(WidgetTester t, bool Function() done, String what) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (!done()) {
+        if (DateTime.now().isAfter(deadline)) fail('timed out waiting for $what');
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+        await t.pump();
+      }
+    }
+
+    Future<bool> refused(WidgetTester t, int port) async => (await t.runAsync(() => Socket.connect(InternetAddress.loopbackIPv4, port).then((s) {
+          s.destroy();
+          return false;
+        }, onError: (Object _) => true)))!;
+
+    Future<void> untilClosed(WidgetTester t, int port) async {
+      await until(t, () => cookies.isNotEmpty && cookies.last.cookie == cleared(port), 'the cleared cookie');
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (!await refused(t, port)) {
+        if (DateTime.now().isAfter(deadline)) fail('the tunnel still listens on $port');
+      }
+    }
+
+    Future<Harness> devShown(WidgetTester t, {bool refuseCookie = false}) async {
       cookies = [];
+      cookieOk = !refuseCookie;
       devPort = (await t.runAsync(() async {
         final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
         final port = s.port;
@@ -426,22 +452,17 @@ void main() {
       t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('elis/cookie'), (call) async {
         final a = call.arguments as Map;
         cookies.add((url: a['url'] as String, cookie: a['cookie'] as String, loads: h.webs.isEmpty ? 0 : h.webs.last.urls.length));
-        return true;
+        return cookieOk;
       });
       await h.start(pages: true);
       await h.opened();
       await pageDown(h, [devPage()], open: true);
-      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100))); // the tunnel binds
+      await until(t, () => cookies.isNotEmpty, 'the tunnel cookie');
       await t.pump();
       return h;
     }
 
     int portOf(String cookie) => int.parse(cookieRe.firstMatch(cookie)!.group(1)!);
-
-    Future<void> settle(WidgetTester t) async {
-      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-      await t.pump();
-    }
 
     testWidgets('a forward page loads through the tunnel', (t) async {
       final h = await devShown(t);
@@ -454,13 +475,10 @@ void main() {
       expect(h.webs.single.c.javascript, isTrue);
 
       final value = set.cookie.split(';').first;
-      await t.runAsync(() async {
-        final s = await Socket.connect(InternetAddress.loopbackIPv4, port);
-        s.add(utf8.encode('GET /app HTTP/1.1\r\nHost: 127.0.0.1:$port\r\nCookie: $value\r\n\r\n'));
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        s.destroy();
-      });
-      await t.pump();
+      final socket = (await t.runAsync(() => Socket.connect(InternetAddress.loopbackIPv4, port)))!;
+      socket.add(utf8.encode('GET /app HTTP/1.1\r\nHost: 127.0.0.1:$port\r\nCookie: $value\r\n\r\n'));
+      await until(t, () => h.r.opens.any((o) => o['type'] == 'forward'), 'the forward OPEN');
+      socket.destroy();
       expect(h.r.opens.where((o) => o['type'] == 'forward'), [
         {'type': 'forward', 'target': 's1', 'page': 'd1'},
       ]);
@@ -485,27 +503,47 @@ void main() {
       final h = await devShown(t);
       final port = portOf(cookies.single.cookie);
       await t.tap(find.byKey(const Key('pageClose')));
-      await settle(t);
-      expect(cookies.last, (url: 'http://127.0.0.1:$port', cookie: 'elis_tunnel_$port=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict', loads: 1));
-      final refused = await t.runAsync(() => Socket.connect(InternetAddress.loopbackIPv4, port).then((s) {
-            s.destroy();
-            return false;
-          }, onError: (Object _) => true));
-      expect(refused, isTrue);
+      await untilClosed(t, port);
+      expect(cookies.last, (url: 'http://127.0.0.1:$port', cookie: cleared(port), loads: 1));
       await h.stop();
     });
 
-    testWidgets('two sheets in turn get different cookie values', (t) async {
+    testWidgets('a relay close and the channel end close the tunnel; each sheet gets a new cookie', (t) async {
       final h = await devShown(t);
       await t.tap(find.byKey(const Key('pageClose')));
-      await settle(t);
+      await untilClosed(t, devPort);
       await pageDown(h, [devPage(id: 'd2')]);
-      await settle(t);
-      final sets = [for (final c in cookies) if (cookieRe.hasMatch(c.cookie)) cookieRe.firstMatch(c.cookie)!.group(2)];
-      expect(sets, hasLength(2));
-      expect(sets.first, isNot(sets.last));
+      await until(t, () => sets().length == 2, 'the second cookie');
       await pageDown(h, [_command('close', 1, id: 'd2')]);
-      await settle(t);
+      await untilClosed(t, devPort);
+      await pageDown(h, [devPage(id: 'd3')]);
+      await until(t, () => sets().length == 3, 'the third cookie');
+      h.r.send(json(LinkKind.close, presentCh, {'reason': 'gone'}));
+      await untilClosed(t, devPort);
+      expect(sets().map(portOf), everyElement(devPort));
+      expect(sets().toSet(), hasLength(3));
+      await h.stop();
+    });
+
+    testWidgets('a page sent again keeps its port and its new cookie', (t) async {
+      final h = await devShown(t);
+      await pageDown(h, [devPage()]);
+      await until(t, () => sets().length == 2, 'the second cookie');
+      expect(sets().map(portOf), [devPort, devPort]);
+      expect(cookies.map((c) => c.cookie), [sets().first, cleared(devPort), sets().last]);
+      await pageDown(h, [_command('close', 1, id: 'd1')]);
+      await untilClosed(t, devPort);
+      await h.stop();
+    });
+
+    testWidgets('a cookie the platform refuses fails the page and reload starts it again', (t) async {
+      final h = await devShown(t, refuseCookie: true);
+      expect(h.webs.single.urls, isEmpty);
+      expect(pageUp(h).last, allOf(containsPair('load', 'failed'), containsPair('error', 'could not set the page cookie')));
+      cookieOk = true;
+      await t.tap(find.byKey(const Key('pageReload')));
+      await until(t, () => h.webs.single.urls.isNotEmpty, 'the load');
+      expect(h.webs.single.urls, [Uri.parse('http://127.0.0.1:$devPort/app?x=1')]);
       await h.stop();
     });
 

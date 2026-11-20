@@ -311,5 +311,16 @@ void main() {
       expect(second.cookie.split('=').first, isNot(first.cookie.split('=').first));
       await second.close();
     });
+
+    test('aTunnelClosedJustAfterTheNextStartsHandsOverItsPort', () async {
+      await start();
+      for (var i = 0; i < 50; i++) { // the race lost about one time in ten
+        final old = tunnel;
+        final next = PageTunnel.start(FakeForward.new, preferredPort: old.port); // a page sent again: mount, then dispose
+        unawaited(old.close());
+        tunnel = await next;
+        expect(tunnel.port, old.port);
+      }
+    });
   });
 }
