@@ -122,6 +122,12 @@ class _ChatViewState extends State<ChatView> {
     return box != null && box.attached && box.hasSize ? box.localToGlobal(Offset.zero).dy : null;
   }
 
+  // a row's place in the list's content, so the user's own scrolling does not count as a shift
+  double? _offset(String key) {
+    final box = _top(key) == null ? null : _built[key]!.findRenderObject() as RenderBox;
+    return box == null ? null : RenderAbstractViewport.of(box).getOffsetToReveal(box, 0).offset;
+  }
+
   Rect? get _viewport {
     if (!_scroll.hasClients) return null;
     final box = _scroll.position.context.notificationContext?.findRenderObject() as RenderBox?;
@@ -148,17 +154,25 @@ class _ChatViewState extends State<ChatView> {
     final added = k <= 0 ? 0 : rows.take(k).where((r) => r.day == null).length;
     // away from the bottom, any change keeps the row the user is reading where it is
     final anchor = _away ? _visible.firstOrNull?.$2 : null;
-    final at = anchor == null ? null : _top(anchor);
+    final at = anchor == null ? null : _offset(anchor);
     setState(() {
       _setRows(rows);
       if (_away) _newCount += added;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
-      final now = anchor == null ? null : _top(anchor);
-      if (at != null && now != null && now != at) _scroll.jumpTo(_scroll.position.pixels + at - now);
+      final now = anchor == null ? null : _offset(anchor);
+      if (at != null && now != null && now != at) _shift(now - at, _built[anchor]!.findRenderObject()!);
       _onScroll(load: rows.length != old.length);
     });
+  }
+
+  void _shift(double by, RenderObject row) {
+    final p = _scroll.position;
+    if (!p.isScrollingNotifier.value) return _scroll.jumpTo(p.pixels + by);
+    // a jump would end the user's drag or fling
+    p.correctBy(by);
+    RenderAbstractViewport.of(row).markNeedsLayout();
   }
 
   void _onScroll({bool load = true}) {
@@ -180,7 +194,7 @@ class _ChatViewState extends State<ChatView> {
     // `forward` lowers pixels: toward the newest row, at the bottom of this reversed list
     final show = switch (n.direction) {
       ScrollDirection.forward => true,
-      ScrollDirection.reverse => false,
+      ScrollDirection.reverse => n.metrics.maxScrollExtent <= 0, // a list too short to scroll moves nothing
       ScrollDirection.idle => _header,
     };
     if (show != _header) setState(() => _header = show);

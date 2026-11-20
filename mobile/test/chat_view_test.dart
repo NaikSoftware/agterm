@@ -158,6 +158,38 @@ void main() {
     expect(find.byKey(const Key('jumpToBottom')), findsNothing);
   });
 
+  for (final append in [false, true]) {
+    _chatTest('pollMidDragKeepsScrolling${append ? 'WithAppend' : ''}', (t, c) async {
+      final items = _history(40);
+      await c.start(items);
+      final g = await t.startGesture(t.getCenter(find.byKey(const Key('chatList'))));
+      for (var n = 0; n < 5; n++) {
+        await g.moveBy(const Offset(0, 40));
+        await t.pump();
+      }
+      await c.tick();
+      final before = _pixels(t);
+      final anchor = _onScreen(t, items).first;
+      final top = t.getRect(_row(anchor).first).top;
+      c.h.held!.$2.complete({
+        'transcript': 't1', 'size': 300, 'start': 0, 'next': 300, //
+        'items': append ? [_text('n1', 2), _prompt('n2'), _tool('n3')] : [],
+      });
+      await Future<void>.value();
+      await g.moveBy(const Offset(0, 50)); // the user's finger moves before the reply's frame
+      await t.pump();
+      await t.pump();
+      final settled = _pixels(t);
+      expect(settled, greaterThan(before + 40));
+      expect(t.getRect(_row(anchor).first).top, top + 50);
+      await g.moveBy(const Offset(0, 50));
+      await t.pump();
+      expect(_pixels(t), settled + 50);
+      await g.up();
+      await t.pumpAndSettle();
+    });
+  }
+
   _chatTest('atBottomFollows', (t, c) async {
     await c.start(_history(40));
     await c.tick();
