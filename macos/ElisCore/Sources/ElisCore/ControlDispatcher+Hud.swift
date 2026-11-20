@@ -15,7 +15,7 @@ extension ControlDispatcher {
         default: preconditionFailure("dispatchHudCommand called for \(request.cmd.rawValue)")
         }
         let pane: OverlayPane?
-        switch parsePane(request.args?.pane, error: "--pane must be left or right",
+        switch Self.parsePane(request.args?.pane, error: "--pane must be left or right",
                          parse: { OverlayPane(controlName: $0) }) {
         case .pane(let parsed): pane = parsed
         case .rejected(let response): return response

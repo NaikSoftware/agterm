@@ -307,6 +307,10 @@ public extension ControlActions {
         readSessionText(target, window: window, options: options)
     }
 
+    func transcriptSource(_: String?, window _: String?, pane _: StatusPane?, paneID _: String?) -> ControlTranscriptLookup {
+        .tooOld
+    }
+
     func sessionAttach(target _: String?, pane _: StatusPane, paneID _: String?, window _: String?) async -> ControlResponse {
         ControlResponse(ok: false, error: "session.attach is not supported by this host")
     }

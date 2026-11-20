@@ -39,6 +39,8 @@ public struct ControlDispatcher {
                 .sessionOverlaySearch, .sessionOverlayChanges, .sessionOverlayFiles, .sessionOverlayWrap, .sessionBackground,
                 .sessionText, .sessionGrid, .sessionScroll, .sessionAttach:
             return await dispatchSessionSurfaceCommand(request)
+        case .sessionTranscript:
+            return await dispatchSessionTranscript(request)
         case .sessionOverlayJobRun, .sessionOverlayPageServe:
             return dispatchSessionOverlayCommand(request)
         case .sessionCompanionNew, .sessionCompanionPage, .sessionPage, .sessionCompanionDuplicate, .sessionCompanionConvert,
@@ -402,7 +404,7 @@ public struct ControlDispatcher {
         case .sessionSwap:
             return await actions.swapSessionPanes(request.target, window: request.args?.window)
         case .sessionLead:
-            switch parseSurfacePane(request.args?.pane) {
+            switch Self.parseSurfacePane(request.args?.pane) {
             case .pane(let pane): return actions.takeSessionLead(request.target, window: request.args?.window, pane: pane)
             case .rejected(let rejection): return rejection
             }
@@ -436,7 +438,7 @@ public struct ControlDispatcher {
             }
             if let rejection = nulRejection(text) { return rejection }
             let pane: StatusPane?
-            switch parseSurfacePane(request.args?.pane) {
+            switch Self.parseSurfacePane(request.args?.pane) {
             case .pane(let parsed): pane = parsed
             case .rejected(let rejection): return rejection
             }
@@ -683,7 +685,7 @@ public struct ControlDispatcher {
 
     /// The three `font.*` arms share one parse, so their pane vocabulary cannot drift apart.
     private func dispatchFont(_ request: ControlRequest, action: String) -> ControlResponse {
-        switch parseSurfacePane(request.args?.pane) {
+        switch Self.parseSurfacePane(request.args?.pane) {
         case .pane(let pane):
             return actions.font(request.target, window: request.args?.window, pane: pane, action: action)
         case .rejected(let rejection): return rejection
@@ -695,7 +697,7 @@ public struct ControlDispatcher {
         case .rejected(let response): return response
         case .extent(let all, let lines):
             // the extent is checked first, so an `--all --lines` caller still gets that error before a pane one.
-            switch parseSurfacePane(request.args?.pane) {
+            switch Self.parseSurfacePane(request.args?.pane) {
             case .rejected(let rejection): return rejection
             case .pane(let pane):
                 return await actions.readSessionTextAsync(request.target, window: request.args?.window,

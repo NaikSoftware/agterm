@@ -135,6 +135,7 @@ final class MockControlActions: ControlActions {
         case hudClose(target: String?, window: String?)
         case sessionBackground(target: String?, window: String?, ControlSessionBackgroundOptions)
         case sessionText(target: String?, window: String?, ControlSessionTextOptions)
+        case transcriptSource(target: String?, window: String?, pane: StatusPane?, paneID: String?)
         case sessionGrid(target: String?, window: String?, pane: StatusPane, ControlGrid?)
         case sessionScroll(target: String?, window: String?, pane: StatusPane, lines: Int)
         case sessionAttach(target: String?, pane: StatusPane, paneID: String?, window: String?)
@@ -163,6 +164,7 @@ final class MockControlActions: ControlActions {
 
     var calls: [Call] = []
     var nextTreeResponse = ControlResponse(ok: false, error: "tree not stubbed")
+    var nextTranscriptLookup = ControlTranscriptLookup.tooOld
     var nextEventsReadResponse = ControlResponse(ok: false, error: "events.read not stubbed")
     var nextSessionNewResponse = ControlResponse(ok: true)
     var nextSessionDuplicateResponse = ControlResponse(ok: true)
@@ -934,6 +936,11 @@ final class MockControlActions: ControlActions {
     func readSessionText(_ target: String?, window: String?, options: ControlSessionTextOptions) -> ControlResponse {
         calls.append(.sessionText(target: target, window: window, options))
         return nextSessionTextResponse
+    }
+
+    func transcriptSource(_ target: String?, window: String?, pane: StatusPane?, paneID: String?) -> ControlTranscriptLookup {
+        calls.append(.transcriptSource(target: target, window: window, pane: pane, paneID: paneID))
+        return nextTranscriptLookup
     }
 
     func setSessionGrid(_ target: String?, window: String?, pane: StatusPane, grid: ControlGrid?) -> ControlResponse {

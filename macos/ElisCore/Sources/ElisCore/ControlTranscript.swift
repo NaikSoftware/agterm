@@ -181,3 +181,33 @@ public indirect enum JSONValue: Codable, Sendable, Equatable {
         }
     }
 }
+
+/// The transcript a host found for the addressed pane; the host names its Claude directory, so tests point it at a temp dir.
+public struct ControlTranscriptSource: Sendable, Equatable {
+    public var claudeSessionID: String
+    public var pane: StatusPane
+    public var claudeDirectory: String
+
+    public init(claudeSessionID: String, pane: StatusPane, claudeDirectory: String) {
+        self.claudeSessionID = claudeSessionID
+        self.pane = pane
+        self.claudeDirectory = claudeDirectory
+    }
+}
+
+public enum ControlTranscriptLookup: Sendable, Equatable {
+    case source(ControlTranscriptSource)
+    case refused(ControlResponse)
+
+    /// What a host predating `session.transcript` answers; the phone reads `too old` as a host without Chat.
+    public static let tooOld = ControlTranscriptLookup.refused(
+        ControlResponse(ok: false, error: "the Elis on this host is too old for session.transcript"))
+}
+
+public struct ControlTranscriptRefusal: Error, Equatable {
+    public let message: String
+
+    public init(message: String) { self.message = message }
+
+    public static let noAdapter = ControlTranscriptRefusal(message: "no adapter")
+}

@@ -746,7 +746,7 @@ final class ControlServer {
                 .sessionOverlayResult, .sessionOverlaySubmit, .sessionOverlayCopy, .sessionOverlayText,
                 .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle, .sessionOverlayFollow, .sessionOverlaySearch,
                 .sessionOverlayChanges, .sessionOverlayFiles, .sessionOverlayWrap,
-                .sessionBackground, .sessionText, .sessionGrid, .sessionScroll, .sessionAttach, .quick, .quickType, .quickText,
+                .sessionBackground, .sessionText, .sessionTranscript, .sessionGrid, .sessionScroll, .sessionAttach, .quick, .quickType, .quickText,
                 .windowNew, .windowList, .windowSelect, .windowGo,
                 .windowClose, .windowRename, .windowDelete, .windowResize, .windowMove, .windowZoom,
                 .windowFullscreen, .windowMinimize, .windowRemoteOpen, .windowRemoteDismiss,

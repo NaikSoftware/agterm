@@ -58,3 +58,17 @@ extension AppStore {
         return PresentationAgent(name: agent.rawValue, pane: pane.rawValue)
     }
 }
+
+extension Session {
+    /// transcriptSource names the Claude transcript `pane` runs, the agent's pane by default; a pane without Claude is refused.
+    public func transcriptSource(token: String?, pane: StatusPane?, claudeDirectory: String = ClaudeHome.directory())
+        -> Result<ControlTranscriptSource, ControlTranscriptRefusal> {
+        let resolved: StatusPane
+        switch paneAddress(token: token, pane: pane) {
+        case .unknownToken(let token): return .failure(ControlTranscriptRefusal(message: "unknown pane id: \(token)"))
+        case .pane(let addressed): resolved = addressed ?? agentPane ?? .left
+        }
+        guard runningAgent == .claude, let id = agentSessionID, resolved == agentPane else { return .failure(.noAdapter) }
+        return .success(ControlTranscriptSource(claudeSessionID: id, pane: resolved, claudeDirectory: claudeDirectory))
+    }
+}

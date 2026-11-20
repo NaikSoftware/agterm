@@ -62,6 +62,7 @@ public enum Command: String, Codable, Sendable, CaseIterable {
     case sessionPaste = "session.paste"
     case sessionSelectAll = "session.selectall"
     case sessionText = "session.text"
+    case sessionTranscript = "session.transcript"
     case sessionGrid = "session.grid"
     case sessionScroll = "session.scroll"
     case sessionAttach = "session.attach"
@@ -544,6 +545,10 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     public var index: Int?
     /// claim makes `session.attach` answer a claiming attach that takes the pane's lead; nil = a viewer.
     public var claim: Bool?
+    /// transcript is the Claude session id a `session.transcript` caller holds; only compared, never a path.
+    public var transcript: String?
+    /// maxBytes is `session.transcript`'s page budget, clamped to `ClaudeTranscript.pageBudget`.
+    public var maxBytes: Int?
 
     public init(name: String? = nil, cwd: String? = nil, targets: [String]? = nil,
                 workspace: String? = nil, workspaceName: String? = nil,
@@ -835,6 +840,17 @@ public struct ControlResult: Codable, Sendable, Equatable {
     /// acked names the messages removed, present on every `msg.ack` and `msg.read --ack` reply, empty included.
     public var acked: [String]?
     public var remoteGroup: ControlRemoteGroup?
+    /// A `session.transcript` page, flat on the result; control-api.md owns the cursor contract.
+    public var transcript: String?
+    public var size: Int?
+    public var start: Int?
+    public var next: Int?
+    public var reset: Bool?
+    public var items: [ControlTranscriptItem]?
+    public var pending: [ControlTranscriptPending]?
+    public var meta: ControlTranscriptMeta?
+    public var commands: [ControlTranscriptCommand]?
+    public var skipped: Int?
 
     public init(id: String? = nil, tree: ControlTree? = nil, text: String? = nil,
                 windows: [ControlWindowNode]? = nil, exitCode: Int? = nil, count: Int? = nil,

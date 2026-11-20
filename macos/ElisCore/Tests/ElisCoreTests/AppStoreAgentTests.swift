@@ -139,4 +139,18 @@ struct AppStoreAgentTests {
         store.applyRemoteAgent(PresentationAgent(name: "claude", pane: "scratch"), forSession: row.id)
         #expect(row.runningAgent == nil)
     }
+
+    @Test func transcriptSourceNeedsRunningClaudeInThatPane() throws {
+        let (store, session) = try session()
+        session.agentSessionID = "c1"
+        #expect(session.transcriptSource(token: nil, pane: nil, claudeDirectory: "/c") == .failure(ControlTranscriptRefusal(message: "no adapter")))
+
+        store.setRunningAgent(.claude, pane: .left, forSession: session.id)
+
+        #expect(session.transcriptSource(token: nil, pane: .right, claudeDirectory: "/c") == .failure(ControlTranscriptRefusal(message: "no adapter")))
+        #expect(session.transcriptSource(token: nil, pane: nil, claudeDirectory: "/c")
+            == .success(ControlTranscriptSource(claudeSessionID: "c1", pane: .left, claudeDirectory: "/c")))
+        #expect(session.transcriptSource(token: "nope", pane: nil, claudeDirectory: "/c")
+            == .failure(ControlTranscriptRefusal(message: "unknown pane id: nope")))
+    }
 }

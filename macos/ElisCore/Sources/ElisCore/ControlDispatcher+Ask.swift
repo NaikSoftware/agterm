@@ -106,7 +106,7 @@ extension ControlDispatcher {
             return ControlResponse(ok: false, error: "--pane requires a session")
         }
         let pane: OverlayPane?
-        switch parsePane(args.pane, error: "--pane must be left or right",
+        switch Self.parsePane(args.pane, error: "--pane must be left or right",
                          parse: { OverlayPane(controlName: $0) }) {
         case .pane(let parsed): pane = parsed
         case .rejected(let response): return response
