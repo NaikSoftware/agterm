@@ -502,7 +502,7 @@ List<_Row> _screenRows(PromptMatch m, CardChecks cards, String primary, {String?
   return rows;
 }
 
-/// Permission and plan cards: the call's content, then one button per row.
+/// Permission and plan cards: the call's content, then one button per row, the primary last as in [CardFrame].
 class _RowsCard extends StatefulWidget {
   const _RowsCard({
     required this.c,
@@ -560,8 +560,9 @@ class _RowsCardState extends State<_RowsCard> {
     String? busy(String label) => running && _sender == label ? widget.c.gate.progress : null;
     // frozen while sending: Tab and a paste relabel the rows under the running card
     if (!running || _rows == null) _rows = widget.rows();
+    final rows = _rows ?? const <_Row>[];
     final buttons = <Widget>[
-      for (final r in _rows ?? const <_Row>[])
+      for (final r in [...rows.where((r) => !r.primary), ...rows.where((r) => r.primary)])
         if (r.answer case final answer?) ...[
           CardButton(
             // a second tap armed on one prompt never confirms the next

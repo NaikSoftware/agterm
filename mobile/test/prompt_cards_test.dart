@@ -303,7 +303,7 @@ void main() {
     final h = _Host('card-bash');
     final rows = _rows('card-bash');
     await h.show(t);
-    expect(_labels(t, secondTap: false), ['Yes', 'More options in panel', 'No', 'Yes with a note', 'No with a reason']);
+    expect(_labels(t, secondTap: false), ['More options in panel', 'No', 'Yes with a note', 'No with a reason', 'Yes']);
     expect(_labels(t, secondTap: true), isEmpty);
     await _tap(t, 'More options in panel');
     expect(h.events, ['panel:null']);
@@ -365,7 +365,7 @@ void main() {
     await _tap(t, 'Answer in panel');
     expect(h.events, ['panel:null']);
     await h.show(t, cards: const CardChecks(webFetch: true));
-    expect(_labels(t, secondTap: false), ['Yes', 'More options in panel']);
+    expect(_labels(t, secondTap: false), ['More options in panel', 'Yes']);
   });
 
   testWidgets('planCardMarkdownAndChange', (t) async {
@@ -394,7 +394,7 @@ void main() {
     final h = _Host('card-plan');
     await h.show(t);
     expect(find.text('Yes, and use auto mode'), findsNothing);
-    expect(_labels(t, secondTap: false), ['More options in panel', 'Yes, manually approve edits', 'Change']);
+    expect(_labels(t, secondTap: false), ['More options in panel', 'Change', 'Yes, manually approve edits']);
     await h.show(t, cards: const CardChecks(persistOptions: true));
     expect(_labels(t, secondTap: true), ['Yes, and use auto mode']);
     expect(find.text('More options in panel'), findsNothing);
