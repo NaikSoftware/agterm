@@ -6,7 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../client.dart';
+import '../link/mux.dart';
 import '../model.dart';
+import '../pages/page_link.dart';
+import '../pages/page_sheet.dart';
 import '../terminal/row_cache.dart';
 import '../terminal/term_gestures.dart';
 import '../terminal/term_keyboard.dart';
@@ -42,11 +45,14 @@ const keys = [
 ];
 
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt, @visibleForTesting this.onKeyboard});
+  const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt, @visibleForTesting this.onKeyboard,
+      @visibleForTesting this.pages = true, @visibleForTesting this.pageWebView});
   final ElisModel model;
   final String sessionId;
   final Vt Function(int cols, int rows) vt;
   final VoidCallback? onKeyboard; // told each time a tap asks for the soft keyboard
+  final bool pages; // off, a test's channel ids stay as they were before pages
+  final Widget Function(PageSheetController)? pageWebView;
 
   @override
   State<SessionScreen> createState() => _SessionScreenState();
@@ -98,6 +104,8 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _quietFit = false; // the refit after a refused claim: a refusal of it repeats the claim's, already said
   final _refused = <String>{}; // panes whose terminal the relay refused on this visit: text view until they stop being Live
   final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
+  PageLink? _pages; // the session's pages while the screen is open, in the background too
+  Mux? _pagesMux;
 
   ElisModel get m => widget.model;
   Session? get s => m.session(widget.sessionId);
@@ -136,6 +144,7 @@ class _SessionScreenState extends State<SessionScreen> {
     }
     m.removeListener(_onModel);
     _lifecycle.dispose();
+    _pages?.dispose();
     _release(pane);
     _visit();
     input.dispose();
@@ -160,6 +169,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   /// Watch the pane as a terminal when it is Live, the relay has the mux and the screen is in front; else the text view.
   void _syncTerm() {
+    _syncPages(); // first, so the watch keeps its channel id after the present channel's
     _refused.removeWhere((p) => s?.livePanes.contains(p) != true); // a restarted session gets another try
     final want = _foreground &&
         !m.background &&
@@ -176,6 +186,15 @@ class _SessionScreenState extends State<SessionScreen> {
       _alt = null; // the next stream picks the view again
     }
     if (want && term == null) term = TermSession(m.mux!, widget.sessionId, pane, vt: widget.vt)..addListener(_onTerm);
+  }
+
+  void _syncPages() {
+    final mux = widget.pages && m.state == LinkState.connected ? m.mux : null;
+    if (mux == _pagesMux) return;
+    _pages?.dispose();
+    _pagesMux = mux;
+    // the claim's target, which the relay matches the session's pages against
+    _pages = mux == null ? null : (PageLink(mux, widget.sessionId)..addListener(() => setState(() {})));
   }
 
   void _onTerm() {
@@ -603,6 +622,7 @@ class _SessionScreenState extends State<SessionScreen> {
               style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
         ]),
         actions: [
+          if (_pages?.page case final p? when p.hidden) PageChip(title: p.title, onTap: () => setState(() => p.hidden = false)),
           if (_lead) _Tag(_leading ? 'Leading' : 'Leading…', key: const Key('lead')),
           if (m.state == LinkState.connected && m.via.isNotEmpty) _Tag(m.via, key: const Key('via')),
           Padding(
@@ -620,7 +640,8 @@ class _SessionScreenState extends State<SessionScreen> {
         bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
       ),
       body: SafeArea(
-        child: Column(children: [
+        child: Stack(fit: StackFit.expand, children: [
+          Column(children: [
           // the buttons float over the screen's top edge, so the terminal takes the whole height
           Expanded(
               child: Stack(children: [
@@ -639,6 +660,12 @@ class _SessionScreenState extends State<SessionScreen> {
           if (options.isNotEmpty) _answers(options),
           _keyBar(),
           if (ComposerPref.shown) _composer(),
+          ]),
+          if (_pages?.page case final p?)
+            KeyedSubtree(
+              key: ObjectKey(p), // a page sent again starts a fresh sheet
+              child: PageSheet(link: _pages!, page: p, onSwipeDown: () => setState(() => p.hidden = true), webView: widget.pageWebView),
+            ),
         ]),
       ),
     );

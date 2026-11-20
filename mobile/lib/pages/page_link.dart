@@ -156,6 +156,7 @@ class PageLink extends ChangeNotifier {
         if (seq > p.appliedSeq) p.appliedSeq = seq;
         if (action == 'hide' || action == 'show') p.hidden = action == 'hide';
         if (action == 'resize') p.sizePercent = size;
+        if (action == 'hide' || action == 'show' || action == 'resize') notifyListeners();
         _commands.add(PageCommand(id, seq, action, size));
       case 'res':
         _res(o);

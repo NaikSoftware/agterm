@@ -593,11 +593,15 @@ void main() {
     expect(ch.ended, 'Disconnected');
   });
 
-  test('aSecondPresentForTheSameTargetIsRefused', () async {
+  test('aSecondPresentForTheSameTargetClosesTheFirstAndCanStillBeRefused', () async {
     final (m, r, _) = await upgraded();
-    m.present('w');
+    final first = m.present('w');
+    unawaited(first.opened.catchError((Object _) {}));
     final second = m.present('w');
     await flush();
+    expect(first.ended, 'closed');
+    expect([for (final f in r.frames) if (f.channel != 0) (f.kind, f.channel)],
+        [(LinkKind.open, first.id), (LinkKind.close, first.id), (LinkKind.open, second.id)]);
     r.send(json(LinkKind.opened, r.frames.last.channel, {'error': 'channel already open'}));
     await expectLater(second.opened, throwsA(isA<ElisError>()));
     expect(second.ended, 'channel already open');

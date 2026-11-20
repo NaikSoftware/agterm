@@ -7,6 +7,7 @@ import 'package:elis_mobile/link/decoder.dart';
 import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/link/messages.dart';
 import 'package:elis_mobile/model.dart';
+import 'package:elis_mobile/pages/page_sheet.dart';
 import 'package:elis_mobile/screens/actions.dart';
 import 'package:elis_mobile/screens/session.dart';
 import 'package:elis_mobile/terminal/row_cache.dart';
@@ -230,7 +231,9 @@ class Harness {
   late final ElisModel m;
   Relay get r => relays.last;
 
-  Future<void> start({Vt Function(int, int)? vt}) async {
+  final webs = <FakeWeb>[]; // one per page sheet, with [start]'s pages
+
+  Future<void> start({Vt Function(int, int)? vt, bool pages = false}) async {
     var n = 0;
     m = ElisModel(pairing, open: (p, {preferBluetooth = false}) {
       if (n == relays.length) relays.add(Relay(relays.first.tree));
@@ -241,9 +244,20 @@ class Harness {
     expect(m.mux, isNotNull);
     expect(m.loaded, isTrue);
     unawaited(nav.currentState!.push(MaterialPageRoute<void>(
-        builder: (_) => SessionScreen(model: m, sessionId: 's1', vt: vt ?? (c, r) => FakeVt(c, r)..also(vts.add), onKeyboard: () => keyboards++))));
+        builder: (_) => screen(vt: vt, pages: pages))));
     await t.pumpAndSettle(const Duration(milliseconds: 10));
   }
+
+  SessionScreen screen({Vt Function(int, int)? vt, bool pages = false}) => SessionScreen(
+      model: m,
+      sessionId: 's1',
+      vt: vt ?? (c, r) => FakeVt(c, r)..also(vts.add),
+      onKeyboard: () => keyboards++,
+      pages: pages,
+      pageWebView: (c) {
+        webs.add(FakeWeb(c));
+        return const SizedBox.expand(key: Key('fakeWeb'));
+      });
 
   /// The Mac's tree changes and the phone re-reads it.
   Future<void> retree(Map<String, Object> tree) async {
@@ -278,6 +292,60 @@ extension<T> on T {
 }
 
 const _claimCh = 3; // the watch channel is 2
+
+/// With pages the present channel opens first: present 2, watch 3, claim 4.
+const presentCh = 2;
+
+/// A sheet's web view: it records what the sheet asks and lets a test report the page's side.
+class FakeWeb implements PageWeb {
+  FakeWeb(this.c) {
+    c.web = this;
+  }
+  final PageSheetController c;
+  final urls = <Uri>[], htmls = <String>[], scripts = <String>[];
+  var reloads = 0, backs = 0, forwards = 0;
+  bool back = false;
+
+  @override
+  Future<void> loadUrl(Uri url) async => urls.add(url);
+  @override
+  Future<void> loadHtml(String html) async => htmls.add(html);
+  @override
+  Future<void> run(String script) async => scripts.add(script);
+  @override
+  Future<void> reload() async => reloads++;
+  @override
+  Future<void> goBack() async => backs++;
+  @override
+  Future<void> goForward() async => forwards++;
+  @override
+  Future<bool> canGoBack() async => back;
+  @override
+  Future<String?> title() async => 'doc title';
+
+  /// The nonce the sheet put in its prelude.
+  String get nonce => RegExp(r"const n = '([0-9a-f]+)'").firstMatch(scripts.firstWhere((s) => s.contains('const n')))!.group(1)!;
+}
+
+Map<String, Object?> urlPage({String id = 'p1', bool hidden = false, int? sizePercent, bool javascript = false, bool chromeless = false}) => {
+      't': 'page', 'id': id, 'kind': 'url', 'url': 'https://example.com/a', 'javascript': javascript, 'chromeless': chromeless,
+      'browse': false, 'hidden': hidden, 'title': 'example.com', 'sizePercent': ?sizePercent,
+    };
+
+/// The relay accepts the present channel and sends [lines] on it.
+Future<void> pageDown(Harness h, List<Map<String, Object?>> lines, {bool open = false}) async {
+  if (open) h.r.send(json(LinkKind.opened, presentCh, {}));
+  for (final l in lines) {
+    h.r.send(frame(LinkKind.data, presentCh, utf8.encode('${jsonEncode(l)}\n')));
+  }
+  await h.t.pump();
+  await h.t.pump();
+}
+
+/// The lines the phone sent on the present channel.
+List<Map> pageUp(Harness h) => [
+      for (final l in const LineSplitter().convert(_typed(h, presentCh))) jsonDecode(l) as Map,
+    ];
 
 const _busy = 'The computer has not taken the earlier input yet.';
 
@@ -584,13 +652,65 @@ void main() {
     expect(h.r.closes, [2, 3, 4, 5]);
 
     // left before OPENED: the channel that opens late is closed
-    unawaited(h.nav.currentState!.push(MaterialPageRoute<void>(builder: (_) => SessionScreen(model: h.m, sessionId: 's1', vt: FakeVt.new))));
+    unawaited(h.nav.currentState!.push(MaterialPageRoute<void>(builder: (_) => SessionScreen(model: h.m, sessionId: 's1', vt: FakeVt.new, pages: false))));
     await t.pumpAndSettle();
     expect(h.r.lastWatch, 6);
     h.nav.currentState!.pop();
     await t.pumpAndSettle();
     await h.opened();
     expect(h.r.closes, [2, 3, 4, 5, 6]); // no OPENED, so no claim
+    await h.stop();
+  });
+
+  testWidgets('backgrounding keeps the present channel', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start(pages: true);
+    expect(h.r.opens.first, {'type': 'present', 'target': 's1'});
+    await h.opened();
+    await _leader(h, 4);
+    await pageDown(h, [urlPage()], open: true);
+    expect(find.byKey(const Key('pageSheet')), findsOneWidget);
+    await _pauseResume(h, paused: () async {
+      expect(h.r.closes, containsAll([3, 4])); // the watch and the claim
+      expect(h.r.closes, isNot(contains(presentCh)));
+      await pageDown(h, [
+        {'t': 'command', 'id': 'p1', 'seq': 1, 'action': 'close'},
+      ]); // the origin moves the page to the Mac
+    });
+    // a paused app draws no frame, so the sheet is seen gone at resume
+    expect(find.byKey(const Key('pageSheet'), skipOffstage: false), findsNothing);
+    expect(find.byKey(const Key('pageChip')), findsNothing);
+    await h.opened();
+    await pageDown(h, [urlPage()]);
+    expect(find.byKey(const Key('pageSheet')), findsOneWidget);
+    expect(h.r.closes, isNot(contains(presentCh)));
+    await h.stop();
+  });
+
+  testWidgets('leaving the session closes the present channel', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start(pages: true);
+    await h.opened();
+    await pageDown(h, [urlPage()], open: true);
+    h.nav.currentState!.pop();
+    await t.pumpAndSettle();
+    expect(h.r.closes, contains(presentCh));
+    await h.stop();
+  });
+
+  testWidgets('a new screen for the session closes the old present channel before it opens its own', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start(pages: true);
+    await h.opened();
+    await pageDown(h, [urlPage()], open: true);
+    h.nav.currentState!.pop(); // the old screen disposes only after its exit transition
+    unawaited(h.nav.currentState!.push(MaterialPageRoute<void>(builder: (_) => h.screen(pages: true))));
+    await t.pump();
+    final close = h.r.frames.indexWhere((f) => f.kind == LinkKind.close && f.channel == presentCh);
+    final reopen = h.r.frames.lastIndexWhere((f) => f.kind == LinkKind.open && (jsonDecode(utf8.decode(f.payload)) as Map)['type'] == 'present');
+    expect(close, isNonNegative);
+    expect(close, lessThan(reopen));
+    await t.pumpAndSettle();
     await h.stop();
   });
 

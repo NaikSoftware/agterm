@@ -107,7 +107,11 @@ class Mux {
   /// The session's page lines; [PresentChannel.opened] throws as [open] does, `unsupported channel type` from an
   /// older relay. The channel is returned at once so it can be closed before OPENED.
   PresentChannel present(String target) {
-    final ch = PresentChannel._(this, _nextChannel++);
+    // the relay refuses a second channel for a target, and a screen on its way out still holds the first
+    for (final old in _channels.values.whereType<PresentChannel>().where((c) => c.target == target).toList()) {
+      unawaited(old.close());
+    }
+    final ch = PresentChannel._(this, _nextChannel++, target);
     if (_done.isCompleted) return ch.._end('Disconnected');
     _channels[ch.id] = ch;
     _add(LinkFrame.json(LinkKind.open, ch.id, {'type': 'present', 'target': target}));
@@ -395,11 +399,12 @@ class ClaimChannel implements _Channel {
 
 /// A session's `present` channel: one JSON line per message both ways.
 class PresentChannel implements _Channel {
-  PresentChannel._(this._mux, this.id);
+  PresentChannel._(this._mux, this.id, this.target);
 
   final Mux _mux;
   @override
   final int id;
+  final String target;
   final _lines = StreamController<Map<String, dynamic>>(); // single-subscription: lines in the OPENED read are kept
   final _opened = Completer<void>();
   final _buffer = LineBuffer();
