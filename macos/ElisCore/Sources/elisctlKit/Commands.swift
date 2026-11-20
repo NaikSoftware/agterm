@@ -71,8 +71,6 @@ struct ClientOptions: ParsableArguments, ConnectionOptions {
 enum CallerEnvironment {
     @TaskLocal static var values = ProcessInfo.processInfo.environment
 
-    /// The caller's own session inside an Elis pane, else `active`: a pane may be led from the phone, where the
-    /// Mac's selection is a session the typist cannot see.
     /// The environment `command` runs under. The pane's session id is kept only when the command reaches the pane's own
     /// instance and names no window: another instance does not know the id, and a named window means its selection.
     static func scoped(_ env: [String: String], for command: ParsableCommand) -> [String: String] {
@@ -90,6 +88,8 @@ enum CallerEnvironment {
         return URL(fileURLWithPath: String(cString: folder)).appendingPathComponent(url.lastPathComponent).path
     }
 
+    /// The caller's own session inside an Elis pane, else `active`: a pane may be led from the phone, where the
+    /// Mac's selection is a session the typist cannot see.
     static var defaultSessionTarget: String { ownSession ?? "active" }
 
     static var ownSession: String? { values["ELIS_SESSION_ID"].flatMap { $0.isEmpty ? nil : $0 } }

@@ -1095,9 +1095,8 @@ error keeps those names for compatibility.
   background); it honors the Settings window translucency, captured when the overlay opens. `--wait` keeps the overlay open after the command exits (press a key
   to close). `--block` waits for the command to exit and makes elisctl exit with the command's status
   (cannot combine with `--wait`); the program renders normally — capture its OUTPUT via the program's
-  own output file, not the control channel. Returns the overlay's session id. `--target` defaults to
-  `active`, so an automated caller should pass `--target "$ELIS_SESSION_ID"` — otherwise a (usually
-  blocking, full-pane) overlay lands on whatever session is currently active, not the calling one.
+  own output file, not the control channel. Returns the overlay's session id. `--target` defaults as on any
+  session command (see Addressing): the calling pane's session, else `active`.
   `--pane left|right` scopes the overlay to ONE split pane rather than the whole session: it covers
   exactly that pane and leaves the sibling pane visible and interactive. The two panes are independent
   and may both hold an overlay at once, each with its own `--background-color` and `--cwd`. A pane

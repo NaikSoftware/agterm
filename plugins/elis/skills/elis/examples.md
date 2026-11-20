@@ -302,10 +302,9 @@ command "even split"      cmd+ctrl+0 elisctl session resize --split-ratio 0.5
 `--block` waits for the program to exit and makes elisctl exit with the program's status. The
 program renders normally in the overlay; read its OUTPUT from the program's own output file.
 
-Pass `--target "$ELIS_SESSION_ID"` so the overlay attaches to YOUR (the calling) session. Without
-`--target` it opens on whatever session is currently active — so if the user has moved to another
-session or workspace, an agent (e.g. running revdiff) pops a blocking full-pane overlay on the WRONG
-session. Always target your own session for these examples.
+Without `--target` the overlay opens in YOUR (the calling) session, even when the user has moved to
+another session or workspace; `--target "$ELIS_SESSION_ID"` says the same. `--target active` is the user's
+selection.
 
 ```bash
 elisctl session overlay open "revdiff HEAD~3 --output /tmp/notes.md" --target "$ELIS_SESSION_ID" --block   # this session
@@ -568,7 +567,7 @@ commands repair it, so `session flag on` into an empty flagged view and `workspa
 populated workspace while only empty ones are marked move the selection too. `session flag clear` never
 does, and neither does `session new --no-select`.
 
-Re-read `tree` after any command that changes what is visible, before using the default `active` target.
+Re-read `tree` after any command that changes what is visible, before using `--target active`.
 
 ```bash
 elisctl workspace focus on --target "$ELIS_WORKSPACE_ID"  # zoom to this workspace
