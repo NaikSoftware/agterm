@@ -61,11 +61,17 @@ class _Chat {
   var terms = 0;
 
   Future<void> start(List<Map<String, dynamic>>? items,
-      {Map<String, dynamic> meta = const {}, int start = 0, bool exited = false, bool stale = false, double height = 800}) async {
+      {Map<String, dynamic> meta = const {},
+      int start = 0,
+      bool exited = false,
+      bool stale = false,
+      bool running = false,
+      double height = 800}) async {
     t.view.physicalSize = Size(400, height);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
-    final s = Session({'id': 's1', 'name': 'Session one', 'cwd': '/work/elis'}, 'w', 'W');
+    final s = Session(
+        {'id': 's1', 'name': 'Session one', 'cwd': '/work/elis', if (running) ...{'agent': 'claude', 'agentSessionId': 'a1'}}, 'w', 'W');
     final gate = WriteGate(
         grids: ChangeNotifier(), grid: () => null, writer: () => throw UnimplementedError(), remote: () => false, blocked: () => null);
     await t.pumpWidget(MaterialApp(
@@ -453,6 +459,21 @@ void main() {
         expect(_row('a1'), findsOneWidget);
       });
     }
+
+    _chatTest('notFoundWhileClaudeRunsIsEmptyAndKeepsPolling', (t, c) async {
+      await c.start(null, running: true);
+      await t.pump();
+      c.h.held!.$2.completeError(Exception('transcript not found'));
+      await t.pump();
+      await t.pump();
+      expect(find.byKey(const Key('chatUnreadable')), findsNothing);
+      expect(find.byKey(const Key('chatError')), findsNothing);
+      expect(find.text('Claude is ready'), findsOneWidget);
+      expect(t.widget<TextField>(find.byKey(const Key('composer'))).enabled, isNot(false));
+      await c.tick();
+      await c.reply([_text('a1')]);
+      expect(_row('a1'), findsOneWidget);
+    });
 
     _chatTest('pollFailureKeepsHistoryUnderABanner', (t, c) async {
       await c.start([_prompt('p1'), _text('a1')]);
