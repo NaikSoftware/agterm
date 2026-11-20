@@ -8,8 +8,11 @@ final class PresentedPage: @unchecked Sendable {
         case fetch(seq: Int)
         case bridge(seq: Int)
         /// The relay's own read of a content page's file, at most `limit` bytes.
-        case read(Data, limit: Int, done: (Result<Data, SocketClientError>) -> Void)
+        case read(Buffer, limit: Int, done: (Result<Data, SocketClientError>) -> Void)
     }
+
+    /// A reference, so appending a chunk does not copy what was read before.
+    final class Buffer { var data = Data() }
 
     let request: PresentationPage
     var pipe: PhoneLinkLineStream?
@@ -41,12 +44,12 @@ struct MemoryAnswer {
 extension PhoneLinkPresenter {
     static let pipeGrace: TimeInterval = 2
     static let adapterHandler = "window.__elis"
-    /// After the renderer, every link becomes its text: the phone follows no markdown link.
+    /// After the renderer, every link becomes its contents (text, pictures, code): the phone follows no markdown link.
     static let unlinkScript = """
         ;(() => {
           const page = document.getElementById('elis-page');
           if (!page) return;
-          for (const link of Array.from(page.querySelectorAll('a'))) link.replaceWith(document.createTextNode(link.textContent));
+          for (const link of Array.from(page.querySelectorAll('a'))) link.replaceWith(...link.childNodes);
         })();
         """
 
@@ -211,16 +214,15 @@ extension PhoneLinkPresenter {
         case let (.bridge(seq), .failure(_, error)):
             done()
             output(.reply(id: page.id, seq: seq, response: nil, error: error))
-        case (.read(var data, let limit, let finish), .chunk(_, let chunk)):
-            data.append(chunk)
-            guard data.count <= limit else {
+        case let (.read(buffer, limit, finish), .chunk(_, chunk)):
+            buffer.data.append(chunk)
+            guard buffer.data.count <= limit else {
                 done()
                 return finish(.failure(SocketClientError("the file is too large")))
             }
-            page.waiting[frame.id] = .read(data, limit: limit, done: finish)
-        case let (.read(data, _, finish), .end):
+        case let (.read(buffer, _, finish), .end):
             done()
-            finish(.success(data))
+            finish(.success(buffer.data))
         case let (.read(_, _, finish), .failure(_, error)):
             done()
             finish(.failure(SocketClientError(error)))
@@ -296,7 +298,7 @@ extension PhoneLinkPresenter {
 
     /// The relay's own read over the pipe; a failure rejects the page.
     private func read(_ page: PresentedPage, _ path: String, limit: Int, then: @escaping (Data) -> Void) {
-        pipeSend(page, .read(Data(), limit: limit, done: { [self] result in
+        pipeSend(page, .read(PresentedPage.Buffer(), limit: limit, done: { [self] result in
             switch result {
             case .success(let data): then(data)
             case .failure(let error): reject(page, error.description)
@@ -325,7 +327,7 @@ extension PhoneLinkPresenter {
             }
             guard pictures.read.count < MarkdownPage.maxImages, pictures.bytes < MarkdownPage.maxImageBytes else { continue }
             let (before, remaining) = (pictures, rest)
-            pipeSend(page, .read(Data(), limit: MarkdownPage.maxImageBytes - pictures.bytes, done: { [self] result in
+            pipeSend(page, .read(PresentedPage.Buffer(), limit: MarkdownPage.maxImageBytes - pictures.bytes, done: { [self] result in
                 var pictures = before
                 if case .success(let data) = result, let mime = ImagePage.mimeType(sniffing: data) {
                     pictures.bytes += data.count

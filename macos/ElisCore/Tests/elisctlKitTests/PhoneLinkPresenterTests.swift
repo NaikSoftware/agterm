@@ -134,6 +134,7 @@ struct PhoneLinkPresenterTests {
             error: "could not reach the presentation: recorded h -")))
         #expect(try PhoneLinkPresenter.remoteArgv(host: "h", session: "O1", pageToken: nil)
             == RemoteSession.presentCommand(host: "h", session: "O1"))
+        #expect(try PhoneLinkPresenter.remoteArgv(host: "h", session: "O1", pageToken: "t") == RemoteSession.pageServeCommand(host: "h", token: "t"))
     }
 
     @Test func thePresentationStreamIsReadWhileAPageWaits() throws {

@@ -235,10 +235,10 @@ struct PhoneLinkPresenterPagesTests {
     @Test func aLargeFileDoesNotOverflowTheChannel() throws {
         let (fixture, phone, stream) = try Self.linked()
         defer { PhoneLinkPresenterTests.finish(fixture, phone) }
+        let reader = try #require(LinkReader.flowing(phone))
         Self.send(stream, .pageRequest(Self.file))
         let pipe = try #require(fixture.server.nextStream())
         let body = Self.pattern(2 << 20)
-        let reader = LinkReader()
         guard case .page = reader.line(phone) else { Issue.record("no page line"); return }
         phone.deliver(PhoneLinkFrame.data(channel: 5, Self.up(.fetch(id: "p2", seq: 1, path: "/w/big.bin"))).encoded())
         let resource = try #require(Self.pipeFrame(pipe))
@@ -259,13 +259,13 @@ struct PhoneLinkPresenterPagesTests {
     @Test func aLargeImagePageReachesThePhoneWhole() throws {
         let (fixture, phone, stream) = try Self.linked()
         defer { PhoneLinkPresenterTests.finish(fixture, phone) }
+        let reader = try #require(LinkReader.flowing(phone))
         Self.send(stream, .pageRequest(Self.content(.image(path: "/w/big.png", width: 10, height: 10))))
         let pipe = try #require(fixture.server.nextStream())
         let image = Self.png(2 << 20)
         let own = try #require(Self.pipeFrame(pipe))
         let origin = Thread { Self.answer(pipe, Self.transfer(own.id, image)) }
         origin.start()
-        let reader = LinkReader()
         guard case .page(let page) = reader.line(phone) else { Issue.record("no page line"); return }
         #expect(page.kind == "content" && reader.lastLineBytes < PhoneLinkPresenter.highWater)
         phone.deliver(PhoneLinkFrame.data(channel: 5, Self.up(.fetch(id: "p3", seq: 1, path: PhonePage.contentPath))).encoded())
@@ -379,8 +379,10 @@ final class HarnessBox: @unchecked Sendable { var harness: PhoneLinkPresenterTes
 
 /// Reads channel 5's page lines off the phone, granting their credit one frame late, and records where vt DATA fell.
 private final class LinkReader {
+    // vt prints every 10 ms, so a read never times out: the deadline bounds a stalled transfer
+    private let deadline = Date().addingTimeInterval(60)
     private var decoder = PhoneLinkDecoder()
-    private var frames: [PhoneLinkFrame] = []
+    private var pendingFrames: [PhoneLinkFrame] = []
     private var buffer = Data()
     private var lines = 0
     private(set) var closed: [PhoneLinkFrame] = []
@@ -390,6 +392,11 @@ private final class LinkReader {
 
     func line(_ phone: MemoryPhone) -> PhonePageDown? {
         while true {
+            if let frame = pendingFrames.first {
+                pendingFrames.removeFirst()
+                take(frame, phone)
+                continue
+            }
             if let newline = buffer.firstIndex(of: 0x0A) {
                 let line = Data(buffer[buffer.startIndex..<newline])
                 buffer.removeSubrange(buffer.startIndex...newline)
@@ -397,20 +404,38 @@ private final class LinkReader {
                 lastLineBytes = line.count
                 return try? JSONDecoder().decode(PhonePageDown.self, from: line)
             }
-            guard let bytes = phone.readSent(), let decoded = try? decoder.feed(bytes) else { return nil }
+            guard closed.isEmpty, Date() < deadline, let bytes = phone.readSent(), let decoded = try? decoder.feed(bytes) else { return nil }
+            decoded.forEach { take($0, phone) }
+        }
+    }
+
+    private func take(_ frame: PhoneLinkFrame, _ phone: MemoryPhone) {
+        switch (frame.channel, frame.kind) {
+        case (5, .data):
+            buffer.append(frame.payload)
+            // a slow phone: its credit comes back a little after the bytes
+            usleep(2_000)
+            phone.deliver(PhoneLinkFrame.credit(channel: 5, bytes: UInt32(frame.payload.count)).encoded())
+        case (5, .close): closed.append(frame)
+        case (2, .data): vtAt.append(lines)
+        default: break
+        }
+    }
+
+    /// A reader once channel 2 DATA arrived, nil past the deadline; channel 5 frames read meanwhile wait for `line`.
+    static func flowing(_ phone: MemoryPhone) -> LinkReader? {
+        let reader = LinkReader()
+        return reader.vtFlows(phone) ? reader : nil
+    }
+
+    private func vtFlows(_ phone: MemoryPhone) -> Bool {
+        while vtAt.isEmpty {
+            guard Date() < deadline, let bytes = phone.readSent(), let decoded = try? decoder.feed(bytes) else { return false }
             for frame in decoded {
-                switch (frame.channel, frame.kind) {
-                case (5, .data):
-                    buffer.append(frame.payload)
-                    // a slow phone: its credit comes back a little after the bytes
-                    usleep(2_000)
-                    phone.deliver(PhoneLinkFrame.credit(channel: 5, bytes: UInt32(frame.payload.count)).encoded())
-                case (5, .close): closed.append(frame)
-                case (2, .data): vtAt.append(lines)
-                default: break
-                }
+                if frame.channel == 2, frame.kind == .data { vtAt.append(0) } else { pendingFrames.append(frame) }
             }
         }
+        return true
     }
 
     func vtBeforeLastPageLine() -> Bool {
