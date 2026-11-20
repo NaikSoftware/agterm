@@ -4,6 +4,7 @@ import Testing
 import ElisCore
 @testable import elisctlKit
 
+@Suite(.outsidePane)
 struct OverlayCommandsTests {
     private func request(_ argv: [String]) throws -> ControlRequest {
         let parsed = try Elisctl.parseAsRoot(argv)
@@ -137,7 +138,7 @@ struct OverlayCommandsTests {
         ["session", "overlay", "open", "revdiff", "--url", "http://localhost:5173/"],
         ["session", "overlay", "open", "--html", "/tmp/r.html", "--url", "http://localhost:5173/"],
         ["session", "overlay", "open", "--url", "http://localhost:5173/", "--wait"],
-        ["session", "overlay", "open", "--url", "http://localhost:5173/", "--block"],
+        ["session", "overlay", "open", "--url", "http://localhost:5173/", "--block", "--wait"],
         ["session", "overlay", "open", "--url", "http://localhost:5173/", "--cwd", "/tmp"],
         ["session", "overlay", "open", "revdiff", "--image", "/tmp/a.png"],
         ["session", "overlay", "open", "--html", "/tmp/r.html", "--image", "/tmp/a.png"],
@@ -377,7 +378,6 @@ struct OverlayCommandsTests {
         ["--html", "/tmp/r.html", "--page", "--pane", "right"],
         ["--html", "/tmp/r.html", "--page", "--size-percent", "50"],
         ["--html", "/tmp/r.html", "--page", "--size-percent", "50", "--width", "300"],
-        ["--url", "http://localhost:5173/", "--page", "--block"],
     ])
     func pageRefusesAnythingButAFullSizeFileOrURLPageAndCompanion(_ extra: [String]) {
         #expect(rejects(["session", "overlay", "open"] + extra))
@@ -389,10 +389,12 @@ struct OverlayCommandsTests {
         #expect(open.contains("with --companion or --page, the new row"))
     }
 
-    @Test func aPageMayBlockButAUrlMayNot() throws {
-        let opened = try request(["session", "overlay", "open", "--html", "/tmp/r.html", "--block"])
-        #expect(opened.args?.html == "/tmp/r.html")
-        #expect(rejects(["session", "overlay", "open", "--url", "http://localhost:5173/", "--block"]))
+    @Test func aFileOrURLPageMayBlockInItsSlotOrAsARow() throws {
+        #expect(try request(["session", "overlay", "open", "--html", "/tmp/r.html", "--block"]).args?.html == "/tmp/r.html")
+        let url = ["session", "overlay", "open", "--url", "http://localhost:5173/", "--block"]
+        #expect(try request(url).args?.url == "http://localhost:5173/")
+        #expect(try request(url + ["--page"]).cmd == .sessionPage)
+        #expect(try request(url + ["--companion"]).cmd == .sessionCompanionPage)
     }
 
     private final class Wire {
@@ -436,6 +438,14 @@ struct OverlayCommandsTests {
         let wire = Wire([Self.opened, Self.outcome(.submitted, "")])
         try wire.runner().block(Self.open)
         #expect(try #require(wire.out.last).contains(#""value":"""#))
+    }
+
+    @Test func aBlockedURLPageEndsDismissedAndExitsTwo() throws {
+        let wire = Wire([Self.opened, Self.outcome(.pending), Self.outcome(.dismissed)])
+        let open = ControlRequest(cmd: .sessionOverlayOpen, args: ControlArgs(url: "http://localhost:5173/"))
+        #expect(throws: ExitCode(rawValue: 2)) { try wire.runner().block(open) }
+        #expect(wire.sent.dropFirst().allSatisfy { $0.cmd == .sessionOverlayResult && $0.args?.page == "P1" })
+        #expect(try #require(wire.out.last).contains(#""outcome":"dismissed""#))
     }
 
     @Test func aDismissedSelectorExitsTwo() throws {

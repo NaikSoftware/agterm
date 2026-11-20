@@ -18,10 +18,11 @@ public struct ForwardedPage: Equatable, Sendable {
         self.components = components
     }
 
-    /// spec is the `-L` argument forwarding `localPort` on this Mac to the page's port on the origin.
-    public func spec(localPort: Int) -> String {
+    /// spec is the `-L` argument forwarding `localPort` on this Mac, bound at `bindAddress` or the page's host, to the
+    /// page's port on the origin.
+    public func spec(localPort: Int, bindAddress: String? = nil) -> String {
         let address = host.contains(":") ? "[\(host)]" : host
-        return "\(address):\(localPort):\(address):\(port)"
+        return "\(bindAddress ?? address):\(localPort):\(address):\(port)"
     }
 
     /// url is the page's URL at `localPort` on this Mac.

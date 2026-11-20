@@ -94,6 +94,8 @@ struct elisApp: App {
             setenv(DebugStateDirectory.environmentKey, adopted, 1)
         }
         #endif
+        // a launch from a pane inherits its id; hooks and custom commands would send it as their untargeted elisctl's session
+        unsetenv("ELIS_SESSION_ID")
         let stateDirectory = ProcessInfo.processInfo.environment["ELIS_STATE_DIR"]
             .map { URL(fileURLWithPath: $0, isDirectory: true) } ?? PersistenceStore.defaultDirectory
         Self.claimStateDirectory(stateDirectory)

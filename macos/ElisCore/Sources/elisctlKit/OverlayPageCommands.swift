@@ -70,7 +70,7 @@ extension Session.Overlay {
 extension Session.Overlay.Open {
     static let blockHelp: ArgumentHelp = """
         Block until COMMAND exits and exit with its status (the program renders normally; capture its output via the \
-        program's own output file). With --html, wait for the page to submit or close, print its outcome JSON, and \
+        program's own output file). With --html or --url, wait for the page to submit or close, print its outcome JSON, and \
         exit 0 when submitted, 2 when dismissed, 1 on error.
         """
 
@@ -113,7 +113,7 @@ extension Session.Overlay.Result {
     }
 }
 
-/// HtmlPageRunner is the page side of `session overlay open --html --block` and `result --page`, with the
+/// HtmlPageRunner is the page side of `session overlay open --html/--url --block` and `result --page`, with the
 /// transport, sleep and output injected so every outcome and exit status is testable without a socket. It
 /// polls by the page id the open reply names, never by session, so a page reopened in the same slot cannot
 /// answer for this one.

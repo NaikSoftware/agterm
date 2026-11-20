@@ -4,6 +4,7 @@ import Testing
 import ElisCore
 @testable import elisctlKit
 
+@Suite(.outsidePane)
 struct CommandsTests {
     /// Parse argv into a subcommand and build its `ControlRequest`. Throws if parsing or request-building fails.
     private func request(_ argv: [String]) throws -> ControlRequest {

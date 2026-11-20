@@ -1,9 +1,10 @@
 import XCTest
 @testable import Elis
+import ElisCore
 
 final class MarkdownAssetsTests: XCTestCase {
     func testTheAppBundleCarriesTheRendererInDependencyOrderAndTheStylesheet() throws {
-        let assets = MarkdownAssets(bundle: .main)
+        let assets = MarkdownAssets.shared
 
         let library = try XCTUnwrap(assets.script.range(of: "markdown-it 14.1.0"))
         let highlight = try XCTUnwrap(assets.script.range(of: "Highlight.js v11.11.1"))
@@ -17,7 +18,7 @@ final class MarkdownAssetsTests: XCTestCase {
     }
 
     func testTheTextRendererCarriesHighlightJsWithoutTheMarkdownParser() throws {
-        let assets = MarkdownAssets(bundle: .main)
+        let assets = MarkdownAssets.shared
 
         let highlight = try XCTUnwrap(assets.textScript.range(of: "Highlight.js v11.11.1"))
         let render = try XCTUnwrap(assets.textScript.range(of: "getElementById('elis-text')"))
@@ -26,14 +27,5 @@ final class MarkdownAssetsTests: XCTestCase {
         let shared = try XCTUnwrap(assets.textStyle.range(of: "--elis-foreground"))
         let own = try XCTUnwrap(assets.textStyle.range(of: ".elis-gutter"))
         XCTAssertLessThan(shared.lowerBound, own.lowerBound)
-    }
-
-    func testABundleWithoutTheFolderReadsEmpty() {
-        let assets = MarkdownAssets(bundle: Bundle(for: MarkdownAssetsTests.self))
-
-        XCTAssertEqual(assets.script, ";\n;\n")
-        XCTAssertEqual(assets.style, "")
-        XCTAssertEqual(assets.textScript, ";\n")
-        XCTAssertEqual(assets.textStyle, "\n")
     }
 }

@@ -125,7 +125,7 @@ struct Session: ParsableCommand {
         func makeRequest() throws -> ControlRequest {
             let args = ControlArgs(targets: target.batchTargets, undoable: undoable ? true : nil)
             return operation.stamp(ControlRequest(cmd: terminate ? .sessionTerminate : .sessionClose,
-                                                  target: target.targets.first ?? "active",
+                                                  target: target.first,
                                                   args: options.withWindow(args == ControlArgs() ? nil : args)))
         }
 
@@ -241,7 +241,7 @@ struct Session: ParsableCommand {
             }
             var withTargets = args
             withTargets.targets = target.batchTargets
-            return operation.stamp(ControlRequest(cmd: .sessionMove, target: target.targets.first ?? "active",
+            return operation.stamp(ControlRequest(cmd: .sessionMove, target: target.first,
                                                   args: options.withWindow(withTargets)))
         }
     }
@@ -750,7 +750,7 @@ struct Session: ParsableCommand {
                     throw ValidationError("--markdown takes no --companion, --page, --block, --wait, --js, --chromeless, --persistent, --browse or --cwd")
                 }
                 if text != nil, pageOnly { throw ValidationError("--text takes no \(pageOnlyFlags)") }
-                if command == nil, wait || (url != nil && block) { throw ValidationError("a page takes no --wait, and a --url page no --block") }
+                if command == nil, wait { throw ValidationError("a page takes no --wait") }
                 if navigation, command != nil { throw ValidationError("--navigation requires --html, --url or --markdown") }
                 if javascript, command != nil { throw ValidationError("--js requires --html or --url") }
                 if chromeless, command != nil { throw ValidationError("--chromeless requires --html or a loopback --url") }
@@ -800,7 +800,7 @@ struct Session: ParsableCommand {
                 let tooOld = page ? "the running app is too old for page sessions" : "the running app is too old for companions"
                 if rowFlag != nil, !block { return try runCompanionRequest(makeRequest(), options: options, echoID: true, tooOld: tooOld) }
                 guard block else { try defaultRun(); return }
-                if html != nil {
+                if html != nil || url != nil {
                     let send = SocketClient(path: options.socketPath()).send
                     return try HtmlPageRunner(json: options.json, send: rowFlag != nil ? companionSend(send, json: options.json, tooOld: tooOld) : send)
                         .block(makeRequest())

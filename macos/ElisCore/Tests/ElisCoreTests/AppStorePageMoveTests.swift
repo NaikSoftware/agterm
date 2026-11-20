@@ -224,6 +224,7 @@ struct AppStorePageMoveTests {
         #expect(offered.points == OverlayPointSize(width: 600))
         #expect(offered.textSeed?.query == "err")
         #expect(offered.textSeed?.wrap == true)
+        #expect(offered.hidden == true)
         #expect(second.sink.commands.map(\.action) == [.hide])
     }
 

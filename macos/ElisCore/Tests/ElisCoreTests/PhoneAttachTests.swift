@@ -80,6 +80,13 @@ struct PhoneAttachTests {
         #expect(try JSONDecoder().decode(ControlAttach.self, from: JSONEncoder().encode(new)) == new)
     }
 
+    @Test func originRoundTripsAndAnOlderAnswerHasNone() throws {
+        let origin = ControlAttachOrigin(session: "s", pane: "p", host: "mini")
+        let attach = ControlAttach(argv: ["a"], paneID: "p", origin: origin)
+        #expect(try JSONDecoder().decode(ControlAttach.self, from: JSONEncoder().encode(attach)).origin == origin)
+        #expect(try JSONDecoder().decode(ControlAttach.self, from: Data(#"{"argv":["zmx"],"paneID":"p"}"#.utf8)).origin == nil)
+    }
+
     @Test func localViewerArgvRunsZmxDirectly() throws {
         let attach = try ControlAttach.viewer(.local(endpoint: endpoint, daemon: daemon), paneID: "p1")
 

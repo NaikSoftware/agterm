@@ -30,6 +30,7 @@
     {"name": "open vt", "kind": "open", "channel": 2, "object": {"target":"s1","type":"vt"}, "hex": "01000000020000001b7b22746172676574223a227331222c2274797065223a227674227d"},
     {"name": "open claim", "kind": "open", "channel": 3, "object": {"claim":true,"cols":120,"pane":"p2","rows":40,"target":"s1","type":"vt"}, "hex": "0100000003000000497b22636c61696d223a747275652c22636f6c73223a3132302c2270616e65223a227032222c22726f7773223a34302c22746172676574223a227331222c2274797065223a227674227d"},
     {"name": "open page", "kind": "open", "channel": 4, "object": {"target":"s1","type":"page"}, "hex": "01000000040000001d7b22746172676574223a227331222c2274797065223a2270616765227d"},
+    {"name": "open forward", "kind": "open", "channel": 5, "object": {"page":"p1","target":"s1","type":"forward"}, "hex": "01000000050000002c7b2270616765223a227031222c22746172676574223a227331222c2274797065223a22666f7277617264227d"},
     {"name": "opened grid", "kind": "opened", "channel": 2, "object": {"cols":120,"rows":40}, "hex": "0200000002000000167b22636f6c73223a3132302c22726f7773223a34307d"},
     {"name": "opened error", "kind": "opened", "channel": 2, "object": {"error":"not a Live pane"}, "hex": "02000000020000001b7b226572726f72223a226e6f742061204c6976652070616e65227d"},
     {"name": "lead follower", "kind": "lead", "channel": 2, "object": {"role":"follower"}, "hex": "0800000002000000137b22726f6c65223a22666f6c6c6f776572227d"},

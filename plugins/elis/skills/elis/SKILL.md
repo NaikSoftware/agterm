@@ -6,10 +6,10 @@ description: >
   read exit status; show HTML pages, URLs or dev servers in an overlay with saved logins or as a
   page row;
   post a HUD/caption/notification/sidebar activity line; message panes; show a picker, question or input dialog; show images/markdown/code; type
-  into or restart a pane by id, copy its selection, set the clipboard, search scrollback; manage windows, font size,
+  into or restart a pane by id, copy its selection, set the clipboard, search scrollback; manage windows, fonts,
   theme; reload or edit the keymap, event hooks and elis-scoped ghostty config; run a custom command; read
-  a closed window's session screen; subscribe to status, lifecycle, tree and other
-  events; wait on agent status; pair the phone app.
+  a closed window's session screen; subscribe to status, tree and other
+  events; wait on agent status; pair the phone, show pages on it.
   Covers window/workspace/session addressing, session links, ELIS_* variables,
   another Mac's sessions/windows, elis-server hosts, cookbook recipes, versions/upgrades, diagnosing
   problems, filing a bug or feature request.
@@ -20,6 +20,7 @@ when_to_use: >
   show an image inline, show this markdown file rendered, show this source file or log at a line, show me the diff of a file or the changes as links, tail or follow this log file, search the log or text page in the overlay, wrap long lines in the text or log page, show this HTML page or artifact, make an HTML page or explainer for this and show
   it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, pin a project folder to a workspace, route a session to its project workspace, show status or activity under a session in the sidebar, show or hide the file panel (file tree), make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, make this session a companion, move a companion under another session, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, open a page as its own session row in the sidebar, run my custom command, send a message to the other pane or another agent, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, open a remote window for my Linux server, run sessions on a Linux host with elis-server, watch events or wait for a session on the elis-server host, install elis-server on a Linux host, detach or reattach a remote session, copy this to the clipboard, was Elis upgraded under the running app, upgrade Elis without losing sessions, what recipes are there, connect my phone, pair Elis Mobile, revoke a paired phone, fit a pane to the phone,
   attach a script to a pane's terminal stream, lead or take over a pane from a script, does the phone lead a pane,
+  show this on my phone, show a page where I am, show the dev server on my phone,
   the keymap editor will not open.
 allowed-tools: Bash(elisctl *)
 ---
@@ -140,7 +141,9 @@ a closed window, but not the live `idleMs`, which is `tree`-only. A MINIMIZED wi
 
 ## Addressing
 
-Commands that target a session or workspace take `--target` (default `active`):
+Commands that target a session or workspace take `--target`. A session command run without it inside an
+Elis pane acts on that pane's session (`$ELIS_SESSION_ID`); outside a pane, and for every workspace command,
+the default is `active`:
 
 - `active` — the selected session / current workspace.
 - a full UUID (case-insensitive), or a unique **prefix** of one (git-style). Zero matches → `notFound`
@@ -149,14 +152,14 @@ Commands that target a session or workspace take `--target` (default `active`):
 `window.*` commands take the window id/prefix/`active` as a positional argument. Other commands accept
 a global `--window <id|prefix|active>` to operate on a specific window's tree (default: the frontmost).
 
-Scripts rarely type ids: create with `*.new` (capture the returned id), or act on `active`.
+Scripts rarely type ids: create with `*.new` (capture the returned id), or act on the default.
 
-**Agents: `active` is almost never your own session.** `active` is the session the USER has selected in
-the GUI; your shell runs in `$ELIS_SESSION_ID`, and the user is usually on a different session while
-you work. For any session-scoped command meant to act on *this* session — `session overlay open`,
-`session scratch`, `session type`, `session text`, `session background`, `session status`, `session copy`,
-… — pass `--target "$ELIS_SESSION_ID"`. Omit it and
-you open overlays / type into whatever the user has selected, not your own session.
+**Agents: omit `--target` to act on your own session.** Your shell runs in `$ELIS_SESSION_ID`, which an
+untargeted session command uses; `--target "$ELIS_SESSION_ID"` says the same and stays valid.
+`--target active` is the session the USER has selected in the GUI, usually a different one while you work,
+and a session led from the phone is never it. A `--socket` naming another Elis instance, or a `--window`,
+falls back to that instance's or window's `active`. Inside tmux or another long-lived program started from a
+different session the inherited id is that session's: pass `--target` there.
 
 ## Restore modes
 
@@ -208,7 +211,7 @@ replays the captured running command inside a new persistent shell. The exclusio
 
 `session type` drives an ALREADY-RUNNING program — it is not a launcher. Its keystrokes land in a line
 buffer you do not own: a newline submits (a multi-line brief becomes N premature Enters), and the user
-or a concurrent agent writes to that same buffer. An untargeted `session type` from another agent hits
+or a concurrent agent writes to that same buffer. A `session type --target active` from another agent hits
 whatever is `active`, and `session new` focuses — so a just-created session is briefly `active`, a stray
 prompt concatenates with yours, and the program starts on the merged line. (`--no-select` skips the
 focus, but the newline and shared-buffer hazards of `type`-as-launcher remain — `--command` is still the
@@ -422,8 +425,7 @@ omitted when expanded).
   included) into the main pane, the split pane with `--pane right`, or the scratch terminal (even hidden)
   with `--pane scratch`. `--pane-id` names one terminal wherever a swap or promotion moved it; an unknown
   token without `--pane` fails with `unknown pane id: <id>`, and `--json` reports the pane typed into as
-  `result.pane`. Pass `--target "$ELIS_SESSION_ID"` to type into YOUR session, not the user's
-  active one (see Addressing). Like `session text`, every `--pane` addresses the surface UNDER a covering
+  `result.pane`. Without `--target` it types into your own session (see Addressing). Like `session text`, every `--pane` addresses the surface UNDER a covering
   overlay — by design, so a pane stays drivable whatever is drawn over it — meaning text typed while one is
   open runs in the hidden shell and is invisible until it closes. There is no write twin of
   `session overlay text`: an overlay runs the caller's own program, so nothing types into one. Typing is the
@@ -464,9 +466,8 @@ omitted when expanded).
   from `tree`'s `cwd`/`title`/`foreground` and the other side from `splitCwd`/`splitForeground`.
 - `session scratch [on|off|toggle] [--command CMD] [--follow]` — full-coverage third shell (hide keeps it alive; `exit`
   recreates). `--command` (when showing) runs a program instead of a shell, run-once like `session new
-  --command` (respawns the scratch if one is open). Target your own session with
-  `--target "$ELIS_SESSION_ID"` (see Addressing); it opens there without switching the window to it
-  unless you pass `--follow`.
+  --command` (respawns the scratch if one is open). Without `--target` it opens in your own session
+  (see Addressing), without switching the window to it unless you pass `--follow`.
 - `session focus [primary|split|left|right|top|bottom|other]` - move focus between split panes. Role and position
   aliases select the same two live terminals; readback remains `left`/`right`.
 - `session resize --split-ratio R | --grow-left D | --grow-right D | --grow-primary D | --grow-split D | --grow-top D | --grow-bottom D` - move the split divider (the GUI only drags
@@ -528,7 +529,7 @@ omitted when expanded).
   and `clear --pane` returns the pane to the default. `--opacity` 0.0–1.0. (An image/text watermark
   renders the pane opaque, overriding window translucency, so it shows; a `color` takes no opacity and
   honors the Settings window translucency instead.)
-- `session overlay open (<command> [--cwd DIR] [--wait] [--block] | --html FILE [--cwd DIR] [--navigation | --chromeless] [--js] [--block] | --url URL [--navigation | --chromeless] [--js] | --image FILE | --markdown FILE [--navigation] | --text FILE [--line N]) [--size-percent N [--width PT] [--height PT]] [--background-color #rrggbb] [--follow] [--pane left|right]` ·
+- `session overlay open (<command> [--cwd DIR] [--wait] [--block] | --html FILE [--cwd DIR] [--navigation | --chromeless] [--js] [--block] | --url URL [--navigation | --chromeless] [--js] [--block] | --image FILE | --markdown FILE [--navigation] | --text FILE [--line N]) [--size-percent N [--width PT] [--height PT]] [--background-color #rrggbb] [--follow] [--pane left|right]` ·
   `session overlay resize (--size-percent N [--width PT] [--height PT] | --width PT [--height PT] | --height PT | --full)` ·
   `session overlay close [--pane left|right]` ·
   `session overlay hide|show|toggle [--pane left|right]` ·
@@ -561,7 +562,7 @@ omitted when expanded).
   A pane that is not currently rendered is refused with `pane not visible`. A SHOWN
   split renders both panes, a HIDDEN one renders only the FOCUSED pane, so the refused one is the pane
   that does not have focus.
-  Target with `--target "$ELIS_SESSION_ID"` for YOUR session (default `active` is the user's selection).
+  Without `--target` it opens in YOUR session; `--target active` is the user's selection.
   **By default `session overlay open` does NOT switch the user** — full and floating (`--size-percent N`, 1-100)
   both open on `--target` and run their program in the background; the panel appears when the user visits
   that session. **Pass `--follow` to select the target after opening** (a no-op if it is already active):
@@ -677,7 +678,7 @@ Pick shares its window modal slot with GUI asks. A background target is raised o
 Read the live picker id from the tree's top-level `pickPending` field.
 
 **ask**: `ask TITLE --button ID=LABEL [--button ...] [--message TEXT]` opens a question and waits for
-an answer. The default `--style terminal` uses the selected session, with one pending ask per session.
+an answer. The default `--style terminal` uses your own session (outside a pane, the selected one), with one pending ask per session.
 `--pane` or `--pane-id` narrows it to a pane without requiring `--target`. An explicit unselected session
 is accepted and keeps its ask hidden and pending. A terminal ask leaves the rest of the window usable.
 `--style gui` uses the window modal slot shared with pick; GUI pane placement requires a selected
@@ -837,6 +838,35 @@ over the config. The remote needs `tic` (ncurses) and says so when it is missing
 the relay and replaces its token, `session grid` / `session scroll` fit and scroll a pane for the phone, and `session attach` attaches a script to a Live pane's terminal as a viewer, or with `--claim` as its lead. `tree` shows the phone's open views as `phoneViewers` and the pane it leads as `phoneLead`. The
 pairing link holds the token: never print it to a shared surface. Results, rules and the cases that clear a grid
 are in the [command reference](reference.md#phone).
+
+Pages on the phone: to show the user a page, run `elisctl session overlay open --html FILE --js --target "$ELIS_SESSION_ID"`
+(drop `--js` for a static page, see [Displaying an HTML artifact](#displaying-an-html-artifact)), never `open FILE`,
+which Elis never sees. The page follows the user: it shows on the phone while the phone leads the pane, on the Mac
+otherwise, and moves (reloading) when the lead moves; `tree` marks it `htmlOverlays[].phone`.
+Log pages (`--text --follow-file`), diff pages, markdown with `--navigation` and `--image` pictures over 6 MB open on the Mac even while the phone leads.
+Questions, pickers, program overlays, HUDs and sounds stay on the Mac too. So a `--block` on one of those pages, or an
+`ask`/`pick`, waits on a screen the user may not see while they drive from the phone: prefer a page the phone shows.
+
+Dev servers on the phone: a `--url` page on the session host's loopback (`localhost`, `127.0.0.1`, `::1`) shows on
+the phone too, hot reload included; the relay carries its connections, through ssh for a row on another host.
+Pass `--js`, or a script-built page is blank. A dev server you start needs its own stop condition: open the page with
+`--block`, which returns when the page closes (exit 2, `dismissed`), and stop the server then:
+
+```bash
+npm run dev -- --host 127.0.0.1 --port 5173 >/tmp/dev.log 2>&1 & server=$!
+for _ in $(seq 60); do nc -z 127.0.0.1 5173 && break; sleep 0.5; done  # up to 30 s for the server to listen
+elisctl session overlay open --url http://localhost:5173/ --js --block --target "$ELIS_SESSION_ID"
+kill "$server"
+```
+
+`--block` holds the call until the user closes the page, and a tool timeout (2 minutes for Claude Code's Bash) would
+kill it before `kill` runs: run the lines as a background command (the Bash tool's `run_in_background`, or
+`( … ) &`), so the server still stops.
+Generated apps (a file manager, a GitHub workflows view, a log viewer) follow the same pattern.
+Only the page's own sheet reaches the server; other apps on the phone cannot. Over Bluetooth it is slow.
+An `https` dev server opens on the Mac even while the phone leads.
+A server that writes absolute `http://localhost:PORT` addresses into its pages may break on the phone, where the
+page loads from `127.0.0.1`.
 
 **version** — `elisctl version` — which Elis is serving this socket, as `result.app` (`version`, plus
 `commit` when the build recorded one), and the bundle on disk as `result.installed`, which differs from

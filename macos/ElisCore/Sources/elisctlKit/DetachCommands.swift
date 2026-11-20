@@ -24,7 +24,7 @@ extension Session {
 
         func makeRequest() throws -> ControlRequest {
             let args = ControlArgs(targets: target.batchTargets)
-            return ControlRequest(cmd: .sessionDetach, target: target.targets.first ?? "active",
+            return ControlRequest(cmd: .sessionDetach, target: target.first,
                                   args: options.withWindow(args == ControlArgs() ? nil : args))
         }
     }
@@ -44,7 +44,7 @@ extension Workspace {
     struct Detach: RequestCommand {
         static let configuration = CommandConfiguration(
             abstract: "Hide a remote window's workspace and its sessions on this Mac, leaving them running on the server.")
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
 
         func makeRequest() throws -> ControlRequest {

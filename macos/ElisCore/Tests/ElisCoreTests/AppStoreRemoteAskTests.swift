@@ -650,6 +650,18 @@ struct AppStoreRemoteAskTests {
 
         #expect(received == [rejected])
     }
+
+    @Test func anAskStaysHereWhileOnlyThePhoneLeads() throws {
+        let session = try Viewers.origin(store, hub: hub)
+        let phone = try Viewers.phone(hub, session)
+
+        #expect(store.openRemoteAsk(ask(), in: session, paneIdentity: nil, window: Self.window) == .notPresented)
+
+        let mac = try Viewers.viewer(hub, session, acquire: true)
+        #expect(store.openRemoteAsk(ask(), in: session, paneIdentity: nil, window: Self.window) == .opened)
+        #expect(session.askRemoteOwner == mac.gen)
+        #expect(phone.sink.asks.isEmpty)
+    }
 }
 
 private let remoteRadio = AskChoiceForm(choices: [ControlAskChoice(id: "a", label: "A"), ControlAskChoice(id: "b", label: "B")])

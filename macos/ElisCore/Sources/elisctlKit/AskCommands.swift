@@ -41,7 +41,7 @@ struct Ask: ParsableCommand {
         @Option(name: .customLong("checked"), help: "ID of an item selected at open. Repeat with --multiple.") var checked: [String] = []
         @Option(name: .long, help: "Add a free-form row after the --choice list, with this placeholder; its text answers as `text`.")
         var other: String?
-        @Option(name: .long, help: "Session id, prefix, or 'active'. Default: selected session for terminal, window-centered for gui.") var target: String?
+        @Option(name: .long, help: "Session id, prefix, or 'active'. Default: this pane's session (else the selected one) for terminal, window-centered for gui.") var target: String?
         @Option(name: .long, help: "Anchor to the session's left or right pane. GUI style requires --target.") var pane: String?
         @Option(name: .customLong("pane-id"), help: "Stable pane token; overrides --pane. GUI style requires --target.") var paneID: String?
         @Flag(name: .long, help: "Raise the owning window.") var follow = false
@@ -75,7 +75,7 @@ struct Ask: ParsableCommand {
                                    multiple: multiple ? true : nil, checked: checked.isEmpty ? nil : checked, other: other)
             var timed = args
             timed.timeout = timeout
-            return ControlRequest(cmd: .askOpen, target: target, args: options.withWindow(timed))
+            return ControlRequest(cmd: .askOpen, target: target ?? (style == "gui" ? nil : CallerEnvironment.ownSession), args: options.withWindow(timed))
         }
 
         private func parsedWidth() throws -> Int? {

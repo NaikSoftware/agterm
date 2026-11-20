@@ -40,7 +40,7 @@ struct Workspace: ParsableCommand {
             discussion: "A new session whose directory is the folder or inside it lands in that workspace.")
         @Argument(help: "set or clear.") var mode: String
         @Argument(help: "The project folder (set only).") var dir: String?
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
 
         func validate() throws {
@@ -56,7 +56,7 @@ struct Workspace: ParsableCommand {
     struct Rename: RequestCommand {
         static let configuration = CommandConfiguration(abstract: "Rename a workspace.")
         @Argument(help: "New workspace name.") var name: String
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
         @OptionGroup var operation: OperationOptions
 
@@ -68,7 +68,7 @@ struct Workspace: ParsableCommand {
 
     struct Delete: RequestCommand {
         static let configuration = CommandConfiguration(abstract: "Delete a workspace.")
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
         @OptionGroup var operation: OperationOptions
 
@@ -79,7 +79,7 @@ struct Workspace: ParsableCommand {
 
     struct Select: RequestCommand {
         static let configuration = CommandConfiguration(abstract: "Select a workspace.")
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
 
         func makeRequest() throws -> ControlRequest {
@@ -104,7 +104,7 @@ struct Workspace: ParsableCommand {
     struct Move: RequestCommand {
         static let configuration = CommandConfiguration(abstract: "Reorder a workspace among its siblings.")
         @Option(name: .long, help: "Direction: up, down, top, or bottom.") var to: String
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
         @OptionGroup var operation: OperationOptions
 
@@ -124,7 +124,7 @@ struct Workspace: ParsableCommand {
         )
         @Argument(help: "Mode: \(ControlWorkspaceFocusMode.helpPhrase).")
         var mode: String = ControlWorkspaceFocusMode.toggle.rawValue
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
 
         func validate() throws {
@@ -171,7 +171,7 @@ struct Workspace: ParsableCommand {
         )
         @Argument(help: "Mode: on, off, or toggle (default; unflags only when every session is flagged).")
         var mode: String = "toggle"
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
         @OptionGroup var operation: OperationOptions
 
@@ -188,7 +188,7 @@ struct Workspace: ParsableCommand {
 
     struct Collapse: RequestCommand {
         static let configuration = CommandConfiguration(abstract: "Collapse a workspace in the sidebar tree.")
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
 
         func makeRequest() throws -> ControlRequest {
@@ -198,7 +198,7 @@ struct Workspace: ParsableCommand {
 
     struct Expand: RequestCommand {
         static let configuration = CommandConfiguration(abstract: "Expand a workspace in the sidebar tree.")
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
 
         func makeRequest() throws -> ControlRequest {

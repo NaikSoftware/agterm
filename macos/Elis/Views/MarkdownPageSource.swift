@@ -59,7 +59,7 @@ enum MarkdownPageSource {
             for image in MarkdownPage.remoteImageReferences(in: markdown, folder: folder) {
                 guard let room = embedding.room(for: image) else { continue }
                 let bytes = await fetch(image.path, room)
-                embedding.add(image, bytes.flatMap { bytes in (try? ImageProbe.probe(bytes, path: image.path).get()).map { ($0, bytes) } })
+                embedding.add(image, bytes.flatMap { bytes in (try? ImageProbe.probe(bytes, path: image.path).get()).map { MarkdownProbe.picture(($0, bytes)) } })
             }
             return .success(MarkdownPage.html(markdown: markdown, images: embedding.embedded, style: style, links: links))
         }.value
@@ -71,4 +71,8 @@ enum MarkdownPageSource {
             $0.finish()
         })
     }
+}
+
+extension MarkdownAssets {
+    static let shared = MarkdownAssets(directory: Bundle.main.resourceURL?.appendingPathComponent("markdown"))
 }

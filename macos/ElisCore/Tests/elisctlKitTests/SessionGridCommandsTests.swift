@@ -2,6 +2,7 @@ import ElisCore
 @testable import elisctlKit
 import Testing
 
+@Suite(.outsidePane)
 struct SessionGridCommandsTests {
     private func request(_ argv: [String]) throws -> ControlRequest {
         let parsed = try Elisctl.parseAsRoot(argv)

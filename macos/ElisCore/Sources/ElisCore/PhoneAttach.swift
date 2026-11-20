@@ -6,6 +6,21 @@ public enum LivePaneSource: Equatable, Sendable {
     case remote(host: String, endpoint: ControlZmxEndpoint, daemon: String)
 }
 
+/// The session a phone attach shows, as the host owning its presentation hub names it.
+public struct ControlAttachOrigin: Codable, Sendable, Equatable {
+    public let session: String
+    /// The pane identity a `lead.report` names.
+    public let pane: String
+    /// The ssh host; nil when the answering app is the origin.
+    public let host: String?
+
+    public init(session: String, pane: String, host: String?) {
+        self.session = session
+        self.pane = pane
+        self.host = host
+    }
+}
+
 /// A command the relay runs to read a pane's VT stream, and the pane it belongs to.
 public struct ControlAttach: Codable, Sendable, Equatable {
     public let argv: [String]
@@ -17,13 +32,17 @@ public struct ControlAttach: Codable, Sendable, Equatable {
     public let remote: Bool
     /// A claiming attach's `ZMX_MANAGED` value, which its zmx role reports echo; nil for a viewer.
     public let nonce: String?
+    /// Where the relay presents for this pane; nil from an app that predates it.
+    public let origin: ControlAttachOrigin?
 
-    public init(argv: [String], paneID: String, screen: [String] = [], remote: Bool = false, nonce: String? = nil) {
+    public init(argv: [String], paneID: String, screen: [String] = [], remote: Bool = false, nonce: String? = nil,
+                origin: ControlAttachOrigin? = nil) {
         self.argv = argv
         self.paneID = paneID
         self.screen = screen
         self.remote = remote
         self.nonce = nonce
+        self.origin = origin
     }
 
     public init(from decoder: Decoder) throws {
@@ -33,31 +52,33 @@ public struct ControlAttach: Codable, Sendable, Equatable {
         screen = try container.decodeIfPresent([String].self, forKey: .screen) ?? []
         remote = try container.decodeIfPresent(Bool.self, forKey: .remote) ?? false
         nonce = try container.decodeIfPresent(String.self, forKey: .nonce)
+        origin = try container.decodeIfPresent(ControlAttachOrigin.self, forKey: .origin)
     }
 
     /// A passive attach: it never leads and starts from the visible screen.
-    public static func viewer(_ source: LivePaneSource, paneID: String) throws -> ControlAttach {
-        try make(source, paneID: paneID, lead: .viewer, nonce: nil)
+    public static func viewer(_ source: LivePaneSource, paneID: String, origin: ControlAttachOrigin? = nil) throws -> ControlAttach {
+        try make(source, paneID: paneID, lead: .viewer, nonce: nil, origin: origin)
     }
 
     /// Takes the lead from whichever client holds it; its own output is unused, so it skips the scrollback.
-    public static func claimer(_ source: LivePaneSource, paneID: String) throws -> ControlAttach {
+    public static func claimer(_ source: LivePaneSource, paneID: String, origin: ControlAttachOrigin? = nil) throws -> ControlAttach {
         let lead = ZmxLeadAttachment(claim: true, screenOnly: true)
-        return try make(source, paneID: paneID, lead: lead, nonce: lead.nonce)
+        return try make(source, paneID: paneID, lead: lead, nonce: lead.nonce, origin: origin)
     }
 
-    private static func make(_ source: LivePaneSource, paneID: String, lead: ZmxLeadAttachment, nonce: String?) throws -> ControlAttach {
+    private static func make(_ source: LivePaneSource, paneID: String, lead: ZmxLeadAttachment, nonce: String?,
+                             origin: ControlAttachOrigin?) throws -> ControlAttach {
         switch source {
         case let .local(endpoint, daemon):
             return ControlAttach(argv: try RemoteSession.zmxAttachArguments(endpoint: endpoint, daemon: daemon, lead: lead),
                                  paneID: paneID, screen: try RemoteSession.zmxScreenArguments(endpoint: endpoint, daemon: daemon),
-                                 nonce: nonce)
+                                 nonce: nonce, origin: origin)
         case let .remote(host, endpoint, daemon):
             // shortcut: each phone attach opens its own ssh connection; lease a pool channel released on phone.detached if connection count matters.
             let attach = try RemoteSession.attachCommand(host: host, endpoint: endpoint, daemon: daemon, lead: lead)
             return ControlAttach(argv: RemoteSession.keepingAlive(attach), paneID: paneID,
                                  screen: try RemoteSession.screenCommand(host: host, endpoint: endpoint, daemon: daemon),
-                                 remote: true, nonce: nonce)
+                                 remote: true, nonce: nonce, origin: origin)
         }
     }
 }

@@ -124,4 +124,12 @@ struct AppStorePresentationTests {
         #expect(store.presentationLayout(of: session)?.scratch == nil)
         #expect(store.presentationLayout(of: session)?.scratchShown == false)
     }
+
+    @Test func aStatusSoundNeverGoesToThePhone() throws {
+        let session = try Viewers.origin(store, hub: hub)
+        let phone = try Viewers.phone(hub, session, kinds: Viewers.phoneKinds + ["sound"])
+
+        #expect(!store.presentStatusSoundRemotely(Self.glass, in: session, pane: nil))
+        #expect(phone.sink.sounds.isEmpty)
+    }
 }
