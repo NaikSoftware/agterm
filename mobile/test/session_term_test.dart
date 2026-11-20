@@ -131,7 +131,7 @@ Map<String, Object> treeOf({bool live = true, bool split = false}) => {
     };
 
 class FakeSnapshot implements VtSnapshot {
-  FakeSnapshot(this.cols, this.rows, this.altScreen, {this.cursorY = 0, this.cursorVisible = false});
+  FakeSnapshot(this.cols, this.rows, this.altScreen, {this.cursorY = 0, this.cursorVisible = false, this.lines = const []});
   @override
   final int cols, rows;
   @override
@@ -143,7 +143,7 @@ class FakeSnapshot implements VtSnapshot {
   @override
   final bool cursorVisible;
   @override
-  List<VtRow> get lines => const [];
+  final List<VtRow> lines;
 }
 
 class FakeVt implements Vt {
@@ -154,6 +154,7 @@ class FakeVt implements Vt {
   bool alt = true; // a full-screen program: Term, no scrollback
   int cursorY = 0;
   bool cursorVisible = false;
+  List<VtRow> lines = []; // the grid rows a snapshot shows
 
   @override
   void write(Uint8List bytes) => written.addAll(bytes);
@@ -178,7 +179,7 @@ class FakeVt implements Vt {
   VtSnapshot snapshot() {
     snapshots++;
     if (failSnapshot) throw StateError('boom');
-    return FakeSnapshot(cols, rows, alt, cursorY: cursorY, cursorVisible: cursorVisible);
+    return FakeSnapshot(cols, rows, alt, cursorY: cursorY, cursorVisible: cursorVisible, lines: lines);
   }
   @override
   void dispose() => disposed = true;

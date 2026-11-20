@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../client.dart';
 import '../model.dart';
+import '../terminal/key_bar.dart';
 import '../terminal/row_cache.dart';
 import '../terminal/term_gestures.dart';
 import '../terminal/term_keyboard.dart';
@@ -16,30 +17,6 @@ import '../terminal/vt.dart';
 import '../theme.dart';
 import 'actions.dart';
 import 'prompt.dart';
-
-// what each key-bar key types into the pane: xterm sequences, as Konsole sends them, or while the phone leads, the key
-// the emulator encodes in the program's own modes
-const keys = [
-  ('esc', '\x1b', 'Escape', VtKey.escape, 0),
-  ('tab', '\t', 'Tab', VtKey.tab, 0),
-  ('⇧tab', '\x1b[Z', 'Shift Tab', VtKey.tab, vtShift),
-  ('^C', '\x03', 'Control C', VtKey.c, vtCtrl),
-  ('↑', '\x1b[A', 'Up', VtKey.arrowUp, 0),
-  ('↓', '\x1b[B', 'Down', VtKey.arrowDown, 0),
-  ('←', '\x1b[D', 'Left', VtKey.arrowLeft, 0),
-  ('→', '\x1b[C', 'Right', VtKey.arrowRight, 0),
-  ('⏎', '\r', 'Enter', VtKey.enter, 0),
-  ('^D', '\x04', 'Control D', VtKey.d, vtCtrl),
-  ('^L', '\x0c', 'Control L', VtKey.l, vtCtrl),
-  ('^R', '\x12', 'Control R', VtKey.r, vtCtrl),
-  ('^Z', '\x1a', 'Control Z', VtKey.z, vtCtrl),
-  ('^U', '\x15', 'Control U', VtKey.u, vtCtrl),
-  ('home', '\x1b[H', 'Home', VtKey.home, 0),
-  ('end', '\x1b[F', 'End', VtKey.end, 0),
-  ('pgup', '\x1b[5~', 'Page up', VtKey.pageUp, 0),
-  ('pgdn', '\x1b[6~', 'Page down', VtKey.pageDown, 0),
-  ('paste', null, 'Paste', null, 0), // the clipboard
-];
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt, @visibleForTesting this.onKeyboard});
@@ -535,8 +512,8 @@ class _SessionScreenState extends State<SessionScreen> {
   // session.type at a time so the keystrokes keep their order
   void _softKey(VtKey key, int mods) {
     _claim();
-    if (!_direct) return _typeSoft(_seq(key, mods));
-    _sent(term!.key(key, mods: mods, seq: _seq(key, mods)));
+    if (!_direct) return _typeSoft(xtermSeq(key, mods));
+    _sent(term!.key(key, mods: mods, seq: xtermSeq(key, mods)));
   }
 
   void _softText(String text, {bool paste = false}) {
@@ -548,20 +525,6 @@ class _SessionScreenState extends State<SessionScreen> {
   void _typeSoft(String text) {
     _typeAll([text], pane);
     Future.delayed(const Duration(milliseconds: 150), _load);
-  }
-
-  /// What [key] with [mods] types indirectly, as xterm sends it: cursor keys carry the modifiers as `CSI 1;m`, other
-  /// keys take alt as a leading ESC.
-  static String _seq(VtKey key, int mods) {
-    final m = 1 + (mods & vtShift != 0 ? 1 : 0) + (mods & vtAlt != 0 ? 2 : 0) + (mods & vtCtrl != 0 ? 4 : 0);
-    final cursor = const {
-      VtKey.arrowUp: '1;mA', VtKey.arrowDown: '1;mB', VtKey.arrowRight: '1;mC', VtKey.arrowLeft: '1;mD', //
-      VtKey.home: '1;mH', VtKey.end: '1;mF', VtKey.pageUp: '5;m~', VtKey.pageDown: '6;m~',
-    }[key];
-    if (cursor != null && m > 1) return '\x1b[${cursor.replaceFirst('m', '$m')}';
-    final plain = mods & ~vtAlt;
-    final seq = key == VtKey.backspace ? '\x7f' : (keys.where((k) => k.$4 == key && k.$5 == plain).firstOrNull ?? keys.firstWhere((k) => k.$4 == key)).$2!;
-    return mods & vtAlt != 0 ? '\x1b$seq' : seq;
   }
 
   Future<void> sendInput() async {
