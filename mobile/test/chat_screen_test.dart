@@ -509,6 +509,9 @@ void main() {
         expect(find.descendant(of: find.byType(AppBar), matching: find.byKey(Key(key))), findsOneWidget);
       }
       expect(t.renderObject<RenderParagraph>(find.byKey(const Key('modelChip'))).didExceedMaxLines, isFalse); // the model is not cut
+      expect(find.descendant(of: find.byType(AppBar), matching: find.byKey(const Key('via'))), findsNothing);
+      expect(find.descendant(of: find.byType(ChatView), matching: find.byKey(const Key('via'))), findsNothing);
+      expect(find.byKey(const Key('via')), findsOneWidget); // over the Chat view, not in it
       await expectLater(find.byType(Scaffold), matchesGoldenFile('goldens/session_chat${split ? '_split' : ''}.png'));
       await h.stop();
     });

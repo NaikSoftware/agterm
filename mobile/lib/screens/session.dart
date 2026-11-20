@@ -721,7 +721,6 @@ class _SessionScreenState extends State<SessionScreen> {
         actions: [
           _modeButton(s),
           if (s.hasSplit) _paneButton(),
-          if (m.state == LinkState.connected && m.via.isNotEmpty) _Tag(m.via, key: const Key('via')),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Semantics(
@@ -748,6 +747,7 @@ class _SessionScreenState extends State<SessionScreen> {
           Expanded(
               child: Stack(children: [
             Positioned.fill(child: chat ? _chatView(s) : _terminal()),
+            if (m.state == LinkState.connected && m.via.isNotEmpty) Positioned(top: 6, right: 6, child: _LinkIcon(m.via)),
             if (!chat)
               Positioned(left: 0, bottom: 0, child: TermKeyboard(focus: _keyboard, onKey: _softKey, onText: _softText, onPaste: (t) => _softText(t, paste: true))),
             if (m.state != LinkState.connected)
@@ -1081,16 +1081,17 @@ class _PaneWriter implements GateWriter {
   bool pasteSafe(String text) => _now.pasteSafe(text);
 }
 
-/// A small bordered label in the app bar: the link the phone uses.
-class _Tag extends StatelessWidget {
-  const _Tag(this.text, {super.key});
-  final String text;
+/// The link the phone uses ('Wi-Fi' or 'BT'), faint over the content's top-right corner; it never takes a touch.
+class _LinkIcon extends StatelessWidget {
+  const _LinkIcon(this.via);
+  final String via;
 
   @override
-  Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(border: Border.all(color: C.line), borderRadius: BorderRadius.circular(6)),
-        child: Text(text, style: const TextStyle(fontSize: 11, color: C.muted, fontWeight: FontWeight.w600)),
+  Widget build(BuildContext context) => IgnorePointer(
+        child: Semantics(
+          key: const Key('via'),
+          label: via,
+          child: Opacity(opacity: 0.4, child: Icon(via == 'BT' ? Icons.bluetooth : Icons.wifi, size: 16, color: C.muted)),
+        ),
       );
 }

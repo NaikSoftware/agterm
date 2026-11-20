@@ -387,7 +387,7 @@ class _ChatViewState extends State<ChatView> {
       key: const Key('todoStrip'),
       onTap: () => setState(() => _todos = !_todos),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.fromLTRB(12, 6, 28, 6), // clear of the link icon
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 4, children: [
           Row(children: [
             Expanded(
@@ -456,7 +456,7 @@ class _ChatViewState extends State<ChatView> {
           key: const Key('stickyPrompt'),
           onTap: () => _reveal(sticky.key),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.fromLTRB(12, 6, 28, 6), // clear of the link icon
             child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text('❯ ${sticky.item?.text ?? ''}', style: const TextStyle(fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),

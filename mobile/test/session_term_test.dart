@@ -1267,6 +1267,20 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('linkIconFloatsOverTheTerminalAndTakesNoTouch', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    final icon = find.byKey(const Key('via'));
+    expect(find.descendant(of: find.byType(AppBar), matching: icon), findsNothing);
+    expect(t.widget<Semantics>(icon).properties.label, 'Wi-Fi');
+    expect(find.descendant(of: icon, matching: find.byIcon(Icons.wifi)), findsOneWidget);
+    expect(find.ancestor(of: icon, matching: find.byType(IgnorePointer)), findsWidgets);
+    final term = t.getRect(find.byKey(const Key('term')));
+    expect(t.getRect(icon).topRight, term.topRight + const Offset(-6, 6));
+    await h.stop();
+  });
+
   testWidgets('noPaneButtonWithoutASplit', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
