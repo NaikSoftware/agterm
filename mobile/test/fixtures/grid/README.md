@@ -46,6 +46,7 @@ Each 100-column grid is the same dialog as its 45-column twin, after a resize.
 | `card-ask-multi` | one multiSelect question, nothing ticked | fullscreen | 45, 100 |
 | `card-ask-multi-ticked` | digits 1 and 3: rows 1 and 3 ticked, `❯` on row 1 | fullscreen | 45, 100 |
 | `card-ask-multi-other` | Down ×3, `a spare lens` pasted: Other ticked, `❯` on it | fullscreen | 45, 100 |
+| `card-ask-multi-submit` | digit 1, Down ×4: `❯` on the unnumbered `Submit` row | fullscreen | 45, 100 |
 | `card-ask-two` | two questions; the 14-character header is cut to `Watch sched…` at 45 (`Environment` fits) | fullscreen | 45, 100 |
 | `card-ask-two-second` | digit 1: the second question shown | fullscreen | 45, 100 |
 | `card-ask-review` | digit 1 again: Review with `→` lines, `Submit answers` and `Cancel` | fullscreen | 45, 100 |
@@ -65,6 +66,7 @@ Each 100-column grid is the same dialog as its 45-column twin, after a resize.
 
 `card-plan.pending.json` keeps the captured `ExitPlanMode` input: keys `plan` and `planFilePath`, the home folder's user name replaced with `keeper`.
 `card-webfetch` and `card-subagent-bash` carry `source` (the bare `agentId`) and `agentType` from `.meta.json`.
+Both agents ran in the background (`requestShape: background`), so their Agent call already had its result; plan A's `subagentPending` lists subagent calls only under an open Agent call, so it would list neither.
 
 `panel-usage-45` is redacted by hand: the reset time, usage figures, counts and skill and subagent names are neutral text in the captured layout.
 The 100-column grids carry an OSC 8 `/rc` link whose session id is replaced with `session_REDACTED`.

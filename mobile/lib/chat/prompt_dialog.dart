@@ -20,8 +20,19 @@ class DialogOption {
 
 /// The prompt dialog at the bottom of a Claude Code grid, split into regions; every rule compares width-agnostically.
 class PromptDialog {
-  PromptDialog._(this.top, this.header, this.body, this.boxed, this.question, this.options, this.footer, this.review, this.answers,
-      this.reviewQuestions, this.preview);
+  PromptDialog._(
+    this.top,
+    this.header,
+    this.body,
+    this.boxed,
+    this.question,
+    this.options,
+    this.footer,
+    this.review,
+    this.answers,
+    this.reviewQuestions,
+    this.preview,
+  );
 
   final int top; // first grid row of the dialog: the rule above the tab bar or title
   final String header, body, boxed, question, footer;
@@ -41,8 +52,10 @@ class PromptDialog {
     bool solid(int r) => _solid.hasMatch(trimmed(r));
     bool dashed(int r) => _dashed.hasMatch(trimmed(r));
     int indent(int r) => t(r).length - t(r).trimLeft().length;
-    // conversation rows start at column 0; dialog rows never do with these
-    bool conversation(int r) => RegExp(r'^(⏺|▔|❯\s*[^\s\d])').hasMatch(t(r));
+    // the text column, past a cursor: `❯    Submit` starts at 5
+    int lead(int r) => _unnumbered.firstMatch(t(r))!.group(1)!.length;
+    // column-0 conversation rows; a user prompt `❯ text` is only looked for above the options, where no cursor row is
+    bool conversation(int r, {bool prompt = true}) => RegExp(prompt ? r'^(⏺|▔|❯ [^\s\d])' : r'^(⏺|▔)').hasMatch(t(r));
     String join(Iterable<int> rows) => [for (final r in rows) trimmed(r)].where((s) => s.isNotEmpty).join(' ');
 
     // scanned upward from the bottom, so the conversation above the dialog never reaches a region
@@ -51,18 +64,34 @@ class PromptDialog {
       b--;
     }
     if (b < 0 || !solid(b)) return null;
+    // a `N. ` deeper than a numbered row above it in the same block is wrapped text, not the last option
+    bool deeper(int r) {
+      final col = _numbered.firstMatch(t(r))!.group(1)!.length;
+      for (var u = r - 1; u >= 0 && !blank(u) && !solid(u); u--) {
+        if ((_numbered.firstMatch(t(u))?.group(1)!.length ?? col) < col) return true;
+      }
+      return false;
+    }
+
     var last = b - 1;
-    for (; last >= 0 && !_numbered.hasMatch(t(last)); last--) {
-      if (conversation(last)) return null;
+    for (; last >= 0 && !(_numbered.hasMatch(t(last)) && !deeper(last)); last--) {
+      if (conversation(last, prompt: false)) return null;
     }
     if (last < 0) return null;
 
     final lastMatch = _numbered.firstMatch(t(last))!;
+    final digitCol = lastMatch.group(1)!.length;
+    // a `N. ` away from the list's digit column is text: a description or a pasted Other line
+    RegExpMatch? numbered(int r) {
+      final m = _numbered.firstMatch(t(r));
+      return m?.group(1)!.length == digitCol ? m : null;
+    }
+
     var first = last;
     for (var r = last - 1; r >= 0; r--) {
-      if (_numbered.hasMatch(t(r))) {
+      if (numbered(r) != null) {
         first = r;
-      } else if (blank(r) || conversation(r) || (!solid(r) && indent(r) < lastMatch.end)) {
+      } else if (blank(r) || conversation(r) || (!solid(r) && lead(r) < lastMatch.end)) {
         break;
       }
     }
@@ -95,7 +124,10 @@ class PromptDialog {
     } else {
       final bodyStart = dash ?? q0;
       header = join([for (var r = top + 1; r < bodyStart; r++) r]);
-      body = join([for (var r = bodyStart; r < q0; r++) if (!solid(r) && !dashed(r)) r]);
+      body = join([
+        for (var r = bodyStart; r < q0; r++)
+          if (!solid(r) && !dashed(r)) r,
+      ]);
       question = join([for (var r = q0; r < first; r++) r]);
       if (dash != null) {
         final box = <String>[];
@@ -106,7 +138,7 @@ class PromptDialog {
       }
     }
 
-    final dim = g.colours ? _cells(g.rows[first])[lastMatch.group(1)!.length].fg : null;
+    final dim = g.colours ? _cells(g.rows[first])[digitCol].fg : null;
     final options = <_Option>[];
     _Option? current;
     var inList = true, belowRule = false;
@@ -116,15 +148,15 @@ class PromptDialog {
         (current, inList, belowRule) = (null, true, true);
       } else if (blank(r)) {
         (current, inList) = (null, false);
-      } else if (_numbered.firstMatch(t(r)) case final m?) {
+      } else if (numbered(r) case final m?) {
         current = _Option(int.parse(m.group(2)!), m.group(4), t(r).trimLeft().startsWith('❯'), belowRule, r, m.end)
           ..take(cells, dim, g.colours);
         options.add(current);
         inList = true;
-      } else if (current != null && indent(r) >= current.textCol) {
+      } else if (current != null && lead(r) >= current.textCol) {
         current.lastRow = r;
-        if (current.open) current.take(cells, dim, g.colours, start: indent(r));
-      } else if (inList && indent(r) >= lastMatch.group(1)!.length) {
+        if (current.open) current.take(cells, dim, g.colours, start: lead(r));
+      } else if (inList && lead(r) >= digitCol) {
         final m = _unnumbered.firstMatch(t(r))!;
         current = _Option(null, m.group(3), t(r).trimLeft().startsWith('❯'), belowRule, r, m.end)..take(cells, dim, g.colours);
         options.add(current);
@@ -166,13 +198,16 @@ class PromptDialog {
     );
   }
 
-  static List<VtCell> _cells(VtRow row) => [for (final c in row.cells) if (!c.spacer) c];
+  static List<VtCell> _cells(VtRow row) => [
+    for (final c in row.cells)
+      if (!c.spacer) c,
+  ];
 }
 
 class _Option {
   _Option(this.number, String? mark, this.cursor, this.belowRule, this.row, this.textCol)
-      : checked = mark == null ? null : mark == '✔',
-        lastRow = row;
+    : checked = mark == null ? null : mark == '✔',
+      lastRow = row;
 
   final int? number;
   final bool? checked;

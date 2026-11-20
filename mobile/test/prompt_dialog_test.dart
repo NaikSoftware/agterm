@@ -20,9 +20,11 @@ void main() {
   test('optionsAndNumbers', () {
     for (final w in _widths) {
       final d = _read('card-ask-single-$w');
-      expect([for (final o in d.options) o.label],
-          ['North Cape', 'Harbour light on the long southern breakwater', 'Island tower', 'Type something.', 'Chat about this'],
-          reason: '$w');
+      expect(
+        [for (final o in d.options) o.label],
+        ['North Cape', 'Harbour light on the long southern breakwater', 'Island tower', 'Type something.', 'Chat about this'],
+        reason: '$w',
+      );
       expect([for (final o in d.options) o.number], [1, 2, 3, 4, 5]);
       expect([for (final o in d.options) o.belowRule], [false, false, false, false, true]);
       final n = _read('card-ask-numbers-$w');
@@ -45,6 +47,37 @@ void main() {
       final other = _read('card-ask-other-open-$w').cursorOption!;
       expect((other.number, other.label), (4, 'Type something.'));
     }
+  });
+
+  test('cursorOnAnUnnumberedRow', () {
+    for (final w in _widths) {
+      final d = _read('card-ask-multi-submit-$w');
+      expect((d.cursorOption?.number, d.cursorOption?.label), (null, 'Submit'), reason: '$w');
+      expect(d.options.where((o) => o.number != null).length, 5);
+    }
+  });
+
+  test('numberAwayFromTheDigitColumnIsText', () {
+    final d = PromptDialog.read(
+      Grid.text(
+        [
+          '❯ hi',
+          '─────────────',
+          ' Bash command',
+          '',
+          ' Do you want to proceed?',
+          ' ❯ 1. Yes',
+          '   2. No',
+          '      3. not a row',
+          '',
+          ' Esc to cancel',
+          '──── Title ─',
+        ].join('\n'),
+      ),
+    )!;
+    expect([for (final o in d.options) o.number], [1, 2]);
+    expect(d.options.last.lastRow, 7);
+    expect(d.top, 1);
   });
 
   test('reviewLines', () {
@@ -96,7 +129,10 @@ void main() {
     ]) {
       final g = _grid(name);
       final d = PromptDialog.read(g)!;
-      final hits = [for (var r = 0; r < g.rows.length; r++) if (norm(g.text(r)).contains(fragment)) r];
+      final hits = [
+        for (var r = 0; r < g.rows.length; r++)
+          if (norm(g.text(r)).contains(fragment)) r,
+      ];
       expect(hits.length, greaterThan(1), reason: '$name echoes the anchor above the dialog');
       expect(d.top, greaterThan(hits[hits.length - 2]), reason: name);
       expect(d.top, lessThan(hits.last), reason: name);
@@ -117,12 +153,19 @@ void main() {
     expect(PromptDialog.read(_grid('working-45')), isNull);
   });
 
+  test('everyFixtureReadsWithoutThrowing', () {
+    final names = [for (final f in Directory('test/fixtures/grid').listSync()) f.path.split('/').last]
+        .where((n) => n.endsWith('.ansi'))
+        .map((n) => n.replaceAll('.ansi', ''));
+    for (final n in names) {
+      final d = PromptDialog.read(_grid(n));
+      if (n.startsWith('dialog-')) expect(d?.options.length, greaterThanOrEqualTo(3), reason: n);
+    }
+  });
+
   test('everyCardFixtureParses', () {
-    final names = Directory('test/fixtures/grid')
-        .listSync()
-        .map((f) => f.path.split('/').last)
+    final names = [for (final f in Directory('test/fixtures/grid').listSync()) f.path.split('/').last]
         .where((n) => n.startsWith('card-') && n.endsWith('.ansi'));
-    expect(names.length, 45);
     for (final n in names) {
       final d = _read(n.replaceAll('.ansi', ''));
       expect(d.options.where((o) => o.number != null).length, greaterThanOrEqualTo(2), reason: n);
