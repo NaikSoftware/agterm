@@ -3,12 +3,12 @@ name: elis
 description: >
   Drive Elis, a macOS and Linux terminal, via elisctl. Use in an Elis session:
   manage and move sessions, companions and workspaces; split panes; toggle the scratch or file panel; run, hide or show overlays;
-  read exit status; show HTML pages, URLs or dev servers in an overlay with saved logins or as a
+  read exit status; show HTML pages, URLs or dev servers in an overlay or as a
   page row;
   post a HUD/caption/notification/sidebar activity line; message panes; show a picker, question or input dialog; show images/markdown/code; type
   into or restart a pane by id, copy its selection, set the clipboard, search scrollback; manage windows, font size,
-  theme; reload or edit the keymap, event hooks and elis-scoped ghostty config; run a custom command; read
-  a closed window's session screen; subscribe to status, lifecycle, tree and other
+  theme; reload or edit the keymap, event hooks and ghostty config; run a custom command; read
+  a closed window's session screen; read a session's Claude conversation; subscribe to status, tree and other
   events; wait on agent status; pair the phone app.
   Covers window/workspace/session addressing, session links, ELIS_* variables,
   another Mac's sessions/windows, elis-server hosts, cookbook recipes, versions/upgrades, diagnosing
@@ -443,6 +443,9 @@ omitted when expanded).
   and overrides `--pane` when it resolves, while an unknown token without `--pane` fails with
   `unknown pane id: <id>`; `--json` reports the pane read as `result.pane`; `--all` adds available scrollback (alternate-screen buffers
   have none); `--lines N` keeps the last N lines.
+- `session transcript [--after N | --before N] [--json]`: read a session's Claude conversation as items (prompts,
+  replies, tool calls with results), from Claude Code's transcript rather than the screen, so completed replies
+  survive scrolling and redraws; page with the printed `next`. reference.md has the fields and the cursor rules.
 - `session search [needle] [--next|--prev|--close]` — search the terminal scrollback; prints the "N of M" counter.
 - `session split [on|off|toggle] [--axis vertical|horizontal]` · `session split close` - second shell, left/right by
   default or top/bottom with `--axis horizontal`. Omitting `--axis` preserves the current axis and the

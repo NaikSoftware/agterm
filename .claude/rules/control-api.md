@@ -181,7 +181,7 @@ renumbering. Do not reintroduce a count anywhere.
   `.expand`, `.tint`, `.folder`
 - `session.new`, `.duplicate`, `.companion.new`, `.companion.page`, `.companion.duplicate`, `.companion.convert`, `.companion.move`, `.companion.page.attach`, `.page`, `.collapse`, `.expand`, `.close`, `.terminate`, `.select`, `.rename`, `.reveal`, `.move`, `.type`, `.split`,
   `.split.close`, `.swap`, `.lead`,
-  `.scratch`, `.focus`, `.resize`, `.go`, `.copy`, `.paste`, `.selectall`, `.text`, `.search`, `.status`,
+  `.scratch`, `.focus`, `.resize`, `.go`, `.copy`, `.paste`, `.selectall`, `.text`, `.transcript`, `.search`, `.status`,
   `.grid`, `.scroll`, `.flag`, `.tint`, `.info`, `.seen`, `.restore`, `.restart`, `.background`, `.overlay.open`, `.overlay.close`, `.overlay.resize`,
   `.overlay.reload`, `.overlay.navigate`,
   `.overlay.result`, `.overlay.submit`, `.overlay.copy`, `.overlay.text`, `.overlay.job.run`, `.overlay.page.serve`, `.overlay.hide`,
@@ -1544,6 +1544,38 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   Each field is omitted when its slot is empty; forms add no tree field. App shutdown can interrupt polling.
   Ask emits no events; result and tree polling are its explicit event exemption.
 
+## Claude transcript
+
+`site/commands.html#session` owns the user contract of `session.transcript`;
+the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the record allowlist and the caps.
+
+- The reader is `ClaudeTranscript` in `ElisCore` (index, items, command catalog), Linux-safe so elis-server runs it.
+  `ClaudeTranscript.instance(directory:)` keeps one reader per Claude directory (`ClaudeHome`: an absolute
+  `CLAUDE_CONFIG_DIR`, else `~/.claude`), which finds `projects/*/<id>.jsonl` once and extends its index per poll.
+  No caller passes a path: the session id and every sidecar name read from a file pass
+  `SessionLauncher.plainSessionID`, and the `transcript` argument is only compared with the id read.
+- The host names the source through `ControlActions.transcriptSource`, which resolves the session and calls
+  `Session.transcriptSource`; the dispatcher does not read the tree, which a 700 ms phone poll would project
+  whole, and the host owns its Claude directory, which tests point at a temp dir.
+  It answers `no adapter` unless the session runs Claude in the asked pane (`agentPane` by default) and knows its id.
+  The `ControlActions` default refuses `the Elis on this host is too old for session.transcript`, so the fork builds.
+- The dispatcher validates first, so every host gives the same first error, then reads on
+  `DispatchQueue.global`, never in a `Task`: a first scan of a large file would park a cooperative-pool thread.
+- Cursor: a tail page (no `after`/`before`) ends at the last whole line; an `after` page cut by the budget sets
+  `next` to the end of its last record. Items upsert by `uuid`: a tool item is re-emitted with its result, a text
+  item with another block of its message. `reset` answers a tail page when the held id differs, `after` passes
+  the file's size, or the leaf's chain no longer holds the caller's last item (`/rewind`, retry).
+- An attached row's read runs on its origin and a server row's on its server (`transcriptRoute`, before the
+  structural route), as the remote `elisctl session transcript` with values joined to their flags
+  (`TranscriptForward.words`). An attached row maps a pane token through `AttachedOrigin.originPaneID`; a server
+  row keeps it, the catalog sharing pane identities. Server rows lease the catalog pool, attached rows one
+  `SshConnectionPool` per host (`attachedTranscriptPools`), never closed, since an idle master exits after its
+  `ControlPersist`. A refused argument or an unknown-command reply answers
+  `the Elis on HOST is too old for session.transcript`; an undecodable or slow reply is `HOST gave no answer`,
+  never too old, which would disable Chat on the phone. The read leaves the window cache alone.
+- `PageSessionRefusal` refuses it on a page row. It is a read: no event, no `EventFormatter` entry, and the
+  tree's `agent`, `agentPane` and `agentSessionId` name what it reads.
+
 ## Status, notifications, and flags
 
 - `session.status` accepts idle/active/completed/blocked, blink, auto-reset, optional sound, `#rrggbb`
@@ -2362,6 +2394,10 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   `agentSessionID`, and the viewer drops a value that is not a plain token.
   An older origin or elis-server sends none, so the row falls back to `remoteSessionID`.
   Unlike status and context, stream end does not clear it, since it still names the conversation.
+- The origin's running agent and its pane ride the `agent` frame and snapshot field (`PresentationAgent`) into the
+  row's `runningAgent` and `agentPane` through `applyRemoteAgent`, which reads an unknown name or a `scratch` pane as
+  none. Stream end clears them (`stopRemotePresentation`), or an ended row keeps the agent logo and Chat;
+  an origin that never sends the kind leaves them unset, so `session.transcript` answers `no adapter` there.
 - A mirrored HUD carries the origin's REMAINING time, and the viewer counts that down on its own clock.
   The two expiries are not synchronized, so the panels can close a moment apart; the origin's withdrawal
   frame closes the viewer's early. A mirrored HUD yields to a HUD or program overlay this Mac's own caller
@@ -2614,6 +2650,11 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
     the viewer creates, reopens or undoes (`RemoteOperation.claimedRows`) and for the new pane of a split it adds
     (`claimSplitWhenShown`), never on reconnect or relaunch; a pane reported before its claim is reattached with it
     (`ZmxLeadBook.claimOnReport`).
+- `PaneObserver` detects agents per tick: `ProcAgent.probe` reads each listed pane's foreground group leader from
+  `/proc`, a Claude pane adds its `sessions/<pid>.json` under `ClaudeHome`, and `applyAgentSamples` sets the
+  tree's `agent`, `agentPane` and `agentSessionId` and publishes `agent` and `agent.session` to presenters.
+  shortcut: the group leader only, so a script-started claude without job control is missed.
+  `session.transcript` is served (`ServerActions.transcriptSource`), reading the server's own Claude directory.
 - Under musl every `ServerProcess` spawn re-execs the server as `CleanExec`, which closes inherited
   descriptors in the single-threaded child: musl has no closefrom file action, and Foundation opens files
   without `O_CLOEXEC`.

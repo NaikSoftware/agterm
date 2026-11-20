@@ -2353,6 +2353,16 @@ elisctl session info --clear --target &quot;$ELIS_SESSION_ID&quot;</code></pre>
 <li>A session attached from another Mac shows that Mac's line too, unless one is set here.</li>
 <li><code>tree</code> reports <code>info</code>, <code>infoMarkdown</code> and <code>infoHideAfter</code>.</li>
 </ul>
+<h3 id="status-transcript">Read Claude's conversation</h3>
+<p>A script can read the Claude Code conversation running in a session as a list of prompts, replies and tool calls, taken from Claude Code's own transcript rather than the screen, so a finished reply reads whole however far it scrolled away.</p>
+<pre class="bash"><code>elisctl session transcript --target &quot;$ID&quot;
+elisctl session transcript --after 18234 --json --target &quot;$ID&quot;</code></pre>
+<ul>
+<li>It reads the pane <code>tree</code> names in <code>agentPane</code>, the one running Claude Code, whichever pane has focus. A pane without Claude Code answers <code>no adapter</code>.</li>
+<li>The first form prints the newest items and a <code>next</code> offset; pass it to <code>--after</code> to read only what was added since, and a page's <code>start</code> to <code>--before</code> to read older items.</li>
+<li>It works on a session attached from another Mac and on an elis-server session, reading there. An Elis on that host too old for the command answers <code>the Elis on HOST is too old for session.transcript</code>.</li>
+</ul>
+<p>The command reference lists every field: <a href="commands.html#session">session transcript</a>.</p>
 <h3 id="status-tint">Row tint</h3>
 <p>A tint tells rows apart at a glance: red for production, green for development. Pick one from <strong>Tint</strong> in a session or workspace row menu: None or one of twelve colors (red, orange, yellow, green, blue, purple, gray, teal, pink, brown, indigo, mint) that follow light and dark mode. A tint colors the row's icon and name.</p>
 <pre class="bash"><code>elisctl session tint red --target &quot;$ELIS_SESSION_ID&quot;

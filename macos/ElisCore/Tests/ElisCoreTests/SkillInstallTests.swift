@@ -45,6 +45,9 @@ struct SkillInstallTests {
         #expect(reference.contains("`workspaceFilter`"))
         #expect(examples.contains("elisctl workspace focus add"))
         #expect(examples.contains("elisctl workspace filter on"))
+        #expect(skill.contains("read a session's Claude conversation"))
+        #expect(skill.contains("`session transcript"))
+        #expect(reference.contains("`session transcript [--pane left|right] [--pane-id TOKEN] [--after N | --before N]"))
     }
 
     // the plugin manifests and the app bundle read the SAME directory, so a moved skill or a renamed leaf
