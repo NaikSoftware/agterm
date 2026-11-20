@@ -58,7 +58,8 @@ const _maxLine = 1 << 20; // the relay closes the whole channel past ControlWire
 
 class PageLink extends ChangeNotifier {
   PageLink(Mux mux, String target) : _channel = mux.present(target) {
-    _channel.lines.listen(_line, onDone: _ended);
+    _lines = _channel.lines.listen(_line, onDone: _ended);
+    // every failure also ends the channel, which `_ended` handles; only an older relay changes `supported`
     _channel.opened.catchError((Object e) {
       if (e is ElisError && e.message == 'unsupported channel type') {
         supported = false;
@@ -68,6 +69,7 @@ class PageLink extends ChangeNotifier {
   }
 
   final PresentChannel _channel;
+  late final StreamSubscription<Map<String, dynamic>> _lines;
   final _pages = <String, PhonePage>{}; // oldest first
   final _commands = StreamController<PageCommand>.broadcast();
   final _fetches = <int, _Fetch>{};
@@ -118,6 +120,7 @@ class PageLink extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    unawaited(_lines.cancel()); // lines the channel still holds would reach a disposed notifier
     unawaited(_channel.close());
     _ended();
     unawaited(_commands.close());
@@ -131,6 +134,14 @@ class PageLink extends ChangeNotifier {
   }
 
   void _line(Map<String, dynamic> o) {
+    try {
+      _apply(o);
+    } on Object {
+      // a line with a wrong JSON type is dropped
+    }
+  }
+
+  void _apply(Map<String, dynamic> o) {
     switch (o['t']) {
       case 'page':
         final p = PhonePage._(o);
@@ -161,7 +172,13 @@ class PageLink extends ChangeNotifier {
     if (f == null) return;
     if (o['error'] case final error?) return _fail(seq!, '$error');
     if (!f.file.isCompleted) f.file.complete(PageFile('${o['mime'] ?? 'application/octet-stream'}', f.bytes.stream));
-    if (o['data'] case final String data) f.bytes.add(base64Decode(data));
+    if (o['data'] case final String data) {
+      try {
+        f.bytes.add(base64Decode(data));
+      } on FormatException {
+        return _fail(seq!, 'bad res');
+      }
+    }
     if (o['end'] == true) {
       _fetches.remove(seq);
       unawaited(f.bytes.close());

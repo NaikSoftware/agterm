@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:elis_mobile/client.dart';
@@ -140,6 +141,33 @@ void main() {
     expect(sent(r, ch).single, {
       't': 'state', 'id': 'p1', 'load': 'loaded', 'title': 'T', 'canGoBack': false, 'appliedSeq': 7, 'hidden': true,
     });
+  });
+
+  test('linesQueuedAtDisposeAreDropped', () async {
+    final (link, r, ch) = await opened();
+    down(r, ch, filePage);
+    await flush();
+    link.addListener(() => scheduleMicrotask(link.dispose)); // between two queued lines
+    final lines = [{...filePage, 'id': 'p2'}, {'t': 'command', 'id': 'p1', 'seq': 3, 'action': 'hide'}, {...filePage, 'id': 'p3'}];
+    r.send(frame(LinkKind.data, ch, utf8.encode(lines.map((l) => '${jsonEncode(l)}\n').join())));
+    await flush();
+    await flush();
+  });
+
+  test('aMalformedLineIsDropped', () async {
+    final (link, r, ch) = await opened();
+    down(r, ch, {...filePage, 'sizePercent': 'big'});
+    down(r, ch, {'t': 'command', 'id': 'p1', 'seq': 'x', 'action': 'hide'});
+    down(r, ch, filePage);
+    await flush();
+    expect(link.page?.id, 'p1');
+    final fetch = link.fetch('p1', '/w/a.css');
+    final seq = sent(r, ch).last['seq'];
+    down(r, ch, {'t': 'res', 'id': 'p1', 'seq': seq, 'mime': 'text/css', 'end': false});
+    final file = await fetch;
+    final bytes = expectLater(file.bytes.drain<void>(), throwsA(isA<ElisError>()));
+    down(r, ch, {'t': 'res', 'id': 'p1', 'seq': seq, 'data': '***', 'end': false});
+    await bytes;
   });
 
   test('disposeClosesTheChannelAndDropsEveryPage', () async {

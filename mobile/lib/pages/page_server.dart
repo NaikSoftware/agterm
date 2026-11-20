@@ -52,7 +52,7 @@ class PageServer {
         await response.addStream(file.bytes);
       }
     } on Object {
-      // the WebView went away or the fetch failed mid-file: the response just ends
+      // the WebView went away, or the file failed mid-way and dart:io already broke the connection (a test covers it)
     } finally {
       await response.close().catchError((Object _) {});
     }

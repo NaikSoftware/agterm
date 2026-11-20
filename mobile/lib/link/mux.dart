@@ -439,7 +439,8 @@ class PresentChannel implements _Channel {
         for (var line = _buffer.next(); line != null; line = _buffer.next()) {
           if (_jsonLine(line) case final o?) _lines.add(o);
         }
-        // credited on receipt, not per line: a line may exceed the window (16 KiB on Bluetooth)
+        // shortcut: credited on receipt, so no backpressure; credit per line would deadlock a line past the 16 KiB
+        // Bluetooth window. Upgrade when lines can be credited incrementally.
         if (f.payload.isNotEmpty) _mux._add(LinkFrame.credit(id, f.payload.length));
       case LinkKind.close:
         _end('${(_json(f.payload) ?? const {})['reason'] ?? 'closed'}');

@@ -16,6 +16,11 @@ Future<(HttpClientResponse, String)> request(Uri uri, {String method = 'GET'}) a
   }
 }
 
+Stream<List<int>> brokenFile() async* {
+  yield utf8.encode('let a');
+  throw ElisError('lost');
+}
+
 void main() {
   late List<String> fetched;
   late PageServer server;
@@ -25,6 +30,7 @@ void main() {
     server = await PageServer.start((path) async {
       fetched.add(path);
       if (path.endsWith('missing.css')) throw ElisError('not found');
+      if (path.endsWith('broken.js')) return PageFile('text/javascript', brokenFile());
       return PageFile('text/html', Stream.value(utf8.encode('<p>hi</p>')));
     }, javascript: javascript);
   }
@@ -65,6 +71,11 @@ void main() {
     final (response, body) = await request(server.urlFor('/w/missing.css'));
     expect(response.statusCode, 404);
     expect(body, 'not found');
+  });
+
+  test('aFetchFailingMidFileAbortsTheConnection', () async {
+    await start(javascript: true);
+    await expectLater(request(server.urlFor('/w/broken.js')), throwsA(isA<HttpException>()));
   });
 
   test('withoutJavaScriptThePagesScriptsAreBlocked', () async {
