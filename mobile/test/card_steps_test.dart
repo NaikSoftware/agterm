@@ -8,6 +8,7 @@ import 'package:elis_mobile/chat/prompt_dialog.dart';
 import 'package:elis_mobile/chat/prompt_match.dart';
 import 'package:elis_mobile/chat/transcript.dart';
 import 'package:elis_mobile/chat/write_gate.dart';
+import 'package:elis_mobile/terminal/vt.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -290,6 +291,117 @@ void main() {
       final steps = cardSteps(_match(single, _call('card-ask-single')), AskCancel());
       expect([for (final st in steps) sent(st.write)], ['escape']);
       expect(_send(esc, steps)?.outcome, GateOutcome.done);
+    });
+  }
+
+  for (final w in [45, 100]) {
+    final idle = _g('idle-placeholder-$w');
+    final bash = _g('card-bash-$w'), plan = _g('card-plan-$w');
+    final bashCall = _call('card-bash'), planCall = _call('card-plan');
+    Grid cursorTo(Grid g, int from, int to) => retext(retext(g, '❯ $from.', '  $from.'), '  $to. ', '❯ $to. ');
+
+    test('yesIsOneDigit $w', () {
+      final s = ScriptedGrids([(equals('1'), idle)], bash);
+      expect(_send(s, cardSteps(_match(bash, bashCall), OptionAnswer('Yes')))?.outcome, GateOutcome.done);
+      expect(s.sentWrites, ['1']);
+    });
+
+    test('noFindsItsRow $w', () {
+      final s = ScriptedGrids([(equals('4'), idle)], bash);
+      expect(_send(s, cardSteps(_match(bash, bashCall), OptionAnswer('No')))?.outcome, GateOutcome.done);
+      expect(s.sentWrites, ['4']);
+
+      final write = _g('card-write-$w');
+      final ws = ScriptedGrids([(equals('3'), idle)], write);
+      expect(_send(ws, cardSteps(_match(write, _call('card-write')), OptionAnswer('No')))?.outcome, GateOutcome.done);
+      expect(ws.sentWrites, ['3']);
+    });
+
+    test('yesWithNote $w', () {
+      final amend = _g('card-bash-amend-$w');
+      final s = ScriptedGrids([
+        (equals('tab'), amend),
+        (equals('paste:mind the stairs'), retext(amend, 'Yes, and tell Claude what to do next', 'Yes, mind the stairs')),
+        (equals('enter'), idle),
+      ], bash);
+      expect(_send(s, cardSteps(_match(bash, bashCall), NoteAnswer(yes: true, text: 'mind the stairs')))?.outcome, GateOutcome.done);
+      expect(s.sentWrites, ['tab', 'paste:mind the stairs', 'enter']);
+    });
+
+    test('noWithReasonWalksDown $w', () {
+      final no = _g('card-bash-no-amend-$w');
+      final two = cursorTo(bash, 1, 2), three = cursorTo(two, 2, 3);
+      final s = ScriptedGrids([
+        (equals('arrowDown'), two),
+        (equals('arrowDown'), three),
+        (equals('arrowDown'), cursorTo(three, 3, 4)),
+        (equals('tab'), no),
+        (equals('paste:too early'), retext(no, 'No, and tell Claude what to do differe', 'No, too early')),
+        (equals('enter'), idle),
+      ], bash);
+      expect(_send(s, cardSteps(_match(bash, bashCall), NoteAnswer(yes: false, text: 'too early')))?.outcome, GateOutcome.done);
+      expect(s.sentWrites, ['arrowDown', 'arrowDown', 'arrowDown', 'tab', 'paste:too early', 'enter']);
+
+      final stuck = ScriptedGrids([(equals('arrowDown'), two)], bash);
+      final r = _send(stuck, cardSteps(_match(bash, bashCall), NoteAnswer(yes: false, text: 'too early')));
+      expect((r?.outcome, r?.step), (GateOutcome.timeout, 2));
+      expect(stuck.sentWrites, ['arrowDown', 'arrowDown']);
+    });
+
+    test('noteNeedsCursorOnYes $w', () {
+      final two = cursorTo(bash, 1, 2);
+      final s = ScriptedGrids(const [], two);
+      final r = _send(s, cardSteps(_match(two, bashCall), NoteAnswer(yes: true, text: 'mind the stairs')));
+      expect((r?.outcome, r?.step), (GateOutcome.mismatch, 1));
+      expect(s.sentWrites, isEmpty);
+    });
+
+    test('digitRefusedWhileAmending $w', () {
+      final amend = _g('card-bash-amend-$w');
+      final s = ScriptedGrids([(equals('4'), idle)], amend);
+      expect(_send(s, cardSteps(_match(amend, bashCall), OptionAnswer('No')))?.outcome, GateOutcome.mismatch);
+      expect(s.sentWrites, isEmpty);
+    });
+
+    test('secondTapRows $w', () {
+      final rows = [for (final o in _match(bash, bashCall).dialog.options) o.label];
+      expect([for (final l in rows) needsSecondTap(PromptKind.permission, l)], [false, true, true, false]);
+      final planRows = {for (final o in _match(plan, planCall).dialog.options) o.label: needsSecondTap(PromptKind.plan, o.label)};
+      expect(planRows, {'Yes, and use auto mode': true, 'Yes, manually approve edits': false, 'Tell Claude what to change': false});
+      expect(needsSecondTap(PromptKind.permission, 'Sí'), isTrue);
+      expect(needsSecondTap(PromptKind.plan, 'Sí, aprobar'), isTrue);
+    });
+
+    test('planNeverSendsBareEnter $w', () {
+      final m = _match(plan, planCall);
+      final answers = <CardAnswer>[for (final o in m.dialog.options) OptionAnswer(o.label), PlanChange('two lanterns')];
+      for (final a in answers) {
+        final writes = [for (final st in cardSteps(m, a)) st.write];
+        for (final (i, wr) in writes.indexed) {
+          if (wr case KeyWrite(key: VtKey.enter)) expect(writes[i - 1], isA<PasteWrite>());
+          expect(wr, isNot(isA<KeyWrite>().having((k) => k.key, 'key', VtKey.escape)));
+        }
+      }
+      final s = ScriptedGrids([(equals('2'), idle)], plan);
+      expect(_send(s, cardSteps(m, OptionAnswer('Yes, manually approve edits')))?.outcome, GateOutcome.done);
+      expect(s.sentWrites, ['2']);
+    });
+
+    test('planChange $w', () {
+      final change = _g('card-plan-change-$w');
+      final s = ScriptedGrids([
+        (equals('3'), change),
+        (equals('paste:two lanterns'), retext(change, 'Tell Claude what to change', 'two lanterns')),
+        (equals('enter'), idle),
+      ], plan);
+      expect(_send(s, cardSteps(_match(plan, planCall), PlanChange('two lanterns')))?.outcome, GateOutcome.done);
+      expect(s.sentWrites, ['3', 'paste:two lanterns', 'enter']);
+
+      final open = cardSteps(_match(change, planCall), PlanChange('two lanterns'));
+      expect([for (final st in open) sent(st.write)], ['paste:two lanterns', 'enter'], reason: '❯ is already on the change row');
+      final digit = ScriptedGrids([(equals('2'), idle)], change);
+      expect(_send(digit, cardSteps(_match(change, planCall), OptionAnswer('Yes, manually approve edits')))?.outcome, GateOutcome.mismatch);
+      expect(digit.sentWrites, isEmpty);
     });
   }
 

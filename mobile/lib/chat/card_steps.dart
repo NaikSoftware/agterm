@@ -43,7 +43,15 @@ class PlanChange extends CardAnswer {
 /// The whole key sequence for [a], fixed before the first write; each step re-reads the dialog and its anchor.
 List<GateStep> cardSteps(PromptMatch m, CardAnswer a) => switch (m.kind) {
   PromptKind.ask => _Ask(m).steps(a),
-  _ => throw UnsupportedError('${m.kind} cards have no steps yet'),
+  PromptKind.permission => _Permission(m).steps(a),
+  PromptKind.plan => _Plan(m).steps(a),
+};
+
+/// Rows that persist a rule or change the mode need a second tap; a label the card does not know always does.
+bool needsSecondTap(PromptKind k, String label) => switch (k) {
+  PromptKind.permission => !['Yes', 'No'].any((l) => norm(l) == norm(label)),
+  PromptKind.plan => !['Yes, manually approve edits', _Plan.change].any((l) => norm(l) == norm(label)),
+  PromptKind.ask => false,
 };
 
 /// Whether the cursor option shows [text]: its first line's first 40 characters, or Claude's "[Pasted text" stand-in.
@@ -62,29 +70,12 @@ String _needle(String text) {
 
 const _nano = 'ctrl+gtoeditinnano';
 
-class _Ask {
-  _Ask(this.m)
-    : qs = [
-        for (final q in m.call.input?['questions'] is List ? m.call.input!['questions'] as List : const [])
-          if (q is Map) q,
-      ];
+class _Card {
+  _Card(this.m);
 
   final PromptMatch m;
-  final List<Map> qs;
 
   PromptDialog get d0 => m.dialog;
-
-  List<String> labels(int i) => [
-    for (final o in qs[i]['options'] is List ? qs[i]['options'] as List : const [])
-      if (o is Map) o['label'] is String ? o['label'] as String : '',
-  ];
-
-  bool multi(int i) => qs[i]['multiSelect'] == true;
-
-  bool preview(int i) => [
-    for (final o in qs[i]['options'] is List ? qs[i]['options'] as List : const [])
-      if (o is Map && o['preview'] != null) o,
-  ].isNotEmpty;
 
   PromptDialog? read(Grid g) {
     final d = PromptDialog.read(g);
@@ -100,6 +91,35 @@ class _Ask {
 
   GateStep step(GateWrite w, bool Function(PromptDialog d) ready, bool Function(Grid g) done, {String? why}) =>
       GateStep(w, ready: (g) => at(g, ready), done: done, why: why);
+
+  int number(String label) => d0.numbered(label)?.number ?? (throw ArgumentError('no row $label'));
+
+  GateStep pick(String label, bool Function(PromptDialog d) keyable) {
+    final k = number(label);
+    return step(TextWrite('$k'), (d) => keyable(d) && _Ask.row(d, label)?.number == k, gone);
+  }
+}
+
+class _Ask extends _Card {
+  _Ask(super.m)
+    : qs = [
+        for (final q in m.call.input?['questions'] is List ? m.call.input!['questions'] as List : const [])
+          if (q is Map) q,
+      ];
+
+  final List<Map> qs;
+
+  List<String> labels(int i) => [
+    for (final o in qs[i]['options'] is List ? qs[i]['options'] as List : const [])
+      if (o is Map) o['label'] is String ? o['label'] as String : '',
+  ];
+
+  bool multi(int i) => qs[i]['multiSelect'] == true;
+
+  bool preview(int i) => [
+    for (final o in qs[i]['options'] is List ? qs[i]['options'] as List : const [])
+      if (o is Map && o['preview'] != null) o,
+  ].isNotEmpty;
 
   // the tab showing question i; a Review tab is never one
   bool on(int i, PromptDialog d) => !d.review && matchPrompt(d, [m.call])?.question == i;
@@ -302,5 +322,73 @@ class _Ask {
     }
 
     return step(TextWrite('$k'), (d) => d.review && !field(d) && same(d) && row(d, 'Submit answers')?.number == k, gone);
+  }
+}
+
+class _Permission extends _Card {
+  _Permission(super.m);
+
+  static const _amend = 'Tabtoamend';
+
+  // an open amend field takes digits and Tab as text; Claude drops "Tab to amend" from the footer while it is open
+  static bool closed(PromptDialog d) => _Ask.keyable(d) && norm(d.footer).contains(_amend);
+
+  static bool amending(PromptDialog d, String word) =>
+      (d.cursorOption?.label.startsWith('$word,') ?? false) && !norm(d.footer).contains(_amend);
+
+  List<GateStep> steps(CardAnswer a) => switch (a) {
+    OptionAnswer(:final label) => [pick(label, closed)],
+    NoteAnswer(:final yes, :final text) => note(yes ? 'Yes' : 'No', text),
+    _ => throw ArgumentError('${a.runtimeType} does not answer a permission prompt'),
+  };
+
+  // Yes needs ❯ on its row already; No walks down to its row one key at a time
+  List<GateStep> note(String word, String text) {
+    final k = number(word), rows = _Ask.list(d0), target = rows.indexWhere((o) => o.number == k);
+    bool on(PromptDialog d) => d.cursorOption?.number == k;
+    return [
+      if (word == 'No')
+        for (var r = _Ask.cursorAt(d0); r >= 0 && r < target; r++)
+          step(KeyWrite(VtKey.arrowDown), (d) => _Ask.cursorAt(d) == r && !_Ask.field(d), (g) => at(g, (d) => _Ask.cursorAt(d) == r + 1)),
+      step(
+        KeyWrite(VtKey.tab),
+        (d) => closed(d) && on(d) && _Ask.row(d, word)?.number == k,
+        (g) => at(g, (d) => on(d) && amending(d, word)),
+      ),
+      step(PasteWrite(text), (d) => on(d) && amending(d, word), (g) => at(g, (d) => on(d) && fieldShows(d, text))),
+      step(KeyWrite(VtKey.enter), (d) => on(d) && fieldShows(d, text), gone),
+    ];
+  }
+}
+
+class _Plan extends _Card {
+  _Plan(super.m);
+
+  static const change = 'Tell Claude what to change';
+
+  // ❯ on the change row focuses its field, and the plan footer always reads "ctrl+g to edit in nano"
+  late final int changeRow = d0.numbered(change)?.number ?? _Ask.list(d0).last.number!;
+
+  bool keyable(PromptDialog d) => _Ask.cursorAt(d) >= 0 && d.cursorOption!.number != changeRow;
+
+  List<GateStep> steps(CardAnswer a) => switch (a) {
+    OptionAnswer(:final label) => [pick(label, keyable)],
+    PlanChange(:final text) => changeSteps(text),
+    _ => throw ArgumentError('${a.runtimeType} does not answer a plan prompt'),
+  };
+
+  List<GateStep> changeSteps(String text) {
+    final k = number(change);
+    bool on(PromptDialog d) => d.cursorOption?.number == k;
+    return [
+      if (!on(d0)) step(TextWrite('$k'), (d) => keyable(d) && _Ask.row(d, change)?.number == k, (g) => at(g, on)),
+      step(
+        PasteWrite(text),
+        (d) => on(d) && norm(d.cursorOption!.label) == norm(change),
+        (g) => at(g, (d) => on(d) && fieldShows(d, text)),
+      ),
+      // a revised plan anchors to this call again, with an empty change row
+      step(KeyWrite(VtKey.enter), (d) => on(d) && fieldShows(d, text), (g) => !at(g, (d) => fieldShows(d, text))),
+    ];
   }
 }
