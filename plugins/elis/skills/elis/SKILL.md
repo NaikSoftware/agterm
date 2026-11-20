@@ -529,7 +529,7 @@ omitted when expanded).
   and `clear --pane` returns the pane to the default. `--opacity` 0.0–1.0. (An image/text watermark
   renders the pane opaque, overriding window translucency, so it shows; a `color` takes no opacity and
   honors the Settings window translucency instead.)
-- `session overlay open (<command> [--cwd DIR] [--wait] [--block] | --html FILE [--cwd DIR] [--navigation | --chromeless] [--js] [--block] | --url URL [--navigation | --chromeless] [--js] | --image FILE | --markdown FILE [--navigation] | --text FILE [--line N]) [--size-percent N [--width PT] [--height PT]] [--background-color #rrggbb] [--follow] [--pane left|right]` ·
+- `session overlay open (<command> [--cwd DIR] [--wait] [--block] | --html FILE [--cwd DIR] [--navigation | --chromeless] [--js] [--block] | --url URL [--navigation | --chromeless] [--js] [--block] | --image FILE | --markdown FILE [--navigation] | --text FILE [--line N]) [--size-percent N [--width PT] [--height PT]] [--background-color #rrggbb] [--follow] [--pane left|right]` ·
   `session overlay resize (--size-percent N [--width PT] [--height PT] | --width PT [--height PT] | --height PT | --full)` ·
   `session overlay close [--pane left|right]` ·
   `session overlay hide|show|toggle [--pane left|right]` ·
@@ -849,14 +849,12 @@ Questions, pickers, program overlays, HUDs and sounds stay on the Mac too. So a 
 
 Dev servers on the phone: a `--url` page on the session host's loopback (`localhost`, `127.0.0.1`, `::1`) shows on
 the phone too, hot reload included; the relay carries its connections, through ssh for a row on another host.
-Pass `--js`, or a script-built page is blank. A `--url` page takes no `--block`, and a dev server you start needs its
-own stop condition, so wait on the page's outcome and stop the server when the page closes:
+Pass `--js`, or a script-built page is blank. A dev server you start needs its own stop condition: open the page with
+`--block`, which returns when the page closes, and stop the server then:
 
 ```bash
 npm run dev -- --host 127.0.0.1 --port 5173 >/tmp/dev.log 2>&1 & server=$!
-reply=$(elisctl session overlay open --url http://localhost:5173/ --js --target "$ELIS_SESSION_ID" --json)
-page=$(printf '%s' "$reply" | sed -n 's/.*"pageID":"\([^"]*\)".*/\1/p')
-while elisctl session overlay result --page "$page" | grep -q '"pending"'; do sleep 2; done
+elisctl session overlay open --url http://localhost:5173/ --js --block --target "$ELIS_SESSION_ID"
 kill "$server"
 ```
 

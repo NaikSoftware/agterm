@@ -1201,11 +1201,12 @@ error keeps those names for compatibility.
   frontmost window. Refused from a page: `zmx.present`, `zmx.reset`, `session.overlay.job.run`,
   `session.overlay.page.serve`, `session.companion.page.attach`, and any
   request from a frame. Escape outside text you put in a page: it can run commands.
-- `session overlay open --url URL [--navigation | --chromeless] [--js] [--persistent] [--browse] [--size-percent N [--width PT] [--height PT]] [--background-color #rrggbb] [--follow] [--pane left|right] [--target] [--window W]`
+- `session overlay open --url URL [--navigation | --chromeless] [--js] [--persistent] [--browse] [--block] [--size-percent N [--width PT] [--height PT]] [--background-color #rrggbb] [--follow] [--pane left|right] [--target] [--window W]`
   — show a web page by URL in the overlay slot, typically a dev server you are running
   (`http://localhost:5173/`) or a docs page. Everything above for `--html` applies, except that URL must be
-  an absolute http or https URL (`--url must be an absolute http or https URL`), `--cwd` and `--block` are
-  refused, and the page gets no bridge to Elis. The
+  an absolute http or https URL (`--url must be an absolute http or https URL`), `--cwd` is
+  refused, and the page gets no bridge to Elis, so it cannot submit: `--block` waits until it closes and exits 2
+  (`dismissed`). The
   server must be reachable from the Elis the command reaches, where `localhost` points: this Mac from a local
   session, the host from a session elis-server or another Mac runs, whose page the Mac showing it reaches through
   an ssh forward (a page session or page companion on a loopback URL is still refused there). Plain http works for
