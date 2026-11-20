@@ -10,16 +10,21 @@ final class PaneObserver {
     let store: AppStore
     let panes: ServerPanes
     let cwd: (Int32) -> String?
+    let agentProbe: (Int32) -> AgentPaneProbe?
+    /// claudeDirectory is where a Claude pane's `sessions/<pid>.json` is read.
+    var claudeDirectory = ClaudeHome.directory()
     /// onRespawn hears that a parent's pane runs a fresh shell under the same daemon name.
     var onRespawn: ((_ session: UUID, _ daemon: String) -> Void)?
     /// onApplied runs after each listing is settled, which is when pane lifecycle and cwd change.
     var onApplied: (() -> Void)?
     private var loop: Task<Void, Never>?
 
-    init(store: AppStore, panes: ServerPanes, cwd: @escaping (Int32) -> String? = ProcCwd.foreground) {
+    init(store: AppStore, panes: ServerPanes, cwd: @escaping (Int32) -> String? = ProcCwd.foreground,
+         agentProbe: @escaping (Int32) -> AgentPaneProbe? = ProcAgent.probe) {
         self.store = store
         self.panes = panes
         self.cwd = cwd
+        self.agentProbe = agentProbe
     }
 
     /// start ticks until `stop`.
@@ -59,14 +64,19 @@ final class PaneObserver {
         // a page row has no daemon, so its absence from a listing never ends it
         for session in store.workspaces.flatMap(\.sessions) where !session.ended && session.content == .terminal {
             var gone: [UUID] = []
+            var samples: [AgentPaneSample] = []
             for (identity, role) in panesOf(session) {
                 if let record = listed[ZmxSupport.daemonName(for: identity)] {
                     session.daemonBackedPanes.insert(identity)
                     leaders[identity] = record.leaderPID
                     updateCwd(of: session, role: role, leader: record.leaderPID)
+                    samples.append(agentSample(role, leader: record.leaderPID))
                 } else if !panes.started(identity, since: listedAt), !panes.restarting.contains(identity) {
                     gone.append(identity)
                 }
+            }
+            if !samples.isEmpty {
+                store.applyAgentSamples(samples, focused: session.focusedPane == .right ? .right : .left, forSession: session.id)
             }
             if !gone.isEmpty { missing.append((session, gone)) }
         }
@@ -145,6 +155,13 @@ final class PaneObserver {
         return true
     }
 
+    private func agentSample(_ pane: StatusPane, leader: Int32?) -> AgentPaneSample {
+        guard let leader, let probe = agentProbe(leader) else { return AgentPaneSample(pane: pane, agent: nil, claudeSessionJSON: nil) }
+        let agent = SessionLauncher.agent(argv: probe.argv)
+        let json = agent == .claude ? ClaudeHome.sessionJSON(pid: probe.pid, directory: claudeDirectory) : nil
+        return AgentPaneSample(pane: pane, agent: agent, claudeSessionJSON: json)
+    }
+
     private func updateCwd(of session: Session, role: StatusPane, leader: Int32?) {
         guard let leader, let directory = cwd(leader) else { return }
         switch role {
@@ -186,6 +203,27 @@ enum ProcCwd {
         guard let resolved = realpath(path, nil) else { return nil }
         defer { free(resolved) }
         return String(cString: resolved)
+    }
+}
+
+/// AgentPaneProbe is the foreground process of a pane's terminal: its pid and argv.
+struct AgentPaneProbe: Equatable {
+    var pid: Int32
+    var argv: [String]
+}
+
+/// ProcAgent reads a pane's foreground group leader from `/proc`. Linux only; elsewhere there is none.
+/// shortcut: the group leader only, so a script-started claude without job control is missed; read the group members when that matters.
+enum ProcAgent {
+    static func probe(leader: Int32) -> AgentPaneProbe? {
+        #if os(Linux)
+        let group = ProcCwd.foregroundGroup(of: leader) ?? leader
+        guard let data = FileManager.default.contents(atPath: "/proc/\(group)/cmdline"),
+              let argv = ProcForeground.parseCmdline(data) else { return nil }
+        return AgentPaneProbe(pid: group, argv: argv)
+        #else
+        return nil
+        #endif
     }
 }
 

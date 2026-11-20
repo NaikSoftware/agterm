@@ -17,6 +17,8 @@ public final class ServerActions: ControlActions {
     static let macDefaults = AppSettings()
     /// foregroundArgv reads the foreground program of the terminal whose shell is the given pid.
     var foregroundArgv: (Int32) -> [String]? = ProcForeground.argv
+    /// claudeDirectory is where `session.transcript` reads Claude's transcripts.
+    var claudeDirectory = ClaudeHome.directory()
     /// replayObservation reads, for a replay, the process holding the terminal of the shell with the given pid.
     var replayObservation: (_ leader: Int32, _ shell: String?) -> RestartReplay.Observation = ProcReplay.observation
     /// processes is the panes' process table, so a close and a control kill hang up through the same one.

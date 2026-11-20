@@ -13,6 +13,10 @@ struct ServerCommandPolicyTests {
         #expect(ServerCommandPolicy.refusal(command) == nil)
     }
 
+    @Test func transcriptIsServed() {
+        #expect(ServerCommandPolicy.refusal(.sessionTranscript) == nil)
+    }
+
     @Test func aWindowCommandIsRefusedWithTheWindowReason() {
         #expect(ServerCommandPolicy.refusal(.windowNew) == HeadlessCommandPolicy.physicalWindowRefusal(.windowNew))
     }
