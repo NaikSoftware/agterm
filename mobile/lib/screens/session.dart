@@ -719,6 +719,7 @@ class _SessionScreenState extends State<SessionScreen> {
               style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
         ]),
         actions: [
+          _modeButton(s),
           if (m.state == LinkState.connected && m.via.isNotEmpty) _Tag(m.via, key: const Key('via')),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -746,11 +747,11 @@ class _SessionScreenState extends State<SessionScreen> {
           // the buttons float over the screen's top edge, so the terminal takes the whole height
           Expanded(
               child: Stack(children: [
-            // Chat holds the toolbar in its header; over the terminal it floats
+            // Chat holds the pane pair in its header; over the terminal it floats
             Positioned.fill(child: chat ? _chatView(s) : _terminal()),
             if (!chat) ...[
               Positioned(left: 0, bottom: 0, child: TermKeyboard(focus: _keyboard, onKey: _softKey, onText: _softText, onPaste: (t) => _softText(t, paste: true))),
-              Positioned(top: 6, right: 6, child: _toolbar(s)),
+              if (_toolbar(s) case final bar?) Positioned(top: 6, right: 6, child: bar),
             ],
             if (m.state != LinkState.connected)
               Center(
@@ -794,7 +795,20 @@ class _SessionScreenState extends State<SessionScreen> {
             onAnswer: type));
   }
 
-  Widget _toolbar(Session s) {
+  // the icon is the mode shown; a tap picks the other one
+  Widget _modeButton(Session s) {
+    final canSwitch = chatAvailable(s, pane) || _inChat;
+    final reason = ModePicks.tooOld.contains(s.id) ? _tooOld(s) : 'No Claude in this pane';
+    return IconButton(
+      key: const Key('modeButton'),
+      tooltip: _inChat ? 'Chat — switch to Term' : canSwitch ? 'Term — switch to Chat' : 'Term — $reason',
+      icon: Icon(_inChat ? Icons.chat_bubble_outline : Icons.terminal),
+      onPressed: canSwitch ? () => _pickMode(_inChat ? ViewMode.term : ViewMode.chat) : null,
+    );
+  }
+
+  Widget? _toolbar(Session s) {
+    if (!s.hasSplit) return null;
     Widget seg(String label, bool on, VoidCallback? onTap, {Key? key}) => Padding(
           padding: const EdgeInsets.only(left: 6),
           child: OutlinedButton(
@@ -827,15 +841,8 @@ class _SessionScreenState extends State<SessionScreen> {
       _syncFit();
     }
     return Row(key: const Key('toolbar'), mainAxisSize: MainAxisSize.min, children: [
-      if (ModePicks.tooOld.contains(s.id))
-        Tooltip(message: _tooOld(s), child: seg('Chat', false, null, key: const Key('modeChat')))
-      else
-        seg('Chat', _inChat, chatAvailable(s, pane) ? () => _pickMode(ViewMode.chat) : null, key: const Key('modeChat')),
-      seg('Term', !_inChat, () => _pickMode(ViewMode.term), key: const Key('modeTerm')),
-      if (s.hasSplit) ...[
-        seg('Left pane', pane == 'left', () => setPane('left')),
-        seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
-      ],
+      seg('Left pane', pane == 'left', () => setPane('left')),
+      seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
     ]);
   }
 

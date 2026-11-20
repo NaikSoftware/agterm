@@ -1267,13 +1267,12 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('toolbarShowsTheModeWithoutASplit', (t) async {
+  testWidgets('noToolbarWithoutASplit', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
-    expect(find.byKey(const Key('toolbar')), findsOneWidget);
-    expect(find.byKey(const Key('modeTerm')), findsOneWidget);
-    expect(find.byKey(const Key('rightPane')), findsNothing);
+    expect(find.byKey(const Key('toolbar')), findsNothing);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.byKey(const Key('modeButton'))), findsOneWidget);
     expect(find.text('Take over'), findsNothing);
     await h.stop();
   });
@@ -1512,7 +1511,7 @@ void main() {
     await h.opened();
     final bar = find.byKey(const Key('toolbar'));
     final segs = find.descendant(of: bar, matching: find.byType(OutlinedButton));
-    expect(segs, findsNWidgets(4)); // Chat, Term, Left, Right
+    expect(segs, findsNWidgets(2));
     for (final e in segs.evaluate()) {
       final r = t.getRect(find.byWidget(e.widget));
       expect((r.left >= 0, r.right <= 360), (true, true));

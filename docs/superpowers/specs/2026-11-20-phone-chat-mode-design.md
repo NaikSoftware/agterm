@@ -108,10 +108,9 @@ Rules:
 
 ```
 ┌───────────────────────────────────────────┐
-│ ‹ Run Echo Todo Checklist   [Opus·med] ⋮  │ app bar: title, model chip, ⋮ (holds "Choose mode automatically")
-│   ~/IdeaProjects/elis · PR #446   ● busy  │ cwd, PR chip, Elis status
-│   [ Chat | Term ]                         │ mode switcher (+ Left|Right on a split); collapses with the
-│                                           │ cwd row while the user scrolls up, returns on scroll down
+│ ‹ Run Echo Todo Checklist     [💬] ● ⋮    │ app bar: title, mode button, Elis status, ⋮ (holds "Choose mode automatically")
+│   ~/IdeaProjects/elis · PR #446 [Opus·med]│ cwd, PR chip, model chip (+ Left|Right on a split); collapses
+│                                           │ while the user scrolls up, returns on scroll down
 ├───────────────────────────────────────────┤
 │ ❯ Now write 40 short facts about squi…    │ sticky last prompt (tap: jump)
 │ ☐ 2/5 · Write tests                ▾      │ todo strip (only while open items)
@@ -173,7 +172,7 @@ Stop and Cancel keep a residual risk: a dialog opening inside that window turns 
 
 | Element | Source | Shows / does | Enabled / visible when |
 |---|---|---|---|
-| Mode switcher | E | `Chat`/`Term` `seg` pair in `_toolbar` (`mobile/lib/screens/session.dart:646-649`), now rendered without a split too; the pane pair joins it on a split. Auto is the `⋮` item "Choose mode automatically", checked while no manual pick holds; a manual pick lasts for that Elis session while the phone app runs **[lead]** | Chat enabled while `agent` is `claude` and `agentSessionId` is known (the pane that runs Claude: scope call 1) |
+| Mode switcher | E | One `IconButton` (`modeButton`) first in the session `AppBar` actions: its icon is the mode shown (chat bubble or terminal), a tap picks the other mode; while Chat is unavailable it shows the terminal, disabled, with the reason in its tooltip. The Left/Right pair stays in `_toolbar`, only on a split. Auto is the `⋮` item "Choose mode automatically", checked while no manual pick holds; a manual pick lasts for that Elis session while the phone app runs **[lead]** | Chat enabled while `agent` is `claude` and `agentSessionId` is known (the pane that runs Claude: scope call 1) |
 | Title | T meta | `custom-title` wins over `ai-title`; falls back to the Elis `name` | Always |
 | PR chip | T meta `pr-link` | `PR #N`; a tap opens `prUrl` | A `pr-link` exists |
 | Model chip | T last assistant `model`, `effort` | `Opus · medium`; dimmed after a `/model` command item until the next assistant record. A tap offers "Change model…", which sends `/model` through Send and opens the panel sheet **[lead]** | Always visible; enabled when idle |
@@ -215,7 +214,7 @@ Scrolling acts only on the phone's list; Chat never sends PgUp, `{` or wheel eve
 | Host too old | `session.transcript` answers "unknown command" (an older Mac app, origin or elis-server) | Chat disabled with "Update Elis on <host>" **[lead]** |
 | Transcript file switched (`/clear`, `/resume`, `/branch`) | The reply's `transcript` differs from the held id, the old file's `continued-in` names the next id, or the tree's `agentSessionId` changes | Drop the list and load the new file's tail |
 | Branch switched (rewind, retry) | The reply sets `reset` | Drop the list and load the tail |
-| Claude exited while Chat is shown | `agent` stops being `claude` | History stays read-only with a "Claude exited" banner and a Term button; composer, chips and Stop are disabled; once the user leaves, the switcher shows Chat disabled **[writer]** |
+| Claude exited while Chat is shown | `agent` stops being `claude` | History stays read-only with a "Claude exited" banner and a Term button; composer, chips and Stop are disabled; once the user leaves, the mode button shows Term, disabled **[writer]** |
 | Stale | No GRID for 5 s, or no poll reply for two intervals | "Reconnecting…" bar; working line, statusline and chips dimmed, the spinner stopped, every write disabled; cleared by the next GRID and reply **[lead]** |
 | Empty | Running, no items yet | "Claude is ready" with 2-3 built-in commands to pick **[lead]** |
 | Loading | First page or paging back | Skeleton bubbles; a "Loading earlier…" row at the top **[lead]** |

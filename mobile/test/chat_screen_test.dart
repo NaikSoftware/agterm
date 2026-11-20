@@ -70,6 +70,11 @@ Future<Harness> _cardChat(WidgetTester t, {List<Object?>? pending, List<Object?>
   return h;
 }
 
+(IconData?, String?) _modeIcon(WidgetTester t) {
+  final b = t.widget<IconButton>(find.byKey(const Key('modeButton')));
+  return ((b.icon as Icon).icon, b.tooltip);
+}
+
 bool _panel() => find.byKey(const Key('panelSheet')).evaluate().isNotEmpty;
 
 void main() {
@@ -96,11 +101,13 @@ void main() {
       await h.start();
       await h.opened();
       expect(_claims(h), isEmpty);
-      await _tapKey(t, 'modeTerm');
+      expect(_modeIcon(t), (Icons.chat_bubble_outline, 'Chat — switch to Term'));
+      await _tapKey(t, 'modeButton');
       expect(_chat(), isFalse);
+      expect(_modeIcon(t), (Icons.terminal, 'Term — switch to Chat'));
       expect(find.byKey(const Key('term')), findsOneWidget);
       expect(_claims(h), hasLength(1)); // Term's claim on OPENED, on the next frame
-      await _tapKey(t, 'modeChat');
+      await _tapKey(t, 'modeButton');
       expect(_chat(), isTrue);
       await h.stop();
     });
@@ -109,7 +116,7 @@ void main() {
   testWidgets('autoItemClearsTheManualPick', (t) async {
     final h = Harness(t, treeOf(session: _claude));
     await h.start();
-    await _tapKey(t, 'modeTerm');
+    await _tapKey(t, 'modeButton');
     expect(_chat(), isFalse);
     await _tapKey(t, 'sessionMenu');
     await _tapKey(t, 'autoMode');
@@ -121,7 +128,8 @@ void main() {
   testWidgets('chatDisabledWithoutAgent', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
-    expect(t.widget<OutlinedButton>(find.byKey(const Key('modeChat'))).onPressed, isNull);
+    expect(t.widget<IconButton>(find.byKey(const Key('modeButton'))).onPressed, isNull);
+    expect(_modeIcon(t), (Icons.terminal, 'Term — No Claude in this pane'));
     expect(_chat(), isFalse);
     expect(h.r.transcriptArgs, isEmpty);
     await h.stop();
@@ -135,8 +143,8 @@ void main() {
       final h = Harness(t, treeOf(session: _claude));
       await h.start();
       if (viaTerm) {
-        await _tapKey(t, 'modeTerm'); // Term lays out the phone grid
-        await _tapKey(t, 'modeChat');
+        await _tapKey(t, 'modeButton'); // Term lays out the phone grid
+        await _tapKey(t, 'modeButton');
       }
       await h.opened();
       t.view.viewInsets = const FakeViewPadding(bottom: 900); // the soft keyboard
@@ -173,8 +181,8 @@ void main() {
       final h = Harness(t, treeOf(session: _claude));
       await h.start();
       if (viaTerm) {
-        await _tapKey(t, 'modeTerm');
-        await _tapKey(t, 'modeChat');
+        await _tapKey(t, 'modeButton');
+        await _tapKey(t, 'modeButton');
       }
       GateResult? early;
       unawaited(_view(t).gate.run(1, (s) => s.send(_up())).then((r) => early = r));
@@ -242,9 +250,7 @@ void main() {
     await t.pump();
     expect(_chat(), isTrue);
     expect(_view(t).exited, isTrue);
-    // Chat sits below the toolbar: the exited row's Term button is not under the segments
-    final bar = t.getRect(find.byKey(const Key('toolbar')));
-    expect(t.getRect(find.byKey(const Key('chatExited'))).top, greaterThanOrEqualTo(bar.bottom));
+    expect(t.getRect(find.byKey(const Key('chatExited'))).top, greaterThanOrEqualTo(t.getRect(find.byType(AppBar)).bottom));
     await h.stop();
   });
 
@@ -322,7 +328,7 @@ void main() {
     await h.start();
     await t.pump(const Duration(milliseconds: 100));
     expect(_chat(), isFalse);
-    expect(t.widget<OutlinedButton>(find.byKey(const Key('modeChat'))).onPressed, isNull);
+    expect(t.widget<IconButton>(find.byKey(const Key('modeButton'))).onPressed, isNull);
     final calls = h.r.transcriptArgs.length;
     h.nav.currentState!.pop();
     await t.pumpAndSettle(const Duration(milliseconds: 10));

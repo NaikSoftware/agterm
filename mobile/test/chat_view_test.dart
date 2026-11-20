@@ -600,9 +600,9 @@ void main() {
         await t.pump(const Duration(milliseconds: 100));
         expect(find.byType(ChatView), findsNothing);
         expect(find.text('Update Elis on $shown'), findsOneWidget);
-        expect(t.widget<OutlinedButton>(find.byKey(const Key('modeChat'))).onPressed, isNull);
-        // the reason stays on the disabled segment after the notice is gone
-        expect(find.byWidgetPredicate((w) => w is Tooltip && w.message == 'Update Elis on $shown'), findsOneWidget);
+        expect(t.widget<IconButton>(find.byKey(const Key('modeButton'))).onPressed, isNull);
+        // the reason stays on the disabled button after the notice is gone
+        expect(find.byWidgetPredicate((w) => w is Tooltip && w.message == 'Term — Update Elis on $shown'), findsOneWidget);
         final calls = h.r.transcriptArgs.length;
         await t.pump(const Duration(seconds: 5));
         expect(h.r.transcriptArgs.length, calls);

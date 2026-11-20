@@ -106,7 +106,7 @@ class ChatView extends StatefulWidget {
       required this.exited,
       required this.stale,
       required this.onTerm,
-      required this.switcher,
+      this.switcher,
       this.model,
       this.composer,
       this.promptCard,
@@ -126,7 +126,7 @@ class ChatView extends StatefulWidget {
   final Session s;
   final bool exited, stale;
   final VoidCallback onTerm;
-  final Widget switcher;
+  final Widget? switcher; // the split's pane pair
   final Widget? model; // the model chip, beside the cwd
   final GlobalKey<ChatComposerState>? composer; // for the model chip's `send`
   final PromptCardBuilder? promptCard;
@@ -385,7 +385,7 @@ class _ChatViewState extends State<ChatView> {
             _chip('PR #${pr!.prNumber}', key: const Key('prChip'), onTap: () => openWebLink(pr.prUrl)),
           ?widget.model,
         ]),
-        widget.switcher,
+        ?widget.switcher,
       ]),
     );
   }
