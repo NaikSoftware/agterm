@@ -339,6 +339,19 @@ struct ClaudeTranscriptTests {
         #expect(ClaudeTranscriptError.notFound.description == "transcript not found")
     }
 
+    @Test func missingTranscriptIsLookedUpAgainOnlyAfterTheRetryDelay() throws {
+        let fixture = try Fixture()
+        try FileManager.default.removeItem(atPath: fixture.path)
+        let clock = Locked(Date(timeIntervalSince1970: 0))
+        let reader = ClaudeTranscript(claudeDirectory: fixture.root.path, now: { clock.withLock { $0 } })
+        let request = ClaudeTranscriptRequest(sessionID: fixture.id, maxBytes: 1000)
+        #expect(reader.page(request) == .failure(.notFound))
+        try Data((user("u1", parent: nil) + "\n").utf8).write(to: URL(fileURLWithPath: fixture.path))
+        #expect(reader.page(request) == .failure(.notFound))
+        clock.withLock { $0 += ClaudeTranscript.missRetry }
+        #expect((try? reader.page(request).get())?.items.map(\.uuid) == ["u1"])
+    }
+
     // MARK: - Commands
 
     @Test func skillListingsFoldSinceLastInitial() {

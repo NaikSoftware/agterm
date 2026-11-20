@@ -55,6 +55,8 @@ public enum ClaudeTranscriptError: Error, Equatable, CustomStringConvertible {
 
 /// Pages of `<claudeDirectory>/projects/*/<id>.jsonl`, each file indexed once and extended per poll.
 public final class ClaudeTranscript: @unchecked Sendable {
+    /// How long a lookup that found no transcript answers without listing every project directory again.
+    static let missRetry: TimeInterval = 2
     public static let pageBudget = 49152, clipBytes = ClaudeTranscriptItems.clipBytes, itemCap = ClaudeTranscriptItems.itemCap
 
     private static let instances = Locked<[String: ClaudeTranscript]>([:])
@@ -70,6 +72,7 @@ public final class ClaudeTranscript: @unchecked Sendable {
 
     private struct Cache {
         var paths: [String: String] = [:]
+        var misses: [String: Date] = [:]
         // least recently used first, keyed by keepsSidechains so an Agent fan-out never evicts a main transcript;
         // each index has its own lock so one session's first scan never stalls another's poll
         var indexes: [Bool: [(path: String, index: Locked<ClaudeTranscriptIndex>)]] = [:]
@@ -78,13 +81,15 @@ public final class ClaudeTranscript: @unchecked Sendable {
     let claudeDirectory: String
     let cacheLimit: Int
     let subagentCacheLimit: Int
+    private let now: @Sendable () -> Date
     private let cache = Locked(Cache())
     private let scanCount = Locked(0)
 
     /// How many indexes were built from scratch.
     var scans: Int { scanCount.withLock { $0 } }
 
-    public init(claudeDirectory: String, cacheLimit: Int = 8, subagentCacheLimit: Int = 64) {
+    public init(claudeDirectory: String, cacheLimit: Int = 8, subagentCacheLimit: Int = 64, now: @escaping @Sendable () -> Date = Date.init) {
+        self.now = now
         self.claudeDirectory = claudeDirectory
         self.cacheLimit = cacheLimit
         self.subagentCacheLimit = subagentCacheLimit
@@ -111,11 +116,16 @@ public final class ClaudeTranscript: @unchecked Sendable {
     private func path(for id: String) -> String? {
         let fileManager = FileManager.default
         if let known = cache.withLock({ $0.paths[id] }), fileManager.fileExists(atPath: known) { return known }
+        let now = now()
+        if let missed = cache.withLock({ $0.misses[id] }), now.timeIntervalSince(missed) < Self.missRetry { return nil }
         let projects = (claudeDirectory as NSString).appendingPathComponent("projects")
         let found = ((try? fileManager.contentsOfDirectory(atPath: projects)) ?? []).sorted().lazy
             .map { "\(projects)/\($0)/\(id).jsonl" }
             .first { fileManager.fileExists(atPath: $0) }
-        cache.withLock { $0.paths[id] = found }
+        cache.withLock {
+            $0.paths[id] = found
+            $0.misses[id] = found == nil ? now : nil
+        }
         return found
     }
 
