@@ -50,7 +50,7 @@ bool _has(String hay, String needle) => needle.isNotEmpty && hay.contains(needle
     'Write' || 'Edit' => _path(d, str('file_path')),
     'WebFetch' => _url(d, str('url')),
     'ExitPlanMode' => _plan(d, input),
-    _ => input.isNotEmpty && input.values.every((v) => _has(norm(d.body), norm(v is String ? v : jsonEncode(v)))),
+    _ => _mcp(d, input),
   };
   return ok ? (question: null) : null;
 }
@@ -109,6 +109,10 @@ bool _path(PromptDialog d, String filePath) {
   final tail = h.substring(cut);
   return tail.length >= base.length && p.endsWith(tail);
 }
+
+// "(MCP)" is an expected-state check; the values sit in the argument box, not the server-written tool description.
+bool _mcp(PromptDialog d, Map<String, dynamic> input) =>
+    norm(d.header).endsWith('(MCP)') && input.isNotEmpty && input.values.every((v) => _has(norm(d.boxed), norm(v is String ? v : jsonEncode(v))));
 
 // boxed joins "url: <url>" and "prompt: <prompt>" with no separator, so the URL must end where "prompt:" starts.
 bool _url(PromptDialog d, String url) {

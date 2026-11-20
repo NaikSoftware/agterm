@@ -91,6 +91,16 @@ void main() {
     }
   });
 
+  test('mcpDoesNotAnchorAnotherToolsDialog', () {
+    final mcp = _call('card-mcp', (m) => m..['input'] = <String, dynamic>{'path': 'tmp'});
+    final described = _call('card-mcp', (m) => m..['input'] = <String, dynamic>{'items': 'topic.instructions'});
+    for (final w in [45, 100]) {
+      expect(matchPrompt(_read('card-bash-$w'), [mcp]), isNull, reason: '$w');
+      expect(matchPrompt(_read('card-write-$w'), [mcp]), isNull, reason: '$w');
+      expect(matchPrompt(_read('card-mcp-$w'), [described]), isNull, reason: '$w');
+    }
+  });
+
   test('subagentSourceNeedsTheHeader', () {
     for (final w in [45, 100]) {
       expect(matchPrompt(_read('card-subagent-bash-$w'), [_call('card-subagent-bash', (m) => m..['source'] = 'main')]), isNull);
