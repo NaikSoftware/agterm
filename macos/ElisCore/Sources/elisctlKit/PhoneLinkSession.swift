@@ -281,7 +281,7 @@ final class PhoneLinkSession {
         send(frame.encoded()) { [weak self] in
             self?.sending = false
             sent?()
-            self?.presenters.values.forEach { $0.drained() }
+            self?.presenters.values.forEach { $0.pump() }
             self?.pump()
         }
     }

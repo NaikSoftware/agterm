@@ -152,7 +152,7 @@ final class MarkdownProbeTests: XCTestCase {
         var embedding = MarkdownEmbedding()
 
         XCTAssertEqual(embedding.room(for: first), MarkdownPage.maxImageBytes)
-        embedding.add(first, (probe, png))
+        embedding.add(first, MarkdownProbe.picture((probe, png)))
         XCTAssertNil(embedding.room(for: alias))
         XCTAssertEqual(embedding.room(for: refused), MarkdownPage.maxImageBytes - png.count)
         embedding.add(refused, nil)

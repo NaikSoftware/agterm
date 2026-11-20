@@ -103,7 +103,7 @@ struct PhoneLinkPresenterPagesTests {
         let request = try JSONDecoder().decode(ControlRequest.self, from: Data(pipe.request.utf8))
         #expect(request.cmd == .sessionOverlayPageServe && request.target == "t2")
         guard case .page(let line) = harness.line() else { Issue.record("no page line"); return }
-        #expect(line.kind == "file" && line.path == "/w/index.html" && line.adapter == PhoneLinkPresenter.adapterScript(javascript: false))
+        #expect(line.kind == "file" && line.path == "/w/index.html" && line.adapter == HtmlBridgeAdapter.script(handler: PhoneLinkPresenter.adapterHandler) && line.helper == nil)
         #expect(line.adapter?.contains("Object.defineProperty(window, 'elis'") == false)
         harness.phone(.fetch(id: "p2", seq: 3, path: "/w/a.css"))
         let resource = try #require(Self.pipeFrame(pipe))
@@ -309,7 +309,7 @@ struct PhoneLinkPresenterPagesTests {
         while replies < 2, Date() < deadline {
             if case .reply(_, _, response?, nil)? = harness.line(timeout: 1) { replies += 1 }
             harness.pending = 0
-            harness.drained()
+            harness.pump()
         }
         #expect(replies == 2)
         #expect(!harness.sentFrames().contains(.json(.close, channel: 5, PhoneLinkClose(reason: "overflow"))))
@@ -393,6 +393,89 @@ struct PhoneLinkPresenterPagesTests {
         Self.send(stream, .pageRequest(Self.content(.text(path: "/w/a.txt", line: nil))))
         let rejected = try #require(stream.frame { if case .pageRejected = $0 { true } else { false } })
         #expect(rejected.body == .pageRejected(PresentationPageChange(page: "p3", reason: "the markdown renderer is missing", offer: 4)))
+    }
+
+    @Test func aJsFilePageCarriesItsHelperApartFromTheAdapter() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let stream = try Self.presentation(harness)
+        var page = Self.file
+        page.javascript = true
+        Self.send(stream, .pageRequest(page))
+        guard case .page(let line) = harness.line() else { Issue.record("no page line"); return }
+        #expect(line.adapter == HtmlBridgeAdapter.script(handler: PhoneLinkPresenter.adapterHandler))
+        #expect(line.helper == HtmlBridgeAdapter.helperScript(handler: PhoneLinkPresenter.adapterHandler))
+    }
+
+    @Test func aContentPageReportsItsSourcePath() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let (stream, _) = try Self.textPage(harness)
+        harness.phone(.state(id: "p3", load: "loaded", title: "T", current: nil, canGoBack: false, appliedSeq: 0, hidden: false, error: nil))
+        let state = try #require(stream.frame { if case .pageState = $0 { true } else { false } })
+        guard case .pageState(let reported) = state.body else { return }
+        #expect(reported.address == "/w/main.swift" && reported.title == "T")
+    }
+
+    @Test func aRequestTooLargeForTheOriginFailsAndLeavesThePipeFree() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let (stream, pipe) = try Self.filePage(harness)
+        defer { withExtendedLifetime(stream) {} }
+        _ = harness.line()
+        harness.phone(.bridge(id: "p2", seq: 1, line: String(repeating: "x", count: PageServeCodec.maxFrameBytes)))
+        #expect(harness.line() == .reply(id: "p2", seq: 1, response: nil, error: "the request is too large"))
+        harness.phone(.fetch(id: "p2", seq: 2, path: "/w/a.css"))
+        let resource = try #require(Self.pipeFrame(pipe))
+        Self.answer(pipe, [.failure(id: resource.id, error: "gone")])
+        #expect(harness.line() == .res(id: "p2", seq: 2, mime: nil, data: nil, end: true, error: "gone"))
+    }
+
+    @Test func aReloadRebuildsAContentPage() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let (stream, pipe) = try Self.textPage(harness)
+        Self.send(stream, .pageCommand(PresentationPageCommand(page: "p3", seq: 4, action: .resize, sizePercent: 50)))
+        #expect(harness.line() == .command(id: "p3", seq: 4, action: "resize", sizePercent: 50))
+        harness.phone(.state(id: "p3", load: "loaded", title: nil, current: nil, canGoBack: false, appliedSeq: 4, hidden: true, error: nil))
+        Self.send(stream, .pageCommand(PresentationPageCommand(page: "p3", seq: 5, action: .reloadCurrent)))
+        let own = try #require(Self.pipeFrame(pipe))
+        #expect(own == .resource(id: own.id, path: "/w/main.swift"))
+        Self.answer(pipe, Self.transfer(own.id, Data("let c = 3\n".utf8)))
+        guard case .page(let line) = harness.line() else { Issue.record("no fresh page line"); return }
+        #expect(line.hidden && line.sizePercent == 50)
+        let html = String(decoding: try #require(Self.fetchWhole(harness, id: "p3", path: PhonePage.contentPath, seq: 9)), as: UTF8.self)
+        #expect(html.contains("let c = 3"))
+        harness.phone(.state(id: "p3", load: "loaded", title: nil, current: nil, canGoBack: false, appliedSeq: 0, hidden: true, error: nil))
+        #expect(stream.frame { if case .pageState(let s) = $0 { s.appliedSeq == 5 } else { false } } != nil)
+    }
+
+    @Test func aPageOfferedHiddenArrivesHidden() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let stream = try Self.presentation(harness)
+        var page = PhoneLinkPresenterTests.urlPage
+        page.hidden = true
+        Self.send(stream, .pageRequest(page))
+        guard case .page(let line) = harness.line() else { Issue.record("no page line"); return }
+        #expect(line.hidden)
+    }
+
+    @Test func aPageSentAgainDropsTheOldAnswers() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let (stream, pipe) = try Self.textPage(harness)
+        harness.pending = PhoneLinkPresenter.highWater
+        harness.phone(.fetch(id: "p3", seq: 1, path: PhonePage.contentPath))
+        Self.send(stream, .pageRequest(Self.content(.text(path: "/w/main.swift", line: nil))))
+        #expect(pipe.waitEnd())
+        let second = try #require(harness.server.nextStream())
+        harness.pending = 0
+        harness.pump()
+        let own = try #require(Self.pipeFrame(second))
+        Self.answer(second, Self.transfer(own.id, Data("let a = 1\n".utf8)))
+        guard case .page = harness.line() else { Issue.record("no page line"); return }
+        #expect(harness.remainingLines().isEmpty)
     }
 
     // MARK: - through the link
@@ -488,6 +571,17 @@ struct PhoneLinkPresenterPagesTests {
         let stream = try presentation(harness)
         send(stream, .pageRequest(file))
         return (stream, try #require(harness.server.nextStream()))
+    }
+
+    /// A text page shown, with its pipe.
+    private static func textPage(_ harness: Harness) throws -> (StubStream, StubStream) {
+        let stream = try presentation(harness)
+        send(stream, .pageRequest(content(.text(path: "/w/main.swift", line: nil))))
+        let pipe = try #require(harness.server.nextStream())
+        let own = try #require(pipeFrame(pipe))
+        answer(pipe, transfer(own.id, Data("let a = 1\n".utf8)))
+        guard case .page = harness.line() else { throw CancellationError() }
+        return (stream, pipe)
     }
 
     private static func pipeFrame(_ pipe: StubStream) -> PageServeFrame? {

@@ -10,6 +10,8 @@ public struct PhonePage: Codable, Equatable, Sendable {
     public var url: String?
     /// A file page's bridge adapter; a content page's HTML and script are fetched from `contentPath` and `scriptPath`.
     public var adapter: String?
+    /// A `--js` file page's `window.elis`, which runs before the page's own scripts.
+    public var helper: String?
     public var javascript: Bool
     public var chromeless: Bool
     public var browse: Bool
@@ -22,13 +24,14 @@ public struct PhonePage: Codable, Equatable, Sendable {
     /// No origin path lacks the leading `/`.
     public static let contentPath = "elis:content", scriptPath = "elis:script"
 
-    public init(id: String, kind: String, path: String? = nil, url: String? = nil, adapter: String? = nil, javascript: Bool,
-                chromeless: Bool, browse: Bool, hidden: Bool, title: String, sizePercent: Int? = nil) {
+    public init(id: String, kind: String, path: String? = nil, url: String? = nil, adapter: String? = nil, helper: String? = nil,
+                javascript: Bool, chromeless: Bool, browse: Bool, hidden: Bool, title: String, sizePercent: Int? = nil) {
         self.id = id
         self.kind = kind
         self.path = path
         self.url = url
         self.adapter = adapter
+        self.helper = helper
         self.javascript = javascript
         self.chromeless = chromeless
         self.browse = browse

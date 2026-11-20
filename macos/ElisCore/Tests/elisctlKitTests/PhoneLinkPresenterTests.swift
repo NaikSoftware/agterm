@@ -157,7 +157,7 @@ struct PhoneLinkPresenterTests {
         #expect(stream.frame { $0 == .ack } != nil)
         #expect(harness.remainingLines().isEmpty)
         harness.pending = 0
-        harness.drained()
+        harness.pump()
         #expect(harness.line() == .res(id: "p2", seq: 1, mime: "text/css", data: nil, end: false, error: nil))
         #expect(harness.line() == .res(id: "p2", seq: 1, mime: nil, data: Data("a".utf8), end: false, error: nil))
         #expect(harness.line() == .res(id: "p2", seq: 1, mime: nil, data: nil, end: true, error: nil))
@@ -289,7 +289,7 @@ struct PhoneLinkPresenterTests {
 
         func phoneBytes(_ bytes: Data) { queue.async { [self] in presenter.receive(bytes) } }
 
-        func drained() { queue.async { [self] in presenter.drained() } }
+        func pump() { queue.async { [self] in presenter.pump() } }
 
         func stopPresenter() { queue.sync { presenter.stop() } }
 

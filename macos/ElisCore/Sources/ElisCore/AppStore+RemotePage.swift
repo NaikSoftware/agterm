@@ -131,6 +131,8 @@ extension AppStore {
             if case .text(let path, _) = source, TextPage.isDiff(file: path), !hub.supports(PresentationHub.pageFilesKind, owner: owner) {
                 return false
             }
+            // the phone's web view takes cleartext only from its own loopback server
+            if case .url(let url) = source, url.lowercased().hasPrefix("http:") { return false }
         }
         if source.isContent, !hub.supports(PresentationHub.pageContentKind, owner: owner) { return false }
         if case .document = source { return hub.supports(PresentationHub.pageDocumentKind, owner: owner) }
@@ -166,6 +168,7 @@ extension AppStore {
               mayHandOver(slot.job, to: owner), presenterShows(request, owner: owner) else { return false }
         let merged = reoffer(&request, from: slot, token: UUID().uuidString, owner: owner)
         let hidden = slot.page?.effectiveHidden == true
+        request.hidden = hidden ? true : nil
         session.remoteOverlays.update(job: slot.job) { $0.owner = owner }
         session.remoteOverlays.updatePage(slot.job) { page in
             page.token = request.token

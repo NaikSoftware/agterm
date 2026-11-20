@@ -991,6 +991,14 @@ struct AppStoreRemotePageTests {
         #expect(phone.sink.pages.isEmpty)
     }
 
+    @Test func aPlainHttpPageOfAnotherHostStaysHere() throws {
+        let session = try Viewers.origin(store, hub: hub)
+        let phone = try Viewers.phone(hub, session, kinds: Viewers.phoneKinds + [PresentationHub.pageForwardKind])
+
+        #expect(open(session, try url("http://192.168.1.5:8080/")) == .local)
+        #expect(phone.sink.pages.isEmpty)
+    }
+
     @Test func aLoopbackUrlGoesToAPhoneThatForwards() throws {
         let session = try Viewers.origin(store, hub: hub)
         let phone = try Viewers.phone(hub, session, kinds: Viewers.phoneKinds + [PresentationHub.pageForwardKind])

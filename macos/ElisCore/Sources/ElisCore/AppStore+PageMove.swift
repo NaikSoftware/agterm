@@ -21,6 +21,7 @@ extension AppStore {
         let merged = offered.merged
         dropPageCandidate(job, in: session)
         request.offer = candidate.offer
+        request.hidden = offered.hidden ? true : nil
         var commands: [PresentationPageCommand] = []
         if !merged.isEmpty {
             let seq = nextCandidateSeq(&candidate, job: job, in: session)

@@ -116,6 +116,7 @@ final class PhoneLinkLineStream: @unchecked Sendable {
         guard lock.withLock({ () -> Bool in defer { stopping = true }; return !stopping }) else { return }
         switch transport {
         case .socket(let fd): shutdown(fd, SHUT_RDWR)
+        // shortcut: only SIGTERM; a grandchild holding stdout would block the reader, upgrade by closing readFD here
         case .process(let process, _, _): if process.isRunning { process.terminate() }
         }
         writable.signal()

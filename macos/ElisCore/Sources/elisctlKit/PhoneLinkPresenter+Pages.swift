@@ -21,7 +21,11 @@ final class PresentedPage: @unchecked Sendable {
     var forward: (host: String, port: UInt16)?
     /// The `page` line went out; commands before it wait in `held`.
     var shown = false
-    var hidden = false
+    /// As the phone last reported or was told; a rebuilt content page's fresh `page` line carries it and `sizePercent`.
+    var hidden: Bool
+    var sizePercent: Int?
+    /// The reload a rebuilt content page answers for, since its fresh sheet counts from 0.
+    var seqFloor = 0
     var held: [PresentationPageCommand] = []
     var nextID = 1
     var waiting: [Int: Waiting] = [:]
@@ -30,11 +34,23 @@ final class PresentedPage: @unchecked Sendable {
     /// The pipe holds its next line until `pump()` resumes it; at most one pipe of a channel is not paused.
     var paused = true
 
-    init(_ request: PresentationPage) { self.request = request }
+    init(_ request: PresentationPage) {
+        self.request = request
+        hidden = request.hidden ?? false
+        sizePercent = request.sizePercent
+    }
 
     var id: String { request.page }
 
     var isForwarded: Bool { if case .forwarded = request.source { true } else { false } }
+
+    /// A content page's file, which the Mac reports as its current page.
+    var contentPath: String? {
+        switch request.source {
+        case .image(let path, _, _), .document(let path), .text(let path, _), .markdown(let path): path
+        case .file, .url, .forwarded: nil
+        }
+    }
 }
 
 /// A content page's HTML or script, sent from memory as `res` chunks.
@@ -73,7 +89,10 @@ extension PhoneLinkPresenter {
     // MARK: - from the origin
 
     func pageRequest(_ request: PresentationPage) {
-        if let old = pages.removeValue(forKey: request.page) { old.pipe?.close() }
+        if let old = pages.removeValue(forKey: request.page) {
+            old.pipe?.close()
+            serving.removeAll { $0.page == old.id }
+        }
         let page = PresentedPage(request)
         switch request.source {
         case .url(let url):
@@ -81,7 +100,7 @@ extension PhoneLinkPresenter {
             guard !HtmlSource.isLoopback(url) else { return reject(page, "a loopback page cannot be shown on the phone") }
             pages[page.id] = page
             showPage(page, PhonePage(id: page.id, kind: "url", url: url, javascript: request.javascript, chromeless: request.chromeless,
-                                     browse: request.browse, hidden: false, title: request.identity, sizePercent: request.sizePercent))
+                                     browse: request.browse, hidden: false, title: request.identity))
         case .forwarded(let url):
             openForward(page, url)
         case .markdown, .text:
@@ -111,9 +130,13 @@ extension PhoneLinkPresenter {
 
     func pageCommand(_ command: PresentationPageCommand) {
         guard let page = pages[command.page], action(command) != nil else { return }
-        guard page.shown else {
-            if command.action == .hide || command.action == .show { page.hidden = command.action == .hide }
-            return page.held.append(command)
+        if command.action == .hide || command.action == .show { page.hidden = command.action == .hide }
+        if command.action == .resize { page.sizePercent = command.sizePercent }
+        guard page.shown else { return page.held.append(command) }
+        // the Mac reloads a page built from text by building it again
+        if action(command) == "reload", page.html != nil {
+            page.seqFloor = command.seq
+            return buildContent(page)
         }
         sendCommand(page, command)
     }
@@ -141,6 +164,7 @@ extension PhoneLinkPresenter {
     func showPage(_ page: PresentedPage, _ line: PhonePage) {
         var line = line
         line.hidden = page.hidden
+        line.sizePercent = page.sizePercent
         page.shown = true
         output(.page(line))
         let held = page.held
@@ -173,18 +197,13 @@ extension PhoneLinkPresenter {
         pipe.start(paused: true, onLine: { [weak self] line in self?.pipeLine(page, line) }, onEnd: { [weak self] in self?.pipeEnded(page) })
         switch page.request.source {
         case .file(let path, _):
-            let adapter = Self.adapterScript(javascript: page.request.javascript)
-            showPage(page, PhonePage(id: page.id, kind: "file", path: path, adapter: adapter, javascript: page.request.javascript,
-                                     chromeless: page.request.chromeless, browse: page.request.browse, hidden: false,
-                                     title: page.request.identity, sizePercent: page.request.sizePercent))
+            let helper = page.request.javascript ? HtmlBridgeAdapter.helperScript(handler: Self.adapterHandler) : nil
+            showPage(page, PhonePage(id: page.id, kind: "file", path: path, adapter: HtmlBridgeAdapter.script(handler: Self.adapterHandler),
+                                     helper: helper, javascript: page.request.javascript, chromeless: page.request.chromeless,
+                                     browse: page.request.browse, hidden: false, title: page.request.identity))
         default:
             buildContent(page)
         }
-    }
-
-    static func adapterScript(javascript: Bool) -> String {
-        let adapter = HtmlBridgeAdapter.script(handler: adapterHandler)
-        return javascript ? adapter + "\n" + HtmlBridgeAdapter.helperScript(handler: adapterHandler) : adapter
     }
 
     /// The pipe ended under a page still open: the origin lost it, as the Mac's channel close reports.
@@ -271,7 +290,7 @@ extension PhoneLinkPresenter {
         let id = page.nextID
         page.nextID += 1
         page.waiting[id] = waiting
-        guard let line = try? PageServeCodec.encode(frame(id)) else { return }
+        guard let line = try? PageServeCodec.encode(frame(id)) else { return fail(page, id, "the request is too large") }
         page.pipe?.send(line)
         pump()
     }
@@ -295,12 +314,6 @@ extension PhoneLinkPresenter {
         lastPipe = page.id
         page.paused = false
         page.pipe?.resume()
-    }
-
-    /// The scheduler sent a frame: memory answers and paused pipes go on under `highWater`.
-    func drained() {
-        guard !stopped else { return }
-        pump()
     }
 
     // MARK: - content pages
@@ -327,7 +340,7 @@ extension PhoneLinkPresenter {
             read(page, path, limit: MarkdownPage.maxBytes) { [self] data in
                 guard let markdown = String(data: data, encoding: .utf8) else { return reject(page, "not a text file") }
                 let folder = URL(fileURLWithPath: path).deletingLastPathComponent().path
-                embed(page, MarkdownPage.remoteImageReferences(in: markdown, folder: folder)[...], Pictures()) { [self] embedded in
+                embed(page, MarkdownPage.remoteImageReferences(in: markdown, folder: folder)[...], MarkdownEmbedding()) { [self] embedded in
                     contentReady(page, html: MarkdownPage.html(markdown: markdown, images: embedded, style: assets.style),
                                  script: assets.script + Self.unlinkScript)
                 }
@@ -337,52 +350,45 @@ extension PhoneLinkPresenter {
         }
     }
 
-    /// The relay's own read over the pipe; a failure rejects the page.
+    /// The relay's own read over the pipe; a failure rejects the page, or leaves a shown page as it was.
     private func read(_ page: PresentedPage, _ path: String, limit: Int, then: @escaping (Data) -> Void) {
         pipeSend(page, .read(PresentedPage.Buffer(), limit: limit, done: { [self] result in
             switch result {
             case .success(let data): then(data)
+            case .failure(let error) where page.shown: rebuildFailed(page, error.description)
             case .failure(let error): reject(page, error.description)
             }
         })) { .resource(id: $0, path: path) }
     }
 
-    // shortcut: no decoded-pixel budget (ImageProbe is in the app target); add one if a page of huge-pixel pictures stalls the phone
-    /// The markdown pictures one page embeds, each file once, under the page's count and byte budgets.
-    private struct Pictures {
-        var embedded = MarkdownPage.Embedded()
-        var read: [String: Int?] = [:]
-        var bytes = 0
+    /// A reload that could not build the page again: the phone keeps what it shows, and the origin hears the failure.
+    private func rebuildFailed(_ page: PresentedPage, _ reason: String) {
+        guard pages[page.id] === page else { return }
+        send(.pageState(PresentationPageState(page: page.id, title: nil, address: page.contentPath, load: .failed,
+                                              error: String(reason.prefix(PresentationPageState.maxError)), canGoBack: false,
+                                              canGoForward: false, hidden: page.hidden, appliedSeq: page.seqFloor,
+                                              offer: page.request.offer)))
     }
 
     /// Reads `images` one at a time over the pipe, then hands the embedded set on.
-    private func embed(_ page: PresentedPage, _ images: ArraySlice<MarkdownPage.Image>, _ pictures: Pictures,
+    private func embed(_ page: PresentedPage, _ images: ArraySlice<MarkdownPage.Image>, _ embedding: MarkdownEmbedding,
                        then: @escaping (MarkdownPage.Embedded) -> Void) {
-        var pictures = pictures
+        var embedding = embedding
         var rest = images
         while let image = rest.first {
             rest = rest.dropFirst()
-            if let known = pictures.read[image.path] {
-                if let known { pictures.embedded.references[image.reference] = known }
-                continue
-            }
-            guard pictures.read.count < MarkdownPage.maxImages, pictures.bytes < MarkdownPage.maxImageBytes else { continue }
-            let (before, remaining) = (pictures, rest)
-            pipeSend(page, .read(PresentedPage.Buffer(), limit: MarkdownPage.maxImageBytes - pictures.bytes, done: { [self] result in
-                var pictures = before
-                if case .success(let data) = result, let mime = ImagePage.mimeType(sniffing: data) {
-                    pictures.bytes += data.count
-                    pictures.embedded.uris.append("data:\(mime);base64,\(data.base64EncodedString())")
-                    pictures.read[image.path] = pictures.embedded.uris.count - 1
-                    pictures.embedded.references[image.reference] = pictures.embedded.uris.count - 1
-                } else {
-                    pictures.read[image.path] = .some(nil)
-                }
-                embed(page, remaining, pictures, then: then)
+            guard let room = embedding.room(for: image) else { continue }
+            let (before, remaining) = (embedding, rest)
+            pipeSend(page, .read(PresentedPage.Buffer(), limit: room, done: { [self] result in
+                var embedding = before
+                let data = try? result.get()
+                // shortcut: no decoded-pixel budget (ImageProbe is in the app target); add one if huge-pixel pictures stall the phone
+                embedding.add(image, data.flatMap { data in ImagePage.mimeType(sniffing: data).map { ($0, data, nil) } })
+                embed(page, remaining, embedding, then: then)
             })) { .resource(id: $0, path: image.path) }
             return
         }
-        then(pictures.embedded)
+        then(embedding.embedded)
     }
 
     private func contentReady(_ page: PresentedPage, html: String, script: String) {
@@ -390,7 +396,7 @@ extension PhoneLinkPresenter {
         page.html = Data(html.utf8)
         page.script = Data(script.utf8)
         showPage(page, PhonePage(id: page.id, kind: "content", javascript: false, chromeless: page.request.chromeless,
-                                 browse: false, hidden: false, title: page.request.identity, sizePercent: page.request.sizePercent))
+                                 browse: false, hidden: false, title: page.request.identity))
     }
 
     // MARK: - from the phone
@@ -443,9 +449,11 @@ extension PhoneLinkPresenter {
             pipeSend(page, .bridge(seq: seq)) { .bridge(id: $0, request: line) }
         case let .state(id, load, title, current, canGoBack, appliedSeq, hidden, error):
             guard let page = pages[id] else { return }
-            send(.pageState(PresentationPageState(page: id, title: title, address: current, load: HtmlLoadState(rawValue: load) ?? .loading,
-                                                  error: error, canGoBack: canGoBack, canGoForward: false, hidden: hidden,
-                                                  appliedSeq: appliedSeq, offer: page.request.offer)))
+            page.hidden = hidden
+            send(.pageState(PresentationPageState(page: id, title: title, address: page.contentPath ?? current,
+                                                  load: HtmlLoadState(rawValue: load) ?? .loading, error: error, canGoBack: canGoBack,
+                                                  canGoForward: false, hidden: hidden, appliedSeq: max(appliedSeq, page.seqFloor),
+                                                  offer: page.request.offer)))
         case let .closed(id, dismissed):
             guard let page = pages.removeValue(forKey: id) else { return }
             page.pipe?.close()
