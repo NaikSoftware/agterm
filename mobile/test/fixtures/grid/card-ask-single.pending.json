@@ -1,0 +1,31 @@
+[
+  {
+    "id": "toolu_01P5sZpjH4Zdh4k71unpiuT4",
+    "uuid": "8bc026c8-bd2a-4f02-bbf6-e6ac499fba60",
+    "source": "main",
+    "name": "AskUserQuestion",
+    "input": {
+      "questions": [
+        {
+          "question": "Which lighthouse should the story visit?",
+          "header": "Lighthouse",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "North Cape",
+              "description": "A cold rocky point."
+            },
+            {
+              "label": "Harbour light on the long southern breakwater",
+              "description": "A calm port town."
+            },
+            {
+              "label": "Island tower",
+              "description": "Far out at sea."
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

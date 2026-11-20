@@ -1,0 +1,12 @@
+[
+  {
+    "id": "toolu_01NCF36AwX64vHhircJ6qHtj",
+    "uuid": "8683c3e1-fb64-4c20-b142-38f478774d16",
+    "source": "main",
+    "name": "Write",
+    "input": {
+      "file_path": "/tmp/elis-fixture-keeper/notebook-pages/entry-for-the-morning-watch.txt",
+      "content": "alpha\nbeta\n"
+    }
+  }
+]

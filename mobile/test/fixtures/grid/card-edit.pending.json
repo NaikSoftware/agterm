@@ -1,0 +1,14 @@
+[
+  {
+    "id": "toolu_011zSsmZYkzHXmUKZrNTzaE7",
+    "uuid": "516aa835-f9eb-4d3e-bab5-aa73844bbce9",
+    "source": "main",
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "/tmp/elis-fixture-keeper/notebook-pages/entry-for-the-night-watch.txt",
+      "old_string": "beta",
+      "new_string": "gamma"
+    }
+  }
+]

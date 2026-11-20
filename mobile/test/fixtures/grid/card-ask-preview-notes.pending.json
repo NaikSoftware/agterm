@@ -1,0 +1,29 @@
+[
+  {
+    "id": "toolu_01M45Zc5hTtCT8w51Rv5yk2b",
+    "uuid": "24133d4c-9fc3-4dd2-b8d9-d21057b0da42",
+    "source": "main",
+    "name": "AskUserQuestion",
+    "input": {
+      "questions": [
+        {
+          "question": "Which lamp layout should the keeper use?",
+          "header": "Layout",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Ring",
+              "description": "Lamps set in a circle.",
+              "preview": "lamp\n  ring\n    lens"
+            },
+            {
+              "label": "Stack",
+              "description": "Lamps set one above another.",
+              "preview": "lamp\nstack\nlens"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

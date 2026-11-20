@@ -1,0 +1,12 @@
+[
+  {
+    "id": "toolu_011xNiv9NYWbazTJHH1VJ2ay",
+    "uuid": "8ca1f683-e56e-4bb7-8600-89b72f116728",
+    "source": "main",
+    "name": "ExitPlanMode",
+    "input": {
+      "plan": "# Lantern log\n\n## Context\nThe user wants a tiny log file that records one lantern as lit.\n\n## Steps\n1. Create `/tmp/elis-fixture-keeper/lantern-log.txt` containing the word `lit`.\n\n## Verification\nRead the file and confirm it contains `lit`.\n",
+      "planFilePath": "/Users/keeper/.claude/plans/reply-in-english-write-partitioned-wren.md"
+    }
+  }
+]
