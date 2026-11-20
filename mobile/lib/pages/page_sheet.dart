@@ -93,7 +93,8 @@ class PageSheetState extends State<PageSheet> with SingleTickerProviderStateMixi
   double? _progress; // null until the web view tells one
   // how far down the sheet is, in its own heights: a drag of its strip moves it, a release finishes the move
   late final _slide = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
-  double _height = 1;
+  final _sheetKey = GlobalKey();
+  double get _height => max(_sheetKey.currentContext?.size?.height ?? 1, 1);
 
   PhonePage get page => widget.page;
   PageWeb get _web => _controller.web;
@@ -399,61 +400,57 @@ class PageSheetState extends State<PageSheet> with SingleTickerProviderStateMixi
           alignment: Alignment.bottomCenter,
           child: FractionallySizedBox(
             heightFactor: size == null || size >= 100 ? 1 : max(size, 1) / 100,
-            child: LayoutBuilder(
-              builder: (context, box) {
-                _height = max(box.maxHeight, 1);
-                return SlideTransition(
-                  position: _slide.drive(Tween(begin: Offset.zero, end: const Offset(0, 1))),
-                  child: Material(
-                    key: const Key('pageSheet'),
-                    color: C.bg,
-                    child: Column(
-                      children: [
-                        if (!page.chromeless) ...[_strip(), const Divider(height: 1)],
-                        Expanded(
-                          child: Stack(
-                            children: [
-                              // a web view shows nothing until its first paint
-                              const Positioned.fill(child: ColoredBox(color: C.surface)),
-                              Positioned.fill(
-                                child: Listener(
-                                  onPointerDown: (_) => _touchedNow(),
-                                  child: ExcludeFocus(excluding: page.hidden, child: _view),
-                                ),
+            child: SlideTransition(
+                key: _sheetKey,
+                position: _slide.drive(Tween(begin: Offset.zero, end: const Offset(0, 1))),
+                child: Material(
+                  key: const Key('pageSheet'),
+                  color: C.bg,
+                  child: Column(
+                    children: [
+                      if (!page.chromeless) ...[_strip(), const Divider(height: 1)],
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            // a web view shows nothing until its first paint
+                            const Positioned.fill(child: ColoredBox(color: C.surface)),
+                            Positioned.fill(
+                              child: Listener(
+                                onPointerDown: (_) => _touchedNow(),
+                                child: ExcludeFocus(excluding: page.hidden, child: _view),
                               ),
-                              // over the page, so the strip keeps its height
-                              if (_loading)
-                                Positioned(
-                                  top: 0,
-                                  left: 0,
-                                  right: 0,
-                                  child: LinearProgressIndicator(key: const Key('pageLoading'), value: _progress, minHeight: 2),
-                                ),
-                              if (_load == 'failed')
-                                Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(24),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          _error ?? 'The page did not load.',
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(color: C.danger),
-                                        ),
-                                        if (page.kind == 'forward') TextButton(key: const Key('pageReload'), onPressed: _reloadFailed, child: const Text('Reload')),
-                                      ],
-                                    ),
+                            ),
+                            // over the page, so the strip keeps its height
+                            if (_loading)
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                child: LinearProgressIndicator(key: const Key('pageLoading'), value: _progress, minHeight: 2),
+                              ),
+                            if (_load == 'failed')
+                              Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _error ?? 'The page did not load.',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: C.danger),
+                                      ),
+                                      if (page.kind == 'forward') TextButton(key: const Key('pageReload'), onPressed: _reloadFailed, child: const Text('Reload')),
+                                    ],
                                   ),
                                 ),
-                            ],
-                          ),
+                              ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                );
-              },
+                ),
             ),
           ),
         ),
