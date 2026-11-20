@@ -850,7 +850,7 @@ Questions, pickers, program overlays, HUDs and sounds stay on the Mac too. So a 
 Dev servers on the phone: a `--url` page on the session host's loopback (`localhost`, `127.0.0.1`, `::1`) shows on
 the phone too, hot reload included; the relay carries its connections, through ssh for a row on another host.
 Pass `--js`, or a script-built page is blank. A dev server you start needs its own stop condition: open the page with
-`--block`, which returns when the page closes, and stop the server then:
+`--block`, which returns when the page closes (exit 2, `dismissed`), and stop the server then:
 
 ```bash
 npm run dev -- --host 127.0.0.1 --port 5173 >/tmp/dev.log 2>&1 & server=$!
