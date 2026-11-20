@@ -136,7 +136,7 @@ void main() {
 
   testWidgets('stopDisabledOnDialog', (t) async {
     final lines = _raw('dialog-bash-45').split('\n');
-    lines[0] = '✶ Wrangling… (3s · ↓ 40 tokens)';
+    lines[21] = '✶ Wrangling… (3s · ↓ 40 tokens)';
     final g = gridFromAnsi(lines.join('\n'));
     expect(ClaudeScreen.read(g).dialog, isTrue);
     final s = _Stack(t, 'dialog-bash-45');

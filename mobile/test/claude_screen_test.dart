@@ -143,4 +143,17 @@ void main() {
     expect(s.mode, isNull);
     expect(s.modeText, isNotNull);
   });
+
+  test('staleLimitAboveTheConversationIsGone', () {
+    final rows = File('test/fixtures/grid/limit-45.ansi').readAsStringSync().split('\n')..insert(33, '⏺ Resumed after the reset');
+    expect(ClaudeScreen.read(gridFromAnsi(rows.join('\n'))).limit, isNull);
+  });
+
+  test('spinnerAboveTheConversationIsNotWorking', () {
+    final rows = File('test/fixtures/grid/idle-placeholder-45.ansi').readAsStringSync().split('\n');
+    rows[5] = '· Loading…';
+    rows[6] = '⏺ Loaded';
+    final s = ClaudeScreen.read(gridFromAnsi(rows.join('\n')));
+    expect((s.working, s.busy, s.idle), (null, false, true));
+  });
 }

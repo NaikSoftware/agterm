@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'grid.dart';
 
 enum ClaudeMode { manual, acceptEdits, plan, auto, bypass }
@@ -89,14 +91,13 @@ class ClaudeScreen {
       s.busy = norm([for (var r = bottom + 1; r < n; r++) g.text(r)].join()).contains('esctointerrupt');
     }
 
-    var prompt = -1, spin = -1;
+    var prompt = -1, spin = -1, reply = -1, limit = -1;
     for (var r = 0; r < above; r++) {
       final t = g.text(r);
       if (_spinner.hasMatch(t)) spin = r;
+      if (t.startsWith('⏺')) reply = r;
       if (t.trimLeft().startsWith('⎿') && t.contains('Interrupted')) s.interrupted = r;
-      if (s.limit == null && (t.contains('Usage limit reached') || t.contains('Continuing automatically at'))) {
-        s.limit = _block(g, r, above);
-      }
+      if (limit <= max(prompt, reply) && (t.contains('Usage limit reached') || t.contains('Continuing automatically at'))) limit = r;
       if (!t.startsWith('❯ ')) continue;
       final p = [t.substring(2).trim()];
       var e = r + 1;
@@ -109,7 +110,10 @@ class ClaudeScreen {
         prompt = r;
       }
     }
-    if (spin >= 0) {
+    // the spinner and the limit live below the conversation: an older row of either is history
+    final live = max(prompt, reply);
+    if (limit > live) s.limit = _block(g, limit, above);
+    if (spin > live) {
       s.busy = s.bottomStack;
       final w = StringBuffer(g.text(spin).substring(2).trim());
       for (var r = spin + 1; w.toString().contains(' (') && !w.toString().contains(')') && r < above; r++) {
