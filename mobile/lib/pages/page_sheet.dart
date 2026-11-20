@@ -264,6 +264,9 @@ class _PageSheetState extends State<PageSheet> {
     if (server != null && _origin(u) == server) {
       // a root-absolute link names the origin's root, as file:///x does on the Mac; the origin judges the path
       unawaited(_web.loadUrl(Uri.parse('$_prefix${url.substring(server.length).replaceFirst(RegExp('^/'), '')}')).catchError((Object _) {}));
+    } else if (page.kind == 'forward' && _tunnel != null && _origin(u) == _origin(Uri.parse(page.url!))) {
+      // the dev server's own address, which the phone reaches only through the tunnel
+      unawaited(_web.loadUrl(_tunnel!.urlFor(u)).catchError((Object _) {}));
     } else if (_origin(u) != null && _touched && !_silenced && !page.hidden) {
       unawaited(_offerBrowser(url)); // a click, during the first load too, as on the Mac
     } else if (_load == 'loading') {

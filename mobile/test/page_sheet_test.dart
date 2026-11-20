@@ -499,6 +499,19 @@ void main() {
       await h.stop();
     });
 
+    testWidgets("a link to the page's own origin loads through the tunnel", (t) async {
+      final h = await devShown(t);
+      final port = portOf(cookies.single.cookie);
+      final c = h.webs.single.c;
+      c.finished('http://127.0.0.1:$port/app?x=1');
+      await t.tap(find.byKey(const Key('fakeWeb')));
+      expect(c.allows('http://localhost:$devPort/x?y=1#z'), isFalse);
+      await t.pump();
+      expect(h.webs.single.urls.last, Uri.parse('http://127.0.0.1:$port/x?y=1#z'));
+      expect(find.byType(AlertDialog), findsNothing);
+      await h.stop();
+    });
+
     testWidgets('closing the sheet clears the cookie and closes the tunnel', (t) async {
       final h = await devShown(t);
       final port = portOf(cookies.single.cookie);
