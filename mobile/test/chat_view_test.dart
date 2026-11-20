@@ -398,6 +398,22 @@ void main() {
     expect(find.byKey(const Key('todoStrip')), findsNothing);
   });
 
+  _chatTest('slashMenuShowsItsFirstRowsAboveTheList', (t, c) async {
+    await c.start(_history(40), height: 420); // the soft keyboard is up
+    c.feed.commands = [
+      for (final n in ['model', 'memory', 'mcp', 'help', 'cost', 'compact', 'config', 'clear', 'context', 'usage'])
+        SlashCommand(n, 'About $n', false, false),
+    ];
+    await t.enterText(find.byKey(const Key('composer')), '/');
+    await t.pump();
+    final first = t.getRect(find.byKey(const Key('slash-model')));
+    expect(first.top, greaterThanOrEqualTo(t.getRect(find.byType(AppBar)).bottom));
+    expect(first.bottom, lessThanOrEqualTo(t.getRect(find.byKey(const Key('composer'))).top));
+    await t.tap(find.byKey(const Key('slash-model')));
+    await t.pump();
+    expect(t.widget<TextField>(find.byKey(const Key('composer'))).controller!.text, '/model ');
+  });
+
   _chatTest('headerCollapsesOnScrollUp', (t, c) async {
     await c.start(_history(40));
     bool shown() => t.getSize(find.byKey(const Key('chatHeader'))).height > 0;

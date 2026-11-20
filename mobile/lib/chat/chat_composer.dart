@@ -68,6 +68,7 @@ class ChatComposer extends StatefulWidget {
 class ChatComposerState extends State<ChatComposer> {
   final _field = TextEditingController();
   final _focus = FocusNode();
+  final _menuPortal = OverlayPortalController(), _menuLink = LayerLink(), _box = GlobalKey();
   String? _adopted; // the draft taken from Claude's row, which Send clears there first
   bool _seen = false, _sending = false, _running = false, _stopRun = false, _readopt = false;
   String? _offer, _offerDraft; // the text a changed row stopped, and that row
@@ -76,6 +77,7 @@ class ChatComposerState extends State<ChatComposer> {
   void initState() {
     super.initState();
     widget.gate.addListener(_onGate);
+    _menuPortal.show(); // the menu's own builder is empty without a match
     _adopt();
   }
 
@@ -249,39 +251,45 @@ class ChatComposerState extends State<ChatComposer> {
                   ? blocked
                   : null;
           final canSend = text.trim().isNotEmpty && blocked == null && !widget.gate.running;
-          return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            if (menu.isNotEmpty) _menu(menu),
-            Composer(
-              controller: _field,
-              focus: _focus,
-              onSend: canSend ? () => send(_field.text) : null,
-              maxLines: 6,
-              autocorrect: true,
-              mono: false,
-              sendLabel: queue ? 'Queue' : 'Send',
-              sendIcon: queue ? Icons.schedule : Icons.arrow_forward,
-              reason: reason,
-              enabled: held == null,
-              accessory: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                ModeChip(
-                    screen: s,
-                    meta: widget.feed.meta,
-                    gate: widget.gate,
-                    remote: widget.remote,
-                    disabledBy: widget.disabledBy,
-                    checks: widget.checks),
-                if (_offer != null) _offerRow(),
-                if (held != null)
-                  Row(key: const Key('composerHeld'), children: [
-                    Flexible(child: Text(held, style: const TextStyle(fontSize: 12, color: C.muted))),
-                    if (widget.onOpen != null) ...[
-                      const Text(' · ', style: TextStyle(fontSize: 12, color: C.muted)),
-                      TextButton(key: const Key('panelOpen'), onPressed: widget.onOpen, child: const Text('Open')),
-                    ],
+          // the menu floats above the composer, over the list, so the bottom area's scroll never clips its first rows
+          return OverlayPortal(
+            controller: _menuPortal,
+            overlayChildBuilder: (_) => _menu(menu),
+            child: CompositedTransformTarget(
+              key: _box,
+              link: _menuLink,
+              child: Composer(
+                  controller: _field,
+                  focus: _focus,
+                  onSend: canSend ? () => send(_field.text) : null,
+                  maxLines: 6,
+                  autocorrect: true,
+                  mono: false,
+                  sendLabel: queue ? 'Queue' : 'Send',
+                  sendIcon: queue ? Icons.schedule : Icons.arrow_forward,
+                  reason: reason,
+                  enabled: held == null,
+                  accessory: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    ModeChip(
+                        screen: s,
+                        meta: widget.feed.meta,
+                        gate: widget.gate,
+                        remote: widget.remote,
+                        disabledBy: widget.disabledBy,
+                        checks: widget.checks),
+                    if (_offer != null) _offerRow(),
+                    if (held != null)
+                      Row(key: const Key('composerHeld'), children: [
+                        Flexible(child: Text(held, style: const TextStyle(fontSize: 12, color: C.muted))),
+                        if (widget.onOpen != null) ...[
+                          const Text(' · ', style: TextStyle(fontSize: 12, color: C.muted)),
+                          TextButton(key: const Key('panelOpen'), onPressed: widget.onOpen, child: const Text('Open')),
+                        ],
+                      ]),
                   ]),
-              ]),
-            ),
-          ]);
+                ),
+              ),
+          );
         },
       );
 
@@ -291,23 +299,41 @@ class ChatComposerState extends State<ChatComposer> {
         TextButton(onPressed: () => setState(() => _offer = null), child: const Text('Keep')),
       ]);
 
-  Widget _menu(List<SlashCommand> commands) => ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 220),
-        child: Material(
-          color: C.surface,
-          child: ListView(shrinkWrap: true, padding: EdgeInsets.zero, children: [
-            for (final c in commands)
-              ListTile(
-                key: Key('slash-${c.name}'),
-                dense: true,
-                title: Text('/${c.name}', style: const TextStyle(fontFamily: mono)),
-                subtitle: c.description.isEmpty ? null : Text(c.description, maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: c.panel ? const Text('opens in panel', style: TextStyle(fontSize: 12, color: C.muted)) : null,
-                onTap: () => insert('/${c.name} '),
+  // laid out after the composer: a build-time read misses a reason line the same frame adds
+  Widget _menu(List<SlashCommand> commands) => commands.isEmpty
+      ? const SizedBox.shrink()
+      : LayoutBuilder(builder: (context, _) {
+          final box = _box.currentContext?.findRenderObject() as RenderBox?;
+          if (box == null || !box.hasSize) return const SizedBox.shrink();
+          final room = box.localToGlobal(Offset.zero).dy - MediaQuery.paddingOf(context).top - kToolbarHeight - 8; // below the app bar
+          return Align(
+            alignment: Alignment.topLeft,
+            child: CompositedTransformFollower(
+              link: _menuLink,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.topLeft,
+              followerAnchor: Alignment.bottomLeft,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: box.size.width, minWidth: box.size.width, maxHeight: max(0, min(220, room))),
+                child: Material(
+                  color: C.surface,
+                  elevation: 6,
+                  child: ListView(shrinkWrap: true, padding: EdgeInsets.zero, children: [
+                    for (final c in commands)
+                      ListTile(
+                        key: Key('slash-${c.name}'),
+                        dense: true,
+                        title: Text('/${c.name}', style: const TextStyle(fontFamily: mono)),
+                        subtitle: c.description.isEmpty ? null : Text(c.description, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        trailing: c.panel ? const Text('opens in panel', style: TextStyle(fontSize: 12, color: C.muted)) : null,
+                        onTap: () => insert('/${c.name} '),
+                      ),
+                  ]),
+                ),
               ),
-          ]),
-        ),
-      );
+            ),
+          );
+        });
 }
 
 // Claude's own mode-line wording: the picker shows it verbatim (card rule 10)
