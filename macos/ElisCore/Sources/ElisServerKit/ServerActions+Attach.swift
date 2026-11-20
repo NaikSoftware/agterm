@@ -27,8 +27,9 @@ extension ServerActions {
                                               socketDirectory: panes.configuration.zmxSocketDirectory)
             // a daemon-backed pane's tree token is its identity
             let source = LivePaneSource.local(endpoint: endpoint, daemon: panes.daemonName(for: identity))
-            guard let attach = try? claim ? ControlAttach.claimer(source, paneID: identity.uuidString)
-                                          : ControlAttach.viewer(source, paneID: identity.uuidString) else {
+            let origin = ControlAttachOrigin(session: session.id.uuidString, pane: identity.uuidString, host: nil)
+            guard let attach = try? claim ? ControlAttach.claimer(source, paneID: identity.uuidString, origin: origin)
+                                          : ControlAttach.viewer(source, paneID: identity.uuidString, origin: origin) else {
                 return ControlResponse(ok: false, error: "\(target ?? "active") is not a Live session")
             }
             return ControlResponse(ok: true, result: ControlResult(attach: attach))

@@ -37,6 +37,7 @@ struct ServerAttachTests {
                                       "ZMX_DIR=" + configuration.zmxSocketDirectory, configuration.zmxPath, "screen",
                                       ZmxSupport.daemonName(for: split)])
             #expect(!attach.remote)
+            #expect(attach.origin == ControlAttachOrigin(session: session.id.uuidString, pane: split.uuidString, host: nil))
         }
         let primary = await harness.actions.sessionAttach(target: session.id.uuidString, pane: .left, paneID: nil, window: nil)
         #expect(primary.result?.attach?.paneID == session.paneIdentity.uuidString)
@@ -55,6 +56,7 @@ struct ServerAttachTests {
         #expect(attach.argv.contains("ZMX_MANAGED_CLAIM=1"))
         #expect(!attach.argv.contains("ZMX_MANAGED_FOLLOW=1"))
         #expect(!attach.screen.isEmpty)
+        #expect(attach.origin == ControlAttachOrigin(session: session.id.uuidString, pane: session.paneIdentity.uuidString, host: nil))
     }
 
     @Test func refusesAMissingPane() async throws {

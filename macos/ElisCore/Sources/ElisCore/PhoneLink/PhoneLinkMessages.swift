@@ -7,14 +7,18 @@ public struct PhoneLinkOpen: Codable, Equatable, Sendable {
     public var claim: Bool?
     public var cols: UInt16?
     public var rows: UInt16?
+    /// A `forward` channel's page, by the origin's page id.
+    public var page: String?
 
-    public init(type: String, target: String, pane: String? = nil, claim: Bool? = nil, cols: UInt16? = nil, rows: UInt16? = nil) {
+    public init(type: String, target: String, pane: String? = nil, claim: Bool? = nil, cols: UInt16? = nil, rows: UInt16? = nil,
+                page: String? = nil) {
         self.type = type
         self.target = target
         self.pane = pane
         self.claim = claim
         self.cols = cols
         self.rows = rows
+        self.page = page
     }
 }
 

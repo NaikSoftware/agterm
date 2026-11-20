@@ -913,4 +913,13 @@ struct AppStoreRemoteOverlayTests {
         jobs.finish(job, .exited(0))
         #expect(session.paneOverlayExitCode(.right) == nil)
     }
+
+    @Test func aProgramOverlayNeverGoesToThePhone() throws {
+        store.overlayJobs = jobs
+        let session = try Viewers.origin(store, hub: hub)
+        let phone = try Viewers.phone(hub, session)
+
+        #expect(open(session) == .notPresented)
+        #expect(phone.sink.overlays.isEmpty)
+    }
 }

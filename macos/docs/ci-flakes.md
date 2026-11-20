@@ -308,6 +308,15 @@ Each entry separates a demonstrated cause from one that is only consistent with 
 A WebContent crash appears in passing hosted runs as well as failing ones and was not linked to any failure
 above. That it follows the drag and paste tests releasing their named pasteboards is an inference.
 
+## Flutter tests (`mobile/`)
+
+### `page_tunnel_test.dart` gate `aWrongCookieClosesTheSocket`
+
+- **Symptom.** `TimeoutException after 0:00:30.000000: Test timed out after 30 seconds`.
+- **Cause, demonstrated.** The test made its wrong cookie by setting the last hex digit to `0`. A random cookie
+  ending in `0` (1 in 16) stayed correct and passed the gate. Locally it failed 4 of 40 runs.
+- **Fix.** The test changes the last digit to one it does not have; 0 failures in 40 runs.
+
 ## Release build job: surface teardown smoke
 
 ### `spam-8` stalls on `session new` (case retired)

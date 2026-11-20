@@ -77,6 +77,50 @@ import Testing
         #expect(scheduler.next(maxChunk: 2) == nil)
     }
 
+    @Test func aLowChannelWaitsForVt() {
+        var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 1000)
+        scheduler.open(channel: 3, low: true)
+        scheduler.open(channel: 2)
+        _ = scheduler.enqueue(channel: 3, bytes(4))
+        _ = scheduler.enqueue(channel: 2, bytes(4))
+        _ = scheduler.enqueue(channel: 1, bytes(1))
+        _ = scheduler.enqueue(channel: 0, bytes(1))
+        let order = (0..<6).compactMap { _ in scheduler.next(maxChunk: 2)?.channel }
+        #expect(order == [0, 1, 2, 2, 3, 3])
+        #expect(scheduler.next(maxChunk: 2) == nil)
+    }
+
+    @Test func aLowChannelGetsOneFrameInNine() {
+        var scheduler = PhoneLinkScheduler(window: 10_000, bufferLimit: 10_000)
+        scheduler.open(channel: 2)
+        scheduler.open(channel: 3, low: true)
+        _ = scheduler.enqueue(channel: 2, bytes(1000))
+        _ = scheduler.enqueue(channel: 3, bytes(1000))
+        let order = (0..<27).compactMap { _ in scheduler.next(maxChunk: 1)?.channel }
+        let expected = Array([[UInt32]](repeating: Array(repeating: 2, count: 8) + [3], count: 3).joined())
+        #expect(order == expected)
+    }
+
+    @Test func aLowChannelTakesEveryPickWhileVtIsIdle() {
+        var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 1000)
+        scheduler.open(channel: 2)
+        scheduler.open(channel: 3, low: true)
+        _ = scheduler.enqueue(channel: 3, bytes(20))
+        let order = (0..<20).compactMap { _ in scheduler.next(maxChunk: 1)?.channel }
+        #expect(order == Array(repeating: 3, count: 20))
+    }
+
+    @Test func vtWithoutCreditDoesNotBlockALowChannel() {
+        var scheduler = PhoneLinkScheduler(window: 0, bufferLimit: 1000)
+        scheduler.open(channel: 2)
+        scheduler.open(channel: 3, low: true)
+        scheduler.grant(channel: 3, bytes: 10)
+        _ = scheduler.enqueue(channel: 2, bytes(5))
+        _ = scheduler.enqueue(channel: 3, bytes(5))
+        #expect(scheduler.next(maxChunk: 10) == .data(channel: 3, bytes(5)))
+        #expect(scheduler.next(maxChunk: 10) == nil)
+    }
+
     @Test func overflowDropsOnlyThatChannel() {
         var scheduler = PhoneLinkScheduler(window: 100, bufferLimit: 8)
         scheduler.open(channel: 2)

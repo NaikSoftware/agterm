@@ -641,6 +641,66 @@ struct PresentationHubTests {
         #expect(hub.route(session: other, pane: Self.left) == sink.frames[0].gen)
     }
 
+    static let phoneHello = PresentationHello(version: 1, kinds: ["status", PresentationHub.leadReportKind, PresentationHub.viewerPhoneKind],
+                                              mode: .presenter)
+
+    @Test func aPhoneClaimantTakesPagesOnly() throws {
+        let hub = makeHub()
+        let phone = try viewer(hub, hello: Self.phoneHello)
+
+        report(hub, phone, [Self.left])
+
+        #expect(hub.route(session: Self.session, pane: Self.left, work: .page) == phone.gen)
+        #expect(hub.route(session: Self.session, pane: Self.left) == nil)
+        #expect(hub.leadClaimant(session: Self.session, pane: Self.left) == nil)
+    }
+
+    @Test func otherWorkGoesToTheNextClaimantThenTheHolder() throws {
+        let hub = makeHub()
+        let holder = try viewer(hub)
+        let mac = try viewer(hub)
+        let phone = try viewer(hub, hello: Self.phoneHello)
+        hub.receive(PresentationFrame(gen: holder.gen, rev: 0, body: .presenterAcquire), from: holder.id)
+
+        report(hub, mac, [Self.left])
+        report(hub, phone, [Self.left])
+        #expect(hub.route(session: Self.session, pane: Self.left) == mac.gen)
+        report(hub, mac, [])
+
+        #expect(hub.route(session: Self.session, pane: Self.left) == holder.gen)
+    }
+
+    @Test func aPhoneNeverBecomesTheGrantHolder() throws {
+        let hub = makeHub()
+        let phoneSink = Sink()
+        let phone = try viewer(hub, hello: Self.phoneHello, sink: phoneSink)
+
+        hub.receive(PresentationFrame(gen: phone.gen, rev: 0, body: .presenterAcquire), from: phone.id)
+        #expect(phoneSink.bodies.last == .presenterRefused)
+        #expect(hub.presenter(of: Self.session) == nil)
+
+        let holder = try viewer(hub)
+        hub.receive(PresentationFrame(gen: holder.gen, rev: 0, body: .presenterAcquire), from: holder.id)
+        hub.unsubscribe(holder.id)
+
+        #expect(!phoneSink.bodies.contains(.presenterVacant))
+        #expect(hub.route(session: Self.session, pane: nil) == nil)
+    }
+
+    @Test func theKindIsNegotiated() throws {
+        let hub = makeHub()
+        let phoneSink = Sink()
+        let phone = try viewer(hub, hello: Self.phoneHello, sink: phoneSink)
+        let mac = try viewer(hub, hello: PresentationHello(version: 1, kinds: PresentationHub.supportedKinds, mode: .presenter))
+
+        guard case .hello(let answer)? = phoneSink.bodies.first else { throw CancellationError() }
+        #expect(answer.kinds.contains(PresentationHub.viewerPhoneKind))
+        #expect(!PresentationHub.supportedKinds.contains(PresentationHub.viewerPhoneKind))
+        #expect(hub.isPhone(owner: phone.gen))
+        #expect(!hub.isPhone(owner: mac.gen))
+        #expect(hub.macViewerCount(session: Self.session) == 1)
+    }
+
     @Test func aSendToAnOwnerReachesThatViewerAlone() throws {
         let hub = makeHub()
         let firstSink = Sink()

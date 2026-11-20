@@ -4,6 +4,7 @@ import Testing
 import ElisCore
 @testable import elisctlKit
 
+@Suite(.outsidePane)
 struct AskCommandsTests {
     @Test(arguments: [(Optional("right"), Optional<String>.none), (nil, "pane-token"), ("left", "pane-token")], [false, true])
     func terminalPanePlacementBuildsRequestWithoutTarget(placement: (String?, String?), explicitStyle: Bool) throws {

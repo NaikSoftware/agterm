@@ -386,6 +386,8 @@ public struct PresentationPage: Codable, Equatable, Sendable {
     public var textSeed: PresentationTextState?
     /// offer numbers this hand-over under `offer.id`; every reply about it echoes it.
     public var offer: Int?
+    /// hidden is true for a page offered hidden; the hide command still follows for a presenter that ignores it.
+    public var hidden: Bool?
 
     public init(page: String, token: String, source: PresentationPageSource, identity: String, chromeless: Bool,
                 javascript: Bool, navigation: Bool, browse: Bool, persistent: Bool, backgroundColor: String?,

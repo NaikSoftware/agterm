@@ -83,14 +83,23 @@ struct AppStoreOpenWorkTests {
 
     private func url() throws -> HtmlOverlay { HtmlOverlay(source: .url(try #require(URL(string: "https://example.com/")))) }
 
-    private func openPage(_ page: HtmlOverlay, in session: Session, on host: AppStore? = nil) -> RemotePageOpen {
+    private func openPage(_ page: HtmlOverlay, in session: Session, on host: AppStore? = nil, wait: Bool = false) -> RemotePageOpen {
         (host ?? store).openRemotePage(session.id, overlay: page, options: ControlSessionOverlayOpenOptions(
-            command: "", cwd: nil, wait: false, sizePercent: nil, backgroundColor: nil))
+            command: "", cwd: nil, wait: wait, sizePercent: nil, backgroundColor: nil))
     }
 
     private func report(_ page: HtmlOverlay, in session: Session, from viewer: Viewer, load: HtmlLoadState = .loaded,
                         on host: AppStore? = nil) {
-        let offer = viewer.sink.pages.last { $0.page == page.id.uuidString }?.offer
+        report(page, in: session, by: (viewer.gen, viewer.sink.pages), load: load, on: host)
+    }
+
+    private func report(_ page: HtmlOverlay, in session: Session, from phone: Viewers.Viewer, on host: AppStore? = nil) {
+        report(page, in: session, by: (phone.gen, phone.sink.pages), load: .loaded, on: host)
+    }
+
+    private func report(_ page: HtmlOverlay, in session: Session, by viewer: (gen: Int, pages: [PresentationPage]),
+                        load: HtmlLoadState, on host: AppStore?) {
+        let offer = viewer.pages.last { $0.page == page.id.uuidString }?.offer
         (host ?? store).receiveRemotePageFrame(.pageState(PresentationPageState(
             page: page.id.uuidString, title: nil, address: "https://example.com/", load: load, error: nil, canGoBack: false,
             canGoForward: false, hidden: false, appliedSeq: 0, offer: offer)), forSession: session.id, from: viewer.gen)
@@ -676,5 +685,304 @@ struct AppStoreOpenWorkTests {
         #expect(session.askRemoteOwner == first.gen)
         #expect(SessionPickBook.shared.placement(forSession: session.id) == .presenter(owner: first.gen))
         #expect(first.sink.asks.map(\.id) == [pending.id, pending.id])
+    }
+
+    @Test func aGrantlessViewerThatReportsTheLeadIsRouted() throws {
+        let (host, session) = try session()
+        let viewer = try viewer(session, leads: true)
+        #expect(hub.route(session: session.id, pane: session.paneIdentity) == viewer.gen)
+        #expect(host.presentsRemotely(session, paneIdentity: session.paneIdentity))
+    }
+
+    @Test func aLeadingPhoneGetsThePageRequest() throws {
+        let (_, session) = try session()
+        let phone = try Viewers.phone(hub, session)
+        let page = try url()
+
+        #expect(openPage(page, in: session) == .opened)
+        #expect(phone.sink.pages.map(\.page) == [page.id.uuidString])
+    }
+
+    @Test func anOpenPageMovesToAPhoneTakingTheLead() throws {
+        let (_, session) = try session()
+        let mac = try viewer(session, acquire: true)
+        let page = try url()
+        #expect(openPage(page, in: session) == .opened)
+        let phone = try Viewers.phone(hub, session)
+
+        pass(session)
+
+        #expect(mac.sink.pages.count == 1)
+        #expect(phone.sink.pages.map(\.page) == [page.id.uuidString])
+    }
+
+    @Test func openAskAndPickStayPutAtAPhoneTakeOver() throws {
+        let (_, session) = try session()
+        setLead(.leader, pane: session.paneIdentity)
+        let pending = ask(), choice = pick(), window = UUID()
+        #expect(session.openAsk(pending, paneIdentity: nil, registry: store.askRegistry))
+        #expect(SessionPickBook.shared.openLocal(choice, session: session.id, window: window, controller: PickController()) == nil)
+
+        setLead(.follower, pane: session.paneIdentity)
+        let phone = try Viewers.phone(hub, session)
+        pass(session)
+
+        #expect(phone.sink.asks.isEmpty)
+        #expect(phone.sink.picks.isEmpty)
+        #expect(SessionPickBook.shared.placement(forSession: session.id) == .local(window))
+        #expect(session.askPending?.id == pending.id)
+        #expect(!session.askPresentedRemotely)
+    }
+
+    @Test(arguments: [true, false])
+    func onAHeadlessOriginOtherWorkGoesToTheMacViewer(macViewer: Bool) throws {
+        let (host, session) = try session(headless: true)
+        let phone = try Viewers.phone(hub, session)
+        let mac = macViewer ? try Viewers.viewer(hub, session, acquire: true) : nil
+
+        host.presentAskRemotely(ask(), in: session, paneIdentity: nil, window: UUID())
+
+        #expect(session.askRemoteOwner == mac?.gen)
+        #expect(phone.sink.asks.isEmpty)
+    }
+
+    @Test func aGuiAskInAWindowStaysOffThePhone() throws {
+        let (_, session) = try session()
+        let window = UUID(), controller = PickController()
+        let gui = ask(style: .gui)
+        #expect(controller.openAsk(gui.anchored(at: AskAnchor(sessionID: session.id))))
+        store.askRegistry.register(id: gui.id, owner: .window(window))
+        let phone = try Viewers.phone(hub, session)
+
+        pass(session, local: local(controller, window: window))
+
+        #expect(controller.pendingAsk != nil)
+        #expect(phone.sink.asks.isEmpty)
+    }
+
+    @Test func aHeldInteractionOnAHeadlessOriginStaysOffThePhone() throws {
+        let (host, session) = try session(headless: true)
+        let pending = ask(), choice = pick(), page = try url()
+        #expect(host.openUnpresentedAsk(pending, in: session, paneIdentity: nil, window: UUID()))
+        #expect(SessionPickBook.shared.openUnpresented(choice, session: session.id, follow: false))
+        #expect(openPage(page, in: session, on: host) == .opened)
+        let phone = try Viewers.phone(hub, session)
+
+        host.offerPendingInteractions(forSession: session.id, now: Date())
+
+        #expect(phone.sink.asks.isEmpty)
+        #expect(phone.sink.picks.isEmpty)
+        #expect(session.askPending?.id == pending.id)
+        #expect(session.askRemoteOwner == nil)
+        #expect(SessionPickBook.shared.placement(forSession: session.id) == .unpresented)
+        #expect(phone.sink.pages.map(\.page) == [page.id.uuidString])
+    }
+
+    // MARK: pages following the phone's lead
+
+    private func file() -> HtmlOverlay { HtmlOverlay(source: .file(path: "/tmp/a/page.html", grantRoot: nil)) }
+
+    private func pending(_ page: HtmlOverlay) -> Bool { HtmlPageOutcomes.shared.outcome(for: page.id)?.outcome == .pending }
+
+    /// phoneGivesBack leaves a URL page the phone had loaded mounted here after the phone withdrew its lead.
+    private func phoneGivesBack() throws -> (Session, Viewers.Viewer, HtmlOverlay) {
+        let (_, session) = try session()
+        let phone = try Viewers.phone(hub, session)
+        let page = try url()
+        #expect(openPage(page, in: session, wait: true) == .opened)
+        report(page, in: session, from: phone)
+        #expect(session.remoteOverlays.slot(nil)?.owner == phone.gen)
+        #expect(pending(page))
+
+        Viewers.lead(hub, phone, [])
+        setLead(.leader, pane: session.paneIdentity)
+        pass(session)
+        return (session, phone, page)
+    }
+
+    @Test func aPageReturnsHomeWhenThePhoneWithdrawsTheLead() throws {
+        let (session, phone, page) = try phoneGivesBack()
+
+        #expect(session.htmlOverlayActive)
+        #expect(session.htmlOverlay?.id == page.id)
+        #expect(session.remoteOverlays.slot(nil) == nil)
+        #expect(session.remoteOverlays.slots.isEmpty)
+        guard case .pageClose(let close)? = phone.sink.bodies.last else { Issue.record("no close on the phone"); return }
+        #expect(close.page == page.id.uuidString)
+        #expect(close.reason == PresentationPageChange.channelLost)
+    }
+
+    @Test func aPhoneWithOfferIdIsNeverRecordedAsGivenUp() throws {
+        let (_, phone, page) = try phoneGivesBack()
+
+        #expect(!OfferlessHolders.shared.held(page.id.uuidString, by: phone.gen))
+    }
+
+    @Test func aPageGoesBackToTheSamePhoneWhenItLeadsAgain() throws {
+        let (session, phone, page) = try phoneGivesBack()
+
+        setLead(.follower, pane: session.paneIdentity)
+        Viewers.lead(hub, phone, [session.paneIdentity])
+        pass(session)
+
+        #expect(phone.sink.pages.map(\.page) == [page.id.uuidString, page.id.uuidString])
+        #expect(phone.sink.pages[1].offer != nil && phone.sink.pages[1].offer != phone.sink.pages[0].offer)
+        report(page, in: session, from: phone)
+        #expect(session.remoteOverlays.slot(nil)?.owner == phone.gen)
+        #expect(session.htmlOverlay == nil)
+    }
+
+    @Test func aMoveKeepsTheBlockingOutcomeOpen() throws {
+        let (session, phone, page) = try phoneGivesBack()
+        #expect(session.htmlOverlay?.id == page.id)
+        #expect(pending(page))
+
+        setLead(.follower, pane: session.paneIdentity)
+        Viewers.lead(hub, phone, [session.paneIdentity])
+        pass(session)
+        report(page, in: session, from: phone)
+
+        #expect(session.remoteOverlays.slot(nil)?.owner == phone.gen)
+        #expect(pending(page))
+    }
+
+    @Test func aPageThePhoneNeverClaimedComesHome() throws {
+        let (_, session) = try session()
+        let phone = try Viewers.phone(hub, session)
+        let page = file()
+        #expect(openPage(page, in: session) == .opened)
+        #expect(phone.sink.pages.map(\.page) == [page.id.uuidString])
+
+        hub.unsubscribe(phone.id)
+        setLead(.leader, pane: session.paneIdentity)
+        pass(session)
+
+        #expect(session.htmlOverlay?.id == page.id)
+        #expect(session.remoteOverlays.slots.isEmpty)
+        #expect(pending(page))
+    }
+
+    @Test func aLoadedPageSurvivesThePhoneLeavingWhileThePaneStillFollows() throws {
+        let (_, session) = try session()
+        let phone = try Viewers.phone(hub, session)
+        let page = try url()
+        #expect(openPage(page, in: session) == .opened)
+        report(page, in: session, from: phone)
+
+        hub.unsubscribe(phone.id)
+        pass(session)
+
+        #expect(session.htmlOverlay?.id == page.id)
+        #expect(pending(page))
+    }
+
+    @Test func aLoadingPageWhosePhoneLeavesIsNotDismissed() throws {
+        let (_, session) = try session()
+        let phone = try Viewers.phone(hub, session)
+        let page = file()
+        #expect(openPage(page, in: session) == .opened)
+        #expect(store.claimRemotePage(token: try #require(phone.sink.pages.first?.token)) != nil)
+
+        hub.unsubscribe(phone.id)
+        _ = store.remotePageLost(page.id)
+        pass(session)
+
+        #expect(session.htmlOverlay?.id == page.id)
+        #expect(pending(page))
+    }
+
+    @Test func aPagePipeLostBeforeItLoadedEnds() throws {
+        let (_, session) = try session()
+        let phone = try Viewers.phone(hub, session)
+        let page = file()
+        #expect(openPage(page, in: session) == .opened)
+        #expect(store.claimRemotePage(token: try #require(phone.sink.pages.first?.token)) != nil)
+
+        // the host's pageChannelLost: a loss the rule does not take ends the page
+        #expect(!store.remotePageLost(page.id))
+        store.closeRemoteOverlay(session.id, pane: nil)
+
+        #expect(HtmlPageOutcomes.shared.outcome(for: page.id)?.outcome == .dismissed)
+    }
+
+    @Test func aHiddenPageMovesHidden() throws {
+        let (_, session) = try session()
+        setLead(.leader, pane: session.paneIdentity)
+        let page = try url()
+        #expect(store.openHtmlOverlay(session.id, pane: nil, overlay: page, sizePercent: nil) == nil)
+        session.setOverlayHidden(true, slot: nil)
+
+        setLead(.follower, pane: session.paneIdentity)
+        let phone = try Viewers.phone(hub, session)
+        pass(session)
+
+        let moved = phone.sink.bodies.filter {
+            switch $0 {
+            case .pageRequest, .pageCommand: true
+            default: false
+            }
+        }
+        guard moved.count == 2, case .pageRequest(let request) = moved[0], case .pageCommand(let command) = moved[1]
+        else { Issue.record("no request and command: \(moved)"); return }
+        #expect(request.page == page.id.uuidString)
+        #expect(command.page == page.id.uuidString)
+        #expect(command.action == .hide)
+    }
+
+    @Test(arguments: [false, true])
+    func onlyPagesOfTheLedPaneMove(primary: Bool) throws {
+        let (_, session) = try session()
+        store.toggleSplit(session.id)
+        let split = try #require(session.splitPaneIdentity)
+        setLead(.leader, pane: session.paneIdentity)
+        setLead(.leader, pane: split)
+        let wide = try url(), left = try url(), right = try url()
+        #expect(store.openHtmlOverlay(session.id, pane: nil, overlay: wide, sizePercent: nil) == nil)
+        #expect(store.openHtmlOverlay(session.id, pane: .left, overlay: left, sizePercent: nil) == nil)
+        #expect(store.openHtmlOverlay(session.id, pane: .right, overlay: right, sizePercent: nil) == nil)
+        #expect(session.htmlOverlayActive)
+
+        let led = primary ? session.paneIdentity : split
+        setLead(.follower, pane: led)
+        let phone = try Viewers.viewer(hub, session, kinds: Viewers.phoneKinds)
+        Viewers.lead(hub, phone, [led])
+        pass(session)
+
+        let expected = primary ? [wide, left] : [right]
+        #expect(Set(phone.sink.pages.map(\.page)) == Set(expected.map(\.id.uuidString)))
+        #expect(phone.sink.pages.count == expected.count)
+    }
+
+    @Test func aPageRowStays() throws {
+        let (_, anchor) = try session()
+        let row = try store.addPageSession(after: anchor.id, overlay: try url()).get()
+        #expect(row.htmlOverlayActive)
+        setLead(.follower, pane: row.paneIdentity)
+        let phone = try Viewers.phone(hub, row)
+
+        pass(row)
+
+        #expect(phone.sink.pages.isEmpty)
+    }
+
+    @Test func onAHeadlessOriginThePageStaysUntilAnotherViewerLeads() throws {
+        let (host, session) = try session(headless: true)
+        let mac = try Viewers.viewer(hub, session, acquire: true)
+        let phone = try Viewers.phone(hub, session)
+        let page = try url()
+        #expect(openPage(page, in: session, on: host) == .opened)
+        report(page, in: session, from: phone, on: host)
+        #expect(session.remoteOverlays.slot(nil)?.owner == phone.gen)
+
+        Viewers.lead(hub, phone, [])
+        pass(session, on: host)
+
+        #expect(session.remoteOverlays.slot(nil)?.owner == phone.gen)
+        #expect(mac.sink.pages.isEmpty)
+
+        Viewers.lead(hub, mac, [session.paneIdentity])
+        pass(session, on: host)
+
+        #expect(mac.sink.pages.map(\.page) == [page.id.uuidString])
     }
 }

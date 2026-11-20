@@ -166,6 +166,15 @@ paths:
   A command that reuses `count` for something else must carry its own `result.text`, which the shared
   formatter prefers over every count spelling; `restore.capture` does, or its pane total would print as
   "N diagnostic(s)".
+- The CLI's untargeted session command sends the pane's `ELIS_SESSION_ID`, else `active`
+  (`CallerEnvironment.defaultSessionTarget`): a phone-led pane is never the Mac's selection.
+  `Elisctl.main` scopes it once per command (`CallerEnvironment.scoped`): the id is dropped when the resolved socket
+  is not the pane's `ELIS_SOCKET` (realpath of its folder; an absent or `.unavailable` value never matches), since
+  another instance does not know it, and when `--window` is given, which means that window's selection.
+  Exceptions keep `active`: workspace commands and `workspace tint` (a pane's `ELIS_WORKSPACE_ID` is baked at spawn
+  and goes stale on `session move`); `surface zoom`/`cursor` (no variable carries a surface id); `ask --style gui`
+  and `pick`, window dialogs. The wire default stays `active`.
+  The app unsets an inherited `ELIS_SESSION_ID` at launch, so its hooks and custom commands keep `active`.
 - Targets accept active, case-insensitive UUID, or unique prefix. Batch targets resolve within the first
   target's store, deduplicate, and fail atomically. Preserve the first target in the legacy top-level field
   so old servers degrade to it rather than active.
@@ -266,8 +275,11 @@ Wire contract for the phone (M4b):
 - OPENED `{"error":"revoked"}` is followed by the link closing.
 - The phone sends CREDIT at least once per window consumed, and a zero-byte CREDIT clears the stall clock.
   A CREDIT in flight across RESYNC can let the relay send up to one extra window.
-- Relay-to-phone CREDIT and LEAD are sent only on a claim channel (Direct input below). Channel ids are used once per link.
+- Relay-to-phone CREDIT goes only on a claim or `forward` channel, LEAD only on a claim (Direct input, Pages below).
+  Channel ids are used once per link.
 - Priority is strict 0 > 1 > vt: a large `tree` answer on Bluetooth holds every vt channel until it is out.
+  `present` and `forward` channels are the low class below vt: they send when no vt channel can,
+  and once after every 8 vt frames while it has something to send (`PhoneLinkScheduler`).
 - Grid poll: every 2 s for a local pane, every 30 s for a remote one.
 - A relay killed by a signal prints no per-pane detach lines: viewer processes end by SIGHUP,
   and the app resets its viewers.
@@ -316,9 +328,69 @@ and carries no DATA to the phone.
   A relay `-` address leaves `ip` absent from the event payload; the human line prints `ip=-`.
   elis-server's own tree omits `phoneLead` by the same approved exception as `phoneViewers`.
 
-`session.attach` answers `result.attach = {argv, paneID, screen, remote, nonce?}`:
+Pages (`present`), `PhoneLinkPresenter`; the spec `docs/superpowers/specs/2026-11-20-phone-pages-design.md`.
+
+- OPEN `{type:"present", target}`, one channel per session the phone views, at most 8 per phone.
+  Refusals in OPENED: `channel already open` (a second channel for the same target), `too many open pages`,
+  `Elis is too old to show pages` (an attach answer without `origin`), `could not reach the presentation: …`,
+  and the app's `session.attach` refusal.
+- The relay asks `session.attach` for `origin`, then subscribes on the origin as `viewer.phone`:
+  `zmx.present` on the app socket, or `ssh -T <host> elisctl zmx present` for a row with a `host`.
+  Its hello lists `lead.report`, the page kinds, `page.content`, `page.document`, `pending.snapshot`,
+  `job.token`, `offer.id`, `viewer.phone` and `page.forward`, never `page.text`, `page.files` or `page.links`.
+  It never asks for the grant and ignores frames other than pages, pings and pending batches.
+- It reports the panes the phone's leading claims hold, and only to an origin whose hello lists `viewer.phone`:
+  an older origin would route asks to it.
+- JSON lines; `PhoneLinkPages` owns the shapes: relay to phone `page`, `command`,
+  `res` (a fetch answer in chunks) and `reply` (a bridge answer); phone to relay `fetch`, `bridge`, `state`, `closed`.
+- A file page's pipe is `session.overlay.page.serve <token>`, claimed with the page's single-use token.
+  Fetches and bridge lines go only to that pipe, never to channel 0, which carries the pairing token's authority.
+  Image, document, markdown and text pages are HTML the relay builds and serves from memory.
+  A loopback `--url` page arrives `forwarded`, since the hello lists `page.forward`, and goes to the phone as kind
+  `forward` (below); one arriving as a plain URL is refused `a loopback page cannot be shown on the phone`.
+- Budget: the channel buffer is 512 KiB, past which it closes `overflow`.
+  Page pipes start paused, and only one per channel is resumed at a time, round robin,
+  while the channel's queued bytes stay under `highWater` (160 KiB).
+  A pipe line is capped at `PresentationCodec.maxFrameBytes` + 4 KiB, so a reply as large as a frame still fits.
+- CLOSE reasons: `presentation ended`, `overflow`, `bad page line` (an undecodable or over-long phone line).
+- Stop ends the presentation stream first, then the page pipes after 2 s:
+  a pipe ending first would read on the origin as a lost page.
+- Frames and the bridge: the Mac refuses a request from any frame but the main frame
+  (`HtmlOverlayRegistry`, `requests from frames are refused`).
+  The phone's WebView reports no frame, so it gates the bridge with a per-sheet nonce kept in the prelude closure
+  (`page_sheet.dart`), which stops cross-origin frames.
+  On the phone a same-origin frame of a `--js` file page can call the page's `elis` and is trusted as the page,
+  with the same grant folder.
+- Dev servers (`PhoneLinkForward`, `PhoneLinkPresenter+Forward`, the phone's `page_tunnel.dart`).
+  A loopback `--url` page goes to the phone as kind `forward` once its address is reachable from the relay:
+  a local row's own host and port, a remote row's an `ssh -N -L` on a free 127.0.0.1 port of this Mac.
+  That child is tied to the relay's stdin, so a relay killed outright leaves none; one not accepting in 10 s
+  rejects the page (`the page's forward did not come up`), and one that dies closes the page.
+- OPEN `{type:"forward", target, page}` carries one TCP connection to that address.
+  It is refused `no such page` unless the page is open on the `present` channel for `target` and was handed to this
+  phone, and `too many connections` past `maxForwards` (16 per phone).
+  The relay connects with a 5 s timeout.
+  Phone bytes go under a 64 KiB window with CREDIT back, as on a claim; past it the channel closes `input overflow`.
+  Server bytes are read only while the channel's queue is under `highWater`.
+  CLOSE reasons: `page closed` (its page left the phone), `closed` (the server ended), `input overflow`, `overflow`,
+  `could not connect: …`.
+- The phone queues bytes sent before OPENED, and a CLOSE can arrive before OPENED.
+  It pauses socket reads while sent bytes wait for CREDIT.
+- The tunnel gate.
+  The phone's listener binds 127.0.0.1 only, on the dev server's port when free, else a random one;
+  a page sent again keeps its port, its new sheet waiting for the old listener to close.
+  Each sheet sets a cookie `elis_tunnel_<bound port>` with a 128-bit random value, `HttpOnly`, `SameSite=Strict`,
+  through `CookieManager`, and clears it with the sheet; a cookie the platform refuses fails the page.
+  Every accepted connection must present it in its first request's headers within 16 KiB and 5 s,
+  or it is closed before any OPEN: the gate fails closed, so no other app or site on the phone reaches the server.
+  Cookies ignore ports, so a hostile app on another phone `127.0.0.1` port the page references could read it;
+  accepted for v1.
+
+`session.attach` answers `result.attach = {argv, paneID, screen, remote, origin, nonce?}`:
 `screen` is the zmx `screen` argv for the same daemon (the relay reads the grid with it),
-and `remote` is true for an origin's pane.
+`remote` is true for an origin's pane,
+and `origin` `{session, pane, host}` names the ids a `lead.report` uses on the app that runs the pane,
+with `host` its ssh host, null when the answering app runs it (always on elis-server).
 Remote viewer and screen argvs run through the ssh keepalive wrapper.
 It is a zmx viewer attach that never claims, never leads
 and skips scrollback (`ZMX_MANAGED_SCREEN_ONLY`, `ZMX_MANAGED_FOLLOW`; patch 0007, see the zmx patches README).
@@ -2428,6 +2500,19 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   work (Open work, below). `onOwnerLost` returns only that owner's work. A viewer leading any of the session's panes forwards
   clicks and status seen/keystroke frames like the holder (`sendToOrigin`, `client.claimsLead`), only to an
   origin taking `lead.report`. A viewer or origin without the kind keeps the holder-only rule.
+- Placement guard (`PresentationHub.Work`, `.page` or `.other`): a subscriber whose hello lists `viewer.phone`
+  (the phone relay) takes pages and no other work.
+  `route`, `leadClaimant` and `pendingRecipient` skip it for `.other` work, so asks, picks, program overlays,
+  HUDs and sounds go to the next claimant or the grant holder, and with neither the origin keeps them.
+  A nil recipient is not enough: on a headless elis-server origin nil means "hold for a viewer".
+  A page of a kind the phone does not list (`page.text`, `page.files`, `page.links`) goes to the next recipient
+  by the same rule, not to a refusal.
+  The phone never takes the grant, and `presenters` counts no phone.
+  A page follows the lead both ways through the placement pass; a move reloads it, keeps `hidden`,
+  and leaves a `--block` outcome pending.
+  On a headless origin a page stays on the phone after its lead report is withdrawn,
+  until another viewer reports the lead of that pane.
+  `htmlOverlays[].phone` is true while the slot's owner lists `viewer.phone`.
 - A `session.status` sound follows the same routing on the status pane, scratch staying local: the origin sends
   a one-shot `sound` frame to that pane's recipient and does not play it. A nil name is the blocked-default marker,
   sent on a transition into `blocked` even when the origin's own blocked sound is off, and the presenter

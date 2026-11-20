@@ -90,6 +90,17 @@ final class ControlServerAttachTests: XCTestCase {
         XCTAssertEqual(masked(response.result?.attach), masked(expected))
     }
 
+    func testLocalLivePaneNamesItsOrigin() async throws {
+        let server = makeServer()
+        let (store, session) = try makeSession(live: true)
+        let paneID = try XCTUnwrap(treePaneID(store, session, kind: "left"))
+
+        let response = await attach(server, session.id.uuidString)
+
+        XCTAssertEqual(response.result?.attach?.origin, ControlAttachOrigin(session: session.id.uuidString, pane: paneID, host: nil),
+                       response.error ?? "")
+    }
+
     func testSplitPaneAttachesTheSplitDaemon() async throws {
         let server = makeServer()
         let (store, session) = try makeSession(live: true, split: true)
@@ -168,7 +179,8 @@ final class ControlServerAttachTests: XCTestCase {
     func testAttachedRowUsesItsOrigin() async throws {
         let server = makeServer()
         let (store, session) = try makeSession(live: false)
-        let daemon = ZmxSupport.daemonName(for: UUID())
+        let originPane = UUID()
+        let daemon = ZmxSupport.daemonName(for: originPane)
         store.bindRemote(RemoteBinding(remoteSessionID: "r", daemonsByLocalPane: [session.paneIdentity: daemon], presentationVersion: 1,
                                        origin: .init(host: "mini", endpoint: originEndpoint, sessionName: "r")),
                          forSession: session.id)
@@ -179,6 +191,7 @@ final class ControlServerAttachTests: XCTestCase {
         XCTAssertTrue(response.ok, response.error ?? "")
         XCTAssertEqual(masked(response.result?.attach),
                        masked(try ControlAttach.viewer(.remote(host: "mini", endpoint: originEndpoint, daemon: daemon), paneID: paneID)))
+        XCTAssertEqual(response.result?.attach?.origin, ControlAttachOrigin(session: "r", pane: originPane.uuidString, host: "mini"))
     }
 
     func testServerWindowRowUsesItsCatalogPane() async throws {
@@ -198,6 +211,8 @@ final class ControlServerAttachTests: XCTestCase {
         XCTAssertTrue(response.ok, response.error ?? "")
         XCTAssertEqual(masked(response.result?.attach),
                        masked(try ControlAttach.viewer(.remote(host: "box", endpoint: paneEndpoint, daemon: catalogDaemon), paneID: paneID)))
+        XCTAssertEqual(response.result?.attach?.origin,
+                       ControlAttachOrigin(session: "s", pane: session.paneIdentity.uuidString, host: "box"))
 
         session.catalogPanes[session.paneIdentity]?.held = true
         let held = await attach(server, session.id.uuidString)

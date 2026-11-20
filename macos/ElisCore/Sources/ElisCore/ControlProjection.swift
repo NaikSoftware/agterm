@@ -590,14 +590,17 @@ public struct ControlHtmlOverlayNode: Codable, Sendable, Equatable {
     /// `AppStore.releaseHiddenClickedPage` decides whether a click replaces the page, and `hidden` here also
     /// covers states it leaves alone.
     public let clicked: Bool?
+    /// phone is true for a page the phone relay shows, omitted otherwise.
+    public let phone: Bool?
 
     public init(pane: String?, file: String? = nil, cwd: String? = nil, url: String? = nil, image: String? = nil,
                 markdown: String? = nil, document: String? = nil, text: ControlTextOverlayNode? = nil, state: String,
                 error: String?, page: String? = nil, title: String? = nil, canGoBack: Bool? = nil,
                 canGoForward: Bool? = nil, navigation: Bool? = nil, javascript: Bool = false, chromeless: Bool = false,
                 zoom: Double? = nil, id: String? = nil, persistent: Bool = false, browse: Bool = false,
-                hidden: Bool? = nil, remote: Bool? = nil, replica: Bool? = nil, clicked: Bool? = nil) {
+                hidden: Bool? = nil, remote: Bool? = nil, replica: Bool? = nil, clicked: Bool? = nil, phone: Bool? = nil) {
         self.id = id
+        self.phone = phone
         self.clicked = clicked
         self.hidden = hidden
         self.remote = remote
@@ -626,7 +629,7 @@ public struct ControlHtmlOverlayNode: Codable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case pane, file, cwd, url, image, markdown, document, text, state, error, page, title, canGoBack, canGoForward, navigation, javascript
-        case chromeless, persistent, browse, zoom, id, hidden, remote, replica, clicked
+        case chromeless, persistent, browse, zoom, id, hidden, remote, replica, clicked, phone
     }
 
     public init(from decoder: Decoder) throws {
@@ -656,6 +659,7 @@ public struct ControlHtmlOverlayNode: Codable, Sendable, Equatable {
         remote = try c.decodeIfPresent(Bool.self, forKey: .remote)
         replica = try c.decodeIfPresent(Bool.self, forKey: .replica)
         clicked = try c.decodeIfPresent(Bool.self, forKey: .clicked)
+        phone = try c.decodeIfPresent(Bool.self, forKey: .phone)
     }
 }
 

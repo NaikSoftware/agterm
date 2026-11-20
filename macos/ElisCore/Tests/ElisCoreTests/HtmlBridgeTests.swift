@@ -181,6 +181,10 @@ struct HtmlBridgeTests {
         #expect(try request(#"{"cmd":"session.overlay.reload","args":{"current":false}}"#).args?.current == false)
     }
 
+    @Test func thePhoneStatusRefusalIsWordedForThePhoneRelay() {
+        #expect(HtmlBridgeError.unsupported("phone.status").message == "phone.status cannot be sent from a page")
+    }
+
     @Test(arguments: ["zmx.present", "catalog.subscribe", "session.overlay.job.run", "session.overlay.page.serve", "zmx.reset",
                       "phone.status", "phone.enable", "phone.port", "phone.host", "phone.revoke"])
     func streamAndAfterReplyCommandsAreRefused(_ cmd: String) {

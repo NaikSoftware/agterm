@@ -36,9 +36,13 @@ final class PhoneLinkSession {
     private var terminals: [UInt32: PhoneLinkTerminal] = [:]
     /// Take over channels, which carry no DATA to the phone.
     private var claims: [UInt32: PhoneLinkClaim] = [:]
+    /// `present` channels, one per session the phone views.
+    private var presenters: [UInt32: PhoneLinkPresenter] = [:]
+    /// `forward` channels from their OPEN on, with the present channel and page they reach.
+    private var forwards: [UInt32: (presenter: UInt32, page: String, forward: PhoneLinkForward)] = [:]
     /// Closed channels whose attach request still runs, as their `asking`: each keeps its slot until the answer, so
     /// OPEN and CLOSE in a loop cannot pile up app requests.
-    private var leaving: [() -> Bool] = []
+    private var leaving: [(present: Bool, asking: () -> Bool)] = []
     /// OPENED, LEAD, CREDIT and CLOSE: they bypass the scheduler and go before its next frame; `sent` runs once out.
     private var direct: [(frame: PhoneLinkFrame, sent: (() -> Void)?)] = []
     private var control = Data()
@@ -86,11 +90,18 @@ final class PhoneLinkSession {
                     terminal.stop()
                 } else if let claim = claims[frame.channel] {
                     claim.stop()
+                } else if let presenter = presenters[frame.channel] {
+                    presenter.stop()
+                } else if let forward = forwards[frame.channel]?.forward {
+                    forward.stop()
                 } else {
                     break
                 }
                 closeChannel(frame.channel)
-            case (.data, _): claims[frame.channel]?.input(frame.payload)
+            case (.data, _):
+                claims[frame.channel]?.input(frame.payload)
+                presenters[frame.channel]?.receive(frame.payload)
+                forwards[frame.channel]?.forward.input(frame.payload)
             case (.resize, _):
                 guard let size = frame.size else { break }
                 claims[frame.channel]?.resize(cols: size.cols, rows: size.rows)
@@ -106,8 +117,14 @@ final class PhoneLinkSession {
         // not guarded on `closed`: after `end()` the owner's close still has to end the channels
         let open = terminals.values
         let claimed = claims.values
+        let presenting = presenters.values
+        let forwarding = forwards.values.map(\.forward)
         terminals = [:]
         claims = [:]
+        presenters = [:]
+        forwards = [:]
+        forwarding.forEach { $0.stop() }
+        presenting.forEach { $0.stop() }
         claimed.forEach { $0.stop() }
         open.forEach { $0.stop() }
     }
@@ -119,13 +136,17 @@ final class PhoneLinkSession {
         let request = try? frame.decodeJSON(PhoneLinkOpen.self)
         if channel < 2 {
             refusal = "channels 0 and 1 are not vt channels"
-        } else if terminals[channel] != nil || claims[channel] != nil {
+        } else if terminals[channel] != nil || claims[channel] != nil || presenters[channel] != nil || forwards[channel] != nil {
             refusal = "channel already open"
+        } else if let request, request.type == "present" {
+            return openPresenter(channel, request)
+        } else if let request, request.type == "forward" {
+            return openForward(channel, request)
         } else if request == nil {
             refusal = "malformed open"
         } else if request?.type != "vt" {
             refusal = "unsupported channel type"
-        } else if terminals.count + claims.count + leaving.count(where: { $0() }) >= Self.maxTerminals {
+        } else if terminals.count + claims.count + leaving.count(where: { !$0.present && $0.asking() }) >= Self.maxTerminals {
             refusal = "too many open panes"
         } else {
             refusal = nil
@@ -165,8 +186,14 @@ final class PhoneLinkSession {
             credit: { [weak self] bytes, sent in self?.sendDirect(.credit(channel: channel, bytes: bytes), sent: sent) },
             ended: { [weak self] in self?.closeChannel(channel) },
             // the daemon has resized by the report, so a fresh viewer attach is where old-grid bytes stop
-            leadChanged: { [weak self] paneID in self?.watching(paneID).forEach { $0.resync() } },
-            released: { [weak self] paneID in self?.watching(paneID).forEach { $0.pollSoon() } },
+            leadChanged: { [weak self] paneID in
+                self?.watching(paneID).forEach { $0.resync() }
+                self?.reportLeads()
+            },
+            released: { [weak self] paneID in
+                self?.watching(paneID).forEach { $0.pollSoon() }
+                self?.reportLeads()
+            },
             // the poll catches a size the daemon applies after the fresh attach read it
             resized: { [weak self] paneID in self?.watching(paneID).forEach { $0.resync(); $0.pollSoon() } })
         let watched = terminals.values.first { $0.request.target == request.target && $0.request.pane == request.pane && $0.paneID != nil }
@@ -174,6 +201,62 @@ final class PhoneLinkSession {
                                    after: { delay, work in queue.asyncAfter(deadline: .now() + delay, execute: work) }, link: link)
         claims[channel] = claim
         claim.start()
+    }
+
+    private func openPresenter(_ channel: UInt32, _ request: PhoneLinkOpen) {
+        let refusal = presenters.values.contains { $0.request.target == request.target } ? "channel already open"
+            : presenters.count + leaving.count(where: { $0.present && $0.asking() }) >= PhoneLinkPresenter.maxPresenters ? "too many open pages"
+            : nil
+        if let refusal { return sendDirect(.json(.opened, channel: channel, PhoneLinkOpened(error: refusal))) }
+        scheduler.open(channel: channel, low: true)
+        let link = PhoneLinkPresenter.Link(
+            frame: { [weak self] frame in self?.sendDirect(frame) },
+            output: { [weak self] line in self?.enqueue(channel: channel, line) ?? .closed },
+            pending: { [weak self] in self?.scheduler.pendingBytes(channel: channel) ?? 0 },
+            ended: { [weak self] in self?.closeChannel(channel) },
+            pageEnded: { [weak self] page in self?.pageEnded(presenter: channel, page) })
+        let presenter = PhoneLinkPresenter(channel: channel, request: request, socketPath: socketPath, queue: queue, peer: peer, log: log,
+                                           link: link)
+        presenters[channel] = presenter
+        presenter.start()
+        reportLeads()
+    }
+
+    /// Only to a page the presenter for `target` handed to this phone and still shows; `localhost` resolves on this Mac.
+    private func openForward(_ channel: UInt32, _ request: PhoneLinkOpen) {
+        let presenter = presenters.first { $0.value.request.target == request.target }
+        guard let page = request.page, let presenter, let target = presenter.value.forwardTarget(page: page) else {
+            return sendDirect(.json(.opened, channel: channel, PhoneLinkOpened(error: "no such page")))
+        }
+        guard forwards.count < PhoneLinkForward.maxForwards else {
+            return sendDirect(.json(.opened, channel: channel, PhoneLinkOpened(error: "too many connections")))
+        }
+        scheduler.open(channel: channel, low: true)
+        let link = PhoneLinkForward.Link(
+            frame: { [weak self] frame in self?.sendDirect(frame) },
+            output: { [weak self] bytes in self?.enqueue(channel: channel, bytes) ?? .closed },
+            pending: { [weak self] in self?.scheduler.pendingBytes(channel: channel) ?? 0 },
+            credit: { [weak self] bytes, sent in self?.sendDirect(.credit(channel: channel, bytes: bytes), sent: sent) },
+            ended: { [weak self] in self?.closeChannel(channel) })
+        let forward = PhoneLinkForward(channel: channel, host: target.host, port: target.port, queue: queue, link: link)
+        forwards[channel] = (presenter.key, page, forward)
+        forward.start()
+    }
+
+    /// A page left its presenter: its forwards close, each telling the phone.
+    private func pageEnded(presenter: UInt32, _ page: String) {
+        for (channel, entry) in forwards where entry.presenter == presenter && entry.page == page {
+            entry.forward.stop()
+            sendDirect(.json(.close, channel: channel, PhoneLinkClose(reason: "page closed")))
+            closeChannel(channel)
+        }
+    }
+
+    /// Each presenter reports the panes its session's leading claims hold.
+    private func reportLeads() {
+        for presenter in presenters.values {
+            presenter.setLeads(Set(claims.values.filter { $0.request.target == presenter.request.target && $0.leading }.compactMap(\.originPane)))
+        }
     }
 
     private func watchAttached(_ watch: PhoneLinkOpen) {
@@ -185,9 +268,14 @@ final class PhoneLinkSession {
     }
 
     private func closeChannel(_ channel: UInt32) {
-        leaving.removeAll { !$0() }
-        if let terminal = terminals.removeValue(forKey: channel), terminal.asking { leaving.append { terminal.asking } }
-        if let claim = claims.removeValue(forKey: channel), claim.asking { leaving.append { claim.asking } }
+        leaving.removeAll { !$0.asking() }
+        if let terminal = terminals.removeValue(forKey: channel), terminal.asking { leaving.append((false, { terminal.asking })) }
+        if let claim = claims.removeValue(forKey: channel) {
+            if claim.asking { leaving.append((false, { claim.asking })) }
+            reportLeads()
+        }
+        if let presenter = presenters.removeValue(forKey: channel), presenter.asking { leaving.append((true, { presenter.asking })) }
+        forwards[channel] = nil
         scheduler.close(channel: channel)
     }
 
@@ -235,6 +323,8 @@ final class PhoneLinkSession {
         send(frame.encoded()) { [weak self] in
             self?.sending = false
             sent?()
+            self?.presenters.values.forEach { $0.pump() }
+            self?.forwards.values.forEach { $0.forward.drained() }
             self?.pump()
         }
     }

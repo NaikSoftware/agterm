@@ -321,7 +321,7 @@ extension AppStore {
     /// The `tree` read-back of the viewers mirroring `session`, nil when there is none.
     func presentersNode(of session: Session) -> ControlPresentersNode? {
         guard let hub = presentationHub else { return nil }
-        let viewers = hub.subscriberCount(session: session.id)
+        let viewers = hub.macViewerCount(session: session.id)
         guard viewers > 0 else { return nil }
         let presented = hub.hasPresenter(session: session.id)
         return ControlPresentersNode(mirrors: presented ? viewers - 1 : viewers, presenter: presented ? true : nil, viewers: viewers)

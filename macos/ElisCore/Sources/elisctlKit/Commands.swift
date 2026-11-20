@@ -11,6 +11,9 @@ protocol ConnectionOptions {
 
     /// Resolve the socket path from `--socket` and the environment.
     func socketPath(env: [String: String]) -> String
+
+    /// The `--window` selector, nil where the command has none.
+    var window: String? { get }
 }
 
 extension ConnectionOptions {
@@ -27,6 +30,8 @@ struct BasicOptions: ParsableArguments, ConnectionOptions {
 
     @Flag(name: .long, help: "Print the raw JSON response.")
     var json = false
+
+    var window: String? { nil }
 
     /// Resolve the socket path, in precedence order: `--socket` → `<ELIS_STATE_DIR>/elis.sock` →
     /// `<ControlResolve.defaultStateDirectory>/elis.sock`. `env` is injectable so the precedence is
@@ -62,17 +67,57 @@ struct ClientOptions: ParsableArguments, ConnectionOptions {
     }
 }
 
-/// Options for the commands that address a single session or workspace; `--target` defaults to `active`.
+/// CallerEnvironment is the environment the default target is read from; tests pin it per task.
+enum CallerEnvironment {
+    @TaskLocal static var values = ProcessInfo.processInfo.environment
+
+    /// The environment `command` runs under. The pane's session id is kept only when the command reaches the pane's own
+    /// instance and names no window: another instance does not know the id, and a named window means its selection.
+    static func scoped(_ env: [String: String], for command: ParsableCommand) -> [String: String] {
+        guard let connection = (command as? any ConnectedCommand)?.connection, connection.window == nil,
+              let paneSocket = env["ELIS_SOCKET"], canonical(paneSocket) == canonical(connection.socketPath(env: env))
+        else { return env.filter { $0.key != "ELIS_SESSION_ID" } }
+        return env
+    }
+
+    /// realpath of the socket's folder: `resolvingSymlinksInPath` leaves a path whose file is missing unresolved.
+    private static func canonical(_ path: String) -> String {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        guard let folder = realpath(url.deletingLastPathComponent().path, nil) else { return url.path }
+        defer { free(folder) }
+        return URL(fileURLWithPath: String(cString: folder)).appendingPathComponent(url.lastPathComponent).path
+    }
+
+    /// The caller's own session inside an Elis pane, else `active`: a pane may be led from the phone, where the
+    /// Mac's selection is a session the typist cannot see.
+    static var defaultSessionTarget: String { ownSession ?? "active" }
+
+    static var ownSession: String? { values["ELIS_SESSION_ID"].flatMap { $0.isEmpty ? nil : $0 } }
+}
+
+/// Options for the commands that address a single session.
 struct TargetOptions: ParsableArguments {
-    @Option(name: .long, help: "Target session/workspace id, unique prefix, or 'active'.")
+    @Option(name: .customLong("target"),
+            help: "Target session id, unique prefix, or 'active' (defaults to this pane's session, else 'active').")
+    var explicit: String?
+
+    var target: String { explicit ?? CallerEnvironment.defaultSessionTarget }
+}
+
+/// Options for the commands that address a workspace. `active` stays the default inside a pane: the pane's
+/// `ELIS_WORKSPACE_ID` is baked at spawn and goes stale once its session moves.
+struct WorkspaceTargetOptions: ParsableArguments {
+    @Option(name: .long, help: "Target workspace id, unique prefix, or 'active'.")
     var target: String = "active"
 }
 
 /// Options for batch-capable session commands. Repeating `--target` preserves CLI order on the wire.
 struct BatchTargetOptions: ParsableArguments {
-    @Option(name: .customLong("target"), help: "Target session id, prefix, or 'active'. Repeat for a batch.")
+    @Option(name: .customLong("target"),
+            help: "Target session id, prefix, or 'active' (defaults to this pane's session, else 'active'). Repeat for a batch.")
     var targets: [String] = []
 
+    var first: String { targets.first ?? CallerEnvironment.defaultSessionTarget }
     var batchTargets: [String]? { targets.count > 1 ? targets : nil }
 }
 
@@ -101,12 +146,28 @@ public struct Elisctl: ParsableCommand {
     #endif
 
     public init() {}
+
+    /// ParsableCommand's own `main`, run under the caller environment scoped to the parsed command.
+    public static func main() {
+        do {
+            var command = try parseAsRoot()
+            let environment = CallerEnvironment.scoped(ProcessInfo.processInfo.environment, for: command)
+            try CallerEnvironment.$values.withValue(environment) { try command.run() }
+        } catch {
+            exit(withError: error)
+        }
+    }
 }
 
 /// A subcommand that knows how to build the `ControlRequest` it should send. The default `run()` sends it
 /// and prints the response; tests build the request directly via `makeRequest()`. `Options` is
 /// `ClientOptions` for the window-targeting commands and `BasicOptions` for `window.*`.
-protocol RequestCommand: ParsableCommand {
+/// A command that talks to one control socket, so its caller environment can be scoped to it.
+protocol ConnectedCommand {
+    var connection: any ConnectionOptions { get }
+}
+
+protocol RequestCommand: ParsableCommand, ConnectedCommand {
     associatedtype Options: ParsableArguments & ConnectionOptions
     var options: Options { get }
     func makeRequest() throws -> ControlRequest
@@ -117,6 +178,7 @@ protocol RequestCommand: ParsableCommand {
 }
 
 extension RequestCommand {
+    var connection: any ConnectionOptions { options }
     var echoesResultID: Bool { false }
     public func run() throws { try defaultRun() }
 

@@ -44,7 +44,7 @@ extension Session.Move {
         var args = ControlArgs()
         args.parent = parent
         args.index = index
-        return operation.stamp(ControlRequest(cmd: .sessionCompanionMove, target: target.targets.first ?? "active",
+        return operation.stamp(ControlRequest(cmd: .sessionCompanionMove, target: target.first,
                                               args: options.withWindow(args)))
     }
 }

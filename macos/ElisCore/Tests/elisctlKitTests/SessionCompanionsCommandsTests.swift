@@ -4,6 +4,7 @@ import Testing
 import ElisCore
 @testable import elisctlKit
 
+@Suite(.outsidePane)
 struct SessionCompanionsCommandsTests {
     private func request(_ argv: [String]) throws -> ControlRequest {
         let parsed = try Elisctl.parseAsRoot(argv)
@@ -101,11 +102,13 @@ struct SessionCompanionsCommandsTests {
         #expect(actual.args?.html == "/tmp/p.html")
     }
 
-    @Test func anHtmlCompanionMayBlockOnItsPageAndAURLOneMayNot() throws {
-        let blocked = try request(["session", "overlay", "open", "--html", "/tmp/p.html", "--companion", "--block"])
-        #expect(blocked.cmd == .sessionCompanionPage)
+    @Test func anHtmlOrURLCompanionMayBlockOnItsPageButNotWait() throws {
+        let html = try request(["session", "overlay", "open", "--html", "/tmp/p.html", "--companion", "--block"])
+        #expect(html.cmd == .sessionCompanionPage)
+        let url = try request(["session", "overlay", "open", "--url", "http://localhost:1", "--companion", "--block"])
+        #expect(url.cmd == .sessionCompanionPage)
         #expect(throws: (any Error).self) {
-            try Elisctl.parseAsRoot(["session", "overlay", "open", "--url", "http://localhost:1", "--companion", "--block"])
+            try Elisctl.parseAsRoot(["session", "overlay", "open", "--url", "http://localhost:1", "--companion", "--wait"])
         }
     }
 

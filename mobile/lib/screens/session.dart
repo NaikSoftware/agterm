@@ -16,8 +16,11 @@ import '../chat/prompt_ledger.dart';
 import '../chat/transcript.dart';
 import '../chat/write_gate.dart';
 import '../client.dart';
+import '../link/mux.dart' hide Grid;
 import '../model.dart';
 import '../terminal/key_bar.dart';
+import '../pages/page_link.dart';
+import '../pages/page_sheet.dart';
 import '../terminal/row_cache.dart';
 import '../terminal/term_gestures.dart';
 import '../terminal/term_keyboard.dart';
@@ -31,11 +34,14 @@ import 'composer.dart';
 import 'prompt.dart';
 
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt, @visibleForTesting this.onKeyboard});
+  const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt, @visibleForTesting this.onKeyboard,
+      @visibleForTesting this.pages = true, @visibleForTesting this.pageWebView});
   final ElisModel model;
   final String sessionId;
   final Vt Function(int cols, int rows) vt;
   final VoidCallback? onKeyboard; // told each time a tap asks for the soft keyboard
+  final bool pages; // off, a test's channel ids stay as they were before pages
+  final Widget Function(PageSheetController)? pageWebView;
 
   @override
   State<SessionScreen> createState() => _SessionScreenState();
@@ -59,6 +65,16 @@ class _SessionScreenState extends State<SessionScreen> {
   late final AppLifecycleListener _lifecycle;
   Timer? poll;
   double _dragRows = 0; // a drag's distance in rows not sent yet
+  var _sheet = GlobalKey<PageSheetState>();
+  PhonePage? _sheetPage;
+  // a page sent again starts a fresh sheet
+  GlobalKey<PageSheetState> _sheetFor(PhonePage p) {
+    if (!identical(p, _sheetPage)) {
+      _sheet = GlobalKey();
+      _sheetPage = p;
+    }
+    return _sheet;
+  }
   Offset _finger = Offset.zero; // where the finger is on screen; [_cellUnder] maps it onto the grid, zoom and pan undone
   bool _stale = false; // the finger that was down when the Mac took the lead back: its drag claims nothing
   final _grid = GlobalKey();
@@ -99,6 +115,10 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<void>? _taking; // the claim [_takeOver] is making
   StreamSubscription<Map<String, dynamic>>? _events;
   String? _agentSessionId;
+  PageLink? _pages; // the session's pages while the screen is open, in the background too
+  Mux? _pagesMux;
+  var _pagesRetry = true;
+  bool _pageShown = false; // a sheet on screen; when one appears, typing leaves the terminal behind it
 
   ElisModel get m => widget.model;
   Session? get s => m.session(widget.sessionId);
@@ -245,6 +265,7 @@ class _SessionScreenState extends State<SessionScreen> {
     _gate.dispose();
     _grids.dispose();
     _lifecycle.dispose();
+    _pages?.dispose();
     _release(pane);
     _visit();
     input.dispose();
@@ -275,6 +296,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   /// Watch the pane as a terminal when it is Live, the relay has the mux and the screen is in front; else the text view.
   void _syncTerm() {
+    _syncPages(); // first, so the watch keeps its channel id after the present channel's
     _refused.removeWhere((p) => s?.livePanes.contains(p) != true); // a restarted session gets another try
     final want = _foreground &&
         !m.background &&
@@ -291,6 +313,35 @@ class _SessionScreenState extends State<SessionScreen> {
       _alt = null; // the next stream picks the view again
     }
     if (want && term == null) term = TermSession(m.mux!, widget.sessionId, pane, vt: widget.vt)..addListener(_onTerm);
+  }
+
+  void _syncPages() {
+    final mux = widget.pages && m.state == LinkState.connected ? m.mux : null;
+    // a relay CLOSE (Elis restarted, the ssh dropped) or a refused OPEN: open once more, and again after each terminal OPENED
+    final reopen = mux != null && _pages?.ended != null && _pages!.supported && _pagesRetry;
+    if (mux == _pagesMux && !reopen) return;
+    if (mux == _pagesMux) _pagesRetry = false;
+    _pages?.dispose();
+    _pagesMux = mux;
+    // the claim's target, which the relay matches the session's pages against
+    _pages = mux == null ? null : (PageLink(mux, widget.sessionId)..addListener(_onPages));
+  }
+
+  void _onPages() {
+    if (_pages?.ended != null) scheduleMicrotask(() => mounted ? _syncPages() : null); // not inside its own notify
+    final shown = _pages?.page?.hidden == false;
+    if (shown && !_pageShown) {
+      _keyboard.unfocus();
+      inputFocus.unfocus();
+    }
+    _pageShown = shown;
+    setState(() {});
+  }
+
+  // under a full sheet nothing takes the keyboard back; a smaller one leaves the terminal's top to tap
+  bool get _covered {
+    final p = _pages?.page;
+    return p != null && !p.hidden && (p.sizePercent ?? 100) >= 100;
   }
 
   void _onTerm() {
@@ -324,6 +375,8 @@ class _SessionScreenState extends State<SessionScreen> {
       // on OPENED, not before: the relay pins the claim to the pane the watch resolved
       if (!_inChat && t.opened && _openClaim != t) {
         _openClaim = t;
+        _pagesRetry = true;
+        _syncPages();
         if (!_macTookBack) _claim(open: true);
       }
       if (t.leadLost case final r? when _claimed == t) {
@@ -721,6 +774,7 @@ class _SessionScreenState extends State<SessionScreen> {
         actions: [
           _modeButton(s),
           if (s.hasSplit) _paneButton(),
+          if (_pages?.page case final p? when p.hidden) PageChip(title: p.title, onTap: () => _pages!.setHidden(p, false)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Semantics(
@@ -743,7 +797,8 @@ class _SessionScreenState extends State<SessionScreen> {
         bottom: chat ? _chatSubtitle(s) : const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
       ),
       body: SafeArea(
-        child: Column(children: [
+        child: Stack(fit: StackFit.expand, children: [
+          ExcludeFocus(excluding: _covered, child: Column(children: [
           Expanded(
               child: Stack(children: [
             Positioned.fill(child: chat ? _chatView(s) : _terminal()),
@@ -762,6 +817,9 @@ class _SessionScreenState extends State<SessionScreen> {
           if (options.isNotEmpty) AnswerBar(key: _answersBox, options: options, onAnswer: type),
           if (!chat) KeyBar(onKey: _press, onKeyboard: _toggleKeyboard),
           if (!chat && ComposerPref.shown) Composer(key: _composerBox, controller: input, focus: inputFocus, onSend: sending ? null : sendInput),
+          ])),
+          if (_pages?.page case final p?)
+            PageSheet(key: _sheetFor(p), link: _pages!, page: p, onSwipeDown: () => _pages!.setHidden(p, true), webView: widget.pageWebView),
         ]),
       ),
     );
@@ -926,9 +984,12 @@ class _SessionScreenState extends State<SessionScreen> {
       final (col, row) = _cellUnder();
       if (col >= 0 && row >= 0 && col < snap.cols && row < snap.rows) term!.click(col: col, row: row);
     }
+    // a tap above a smaller sheet takes typing from the page, which keeps native focus through Flutter's
+    final page = _pages?.page?.hidden == false;
+    if (page) unawaited(_sheet.currentState?.release());
     if (_onCursorRow) return _showKeyboard();
-    // typing comes back from the composer to the program, but a hidden keyboard opens only on the cursor row
-    if (inputFocus.hasFocus && MediaQuery.viewInsetsOf(context).bottom > 0) _keyboard.requestFocus();
+    // typing comes back from the composer or the page to the program, but a hidden keyboard opens only on the cursor row
+    if ((inputFocus.hasFocus || page) && MediaQuery.viewInsetsOf(context).bottom > 0) _keyboard.requestFocus();
   }
 
   // the visible caret's whole row (plan decisions 24, 25); the history is reflowed, so there it is the last line,
