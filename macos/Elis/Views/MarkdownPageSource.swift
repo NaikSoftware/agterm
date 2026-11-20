@@ -72,3 +72,7 @@ enum MarkdownPageSource {
         })
     }
 }
+
+extension MarkdownAssets {
+    static let shared = MarkdownAssets(directory: Bundle.main.resourceURL?.appendingPathComponent("markdown"))
+}
