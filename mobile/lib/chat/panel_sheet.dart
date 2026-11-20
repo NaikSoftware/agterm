@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../screens/answer_bar.dart';
 import '../screens/prompt.dart';
 import '../terminal/key_bar.dart';
+import '../terminal/term_keyboard.dart';
 import '../terminal/terminal_view.dart';
 import '../terminal/vt.dart';
 import '../theme.dart';
@@ -24,6 +28,21 @@ class PanelSheet extends StatefulWidget {
 
 class _PanelSheetState extends State<PanelSheet> {
   double _drag = 0;
+  // owned here, so the soft keyboard's input closes with the panel and never types past the gate
+  final _keyboard = FocusNode();
+
+  @override
+  void dispose() {
+    _keyboard.dispose();
+    super.dispose();
+  }
+
+  // as Term's key: a focused field whose keyboard the user hid gets it back only by asking the platform
+  void _toggleKeyboard() {
+    if (MediaQuery.viewInsetsOf(context).bottom > 0) return _keyboard.unfocus();
+    if (!_keyboard.hasPrimaryFocus) return _keyboard.requestFocus();
+    unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +94,13 @@ class _PanelSheetState extends State<PanelSheet> {
             ),
           ),
           if (options.isNotEmpty) AnswerBar(options: options, onAnswer: widget.onAnswer),
-          KeyBar(onKey: widget.onKey),
+          KeyBar(onKey: widget.onKey, onKeyboard: _toggleKeyboard),
+          // text goes as onAnswer's typed keys; a free-text panel (the /resume filter) reads it like the answer digits
+          TermKeyboard(
+              focus: _keyboard,
+              onKey: (k, mods) => widget.onKey(xtermSeq(k, mods), k, mods),
+              onText: widget.onAnswer,
+              onPaste: widget.onAnswer),
         ]),
       ),
     );

@@ -137,7 +137,7 @@ class _ChatViewState extends State<ChatView> {
   bool _away = false, _header = true, _todos = false;
   int _switches = 0;
   late final _composer = widget.composer ?? GlobalKey<ChatComposerState>();
-  int _dialogReads = 0; // consecutive grid reads showing a dialog; a blank or replaying grid neither counts nor resets
+  int _dialogReads = 0; // consecutive grid reads showing a dialog; a blank, replaying, exited or stale read neither counts nor resets
   Timer? _reread;
   bool _panelHidden = false, _panelForced = false;
   String? _stopped;
@@ -198,6 +198,7 @@ class _ChatViewState extends State<ChatView> {
     final s = g == null ? null : ClaudeScreen.read(g);
     if (s == null || !(s.bottomStack || s.dialog)) return;
     if (s.bottomStack) return _clearPanel();
+    if (widget.exited || widget.stale) return;
     _dialogReads++;
     // a dialog drawn once may bring no further frame: a re-read stands in for the second update
     if (_dialogReads == 1) _reread = Timer(const Duration(milliseconds: 400), _onGrid);

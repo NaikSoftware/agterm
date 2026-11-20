@@ -8,6 +8,7 @@ import 'package:elis_mobile/model.dart';
 import 'package:elis_mobile/terminal/vt.dart';
 import 'package:elis_mobile/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/ansi.dart';
@@ -38,6 +39,7 @@ class _P {
   late final gate = WriteGate(grids: grids, grid: () => g, writer: () => writer, remote: () => false, blocked: () => null);
   final feed = TranscriptFeed(call: (_) async => const {}, canPoll: () => false, remote: false)..loading = false;
   final keys = <(String?, VtKey?, int)>[];
+  final typed = <String>[];
   var gateRuns = 0;
   PromptCardBuilder? card;
   void Function(String?)? openPanel;
@@ -64,7 +66,8 @@ class _P {
               openPanel = c.openPanel;
               return card?.call(context, c);
             },
-            onKey: (seq, key, mods) => keys.add((seq, key, mods))),
+            onKey: (seq, key, mods) => keys.add((seq, key, mods)),
+            onAnswer: typed.add),
       ),
     ));
   }
@@ -117,6 +120,47 @@ void main() {
       await t.pump(const Duration(seconds: 1));
       expect(p.panel, isFalse);
     }
+  });
+
+  testWidgets('readsWhileStaleDoNotCount', (t) async {
+    for (final (exited, stale) in [(true, false), (false, true)]) {
+      final p = _P(t, _g('idle-placeholder-45'));
+      await p.pump(exited: exited, stale: stale);
+      await p.show('dialog-bash-45');
+      await p.show('dialog-bash-45');
+      await p.pump();
+      expect(p.panel, isFalse, reason: 'exited $exited');
+      await p.show('dialog-bash-45');
+      expect(p.panel, isFalse, reason: 'exited $exited');
+      await p.show('dialog-bash-45');
+      expect(p.panel, isTrue, reason: 'exited $exited');
+    }
+  });
+
+  testWidgets('panelTypesFromTheSoftKeyboard', (t) async {
+    final p = _P(t, _g('dialog-bash-45'));
+    await p.pump();
+    await p.show('dialog-bash-45');
+    expect(t.testTextInput.hasAnyClients, isFalse);
+    await t.tap(find.byKey(const Key('softKeyboard')));
+    await t.pump();
+    expect(t.testTextInput.hasAnyClients, isTrue);
+    await t.binding.defaultBinaryMessenger.handlePlatformMessage(
+        SystemChannels.textInput.name,
+        SystemChannels.textInput.codec.encodeMethodCall(MethodCall('TextInputClient.updateEditingStateWithDeltas', [
+          -1,
+          {
+            'deltas': [
+              {'oldText': '  ', 'deltaText': 'ab', 'deltaStart': 2, 'deltaEnd': 2, 'selectionBase': 4, 'selectionExtent': 4, 'composingBase': -1, 'composingExtent': -1},
+            ],
+          },
+        ])),
+        (_) {});
+    await t.pump();
+    expect(p.typed, ['ab']);
+    expect(p.writer.writes, isEmpty);
+    await p.show('idle-placeholder-45');
+    expect(t.testTextInput.hasAnyClients, isFalse);
   });
 
   testWidgets('blankOrReplayingGridOpensNothing', (t) async {
