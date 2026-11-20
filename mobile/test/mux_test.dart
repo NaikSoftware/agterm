@@ -8,6 +8,7 @@ import 'package:elis_mobile/link/decoder.dart';
 import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/link/messages.dart';
 import 'package:elis_mobile/link/mux.dart';
+import 'package:elis_mobile/pages/page_link.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -554,5 +555,57 @@ void main() {
     r.send([...json(LinkKind.lead, 2, {'role': 'leader'}), ...frame(LinkKind.data, 2, utf8.encode('X'))]);
     await flush();
     expect(seen, ['opened 80x24', 'data X']);
+  });
+
+  test('presentOpensAndDecodesLines', () async {
+    final (m, r, _) = await upgraded();
+    final ch = m.present('w');
+    await flush();
+    expect(r.frames.last.kind, LinkKind.open);
+    expect(jsonDecode(utf8.decode(r.frames.last.payload)), {'type': 'present', 'target': 'w'});
+    final id = r.frames.last.channel;
+    final lines = <Map>[];
+    ch.lines.listen(lines.add);
+    final line = utf8.encode('${jsonEncode({'t': 'page', 'id': 'p1'})}\n');
+    r.send([...json(LinkKind.opened, id, {}), ...frame(LinkKind.data, id, line.sublist(0, 7))]);
+    await ch.opened;
+    await flush();
+    expect(lines, isEmpty);
+    r.send(frame(LinkKind.data, id, line.sublist(7)));
+    await flush();
+    expect(lines, [{'t': 'page', 'id': 'p1'}]);
+    expect(r.credits, [7, line.length - 7]);
+    ch.send({'t': 'closed', 'id': 'p1', 'dismissed': true});
+    expect(utf8.decode(dataOn(r, id).single.payload), '{"t":"closed","id":"p1","dismissed":true}\n');
+    r.send(json(LinkKind.close, id, {'reason': 'presentation ended'}));
+    await flush();
+    expect(ch.ended, 'presentation ended');
+  });
+
+  test('presentEndsDisconnectedOnLinkLoss', () async {
+    final (m, r, _) = await upgraded();
+    final ch = m.present('w');
+    await flush();
+    r.send(json(LinkKind.opened, r.frames.last.channel, {}));
+    await ch.opened;
+    r.drop();
+    await m.closed.first;
+    expect(ch.ended, 'Disconnected');
+  });
+
+  test('anOlderRelayRefusesPresent', () async {
+    final (m, r, _) = await upgraded();
+    final link = PageLink(m, 'w');
+    await flush();
+    final opens = [for (final f in r.frames) if (f.kind == LinkKind.open) f];
+    r.send(json(LinkKind.opened, opens.single.channel, {'error': 'unsupported channel type'}));
+    await flush();
+    expect(link.supported, isFalse);
+    expect([for (final f in r.frames) if (f.kind == LinkKind.open) f], hasLength(1));
+    final ch = m.present('w');
+    await flush();
+    r.send(json(LinkKind.opened, r.frames.last.channel, {'error': 'unsupported channel type'}));
+    await expectLater(ch.opened, throwsA(isA<ElisError>().having((e) => e.message, 'message', 'unsupported channel type')));
+    link.dispose();
   });
 }

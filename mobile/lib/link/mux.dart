@@ -104,13 +104,25 @@ class Mux {
     return ch;
   }
 
-  void _add(LinkFrame f) => _c.addBytes(f.encode());
+  /// The session's page lines; [PresentChannel.opened] throws as [open] does, `unsupported channel type` from an
+  /// older relay. The channel is returned at once so it can be closed before OPENED.
+  PresentChannel present(String target) {
+    final ch = PresentChannel._(this, _nextChannel++);
+    if (_done.isCompleted) return ch.._end('Disconnected');
+    _channels[ch.id] = ch;
+    _add(LinkFrame.json(LinkKind.open, ch.id, {'type': 'present', 'target': target}));
+    return ch;
+  }
 
-  void _sendLine(List<int> line) {
-    for (var at = 0; at < line.length; at += linkMaxPayload) {
-      _add(LinkFrame.data(0, line.sublist(at, min(at + linkMaxPayload, line.length))));
+  void _sendData(int channel, List<int> bytes) {
+    for (var at = 0; at < bytes.length; at += linkMaxPayload) {
+      _add(LinkFrame.data(channel, bytes.sublist(at, min(at + linkMaxPayload, bytes.length))));
     }
   }
+
+  void _add(LinkFrame f) => _c.addBytes(f.encode());
+
+  void _sendLine(List<int> line) => _sendData(0, line);
 
   void _feed(List<int> bytes) {
     final List<LinkFrame> frames;
@@ -165,6 +177,19 @@ Map<String, dynamic>? _jsonLine(String line) {
   }
 }
 
+/// Whether OPENED's [o] carries an error, handled here: a duplicate refusal leaves the stream as it is.
+bool _refused(Mux mux, _Channel ch, Map<String, dynamic> o) {
+  final error = o['error'];
+  if (error == null || error == _duplicateOpen) return error != null;
+  if (error == 'revoked') {
+    ch._end(revokedMessage, revoked: true); // Revoked, not Disconnected, for this open
+    mux._revoke();
+  } else {
+    ch._end('$error');
+  }
+  return true;
+}
+
 abstract interface class _Channel {
   int get id;
   bool get _isOpened;
@@ -177,18 +202,7 @@ bool _sane(int cols, int rows) => cols >= 1 && cols <= 1000 && rows >= 1 && rows
 /// OPENED's size; null when there is nothing more to do: a duplicate refusal, a repeat, or the channel ended.
 (int, int)? _openedSize(Mux mux, _Channel ch, LinkFrame f) {
   final o = _json(f.payload) ?? const {};
-  final error = o['error'];
-  if (error == _duplicateOpen) return null; // a duplicate OPEN refused: this stream continues
-  if (error == 'revoked') {
-    ch._end(revokedMessage, revoked: true); // Revoked, not Disconnected, for this open
-    mux._revoke();
-    return null;
-  }
-  if (error != null) {
-    ch._end('$error');
-    return null;
-  }
-  if (ch._isOpened) return null;
+  if (_refused(mux, ch, o) || ch._isOpened) return null;
   if ((o['cols'], o['rows']) case (final int cols, final int rows) when _sane(cols, rows)) return (cols, rows);
   mux._add(LinkFrame.json(LinkKind.close, ch.id, {'reason': 'closed'})); // the relay holds it open: free the slot
   ch._end('the relay sent a bad OPENED');
@@ -376,5 +390,66 @@ class ClaimChannel implements _Channel {
       _events.add(ClaimClosed(reason));
     }
     unawaited(_events.close());
+  }
+}
+
+/// A session's `present` channel: one JSON line per message both ways.
+class PresentChannel implements _Channel {
+  PresentChannel._(this._mux, this.id);
+
+  final Mux _mux;
+  @override
+  final int id;
+  final _lines = StreamController<Map<String, dynamic>>(); // single-subscription: lines in the OPENED read are kept
+  final _opened = Completer<void>();
+  final _buffer = LineBuffer();
+  String? _ended;
+
+  Future<void> get opened => _opened.future;
+
+  Stream<Map<String, dynamic>> get lines => _lines.stream;
+
+  /// The CLOSE reason, `closed` for the phone's own close, `Disconnected` on link loss; null while open.
+  String? get ended => _ended;
+
+  @override
+  bool get _isOpened => _opened.isCompleted;
+
+  void send(Map<String, dynamic> line) {
+    if (_ended == null) _mux._sendData(id, utf8.encode('${jsonEncode(line)}\n'));
+  }
+
+  /// Sends CLOSE; the relay does not answer it.
+  Future<void> close() async {
+    if (_mux._channels[id] != this) return;
+    _mux._add(LinkFrame.json(LinkKind.close, id, {'reason': 'closed'}));
+    _end(null);
+  }
+
+  @override
+  void _onFrame(LinkFrame f) {
+    switch (f.kind) {
+      case LinkKind.opened:
+        if (!_refused(_mux, this, _json(f.payload) ?? const {}) && !_isOpened) _opened.complete();
+      case LinkKind.data:
+        _buffer.add(f.payload);
+        for (var line = _buffer.next(); line != null; line = _buffer.next()) {
+          if (_jsonLine(line) case final o?) _lines.add(o);
+        }
+        // credited on receipt, not per line: a line may exceed the window (16 KiB on Bluetooth)
+        if (f.payload.isNotEmpty) _mux._add(LinkFrame.credit(id, f.payload.length));
+      case LinkKind.close:
+        _end('${(_json(f.payload) ?? const {})['reason'] ?? 'closed'}');
+      case LinkKind.open || LinkKind.credit || LinkKind.resize || LinkKind.grid || LinkKind.resync || LinkKind.lead:
+        break; // not sent on a present channel
+    }
+  }
+
+  @override
+  void _end(String? reason, {bool revoked = false}) {
+    _mux._channels.remove(id);
+    _ended ??= reason ?? 'closed';
+    if (!_opened.isCompleted) _opened.completeError(revoked ? Revoked() : ElisError(_ended!));
+    unawaited(_lines.close());
   }
 }
