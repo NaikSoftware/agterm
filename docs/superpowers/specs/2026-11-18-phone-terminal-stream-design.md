@@ -20,6 +20,7 @@ Claude Code, codex and agy correctly, with native UI around it.
 ## Non-goals
 
 - Native ask/pick sheets on the phone (needs a presenter routing rule; own design later).
+  HTML overlay pages are not a non-goal: `2026-11-20-phone-pages-design.md` shows them on the phone.
 - A terminal for non-Live panes: they keep the text view, improved in M1.
 - iOS. The Linux (`linux/`) relay: phones paired with it keep the text view; a C++ port later reuses the golden vectors (user decision).
 
