@@ -110,9 +110,15 @@ bool _path(PromptDialog d, String filePath) {
   return tail.length >= base.length && p.endsWith(tail);
 }
 
-// "(MCP)" is an expected-state check; the values sit in the argument box, not the server-written tool description.
+// "(MCP)" is an expected-state check; the box shows each argument as "key: value", apart from the server-written description.
+// shortcut: a value that is a prefix of the shown one still anchors, upgrade with a capture of several arguments' layout
 bool _mcp(PromptDialog d, Map<String, dynamic> input) =>
-    norm(d.header).endsWith('(MCP)') && input.isNotEmpty && input.values.every((v) => _has(norm(d.boxed), norm(v is String ? v : jsonEncode(v))));
+    norm(d.header).endsWith('(MCP)') &&
+    input.isNotEmpty &&
+    input.entries.every((e) {
+      final v = e.value;
+      return [if (v is String) v, jsonEncode(v)].any((s) => norm(s).isNotEmpty && _has(norm(d.boxed), norm('${e.key}:$s')));
+    });
 
 // boxed joins "url: <url>" and "prompt: <prompt>" with no separator, so the URL must end where "prompt:" starts.
 bool _url(PromptDialog d, String url) {

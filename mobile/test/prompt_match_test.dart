@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:elis_mobile/chat/grid.dart';
 import 'package:elis_mobile/chat/prompt_dialog.dart';
 import 'package:elis_mobile/chat/prompt_match.dart';
 import 'package:elis_mobile/chat/transcript.dart';
@@ -98,6 +99,31 @@ void main() {
       expect(matchPrompt(_read('card-bash-$w'), [mcp]), isNull, reason: '$w');
       expect(matchPrompt(_read('card-write-$w'), [mcp]), isNull, reason: '$w');
       expect(matchPrompt(_read('card-mcp-$w'), [described]), isNull, reason: '$w');
+    }
+  });
+
+  test('mcpShortValueDoesNotAnchorABashDialog', () {
+    final one = _call('card-mcp', (m) => m..['input'] = <String, dynamic>{'n': 1});
+    for (final w in [45, 100]) {
+      final ansi = File('$_dir/card-bash-$w.ansi').readAsStringSync().replaceAll('lantern', 'lant1rn');
+      final bash = PromptDialog.read(gridFromAnsi(ansi))!;
+      expect(norm(bash.boxed), contains('1'), reason: '$w');
+      expect(matchPrompt(bash, [one]), isNull, reason: '$w');
+    }
+  });
+
+  test('mcpValueMustFollowItsKey', () {
+    final inside = _call('card-mcp', (m) => m..['input'] = <String, dynamic>{'items': 'topic'});
+    final otherKey = _call(
+      'card-mcp',
+      (m) => m
+        ..['input'] = <String, dynamic>{
+          'topics': ['topic.index'],
+        },
+    );
+    for (final w in [45, 100]) {
+      expect(matchPrompt(_read('card-mcp-$w'), [inside]), isNull, reason: '$w');
+      expect(matchPrompt(_read('card-mcp-$w'), [otherKey]), isNull, reason: '$w');
     }
   });
 
