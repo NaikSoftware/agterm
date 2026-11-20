@@ -344,9 +344,12 @@ Pages (`present`), `PhoneLinkPresenter`; the spec `docs/superpowers/specs/2026-1
 - CLOSE reasons: `presentation ended`, `overflow`, `bad page line` (an undecodable or over-long phone line).
 - Stop ends the presentation stream first, then the page pipes after 2 s:
   a pipe ending first would read on the origin as a lost page.
-- A same-origin frame of a `--js` file page can reach the page's `elis` bridge on both platforms
-  (the Mac checks `mainFrame` only; the phone's per-page nonce stops cross-origin frames).
-  Such a frame has the page's own trust.
+- Frames and the bridge: the Mac refuses a request from any frame but the main frame
+  (`HtmlOverlayRegistry`, `requests from frames are refused`).
+  The phone's WebView reports no frame, so it gates the bridge with a per-sheet nonce kept in the prelude closure
+  (`page_sheet.dart`), which stops cross-origin frames.
+  On the phone a same-origin frame of a `--js` file page can call the page's `elis` and is trusted as the page,
+  with the same grant folder.
 
 `session.attach` answers `result.attach = {argv, paneID, screen, remote, origin, nonce?}`:
 `screen` is the zmx `screen` argv for the same daemon (the relay reads the grid with it),
