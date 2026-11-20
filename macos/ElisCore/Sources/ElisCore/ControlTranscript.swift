@@ -211,3 +211,14 @@ public struct ControlTranscriptRefusal: Error, Equatable {
 
     public static let noAdapter = ControlTranscriptRefusal(message: "no adapter")
 }
+
+/// TranscriptForward is a `session.transcript` read as the remote host's own `elisctl` arguments.
+public enum TranscriptForward {
+    /// words join each free value to its flag, so a value starting with `-` is never read as an option.
+    public static func words(session: String, paneID: String?, pane: StatusPane?, arguments: ClaudeTranscriptArguments) -> [String] {
+        ["session", "transcript", "--target", session]
+            + (paneID.map { ["--pane-id=" + $0] } ?? pane.map { ["--pane", $0.rawValue] } ?? [])
+            + (arguments.after.map { ["--after=\($0)"] } ?? []) + (arguments.before.map { ["--before=\($0)"] } ?? [])
+            + (arguments.held.map { ["--transcript=" + $0] } ?? []) + ["--max-bytes=\(arguments.maxBytes)"]
+    }
+}
