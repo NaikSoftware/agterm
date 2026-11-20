@@ -27,6 +27,12 @@ final class ClaudeTranscriptIndex {
     private(set) var skipped = 0
     private(set) var openCalls: [String: Int] = [:]
     private(set) var meta = ControlTranscriptMeta()
+    /// tool_use id → its record, kept after the call closes.
+    private(set) var toolUses: [String: Int] = [:]
+    /// Result record → the tool_use ids it closes.
+    private(set) var closers: [Int: [String]] = [:]
+    /// The `skill_listing` records since the last initial one.
+    private(set) var skillListings: [Int] = []
 
     private var prefix = Data()
     private var byUUID: [String: Int] = [:]
@@ -36,8 +42,14 @@ final class ClaudeTranscriptIndex {
     // nil holds the place of a content-less enqueue, which a later dequeue takes
     private var queue: [String?] = []
     private var chainCache: (count: Int, chain: [Int])?
+    private var activeCache: (count: Int, records: [Int])?
+    // a subagent file is all sidechain records, so its calls fold only when they are kept
+    let keepsSidechains: Bool
 
-    init(path: String) { self.path = path }
+    init(path: String, keepsSidechains: Bool = false) {
+        self.path = path
+        self.keepsSidechains = keepsSidechains
+    }
 
     /// Indexes lines appended since the last call; false when the file shrank, changed its head or is unreadable.
     func extend() -> Bool {
@@ -73,6 +85,21 @@ final class ClaudeTranscriptIndex {
         chain.reverse()
         chainCache = (records.count, chain)
         return chain
+    }
+
+    /// The active chain plus every record sharing a `message.id` with it: parallel tool calls chain off one another,
+    /// so all but one of them sit off the chain.
+    func activeRecords() -> [Int] {
+        if let cache = activeCache, cache.count == records.count { return cache.records }
+        let chain = activeChain()
+        let messages = Set(chain.compactMap { records[$0].messageID })
+        var active = Set(chain)
+        for (index, record) in records.enumerated() where !record.sidechain && record.messageID.map(messages.contains) == true {
+            active.insert(index)
+        }
+        let sorted = active.sorted()
+        activeCache = (records.count, sorted)
+        return sorted
     }
 
     private func scan(_ handle: FileHandle) {
@@ -131,11 +158,9 @@ final class ClaudeTranscriptIndex {
             offset: offset, length: length, type: "", subtype: nil, sidechain: fields.sidechain, messageID: nil, oversized: true
         ))
         // a tool_result too big to parse closes the calls of the assistant record it names
-        guard !fields.sidechain, let source = fields.strings["sourceToolAssistantUUID"].flatMap({ byUUID[$0] }) else { return }
-        for (id, call) in openCalls where call == source {
-            results[id] = records.count - 1
-            openCalls[id] = nil
-        }
+        guard !fields.sidechain || keepsSidechains, let source = fields.strings["sourceToolAssistantUUID"].flatMap({ byUUID[$0] })
+        else { return }
+        for (id, call) in openCalls where call == source { close(id, by: records.count - 1) }
     }
 
     private func append(_ record: TranscriptRecord) {
@@ -144,7 +169,7 @@ final class ClaudeTranscriptIndex {
     }
 
     private func fold(_ object: [String: Any], message: [String: Any]?, index: Int) {
-        let sidechain = object["isSidechain"] as? Bool ?? false
+        let sidechain = (object["isSidechain"] as? Bool ?? false) && !keepsSidechains
         switch object["type"] as? String {
         case "custom-title": customTitle = object["customTitle"] as? String ?? customTitle
         case "ai-title": aiTitle = object["aiTitle"] as? String ?? aiTitle
@@ -157,7 +182,12 @@ final class ClaudeTranscriptIndex {
                                           prUrl: object["prUrl"] as? String)
         case "queue-operation": foldQueue(object)
         case "attachment" where !sidechain:
-            if (object["attachment"] as? [String: Any])?["type"] as? String == "skill_listing" { meta.skillsAt = records[index].offset }
+            let attachment = object["attachment"] as? [String: Any]
+            if attachment?["type"] as? String == "skill_listing" {
+                meta.skillsAt = records[index].offset
+                if attachment?["isInitial"] as? Bool == true { skillListings = [] }
+                skillListings.append(index)
+            }
         case "assistant" where !sidechain:
             if let model = message?["model"] as? String, model != "<synthetic>" {
                 meta.model = model
@@ -165,6 +195,7 @@ final class ClaudeTranscriptIndex {
             }
             for block in Self.blocks(message, type: "tool_use") {
                 guard let id = block["id"] as? String else { continue }
+                toolUses[id] = index
                 if results[id] == nil { openCalls[id] = index }
                 if block["name"] as? String == "TodoWrite", let todos = (block["input"] as? [String: Any])?["todos"] as? [[String: Any]] {
                     let folded = todos.compactMap { todo in
@@ -179,12 +210,17 @@ final class ClaudeTranscriptIndex {
         case "user" where !sidechain:
             for block in Self.blocks(message, type: "tool_result") {
                 guard let id = block["tool_use_id"] as? String else { continue }
-                results[id] = index
-                openCalls[id] = nil
+                close(id, by: index)
             }
         default: break
         }
         meta.title = customTitle ?? aiTitle
+    }
+
+    private func close(_ id: String, by result: Int) {
+        results[id] = result
+        openCalls[id] = nil
+        closers[result, default: []].append(id)
     }
 
     // Claude Code 2.1.329 writes the queue only as these operations; its queued_command attachment is the delivery.

@@ -291,7 +291,7 @@ enum ClaudeTranscriptItems {
     }
 
     /// Shrinks the item until it encodes within `itemCap`: an image loses its data, then the longest text field is cut.
-    private static func capped(_ item: ControlTranscriptItem) -> ControlTranscriptItem {
+    static func capped(_ item: ControlTranscriptItem) -> ControlTranscriptItem {
         var item = item
         let encoder = JSONEncoder()
         while let size = try? encoder.encode(item).count, size > itemCap {
