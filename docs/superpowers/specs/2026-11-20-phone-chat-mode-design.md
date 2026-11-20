@@ -198,7 +198,7 @@ Stop and Cancel keep a residual risk: a dialog opening inside that window turns 
 | Streaming area | G | The grid's in-progress reply rows, below the last T record; cross-fades into the T message **[lead]** | While G shows the working line and reply rows newer than the last T block (not gated on E, which may be missing remotely); cleared when the next T record arrives or the working line goes **[lead]** |
 | Working line | G spinner row (glyphs `✶✻✽✢·`, then `Verb… (`) | Mirrored text with a phone-drawn spinner; `Stop` sends Esc through the write gate **[lead]**. Esc interrupts and then sends queued messages (tui-facts); whether it can instead pull them into the input row is open check 13 | Visible while G shows the row; `Stop` enabled only when no dialog is open |
 | Limit banner | G `Usage limit reached` / `Continuing automatically at … · Esc to cancel` | Banner; `Cancel` sends Esc through the write gate | While G shows the line; `Cancel` enabled when no dialog is open |
-| Queued messages | T `attachment queued_command`, cleared by `queue-operation`; G `⎿ Queued` confirms | Gray rows; `Send now` sends Ctrl+X, then Ctrl+S, one key per write through the write gate. The keys come from a footer hint only **[unproven]**, so the button ships after open check 12 **[lead]** | While both T and G show the item |
+| Queued messages | T `queue-operation` enqueue, cleared by its dequeue, remove or popAll (2.1.329 writes `queued_command` only as the delivery); G `⎿ Queued` confirms | Gray rows; `Send now` sends Ctrl+X, then Ctrl+S, one key per write through the write gate. The keys come from a footer hint only **[unproven]**, so the button ships after open check 12 **[lead]** | While both T and G show the item |
 | Statusline | G rows between the composer's bottom rule and the mode line, with SGR colours | The first mirrored row cut to one line; a tap expands all rows, wrapped by the phone. Never parsed; the only source of "context left" **[lead]** | When present; while a dialog hides them, the last rows show dimmed as stale and update when G shows them again |
 | Mode chip | G mode line (`⏸ manual mode on`, `⏵⏵ accept edits on`, …); T `permission-mode` while G hides it | In the composer accessory row. A tap opens a picker that names the modes the cycle passes through; the phone sends Shift+Tab through the write gate until G shows the chosen mode, at most one full cycle, with a selection haptic per step. A target of auto or bypass needs a second tap (card rule 10) **[lead]** | Always visible; enabled only when idle: Shift+Tab approves a plan, picks "allow for session" on a file prompt, and a mode passed on the way could auto-approve a call raised mid-cycle **[lead]** |
 | Shell count | G mode line `· N shell` | `1 shell` badge in the composer accessory row | While G shows it |
@@ -254,7 +254,7 @@ All three must hold; otherwise no card shows:
 3. **G rows:** numbered option rows parse from the screen.
 
 - With 2 and 3 but no T match, or with a G dialog of any other kind, the [panel sheet](#panel-sheet) shows instead.
-- When T arrives late, the card replaces the panel sheet.
+- When T arrives late, the card replaces the panel sheet. Claude Code 2.1.329 can draw a dialog before it writes the call's `tool_use`; the first dialog read polls at once, and until the call is in `pending` the panel sheet answers it.
 - In a parallel batch, the call whose anchor matches wins; two matches go to the panel sheet.
 
 ### Shared rules **[owner]**
@@ -461,7 +461,7 @@ The reader folds meta during the index scan and on each extension, so meta never
 | `agentName` | last `agent-name` |
 | `model`, `effort` | last non-sidechain assistant record |
 | `todos` | latest folded `TaskCreate`/`TaskUpdate`/`TodoWrite` state |
-| `queued` | `queued_command` attachments minus `queue-operation` dequeue, remove and popAll |
+| `queued` | `queue-operation` enqueue records minus dequeue, remove and popAll |
 | `continuedIn` | `continued-in` record |
 | `skillsAt` | byte offset of the last `skill_listing` |
 
@@ -589,7 +589,7 @@ The owner delegated these on 2026-11-20 ("work autonomously; ask only non-obviou
 4. A pasted `/cmd args` followed by Enter runs exactly that command, not the slash menu's highlighted match.
 5. The key that clears Claude's input row for Send (Ctrl+U or another), including multi-line drafts.
 6. The `skill_listing` attachment's shape; until it is known, the "/" menu shows built-ins only.
-7. The todo tools' input shapes (no samples so far).
+7. The todo tools' input shapes: 2.1.329 has only `TodoWrite`, and 691 local transcripts hold no task tool, so the todo strip may stay empty.
 8. The transcript layout on an elis-server Linux host.
 9. Whether entering Chat after a Term fit should restore the Mac's grid size.
 10. Every [unproven] row in the card tables, starting with Yes-with-note on Write, Edit and MCP, and the rule and mode options.
