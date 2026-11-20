@@ -106,6 +106,7 @@ class _SessionScreenState extends State<SessionScreen> {
   final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
   PageLink? _pages; // the session's pages while the screen is open, in the background too
   Mux? _pagesMux;
+  bool _pageShown = false; // a sheet on screen; when one appears, typing leaves the terminal behind it
 
   ElisModel get m => widget.model;
   Session? get s => m.session(widget.sessionId);
@@ -194,7 +195,23 @@ class _SessionScreenState extends State<SessionScreen> {
     _pages?.dispose();
     _pagesMux = mux;
     // the claim's target, which the relay matches the session's pages against
-    _pages = mux == null ? null : (PageLink(mux, widget.sessionId)..addListener(() => setState(() {})));
+    _pages = mux == null ? null : (PageLink(mux, widget.sessionId)..addListener(_onPages));
+  }
+
+  void _onPages() {
+    final shown = _pages?.page?.hidden == false;
+    if (shown && !_pageShown) {
+      _keyboard.unfocus();
+      inputFocus.unfocus();
+    }
+    _pageShown = shown;
+    setState(() {});
+  }
+
+  // under a full sheet nothing takes the keyboard back; a smaller one leaves the terminal's top to tap
+  bool get _covered {
+    final p = _pages?.page;
+    return p != null && !p.hidden && (p.sizePercent ?? 100) >= 100;
   }
 
   void _onTerm() {
@@ -622,7 +639,7 @@ class _SessionScreenState extends State<SessionScreen> {
               style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
         ]),
         actions: [
-          if (_pages?.page case final p? when p.hidden) PageChip(title: p.title, onTap: () => setState(() => p.hidden = false)),
+          if (_pages?.page case final p? when p.hidden) PageChip(title: p.title, onTap: () => _pages!.setHidden(p, false)),
           if (_lead) _Tag(_leading ? 'Leading' : 'Leading…', key: const Key('lead')),
           if (m.state == LinkState.connected && m.via.isNotEmpty) _Tag(m.via, key: const Key('via')),
           Padding(
@@ -641,7 +658,7 @@ class _SessionScreenState extends State<SessionScreen> {
       ),
       body: SafeArea(
         child: Stack(fit: StackFit.expand, children: [
-          Column(children: [
+          ExcludeFocus(excluding: _covered, child: Column(children: [
           // the buttons float over the screen's top edge, so the terminal takes the whole height
           Expanded(
               child: Stack(children: [
@@ -660,11 +677,11 @@ class _SessionScreenState extends State<SessionScreen> {
           if (options.isNotEmpty) _answers(options),
           _keyBar(),
           if (ComposerPref.shown) _composer(),
-          ]),
+          ])),
           if (_pages?.page case final p?)
             KeyedSubtree(
               key: ObjectKey(p), // a page sent again starts a fresh sheet
-              child: PageSheet(link: _pages!, page: p, onSwipeDown: () => setState(() => p.hidden = true), webView: widget.pageWebView),
+              child: PageSheet(link: _pages!, page: p, onSwipeDown: () => _pages!.setHidden(p, true), webView: widget.pageWebView),
             ),
         ]),
       ),

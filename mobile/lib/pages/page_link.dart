@@ -112,6 +112,12 @@ class PageLink extends ChangeNotifier {
     });
   }
 
+  /// A swipe or the chip; the sheet reports the change.
+  void setHidden(PhonePage page, bool hidden) {
+    page.hidden = hidden;
+    notifyListeners();
+  }
+
   void closed(String id, {required bool dismissed}) {
     _send({'t': 'closed', 'id': id, 'dismissed': dismissed});
     _drop(id);

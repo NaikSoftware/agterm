@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:elis_mobile/link/frame.dart';
+import 'package:elis_mobile/terminal/term_keyboard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -193,9 +194,12 @@ void main() {
   testWidgets('a url page stays on its origin', (t) async {
     final h = await _shown(t, urlPage());
     final c = h.webs.single.c;
+    c.finished('https://example.com/a');
+    await t.pump();
     final opened = <Object?>[];
     t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('elis/open'), (call) async => opened.add(call.arguments));
     expect(c.allows('https://example.com/b'), isTrue);
+    await t.tap(find.byKey(const Key('fakeWeb')));
     expect(c.allows('intent://x#Intent;end'), isFalse);
     await t.pump();
     expect(find.byType(AlertDialog), findsNothing); // only web links leave for the browser
@@ -207,6 +211,87 @@ void main() {
     await t.pumpAndSettle();
     expect(opened, ['https://other.example/']);
     expect(find.byType(AlertDialog), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('a refused link asks only after a touch and not again after cancel', (t) async {
+    final h = await _shown(t, urlPage());
+    final c = h.webs.single.c;
+    c.finished('https://example.com/a');
+    await t.pump();
+    expect(c.allows('https://other.example/'), isFalse); // a script's navigation: no touch
+    await t.pump();
+    expect(find.byType(AlertDialog), findsNothing);
+    await t.tap(find.byKey(const Key('fakeWeb')));
+    c.allows('https://other.example/');
+    await t.pump();
+    await t.tap(find.text('Cancel'));
+    await t.pumpAndSettle();
+    c.allows('https://other.example/');
+    await t.pump();
+    expect(find.byType(AlertDialog), findsNothing); // silenced until the next touch
+    await t.tap(find.byKey(const Key('fakeWeb')));
+    c.allows('https://other.example/');
+    await t.pump();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await t.tap(find.text('Cancel'));
+    await t.pumpAndSettle();
+    await h.stop();
+  });
+
+  testWidgets('a hidden page offers no link', (t) async {
+    final h = await _shown(t, urlPage());
+    final c = h.webs.single.c;
+    c.finished('https://example.com/a');
+    await t.pump();
+    await t.tap(find.byKey(const Key('fakeWeb')));
+    await pageDown(h, [_command('hide', 1)]);
+    expect(c.allows('https://other.example/'), isFalse);
+    await t.pump();
+    expect(find.byType(AlertDialog), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('a refused navigation during the first load fails the page', (t) async {
+    final h = await _shown(t, urlPage());
+    expect(h.webs.single.c.allows('https://other.example/'), isFalse); // a redirect
+    await t.pump();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(pageUp(h).last, allOf(containsPair('load', 'failed'), containsPair('error', 'navigation blocked: https://other.example/')));
+    await h.stop();
+  });
+
+  testWidgets('a shown sheet takes the keyboard from the terminal', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start(pages: true);
+    await h.opened();
+    final keyboard = t.widget<TermKeyboard>(find.byType(TermKeyboard)).focus..requestFocus();
+    await t.pump();
+    expect(keyboard.hasFocus, isTrue);
+    await pageDown(h, [urlPage()], open: true);
+    expect(keyboard.hasFocus, isFalse);
+    keyboard.requestFocus(); // under a full sheet nothing takes it back
+    await t.pump();
+    expect(keyboard.hasFocus, isFalse);
+
+    await _swipeDown(t);
+    keyboard.requestFocus();
+    await t.pump();
+    expect(keyboard.hasFocus, isTrue);
+    await t.tap(find.byKey(_chip));
+    await t.pump();
+    expect(keyboard.hasFocus, isFalse);
+    await h.stop();
+  });
+
+  testWidgets('a hidden page loses the keyboard', (t) async {
+    final h = await _shown(t, urlPage());
+    final web = h.webs.single;
+    web.focus.requestFocus();
+    await t.pump();
+    expect(web.focus.hasFocus, isTrue);
+    await _swipeDown(t);
+    expect(web.focus.hasFocus, isFalse);
     await h.stop();
   });
 

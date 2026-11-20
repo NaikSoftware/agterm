@@ -255,8 +255,9 @@ class Harness {
       onKeyboard: () => keyboards++,
       pages: pages,
       pageWebView: (c) {
-        webs.add(FakeWeb(c));
-        return const SizedBox.expand(key: Key('fakeWeb'));
+        final web = FakeWeb(c);
+        webs.add(web);
+        return Focus(focusNode: web.focus, child: const ColoredBox(color: C.bg, child: SizedBox.expand(key: Key('fakeWeb')))); // hit-testable, as a platform view is
       });
 
   /// The Mac's tree changes and the phone re-reads it.
@@ -302,6 +303,7 @@ class FakeWeb implements PageWeb {
     c.web = this;
   }
   final PageSheetController c;
+  final focus = FocusNode(); // the platform view's, which takes hardware keys
   final urls = <Uri>[], htmls = <String>[], scripts = <String>[];
   var reloads = 0, backs = 0, forwards = 0;
   bool back = false;

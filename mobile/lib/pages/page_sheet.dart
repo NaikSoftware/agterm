@@ -67,6 +67,8 @@ class _PageSheetState extends State<PageSheet> {
   String _load = 'loading';
   String? _title, _current, _error;
   bool _canGoBack = false, _closed = false, _offering = false;
+  bool _touched = false, _silenced = false; // as the Mac's user activation and promptsSilenced
+  Timer? _touch;
   late bool _reportedHidden;
   double _drag = 0;
 
@@ -92,6 +94,7 @@ class _PageSheetState extends State<PageSheet> {
   @override
   void dispose() {
     unawaited(_commands.cancel());
+    _touch?.cancel();
     unawaited(_server?.close());
     super.dispose();
   }
@@ -186,7 +189,7 @@ class _PageSheetState extends State<PageSheet> {
     } on FormatException {
       return;
     }
-    if (!mounted || o is! Map<String, dynamic> || o['n'] != _nonce) return;
+    if (!mounted || _closed || o is! Map<String, dynamic> || o['n'] != _nonce) return;
     if (o['close'] == true) return _close();
     final (id, body) = (o['id'], o['body']);
     if (page.kind != 'file' || id is! int || body is! Map) return;
@@ -218,13 +221,25 @@ class _PageSheetState extends State<PageSheet> {
       'file' => _prefix != null && url.startsWith(_prefix!),
       _ => false,
     };
-    if (!ok && _origin(u) != null) unawaited(_offerBrowser(url));
-    return ok;
+    if (ok) return true;
+    if (_load == 'loading') {
+      _failed('navigation blocked: $url'); // a redirect off the page's bounds
+    } else if (_origin(u) != null && _touched && !_silenced && !page.hidden) {
+      unawaited(_offerBrowser(url));
+    }
+    return false;
+  }
+
+  // Android tells no user gesture: a touch in the last second stands in for one
+  void _touchedNow() {
+    _silenced = false;
+    _touched = true;
+    _touch?.cancel();
+    _touch = Timer(const Duration(seconds: 1), () => _touched = false);
   }
 
   static String? _origin(Uri u) => (u.isScheme('http') || u.isScheme('https')) && u.host.isNotEmpty ? u.origin : null;
 
-  // Android tells no user gesture, so a script could leave without a tap: the browser opens only when confirmed
   Future<void> _offerBrowser(String url) async {
     if (_offering || !mounted) return;
     _offering = true;
@@ -240,6 +255,7 @@ class _PageSheetState extends State<PageSheet> {
       ),
     );
     _offering = false;
+    _silenced = open != true;
     if (open == true) await const MethodChannel('elis/open').invokeMethod<bool>('view', url).catchError((Object _) => false);
   }
 
@@ -294,7 +310,9 @@ class _PageSheetState extends State<PageSheet> {
                   Expanded(
                     child: Stack(
                       children: [
-                        Positioned.fill(child: _view),
+                        Positioned.fill(
+                        child: Listener(onPointerDown: (_) => _touchedNow(), child: ExcludeFocus(excluding: page.hidden, child: _view)),
+                      ),
                         if (_load == 'failed')
                           Center(
                             child: Padding(
@@ -419,7 +437,8 @@ Widget _nativeWebView(PageSheetController c) {
   unawaited(
     w.setNavigationDelegate(
       NavigationDelegate(
-        onNavigationRequest: (r) => !r.isMainFrame || c.allows(r.url) ? NavigationDecision.navigate : NavigationDecision.prevent,
+        // a frame's own navigation stays inside the page, as on the Mac; the nonce bounds what it can post
+    onNavigationRequest: (r) => !r.isMainFrame || c.allows(r.url) ? NavigationDecision.navigate : NavigationDecision.prevent,
         onPageFinished: c.finished,
         onWebResourceError: (e) {
           if (e.isForMainFrame ?? false) c.failed(e.description);
