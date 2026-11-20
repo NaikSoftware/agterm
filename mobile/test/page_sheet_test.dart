@@ -12,10 +12,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'mux_test.dart' show json;
 import 'session_term_test.dart' show FakeWeb, Harness, pageDown, pageUp, presentCh, treeOf, urlPage;
 
-const _sheet = Key('pageSheet'), _chip = Key('pageChip'), _loading = Key('pageLoading');
+const _sheet = Key('pageSheet'), _chip = Key('pageChip'), _loading = Key('pageLoading'), _cover = Key('pageCover');
 
-Future<Harness> _shown(WidgetTester t, Map<String, Object?> page) async {
+Future<Harness> _shown(WidgetTester t, Map<String, Object?> page, {String via = 'Wi-Fi'}) async {
   final h = Harness(t, treeOf());
+  h.relays.single.via = via;
   await h.start(pages: true);
   await h.opened();
   await pageDown(h, [page], open: true);
@@ -49,11 +50,19 @@ void main() {
     expect(find.byKey(_chip), findsNothing);
     expect(h.webs.single.urls, [Uri.parse('https://example.com/a')]);
     expect(find.byKey(_loading), findsOneWidget);
-    expect(find.descendant(of: find.byKey(_sheet), matching: find.byWidgetPredicate((w) => w is ColoredBox && w.color == C.surface)), findsOneWidget);
+    final bar = t.widget<LinearProgressIndicator>(find.byKey(_loading));
+    expect((bar.minHeight, bar.color), (3, C.accent));
+    expect(find.byKey(_cover), findsOneWidget); // the platform view paints black until its first frame
+    expect(find.text('Loading over Bluetooth…'), findsNothing);
     h.webs.single.c.finished('https://example.com/a');
     await t.pump();
     expect(pageUp(h).last, containsPair('load', 'loaded'));
     expect(find.byKey(_loading), findsNothing);
+    expect(find.byKey(_cover), findsNothing);
+    h.webs.single.c.started('https://example.com/b');
+    await t.pump();
+    expect(find.byKey(_loading), findsOneWidget); // a later navigation keeps only the bar
+    expect(find.byKey(_cover), findsNothing);
     await h.stop();
   });
 
@@ -106,13 +115,24 @@ void main() {
   testWidgets('the loading bar shows the web view progress', (t) async {
     final h = await _shown(t, urlPage(chromeless: true));
     LinearProgressIndicator bar() => t.widget<LinearProgressIndicator>(find.byKey(_loading));
+    CircularProgressIndicator spinner() =>
+        t.widget<CircularProgressIndicator>(find.descendant(of: find.byKey(_cover), matching: find.byType(CircularProgressIndicator)));
     expect(bar().value, isNull);
+    expect(spinner().value, isNull);
     h.webs.single.c.progress(40);
     await t.pump();
     expect(bar().value, 0.4);
+    expect(spinner().value, 0.4);
+    expect(find.descendant(of: find.byKey(_cover), matching: find.text('40%')), findsOneWidget);
     h.webs.single.c.finished('https://example.com/a');
     await t.pump();
     expect(find.byKey(_loading), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('a page over Bluetooth says so while it loads', (t) async {
+    final h = await _shown(t, urlPage(), via: 'BT');
+    expect(find.descendant(of: find.byKey(_cover), matching: find.text('Loading over Bluetooth…')), findsOneWidget);
     await h.stop();
   });
 
@@ -691,9 +711,11 @@ void main() {
       await t.pump();
       expect(pageUp(h).last, allOf(containsPair('load', 'failed'), containsPair('error', 'net::ERR_EMPTY_RESPONSE')));
       expect(find.text('net::ERR_EMPTY_RESPONSE'), findsOneWidget);
+      expect(find.byKey(_cover), findsNothing);
       await t.tap(find.byKey(const Key('pageReload')));
       await t.pump();
       expect(web.reloads, 1);
+      expect(find.byKey(_cover), findsOneWidget);
       web.c.finished('${web.urls.single}');
       await t.pump();
       expect(pageUp(h).last, containsPair('load', 'loaded'));

@@ -41,6 +41,9 @@ class PageSheetController {
 
   bool get javascript => _sheet._javascript;
 
+  /// A content page is the Mac's own rendering, themed: its web view starts on the surface color, not black.
+  bool get themed => _sheet.page.kind == 'content';
+
   /// A message on the page's `ElisChannel`, which every frame of every page can reach.
   void message(String text) => _sheet._message(text);
 
@@ -412,21 +415,21 @@ class PageSheetState extends State<PageSheet> with SingleTickerProviderStateMixi
                       Expanded(
                         child: Stack(
                           children: [
-                            // a web view shows nothing until its first paint
-                            const Positioned.fill(child: ColoredBox(color: C.surface)),
                             Positioned.fill(
                               child: Listener(
                                 onPointerDown: (_) => _touchedNow(),
                                 child: ExcludeFocus(excluding: page.hidden, child: _view),
                               ),
                             ),
+                            // the platform view paints black until its first frame, so the first load is covered
+                            if (_load == 'loading') Positioned.fill(child: IgnorePointer(child: _cover())),
                             // over the page, so the strip keeps its height
                             if (_loading)
                               Positioned(
                                 top: 0,
                                 left: 0,
                                 right: 0,
-                                child: LinearProgressIndicator(key: const Key('pageLoading'), value: _progress, minHeight: 2),
+                                child: LinearProgressIndicator(key: const Key('pageLoading'), value: _progress, minHeight: 3, color: C.accent),
                               ),
                             if (_load == 'failed')
                               Center(
@@ -457,6 +460,22 @@ class PageSheetState extends State<PageSheet> with SingleTickerProviderStateMixi
       ),
     );
   }
+
+  Widget _cover() => ColoredBox(
+    key: const Key('pageCover'),
+    color: C.surface,
+    child: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(value: _progress, color: C.accent),
+          const SizedBox(height: 12),
+          if (_progress case final p?) Text('${(p * 100).round()}%', style: const TextStyle(fontSize: 12, color: C.muted)),
+          if (widget.link.via == 'BT') const Text('Loading over Bluetooth…', style: TextStyle(fontSize: 12, color: C.muted)),
+        ],
+      ),
+    ),
+  );
 
   void _dragEnd(DragEndDetails d) {
     final v = d.velocity.pixelsPerSecond.dy;
@@ -592,6 +611,7 @@ Widget _nativeWebView(PageSheetController c) {
       ),
     ),
   );
+  if (c.themed) unawaited(w.setBackgroundColor(C.surface));
   unawaited(w.addJavaScriptChannel('ElisChannel', onMessageReceived: (m) => c.message(m.message)));
   if (w.platform case final AndroidWebViewController a) {
     unawaited(a.setAllowFileAccess(false));
