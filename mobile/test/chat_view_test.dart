@@ -454,6 +454,22 @@ void main() {
       });
     }
 
+    _chatTest('pollFailureKeepsHistoryUnderABanner', (t, c) async {
+      await c.start([_prompt('p1'), _text('a1')]);
+      await c.tick();
+      c.h.held!.$2.completeError(Exception('boom'));
+      await t.pump();
+      await t.pump();
+      expect(find.byKey(const Key('chatUnreadable')), findsNothing);
+      expect(find.byKey(const Key('chatError')), findsOneWidget);
+      expect(_row('a1'), findsOneWidget);
+      await t.tap(find.byKey(const Key('chatErrorRetry')));
+      await c.reply([_text('a2')]);
+      expect(find.byKey(const Key('chatError')), findsNothing);
+      expect(_row('a1'), findsOneWidget);
+      expect(_row('a2'), findsOneWidget);
+    });
+
     _chatTest('switchClearsTransientMarks', (t, c) async {
       await c.start([..._history(40), _tool('a1'), {'kind': 'tool', 'uuid': 'ag1', 'name': 'Agent', 'arg': 'probe', 'running': true, 'mark': 'running'}]);
       expect(find.text('◯ running'), findsOneWidget);

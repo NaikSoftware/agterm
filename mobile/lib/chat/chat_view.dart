@@ -35,6 +35,9 @@ class ChatPromptContext {
 /// The card for the dialog on screen, or null for the panel sheet.
 typedef PromptCardBuilder = Widget? Function(BuildContext context, ChatPromptContext c);
 
+String _errorText(TranscriptError error) =>
+    error == TranscriptError.notFound ? 'Claude\'s transcript was not found.' : 'Claude\'s transcript could not be read.';
+
 void _noKey(String? seq, VtKey? key, int mods) {}
 void _noAnswer(String key) {}
 
@@ -432,6 +435,11 @@ class _ChatViewState extends State<ChatView> {
             key: const Key('chatExited'),
             title: const Text(ChatView.exitedText),
             trailing: TextButton(onPressed: widget.onTerm, child: const Text('Term'))),
+      if (_error case final e? when state == null)
+        ListTile(
+            key: const Key('chatError'),
+            title: Text(_errorText(e)),
+            trailing: TextButton(key: const Key('chatErrorRetry'), onPressed: feed.pollNow, child: const Text('Retry'))),
       if (widget.stale) const Padding(padding: EdgeInsets.all(8), child: Text(ChatView.staleText, style: TextStyle(color: C.muted))),
       if (sticky != null)
         InkWell(
@@ -517,9 +525,12 @@ class _ChatViewState extends State<ChatView> {
 
 /// What shows in place of the list, or null for the list; an exited Claude keeps its history.
 extension on _ChatViewState {
+  // a failed poll over history: the feed keeps polling, so the list stays and a banner says so
+  TranscriptError? get _error => widget.exited || feed.error == TranscriptError.hostTooOld ? null : feed.error;
+
   Widget? _state() {
-    final error = feed.error;
-    if (!widget.exited && error != null && error != TranscriptError.hostTooOld) return _unreadable(error);
+    final error = _error;
+    if (error != null && _rows.isEmpty) return _unreadable(error);
     if (feed.loading) return const _Skeleton();
     if (_rows.isEmpty && !widget.exited) return _empty();
     return null;
@@ -531,8 +542,7 @@ extension on _ChatViewState {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(mainAxisSize: MainAxisSize.min, spacing: 12, children: [
-            Text(error == TranscriptError.notFound ? 'Claude\'s transcript was not found.' : 'Claude\'s transcript could not be read.',
-                textAlign: TextAlign.center, style: const TextStyle(color: C.muted)),
+            Text(_errorText(error), textAlign: TextAlign.center, style: const TextStyle(color: C.muted)),
             Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: [
               OutlinedButton(key: const Key('chatRetry'), onPressed: feed.retry, child: const Text('Retry')),
               OutlinedButton(key: const Key('chatTerm'), onPressed: widget.onTerm, child: const Text('Term')),
