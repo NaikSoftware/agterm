@@ -36,10 +36,16 @@ class PageSheetController {
   /// A message on the page's `ElisChannel`, which every frame of every page can reach.
   void message(String text) => _sheet._message(text);
 
+  /// The main frame started showing [url].
+  void started(String url) => _sheet._started(url);
+
   /// The main frame finished loading [url].
   void finished(String url) => unawaited(_sheet._finished(url));
 
   void failed(String error) => _sheet._failed(error);
+
+  /// A response with an error status; only the main frame's fails the page.
+  void httpError(String url, int? status) => _sheet._httpError(url, status);
 
   /// Whether the main frame may go to [url]; a web link outside the page's bounds is offered to the browser.
   bool allows(String url) => _sheet._allows(url);
@@ -60,12 +66,14 @@ class _PageSheetState extends State<PageSheet> {
   late final _controller = PageSheetController._(this);
   late final Widget _view;
   late final StreamSubscription<PageCommand> _commands;
-  final _nonce = _random128();
+  final _nonce = randomHex128();
   PageServer? _server;
   String? _prefix; // a file page's server root, secret included
   String? _script; // a content page's renderer
   String _load = 'loading';
   String? _title, _current, _error;
+  String? _main; // the main frame's address, as the web view names it
+  String? _failedAt; // the main frame the page failed on: its own finish is no load
   bool _canGoBack = false, _closed = false, _offering = false;
   bool _touched = false, _silenced = false; // as the Mac's user activation and promptsSilenced
   Timer? _touch;
@@ -103,12 +111,15 @@ class _PageSheetState extends State<PageSheet> {
     try {
       switch (page.kind) {
         case 'file':
-          final server = await PageServer.start((path) => widget.link.fetch(page.id, path), javascript: page.javascript);
+          final server = await PageServer.start((path) => widget.link.fetch(page.id, path),
+              javascript: page.javascript, head: page.javascript ? headTag(_nonce, page.helper ?? '') : null);
           if (!mounted) return unawaited(server.close());
           _server = server;
           _prefix = '${server.urlFor('/')}';
+          _main = '${server.urlFor(page.path!)}';
           await _web.loadUrl(server.urlFor(page.path!));
         case 'url':
+          _main = page.url;
           await _web.loadUrl(Uri.parse(page.url!));
         case 'content':
           final [html, script] = await Future.wait([_text(contentPath), _text(scriptPath)]);
@@ -123,21 +134,32 @@ class _PageSheetState extends State<PageSheet> {
 
   Future<String> _text(String path) async => utf8.decoder.bind((await widget.link.fetch(page.id, path)).bytes).join();
 
+  void _started(String url) {
+    if (url != _failedAt) _failedAt = null;
+    _main = url;
+  }
+
+  void _httpError(String url, int? status) {
+    if (url == _main) _failed('the page answered ${status ?? 'an error'}');
+  }
+
   Future<void> _finished(String url) async {
-    if (!mounted || _closed) return;
-    _current = url;
+    if (!mounted || _closed || _failedAt != null) return;
+    _current = _address(url);
     _load = 'loaded';
     _error = null;
     final script = switch (page.kind) {
-      'file' => _prelude(page.adapter ?? ''),
-      'url' when page.javascript => _prelude(''),
+      'file' => bridgeScript(_nonce, helper: page.helper, adapter: page.adapter ?? ''),
+      'url' when page.javascript => bridgeScript(_nonce),
       'content' => _script,
       _ => null,
     };
     try {
       if (script != null && script.isNotEmpty) await _web.run(script);
       _canGoBack = await _web.canGoBack();
-      _title = await _web.title();
+      final title = await _web.title();
+      // Android names an untitled page by its address, which for a file page carries the sheet's secret
+      _title = title == url || (_prefix != null && title != null && title.contains(_prefix!)) ? null : title;
     } on Object {
       // a page that navigated away meanwhile reports its own finish
     }
@@ -146,41 +168,21 @@ class _PageSheetState extends State<PageSheet> {
     setState(() {});
   }
 
+  /// The Mac's current page: a file page's origin path, never the sheet's server; the relay names a content page's.
+  String? _address(String url) => switch (page.kind) {
+    'file' when _prefix != null && url.startsWith(_prefix!) => '/${Uri.parse(url).pathSegments.skip(1).join('/')}',
+    'url' => url,
+    _ => null,
+  };
+
   void _failed(String error) {
     if (!mounted || _closed) return;
+    _failedAt = _main ?? '';
     _load = 'failed';
     _error = error;
     _report();
     setState(() {});
   }
-
-  // the nonce stays in the closure: a script without it can neither post nor resolve a reply
-  String _prelude(String adapter) =>
-      '''
-(() => {
-  if (Object.getOwnPropertyDescriptor(window, '__elisReply')) return;
-  const n = '$_nonce';
-  const post = ElisChannel.postMessage.bind(ElisChannel);
-  const pending = new Map();
-  let next = 0;
-  Object.defineProperty(window, '__elisReply', {value: (nonce, id, ok, value) => {
-    if (nonce !== n) return;
-    const waiting = pending.get(id);
-    if (!waiting) return;
-    pending.delete(id);
-    if (ok) waiting.resolve(value); else waiting.reject(new Error(String(value)));
-  }});
-  Object.defineProperty(window, '__elis', {value: Object.freeze({
-    postMessage(body) {
-      const id = ++next;
-      post(JSON.stringify({n, id, body}));
-      return new Promise((resolve, reject) => pending.set(id, {resolve, reject}));
-    },
-  })});
-  window.close = () => post(JSON.stringify({n, close: true}));
-  ;$adapter
-})();
-''';
 
   void _message(String text) {
     final Object? o;
@@ -221,11 +223,19 @@ class _PageSheetState extends State<PageSheet> {
       'file' => _prefix != null && url.startsWith(_prefix!),
       _ => false,
     };
-    if (ok) return true;
-    if (_load == 'loading') {
-      _failed('navigation blocked: $url'); // a redirect off the page's bounds
+    if (ok) {
+      _main = url;
+      _failedAt = null;
+      return true;
+    }
+    final server = _prefix == null ? null : Uri.parse(_prefix!).origin;
+    if (server != null && _origin(u) == server) {
+      // a root-absolute link names the origin's root, as file:///x does on the Mac; the origin judges the path
+      unawaited(_web.loadUrl(Uri.parse('$_prefix${url.substring(server.length + 1)}')).catchError((Object _) {}));
     } else if (_origin(u) != null && _touched && !_silenced && !page.hidden) {
-      unawaited(_offerBrowser(url));
+      unawaited(_offerBrowser(url)); // a click, during the first load too, as on the Mac
+    } else if (_load == 'loading') {
+      _failed('navigation blocked: $url'); // a redirect off the page's bounds
     }
     return false;
   }
@@ -260,6 +270,7 @@ class _PageSheetState extends State<PageSheet> {
   }
 
   Future<void> _command(PageCommand c) async {
+    if (const {'reload', 'back', 'forward'}.contains(c.action)) _failedAt = null;
     try {
       switch (c.action) {
         case 'reload':
@@ -439,9 +450,13 @@ Widget _nativeWebView(PageSheetController c) {
       NavigationDelegate(
         // a frame's own navigation stays inside the page, as on the Mac; the nonce bounds what it can post
     onNavigationRequest: (r) => !r.isMainFrame || c.allows(r.url) ? NavigationDecision.navigate : NavigationDecision.prevent,
+        onPageStarted: c.started,
         onPageFinished: c.finished,
         onWebResourceError: (e) {
           if (e.isForMainFrame ?? false) c.failed(e.description);
+        },
+        onHttpError: (e) {
+          if (e.request?.uri case final uri?) c.httpError('$uri', e.response?.statusCode);
         },
       ),
     ),
@@ -477,7 +492,40 @@ class _NativeWeb implements PageWeb {
   Future<String?> title() => w.getTitle();
 }
 
-String _random128() {
-  final random = Random.secure();
-  return [for (var i = 0; i < 16; i++) random.nextInt(256).toRadixString(16).padLeft(2, '0')].join();
+/// A sheet's bridge under [nonce]; each part installs once per document, so the finish run skips what a head installed.
+/// The nonce stays in the closure: a script without it can neither post nor resolve a reply.
+String bridgeScript(String nonce, {String? helper, String? adapter}) =>
+    '''
+(() => {
+  if (!Object.getOwnPropertyDescriptor(window, '__elisReply')) {
+    const n = '$nonce';
+    const post = ElisChannel.postMessage.bind(ElisChannel);
+    const pending = new Map();
+    let next = 0;
+    Object.defineProperty(window, '__elisReply', {value: (nonce, id, ok, value) => {
+      if (nonce !== n) return;
+      const waiting = pending.get(id);
+      if (!waiting) return;
+      pending.delete(id);
+      if (ok) waiting.resolve(value); else waiting.reject(new Error(String(value)));
+    }});
+    Object.defineProperty(window, '__elis', {value: Object.freeze({
+      postMessage(body) {
+        const id = ++next;
+        post(JSON.stringify({n, id, body}));
+        return new Promise((resolve, reject) => pending.set(id, {resolve, reject}));
+      },
+    })});
+    window.close = () => post(JSON.stringify({n, close: true}));
+  }
+  ${helper == null ? '' : "if (!Object.getOwnPropertyDescriptor(window, 'elis')) $helper"}
+  ${adapter == null ? '' : "if (!Object.getOwnPropertyDescriptor(window, '__elisAdapter')) { Object.defineProperty(window, '__elisAdapter', {value: true}); $adapter }"}
+})();
+''';
+
+/// A --js file page's bridge and `elis.request` ahead of its own scripts, in the main frame only, as on the Mac;
+/// the element removes itself so the nonce does not stay in the document.
+String headTag(String nonce, String helper) {
+  final script = bridgeScript(nonce, helper: helper).replaceAllMapped(RegExp('</(script)', caseSensitive: false), (m) => '<\\/${m[1]}');
+  return '<script>document.currentScript.remove(); if (window.top === window) $script</script>';
 }

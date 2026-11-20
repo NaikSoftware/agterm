@@ -82,8 +82,28 @@ void main() {
     final (link, r, ch) = await opened();
     down(r, ch, filePage);
     await flush();
-    await expectLater(link.bridge('p1', 'x' * (1 << 20)), throwsA(isA<ElisError>()));
+    await expectLater(link.bridge('p1', 'x' * (256 << 10)), throwsA(isA<ElisError>())); // the origin's frame cap
     expect(dataOn(r, ch), isEmpty);
+  });
+
+  test('aPageSentAgainFailsTheOldPagesRequests', () async {
+    final (link, r, ch) = await opened();
+    down(r, ch, filePage);
+    await flush();
+    final fetch = expectLater(link.fetch('p1', '/w/a.css'), throwsA(isA<ElisError>()));
+    final bridge = expectLater(link.bridge('p1', '{}'), throwsA(isA<ElisError>()));
+    down(r, ch, filePage);
+    await fetch;
+    await bridge;
+  });
+
+  test('theChannelsEndIsHeardWithNoPageOpen', () async {
+    final (link, r, ch) = await opened();
+    var notified = 0;
+    link.addListener(() => notified++);
+    r.send(json(LinkKind.close, ch, {'reason': 'presentation ended'}));
+    await flush();
+    expect((link.ended, notified), ('presentation ended', 1));
   });
 
   test('closedSendsDismissed', () async {

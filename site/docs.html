@@ -1118,7 +1118,7 @@ s=$(elisctl zmx tree studio.local --json \
 <ul>
 <li>The page follows the lead both ways, so a page already open moves when the lead moves. A move reloads the page: scroll position and form input are lost. A command waiting with <code>--block</code> keeps waiting through moves.</li>
 <li>On the phone the page opens in a sheet over the session. A sheet swiped down, or a hidden page, waits behind the page chip in the session's top bar, and a tap on the chip brings it back.</li>
-<li>Log pages (<code>--text --follow-file</code>), diff pages and markdown with <code>--navigation</code> open on the Mac even while the phone leads. Questions, pickers, program overlays, HUDs and status sounds stay on the Mac.</li>
+<li>Log pages (<code>--text --follow-file</code>), diff pages, markdown with <code>--navigation</code> and plain <code>http://</code> <code>--url</code> pages of another host open on the Mac even while the phone leads. Questions, pickers, program overlays, HUDs and status sounds stay on the Mac.</li>
 <li>On the phone, markdown links are plain text, and a tap on a link past the page's bounds asks before it opens the browser, as on the Mac. A <code>--persistent</code> page keeps no logins on the phone.</li>
 <li>On an elis-server row, a page stays on the phone after the phone stops leading, until another viewer leads the pane. <code>tree</code> marks a page on the phone with <a href="commands.html#tree"><code>phone</code></a>.</li>
 </ul></li>

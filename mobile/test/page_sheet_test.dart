@@ -1,13 +1,14 @@
 import 'dart:convert';
 
 import 'package:elis_mobile/link/frame.dart';
+import 'package:elis_mobile/pages/page_sheet.dart';
 import 'package:elis_mobile/terminal/term_keyboard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'mux_test.dart' show json;
-import 'session_term_test.dart' show Harness, pageDown, pageUp, presentCh, treeOf, urlPage;
+import 'session_term_test.dart' show FakeWeb, Harness, pageDown, pageUp, presentCh, treeOf, urlPage;
 
 const _sheet = Key('pageSheet'), _chip = Key('pageChip');
 
@@ -295,6 +296,90 @@ void main() {
     await h.stop();
   });
 
+  Future<(Harness, FakeWeb, Uri)> fileShown(WidgetTester t, {bool javascript = false}) async {
+    final h = Harness(t, treeOf());
+    await h.start(pages: true);
+    await h.opened();
+    await pageDown(h, [
+      {..._filePage(javascript: javascript), 'helper': 'HELPER();'},
+    ], open: true);
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100))); // the loopback server binds
+    await t.pump();
+    return (h, h.webs.single, h.webs.single.urls.single);
+  }
+
+  Future<void> closeFile(Harness h) async {
+    await pageDown(h, [_command('close', 1, id: 'f1')]);
+    await h.t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50))); // the server closes
+    await h.stop();
+  }
+
+  testWidgets('a file page reports its origin path and never the sheet secret', (t) async {
+    final (h, web, url) = await fileShown(t);
+    web.titleText = '$url'; // Android's title for an untitled page
+    web.c.finished('$url#top');
+    await t.pump();
+    final state = pageUp(h).lastWhere((l) => l['t'] == 'state');
+    expect(state['current'], '/w/index.html');
+    expect(state.containsKey('title'), isFalse);
+    expect(pageUp(h).where((l) => l['t'] == 'state').map(jsonEncode), everyElement(isNot(contains(url.pathSegments.first))));
+    await closeFile(h);
+  });
+
+  testWidgets('a --js file page runs its helper at finish only where the head did not', (t) async {
+    final (h, web, url) = await fileShown(t, javascript: true);
+    web.c.finished('$url');
+    await t.pump();
+    final script = web.scripts.single;
+    expect(script, contains("if (!Object.getOwnPropertyDescriptor(window, 'elis')) HELPER();"));
+    expect(script, contains('ADAPTER();'));
+    final head = headTag(web.nonce, 'HELPER();');
+    expect(head, startsWith('<script>document.currentScript.remove(); if (window.top === window) '));
+    expect(head, contains("const n = '${web.nonce}'"));
+    expect(head, isNot(contains('ADAPTER();')));
+    expect(headTag('n', "x = '</SCRIPT>';"), contains(r"x = '<\/SCRIPT>';"));
+    await closeFile(h);
+  });
+
+  testWidgets('a failed main frame stays failed through its own finish', (t) async {
+    final (h, web, url) = await fileShown(t);
+    web.c.httpError('${url.replace(path: '/favicon.ico')}', 404); // a subresource
+    web.c.httpError('$url', 404);
+    web.c.started('$url');
+    web.c.finished('$url');
+    await t.pump();
+    expect(pageUp(h).last, allOf(containsPair('load', 'failed'), containsPair('error', 'the page answered 404')));
+    await pageDown(h, [_command('reload', 1, id: 'f1')]);
+    web.c.finished('$url');
+    await t.pump();
+    expect(pageUp(h).last, containsPair('load', 'loaded'));
+    await closeFile(h);
+  });
+
+  testWidgets('a root-absolute link stays inside the page', (t) async {
+    final (h, web, url) = await fileShown(t);
+    web.c.finished('$url');
+    await t.pump();
+    await t.tap(find.byKey(const Key('fakeWeb')));
+    expect(web.c.allows('http://127.0.0.1:${url.port}/w/b.html?q=1'), isFalse);
+    await t.pump();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(web.urls.last, url.replace(path: '/${url.pathSegments.first}/w/b.html', query: 'q=1'));
+    await closeFile(h);
+  });
+
+  testWidgets('a link tapped during the first load is offered to the browser', (t) async {
+    final h = await _shown(t, urlPage());
+    await t.tap(find.byKey(const Key('fakeWeb')));
+    expect(h.webs.single.c.allows('https://other.example/'), isFalse);
+    await t.pump();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(pageUp(h).where((l) => l['load'] == 'failed'), isEmpty);
+    await t.tap(find.text('Cancel'));
+    await t.pumpAndSettle();
+    await h.stop();
+  });
+
   testWidgets('a content page loads the fetched html and script', (t) async {
     final h = await _shown(t, {
       't': 'page', 'id': 'c1', 'kind': 'content', 'javascript': false, 'chromeless': false, 'browse': false, 'hidden': false,
@@ -309,10 +394,10 @@ void main() {
     ]);
     final web = h.webs.single;
     expect(web.htmls, ['<p>hi</p>']);
-    expect(web.c.allows('https://example.com/'), isFalse);
     web.c.finished('about:blank');
     await t.pump();
     expect(web.scripts, contains('render();'));
+    expect(web.c.allows('https://example.com/'), isFalse);
     await h.stop();
   });
 }

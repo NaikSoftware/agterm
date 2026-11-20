@@ -323,7 +323,8 @@ class FakeWeb implements PageWeb {
   @override
   Future<bool> canGoBack() async => back;
   @override
-  Future<String?> title() async => 'doc title';
+  Future<String?> title() async => titleText;
+  String? titleText = 'doc title';
 
   /// The nonce the sheet put in its prelude.
   String get nonce => RegExp(r"const n = '([0-9a-f]+)'").firstMatch(scripts.firstWhere((s) => s.contains('const n')))!.group(1)!;
@@ -686,6 +687,26 @@ void main() {
     await pageDown(h, [urlPage()]);
     expect(find.byKey(const Key('pageSheet')), findsOneWidget);
     expect(h.r.closes, isNot(contains(presentCh)));
+    await h.stop();
+  });
+
+  testWidgets('the present channel opens once more after the relay ends it, and not for an older relay', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start(pages: true);
+    await h.opened();
+    await pageDown(h, [urlPage()], open: true);
+    List<int> presents() => [
+      for (final f in h.r.frames)
+        if (f.kind == LinkKind.open && (jsonDecode(utf8.decode(f.payload)) as Map)['type'] == 'present') f.channel,
+    ];
+    h.r.send(json(LinkKind.close, presentCh, {'reason': 'presentation ended'}));
+    await t.pump();
+    await t.pump();
+    expect(presents(), hasLength(2));
+    h.r.send(json(LinkKind.opened, presents().last, {'error': 'unsupported channel type'}));
+    await t.pump();
+    await t.pump();
+    expect(presents(), hasLength(2)); // the budget is spent until the next terminal OPENED, and an older relay never retries
     await h.stop();
   });
 

@@ -25,14 +25,18 @@ void main() {
   late List<String> fetched;
   late PageServer server;
 
-  Future<void> start({required bool javascript}) async {
+  Future<void> start({required bool javascript, String? head}) async {
     fetched = [];
     server = await PageServer.start((path) async {
       fetched.add(path);
       if (path.endsWith('missing.css')) throw ElisError('not found');
       if (path.endsWith('broken.js')) return PageFile('text/javascript', brokenFile());
+      if (path.endsWith('.css')) return PageFile('text/css', Stream.value(utf8.encode('p{}')));
+      if (path.endsWith('doc.html')) {
+        return PageFile('text/html; charset=utf-8', Stream.fromIterable([utf8.encode('\uFEFF <!DOCTYPE html>'), utf8.encode('<p>hi</p>')]));
+      }
       return PageFile('text/html', Stream.value(utf8.encode('<p>hi</p>')));
-    }, javascript: javascript);
+    }, javascript: javascript, head: head);
   }
 
   tearDown(() => server.close());
@@ -82,6 +86,14 @@ void main() {
     await start(javascript: false);
     final (response, _) = await request(server.urlFor('/w/index.html'));
     expect(response.headers.value('content-security-policy'), "script-src 'none'");
+  });
+
+  test('aHeadGoesAfterTheDoctypeOfEveryHtmlDocumentOnly', () async {
+    await start(javascript: true, head: '<script>H</script>');
+    // the decoder drops the byte order mark
+    expect((await request(server.urlFor('/w/doc.html'))).$2, ' <!DOCTYPE html><script>H</script><p>hi</p>');
+    expect((await request(server.urlFor('/w/index.html'))).$2, '<script>H</script><p>hi</p>');
+    expect((await request(server.urlFor('/w/a.css'))).$2, 'p{}');
   });
 
   test('eachServerHasItsOwnSecret', () async {

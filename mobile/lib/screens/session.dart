@@ -106,6 +106,7 @@ class _SessionScreenState extends State<SessionScreen> {
   final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
   PageLink? _pages; // the session's pages while the screen is open, in the background too
   Mux? _pagesMux;
+  var _pagesRetry = true;
   bool _pageShown = false; // a sheet on screen; when one appears, typing leaves the terminal behind it
 
   ElisModel get m => widget.model;
@@ -191,7 +192,10 @@ class _SessionScreenState extends State<SessionScreen> {
 
   void _syncPages() {
     final mux = widget.pages && m.state == LinkState.connected ? m.mux : null;
-    if (mux == _pagesMux) return;
+    // a relay CLOSE (Elis restarted, the ssh dropped) or a refused OPEN: open once more, and again after each terminal OPENED
+    final reopen = mux != null && _pages?.ended != null && _pages!.supported && _pagesRetry;
+    if (mux == _pagesMux && !reopen) return;
+    if (mux == _pagesMux) _pagesRetry = false;
     _pages?.dispose();
     _pagesMux = mux;
     // the claim's target, which the relay matches the session's pages against
@@ -199,6 +203,7 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   void _onPages() {
+    if (_pages?.ended != null) scheduleMicrotask(() => mounted ? _syncPages() : null); // not inside its own notify
     final shown = _pages?.page?.hidden == false;
     if (shown && !_pageShown) {
       _keyboard.unfocus();
@@ -243,6 +248,8 @@ class _SessionScreenState extends State<SessionScreen> {
       // on OPENED, not before: the relay pins the claim to the pane the watch resolved
       if (t.opened && _openClaim != t) {
         _openClaim = t;
+        _pagesRetry = true;
+        _syncPages();
         if (!_macTookBack) _claim(open: true);
       }
       if (t.leadLost case final r? when _claimed == t) {

@@ -12,7 +12,7 @@ const wire = {
   'ElisCore/PhoneLink/PhoneLinkPages.swift': [
     'page', 'command', 'res', 'reply', 'fetch', 'bridge', 'state', 'closed', 'elis:content', 'elis:script',
     't', 'id', 'seq', 'action', 'sizePercent', 'mime', 'data', 'end', 'error', 'response', 'path', 'line', 'load', 'title',
-    'current', 'canGoBack', 'appliedSeq', 'hidden', 'dismissed', 'kind', 'url', 'adapter', 'javascript', 'chromeless', 'browse',
+    'current', 'canGoBack', 'appliedSeq', 'hidden', 'dismissed', 'kind', 'url', 'adapter', 'helper', 'javascript', 'chromeless', 'browse',
   ],
   'elisctlKit/PhoneLinkSession.swift': ['present'],
   'ElisCore/ControlProjection+Tree.swift': ['workspaces', 'id', 'name', 'open', 'active'],

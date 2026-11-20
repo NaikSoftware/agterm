@@ -10,6 +10,7 @@ import 'dart:math';
 
 import 'package:elis_mobile/pages/page_link.dart';
 import 'package:elis_mobile/pages/page_server.dart';
+import 'package:elis_mobile/pages/page_sheet.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -40,6 +41,7 @@ class _Sheet {
   late final String nonce;
   final raw = <String>[], accepted = <Map<String, dynamic>>[], console = <String>[];
   var _loaded = Completer<void>();
+  var real = false; // replies as the sheet's own bridgeScript takes them
 
   String get prelude =>
       '''
@@ -74,7 +76,8 @@ class _Sheet {
     }
     if (decoded is! Map<String, dynamic> || decoded['n'] != nonce || decoded['body'] is! Map<String, dynamic>) return;
     accepted.add(decoded['body'] as Map<String, dynamic>);
-    unawaited(controller.runJavaScript('window.__elisReply(${jsonEncode(decoded['id'])}, true, {})'));
+    final nonceArg = real ? "'$nonce', " : '';
+    unawaited(controller.runJavaScript('window.__elisReply($nonceArg${jsonEncode(decoded['id'])}, true, {})'));
   }
 
   Future<void> mount(WidgetTester t) => t.pumpWidget(
@@ -216,6 +219,24 @@ void main() {
       expect(s.raw.length, greaterThanOrEqualTo(javascript ? 3 : 2));
     });
   }
+
+  testWidgets('6: an inline script of a --js page calls elis.request while the page loads', (t) async {
+    final s = await sheet(t)
+      ..real = true;
+    const page = "<!doctype html><script>elis.request('notify').then(() => { document.title = 'replied'; })</script>";
+    final server = await PageServer.start(
+      (path) async => PageFile('text/html; charset=utf-8', Stream.value(utf8.encode(page))),
+      javascript: true,
+      head: headTag(s.nonce, _helper),
+    );
+    addTearDown(server.close);
+    await s.load(url: server.urlFor('/page.html'));
+    await s.until('the request', () => s.accepted.isNotEmpty);
+    expect(s.accepted.single['cmd'], 'notify');
+    await s.until('the reply', () async => await s.js("document.title === 'replied'") == 'true');
+    expect(await s.js('document.compatMode'), contains('CSS1Compat')); // the head went after the doctype
+    expect(await s.js('document.scripts.length'), '1'); // the head removed itself with its nonce
+  });
 }
 
 // PhoneLinkPresenter.unlinkScript, verbatim

@@ -1,6 +1,7 @@
 // A session's pages on the phone (`PhoneLinkPages.swift` owns the wire).
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -18,6 +19,7 @@ class PhonePage {
         path = o['path'] as String?,
         url = o['url'] as String?,
         adapter = o['adapter'] as String?,
+        helper = o['helper'] as String?,
         javascript = o['javascript'] == true,
         chromeless = o['chromeless'] == true,
         browse = o['browse'] == true,
@@ -25,7 +27,7 @@ class PhonePage {
         sizePercent = o['sizePercent'] as int?;
 
   final String id, kind, title;
-  final String? path, url, adapter;
+  final String? path, url, adapter, helper;
   final bool javascript, chromeless, browse;
   bool hidden;
   int? sizePercent;
@@ -54,7 +56,13 @@ class _Fetch {
   final bytes = StreamController<List<int>>();
 }
 
-const _maxLine = 1 << 20; // the relay closes the whole channel past ControlWire.maxRequestLineBytes
+const _maxBridge = 256 << 10; // PageServeCodec.maxFrameBytes, the origin frame that carries the line
+
+/// 128 random bits as hex, for a sheet's server secret and its nonce.
+String randomHex128() {
+  final random = Random.secure();
+  return [for (var i = 0; i < 16; i++) random.nextInt(256).toRadixString(16).padLeft(2, '0')].join();
+}
 
 class PageLink extends ChangeNotifier {
   PageLink(Mux mux, String target) : _channel = mux.present(target) {
@@ -82,6 +90,9 @@ class PageLink extends ChangeNotifier {
 
   PhonePage? get page => _pages.isEmpty ? null : _pages.values.last;
 
+  /// Why the channel ended, once it has.
+  String? get ended => _channel.ended;
+
   Stream<PageCommand> get commands => _commands.stream;
 
   /// Completes on the first `res` line; the rest of the file follows on [PageFile.bytes].
@@ -96,7 +107,7 @@ class PageLink extends ChangeNotifier {
   Future<String> bridge(String id, String line) {
     final seq = ++_seq;
     final out = {'t': 'bridge', 'id': id, 'seq': seq, 'line': line};
-    if (utf8.encode(jsonEncode(out)).length >= _maxLine) return Future.error(ElisError('the request is too large'));
+    if (utf8.encode(jsonEncode(out)).length >= _maxBridge) return Future.error(ElisError('the request is too large'));
     final c = Completer<String>();
     _bridges[seq] = (page: id, reply: c);
     _send(out);
@@ -151,6 +162,7 @@ class PageLink extends ChangeNotifier {
     switch (o['t']) {
       case 'page':
         final p = PhonePage._(o);
+        _failRequests('page sent again', page: p.id); // the relay forgot them with the old page
         _pages.remove(p.id); // a page sent again is the newest
         _pages[p.id] = p;
         notifyListeners();
@@ -219,8 +231,7 @@ class PageLink extends ChangeNotifier {
   /// The channel ended: every page leaves the phone and every request fails.
   void _ended() {
     _failRequests(_channel.ended ?? 'closed');
-    if (_pages.isEmpty) return;
     _pages.clear();
-    if (!_disposed) notifyListeners();
+    if (!_disposed) notifyListeners(); // the screen opens the channel again
   }
 }
