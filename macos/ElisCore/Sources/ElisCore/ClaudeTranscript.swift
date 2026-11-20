@@ -73,6 +73,7 @@ public final class ClaudeTranscript: @unchecked Sendable {
     private struct Cache {
         var paths: [String: String] = [:]
         var misses: [String: Date] = [:]
+        var metas: [String: (modified: Date?, size: Int?, meta: SubagentMeta)] = [:]
         // least recently used first, keyed by keepsSidechains so an Agent fan-out never evicts a main transcript;
         // each index has its own lock so one session's first scan never stalls another's poll
         var indexes: [Bool: [(path: String, index: Locked<ClaudeTranscriptIndex>)]] = [:]
@@ -154,6 +155,22 @@ public final class ClaudeTranscript: @unchecked Sendable {
         return index.extend()
     }
 
+    private typealias SubagentMeta = (call: String, agentType: String?)
+
+    /// A subagent's `.meta.json`, parsed again only when its modification date or size changed.
+    private func meta(_ path: String) -> SubagentMeta? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path) else { return nil }
+        let modified = attributes[.modificationDate] as? Date, size = attributes[.size] as? Int
+        if let known = cache.withLock({ $0.metas[path] }), known.modified == modified, known.size == size { return known.meta }
+        guard let data = FileManager.default.contents(atPath: path),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let call = object["toolUseId"] as? String
+        else { return nil }
+        let meta = (call: call, agentType: object["agentType"] as? String)
+        cache.withLock { $0.metas[path] = (modified, size, meta) }
+        return meta
+    }
+
     /// Open calls in `subagents/agent-<id>.jsonl` whose `.meta.json` names an open Agent call; `agents` maps its id to its `name`.
     private func subagentPending(_ agents: [String: String?], sessionDirectory: String) -> [ControlTranscriptPending] {
         let directory = sessionDirectory + "/subagents"
@@ -161,14 +178,12 @@ public final class ClaudeTranscript: @unchecked Sendable {
         return files.flatMap { file -> [ControlTranscriptPending] in
             guard file.hasPrefix("agent-"), file.hasSuffix(".meta.json"),
                   let agent = SessionLauncher.plainSessionID(String(file.dropFirst("agent-".count).dropLast(".meta.json".count))),
-                  let data = FileManager.default.contents(atPath: "\(directory)/\(file)"),
-                  let meta = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let call = meta["toolUseId"] as? String, let agentName = agents[call]
+                  let meta = meta("\(directory)/\(file)"), let agentName = agents[meta.call]
             else { return [] }
             return index("\(directory)/agent-\(agent).jsonl", keepsSidechains: true).withLock { index in
                 guard refresh(&index), let reader = RecordReader(index: index, sessionDirectory: sessionDirectory) else { return [] }
                 return reader.openCalls { _ in true }.compactMap { call in
-                    RecordReader.isAgent(call) ? nil : reader.pending(call, source: agent, agentType: meta["agentType"] as? String, agentName: agentName)
+                    RecordReader.isAgent(call) ? nil : reader.pending(call, source: agent, agentType: meta.agentType, agentName: agentName)
                 }
             }
         }

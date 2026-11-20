@@ -303,6 +303,21 @@ struct ClaudeTranscriptTests {
                                                      name: "Bash", input: .object(["command": .string("ls")]))])
     }
 
+    @Test func unchangedSubagentMetaIsNotReadAgain() throws {
+        let fixture = try Fixture([
+            user("u1", parent: nil),
+            toolUse("a1", parent: "u1", id: "t9", name: "Agent", input: #"{"description":"d"}"#),
+        ])
+        try fixture.write("subagents/agent-abc.meta.json", #"{"toolUseId":"t9"}"#)
+        try fixture.write("subagents/agent-abc.jsonl", toolUse("s2", parent: nil, id: "b1", sidechain: true) + "\n")
+        #expect(try fixture.page().pending.map(\.id) == ["b1"])
+        let meta = fixture.sessionDirectory.appendingPathComponent("subagents/agent-abc.meta.json").path
+        let stamp = try #require(try FileManager.default.attributesOfItem(atPath: meta)[.modificationDate] as? Date)
+        try fixture.write("subagents/agent-abc.meta.json", #"{"toolUseId":"t8"}"#)
+        try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: meta)
+        #expect(try fixture.page().pending.map(\.id) == ["b1"])
+    }
+
     @Test func pendingInputOverCapIsClipped() throws {
         let long = String(repeating: "z", count: 20 << 10)
         let fixture = try Fixture([user("u1", parent: nil), toolUse("a1", parent: "u1", id: "t1", input: #"{"command":"\#(long)"}"#)])
