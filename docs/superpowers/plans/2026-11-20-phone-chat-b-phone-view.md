@@ -401,10 +401,11 @@ test('normDropsAllWhitespace', () => expect(norm(' a b\n c '), 'abc'));
 - Consumes: `Grid`, `norm` (Task 5).
 - Produces `class ClaudeScreen` with `static ClaudeScreen read(Grid g)` and:
   - Input: `bool bottomStack`, `String? input` (joined `❯` input rows), `String draft` (their non-dim text; `''` for a placeholder, a suggestion or `Press up to edit queued messages`), `bool pastePlaceholder`
-  - Working: `String? working` (spinner text joined across wraps, glyph removed), `String? limit`
+  - Working: `String? working` (spinner text joined across wraps, glyph removed), `bool busy` (Claude is working: a spinner row, with or without ` (`, or `esc to interrupt` in the footer), `String? limit`
   - Rows: `List<String> queued`, `List<int> statusRows`, `(int, int)? streaming` (first and last row of the reply above the spinner), `int? interrupted`
   - Mode: `ClaudeMode? mode`, `String? modeText`, `int shells`
-  - Derived: `bool get dialog` (not blank and no bottom stack), `bool get idle` (bottom stack, no working line)
+  - Derived: `bool get dialog` (not blank and no bottom stack), `bool get idle` (bottom stack and not `busy`)
+  - Ruling (2026-11-20): Claude Code 2.1.329 hides the spinner row while reply text streams, so every "while working" below means `busy`, not `working != null`.
   - `dialog` is a single-frame reading. Callers act on it only as Task 18 says: Claude running, not stale, and held for two grid updates.
 - `enum ClaudeMode { manual, acceptEdits, plan, auto, bypass }`
 
@@ -420,7 +421,7 @@ Rules, all width-agnostic:
   - `shells` comes from `· N shell` on the mode line.
 - Above the composer:
   - The working line is a row starting with one of `✶✻✽✢·`, then a word ending `…`, then ` (`; it is joined with the following rows up to the closing `)`.
-  - `streaming` is the rows from the last row starting `⏺ ` that is not a tool call (`⏺ Name(`) down to the row above the working line, only while working.
+  - `streaming` is the rows from the last row starting `⏺ ` that is not a tool call (`⏺ Name(`) down to the row above the working line or the composer, only while `busy`.
   - `queued` is the text of each `❯ ` row directly followed by a `⎿  Queued` row.
   - `limit` is a row containing `Usage limit reached` or `Continuing automatically at`.
   - `interrupted` is the row index of the last row above the composer starting `⎿` that contains `Interrupted`, or null. Callers compare it with the index seen before a write, because an old row stays on screen.
@@ -774,7 +775,7 @@ Composer({Key? key, required TextEditingController controller, required FocusNod
 - Produces `BottomStack({required ClaudeScreen? screen, required Grid? grid, required TranscriptFeed feed, required WriteGate gate, required bool stale, required bool remote, Checks checks = checks})`.
 - Behaviour:
   - Working line: mirrored text with a phone-drawn spinner.
-    - `Stop` runs one `GateStep(KeyWrite(VtKey.escape), ready: s.working != null && !s.dialog, done: working gone or s.interrupted differs from its value at ready)`.
+    - `Stop` runs one `GateStep(KeyWrite(VtKey.escape), ready: s.busy && !s.dialog, done: busy gone or s.interrupted differs from its value at ready)`.
       Check 13: Esc interrupts and then sends the queue, so the working line may never leave; a new `Interrupted` row ends the step.
     - It is enabled only when no dialog is open.
   - Limit banner: `Cancel` sends Esc the same way while `limit` shows.
@@ -785,8 +786,8 @@ Composer({Key? key, required TextEditingController controller, required FocusNod
     - While a dialog hides them, the last rows stay dimmed as stale.
     - On a `Grid.text` grid the statusline is plain.
   - Streaming area: the `streaming` rows, drawn plain.
-    - It shows while working and while its first line is not already the start of the last `text` item (`norm` compare).
-    - It cross-fades out when the next T record arrives or the working line goes.
+    - It shows while `busy` and while its first line is not already the start of the last `text` item (`norm` compare).
+    - It cross-fades out when the next T record arrives or `busy` goes.
 
 - [ ] **Step 1: Write the failing tests** from fixtures:
   - `stopSendsOneEsc`: one Esc write.
@@ -827,7 +828,7 @@ Composer({Key? key, required TextEditingController controller, required FocusNod
     - again after a Stop run, when the field is empty and Claude's row shows a draft (check 13: an Esc before any output puts the prompt back);
     - never while `pastePlaceholder` (the placeholder is not the text); Send then treats the row as a changed draft.
     - The adopted text is remembered as `adopted`.
-  - Send is enabled when the field is not empty, `bottomStack`, no dialog, and `disabledBy == null`. It reads `Queue` while `working`; `/model`, `/effort`, `/fast`, `/status`, `/tasks` and `/usage` read `Send`.
+  - Send is enabled when the field is not empty, `bottomStack`, no dialog, and `disabledBy == null`. It reads `Queue` while `busy`; `/model`, `/effort`, `/fast`, `/status`, `/tasks` and `/usage` read `Send`.
   - Disabled with text, one reason line: "Claude shows a dialog", "Waiting for Claude's screen", the `checks.writeBlockedOn(remote: remote)` text, or `disabledBy`.
   - Send trims trailing whitespace. A pasted bare `/cos` runs `/cost` (check 4), so the menu inserts full names.
   - The send sequence on a Live pane (`colours`), through one `gate.run`:
@@ -840,7 +841,7 @@ Composer({Key? key, required TextEditingController controller, required FocusNod
        - `TextWrite` for a leading `/` when `!checks.pastedCommandRuns`;
        - a split leading `!`/`#` when `!checks.pastedBangSwitches`.
        - Each write's `done` is `pasteShown`: the `norm`ed input contains the first 40 normalized characters, or `pastePlaceholder`.
-    3. Enter as its own write. Its `done` is an empty input row, a new human `user` item in the feed, or a working line.
+    3. Enter as its own write. Its `done` is an empty input row, a new human `user` item in the feed, or `busy`.
     4. Clear the field.
   - On a non-Live pane (`!colours`): no adoption, no draft check and no clear (a `Grid.text` placeholder reads as text), and the `TypeWriter` path: the text, then Enter, as two steps whose `done` is any grid change.
   - The model chip's "Change model…" (Task 13) sends `/model` through `send`, enabled only when idle.
