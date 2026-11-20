@@ -3,6 +3,7 @@ package ua.naiksoftware.elis
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.webkit.CookieManager
 import android.webkit.WebView
@@ -32,6 +33,8 @@ class MainActivity : FlutterActivity() {
             (currentFocus as? WebView)?.let { web ->
                 getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(web.windowToken, 0)
                 web.clearFocus()
+                // else the IME keeps serving the web view; Flutter draws its own focus, never the platform's frame
+                findViewById<View>(FLUTTER_VIEW_ID)?.apply { defaultFocusHighlightEnabled = false }?.requestFocus()
             }
             result.success(null)
         }
