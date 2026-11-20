@@ -245,6 +245,12 @@ void main() {
     expect(pasteShown(ClaudeScreen.read(_g('idle-placeholder-45')), _three), isFalse);
   });
 
+  test('pasteShownIgnoresTheDimPlaceholder', () {
+    final s = ClaudeScreen.read(_g('idle-placeholder-45'));
+    expect(s.input, isNotEmpty);
+    expect(pasteShown(s, s.input!), isFalse);
+  });
+
   testWidgets('sendClearsAdoptedDraftFirst', (t) async {
     final c = _C(t, _g('idle-draft-wrapped-45'));
     final drafts = <String>[];

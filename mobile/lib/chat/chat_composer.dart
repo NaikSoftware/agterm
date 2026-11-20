@@ -25,10 +25,10 @@ List<SlashCommand> slashMatches(List<SlashCommand> all, String typed) {
   return [...all.where(prefix), ...all.where((c) => !prefix(c) && c.name.toLowerCase().contains(t))];
 }
 
-/// Claude's input shows [text]: its first 40 characters, whitespace ignored, or a paste placeholder.
+/// Claude's draft shows [text]: its first 40 characters, whitespace ignored, or a paste placeholder.
 bool pasteShown(ClaudeScreen s, String text) {
   final k = norm(text);
-  return s.pastePlaceholder || norm(s.input ?? '').contains(k.substring(0, min(40, k.length)));
+  return s.pastePlaceholder || norm(s.draft).contains(k.substring(0, min(40, k.length)));
 }
 
 // the input block's rows as drawn: a Ctrl+U that only removes a newline changes no trimmed text
