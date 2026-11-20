@@ -443,4 +443,96 @@ void main() {
     expect(c.sendEnabled, isFalse);
     expect(find.text('Sending from the phone is not verified yet'), findsOneWidget);
   });
+
+  group('mode chip', () {
+    bool chipEnabled(WidgetTester t) => t.widget<ActionChip>(find.byKey(const Key('mode-chip'))).onPressed != null;
+    bool shiftTab(GateWrite w) => w is KeyWrite && w.key == VtKey.tab && w.mods == vtShift;
+
+    testWidgets('chipCyclesToTarget', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
+      final next = [_g('mode-accept-45'), _g('mode-plan-45'), _g('mode-auto-45')];
+      c.script((w) => shiftTab(w) ? next.removeAt(0) : null);
+      await c.pump();
+      expect(chipEnabled(t), isTrue);
+      await t.tap(find.byKey(const Key('mode-chip')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('auto mode on'));
+      await t.pumpAndSettle();
+      expect(c.writer.writes, isEmpty);
+      expect(find.text('Tap again to switch'), findsOneWidget);
+      await t.tap(find.text('auto mode on'));
+      await t.pumpAndSettle();
+      expect(c.writer.writes.length, 3);
+      expect(c.writer.writes.every(shiftTab), isTrue);
+      expect(ClaudeScreen.read(c.grids.g).mode, ClaudeMode.auto);
+    });
+
+    testWidgets('chipStopsWhenModeUnchanged', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
+      c.script((_) => null);
+      await c.pump();
+      await t.tap(find.byKey(const Key('mode-chip')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('plan mode on'));
+      await t.pump();
+      await t.pump(const Duration(seconds: 3));
+      await t.pump();
+      expect(c.writer.writes.length, 1);
+      expect(find.text("Claude's screen did not change"), findsOneWidget);
+    });
+
+    testWidgets('chipStopsWhenTheStartModeReturns', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
+      final next = [_g('mode-accept-45'), _g('idle-placeholder-45')];
+      c.script((w) => next.isEmpty ? null : next.removeAt(0));
+      await c.pump();
+      await t.tap(find.byKey(const Key('mode-chip')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('plan mode on'));
+      await t.pumpAndSettle();
+      expect(c.writer.writes.length, 2);
+      expect(find.text('Claude did not reach plan mode on'), findsOneWidget);
+    });
+
+    testWidgets('chipDisabledWhileWorking', (t) async {
+      final c = _C(t, _g('working-45'));
+      await c.pump();
+      expect(chipEnabled(t), isFalse);
+    });
+
+    testWidgets('chipDisabledWithoutAKnownMode', (t) async {
+      final g = _g('idle-placeholder-45');
+      final r = g.rows.lastIndexWhere((row) => row.text.contains('manual mode on'));
+      g.rows[r] = _row('  ⏸ ручний режим');
+      final c = _C(t, g);
+      await c.pump();
+      expect(chipEnabled(t), isFalse);
+    });
+
+    testWidgets('chipDisabledOnAnUnprovenRemoteRow', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))..remote = true;
+      await c.pump();
+      expect(chipEnabled(t), isFalse);
+      c.checks = const Checks(keys: true, paste: true, remote: true);
+      await c.pump();
+      expect(chipEnabled(t), isTrue);
+    });
+
+    testWidgets('chipShowsTheTranscriptModeWhileHidden', (t) async {
+      final c = _C(t, _g('dialog-bash-45'));
+      c.feed.meta = TranscriptMeta.fromJson(const {'permissionMode': 'plan'});
+      await c.pump();
+      expect(find.text('plan'), findsOneWidget);
+      expect(chipEnabled(t), isFalse);
+    });
+
+    testWidgets('shellBadge', (t) async {
+      final c = _C(t, _g('shell-45'));
+      await c.pump();
+      expect(find.text('1 shell'), findsOneWidget);
+      c.grids.set(_g('idle-placeholder-45'));
+      await t.pump();
+      expect(find.text('1 shell'), findsNothing);
+    });
+  });
 }

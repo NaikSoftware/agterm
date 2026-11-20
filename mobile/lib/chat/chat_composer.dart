@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../screens/composer.dart';
 import '../terminal/vt.dart';
@@ -254,7 +256,16 @@ class ChatComposerState extends State<ChatComposer> {
               sendLabel: queue ? 'Queue' : 'Send',
               sendIcon: queue ? Icons.schedule : Icons.arrow_forward,
               reason: reason,
-              accessory: _offer == null ? null : _offerRow(),
+              accessory: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                ModeChip(
+                    screen: s,
+                    meta: widget.feed.meta,
+                    gate: widget.gate,
+                    remote: widget.remote,
+                    disabledBy: widget.disabledBy,
+                    checks: widget.checks),
+                if (_offer != null) _offerRow(),
+              ]),
             ),
           ]);
         },
@@ -283,4 +294,149 @@ class ChatComposerState extends State<ChatComposer> {
           ]),
         ),
       );
+}
+
+// Claude's own mode-line wording: the picker shows it verbatim (card rule 10)
+const _modeLabels = {
+  ClaudeMode.manual: 'manual mode on',
+  ClaudeMode.acceptEdits: 'accept edits on',
+  ClaudeMode.plan: 'plan mode on',
+  ClaudeMode.auto: 'auto mode on',
+  ClaudeMode.bypass: 'bypass permissions on',
+};
+const _modeNames = {
+  ClaudeMode.manual: 'manual',
+  ClaudeMode.acceptEdits: 'accept edits',
+  ClaudeMode.plan: 'plan',
+  ClaudeMode.auto: 'auto',
+  ClaudeMode.bypass: 'bypass',
+};
+const _permissionModes = {
+  'default': ClaudeMode.manual,
+  'acceptEdits': ClaudeMode.acceptEdits,
+  'plan': ClaudeMode.plan,
+  'auto': ClaudeMode.auto,
+  'bypassPermissions': ClaudeMode.bypass,
+};
+
+/// The composer's mode chip and shell badge: Shift+Tab through [gate] until Claude shows the picked mode.
+class ModeChip extends StatefulWidget {
+  const ModeChip(
+      {super.key,
+      required this.screen,
+      required this.meta,
+      required this.gate,
+      required this.remote,
+      this.disabledBy,
+      this.checks = _checks});
+
+  final ClaudeScreen? screen;
+  final TranscriptMeta? meta;
+  final WriteGate gate;
+  final bool remote;
+  final String? disabledBy;
+  final Checks checks;
+
+  @override
+  State<ModeChip> createState() => ModeChipState();
+}
+
+class ModeChipState extends State<ModeChip> {
+  bool _bypassSeen = false;
+
+  List<ClaudeMode> get _cycle =>
+      [ClaudeMode.manual, ClaudeMode.acceptEdits, ClaudeMode.plan, ClaudeMode.auto, if (_bypassSeen) ClaudeMode.bypass];
+
+  /// One Shift+Tab per step until Claude shows [target]; stops when the start mode returns, after at most 5 steps.
+  Future<GateResult> cycleTo(ClaudeMode target) {
+    final cycle = _cycle;
+    final start = widget.screen?.mode;
+    var total = start == null || !cycle.contains(target) ? 1 : (cycle.indexOf(target) - cycle.indexOf(start)) % cycle.length;
+    total = max(1, total);
+    return widget.gate.run(total, (q) async {
+      final from = ClaudeScreen.read(q.grid).mode;
+      var mode = from;
+      for (var n = 0; mode != target; n++) {
+        if (n == 5 || (n > 0 && mode == from)) throw GateStop(GateOutcome.mismatch, 'Claude did not reach ${_modeLabels[target]}');
+        if (n >= total) {
+          total++;
+          q.addSteps(1);
+        }
+        final expected = mode;
+        await q.send(GateStep(KeyWrite(VtKey.tab, vtShift), ready: (g) {
+          final s = ClaudeScreen.read(g);
+          return s.idle && s.mode != null && s.mode == expected;
+        }, done: (g) => switch (ClaudeScreen.read(g).mode) { final m? => m != expected, null => false }));
+        unawaited(HapticFeedback.selectionClick());
+        mode = ClaudeScreen.read(q.grid).mode;
+      }
+    });
+  }
+
+  Future<void> _pick() async {
+    final current = widget.screen?.mode;
+    final target = await showModalBottomSheet<ClaudeMode>(
+        context: context,
+        builder: (context) {
+          ClaudeMode? armed;
+          return StatefulBuilder(
+              builder: (context, setSheet) => SafeArea(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      for (final m in _cycle)
+                        ListTile(
+                          key: Key('mode-${m.name}'),
+                          title: Text(_modeLabels[m]!),
+                          subtitle: armed == m ? const Text('Tap again to switch') : null,
+                          trailing: m == current ? const Icon(Icons.check) : null,
+                          selected: armed == m,
+                          onTap: () {
+                            if (m == current) return Navigator.pop(context);
+                            // a mode that auto-approves calls needs a second tap
+                            if ((m == ClaudeMode.auto || m == ClaudeMode.bypass) && armed != m) return setSheet(() => armed = m);
+                            Navigator.pop(context, m);
+                          },
+                        ),
+                    ]),
+                  ));
+        });
+    if (target == null || !mounted) return;
+    final r = await cycleTo(target);
+    if (!r.ok && mounted) ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(r.reason)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.screen;
+    final meta = widget.meta?.permissionMode;
+    if (s?.mode == ClaudeMode.bypass || meta == 'bypassPermissions') _bypassSeen = true;
+    final hidden = s?.modeText == null; // G hides the mode line: the transcript's mode, dimmed
+    final label = switch (s?.mode) {
+      final m? => _modeNames[m]!,
+      null when !hidden => s!.modeText!.split('·').first.replaceFirst(RegExp(r'^[⏸⏵\s]+'), '').trim(),
+      null => _modeNames[_permissionModes[meta]] ?? meta ?? 'mode',
+    };
+    final enabled = s != null &&
+        s.idle &&
+        s.mode != null &&
+        widget.disabledBy == null &&
+        widget.checks.writeBlockedOn(remote: widget.remote) == null &&
+        !widget.gate.running;
+    final shells = s?.shells ?? 0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(children: [
+        ActionChip(
+          key: const Key('mode-chip'),
+          label: Text(label, style: TextStyle(fontSize: 12, color: hidden ? C.muted : null)),
+          visualDensity: VisualDensity.compact,
+          onPressed: enabled ? _pick : null,
+        ),
+        if (shells > 0) ...[
+          const SizedBox(width: 8),
+          Text('$shells shell${shells == 1 ? '' : 's'}',
+              key: const Key('shell-badge'), style: const TextStyle(fontSize: 12, color: C.muted)),
+        ],
+      ]),
+    );
+  }
 }
