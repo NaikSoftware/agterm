@@ -118,7 +118,7 @@ void main() {
 
   testWidgets('dayRowShowsTheDate', (t) async {
     await t.pumpWidget(MaterialApp(
-        home: Scaffold(body: Builder(builder: (c) => chatRowWidget(c, chatRows([_item('user', 'u1', text: 'a')])[1], fresh: false)))));
+        home: Scaffold(body: Builder(builder: (c) => chatRowWidget(c, chatRows([_item('user', 'u1', text: 'a', time: '2026-11-20T12:00:00.000')])[1], fresh: false)))));
     expect(find.text('Fri, Nov 20'), findsOneWidget);
   });
   test('threeReadOnlyCallsGroup', () {

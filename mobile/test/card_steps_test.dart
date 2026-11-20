@@ -292,6 +292,21 @@ void main() {
       expect([for (final st in steps) sent(st.write)], ['escape']);
       expect(_send(esc, steps)?.outcome, GateOutcome.done);
     });
+
+    test('reviewCancelDigitWaitsForNoField $w', () {
+      final review = _g('card-ask-review-$w');
+      final row = VtRow([for (final r in 'ctrl+g to edit in nano'.runes) VtCell(String.fromCharCode(r))]);
+      final field = Grid([...review.rows.take(review.rows.length - 1), row, review.rows.last]);
+      expect(PromptDialog.read(field)!.footer, contains('nano'));
+      final step = cardSteps(_match(review, _call('card-ask-review')), AskCancel()).single;
+      expect(step.ready(review), isTrue);
+      expect(step.ready(field), isFalse);
+    });
+
+    test('blankOtherIsRejected $w', () {
+      final m = _match(_g('card-ask-single-$w'), _call('card-ask-single'));
+      expect(() => cardSteps(m, _ask([const QuestionAnswer(other: ' \n ')])), throwsArgumentError);
+    });
   }
 
   for (final w in [45, 100]) {

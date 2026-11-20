@@ -163,7 +163,7 @@ class _Ask extends _Card {
         step(TextWrite('${o.number}'), (d) => keyable(d) && d.options.any((x) => x.belowRule && x.number == o.number), gone),
     ],
     AskCancel() => switch (d0.review ? row(d0, 'Cancel')?.number : null) {
-      final n? => [step(TextWrite('$n'), (d) => d.review && row(d, 'Cancel')?.number == n, gone)],
+      final n? => [step(TextWrite('$n'), (d) => d.review && !field(d) && row(d, 'Cancel')?.number == n, gone)],
       // the only Esc a card sends, always its last write
       null => [step(KeyWrite(VtKey.escape), (d) => !field(d), gone)],
     },
@@ -173,6 +173,8 @@ class _Ask extends _Card {
 
   List<GateStep> answer(List<QuestionAnswer> answers) {
     if (answers.length != qs.length || qs.isEmpty) throw ArgumentError('${answers.length} answers for ${qs.length} questions');
+    // a blank Other leaves no text the screen can show, so its paste could never be confirmed
+    if (answers.any((a) => a.other != null && _needle(a.other!).isEmpty)) throw ArgumentError('a blank Other');
     final out = <GateStep>[];
     final start = m.question ?? qs.length;
     for (var i = start; i < qs.length; i++) {
