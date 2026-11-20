@@ -81,7 +81,7 @@ class _ChatViewState extends State<ChatView> {
   final Map<String, BuildContext> _built = {};
   final Set<String> _gone = {}; // rows built once: scrolling back to a fresh row does not fade it in again
   int _newCount = 0;
-  int? _sticky;
+  String? _sticky; // a row key: an index would point at another row for the frame after an append
   bool _away = false, _header = true, _todos = false;
 
   TranscriptFeed get feed => widget.feed;
@@ -180,7 +180,7 @@ class _ChatViewState extends State<ChatView> {
     final p = _scroll.position;
     final away = p.pixels > _bottomSlack;
     final top = _visible.fold(0, (m, v) => max(m, v.$1));
-    final sticky = stickyPrompt(_rows, top);
+    final n = stickyPrompt(_rows, top), sticky = n == null ? null : _rows[n].key;
     if (load && p.extentAfter < 400) feed.loadEarlier();
     if (away == _away && sticky == _sticky && (away || _newCount == 0)) return;
     setState(() {
@@ -278,7 +278,7 @@ class _ChatViewState extends State<ChatView> {
 
   @override
   Widget build(BuildContext context) {
-    final sticky = _sticky == null || _sticky! >= _rows.length ? null : _rows[_sticky!];
+    final n = _index[_sticky], sticky = n == null ? null : _rows[n];
     final todos = _todoStrip();
     final top = [
       AnimatedSize(

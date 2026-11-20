@@ -140,6 +140,17 @@ void main() {
     expect(_onScreen(t, [_prompt('first prompt')]), ['first prompt']);
   });
 
+  _chatTest('stickyHoldsItsPromptThroughAppend', (t, c) async {
+    await c.start([_prompt('first prompt'), for (var i = 0; i < 40; i++) _text('r$i', i % 4)]);
+    await c.tick();
+    await t.pump();
+    c.h.held!.$2.complete({'transcript': 't1', 'size': 300, 'start': 0, 'next': 300, 'items': [_text('n1'), _text('n2'), _tool('n3')]});
+    await Future<void>.value();
+    await t.pump();
+    expect(_row('n1'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('stickyPrompt')), matching: find.text('❯ first prompt')), findsOneWidget);
+  });
+
   _chatTest('appendWhileScrolledUpKeepsView', (t, c) async {
     final items = _history(40);
     await c.start(items);
