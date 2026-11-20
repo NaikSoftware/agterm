@@ -249,7 +249,10 @@ void main() {
 
     test('noCookieClosesTheSocket', () => refused(() => 'GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n'));
 
-    test('aWrongCookieClosesTheSocket', () => refused(() => get('/', cookies: '${tunnel.cookie.substring(0, tunnel.cookie.length - 1)}0')));
+    test('aWrongCookieClosesTheSocket', () => refused(() {
+          final last = tunnel.cookie[tunnel.cookie.length - 1];
+          return get('/', cookies: '${tunnel.cookie.substring(0, tunnel.cookie.length - 1)}${last == '0' ? '1' : '0'}');
+        }));
 
     test('aCookieValuePrefixClosesTheSocket', () => refused(() => get('/', cookies: '${tunnel.cookie}x')));
 
