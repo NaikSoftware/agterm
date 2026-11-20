@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -42,8 +44,104 @@ Widget _row(BuildContext c, ChatRow r, bool gone) {
     'user' => _bubble(c, i),
     'text' => _menu(c, i.text ?? '', _markdown(i.text ?? '')),
     'tool' => _toolRow(i, stopped: r.interruptedAfter || gone),
+    'compact' => _divider('Conversation compacted', r.key, r.summary?.text),
+    'compactSummary' => _divider('Conversation compacted', r.key, i.text ?? ''),
+    'interrupted' => _divider('Interrupted', r.key, null),
+    'error' => _menu(c, i.text ?? '', Text(i.text ?? '', style: const TextStyle(color: C.danger))),
+    'hook' => _notice(i.text, warning: true),
+    'notice' => _notice(i.text, warning: i.raw['level'] == 'warning'),
+    'taskNotification' => _notice(i.text, warning: false),
+    'thinking' => Text(i.durationMs == null ? 'Thought' : 'Thought for ${(i.durationMs! / 1000).round()}s', style: _toolStyle),
+    'command' => Row(spacing: 8, children: [
+        Container(
+          key: Key('chip-${i.uuid}'),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(8)),
+          child: Text('/${i.name ?? ''}', style: _monoStyle),
+        ),
+        if (i.raw['args'] case final String a when a.isNotEmpty)
+          Expanded(child: Text(a, style: _toolStyle, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      ]),
+    'commandOutput' => _menu(c, i.text ?? '', _monoBlock(i.text ?? '')),
+    'bash' => _menu(c, i.text ?? '', Text('! ${i.text ?? ''}', style: _monoStyle)),
+    'image' => _image(c, i),
+    'oversized' => _placeholder('Record too large to show · ${byteSize(i.bytes ?? 0)}'),
     _ => Text(i.text ?? i.name ?? i.kind, style: const TextStyle(color: C.muted)),
   };
+}
+
+/// [bytes] as `67 B`, `12 KB` or `2.3 MB` (binary units).
+String byteSize(int bytes) => bytes < 1024
+    ? '$bytes B'
+    : bytes < 1024 * 1024
+        ? '${(bytes / 1024).round()} KB'
+        : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+
+Widget _divider(String label, String key, String? body) {
+  final line = Row(spacing: 8, children: [
+    const Expanded(child: Divider(color: C.line)),
+    Text(label, style: const TextStyle(color: C.dim, fontSize: 12)),
+    const Expanded(child: Divider(color: C.line)),
+  ]);
+  return body == null ? line : _Expandable(key: ValueKey('divider-$key'), title: line, body: _markdown(body));
+}
+
+Widget _notice(String? text, {required bool warning}) {
+  final color = warning ? C.blockedText : C.muted;
+  return Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 6, children: [
+    Icon(warning ? Icons.warning_amber_rounded : Icons.info_outline, size: 16, color: color),
+    Expanded(child: Text(text ?? '', style: TextStyle(color: color, fontSize: 13))),
+  ]);
+}
+
+Widget _monoBlock(String text) => Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: C.term, borderRadius: BorderRadius.circular(8)),
+      child: Text(text, style: _monoStyle),
+    );
+
+Widget _placeholder(String label) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(border: Border.all(color: C.line), borderRadius: BorderRadius.circular(8)),
+      child: Row(mainAxisSize: MainAxisSize.min, spacing: 6, children: [
+        const Icon(Icons.image_outlined, size: 16, color: C.dim),
+        Flexible(child: Text(label, style: const TextStyle(color: C.muted, fontSize: 13))),
+      ]),
+    );
+
+Uint8List? _decode(String data) {
+  try {
+    return base64Decode(data);
+  } on FormatException {
+    return null;
+  }
+}
+
+Widget _image(BuildContext c, ChatItem i) {
+  final type = i.raw['mediaType'] is String ? i.raw['mediaType'] as String : 'image';
+  final placeholder = _placeholder('$type · ${byteSize(i.bytes ?? 0)}');
+  final data = i.raw['data'];
+  final bytes = data is String ? _decode(data) : null;
+  if (bytes == null || bytes.isEmpty) return placeholder;
+  Widget image() => Image.memory(bytes, gaplessPlayback: true, errorBuilder: (_, _, _) => placeholder);
+  return Align(
+    alignment: Alignment.centerLeft,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => showDialog<void>(
+        context: c,
+        builder: (d) => GestureDetector(
+          onTap: () => Navigator.pop(d),
+          child: InteractiveViewer(maxScale: 8, child: Center(child: image())),
+        ),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48, maxWidth: 200, maxHeight: 200),
+        child: ClipRRect(borderRadius: BorderRadius.circular(8), child: image()),
+      ),
+    ),
+  );
 }
 
 /// The label of a read-only group, e.g. `Read 7 files · Searched 2`.

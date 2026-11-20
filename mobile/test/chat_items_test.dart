@@ -235,4 +235,79 @@ void main() {
     expect(_color(t, 'alice'), tintColor('blue'));
     expect(find.text('worker'), findsOneWidget);
   });
+
+  testWidgets('compactDividerCollapsesSummary', (t) async {
+    final rows = chatRows([
+      ChatItem.fromJson({'kind': 'compact', 'uuid': 's1', 'time': '2026-11-20T09:00:00.000Z', 'trigger': 'manual'}),
+      _item('compactSummary', 's2', text: 'Earlier we fixed the test'),
+    ]);
+    expect([for (final r in rows) r.key], ['s1', 'day-2026-11-20']);
+    await _pumpRow(t, rows.first);
+    expect(find.text('Conversation compacted'), findsOneWidget);
+    expect(find.textContaining('Earlier we fixed'), findsNothing);
+    await t.tap(find.text('Conversation compacted'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Earlier we fixed'), findsOneWidget);
+  });
+
+  testWidgets('interruptedDivider', (t) async {
+    await _pump(t, _item('interrupted', 'i1'));
+    expect(find.text('Interrupted'), findsOneWidget);
+  });
+
+  testWidgets('errorRowIsRed', (t) async {
+    await _pump(t, _item('error', 'e1', text: 'API Error: 529 overloaded'));
+    expect(_color(t, 'API Error: 529 overloaded'), C.danger);
+  });
+
+  testWidgets('hookAndNoticeRows', (t) async {
+    await _pump(t, _item('hook', 'h1', text: 'PreToolUse hook blocked the call'));
+    expect(_color(t, 'PreToolUse hook blocked the call'), C.blockedText);
+    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+    await _pump(t, ChatItem.fromJson({'kind': 'notice', 'uuid': 'n1', 'text': 'Context low', 'level': 'warning'}));
+    expect(_color(t, 'Context low'), C.blockedText);
+    await _pump(t, ChatItem.fromJson({'kind': 'notice', 'uuid': 'n2', 'text': 'While you were away', 'level': 'info'}));
+    expect(_color(t, 'While you were away'), C.muted);
+    expect(find.byIcon(Icons.info_outline), findsOneWidget);
+    await _pump(t, _item('taskNotification', 't1', text: 'Background task finished'));
+    expect(find.byIcon(Icons.info_outline), findsOneWidget);
+  });
+
+  testWidgets('thinkingShowsDurationOnly', (t) async {
+    await _pump(t, ChatItem.fromJson({'kind': 'thinking', 'uuid': 'k1', 'durationMs': 4200, 'text': 'secret plan'}));
+    expect(find.text('Thought for 4s'), findsOneWidget);
+    expect(find.textContaining('secret'), findsNothing);
+    await t.tap(find.text('Thought for 4s'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('secret'), findsNothing);
+  });
+
+  testWidgets('commandChipAndOutput', (t) async {
+    await _pump(t, ChatItem.fromJson({'kind': 'command', 'uuid': 'c1', 'name': 'compact', 'args': 'keep the plan'}));
+    expect(find.ancestor(of: find.text('/compact'), matching: find.byKey(const Key('chip-c1'))), findsOneWidget);
+    expect(find.text('keep the plan'), findsOneWidget);
+    await _pump(t, _item('commandOutput', 'c2', text: 'Set model to opus'));
+    final out = t.widget<RichText>(find.descendant(of: find.text('Set model to opus'), matching: find.byType(RichText))).text.style!;
+    expect(out.fontFamily, mono);
+    await _pump(t, _item('bash', 'c3', text: 'git status'));
+    expect(find.text('! git status'), findsOneWidget);
+  });
+
+  testWidgets('imageThumbnailZooms', (t) async {
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    await _pump(t, ChatItem.fromJson({'kind': 'image', 'uuid': 'p1', 'mediaType': 'image/png', 'bytes': 67, 'data': png}));
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.byType(InteractiveViewer), findsNothing);
+    await t.tap(find.byType(Image));
+    await t.pumpAndSettle();
+    expect(find.byType(InteractiveViewer), findsOneWidget);
+  });
+
+  testWidgets('imageOverCapIsPlaceholder', (t) async {
+    await _pump(t, ChatItem.fromJson({'kind': 'image', 'uuid': 'p1', 'mediaType': 'image/png', 'bytes': 2411724}));
+    expect(find.text('image/png · 2.3 MB'), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+    await _pump(t, ChatItem.fromJson({'kind': 'oversized', 'uuid': 'o1', 'bytes': 5242880}));
+    expect(find.textContaining('5.0 MB'), findsOneWidget);
+  });
 }

@@ -2,7 +2,7 @@ import 'transcript.dart';
 
 /// One list row: an item, a group of read-only tool items, or a day separator ([day] set).
 class ChatRow {
-  const ChatRow(this.key, {this.item, this.group = const [], this.day, this.interruptedAfter = false});
+  const ChatRow(this.key, {this.item, this.group = const [], this.day, this.interruptedAfter = false, this.summary});
 
   final String key;
   final ChatItem? item;
@@ -10,6 +10,8 @@ class ChatRow {
   final DateTime? day;
   // an `interrupted` item follows this one: an open Agent call reads "stopped"
   final bool interruptedAfter;
+  // the `compactSummary` folded under this `compact` divider
+  final ChatItem? summary;
 }
 
 DateTime? _day(ChatItem i) {
@@ -20,6 +22,7 @@ DateTime? _day(ChatItem i) {
 String _dayKey(DateTime d) => 'day-${d.toIso8601String().substring(0, 10)}';
 
 /// The rows for [items] (oldest first), newest first for a `reverse: true` list; a day row sits above each day's first item.
+/// A `compactSummary` right after a `compact` folds into the divider's row, keyed by the divider.
 /// Three or more consecutive read-only tool items share one row, keyed by the first so a poll that grows it keeps the key.
 List<ChatRow> chatRows(List<ChatItem> items) {
   final rows = <ChatRow>[];
@@ -36,6 +39,11 @@ List<ChatRow> chatRows(List<ChatItem> items) {
 
   DateTime? shown;
   for (final (n, i) in items.indexed) {
+    final last = rows.lastOrNull?.item;
+    if (i.kind == 'compactSummary' && run.isEmpty && last?.kind == 'compact' && rows.last.summary == null) {
+      rows.last = ChatRow(last!.uuid, item: last, summary: i);
+      continue;
+    }
     final d = _day(i);
     if (d != null && d != shown) {
       flush();
