@@ -784,7 +784,9 @@ class _SessionScreenState extends State<SessionScreen> {
             stale: _chatStale,
             onTerm: () => _pickMode(ViewMode.term),
             switcher: _toolbar(s),
-            composer: _composer));
+            composer: _composer,
+            onKey: _press,
+            onAnswer: type));
   }
 
   Widget _toolbar(Session s) {

@@ -47,6 +47,8 @@ class ChatComposer extends StatefulWidget {
       required this.remote,
       required this.gate,
       this.disabledBy,
+      this.held,
+      this.onOpen,
       this.checks = _checks});
 
   final TranscriptFeed feed;
@@ -55,6 +57,8 @@ class ChatComposer extends StatefulWidget {
   final bool remote;
   final WriteGate gate;
   final String? disabledBy;
+  final String? held; // a prompt or panel owns Claude's input: the composer is disabled with this line
+  final VoidCallback? onOpen; // shows the hidden panel again
   final Checks checks;
 
   @override
@@ -238,9 +242,10 @@ class ChatComposerState extends State<ChatComposer> {
           final command = RegExp(r'^/(\S+)').firstMatch(text.trim())?.group(1);
           final queue = (s?.busy ?? false) && !_instant.contains(command);
           final menu = text.startsWith('/') && !text.contains(RegExp(r'\s')) ? slashMatches(widget.feed.commands, text) : const <SlashCommand>[];
+          final held = widget.held;
           final reason = _sending && widget.gate.running
               ? widget.gate.progress
-              : text.trim().isNotEmpty && _offer == null
+              : text.trim().isNotEmpty && _offer == null && held == null
                   ? blocked
                   : null;
           final canSend = text.trim().isNotEmpty && blocked == null && !widget.gate.running;
@@ -256,6 +261,7 @@ class ChatComposerState extends State<ChatComposer> {
               sendLabel: queue ? 'Queue' : 'Send',
               sendIcon: queue ? Icons.schedule : Icons.arrow_forward,
               reason: reason,
+              enabled: held == null,
               accessory: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                 ModeChip(
                     screen: s,
@@ -265,6 +271,14 @@ class ChatComposerState extends State<ChatComposer> {
                     disabledBy: widget.disabledBy,
                     checks: widget.checks),
                 if (_offer != null) _offerRow(),
+                if (held != null)
+                  Row(key: const Key('composerHeld'), children: [
+                    Flexible(child: Text(held, style: const TextStyle(fontSize: 12, color: C.muted))),
+                    if (widget.onOpen != null) ...[
+                      const Text(' · ', style: TextStyle(fontSize: 12, color: C.muted)),
+                      TextButton(key: const Key('panelOpen'), onPressed: widget.onOpen, child: const Text('Open')),
+                    ],
+                  ]),
               ]),
             ),
           ]);

@@ -5,15 +5,20 @@ String norm(String s) => s.replaceAll(RegExp(r'\s'), '');
 
 /// The screen Chat reads Claude's live state from: vt rows, or plain `session.text` lines without styles.
 class Grid {
-  Grid(this.rows, {this.colours = true});
+  Grid(this.rows, {this.colours = true}) : snapshot = null;
 
-  Grid.of(VtSnapshot s) : this(s.lines);
+  Grid.of(VtSnapshot this.snapshot)
+      : rows = snapshot.lines,
+        colours = true;
 
   /// `session.text` carries no SGR, so [bright] cannot tell a dim placeholder from a draft.
   Grid.text(String screen)
       : this([
           for (final line in screen.split('\n')) VtRow([for (final r in line.runes) VtCell(String.fromCharCode(r))]),
         ], colours: false);
+
+  /// The frame this grid reads, for drawing it with the Term renderer; null for a `session.text` or test grid.
+  final VtSnapshot? snapshot;
 
   final List<VtRow> rows;
   final bool colours;

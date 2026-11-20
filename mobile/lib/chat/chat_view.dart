@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../model.dart';
+import '../terminal/vt.dart';
 import '../theme.dart';
 import 'bottom_stack.dart';
 import 'chat_composer.dart';
@@ -11,9 +13,29 @@ import 'claude_screen.dart';
 import 'feed.dart';
 import 'grid.dart';
 import 'items.dart';
+import 'panel_sheet.dart';
 import 'rows.dart';
 import 'transcript.dart';
 import 'write_gate.dart';
+
+/// What a prompt card reads and writes through, for plan C's builder.
+class ChatPromptContext {
+  const ChatPromptContext(
+      {required this.screen, required this.grid, required this.pending, required this.gate, required this.remote, required this.openPanel});
+
+  final ClaudeScreen screen;
+  final Grid grid;
+  final List<PendingCall> pending;
+  final WriteGate gate;
+  final bool remote;
+  final void Function(String? stopped) openPanel;
+}
+
+/// The card for the dialog on screen, or null for the panel sheet.
+typedef PromptCardBuilder = Widget? Function(BuildContext context, ChatPromptContext c);
+
+void _noKey(String? seq, VtKey? key, int mods) {}
+void _noAnswer(String key) {}
 
 Widget _chip(String label, {Key? key, VoidCallback? onTap}) => GestureDetector(
       key: key,
@@ -69,7 +91,10 @@ class ChatView extends StatefulWidget {
       required this.stale,
       required this.onTerm,
       required this.switcher,
-      this.composer});
+      this.composer,
+      this.promptCard,
+      this.onKey = _noKey,
+      this.onAnswer = _noAnswer});
 
   static const exitedText = 'Claude exited', staleText = 'Reconnecting…';
 
@@ -85,6 +110,9 @@ class ChatView extends StatefulWidget {
   final VoidCallback onTerm;
   final Widget switcher;
   final GlobalKey<ChatComposerState>? composer; // for the model chip's `send`
+  final PromptCardBuilder? promptCard;
+  final void Function(String? seq, VtKey? key, int mods) onKey; // the panel's keys: straight to the program, past the gate
+  final void Function(String key) onAnswer;
 
   @override
   State<ChatView> createState() => _ChatViewState();
@@ -102,6 +130,10 @@ class _ChatViewState extends State<ChatView> {
   bool _away = false, _header = true, _todos = false;
   int _switches = 0;
   late final _composer = widget.composer ?? GlobalKey<ChatComposerState>();
+  int _dialogReads = 0; // consecutive grid reads showing a dialog; a blank or replaying grid neither counts nor resets
+  Timer? _reread;
+  bool _panelHidden = false, _panelForced = false;
+  String? _stopped;
 
   TranscriptFeed get feed => widget.feed;
 
@@ -112,11 +144,18 @@ class _ChatViewState extends State<ChatView> {
     _switches = feed.switches;
     feed.addListener(_changed);
     _scroll.addListener(_onScroll);
+    widget.grids.addListener(_onGrid);
+    _readGrid();
   }
 
   @override
   void didUpdateWidget(ChatView old) {
     super.didUpdateWidget(old);
+    if (old.grids != widget.grids) {
+      old.grids.removeListener(_onGrid);
+      widget.grids.addListener(_onGrid);
+    }
+    if (widget.exited || widget.stale) _clearPanel();
     if (old.feed == feed) return;
     old.feed.removeListener(_changed);
     feed.addListener(_changed);
@@ -125,10 +164,54 @@ class _ChatViewState extends State<ChatView> {
 
   @override
   void dispose() {
+    _reread?.cancel();
+    widget.grids.removeListener(_onGrid);
     feed.removeListener(_changed);
     _scroll.dispose();
     super.dispose();
   }
+
+  void _onGrid() {
+    final before = (_counts, _panelForced);
+    _readGrid();
+    // while a dialog counts, its card and panel follow every frame
+    if (mounted && (_counts || before != (_counts, _panelForced))) setState(() {});
+  }
+
+  void _readGrid() {
+    final g = widget.grid();
+    final s = g == null ? null : ClaudeScreen.read(g);
+    if (s == null || !(s.bottomStack || s.dialog)) return;
+    if (s.bottomStack) return _clearPanel();
+    _dialogReads++;
+    // a dialog drawn once may bring no further frame: a re-read stands in for the second update
+    if (_dialogReads == 1) _reread = Timer(const Duration(milliseconds: 400), _onGrid);
+  }
+
+  bool get _counts => _dialogReads >= 2 && !widget.exited && !widget.stale;
+
+  // everything the dialog left: its count, a swipe, a forced open and the stopped text
+  void _clearPanel() {
+    _reread?.cancel();
+    _dialogReads = 0;
+    _panelHidden = _panelForced = false;
+    _stopped = null;
+  }
+
+  void _openPanel(String? stopped) {
+    if (!mounted) return;
+    setState(() {
+      _panelForced = true;
+      _panelHidden = false;
+      _stopped = stopped;
+    });
+  }
+
+  void _hidePanel() => setState(() {
+        _panelHidden = true;
+        _panelForced = false;
+        _stopped = null;
+      });
 
   void _setRows(List<ChatRow> rows) {
     _rows = rows;
@@ -181,6 +264,7 @@ class _ChatViewState extends State<ChatView> {
       if (_away) _newCount += added;
       // a new transcript: nothing above or below the old rows describes it
       if (switched) {
+        _clearPanel();
         _switches = feed.switches;
         _away = false;
         _newCount = 0;
@@ -306,6 +390,16 @@ class _ChatViewState extends State<ChatView> {
 
   @override
   Widget build(BuildContext context) {
+    final g = widget.grid();
+    final live = !widget.exited && !widget.stale;
+    final card = _counts && !_panelForced && g != null
+        ? widget.promptCard?.call(
+            context,
+            ChatPromptContext(
+                screen: ClaudeScreen.read(g), grid: g, pending: feed.pending, gate: widget.gate, remote: widget.s.remote, openPanel: _openPanel))
+        : null;
+    final panel = live && (_panelForced || (_counts && card == null));
+    final held = card != null ? 'Answer the prompt above' : panel ? 'Claude shows a panel' : null;
     final n = _index[_sticky], sticky = n == null ? null : _rows[n];
     final todos = _todoStrip();
     final state = _state();
@@ -365,18 +459,40 @@ class _ChatViewState extends State<ChatView> {
     return ColoredBox(
       color: C.bg,
       child: LayoutBuilder(
-        builder: (context, box) => Column(children: [
-          // at most half the height: an open todo list or a landscape keyboard scrolls here and never squeezes out the list
-          ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: box.maxHeight / 2),
-            child: SingleChildScrollView(primary: false, child: Column(children: top)),
-          ),
-          Expanded(child: state ?? list),
-          // the other half: a landscape keyboard scrolls the composer here too
-          ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: box.maxHeight / 2),
-            child: SingleChildScrollView(primary: false, reverse: true, child: _bottom()),
-          ),
+        builder: (context, box) => Stack(children: [
+          Column(children: [
+            // at most half the height (a quarter beside a card): an open todo list or a landscape keyboard scrolls here
+            // and never squeezes out the list
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: box.maxHeight * (card == null ? 0.5 : 0.25)),
+              child: SingleChildScrollView(primary: false, child: Column(children: top)),
+            ),
+            Expanded(child: state ?? list),
+            // the rest: a landscape keyboard scrolls the card and the composer here too
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: box.maxHeight * (card == null ? 0.5 : 0.75)),
+              child: SingleChildScrollView(
+                  primary: false,
+                  reverse: true,
+                  child: _bottom(
+                      card: card == null
+                          ? null
+                          : ConstrainedBox(
+                              key: const Key('promptCard'),
+                              constraints: BoxConstraints(maxHeight: box.maxHeight * 0.6),
+                              child: SingleChildScrollView(primary: false, child: card)),
+                      held: held,
+                      onOpen: panel && _panelHidden ? () => setState(() => _panelHidden = false) : null)),
+            ),
+          ]),
+          if (panel && !_panelHidden)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              top: box.maxHeight * 0.1,
+              child: PanelSheet(grid: g, stopped: _stopped, onKey: widget.onKey, onAnswer: widget.onAnswer, onHide: _hidePanel),
+            ),
         ]),
       ),
     );
@@ -409,7 +525,7 @@ extension on _ChatViewState {
         ),
       );
 
-  Widget _bottom() => ListenableBuilder(
+  Widget _bottom({Widget? card, String? held, VoidCallback? onOpen}) => ListenableBuilder(
         listenable: widget.grids,
         builder: (context, _) {
           final g = widget.grid();
@@ -421,6 +537,7 @@ extension on _ChatViewState {
                 gate: widget.gate,
                 stale: widget.stale,
                 remote: widget.s.remote),
+            ?card,
             ChatComposer(
                 key: _composer,
                 feed: feed,
@@ -431,7 +548,9 @@ extension on _ChatViewState {
                 colours: g?.colours ?? false,
                 remote: widget.s.remote,
                 gate: widget.gate,
-                disabledBy: ChatView.blockedReason(exited: widget.exited, stale: widget.stale)),
+                disabledBy: ChatView.blockedReason(exited: widget.exited, stale: widget.stale),
+                held: held,
+                onOpen: onOpen),
           ]);
         },
       );
