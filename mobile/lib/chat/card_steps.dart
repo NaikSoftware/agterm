@@ -330,8 +330,8 @@ class _Permission extends _Card {
 
   static const _amend = 'Tabtoamend';
 
-  // an open amend field takes digits and Tab as text; Claude drops "Tab to amend" from the footer while it is open
-  static bool closed(PromptDialog d) => _Ask.keyable(d) && norm(d.footer).contains(_amend);
+  // an open amend field takes digits and Tab as text; WebFetch has no "Tab to amend" footer to lose
+  static bool closed(PromptDialog d) => _Ask.keyable(d) && !amending(d, 'Yes') && !amending(d, 'No');
 
   static bool amending(PromptDialog d, String word) =>
       (d.cursorOption?.label.startsWith('$word,') ?? false) && !norm(d.footer).contains(_amend);
@@ -372,6 +372,8 @@ class _Plan extends _Card {
   bool keyable(PromptDialog d) => _Ask.cursorAt(d) >= 0 && d.cursorOption!.number != changeRow;
 
   List<GateStep> steps(CardAnswer a) => switch (a) {
+    // its digit only focuses the field
+    OptionAnswer(:final label) when norm(label) == norm(change) => throw ArgumentError('$change takes a PlanChange'),
     OptionAnswer(:final label) => [pick(label, keyable)],
     PlanChange(:final text) => changeSteps(text),
     _ => throw ArgumentError('${a.runtimeType} does not answer a plan prompt'),

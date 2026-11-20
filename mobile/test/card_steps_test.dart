@@ -317,6 +317,23 @@ void main() {
       expect(ws.sentWrites, ['3']);
     });
 
+    test('everyPermissionTakesYesAndNoDigits $w', () {
+      for (final n in [
+        'card-bash',
+        'card-write',
+        'card-edit',
+        'card-mcp',
+        'card-subagent-bash',
+        'card-webfetch',
+        if (w == 100) 'card-bash-classic',
+      ]) {
+        final g = _g('$n-$w'), m = _match(g, _call(n));
+        for (final label in ['Yes', if (n != 'card-webfetch') 'No']) {
+          expect(cardSteps(m, OptionAnswer(label)).single.ready(g), isTrue, reason: '$n $label');
+        }
+      }
+    });
+
     test('yesWithNote $w', () {
       final amend = _g('card-bash-amend-$w');
       final s = ScriptedGrids([
@@ -374,7 +391,7 @@ void main() {
 
     test('planNeverSendsBareEnter $w', () {
       final m = _match(plan, planCall);
-      final answers = <CardAnswer>[for (final o in m.dialog.options) OptionAnswer(o.label), PlanChange('two lanterns')];
+      final answers = <CardAnswer>[for (final o in m.dialog.options.take(2)) OptionAnswer(o.label), PlanChange('two lanterns')];
       for (final a in answers) {
         final writes = [for (final st in cardSteps(m, a)) st.write];
         for (final (i, wr) in writes.indexed) {
@@ -396,6 +413,12 @@ void main() {
       ], plan);
       expect(_send(s, cardSteps(_match(plan, planCall), PlanChange('two lanterns')))?.outcome, GateOutcome.done);
       expect(s.sentWrites, ['3', 'paste:two lanterns', 'enter']);
+
+      final revised = ScriptedGrids([
+        (equals('paste:two lanterns'), retext(change, 'Tell Claude what to change', 'two lanterns')),
+        (equals('enter'), plan),
+      ], change);
+      expect(_send(revised, cardSteps(_match(change, planCall), PlanChange('two lanterns')))?.outcome, GateOutcome.done);
 
       final open = cardSteps(_match(change, planCall), PlanChange('two lanterns'));
       expect([for (final st in open) sent(st.write)], ['paste:two lanterns', 'enter'], reason: '❯ is already on the change row');
