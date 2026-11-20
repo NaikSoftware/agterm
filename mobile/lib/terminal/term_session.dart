@@ -73,6 +73,9 @@ class TermSession extends ChangeNotifier {
     return _snapshot;
   }
 
+  /// The program's screen: null while a Resync replays, so no classifier sees a half-drawn frame.
+  VtSnapshot? get frame => _replaying ? null : snapshot;
+
   /// The program reads a paste as one (mode 2004); false without an emulator.
   bool get bracketedPaste => _vt?.mode(2004) ?? false;
 

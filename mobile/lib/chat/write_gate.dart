@@ -75,7 +75,7 @@ class LeadWriter implements GateWriter {
     final deadline = Completer<void>();
     final timer = Timer(const Duration(seconds: 10), deadline.complete);
     try {
-      bool shown() => !t.replaying && t.snapshot != null; // OPENED, past any Resync: the claim's grid is the program's
+      bool shown() => t.frame != null; // the claim's grid is the program's
       if (!await _until(t, shown, deadline.future)) return false;
       if (!t.leading && !t.pending && !await Future.any([_claim(), deadline.future.then((_) => false)])) return false;
       return await _until(t, () => t.leading && shown(), deadline.future);

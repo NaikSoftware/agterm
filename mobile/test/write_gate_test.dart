@@ -292,7 +292,7 @@ void main() {
   });
 
   group('over a TermSession', () {
-    Grid? view(TermSession s) => s.replaying || s.snapshot == null ? null : Grid.of(s.snapshot!);
+    Grid? view(TermSession s) => s.frame == null ? null : Grid.of(s.frame!);
 
     test('gateWaitsForLeadBeforeChecking', () async {
       final (s, r, _) = await watched();

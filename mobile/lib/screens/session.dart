@@ -554,7 +554,7 @@ class _SessionScreenState extends State<SessionScreen> {
     final s = this.s;
     if (s == null) return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
     final t = term;
-    _pickView(t?.replaying == true ? null : t?.snapshot); // a reset's main screen is not the program's
+    _pickView(t?.frame); // a reset's main screen is not the program's
     final options = promptOptions(_termShown ? t!.snapshot!.lines.map((l) => l.text).join('\n') : text);
     _answersShown = options.isNotEmpty;
     return Scaffold(
