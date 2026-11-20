@@ -3,7 +3,9 @@ package ua.naiksoftware.elis
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.view.inputmethod.InputMethodManager
 import android.webkit.CookieManager
+import android.webkit.WebView
 import com.dexterous.flutterlocalnotifications.ForegroundService
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -23,6 +25,15 @@ class MainActivity : FlutterActivity() {
             } catch (e: ActivityNotFoundException) {
                 result.success(false)
             }
+        }
+        // a hidden page's web view keeps native focus and the keyboard, which Flutter's focus tree does not reach
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "elis/focus").setMethodCallHandler { call, result ->
+            if (call.method != "release") return@setMethodCallHandler result.notImplemented()
+            (currentFocus as? WebView)?.let { web ->
+                getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(web.windowToken, 0)
+                web.clearFocus()
+            }
+            result.success(null)
         }
         // a page tunnel's cookie: HttpOnly and SameSite, which webview_flutter's cookie API cannot set
         val cookies = CookieManager.getInstance()

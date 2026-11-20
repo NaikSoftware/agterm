@@ -27,6 +27,9 @@ abstract interface class PageWeb {
 
   /// Whether the document has no element in its head or body, as one the web view dropped.
   Future<bool> isEmpty();
+
+  /// Gives up the native focus and the keyboard, which a hidden platform view keeps through Flutter's focus.
+  Future<void> release();
 }
 
 /// A sheet's side of its web view: the web view calls these, and the builder sets [web].
@@ -82,7 +85,7 @@ class _PageSheetState extends State<PageSheet> {
   bool _canGoBack = false, _closed = false, _offering = false, _loading = true;
   bool _touched = false, _silenced = false; // as the Mac's user activation and promptsSilenced
   Timer? _touch;
-  late bool _reportedHidden;
+  late bool _reportedHidden, _hidden;
   double _drag = 0;
 
   PhonePage get page => widget.page;
@@ -94,7 +97,7 @@ class _PageSheetState extends State<PageSheet> {
   @override
   void initState() {
     super.initState();
-    _reportedHidden = page.hidden;
+    _reportedHidden = _hidden = page.hidden;
     _view = (widget.webView ?? _nativeWebView)(_controller);
     _commands = widget.link.commands.where((c) => c.id == page.id).listen((c) => unawaited(_command(c)));
     unawaited(_start());
@@ -103,6 +106,8 @@ class _PageSheetState extends State<PageSheet> {
   @override
   void didUpdateWidget(PageSheet old) {
     super.didUpdateWidget(old);
+    if (page.hidden && !_hidden) unawaited(_web.release().catchError((Object _) {}));
+    _hidden = page.hidden;
     if (page.hidden != _reportedHidden) _report(); // a swipe or the chip
   }
 
@@ -565,6 +570,8 @@ class _NativeWeb implements PageWeb {
   Future<bool> canGoBack() => w.canGoBack();
   @override
   Future<String?> title() => w.getTitle();
+  @override
+  Future<void> release() => const MethodChannel('elis/focus').invokeMethod<void>('release');
   @override
   Future<bool> isEmpty() async =>
       '${await w.runJavaScriptReturningResult('!(document.head?.firstElementChild || document.body?.firstElementChild)')}' == 'true';

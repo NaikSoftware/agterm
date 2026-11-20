@@ -294,6 +294,11 @@ void main() {
     expect(web.focus.hasFocus, isTrue);
     await _swipeDown(t);
     expect(web.focus.hasFocus, isFalse);
+    expect(web.releases, 1); // the platform view's native focus and keyboard, which Flutter's focus does not reach
+    await t.tap(find.byKey(_chip));
+    await t.pump();
+    await pageDown(h, [_command('hide', 1)]);
+    expect(web.releases, 2);
     await h.stop();
   });
 

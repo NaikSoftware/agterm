@@ -326,6 +326,9 @@ class FakeWeb implements PageWeb {
   Future<String?> title() async => titleText;
   String? titleText = 'doc title';
   bool empty = false;
+  var releases = 0;
+  @override
+  Future<void> release() async => releases++;
   @override
   Future<bool> isEmpty() async => empty;
 
