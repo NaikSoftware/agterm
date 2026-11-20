@@ -512,6 +512,29 @@ void main() {
       expect(find.text("Claude's screen did not change"), findsOneWidget);
     });
 
+    testWidgets('pickerNamesTheModesPassed', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
+      await c.pump();
+      await t.tap(find.byKey(const Key('mode-chip')));
+      await t.pumpAndSettle();
+      expect(find.text('Passes accept edits'), findsOneWidget);
+      expect(find.text('Passes accept edits, plan'), findsOneWidget);
+    });
+
+    testWidgets('chipStopNamesTheModeReached', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'));
+      final next = [_g('mode-accept-45')];
+      c.script((w) => next.isEmpty ? null : next.removeAt(0));
+      await c.pump();
+      await t.tap(find.byKey(const Key('mode-chip')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('plan mode on'));
+      await t.pump();
+      await t.pump(const Duration(seconds: 3));
+      await t.pump();
+      expect(find.text("Claude's screen did not change. Claude is now in accept edits mode"), findsOneWidget);
+    });
+
     testWidgets('chipStopsWhenTheStartModeReturns', (t) async {
       final c = _C(t, _g('idle-placeholder-45'));
       final next = [_g('mode-accept-45'), _g('idle-placeholder-45')];

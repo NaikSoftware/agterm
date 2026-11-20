@@ -408,22 +408,40 @@ class ModeChipState extends State<ModeChip> {
     total = max(1, total);
     return widget.gate.run(total, (q) async {
       final from = ClaudeScreen.read(q.grid).mode;
-      var mode = from;
-      for (var n = 0; mode != target; n++) {
-        if (n == 5 || (n > 0 && mode == from)) throw GateStop(GateOutcome.mismatch, 'Claude did not reach ${_modeLabels[target]}');
-        if (n >= total) {
-          total++;
-          q.addSteps(1);
-        }
-        final expected = mode;
-        await q.send(GateStep(KeyWrite(VtKey.tab, vtShift), ready: (g) {
-          final s = ClaudeScreen.read(g);
-          return s.idle && s.mode != null && s.mode == expected;
-        }, done: (g) => switch (ClaudeScreen.read(g).mode) { final m? => m != expected, null => false }));
-        unawaited(HapticFeedback.selectionClick());
-        mode = ClaudeScreen.read(q.grid).mode;
+      try {
+        await _steps(q, target, from, total);
+      } on GateStop catch (e) {
+        // a stop on the way can leave a mode that auto-approves calls: name it
+        final now = ClaudeScreen.read(q.grid).mode;
+        if (now == null || now == from) rethrow;
+        throw GateStop(e.outcome, '${e.reason}. Claude is now in ${_modeNames[now]} mode');
       }
     });
+  }
+
+  Future<void> _steps(GateSequence q, ClaudeMode target, ClaudeMode? from, int total) async {
+    var mode = from;
+    for (var n = 0; mode != target; n++) {
+      if (n == 5 || (n > 0 && mode == from)) throw GateStop(GateOutcome.mismatch, 'Claude did not reach ${_modeLabels[target]}');
+      if (n >= total) {
+        total++;
+        q.addSteps(1);
+      }
+      final expected = mode;
+      await q.send(GateStep(KeyWrite(VtKey.tab, vtShift), ready: (g) {
+        final s = ClaudeScreen.read(g);
+        return s.idle && s.mode != null && s.mode == expected;
+      }, done: (g) => switch (ClaudeScreen.read(g).mode) { final m? => m != expected, null => false }));
+      unawaited(HapticFeedback.selectionClick());
+      mode = ClaudeScreen.read(q.grid).mode;
+    }
+  }
+
+  /// The modes Shift+Tab shows on the way from [from] to [to] (spec: the picker names them).
+  List<ClaudeMode> _passed(ClaudeMode? from, ClaudeMode to) {
+    final c = _cycle;
+    if (from == null || !c.contains(from) || from == to) return const [];
+    return [for (var i = (c.indexOf(from) + 1) % c.length; c[i] != to; i = (i + 1) % c.length) c[i]];
   }
 
   Future<void> _pick() async {
@@ -439,7 +457,12 @@ class ModeChipState extends State<ModeChip> {
                         ListTile(
                           key: Key('mode-${m.name}'),
                           title: Text(_modeLabels[m]!),
-                          subtitle: armed == m ? const Text('Tap again to switch') : null,
+                          subtitle: armed == m
+                              ? const Text('Tap again to switch')
+                              : switch (_passed(current, m)) {
+                                  final p when p.isNotEmpty => Text('Passes ${p.map((x) => _modeNames[x]).join(', ')}'),
+                                  _ => null,
+                                },
                           trailing: m == current ? const Icon(Icons.check) : null,
                           selected: armed == m,
                           onTap: () {
