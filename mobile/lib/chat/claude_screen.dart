@@ -96,8 +96,13 @@ class ClaudeScreen {
         s.limit = _block(g, r, above);
       }
       if (!t.startsWith('❯ ')) continue;
-      if (r + 1 < n && norm(g.text(r + 1)).startsWith('⎿Queued')) {
-        s.queued.add(t.substring(2).trim());
+      final p = [t.substring(2).trim()];
+      var e = r + 1;
+      for (; e < above && g.text(e).startsWith('  ') && !norm(g.text(e)).startsWith('⎿'); e++) {
+        p.add(g.text(e).trim());
+      }
+      if (e < n && norm(g.text(e)).startsWith('⎿Queued')) {
+        s.queued.add(p.join(' '));
       } else {
         prompt = r;
       }

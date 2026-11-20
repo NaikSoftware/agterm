@@ -69,6 +69,16 @@ void main() {
     expect(s.working, 'Germinating…');
     expect(s.streaming, isNull);
   });
+  test('wrappedQueuedRowJoins', () {
+    final g = _g('queued-45');
+    final r = g.rows.indexWhere((row) => row.text.startsWith('❯ QUEUED'));
+    VtRow row(String t) => VtRow([for (final c in t.runes) VtCell(String.fromCharCode(c))]);
+    g.rows[r - 1] = row('❯ QUEUED reply with just ok');
+    g.rows[r] = row('  and nothing else');
+    final s = ClaudeScreen.read(g);
+    expect(s.queued, ['QUEUED reply with just ok and nothing else']);
+    expect(s.busy, isTrue);
+  });
   test('slashMenuAndBashModeKeepTheStack', () {
     for (final f in ['slash-menu-45', 'bash-mode-45']) {
       final s = _s(f);
