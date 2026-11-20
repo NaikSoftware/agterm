@@ -82,6 +82,7 @@ final class PhoneLinkForward: @unchecked Sendable {
     func drained() {
         guard !stopped else { return }
         if serverEnded {
+            // the mux has no half-close: phone bytes past the server's EOF may be lost until the queue drains and CLOSE goes
             if link.pending() == 0 { close(reason: "closed") }
         } else if parked, link.pending() < PhoneLinkPresenter.highWater {
             parked = false

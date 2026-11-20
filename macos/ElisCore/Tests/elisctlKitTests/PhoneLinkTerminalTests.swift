@@ -261,9 +261,9 @@ final class FrameReader {
     }
 
     /// The next frame on any channel.
-    func next(from phone: MemoryPhone) -> PhoneLinkFrame? {
+    func next(from phone: MemoryPhone, timeout: TimeInterval = 30) -> PhoneLinkFrame? {
         while frames.isEmpty {
-            guard let bytes = phone.readSent(), let decoded = try? decoder.feed(bytes) else { return nil }
+            guard let bytes = phone.readSent(timeout: timeout), let decoded = try? decoder.feed(bytes) else { return nil }
             frames += decoded
         }
         return frames.removeFirst()

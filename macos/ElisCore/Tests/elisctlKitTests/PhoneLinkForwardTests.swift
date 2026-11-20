@@ -149,6 +149,55 @@ struct PhoneLinkForwardTests {
         #expect(socket.waitReceived(4) == Data("ping".utf8))
     }
 
+    @Test func vtQueuedBehindAForwardGoesFirst() throws {
+        let server = try LoopbackServer()
+        defer { server.stop() }
+        let marks = FileManager.default.temporaryDirectory.appendingPathComponent("elis-vt-\(UUID().uuidString)").path
+        defer { try? FileManager.default.removeItem(atPath: marks + ".done") }
+        let burst = "while [ ! -e '\(marks).go' ]; do sleep 0.01; done; head -c 65536 /dev/zero | tr '\\0' v; touch '\(marks).done'; exec cat"
+        let link = try Self.linkedPage(port: server.port, vt: true, vtScript: burst)
+        let (fixture, phone, reader, stream) = (link.fixture, link.phone, link.reader, link.stream)
+        defer { withExtendedLifetime(stream) { PhoneLinkPresenterTests.finish(fixture, phone) } }
+        phone.deliver(Self.open(11))
+        #expect(reader.opened(from: phone, channel: 11) == PhoneLinkOpened())
+        let download = try #require(server.nextPeer())
+        let writer = Thread { download.write(Data(repeating: 0x66, count: 4 << 20)) }
+        writer.start()
+        var forwarded = 0
+        while forwarded < 256 * 1024, let frame = reader.next(from: phone) { forwarded += Self.take(frame, phone) }
+        phone.hold()
+        FileManager.default.createFile(atPath: marks + ".go", contents: nil)
+        defer { try? FileManager.default.removeItem(atPath: marks + ".go") }
+        let deadline = Date().addingTimeInterval(30)
+        while !FileManager.default.fileExists(atPath: marks + ".done"), Date() < deadline { usleep(10_000) }
+        // the pty's own buffer still holds the burst's tail
+        usleep(300_000)
+        while let frame = reader.next(from: phone, timeout: 0.3) { _ = Self.take(frame, phone) }
+        phone.release()
+        var order: [UInt32] = []
+        while order.count < 3, let frame = reader.next(from: phone) {
+            if frame.kind == .data, frame.channel == 2 || frame.channel == 11 { order.append(frame.channel) }
+            _ = Self.take(frame, phone)
+        }
+        #expect(order == [2, 2, 2])
+        download.close()
+    }
+
+    @Test func closingThePresentChannelClosesItsForwards() throws {
+        let server = try LoopbackServer()
+        defer { server.stop() }
+        let link = try Self.linkedPage(port: server.port)
+        let (fixture, phone, reader, stream) = (link.fixture, link.phone, link.reader, link.stream)
+        defer { withExtendedLifetime(stream) { PhoneLinkPresenterTests.finish(fixture, phone) } }
+        phone.deliver(Self.open(10))
+        #expect(reader.opened(from: phone, channel: 10) == PhoneLinkOpened())
+        let peer = try #require(server.nextPeer())
+        phone.deliver(PhoneLinkFrame.json(.close, channel: 5, PhoneLinkClose(reason: "done")).encoded())
+        let close = try? reader.next(from: phone, channel: 10, kind: .close)?.decodeJSON(PhoneLinkClose.self)
+        #expect(close == PhoneLinkClose(reason: "page closed"))
+        #expect(peer.waitEOF())
+    }
+
     @Test func closingThePageClosesItsForwards() throws {
         let server = try LoopbackServer()
         defer { server.stop() }
@@ -186,6 +235,13 @@ struct PhoneLinkForwardTests {
 
     // MARK: - helpers
 
+    /// Credits a vt or forward DATA frame back at once; the forward bytes it carried.
+    private static func take(_ frame: PhoneLinkFrame, _ phone: MemoryPhone) -> Int {
+        guard frame.kind == .data, frame.channel == 2 || frame.channel == 11 else { return 0 }
+        phone.deliver(PhoneLinkFrame.credit(channel: frame.channel, bytes: UInt32(frame.payload.count)).encoded())
+        return frame.channel == 11 ? frame.payload.count : 0
+    }
+
     private static func open(_ channel: UInt32, page: String = "p1") -> Data {
         PhoneLinkFrame.json(.open, channel: channel, PhoneLinkOpen(type: "forward", target: "S1", page: page)).encoded()
     }
@@ -198,11 +254,11 @@ struct PhoneLinkForwardTests {
         let stream: StubStream
     }
 
-    private static func linkedPage(port: UInt16, vt: Bool = false) throws -> Linked {
+    private static func linkedPage(port: UInt16, vt: Bool = false, vtScript: String = "while :; do printf v; sleep 0.01; done") throws -> Linked {
         let (fixture, phone) = try MobileFixture.upgraded()
         fixture.server.holdStreams("zmx.present")
         fixture.server.answerAttach(ControlResponse(ok: true, result: ControlResult(attach: RawStubServer.fakeAttach(
-            "while :; do printf v; sleep 0.01; done", origin: PhoneLinkPresenterTests.origin))))
+            vtScript, origin: PhoneLinkPresenterTests.origin))))
         if vt { phone.deliver(PhoneLinkFrame.json(.open, channel: 2, PhoneLinkOpen(type: "vt", target: "S1", pane: "left")).encoded()) }
         phone.deliver(PhoneLinkPresenterTests.open(5))
         let reader = FrameReader()
