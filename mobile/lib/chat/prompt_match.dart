@@ -73,14 +73,13 @@ bool _source(PromptDialog d, PendingCall c) {
       if (q is Map) q,
   ];
   String text(Map q, String k) => q[k] is String ? q[k] as String : '';
-  bool header(Map q) => text(q, 'header').length > 10 || _has(norm(d.header), norm(text(q, 'header')));
+  bool header(Map q) => text(q, 'header').trim().isEmpty || text(q, 'header').length > 10 || _has(norm(d.header), norm(text(q, 'header')));
   if (qs.isEmpty) return null;
   if (d.review) {
     final shown = d.reviewQuestions;
     final same =
         shown.length == qs.length &&
-        [for (var i = 0; i < qs.length; i++) norm(shown[i]) == norm(text(qs[i], 'question')) && header(qs[i])]
-            .every((b) => b);
+        [for (var i = 0; i < qs.length; i++) norm(shown[i]) == norm(text(qs[i], 'question')) && header(qs[i])].every((b) => b);
     return same ? (question: null) : null;
   }
   final labels = [

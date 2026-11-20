@@ -30,8 +30,7 @@ void main() {
   test('eachFixtureMatchesItsCall', () {
     final grids = [
       for (final f in Directory(_dir).listSync())
-        if (RegExp(r'/card-.*\.ansi$').hasMatch(f.path) && !f.path.contains('card-plan-nofile'))
-          f.uri.pathSegments.last,
+        if (RegExp(r'/card-.*\.ansi$').hasMatch(f.path) && !f.path.contains('card-plan-nofile')) f.uri.pathSegments.last,
     ]..sort();
     expect(grids.length, greaterThan(40));
     for (final g in grids) {
@@ -55,13 +54,17 @@ void main() {
 
   test('otherCallDoesNotMatch', () {
     final other = _call('card-bash', (m) => _withInput(m, (i) => i['command'] = 'touch /tmp/other.txt'));
-    expect(matchPrompt(_read('card-bash-45'), [other]), isNull);
+    for (final w in [45, 100]) {
+      expect(matchPrompt(_read('card-bash-$w'), [other]), isNull);
+    }
   });
 
   test('twoMatchesGoToPanel', () {
     final a = _call('card-bash');
     final b = _call('card-bash', (m) => m..['id'] = 'toolu_second');
-    expect(matchPrompt(_read('card-bash-45'), [a, b]), isNull);
+    for (final w in [45, 100]) {
+      expect(matchPrompt(_read('card-bash-$w'), [a, b]), isNull);
+    }
   });
 
   test('parallelBatchPicksTheShownCall', () {
@@ -90,11 +93,18 @@ void main() {
 
   test('subagentSourceNeedsTheHeader', () {
     for (final w in [45, 100]) {
+      expect(matchPrompt(_read('card-subagent-bash-$w'), [_call('card-subagent-bash', (m) => m..['source'] = 'main')]), isNull);
       expect(
-        matchPrompt(_read('card-subagent-bash-$w'), [_call('card-subagent-bash', (m) => m..['source'] = 'main')]),
+        matchPrompt(_read('card-bash-$w'), [
+          _call(
+            'card-bash',
+            (m) => m
+              ..['source'] = 'a1'
+              ..['agentType'] = 'general-purpose',
+          ),
+        ]),
         isNull,
       );
-      expect(matchPrompt(_read('card-bash-$w'), [_call('card-bash', (m) => m..['source'] = 'a1')]), isNull);
     }
   });
 
@@ -126,7 +136,9 @@ void main() {
       return m..['clipped'] = true;
     });
     expect(clipped.input, isNull);
-    expect(matchPrompt(_read('card-bash-45'), [clipped]), isNull);
+    for (final w in [45, 100]) {
+      expect(matchPrompt(_read('card-bash-$w'), [clipped]), isNull);
+    }
   });
 
   test('planAnchorsOnHeadingWithoutFile', () {
@@ -152,6 +164,8 @@ void main() {
   test('unknownToolHasNoKind', () {
     final nb = _call('card-bash', (m) => m..['name'] = 'NotebookEdit');
     expect(promptKind(nb), isNull);
-    expect(matchPrompt(_read('card-bash-45'), [nb]), isNull);
+    for (final w in [45, 100]) {
+      expect(matchPrompt(_read('card-bash-$w'), [nb]), isNull);
+    }
   });
 }
