@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:elis_mobile/chat/chat_composer.dart';
 import 'package:elis_mobile/chat/chat_view.dart';
+import 'package:elis_mobile/chat/claude_screen.dart';
 import 'package:elis_mobile/chat/feed.dart';
+import 'package:elis_mobile/chat/grid.dart';
 import 'package:elis_mobile/chat/mode.dart';
 import 'package:elis_mobile/chat/rows.dart';
 import 'package:elis_mobile/chat/transcript.dart';
@@ -16,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'mux_test.dart' show json;
 import 'session_term_test.dart' show Harness, treeOf;
+import 'support/ansi.dart';
 
 class _Host {
   final calls = <(Map<String, dynamic>, Completer<Map<String, dynamic>>)>[];
@@ -56,8 +61,8 @@ class _Chat {
   var terms = 0;
 
   Future<void> start(List<Map<String, dynamic>>? items,
-      {Map<String, dynamic> meta = const {}, int start = 0, bool exited = false, bool stale = false}) async {
-    t.view.physicalSize = const Size(400, 800);
+      {Map<String, dynamic> meta = const {}, int start = 0, bool exited = false, bool stale = false, double height = 800}) async {
+    t.view.physicalSize = Size(400, height);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     final s = Session({'id': 's1', 'name': 'Session one', 'cwd': '/work/elis'}, 'w', 'W');
@@ -222,7 +227,7 @@ void main() {
 
   _chatTest('pagingBackPrepends', (t, c) async {
     final items = _history(30);
-    await c.start(items, start: 50);
+    await c.start(items, start: 50, height: 870); // the composer's 70: the first page-back request leaves its row on screen
     for (var n = 0; n < 10 && c.h.held?.$1['before'] == null; n++) {
       await t.drag(find.byKey(const Key('chatList')), const Offset(0, 600));
       await t.pump();
@@ -252,6 +257,67 @@ void main() {
     await c.tick();
     await c.reply([_text('a2')], meta: meta);
     expect(opacity(), 1);
+  });
+
+  testWidgets('modelChipSendsModel', (t) async {
+    Grid g(String name) => gridFromAnsi(File('test/fixtures/grid/$name.ansi').readAsStringSync());
+    final idle = g('idle-placeholder-45');
+    var grid = idle;
+    final grids = ChangeNotifier();
+    final writes = <GateWrite>[];
+    final writer = TypeWriter((text) async {
+      writes.add(text == '\r' ? KeyWrite(VtKey.enter) : PasteWrite(text));
+      Future.microtask(() {
+        final (a, b) = ClaudeScreen.read(idle).inputRows!;
+        grid = text == '\r' ? g('panel-model-45') : Grid([...idle.rows]..replaceRange(a, b, [VtRow([for (final r in '❯ /model'.runes) VtCell(String.fromCharCode(r))])]));
+        // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+        grids.notifyListeners();
+      });
+      return null;
+    });
+    final gate = WriteGate(grids: grids, grid: () => grid, writer: () => writer, remote: () => false, blocked: () => null);
+    final feed = TranscriptFeed(call: (_) async => const {}, canPoll: () => false, remote: false)
+      ..loading = false
+      ..meta = TranscriptMeta.fromJson({'model': 'claude-opus-4-5'});
+    final s = Session({'id': 's1', 'name': 'Session one', 'cwd': '/work/elis'}, 'w', 'W');
+    final composer = GlobalKey<ChatComposerState>();
+    Future<void> pump({required bool idle}) => t.pumpWidget(MaterialApp(
+          theme: buildTheme(),
+          home: Scaffold(
+            appBar: AppBar(title: ChatTitle(feed: feed, s: s, onChangeModel: idle ? () => composer.currentState?.send('/model') : null)),
+            body: ChatView(
+                feed: feed,
+                grid: () => grid,
+                grids: grids,
+                gate: gate,
+                s: s,
+                exited: false,
+                stale: false,
+                onTerm: () {},
+                switcher: const SizedBox(),
+                composer: composer),
+          ),
+        ));
+    await pump(idle: false);
+    await t.tap(find.byKey(const Key('modelChip')));
+    await t.pumpAndSettle();
+    expect(t.widget<PopupMenuItem<void>>(find.ancestor(of: find.text('Change model…'), matching: find.byType(PopupMenuItem<void>))).enabled,
+        isFalse);
+    await t.tapAt(const Offset(10, 500)); // the barrier
+    await t.pumpAndSettle();
+    expect(find.text('Change model…'), findsNothing);
+
+    await pump(idle: true);
+    await t.enterText(find.byKey(const Key('composer')), 'an unsent draft');
+    await t.tap(find.byKey(const Key('modelChip')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Change model…'));
+    await t.pump(const Duration(seconds: 3));
+    await t.pump();
+    expect([for (final w in writes) w is PasteWrite ? w.text : (w as KeyWrite).key], ['/model', VtKey.enter]);
+    expect(t.widget<TextField>(find.byKey(const Key('composer'))).controller!.text, 'an unsent draft');
+    await t.pumpWidget(const SizedBox());
+    feed.dispose();
   });
 
   _chatTest('titleFallsBackToSessionName', (t, c) async {
@@ -319,6 +385,13 @@ void main() {
         expect(find.byKey(Key('emptyCommand-$cmd')), findsOneWidget);
       }
       expect(find.byKey(const Key('chatSkeleton')), findsNothing);
+    });
+
+    _chatTest('emptyStateFillsTheField', (t, c) async {
+      await c.start([]);
+      await t.tap(find.byKey(const Key('emptyCommand-usage')));
+      await t.pump();
+      expect(t.widget<TextField>(find.byKey(const Key('composer'))).controller!.text, '/usage ');
     });
 
     _chatTest('loadingSkeleton', (t, c) async {

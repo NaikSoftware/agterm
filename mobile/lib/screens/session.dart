@@ -5,8 +5,10 @@ import 'package:flutter/gestures.dart' show kDoubleTapSlop, kDoubleTapTimeout, k
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../chat/chat_composer.dart';
 import '../chat/chat_view.dart';
 import '../chat/checks.dart';
+import '../chat/claude_screen.dart';
 import '../chat/feed.dart';
 import '../chat/grid.dart';
 import '../chat/mode.dart';
@@ -91,6 +93,7 @@ class _SessionScreenState extends State<SessionScreen> {
   TranscriptFeed? _feed;
   final _grids = ValueNotifier(0); // bumped whenever the grid Chat reads may have changed
   late final WriteGate _gate;
+  final _composer = GlobalKey<ChatComposerState>();
   Future<void>? _taking; // the claim [_takeOver] is making
   StreamSubscription<Map<String, dynamic>>? _events;
   String? _agentSessionId;
@@ -193,6 +196,8 @@ class _SessionScreenState extends State<SessionScreen> {
       unawaited(_load());
     });
   }
+
+  bool get _chatIdle => _chatGrid() != null && ClaudeScreen.read(_chatGrid()!).idle;
 
   Grid? _chatGrid() {
     if (term case final t?) return t.frame == null ? null : Grid.of(t.frame!);
@@ -702,7 +707,12 @@ class _SessionScreenState extends State<SessionScreen> {
       appBar: AppBar(
         titleSpacing: 0,
         title: chat
-            ? ChatTitle(feed: _chatFeed, s: s)
+            ? ListenableBuilder(
+                listenable: _grids,
+                builder: (context, _) => ChatTitle(
+                    feed: _chatFeed,
+                    s: s,
+                    onChangeModel: _chatIdle ? () => _composer.currentState?.send('/model') : null))
             : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(s.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
           Text([s.shortCwd, if (s.agent.isNotEmpty) s.agent].join(' · '),
@@ -773,7 +783,8 @@ class _SessionScreenState extends State<SessionScreen> {
             exited: _exited(s),
             stale: _chatStale,
             onTerm: () => _pickMode(ViewMode.term),
-            switcher: _toolbar(s)));
+            switcher: _toolbar(s),
+            composer: _composer));
   }
 
   Widget _toolbar(Session s) {

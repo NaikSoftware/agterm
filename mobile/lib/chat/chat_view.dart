@@ -5,6 +5,9 @@ import 'package:flutter/rendering.dart';
 
 import '../model.dart';
 import '../theme.dart';
+import 'bottom_stack.dart';
+import 'chat_composer.dart';
+import 'claude_screen.dart';
 import 'feed.dart';
 import 'grid.dart';
 import 'items.dart';
@@ -24,10 +27,11 @@ Widget _chip(String label, {Key? key, VoidCallback? onTap}) => GestureDetector(
 
 /// The app bar's title in Chat: the transcript's title, else the session's name, and the model chip.
 class ChatTitle extends StatelessWidget {
-  const ChatTitle({super.key, required this.feed, required this.s});
+  const ChatTitle({super.key, required this.feed, required this.s, this.onChangeModel});
 
   final TranscriptFeed feed;
   final Session s;
+  final VoidCallback? onChangeModel; // null while Claude is not idle
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -41,7 +45,12 @@ class ChatTitle extends StatelessWidget {
                 child: Text(title.isEmpty ? s.name : title,
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
             // a `/model` since Claude's last answer: the transcript has not caught up yet
-            if (model.isNotEmpty) Opacity(opacity: modelPending(feed.items) ? 0.45 : 1, child: _chip(model, key: const Key('modelChip'))),
+            if (model.isNotEmpty)
+              PopupMenuButton<void>(
+                tooltip: '',
+                itemBuilder: (_) => [PopupMenuItem(enabled: onChangeModel != null, onTap: onChangeModel, child: const Text('Change model…'))],
+                child: Opacity(opacity: modelPending(feed.items) ? 0.45 : 1, child: _chip(model, key: const Key('modelChip'))),
+              ),
           ]);
         },
       );
@@ -60,7 +69,7 @@ class ChatView extends StatefulWidget {
       required this.stale,
       required this.onTerm,
       required this.switcher,
-      this.onCommand});
+      this.composer});
 
   static const exitedText = 'Claude exited', staleText = 'Reconnecting…';
 
@@ -75,7 +84,7 @@ class ChatView extends StatefulWidget {
   final bool exited, stale;
   final VoidCallback onTerm;
   final Widget switcher;
-  final ValueChanged<String>? onCommand; // an empty transcript's built-in command buttons
+  final GlobalKey<ChatComposerState>? composer; // for the model chip's `send`
 
   @override
   State<ChatView> createState() => _ChatViewState();
@@ -92,6 +101,7 @@ class _ChatViewState extends State<ChatView> {
   String? _sticky; // a row key: an index would point at another row for the frame after an append
   bool _away = false, _header = true, _todos = false;
   int _switches = 0;
+  late final _composer = widget.composer ?? GlobalKey<ChatComposerState>();
 
   TranscriptFeed get feed => widget.feed;
 
@@ -362,6 +372,11 @@ class _ChatViewState extends State<ChatView> {
             child: SingleChildScrollView(primary: false, child: Column(children: top)),
           ),
           Expanded(child: state ?? list),
+          // the other half: a landscape keyboard scrolls the composer here too
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: box.maxHeight / 2),
+            child: SingleChildScrollView(primary: false, reverse: true, child: _bottom()),
+          ),
         ]),
       ),
     );
@@ -394,6 +409,33 @@ extension on _ChatViewState {
         ),
       );
 
+  Widget _bottom() => ListenableBuilder(
+        listenable: widget.grids,
+        builder: (context, _) {
+          final g = widget.grid();
+          return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            BottomStack(
+                screen: g == null ? null : ClaudeScreen.read(g),
+                grid: g,
+                feed: feed,
+                gate: widget.gate,
+                stale: widget.stale,
+                remote: widget.s.remote),
+            ChatComposer(
+                key: _composer,
+                feed: feed,
+                screen: () => switch (widget.grid()) {
+                      final g? => ClaudeScreen.read(g),
+                      null => null,
+                    },
+                colours: g?.colours ?? false,
+                remote: widget.s.remote,
+                gate: widget.gate,
+                disabledBy: ChatView.blockedReason(exited: widget.exited, stale: widget.stale)),
+          ]);
+        },
+      );
+
   Widget _empty() => Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -403,7 +445,7 @@ extension on _ChatViewState {
               for (final c in ['help', 'model', 'usage'])
                 OutlinedButton(
                     key: Key('emptyCommand-$c'),
-                    onPressed: widget.onCommand == null ? null : () => widget.onCommand!(c),
+                    onPressed: () => _composer.currentState?.insert('/$c '),
                     child: Text('/$c', style: const TextStyle(fontFamily: mono))),
             ]),
           ]),

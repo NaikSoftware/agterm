@@ -22,6 +22,7 @@ class ClaudeScreen {
   final bool _blank;
   bool bottomStack = false;
   String? input;
+  (int, int)? inputRows; // the input block's first row and its closing rule
   String draft = '';
   bool pastePlaceholder = false;
   String? working;
@@ -62,6 +63,7 @@ class ClaudeScreen {
 
     if (top >= 0) {
       s.bottomStack = true;
+      s.inputRows = (top + 1, bottom);
       String strip(String t, int i) => (i == 0 ? t.substring(1) : t).trim();
       final rows = [for (var r = top + 1; r < bottom; r++) r];
       s.input = [for (final (i, r) in rows.indexed) strip(g.text(r), i)].join('\n').trim();
