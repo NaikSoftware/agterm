@@ -276,6 +276,36 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('paneSwitchStopsTheRun', (t) async {
+    final h = Harness(t, treeOf(split: true, session: _claude));
+    await h.start();
+    await h.opened();
+    final next = Completer<void>();
+    GateResult? r;
+    unawaited(_view(t).gate.run(2, (s) async {
+      await s.send(_up());
+      await next.future;
+      await s.send(_up());
+    }).then((v) => r = v));
+    await t.pump();
+    await t.pump();
+    h.r.send(json(LinkKind.opened, 3, {'error': 'session not realized'}));
+    for (var i = 0; i < 10; i++) {
+      await t.pump(const Duration(milliseconds: 10));
+    }
+    await _redraw(h);
+    expect(h.r.typed, ['\x1b[A']);
+    await t.tap(find.text('Right pane'));
+    await t.pump();
+    next.complete();
+    for (var i = 0; i < 10; i++) {
+      await t.pump(const Duration(milliseconds: 10));
+    }
+    expect((r?.outcome, r?.reason), (GateOutcome.blocked, 'The pane changed'));
+    expect(h.r.typed, ['\x1b[A']);
+    await h.stop();
+  });
+
   testWidgets('opensOnTheAgentPane', (t) async {
     final h = Harness(t, treeOf(split: true, session: {..._claude, 'agentPane': 'right'}));
     await h.start();

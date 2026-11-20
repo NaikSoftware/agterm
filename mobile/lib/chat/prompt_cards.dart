@@ -32,7 +32,7 @@ Future<void> sendAnswer(
     }
   });
   if (r.ok) return onDone();
-  if (r.outcome == GateOutcome.busy) return;
+  if (r.outcome == GateOutcome.busy || c.gate.disposed) return; // a closed screen disposed the ledger and the panel
   onStop();
   c.openPanel(stopMessage(r));
 }

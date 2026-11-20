@@ -237,6 +237,35 @@ void main() {
         expect(r?.outcome, GateOutcome.timeout);
       }));
 
+  test('eachWriteRechecksBlockedCancelledAndDisposed', () => fakeAsync((a) {
+        for (final (stop, why) in <(void Function(WriteGate g, void Function(String) block), String)>[
+          ((_, block) => block('Claude exited'), 'Claude exited'),
+          ((g, _) => g.cancel('The pane changed'), 'The pane changed'),
+          ((g, _) => g.dispose(), 'The screen closed'),
+        ]) {
+          final grids = Grids();
+          String? blocked;
+          final w = Recorder(() => a.elapsed, onWrite: (_) => scheduleMicrotask(grids.tick));
+          final gate = WriteGate(grids: grids, grid: () => grids.g, writer: () => w, remote: () => false, blocked: () => blocked);
+          final r = _run(a, gate, 2, (s) async {
+            await s.send(_step(TextWrite('a'), done: (_) {
+              stop(gate, (x) => blocked = x);
+              return true;
+            }));
+            await s.send(_step(TextWrite('b')));
+          });
+          expect((r?.outcome, r?.reason), (GateOutcome.blocked, why));
+          expect(w.writes, hasLength(1), reason: why);
+        }
+      }));
+
+  test('cancelOutsideARunIsIgnored', () => fakeAsync((a) {
+        final grids = Grids();
+        final (gate, w) = _gate(a, grids);
+        gate.cancel('The pane changed');
+        expect(_run(a, gate, 1, (s) => s.send(_step(TextWrite('a'))))?.outcome, GateOutcome.done);
+      }));
+
   test('escapeIsFollowedByAGap', () => fakeAsync((a) {
         final grids = Grids();
         final (gate, w) = _gate(a, grids);

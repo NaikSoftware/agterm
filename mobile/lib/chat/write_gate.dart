@@ -170,8 +170,10 @@ class WriteGate extends ChangeNotifier {
   bool _running = false;
   int _step = 0, _total = 0;
   Future<void>? _escape; // completes escapeGap after the last Esc went out, across runs
+  String? _cancelled;
 
   bool get running => _running;
+  bool get disposed => _disposed;
   int get step => _step;
   int get total => _total;
   String get progress => 'Sending $_step/$_total';
@@ -180,6 +182,7 @@ class WriteGate extends ChangeNotifier {
     if (_running) return _stop(GateResult(GateOutcome.busy, 0, total, 'Another answer is being sent'));
     if (_blocked() case final why?) return _stop(GateResult(GateOutcome.blocked, 0, total, why));
     _running = true;
+    _cancelled = null;
     _step = 0;
     _total = total;
     _notify();
@@ -199,6 +202,11 @@ class WriteGate extends ChangeNotifier {
   }
 
   bool _disposed = false;
+
+  /// The running sequence writes nothing more: its next step stops with [why].
+  void cancel(String why) {
+    if (_running) _cancelled = why;
+  }
 
   void _notify() {
     if (!_disposed) notifyListeners(); // a run outlives an owner that disposed the gate mid-run
@@ -221,6 +229,8 @@ class WriteGate extends ChangeNotifier {
   }
 
   Future<void> _send(GateStep step) async {
+    if (_disposed) throw const GateStop(GateOutcome.blocked, 'The screen closed');
+    if (_cancelled ?? _blocked() case final why?) throw GateStop(GateOutcome.blocked, why);
     _step++;
     _notify();
     final writer = _writer();

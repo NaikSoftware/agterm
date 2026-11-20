@@ -815,6 +815,7 @@ class _SessionScreenState extends State<SessionScreen> {
         );
     void setPane(String p) {
       if (p == pane) return;
+      _gate.cancel('The pane changed'); // its remaining steps would write into the other pane
       _release(pane);
       _macTookBack = false; // a switch claims
       setState(() {
