@@ -60,7 +60,13 @@ class _Host {
               remote: remote,
               openPanel: (why) => events.add('panel:$why'),
             );
-            return AskCard(c: c, m: m, onDone: () => events.add('done'), onStop: () => events.add('stop'), checks: checks, cards: cards);
+            void done() => events.add('done');
+            void stop() => events.add('stop');
+            return switch (m.kind) {
+              PromptKind.ask => AskCard(c: c, m: m, onDone: done, onStop: stop, checks: checks, cards: cards),
+              PromptKind.permission => PermissionCard(c: c, m: m, onDone: done, onStop: stop, checks: checks, cards: cards),
+              PromptKind.plan => PlanCard(c: c, m: m, onDone: done, onStop: stop, checks: checks, cards: cards),
+            };
           },
         ),
       ),
@@ -88,6 +94,19 @@ Future<void> _settle(WidgetTester t) async {
     await t.pump(const Duration(milliseconds: 10));
   }
 }
+
+CardButton _button(WidgetTester t, String label) =>
+    t.widget<CardButton>(find.ancestor(of: find.text(label).last, matching: find.byType(CardButton)));
+
+List<String> _labels(WidgetTester t, {required bool secondTap}) => [
+  for (final b in t.widgetList<CardButton>(find.byType(CardButton)))
+    if (b.secondTap == secondTap) b.label,
+];
+
+List<String> _rows(String fixture) => [
+  for (final o in PromptDialog.read(_g(fixture))!.options)
+    if (o.number != null) o.label,
+];
 
 bool _enabled(WidgetTester t, String label) => t
     .widget<ButtonStyleButton>(find.ancestor(of: find.text(label).last, matching: find.byWidgetPredicate((w) => w is ButtonStyleButton)))
@@ -265,5 +284,119 @@ void main() {
     await t.tap(find.text('Tap again to confirm'));
     await t.pump();
     expect(taps, 1);
+  });
+
+  testWidgets('bashCardYesNo', (t) async {
+    final h = _Host('card-bash', script: [(equals('1'), _g('idle-placeholder'))]);
+    await h.show(t);
+    expect(find.text(r'$ touch /tmp/elis-fixture-lantern-keeper-notebook-entry.txt'), findsOneWidget);
+    expect(find.text('Create empty fixture file in /tmp'), findsOneWidget);
+    expect((_button(t, 'Yes').primary, _button(t, 'Yes').secondTap), (true, false));
+    expect((_button(t, 'No').primary, _button(t, 'No').secondTap), (false, false));
+    await _tap(t, 'Yes');
+    await _settle(t);
+    expect(h.s.sentWrites, ['1']);
+    expect(h.events, ['done']);
+  });
+
+  testWidgets('persistRowsAbsentUntilProven', (t) async {
+    final h = _Host('card-bash');
+    final rows = _rows('card-bash');
+    await h.show(t);
+    expect(_labels(t, secondTap: false), ['Yes', 'More options in panel', 'No', 'Yes with a note', 'No with a reason']);
+    expect(_labels(t, secondTap: true), isEmpty);
+    await _tap(t, 'More options in panel');
+    expect(h.events, ['panel:null']);
+
+    await h.show(t, cards: const CardChecks(persistOptions: true));
+    expect(_labels(t, secondTap: true), [rows[1], rows[2]]);
+    expect(find.text('More options in panel'), findsNothing);
+    expect(find.ancestor(of: find.text(rows[1]), matching: find.byType(OutlinedButton)), findsOneWidget);
+    await _tap(t, rows[1]);
+    expect(find.text('Tap again to confirm'), findsOneWidget);
+    expect(h.s.sentWrites, isEmpty);
+    await t.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('noteOnBashOnly', (t) async {
+    final write = _Host('card-write');
+    await write.show(t);
+    expect(find.text('Yes with a note'), findsNothing);
+    expect(find.text('No with a reason'), findsNothing);
+    await write.show(t, cards: const CardChecks(fileAndMcpNotes: true));
+    expect(find.text('Yes with a note'), findsOneWidget);
+    expect(find.text('No with a reason'), findsOneWidget);
+
+    final amend = _g('card-bash-amend');
+    Future<_Host> note(List<(Matcher, Grid)> script) async {
+      final h = _Host('card-bash', script: [(equals('tab'), amend), ...script]);
+      await h.show(t);
+      expect(find.byKey(const Key('cardField')), findsNothing);
+      await _tap(t, 'Yes with a note');
+      expect(_enabled(t, 'Send'), isFalse);
+      await t.enterText(find.byKey(const Key('cardField')), 'mind the stairs');
+      await t.pump();
+      await _tap(t, 'Send');
+      await _settle(t);
+      return h;
+    }
+
+    final h = await note([
+      (equals('paste:mind the stairs'), retext(amend, 'Yes, and tell Claude what to do next', 'Yes, mind the stairs')),
+      (equals('enter'), _g('idle-placeholder')),
+    ]);
+    expect(h.s.sentWrites, ['tab', 'paste:mind the stairs', 'enter']);
+    expect(h.events, ['done']);
+
+    final stalled = await note([]);
+    expect(stalled.s.sentWrites, ['tab', 'paste:mind the stairs']);
+    expect(find.text('Sending 2/3'), findsOneWidget, reason: 'the amend grid relabels Yes, but the rows stay as read');
+    expect(find.byKey(const Key('cardField')), findsOneWidget);
+    await t.pump(const Duration(seconds: 3));
+    expect(stalled.events.first, 'stop');
+  });
+
+  testWidgets('webFetchPanelOnly', (t) async {
+    final h = _Host('card-webfetch');
+    await h.show(t);
+    expect(find.text('from a subagent'), findsOneWidget);
+    expect(find.text('https://example.org/'), findsOneWidget);
+    expect(_labels(t, secondTap: false), ['Answer in panel']);
+    await _tap(t, 'Answer in panel');
+    expect(h.events, ['panel:null']);
+    await h.show(t, cards: const CardChecks(webFetch: true));
+    expect(_labels(t, secondTap: false), ['Yes', 'More options in panel']);
+  });
+
+  testWidgets('planCardMarkdownAndChange', (t) async {
+    final change = _g('card-plan-change');
+    final h = _Host(
+      'card-plan',
+      script: [
+        (equals('3'), change),
+        (equals('paste:two lanterns'), retext(change, 'Tell Claude what to change', 'two lanterns')),
+        (equals('enter'), _g('idle-placeholder')),
+      ],
+    );
+    await h.show(t);
+    expect(find.text('Lantern log', findRichText: true), findsOneWidget);
+    expect(_button(t, 'Yes, manually approve edits').primary, isTrue);
+    await _tap(t, 'Change');
+    await t.enterText(find.byKey(const Key('cardField')), 'two lanterns');
+    await t.pump();
+    await _tap(t, 'Send');
+    await _settle(t);
+    expect(h.s.sentWrites, ['3', 'paste:two lanterns', 'enter']);
+    expect(h.events, ['done']);
+  });
+
+  testWidgets('planAutoAbsentUntilProven', (t) async {
+    final h = _Host('card-plan');
+    await h.show(t);
+    expect(find.text('Yes, and use auto mode'), findsNothing);
+    expect(_labels(t, secondTap: false), ['More options in panel', 'Yes, manually approve edits', 'Change']);
+    await h.show(t, cards: const CardChecks(persistOptions: true));
+    expect(_labels(t, secondTap: true), ['Yes, and use auto mode']);
+    expect(find.text('More options in panel'), findsNothing);
   });
 }

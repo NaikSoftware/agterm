@@ -50,7 +50,7 @@ Widget _row(BuildContext c, ChatRow r, bool gone) {
   final i = r.item!;
   return switch (i.kind) {
     'user' => _bubble(c, i),
-    'text' => _menu(c, i.text ?? '', _markdown(i.text ?? '')),
+    'text' => _menu(c, i.text ?? '', chatMarkdown(i.text ?? '')),
     'tool' => _toolRow(i, stopped: r.interruptedAfter || gone),
     'compact' => _divider('Conversation compacted', r.key, r.summary?.text),
     'compactSummary' => _divider('Conversation compacted', r.key, i.text ?? ''),
@@ -91,7 +91,7 @@ Widget _divider(String label, String key, String? body) {
     Text(label, style: const TextStyle(color: C.dim, fontSize: 12)),
     const Expanded(child: Divider(color: C.line)),
   ]);
-  return body == null ? line : _Expandable(key: ValueKey('divider-$key'), title: line, body: _markdown(body));
+  return body == null ? line : _Expandable(key: ValueKey('divider-$key'), title: line, body: chatMarkdown(body));
 }
 
 Widget _notice(String? text, {required bool warning}) {
@@ -327,7 +327,7 @@ void _actions(BuildContext c, String text) {
   );
 }
 
-Widget _markdown(String text) => Builder(
+Widget chatMarkdown(String text) => Builder(
       builder: (c) => MarkdownBody(
         data: text,
         // the default `pre` already scrolls horizontally in the `code` style
