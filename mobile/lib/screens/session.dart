@@ -76,6 +76,16 @@ class _SessionScreenState extends State<SessionScreen> {
   late final AppLifecycleListener _lifecycle;
   Timer? poll;
   double _dragRows = 0; // a drag's distance in rows not sent yet
+  var _sheet = GlobalKey<PageSheetState>();
+  PhonePage? _sheetPage;
+  // a page sent again starts a fresh sheet
+  GlobalKey<PageSheetState> _sheetFor(PhonePage p) {
+    if (!identical(p, _sheetPage)) {
+      _sheet = GlobalKey();
+      _sheetPage = p;
+    }
+    return _sheet;
+  }
   Offset _finger = Offset.zero; // where the finger is on screen; [_cellUnder] maps it onto the grid, zoom and pan undone
   bool _stale = false; // the finger that was down when the Mac took the lead back: its drag claims nothing
   final _grid = GlobalKey();
@@ -686,10 +696,7 @@ class _SessionScreenState extends State<SessionScreen> {
           if (ComposerPref.shown) _composer(),
           ])),
           if (_pages?.page case final p?)
-            KeyedSubtree(
-              key: ObjectKey(p), // a page sent again starts a fresh sheet
-              child: PageSheet(link: _pages!, page: p, onSwipeDown: () => _pages!.setHidden(p, true), webView: widget.pageWebView),
-            ),
+            PageSheet(key: _sheetFor(p), link: _pages!, page: p, onSwipeDown: () => _pages!.setHidden(p, true), webView: widget.pageWebView),
         ]),
       ),
     );
@@ -824,9 +831,12 @@ class _SessionScreenState extends State<SessionScreen> {
       final (col, row) = _cellUnder();
       if (col >= 0 && row >= 0 && col < snap.cols && row < snap.rows) term!.click(col: col, row: row);
     }
+    // a tap above a smaller sheet takes typing from the page, which keeps native focus through Flutter's
+    final page = _pages?.page?.hidden == false;
+    if (page) unawaited(_sheet.currentState?.release());
     if (_onCursorRow) return _showKeyboard();
-    // typing comes back from the composer to the program, but a hidden keyboard opens only on the cursor row
-    if (inputFocus.hasFocus && MediaQuery.viewInsetsOf(context).bottom > 0) _keyboard.requestFocus();
+    // typing comes back from the composer or the page to the program, but a hidden keyboard opens only on the cursor row
+    if ((inputFocus.hasFocus || page) && MediaQuery.viewInsetsOf(context).bottom > 0) _keyboard.requestFocus();
   }
 
   // the visible caret's whole row (plan decisions 24, 25); the history is reflowed, so there it is the last line,

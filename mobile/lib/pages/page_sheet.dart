@@ -35,7 +35,7 @@ abstract interface class PageWeb {
 /// A sheet's side of its web view: the web view calls these, and the builder sets [web].
 class PageSheetController {
   PageSheetController._(this._sheet);
-  final _PageSheetState _sheet;
+  final PageSheetState _sheet;
   late PageWeb web;
 
   bool get javascript => _sheet._javascript;
@@ -66,10 +66,10 @@ class PageSheet extends StatefulWidget {
   final Widget Function(PageSheetController)? webView;
 
   @override
-  State<PageSheet> createState() => _PageSheetState();
+  State<PageSheet> createState() => PageSheetState();
 }
 
-class _PageSheetState extends State<PageSheet> {
+class PageSheetState extends State<PageSheet> {
   late final _controller = PageSheetController._(this);
   late final Widget _view;
   late final StreamSubscription<PageCommand> _commands;
@@ -104,12 +104,15 @@ class _PageSheetState extends State<PageSheet> {
   }
 
   @override
-  void didUpdateWidget(PageSheet old) {
-    super.didUpdateWidget(old);
-    if (page.hidden && !_hidden) unawaited(_web.release().catchError((Object _) {}));
+  void didUpdateWidget(PageSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (page.hidden && !_hidden) unawaited(release());
     _hidden = page.hidden;
     if (page.hidden != _reportedHidden) _report(); // a swipe or the chip
   }
+
+  /// Takes the native focus and the keyboard from the page's web view.
+  Future<void> release() => _web.release().catchError((Object _) {});
 
   @override
   void dispose() {

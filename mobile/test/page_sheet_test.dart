@@ -302,6 +302,27 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('a tap on the terminal above a smaller sheet takes the keyboard from the page', (t) async {
+    final h = await _shown(t, urlPage(sizePercent: 50));
+    final web = h.webs.single;
+    final keyboard = t.widget<TermKeyboard>(find.byType(TermKeyboard)).focus;
+    web.focus.requestFocus();
+    await t.pump();
+    final sheet = t.getRect(find.byKey(_sheet));
+    await t.tapAt(Offset(sheet.center.dx, sheet.top / 2));
+    await t.pump(const Duration(milliseconds: 500));
+    expect(web.releases, 1);
+    expect(keyboard.hasFocus, isFalse); // a hidden keyboard opens only on the cursor row
+    t.view.viewInsets = const FakeViewPadding(bottom: 300); // the page's keyboard is up
+    addTearDown(t.view.resetViewInsets);
+    await t.pump();
+    await t.tapAt(Offset(sheet.center.dx, sheet.top / 2));
+    await t.pump(const Duration(milliseconds: 500));
+    expect(web.releases, 2);
+    expect(keyboard.hasFocus, isTrue);
+    await h.stop();
+  });
+
   Future<(Harness, FakeWeb, Uri)> fileShown(WidgetTester t, {bool javascript = false}) async {
     final h = Harness(t, treeOf());
     await h.start(pages: true);
