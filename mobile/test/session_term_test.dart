@@ -48,8 +48,7 @@ class Relay {
   final _control = LineBuffer();
   var _framed = false;
 
-  String via = 'Wi-Fi';
-  late final link = Link(_input.stream, _phone, () => unawaited(_input.close()), via: via);
+  late final link = Link(_input.stream, _phone, () => unawaited(_input.close()), via: 'Wi-Fi');
 
   void _phone(List<int> bytes) {
     if (_framed) return _decoder.feed(bytes).forEach(_frame);

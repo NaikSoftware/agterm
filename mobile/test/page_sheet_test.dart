@@ -14,9 +14,8 @@ import 'session_term_test.dart' show FakeWeb, Harness, pageDown, pageUp, present
 
 const _sheet = Key('pageSheet'), _chip = Key('pageChip'), _loading = Key('pageLoading'), _cover = Key('pageCover');
 
-Future<Harness> _shown(WidgetTester t, Map<String, Object?> page, {String via = 'Wi-Fi'}) async {
+Future<Harness> _shown(WidgetTester t, Map<String, Object?> page) async {
   final h = Harness(t, treeOf());
-  h.relays.single.via = via;
   await h.start(pages: true);
   await h.opened();
   await pageDown(h, [page], open: true);
@@ -51,9 +50,8 @@ void main() {
     expect(h.webs.single.urls, [Uri.parse('https://example.com/a')]);
     expect(find.byKey(_loading), findsOneWidget);
     final bar = t.widget<LinearProgressIndicator>(find.byKey(_loading));
-    expect((bar.minHeight, bar.color), (3, C.accent));
+    expect((bar.minHeight, bar.color), (3, C.completed));
     expect(find.byKey(_cover), findsOneWidget); // the platform view paints black until its first frame
-    expect(find.text('Loading over Bluetooth…'), findsNothing);
     h.webs.single.c.finished('https://example.com/a');
     await t.pump();
     expect(pageUp(h).last, containsPair('load', 'loaded'));
@@ -115,24 +113,13 @@ void main() {
   testWidgets('the loading bar shows the web view progress', (t) async {
     final h = await _shown(t, urlPage(chromeless: true));
     LinearProgressIndicator bar() => t.widget<LinearProgressIndicator>(find.byKey(_loading));
-    CircularProgressIndicator spinner() =>
-        t.widget<CircularProgressIndicator>(find.descendant(of: find.byKey(_cover), matching: find.byType(CircularProgressIndicator)));
     expect(bar().value, isNull);
-    expect(spinner().value, isNull);
     h.webs.single.c.progress(40);
     await t.pump();
     expect(bar().value, 0.4);
-    expect(spinner().value, 0.4);
-    expect(find.descendant(of: find.byKey(_cover), matching: find.text('40%')), findsOneWidget);
     h.webs.single.c.finished('https://example.com/a');
     await t.pump();
     expect(find.byKey(_loading), findsNothing);
-    await h.stop();
-  });
-
-  testWidgets('a page over Bluetooth says so while it loads', (t) async {
-    final h = await _shown(t, urlPage(), via: 'BT');
-    expect(find.descendant(of: find.byKey(_cover), matching: find.text('Loading over Bluetooth…')), findsOneWidget);
     await h.stop();
   });
 
@@ -495,15 +482,12 @@ void main() {
     await closeFile(h);
   });
 
-  testWidgets('a link tapped during the first load is offered to the browser', (t) async {
+  testWidgets('a tap on the covered first load does not reach the page', (t) async {
     final h = await _shown(t, urlPage());
-    await t.tap(find.byKey(const Key('fakeWeb')));
+    await t.tap(find.byKey(_cover));
     expect(h.webs.single.c.allows('https://other.example/'), isFalse);
     await t.pump();
-    expect(find.byType(AlertDialog), findsOneWidget);
-    expect(pageUp(h).where((l) => l['load'] == 'failed'), isEmpty);
-    await t.tap(find.text('Cancel'));
-    await _slid(t);
+    expect(find.byType(AlertDialog), findsNothing);
     await h.stop();
   });
 

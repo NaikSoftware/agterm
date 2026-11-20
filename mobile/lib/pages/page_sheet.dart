@@ -421,15 +421,15 @@ class PageSheetState extends State<PageSheet> with SingleTickerProviderStateMixi
                                 child: ExcludeFocus(excluding: page.hidden, child: _view),
                               ),
                             ),
-                            // the platform view paints black until its first frame, so the first load is covered
-                            if (_load == 'loading') Positioned.fill(child: IgnorePointer(child: _cover())),
+                            // the platform view paints black until its first frame; the cover takes the taps meant for what it hides
+                            if (_load == 'loading') const Positioned.fill(child: AbsorbPointer(child: ColoredBox(key: Key('pageCover'), color: C.surface))),
                             // over the page, so the strip keeps its height
                             if (_loading)
                               Positioned(
                                 top: 0,
                                 left: 0,
                                 right: 0,
-                                child: LinearProgressIndicator(key: const Key('pageLoading'), value: _progress, minHeight: 3, color: C.accent),
+                                child: LinearProgressIndicator(key: const Key('pageLoading'), value: _progress, minHeight: 3, color: C.completed),
                               ),
                             if (_load == 'failed')
                               Center(
@@ -460,22 +460,6 @@ class PageSheetState extends State<PageSheet> with SingleTickerProviderStateMixi
       ),
     );
   }
-
-  Widget _cover() => ColoredBox(
-    key: const Key('pageCover'),
-    color: C.surface,
-    child: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircularProgressIndicator(value: _progress, color: C.accent),
-          const SizedBox(height: 12),
-          if (_progress case final p?) Text('${(p * 100).round()}%', style: const TextStyle(fontSize: 12, color: C.muted)),
-          if (widget.link.via == 'BT') const Text('Loading over Bluetooth…', style: TextStyle(fontSize: 12, color: C.muted)),
-        ],
-      ),
-    ),
-  );
 
   void _dragEnd(DragEndDetails d) {
     final v = d.velocity.pixelsPerSecond.dy;
