@@ -38,6 +38,17 @@ struct AppStoreAgentTests {
         #expect(session.agentPane == .right)
     }
 
+    @Test func theIDComesFromTheWinningPane() throws {
+        let (store, session) = try session()
+
+        store.applyAgentSamples([AgentPaneSample(pane: .left, agent: .claude, claudeSessionJSON: Self.json("c1")),
+                                 AgentPaneSample(pane: .right, agent: .claude, claudeSessionJSON: Self.json("c2"))],
+                                focused: .right, forSession: session.id)
+
+        #expect(session.agentPane == .right)
+        #expect(session.agentSessionID == "c2")
+    }
+
     @Test func otherPaneAgentKeepsClaude() throws {
         let (store, session) = try session()
 

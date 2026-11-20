@@ -50,6 +50,8 @@ extension ControlServer {
 
     func stopRemotePresentation(_ id: UUID) {
         remoteClients.removeValue(forKey: id)?.stop()
+        // an ended row must not keep the agent logo; a shown-again row gets it back from the next snapshot
+        library.store(forSession: id)?.applyRemoteAgent(nil, forSession: id)
         linkForwards.release(row: id)
         catalogPool(forSession: id)?.release("present:\(id)")
     }

@@ -266,7 +266,7 @@ struct RemotePresentationClientTests {
 
         connect(client, kinds: ["status", "hud", "notify"])
 
-        #expect(recorder.agents.allSatisfy { $0 == nil })
+        #expect(recorder.agents == [nil])
     }
 
     @Test func aSnapshotsRespawnsAreASeedAndAFramesAreNot() {
