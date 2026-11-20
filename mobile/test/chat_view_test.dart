@@ -245,6 +245,37 @@ void main() {
     expect(find.textContaining('new'), findsNothing);
   });
 
+  for (final tail in [false, true]) {
+    _chatTest('pagingBackAtTopKeepsTheReadRow${tail ? 'OnAnAppend' : ''}', (t, c) async {
+      final items = _history(30);
+      await c.start(items, start: 50, height: 800);
+      for (var n = 0; n < 10 && c.h.held?.$1['before'] == null; n++) {
+        await t.drag(find.byKey(const Key('chatList')), const Offset(0, 600));
+        await t.pump();
+      }
+      final page = c.h.held!;
+      expect(page.$1['before'], '50');
+      await t.drag(find.byKey(const Key('chatList')), const Offset(0, 3000));
+      await t.pumpAndSettle();
+      final p = t.state<ScrollableState>(find.descendant(of: find.byKey(const Key('chatList')), matching: find.byType(Scrollable))).position;
+      expect(p.pixels, p.maxScrollExtent);
+      final anchor = _onScreen(t, items).last;
+      final before = t.getRect(_row(anchor).first).top;
+      if (tail) {
+        await c.tick();
+        c.h.held!.$2.complete({'transcript': 't1', 'size': 300, 'start': 50, 'next': 300, 'items': [_text('n1', 3), _prompt('n2')]});
+      } else {
+        page.$2.complete({'transcript': 't1', 'size': 200, 'start': 0, 'next': 50, 'items': [_text('old1', 3), _prompt('old2')]});
+      }
+      // every painted frame, not only the settled one
+      for (var n = 0; n < 3; n++) {
+        await t.pump();
+        expect(t.getRect(_row(anchor).first).top, before, reason: 'frame $n');
+      }
+      expect(find.text(tail ? '↓ 2 new' : 'Loading earlier…'), tail ? findsOneWidget : findsNothing);
+    });
+  }
+
   _chatTest('modelChipDimsAfterModelCommand', (t, c) async {
     const meta = {'title': 'Echo todo', 'model': 'claude-opus-4-5', 'effort': 'medium'};
     await c.start([_prompt('p1'), _text('a1')], meta: meta);

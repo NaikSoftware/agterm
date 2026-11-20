@@ -123,7 +123,8 @@ class ChatView extends StatefulWidget {
 
 class _ChatViewState extends State<ChatView> {
   static const _bottomSlack = 24.0;
-  final _scroll = ScrollController();
+  late final _scroll = _KeepController(_keepShift);
+  (RenderObject, double)? _keep; // the read row and its content offset before the rows changed
   List<ChatRow> _rows = const [];
   Map<String, int> _index = const {};
   final Map<String, BuildContext> _built = {};
@@ -236,10 +237,14 @@ class _ChatViewState extends State<ChatView> {
     return box != null && box.attached && box.hasSize ? box.localToGlobal(Offset.zero).dy : null;
   }
 
-  // a row's place in the list's content, so the user's own scrolling does not count as a shift
-  double? _offset(String key) {
-    final box = _top(key) == null ? null : _built[key]!.findRenderObject() as RenderBox;
-    return box == null ? null : RenderAbstractViewport.of(box).getOffsetToReveal(box, 0).offset;
+  // a row's place in the list's content, so the user's own scrolling does not count as a shift; safe inside layout,
+  // where a dropped row's element is already inactive but its render object reads detached
+  static double? _offset(RenderObject? row) {
+    var o = row;
+    while (o != null && o.parentData is! SliverMultiBoxAdaptorParentData) {
+      o = o.parent;
+    }
+    return o != null && o.attached ? (o.parentData as SliverMultiBoxAdaptorParentData).layoutOffset : null;
   }
 
   Rect? get _viewport {
@@ -267,9 +272,10 @@ class _ChatViewState extends State<ChatView> {
     final k = old.isEmpty ? -1 : rows.indexWhere((r) => r.key == old.first.key);
     final added = k <= 0 ? 0 : rows.take(k).where((r) => r.day == null).length;
     // away from the bottom, any change keeps the row the user is reading where it is
-    final anchor = _away ? _visible.firstOrNull?.$2 : null;
-    final at = anchor == null ? null : _offset(anchor);
+    final anchor = _away ? _built[_visible.firstOrNull?.$2]?.findRenderObject() : null;
+    final at = _offset(anchor);
     final switched = feed.switches != _switches;
+    _keep = anchor == null || at == null ? null : (anchor, at);
     setState(() {
       _setRows(rows);
       if (_away) _newCount += added;
@@ -283,19 +289,18 @@ class _ChatViewState extends State<ChatView> {
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _keep = null;
       if (!mounted || !_scroll.hasClients) return;
-      final now = anchor == null ? null : _offset(anchor);
-      if (at != null && now != null && now != at) _shift(now - at, _built[anchor]!.findRenderObject()!);
       _onScroll(load: rows.length != old.length);
     });
   }
 
-  void _shift(double by, RenderObject row) {
-    final p = _scroll.position;
-    if (!p.isScrollingNotifier.value) return _scroll.jumpTo(p.pixels + by);
-    // a jump would end the user's drag or fling
-    p.correctBy(by);
-    RenderAbstractViewport.of(row).markNeedsLayout();
+  // runs inside the viewport's layout: a post-frame jump painted one frame with the read row displaced
+  double _keepShift() {
+    final k = _keep;
+    _keep = null;
+    final now = k == null ? null : _offset(k.$1);
+    return now == null ? 0 : now - k!.$2;
   }
 
   void _onScroll({bool load = true}) {
@@ -631,5 +636,31 @@ class _TrackedState extends State<_Tracked> {
   void dispose() {
     widget.onGone(context);
     super.dispose();
+  }
+}
+
+/// Applies [shift] when the list's content settles in a layout pass, before that frame paints.
+class _KeepController extends ScrollController {
+  _KeepController(this.shift);
+
+  final double Function() shift;
+
+  @override
+  ScrollPosition createScrollPosition(ScrollPhysics physics, ScrollContext context, ScrollPosition? oldPosition) =>
+      _KeepPosition(shift, physics: physics, context: context, oldPosition: oldPosition);
+}
+
+class _KeepPosition extends ScrollPositionWithSingleContext {
+  _KeepPosition(this.shift, {required super.physics, required super.context, super.oldPosition});
+
+  final double Function() shift;
+
+  @override
+  bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
+    final by = shift();
+    if (by == 0) return super.applyContentDimensions(minScrollExtent, maxScrollExtent);
+    // correctBy keeps a drag or fling going, which a jump would end; false lays the viewport out again
+    correctBy(by);
+    return false;
   }
 }
