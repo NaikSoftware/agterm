@@ -137,7 +137,14 @@ class ChatComposerState extends State<ChatComposer> {
   String? _blocked(ClaudeScreen? s) =>
       widget.disabledBy ??
       widget.checks.writeBlockedOn(remote: widget.remote, server: widget.server) ??
-      (s != null && s.dialog ? 'Claude shows a dialog' : s == null || !s.bottomStack ? "Waiting for Claude's screen" : null);
+      (s != null && s.dialog
+          ? 'Claude shows a dialog'
+          : s == null || !s.bottomStack
+              ? "Waiting for Claude's screen"
+              // a polled colourless grid can miss a dialog raised since: its typed digit or Enter would answer it
+              : !widget.colours && s.busy
+                  ? 'Claude is working: this pane sends only while Claude is idle'
+                  : null);
 
   /// Sends [text] to Claude through the gate; the field clears when it held [text].
   Future<void> send(String text, {bool replace = false}) async {

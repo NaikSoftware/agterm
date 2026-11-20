@@ -399,6 +399,15 @@ void main() {
     expect(find.descendant(of: find.byKey(const Key('slash-model')), matching: find.text('opens in panel')), findsOneWidget);
   });
 
+  testWidgets('nonLivePaneDoesNotQueue', (t) async {
+    final working = _g('working-45');
+    final c = _C(t, Grid.text([for (var r = 0; r < working.rows.length; r++) working.text(r)].join('\n')));
+    await c.pump();
+    await c.type('next');
+    expect(c.sendEnabled, isFalse);
+    expect(find.text('Claude is working: this pane sends only while Claude is idle'), findsOneWidget);
+  });
+
   testWidgets('nonLiveSendTypesTextThenEnter', (t) async {
     final colour = _g('idle-placeholder-45');
     final screen = [for (var r = 0; r < colour.rows.length; r++) colour.text(r)].join('\n');
