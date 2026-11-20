@@ -14,7 +14,9 @@ const wire = {
     't', 'id', 'seq', 'action', 'sizePercent', 'mime', 'data', 'end', 'error', 'response', 'path', 'line', 'load', 'title',
     'current', 'canGoBack', 'appliedSeq', 'hidden', 'dismissed', 'kind', 'url', 'adapter', 'helper', 'javascript', 'chromeless', 'browse',
   ],
-  'elisctlKit/PhoneLinkSession.swift': ['present'],
+  'elisctlKit/PhoneLinkSession.swift': ['present', 'forward'],
+  'elisctlKit/PhoneLinkPresenter+Forward.swift': ['forward'],
+  'ElisCore/PhoneLink/PhoneLinkMessages.swift': ['type', 'target', 'page'],
   'ElisCore/ControlProjection+Tree.swift': ['workspaces', 'id', 'name', 'open', 'active'],
   'ElisCore/ControlProjection.swift': [
     'id', 'name', 'status', 'agent', 'foreground', 'cwd', 'parent', 'context', 'tint', 'unseen', 'flagged', 'active',

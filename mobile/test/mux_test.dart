@@ -622,4 +622,79 @@ void main() {
     await expectLater(ch.opened, throwsA(isA<ElisError>().having((e) => e.message, 'message', 'unsupported channel type')));
     link.dispose();
   });
+
+  test('forwardOpensCarriesBytesAndCredits', () async {
+    final (m, r, _) = await upgraded();
+    final ch = m.forward('w', 'p1');
+    final got = <String>[];
+    ch.bytes.listen((b) => got.add(utf8.decode(b)));
+    expect(ch.send(Uint8List.fromList(utf8.encode('GET / HTTP/1.1\r\n\r\n'))), true);
+    await flush();
+    final id = r.frames.firstWhere((f) => f.kind == LinkKind.open).channel;
+    expect(jsonDecode(utf8.decode(r.frames.firstWhere((f) => f.kind == LinkKind.open).payload)),
+        {'type': 'forward', 'target': 'w', 'page': 'p1'});
+    expect(utf8.decode(dataOn(r, id).single.payload), 'GET / HTTP/1.1\r\n\r\n');
+    r.send([...json(LinkKind.opened, id, {}), ...frame(LinkKind.data, id, utf8.encode('HTTP/1.1 200'))]);
+    await ch.opened;
+    await flush();
+    expect(got, ['HTTP/1.1 200']);
+    expect(r.credits, [12]);
+  });
+
+  test('forwardSendIsHeldByTheWindow', () async {
+    final (m, r, _) = await upgraded();
+    final ch = m.forward('w', 'p1');
+    await flush();
+    final id = r.frames.last.channel;
+    r.send(json(LinkKind.opened, id, {}));
+    await ch.opened;
+    expect(ch.send(Uint8List(70000)), true);
+    expect(dataOn(r, id).map((d) => d.payload.length), [65536]);
+    r.send(frame(LinkKind.credit, id, LinkFrame.credit(id, 65536).payload));
+    await flush();
+    expect(dataOn(r, id).map((d) => d.payload.length), [65536, 70000 - 65536]);
+  });
+
+  test('aRefusedForwardThrowsTheReason', () async {
+    final (m, r, _) = await upgraded();
+    final ch = m.forward('w', 'p1');
+    await flush();
+    r.send(json(LinkKind.opened, r.frames.last.channel, {'error': 'too many connections'}));
+    await expectLater(ch.opened, throwsA(isA<ElisError>().having((e) => e.message, 'message', 'too many connections')));
+    expect(ch.send(Uint8List(1)), false);
+  });
+
+  test('aCloseBeforeOpenedEndsTheForward', () async {
+    final (m, r, _) = await upgraded();
+    final ch = m.forward('w', 'p1');
+    final done = ch.bytes.toList();
+    await flush();
+    r.send(json(LinkKind.close, r.frames.last.channel, {'reason': 'page closed'}));
+    await expectLater(ch.opened, throwsA(isA<ElisError>().having((e) => e.message, 'message', 'page closed')));
+    expect(await done, isEmpty);
+  });
+
+  test('aForwardCloseEndsItsBytesAndSendsClose', () async {
+    final (m, r, _) = await upgraded();
+    final ch = m.forward('w', 'p1');
+    final done = ch.bytes.toList();
+    await flush();
+    final id = r.frames.last.channel;
+    r.send(json(LinkKind.opened, id, {}));
+    await ch.opened;
+    await ch.close();
+    expect(await done, isEmpty);
+    expect((r.frames.last.kind, r.frames.last.channel), (LinkKind.close, id));
+  });
+
+  test('aForwardEndsOnLinkLoss', () async {
+    final (m, r, _) = await upgraded();
+    final ch = m.forward('w', 'p1');
+    final done = ch.bytes.toList();
+    await flush();
+    r.send(json(LinkKind.opened, r.frames.last.channel, {}));
+    await ch.opened;
+    r.drop();
+    expect(await done, isEmpty);
+  });
 }

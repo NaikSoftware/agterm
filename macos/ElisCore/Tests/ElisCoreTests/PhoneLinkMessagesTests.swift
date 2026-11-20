@@ -6,7 +6,7 @@ import Testing
     /// Union of every payload field; a vector's `object` decodes into it, then into the struct its kind names.
     struct Object: Decodable {
         var type: String?, target: String?, pane: String?, claim: Bool?, cols: UInt16?, rows: UInt16?
-        var error: String?, role: String?, reason: String?
+        var error: String?, role: String?, reason: String?, page: String?
     }
 
     struct Vectors: Decodable {
@@ -24,7 +24,8 @@ import Testing
         let o = vector.object
         switch kind {
         case .open:
-            return .json(kind, channel: vector.channel, PhoneLinkOpen(type: try #require(o.type), target: try #require(o.target), pane: o.pane, claim: o.claim, cols: o.cols, rows: o.rows))
+            return .json(kind, channel: vector.channel, PhoneLinkOpen(type: try #require(o.type), target: try #require(o.target), pane: o.pane, claim: o.claim, cols: o.cols, rows: o.rows,
+                                                    page: o.page))
         case .opened: return .json(kind, channel: vector.channel, PhoneLinkOpened(cols: o.cols, rows: o.rows, error: o.error))
         case .lead: return .json(kind, channel: vector.channel, PhoneLinkLead(role: try #require(o.role)))
         case .close: return .json(kind, channel: vector.channel, PhoneLinkClose(reason: try #require(o.reason)))
@@ -34,7 +35,7 @@ import Testing
 
     @Test func encodesJsonVectors() throws {
         let vectors = try Self.vectors()
-        #expect(vectors.count == 7)
+        #expect(vectors.count == 8)
         for vector in vectors {
             #expect(try Self.frame(vector).encoded() == PhoneLinkFrameTests.hex(vector.hex), "\(vector.name)")
         }

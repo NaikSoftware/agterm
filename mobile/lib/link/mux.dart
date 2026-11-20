@@ -55,7 +55,8 @@ bool rereadsTree(Map<String, dynamic> row) => row.containsKey('dropped') || row[
 const _creditBatch = 16 * 1024;
 const _duplicateOpen = 'channel already open';
 const _claimWindow = 16 * 1024; // the relay's receive window: more unacknowledged closes the channel `input overflow`
-const _claimQueueCap = 1 << 20;
+const _forwardWindow = 65536; // PhoneLinkForward.window
+const _queueCap = 1 << 20;
 
 class Mux {
   Mux._(this._c);
@@ -115,6 +116,16 @@ class Mux {
     if (_done.isCompleted) return ch.._end('Disconnected');
     _channels[ch.id] = ch;
     _add(LinkFrame.json(LinkKind.open, ch.id, {'type': 'present', 'target': target}));
+    return ch;
+  }
+
+  /// One TCP connection to [page]'s loopback address on the origin; the channel is returned at once, and bytes sent
+  /// before OPENED wait at the relay.
+  ForwardChannel forward(String target, String page) {
+    final ch = ForwardChannel._(this, _nextChannel++);
+    if (_done.isCompleted) return ch.._end('Disconnected');
+    _channels[ch.id] = ch;
+    _add(LinkFrame.json(LinkKind.open, ch.id, {'type': 'forward', 'target': target, 'page': page}));
     return ch;
   }
 
@@ -305,11 +316,7 @@ class ClaimChannel implements _Channel {
   final int id;
   final _events = StreamController<ClaimEvent>(); // single-subscription: LEAD in the same read as OPENED is kept
   final _opened = Completer<ClaimChannel>();
-  final _queue = ListQueue<Uint8List>();
-  int _queued = 0;
-  int _headAt = 0; // bytes of _queue.first already sent
-  int _unacked = 0;
-  Completer<void>? _drained; // a close waiting for the queue to go out
+  late final _out = _Outbox(_mux, id, _claimWindow);
 
   Stream<ClaimEvent> get events => _events.stream;
 
@@ -319,15 +326,7 @@ class ClaimChannel implements _Channel {
   bool get _isOpened => _opened.isCompleted;
 
   /// Queues [bytes] for the relay; false, sending nothing, when the channel ended or more than 1 MiB would wait.
-  bool send(Uint8List bytes) {
-    // what the window takes now does not wait (a non-empty queue means the window is spent)
-    if (_events.isClosed || _queued + bytes.length - (_claimWindow - _unacked) > _claimQueueCap) return false;
-    if (bytes.isEmpty) return true;
-    _queue.add(Uint8List.fromList(bytes)); // the caller may reuse its buffer
-    _queued += bytes.length;
-    _pump();
-    return true;
-  }
+  bool send(Uint8List bytes) => !_events.isClosed && _out.send(bytes);
 
   void resize(int cols, int rows) {
     if (!_events.isClosed) _mux._add(LinkFrame.resize(id, cols, rows));
@@ -336,32 +335,10 @@ class ClaimChannel implements _Channel {
   /// Sends CLOSE once the queued input is out, waiting at most [limit] for CREDIT; the relay does not answer it. Before
   /// OPENED, [opened] throws and the relay never attaches the claim.
   Future<void> close({Duration limit = const Duration(seconds: 1)}) async {
-    if (_queue.isNotEmpty && _mux._channels[id] == this) {
-      await (_drained ??= Completer<void>()).future.timeout(limit, onTimeout: () {});
-    }
+    if (_out.waiting && _mux._channels[id] == this) await _out.drained(limit);
     if (_mux._channels[id] != this) return;
     _mux._add(LinkFrame.json(LinkKind.close, id, {'reason': 'closed'}));
     _end(null);
-  }
-
-  void _pump() {
-    while (_queue.isNotEmpty && _unacked < _claimWindow) {
-      final head = _queue.first;
-      final n = min(head.length - _headAt, _claimWindow - _unacked);
-      _mux._add(LinkFrame(LinkKind.data, id, Uint8List.sublistView(head, _headAt, _headAt + n)));
-      _unacked += n;
-      _queued -= n;
-      _headAt += n;
-      if (_headAt == head.length) {
-        _queue.removeFirst();
-        _headAt = 0;
-      }
-    }
-    if (_queue.isEmpty) _settle();
-  }
-
-  void _settle() {
-    if (_drained case final d? when !d.isCompleted) d.complete();
   }
 
   @override
@@ -373,8 +350,7 @@ class ClaimChannel implements _Channel {
       case LinkKind.lead:
         _events.add(Lead('${(_json(f.payload) ?? const {})['role']}'));
       case LinkKind.credit:
-        _unacked = max(0, _unacked - (f.creditBytes ?? 0));
-        _pump();
+        _out.credit(f.creditBytes ?? 0);
       case LinkKind.close:
         _end('${(_json(f.payload) ?? const {})['reason'] ?? 'closed'}');
       case LinkKind.open || LinkKind.data || LinkKind.resize || LinkKind.grid || LinkKind.resync:
@@ -385,9 +361,7 @@ class ClaimChannel implements _Channel {
   @override
   void _end(String? reason, {bool revoked = false}) {
     _mux._channels.remove(id);
-    _queue.clear();
-    _queued = 0;
-    _settle();
+    _out.clear();
     if (!_opened.isCompleted) {
       _opened.completeError(revoked ? Revoked() : ElisError(reason ?? 'closed'));
     } else if (reason != null) {
@@ -460,5 +434,127 @@ class PresentChannel implements _Channel {
     _ended ??= reason ?? 'closed';
     if (!_opened.isCompleted) _opened.completeError(revoked ? Revoked() : ElisError(_ended!));
     unawaited(_lines.close());
+  }
+}
+
+/// Input sent as DATA within the relay's receive [window], released by its CREDIT.
+class _Outbox {
+  _Outbox(this._mux, this._id, this._window);
+
+  final Mux _mux;
+  final int _id, _window;
+  final _queue = ListQueue<Uint8List>();
+  int _queued = 0;
+  int _headAt = 0; // bytes of _queue.first already sent
+  int _unacked = 0;
+  Completer<void>? _drained; // a close waiting for the queue to go out
+
+  /// False, sending nothing, when more than 1 MiB would wait.
+  bool send(Uint8List bytes) {
+    // what the window takes now does not wait (a non-empty queue means the window is spent)
+    if (_queued + bytes.length - (_window - _unacked) > _queueCap) return false;
+    if (bytes.isEmpty) return true;
+    _queue.add(Uint8List.fromList(bytes)); // the caller may reuse its buffer
+    _queued += bytes.length;
+    _pump();
+    return true;
+  }
+
+  void credit(int bytes) {
+    _unacked = max(0, _unacked - bytes);
+    _pump();
+  }
+
+  bool get waiting => _queue.isNotEmpty;
+
+  /// Waits at most [limit] for the queue to go out.
+  Future<void> drained(Duration limit) => (_drained ??= Completer<void>()).future.timeout(limit, onTimeout: () {});
+
+  void clear() {
+    _queue.clear();
+    _queued = 0;
+    _settle();
+  }
+
+  void _pump() {
+    while (_queue.isNotEmpty && _unacked < _window) {
+      final head = _queue.first;
+      final n = min(min(head.length - _headAt, _window - _unacked), linkMaxPayload);
+      _mux._add(LinkFrame(LinkKind.data, _id, Uint8List.sublistView(head, _headAt, _headAt + n)));
+      _unacked += n;
+      _queued -= n;
+      _headAt += n;
+      if (_headAt == head.length) {
+        _queue.removeFirst();
+        _headAt = 0;
+      }
+    }
+    if (_queue.isEmpty) _settle();
+  }
+
+  void _settle() {
+    if (_drained case final d? when !d.isCompleted) d.complete();
+  }
+}
+
+/// A `forward` channel: one TCP connection to a forwarded page's loopback address on the origin.
+class ForwardChannel implements _Channel {
+  ForwardChannel._(this._mux, this.id);
+
+  final Mux _mux;
+  @override
+  final int id;
+  final _in = StreamController<Uint8List>(); // single-subscription: DATA in the OPENED read is kept
+  final _opened = Completer<void>();
+  late final _out = _Outbox(_mux, id, _forwardWindow);
+
+  /// Throws ElisError with the relay's reason, also for a CLOSE before OPENED (the page closed during the connect).
+  Future<void> get opened => _opened.future;
+
+  /// The server's bytes; each is credited when the listener takes it, so a paused listener holds the server back.
+  late final Stream<Uint8List> bytes = _in.stream.map((b) {
+    if (_mux._channels[id] == this) _mux._add(LinkFrame.credit(id, b.length));
+    return b;
+  });
+
+  @override
+  bool get _isOpened => _opened.isCompleted;
+
+  /// Queues [bytes] for the server; false, sending nothing, when the channel ended or more than 1 MiB would wait.
+  bool send(Uint8List bytes) => !_in.isClosed && _out.send(bytes);
+
+  /// Sends CLOSE once the queued bytes are out, waiting at most 2 s for CREDIT; the relay does not answer it.
+  Future<void> close() async {
+    if (_out.waiting && _mux._channels[id] == this) await _out.drained(const Duration(seconds: 2));
+    if (_mux._channels[id] != this) return;
+    _mux._add(LinkFrame.json(LinkKind.close, id, {'reason': 'closed'}));
+    _end(null);
+  }
+
+  @override
+  void _onFrame(LinkFrame f) {
+    switch (f.kind) {
+      case LinkKind.opened:
+        if (!_refused(_mux, this, _json(f.payload) ?? const {}) && !_isOpened) _opened.complete();
+      case LinkKind.data:
+        if (f.payload.isNotEmpty) _in.add(f.payload);
+      case LinkKind.credit:
+        _out.credit(f.creditBytes ?? 0);
+      case LinkKind.close:
+        _end('${(_json(f.payload) ?? const {})['reason'] ?? 'closed'}');
+      case LinkKind.open || LinkKind.resize || LinkKind.grid || LinkKind.resync || LinkKind.lead:
+        break; // not sent on a forward channel
+    }
+  }
+
+  @override
+  void _end(String? reason, {bool revoked = false}) {
+    _mux._channels.remove(id);
+    _out.clear();
+    if (!_opened.isCompleted) {
+      _opened.completeError(revoked ? Revoked() : ElisError(reason ?? 'closed'));
+      unawaited(_opened.future.catchError((Object _) {})); // a caller that only reads [bytes] still sees the end
+    }
+    unawaited(_in.close());
   }
 }
