@@ -71,6 +71,28 @@ struct PhoneLinkPresenterPagesTests {
         #expect(harness.forwardTarget("p1") == nil)
     }
 
+    @Test func twoForwardsForOnePageStartTheListenerOnce() throws {
+        let recorder = ForwardRecorder()
+        let harness = try Self.remoteForward(recorder)
+        defer { harness.stop() }
+        let stream = try Self.presentation(harness)
+        Self.send(stream, .pageRequest(Self.forwarded("http://127.0.0.1:5173/")))
+        guard case .page = harness.line() else { Issue.record("no page line"); return }
+        let target = try #require(harness.forwardTarget("p1"))
+        let frames = LogLines()
+        let forwards = (UInt32(10)...11).map { channel in
+            PhoneLinkForward(channel: channel, host: target.host, port: target.port, queue: harness.queue, link: PhoneLinkForward.Link(
+                frame: { frames.append("\(channel) \(String(decoding: $0.payload, as: UTF8.self))") }, output: { _ in .queued },
+                pending: { 0 }, credit: { _, sent in sent() }, ended: {}))
+        }
+        harness.queue.sync { forwards.forEach { $0.start() } }
+        let deadline = Date().addingTimeInterval(30)
+        while frames.all().count < 2, Date() < deadline { usleep(20_000) }
+        #expect(frames.all().sorted() == ["10 {}", "11 {}"])
+        #expect(recorder.argvs.count == 1)
+        harness.queue.sync { forwards.forEach { $0.stop() } }
+    }
+
     @Test func aListenerThatDiesClosesTheShownPage() throws {
         let harness = try Self.remoteForward(ForwardRecorder())
         defer { harness.stop() }
