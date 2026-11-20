@@ -50,9 +50,6 @@ class PageSheetController {
   /// The main frame started showing [url].
   void started(String url) => _sheet._started(url);
 
-  /// The main frame committed a document, which the web view now draws, though its subresources may still load.
-  void committed() => _sheet._commit();
-
   /// The main frame finished loading [url].
   void finished(String url) => unawaited(_sheet._finished(url));
 
@@ -93,7 +90,6 @@ class PageSheetState extends State<PageSheet> with SingleTickerProviderStateMixi
   String? _main; // the main frame's address, as the web view names it
   String? _failedAt; // the main frame the page failed on: its own finish is no load
   bool _canGoBack = false, _closed = false, _offering = false, _loading = true;
-  bool _committed = false; // the first load drew something, so the cover can go
   bool _touched = false, _silenced = false; // as the Mac's user activation and promptsSilenced
   Timer? _touch;
   late bool _reportedHidden, _hidden;
@@ -190,10 +186,6 @@ class PageSheetState extends State<PageSheet> with SingleTickerProviderStateMixi
     // a failed main frame's own start shows its error, not a load
     if (mounted && !_closed && !_loading && _failedAt == null) setState(() => _loading = true);
     _progress = null;
-  }
-
-  void _commit() {
-    if (mounted && !_closed && !_committed) setState(() => _committed = true);
   }
 
   void _progressed(int percent) {
@@ -375,7 +367,6 @@ class PageSheetState extends State<PageSheet> with SingleTickerProviderStateMixi
     _failedAt = null;
     _load = 'loading';
     _loading = true;
-    _committed = false;
     _progress = null;
     _error = null;
     _report();
@@ -431,7 +422,7 @@ class PageSheetState extends State<PageSheet> with SingleTickerProviderStateMixi
                               ),
                             ),
                             // the platform view paints black until its first frame; the cover takes the taps meant for what it hides
-                            if (_load == 'loading' && !_committed) const Positioned.fill(child: AbsorbPointer(child: ColoredBox(key: Key('pageCover'), color: C.surface))),
+                            if (_load == 'loading') const Positioned.fill(child: AbsorbPointer(child: ColoredBox(key: Key('pageCover'), color: C.surface))),
                             // over the page, so the strip keeps its height
                             if (_loading)
                               Positioned(
@@ -595,8 +586,6 @@ Widget _nativeWebView(PageSheetController c) {
         onPageStarted: c.started,
         onPageFinished: c.finished,
         onProgress: c.progress,
-        // the main frame's commit (doUpdateVisitedHistory): the delegate does not expose onPageCommitVisible
-        onUrlChange: (_) => c.committed(),
         onWebResourceError: (e) {
           if (e.isForMainFrame ?? false) c.failed(e.description);
         },
