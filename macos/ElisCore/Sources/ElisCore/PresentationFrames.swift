@@ -698,10 +698,12 @@ public struct PresentationSnapshot: Codable, Equatable, Sendable {
     public var mail: PresentationMail?
     /// agentSession is the origin's Claude conversation id, nil from an origin that predates it.
     public var agentSession: String?
+    /// agent is the origin's running agent, nil for none or from an origin that predates it.
+    public var agent: PresentationAgent?
 
     public init(status: PresentationStatus?, hud: PresentationHud?, context: String? = nil, layout: PresentationLayout? = nil,
                 respawns: PresentationRespawns? = nil, info: PresentationInfo? = nil, mail: PresentationMail? = nil,
-                agentSession: String? = nil) {
+                agentSession: String? = nil, agent: PresentationAgent? = nil) {
         self.status = status
         self.hud = hud
         self.context = context
@@ -710,6 +712,18 @@ public struct PresentationSnapshot: Codable, Equatable, Sendable {
         self.info = info
         self.mail = mail
         self.agentSession = agentSession
+        self.agent = agent
+    }
+}
+
+/// PresentationAgent is the coding agent an origin's session runs and the pane (`left`/`right`) it runs in.
+public struct PresentationAgent: Codable, Sendable, Equatable {
+    public var name: String
+    public var pane: String
+
+    public init(name: String, pane: String) {
+        self.name = name
+        self.pane = pane
     }
 }
 
@@ -781,6 +795,7 @@ public struct PresentationFrame: Equatable, Sendable {
         case status(PresentationStatus?)
         case context(String?)
         case agentSession(String?)
+        case agent(PresentationAgent?)
         case info(PresentationInfo?)
         case layout(PresentationLayout)
         case hud(PresentationHud?)
@@ -852,6 +867,7 @@ public struct PresentationFrame: Equatable, Sendable {
             case .status: return "status"
             case .context: return "context"
             case .agentSession: return "agent.session"
+            case .agent: return "agent"
             case .info: return "info"
             case .layout: return "layout"
             case .hud: return "hud"

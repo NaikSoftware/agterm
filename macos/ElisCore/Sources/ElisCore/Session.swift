@@ -43,13 +43,15 @@ public final class Session: Identifiable {
     public var agentIndicator = AgentIndicator()
     @ObservationIgnored var paneActivity: [StatusPane: AgentIndicator] = [:]
 
-    /// The coding agent the focused pane runs in the foreground, sampled by the app; the sidebar row shows its
-    /// logo. Ephemeral, and nil again once the agent exits.
+    /// The coding agent either pane runs in the foreground, the focused pane's first, sampled by the app; the sidebar
+    /// row shows its logo. Ephemeral, and nil again once the agent exits.
     public var runningAgent: SessionLauncher?
-    /// The line resuming the last Claude Code conversation seen in the focused pane. Kept after claude exits so a
+    /// The pane `runningAgent` runs in; nil with no agent.
+    @ObservationIgnored public var agentPane: StatusPane?
+    /// The line resuming the last Claude Code conversation seen in the agent's pane. Kept after claude exits so a
     /// later close still records it; never persisted.
     @ObservationIgnored public var resumeLine: String?
-    /// Claude Code's conversation id seen in the focused pane, or mirrored from an origin; never persisted.
+    /// Claude Code's conversation id seen in the agent's pane, or mirrored from an origin; never persisted.
     @ObservationIgnored public var agentSessionID: String?
     /// A Recent Closed reopen's resume line, typed once into the main pane; see `takePendingResumeLine`.
     @ObservationIgnored public var pendingResumeLine: String?

@@ -434,6 +434,21 @@ struct PresentationFramesTests {
         #expect(PresentationHub.supportedKinds.contains("agent.session"))
     }
 
+    @Test @MainActor func agentFrameRoundTripsAndSnapshotCarriesIt() throws {
+        let agent = PresentationAgent(name: "claude", pane: "left")
+        for body: PresentationFrame.Body in [.agent(agent), .agent(nil),
+                                             .snapshot(PresentationSnapshot(status: nil, hud: nil, agent: agent))] {
+            let frame = PresentationFrame(gen: 1, rev: 1, body: body)
+            #expect(try PresentationCodec.decode(PresentationCodec.encode(frame).dropLast()) == frame)
+        }
+        let line = String(decoding: try PresentationCodec.encode(PresentationFrame(gen: 1, rev: 1, body: .agent(agent))), as: UTF8.self)
+        #expect(line.contains(#""kind":"agent""#))
+        #expect(line.contains(#""agent":{"#))
+        #expect(!String(decoding: try PresentationCodec.encode(PresentationFrame(gen: 1, rev: 1, body: .agent(nil))), as: UTF8.self)
+            .contains(#""agent":{"#))
+        #expect(PresentationHub.supportedKinds.contains("agent"))
+    }
+
     @Test func aSnapshotFromAnOriginWithoutAgentSessionDecodesWithNone() throws {
         let line = Data(#"{"kind":"snapshot","gen":1,"rev":1,"snapshot":{"context":"PR #517"}}"#.utf8)
 

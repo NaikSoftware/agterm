@@ -63,8 +63,8 @@ extension SessionLauncher {
     }
 }
 
-/// SessionAgentMonitor samples each local session's focused pane every two seconds and records the coding agent
-/// in its foreground, so a row's agent icon also follows an agent typed by hand and clears when it exits.
+/// SessionAgentMonitor samples both panes of each local session every two seconds and records the coding agent
+/// in their foreground, so a row's agent icon also follows an agent typed by hand and clears when it exits.
 @MainActor
 final class SessionAgentMonitor {
     private let library: WindowLibrary
@@ -89,23 +89,21 @@ final class SessionAgentMonitor {
         for window in library.windows {
             guard let store = library.store(for: window.id) else { continue }
             for session in store.workspaces.flatMap(\.sessions) where session.remoteHost == nil {
-                let view = session.activeSurface as? GhosttySurfaceView
-                let pids = view.map { ForegroundProcess.groupPIDs(for: $0, zmxResolver: zmxResolver) } ?? []
-                let agent = SessionLauncher.agent(group: pids.compactMap(ForegroundProcess.procArgs(pid:)))
-                if session.runningAgent != agent { session.runningAgent = agent }
-                // only a new value replaces the old, so a session closed after claude exits still resumes it;
-                // another agent clears the id, since it no longer names what the session runs
-                if agent != nil, agent != .claude { store.setAgentSessionID(nil, forSession: session.id) }
-                if agent == .claude,
-                   let json = pids.lazy.compactMap(Self.claudeSessionJSON(pid:)).first(where: { SessionLauncher.claudeSessionID(json: $0) != nil }) {
-                    if let line = SessionLauncher.claudeResumeLine(json: json) { session.resumeLine = line }
-                    store.setAgentSessionID(SessionLauncher.claudeSessionID(json: json), forSession: session.id)
-                }
+                let panes: [(StatusPane, (any TerminalSurface)?)] = [(.left, session.surface), (.right, session.splitSurface)]
+                let samples = panes.compactMap { pane, surface in (surface as? GhosttySurfaceView).map { sample(pane, $0) } }
+                store.applyAgentSamples(samples, focused: session.focusedPane == .right ? .right : .left, forSession: session.id)
             }
         }
     }
 
-    private static func claudeSessionJSON(pid: pid_t) -> Data? {
-        try? Data(contentsOf: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/sessions/\(pid).json"))
+    private func sample(_ pane: StatusPane, _ view: GhosttySurfaceView) -> AgentPaneSample {
+        let pids = ForegroundProcess.groupPIDs(for: view, zmxResolver: zmxResolver)
+        let agent = SessionLauncher.agent(group: pids.compactMap(ForegroundProcess.procArgs(pid:)))
+        let directory = ClaudeHome.directory()
+        let json = agent == .claude
+            ? pids.lazy.compactMap { ClaudeHome.sessionJSON(pid: $0, directory: directory) }
+                .first { SessionLauncher.claudeSessionID(json: $0) != nil }
+            : nil
+        return AgentPaneSample(pane: pane, agent: agent, claudeSessionJSON: json)
     }
 }
