@@ -83,6 +83,9 @@ class Mux {
 
   Stream<Map<String, dynamic>> get events => _events.stream;
 
+  /// The transport's badge: 'Wi-Fi' or 'BT'.
+  String get via => _c.via;
+
   /// Emits once when the link ends; every channel is closed by then.
   Stream<void> get closed => _done.future.asStream();
 

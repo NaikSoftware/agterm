@@ -12,6 +12,7 @@ import '../client.dart';
 import '../theme.dart';
 import 'page_link.dart';
 import 'page_server.dart';
+import 'page_tunnel.dart';
 
 /// What a sheet asks of its web view; widget tests drive the sheet without a platform view.
 abstract interface class PageWeb {
@@ -68,13 +69,14 @@ class _PageSheetState extends State<PageSheet> {
   late final StreamSubscription<PageCommand> _commands;
   final _nonce = randomHex128();
   PageServer? _server;
+  PageTunnel? _tunnel; // a forward page's, and the only owner of its cookie
   String? _prefix; // a file page's server root, secret included
   String? _script; // a content page's renderer
   String _load = 'loading';
   String? _title, _current, _error;
   String? _main; // the main frame's address, as the web view names it
   String? _failedAt; // the main frame the page failed on: its own finish is no load
-  bool _canGoBack = false, _closed = false, _offering = false;
+  bool _canGoBack = false, _closed = false, _offering = false, _loading = true;
   bool _touched = false, _silenced = false; // as the Mac's user activation and promptsSilenced
   Timer? _touch;
   late bool _reportedHidden;
@@ -82,7 +84,9 @@ class _PageSheetState extends State<PageSheet> {
 
   PhonePage get page => widget.page;
   PageWeb get _web => _controller.web;
-  bool get _javascript => page.kind != 'url' || page.javascript;
+  bool get _urlLike => page.kind == 'url' || page.kind == 'forward';
+  bool get _javascript => !_urlLike || page.javascript;
+  String? get _tunnelOrigin => _tunnel == null ? null : 'http://127.0.0.1:${_tunnel!.port}';
 
   @override
   void initState() {
@@ -104,6 +108,10 @@ class _PageSheetState extends State<PageSheet> {
     unawaited(_commands.cancel());
     _touch?.cancel();
     unawaited(_server?.close());
+    if (_tunnel case final t?) {
+      unawaited(_setCookie('${t.cookie.split('=').first}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict').catchError((Object _) => false));
+      unawaited(t.close());
+    }
     super.dispose();
   }
 
@@ -121,6 +129,16 @@ class _PageSheetState extends State<PageSheet> {
         case 'url':
           _main = page.url;
           await _web.loadUrl(Uri.parse(page.url!));
+        case 'forward':
+          final original = Uri.parse(page.url!);
+          final tunnel = await PageTunnel.start(() => widget.link.forward(page.id), preferredPort: original.port);
+          if (!mounted) return unawaited(tunnel.close());
+          _tunnel = tunnel;
+          await _setCookie('${tunnel.cookie}; Path=/; HttpOnly; SameSite=Strict');
+          if (!mounted) return; // dispose cleared it
+          final url = tunnel.urlFor(original);
+          _main = '$url';
+          await _web.loadUrl(url);
         case 'content':
           final [html, script] = await Future.wait([_text(contentPath), _text(scriptPath)]);
           if (!mounted) return;
@@ -132,11 +150,16 @@ class _PageSheetState extends State<PageSheet> {
     }
   }
 
+  // webview_flutter's cookies carry no HttpOnly or SameSite, so MainActivity sets them through CookieManager
+  Future<bool?> _setCookie(String cookie) =>
+      const MethodChannel('elis/cookie').invokeMethod<bool>('set', {'url': _tunnelOrigin, 'cookie': cookie});
+
   Future<String> _text(String path) async => utf8.decoder.bind((await widget.link.fetch(page.id, path)).bytes).join();
 
   void _started(String url) {
     if (url != _failedAt) _failedAt = null;
     _main = url;
+    if (mounted && !_closed && !_loading) setState(() => _loading = true);
   }
 
   void _httpError(String url, int? status) {
@@ -147,10 +170,11 @@ class _PageSheetState extends State<PageSheet> {
     if (!mounted || _closed || _failedAt != null) return;
     _current = _address(url);
     _load = 'loaded';
+    _loading = false;
     _error = null;
     final script = switch (page.kind) {
       'file' => bridgeScript(_nonce, helper: page.helper, adapter: page.adapter ?? ''),
-      'url' when page.javascript => bridgeScript(_nonce),
+      'url' || 'forward' when page.javascript => bridgeScript(_nonce),
       'content' => _script,
       _ => null,
     };
@@ -172,6 +196,12 @@ class _PageSheetState extends State<PageSheet> {
   String? _address(String url) => switch (page.kind) {
     'file' when _prefix != null && url.startsWith(_prefix!) => '/${Uri.parse(url).pathSegments.skip(1).join('/')}',
     'url' => url,
+    // the tunnel's port is the phone's own; the Mac knows the page by its own address
+    'forward' when _tunnelOrigin != null && Uri.parse(url).origin == _tunnelOrigin => () {
+      final (u, o) = (Uri.parse(url), Uri.parse(page.url!));
+      return '${u.replace(scheme: o.scheme, host: o.host, port: o.port)}';
+    }(),
+    'forward' => url,
     _ => null,
   };
 
@@ -179,6 +209,7 @@ class _PageSheetState extends State<PageSheet> {
     if (!mounted || _closed) return;
     _failedAt = _main ?? '';
     _load = 'failed';
+    _loading = false;
     _error = error;
     _report();
     setState(() {});
@@ -220,6 +251,7 @@ class _PageSheetState extends State<PageSheet> {
     if (u.isScheme('about')) return true;
     final ok = switch (page.kind) {
       'url' => _origin(u) != null && (page.browse || _origin(u) == _origin(Uri.parse(page.url!))),
+      'forward' => _origin(u) != null && (page.browse || _origin(u) == _tunnelOrigin),
       'file' => _prefix != null && url.startsWith(_prefix!),
       _ => false,
     };
@@ -286,6 +318,16 @@ class _PageSheetState extends State<PageSheet> {
     _report(); // hide, show and resize the link applied already
   }
 
+  void _reloadFailed() {
+    _failedAt = null;
+    _load = 'loading';
+    _loading = true;
+    _error = null;
+    _report();
+    setState(() {});
+    unawaited(_web.reload().catchError((Object _) {}));
+  }
+
   void _report() {
     if (!mounted || _closed) return;
     _reportedHidden = page.hidden;
@@ -318,6 +360,8 @@ class _PageSheetState extends State<PageSheet> {
               child: Column(
                 children: [
                   if (!page.chromeless) ...[_strip(), const Divider(height: 1)],
+                  // the dev server's bytes cross the link, which over Bluetooth is slow
+                  if (page.kind == 'forward' && _loading) const LinearProgressIndicator(key: Key('pageLoading'), minHeight: 2),
                   Expanded(
                     child: Stack(
                       children: [
@@ -328,10 +372,13 @@ class _PageSheetState extends State<PageSheet> {
                           Center(
                             child: Padding(
                               padding: const EdgeInsets.all(24),
-                              child: Text(
-                                _error ?? 'The page did not load.',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: C.danger),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(_error ?? 'The page did not load.', textAlign: TextAlign.center, style: const TextStyle(color: C.danger)),
+                                  if (page.kind == 'forward')
+                                    TextButton(key: const Key('pageReload'), onPressed: _reloadFailed, child: const Text('Reload')),
+                                ],
                               ),
                             ),
                           ),
@@ -360,7 +407,7 @@ class _PageSheetState extends State<PageSheet> {
       height: 36,
       child: Row(
         children: [
-          if (page.kind == 'url' && _canGoBack)
+          if (_urlLike && _canGoBack)
             IconButton(
               key: const Key('pageBack'),
               tooltip: 'Back',
@@ -388,6 +435,13 @@ class _PageSheetState extends State<PageSheet> {
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
+          if (page.kind == 'forward' && widget.link.via.isNotEmpty)
+            Container(
+              key: const Key('pageVia'),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(border: Border.all(color: C.line), borderRadius: BorderRadius.circular(6)),
+              child: Text(widget.link.via, style: const TextStyle(fontSize: 11, color: C.muted, fontWeight: FontWeight.w600)),
+            ),
           IconButton(
             key: const Key('pageClose'),
             tooltip: 'Close page',

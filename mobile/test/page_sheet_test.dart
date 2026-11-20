@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/pages/page_sheet.dart';
@@ -401,5 +402,140 @@ void main() {
     expect(web.scripts, contains('render();'));
     expect(web.c.allows('https://example.com/'), isFalse);
     await h.stop();
+  });
+
+  group('a forward page', () {
+    late int devPort; // free when the test starts, so the tunnel takes it
+    Map<String, Object?> devPage({String id = 'd1'}) => {
+          't': 'page', 'id': id, 'kind': 'forward', 'url': 'http://localhost:$devPort/app?x=1', 'javascript': true,
+          'chromeless': false, 'browse': false, 'hidden': false, 'title': 'localhost:$devPort',
+        };
+    // each cookie set, with the number of loads the web view had been asked for by then
+    late List<({String url, String cookie, int loads})> cookies;
+    final cookieRe = RegExp(r'^elis_tunnel_(\d+)=([0-9a-f]{32}); Path=/; HttpOnly; SameSite=Strict$');
+
+    Future<Harness> devShown(WidgetTester t) async {
+      cookies = [];
+      devPort = (await t.runAsync(() async {
+        final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        final port = s.port;
+        await s.close();
+        return port;
+      }))!;
+      final h = Harness(t, treeOf());
+      t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('elis/cookie'), (call) async {
+        final a = call.arguments as Map;
+        cookies.add((url: a['url'] as String, cookie: a['cookie'] as String, loads: h.webs.isEmpty ? 0 : h.webs.last.urls.length));
+        return true;
+      });
+      await h.start(pages: true);
+      await h.opened();
+      await pageDown(h, [devPage()], open: true);
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100))); // the tunnel binds
+      await t.pump();
+      return h;
+    }
+
+    int portOf(String cookie) => int.parse(cookieRe.firstMatch(cookie)!.group(1)!);
+
+    Future<void> settle(WidgetTester t) async {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await t.pump();
+    }
+
+    testWidgets('a forward page loads through the tunnel', (t) async {
+      final h = await devShown(t);
+      final set = cookies.single;
+      final port = portOf(set.cookie);
+      expect(port, devPort);
+      expect(set.url, 'http://127.0.0.1:$port');
+      expect(set.loads, 0);
+      expect(h.webs.single.urls, [Uri.parse('http://127.0.0.1:$port/app?x=1')]);
+      expect(h.webs.single.c.javascript, isTrue);
+
+      final value = set.cookie.split(';').first;
+      await t.runAsync(() async {
+        final s = await Socket.connect(InternetAddress.loopbackIPv4, port);
+        s.add(utf8.encode('GET /app HTTP/1.1\r\nHost: 127.0.0.1:$port\r\nCookie: $value\r\n\r\n'));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        s.destroy();
+      });
+      await t.pump();
+      expect(h.r.opens.where((o) => o['type'] == 'forward'), [
+        {'type': 'forward', 'target': 's1', 'page': 'd1'},
+      ]);
+      await h.stop();
+    });
+
+    testWidgets('a forward page stays on the tunnel and reports the original address', (t) async {
+      final h = await devShown(t);
+      final port = portOf(cookies.single.cookie);
+      final c = h.webs.single.c;
+      c.finished('http://127.0.0.1:$port/app?x=1'); // a refusal during the first load fails the page
+      expect(c.allows('http://127.0.0.1:$port/other'), isTrue);
+      expect(c.allows('http://127.0.0.1:${port + 1}/'), isFalse);
+      expect(c.allows('https://example.com/'), isFalse);
+      c.finished('http://127.0.0.1:$port/other?y=2');
+      await t.pump();
+      expect(pageUp(h).last, allOf(containsPair('load', 'loaded'), containsPair('current', 'http://localhost:$devPort/other?y=2')));
+      await h.stop();
+    });
+
+    testWidgets('closing the sheet clears the cookie and closes the tunnel', (t) async {
+      final h = await devShown(t);
+      final port = portOf(cookies.single.cookie);
+      await t.tap(find.byKey(const Key('pageClose')));
+      await settle(t);
+      expect(cookies.last, (url: 'http://127.0.0.1:$port', cookie: 'elis_tunnel_$port=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict', loads: 1));
+      final refused = await t.runAsync(() => Socket.connect(InternetAddress.loopbackIPv4, port).then((s) {
+            s.destroy();
+            return false;
+          }, onError: (Object _) => true));
+      expect(refused, isTrue);
+      await h.stop();
+    });
+
+    testWidgets('two sheets in turn get different cookie values', (t) async {
+      final h = await devShown(t);
+      await t.tap(find.byKey(const Key('pageClose')));
+      await settle(t);
+      await pageDown(h, [devPage(id: 'd2')]);
+      await settle(t);
+      final sets = [for (final c in cookies) if (cookieRe.hasMatch(c.cookie)) cookieRe.firstMatch(c.cookie)!.group(2)];
+      expect(sets, hasLength(2));
+      expect(sets.first, isNot(sets.last));
+      await pageDown(h, [_command('close', 1, id: 'd2')]);
+      await settle(t);
+      await h.stop();
+    });
+
+    testWidgets('a failed load shows reload and reports failed', (t) async {
+      final h = await devShown(t);
+      final web = h.webs.single;
+      web.c.failed('net::ERR_EMPTY_RESPONSE');
+      await t.pump();
+      expect(pageUp(h).last, allOf(containsPair('load', 'failed'), containsPair('error', 'net::ERR_EMPTY_RESPONSE')));
+      expect(find.text('net::ERR_EMPTY_RESPONSE'), findsOneWidget);
+      await t.tap(find.byKey(const Key('pageReload')));
+      await t.pump();
+      expect(web.reloads, 1);
+      web.c.finished('${web.urls.single}');
+      await t.pump();
+      expect(pageUp(h).last, containsPair('load', 'loaded'));
+      expect(find.byKey(const Key('pageReload')), findsNothing);
+      await h.stop();
+    });
+
+    testWidgets('the strip shows the original URL and the transport', (t) async {
+      final h = await devShown(t);
+      final strip = find.byKey(const Key('pageStrip'));
+      expect(find.descendant(of: strip, matching: find.text('localhost:$devPort')), findsOneWidget);
+      expect(find.descendant(of: strip, matching: find.text('Wi-Fi')), findsOneWidget);
+      expect(find.byKey(const Key('pageLoading')), findsOneWidget);
+      h.webs.single.c.finished('${h.webs.single.urls.single}');
+      await t.pump();
+      expect(find.byKey(const Key('pageLoading')), findsNothing);
+      await h.stop();
+    });
   });
 }

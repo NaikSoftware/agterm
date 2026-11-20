@@ -65,7 +65,7 @@ String randomHex128() {
 }
 
 class PageLink extends ChangeNotifier {
-  PageLink(Mux mux, String target) : _channel = mux.present(target) {
+  PageLink(this._mux, this._target) : _channel = _mux.present(_target) {
     _lines = _channel.lines.listen(_line, onDone: _ended);
     // every failure also ends the channel, which `_ended` handles; only an older relay changes `supported`
     _channel.opened.catchError((Object e) {
@@ -76,6 +76,8 @@ class PageLink extends ChangeNotifier {
     });
   }
 
+  final Mux _mux;
+  final String _target;
   final PresentChannel _channel;
   late final StreamSubscription<Map<String, dynamic>> _lines;
   final _pages = <String, PhonePage>{}; // oldest first
@@ -94,6 +96,11 @@ class PageLink extends ChangeNotifier {
   String? get ended => _channel.ended;
 
   Stream<PageCommand> get commands => _commands.stream;
+
+  String get via => _mux.via;
+
+  /// One TCP connection to a forward page's loopback address on the origin.
+  ForwardChannel forward(String id) => _mux.forward(_target, id);
 
   /// Completes on the first `res` line; the rest of the file follows on [PageFile.bytes].
   Future<PageFile> fetch(String id, String path) {
