@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/pages/page_sheet.dart';
 import 'package:elis_mobile/terminal/term_keyboard.dart';
+import 'package:elis_mobile/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'mux_test.dart' show json;
 import 'session_term_test.dart' show FakeWeb, Harness, pageDown, pageUp, presentCh, treeOf, urlPage;
 
-const _sheet = Key('pageSheet'), _chip = Key('pageChip');
+const _sheet = Key('pageSheet'), _chip = Key('pageChip'), _loading = Key('pageLoading');
 
 Future<Harness> _shown(WidgetTester t, Map<String, Object?> page) async {
   final h = Harness(t, treeOf());
@@ -30,7 +31,13 @@ Map<String, Object?> _command(String action, int seq, {String id = 'p1'}) => {'t
 
 Future<void> _swipeDown(WidgetTester t) async {
   await t.fling(find.byKey(const Key('pageStrip')), const Offset(0, 300), 1500);
-  await t.pumpAndSettle();
+  await _slid(t);
+}
+
+/// The sheet's slide ends; pumpAndSettle would wait on a loading bar's endless animation.
+Future<void> _slid(WidgetTester t) async {
+  await t.pump();
+  await t.pump(const Duration(milliseconds: 300));
 }
 
 void main() {
@@ -41,9 +48,12 @@ void main() {
     expect(find.byKey(const Key('pageClose')), findsOneWidget);
     expect(find.byKey(_chip), findsNothing);
     expect(h.webs.single.urls, [Uri.parse('https://example.com/a')]);
+    expect(find.byKey(_loading), findsOneWidget);
+    expect(find.descendant(of: find.byKey(_sheet), matching: find.byWidgetPredicate((w) => w is ColoredBox && w.color == C.surface)), findsOneWidget);
     h.webs.single.c.finished('https://example.com/a');
     await t.pump();
     expect(pageUp(h).last, containsPair('load', 'loaded'));
+    expect(find.byKey(_loading), findsNothing);
     await h.stop();
   });
 
@@ -90,6 +100,68 @@ void main() {
     expect(pageUp(h).last, containsPair('hidden', false));
     expect(h.webs, hasLength(1)); // the same page, not reloaded
     expect(h.webs.single.urls, hasLength(1));
+    await h.stop();
+  });
+
+  testWidgets('the loading bar shows the web view progress', (t) async {
+    final h = await _shown(t, urlPage(chromeless: true));
+    LinearProgressIndicator bar() => t.widget<LinearProgressIndicator>(find.byKey(_loading));
+    expect(bar().value, isNull);
+    h.webs.single.c.progress(40);
+    await t.pump();
+    expect(bar().value, 0.4);
+    h.webs.single.c.finished('https://example.com/a');
+    await t.pump();
+    expect(find.byKey(_loading), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('the sheet follows a drag of its strip and goes back when let go early', (t) async {
+    final h = await _shown(t, urlPage());
+    final top = t.getRect(find.byKey(_sheet)).top;
+    final g = await t.startGesture(t.getCenter(find.byKey(const Key('pageStrip'))));
+    await g.moveBy(const Offset(0, 50));
+    await g.moveBy(const Offset(0, 50));
+    await t.pump();
+    expect(t.getRect(find.byKey(_sheet)).top, moreOrLessEquals(top + 100, epsilon: 1));
+    expect(find.byKey(_chip), findsNothing);
+    await g.moveBy(const Offset(0, -60));
+    await t.pump();
+    expect(t.getRect(find.byKey(_sheet)).top, moreOrLessEquals(top + 40, epsilon: 1));
+    await t.pump(const Duration(seconds: 1)); // no fling
+    await g.up();
+    await _slid(t);
+    expect(t.getRect(find.byKey(_sheet)).top, top);
+    expect(find.byKey(_chip), findsNothing);
+    await h.stop();
+  });
+
+  testWidgets('a slow drag past the threshold slides the sheet down to the chip', (t) async {
+    final h = await _shown(t, urlPage());
+    final height = t.getRect(find.byKey(_sheet)).height;
+    await t.timedDrag(find.byKey(const Key('pageStrip')), Offset(0, height * 0.6), const Duration(seconds: 2));
+    await t.pump(const Duration(milliseconds: 16));
+    expect(find.byKey(_sheet), findsOneWidget); // still on its way down
+    await _slid(t);
+    expect(find.byKey(_sheet), findsNothing);
+    expect(find.byKey(_chip), findsOneWidget);
+    expect(pageUp(h).last, containsPair('hidden', true));
+    expect(h.webs.single.releases, 1);
+    await h.stop();
+  });
+
+  testWidgets('a short fast fling hides the sheet and the chip slides it back up', (t) async {
+    final h = await _shown(t, urlPage());
+    final top = t.getRect(find.byKey(_sheet)).top;
+    await t.fling(find.byKey(const Key('pageStrip')), const Offset(0, 60), 1500);
+    await _slid(t);
+    expect(find.byKey(_chip), findsOneWidget);
+    await t.tap(find.byKey(_chip));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 50));
+    expect(t.getRect(find.byKey(_sheet)).top, greaterThan(top));
+    await _slid(t);
+    expect(t.getRect(find.byKey(_sheet)).top, top);
     await h.stop();
   });
 
@@ -228,7 +300,7 @@ void main() {
     c.allows('https://other.example/');
     await t.pump();
     await t.tap(find.text('Cancel'));
-    await t.pumpAndSettle();
+    await _slid(t);
     c.allows('https://other.example/');
     await t.pump();
     expect(find.byType(AlertDialog), findsNothing); // silenced until the next touch
@@ -237,7 +309,7 @@ void main() {
     await t.pump();
     expect(find.byType(AlertDialog), findsOneWidget);
     await t.tap(find.text('Cancel'));
-    await t.pumpAndSettle();
+    await _slid(t);
     await h.stop();
   });
 
@@ -343,6 +415,7 @@ void main() {
 
   testWidgets('a file page reports its origin path and never the sheet secret', (t) async {
     final (h, web, url) = await fileShown(t);
+    expect(find.byKey(_loading), findsOneWidget);
     for (final title in ['$url', '${url.authority}${url.path}']) { // Android names an untitled page by its address, without the scheme too
       web.titleText = title;
       web.c.finished('$url#top');
@@ -380,6 +453,7 @@ void main() {
     web.c.finished('$url');
     await t.pump();
     expect(pageUp(h).last, allOf(containsPair('load', 'failed'), containsPair('error', 'the page answered 404')));
+    expect(find.byKey(_loading), findsNothing);
     await pageDown(h, [_command('reload', 1, id: 'f1')]);
     web.c.finished('$url');
     await t.pump();
@@ -409,7 +483,7 @@ void main() {
     expect(find.byType(AlertDialog), findsOneWidget);
     expect(pageUp(h).where((l) => l['load'] == 'failed'), isEmpty);
     await t.tap(find.text('Cancel'));
-    await t.pumpAndSettle();
+    await _slid(t);
     await h.stop();
   });
 
@@ -418,6 +492,7 @@ void main() {
       't': 'page', 'id': 'c1', 'kind': 'content', 'javascript': false, 'chromeless': false, 'browse': false, 'hidden': false,
       'title': 'notes.md',
     });
+    expect(find.byKey(_loading), findsOneWidget); // the fetch is still on its way
     final fetches = pageUp(h).where((l) => l['t'] == 'fetch').toList();
     expect([for (final f in fetches) f['path']], ['elis:content', 'elis:script']);
     String b64(String s) => base64Encode(utf8.encode(s));
@@ -427,8 +502,10 @@ void main() {
     ]);
     final web = h.webs.single;
     expect(web.htmls, ['<p>hi</p>']);
+    expect(find.byKey(_loading), findsOneWidget);
     web.c.finished('about:blank');
     await t.pump();
+    expect(find.byKey(_loading), findsNothing);
     expect(web.scripts, contains('render();'));
     expect(web.c.allows('https://example.com/'), isFalse);
     await h.stop();

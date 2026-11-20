@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -51,6 +52,9 @@ class PageSheetController {
 
   void failed(String error) => _sheet._failed(error);
 
+  /// The web view's load progress, 0 to 100.
+  void progress(int percent) => _sheet._progressed(percent);
+
   /// A response with an error status; only the main frame's fails the page.
   void httpError(String url, int? status) => _sheet._httpError(url, status);
 
@@ -69,7 +73,7 @@ class PageSheet extends StatefulWidget {
   State<PageSheet> createState() => PageSheetState();
 }
 
-class PageSheetState extends State<PageSheet> {
+class PageSheetState extends State<PageSheet> with SingleTickerProviderStateMixin {
   late final _controller = PageSheetController._(this);
   late final Widget _view;
   late final StreamSubscription<PageCommand> _commands;
@@ -86,7 +90,10 @@ class PageSheetState extends State<PageSheet> {
   bool _touched = false, _silenced = false; // as the Mac's user activation and promptsSilenced
   Timer? _touch;
   late bool _reportedHidden, _hidden;
-  double _drag = 0;
+  double? _progress; // null until the web view tells one
+  // how far down the sheet is, in its own heights: a drag of its strip moves it, a release finishes the move
+  late final _slide = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
+  double _height = 1;
 
   PhonePage get page => widget.page;
   PageWeb get _web => _controller.web;
@@ -107,6 +114,7 @@ class PageSheetState extends State<PageSheet> {
   void didUpdateWidget(PageSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (page.hidden && !_hidden) unawaited(release());
+    if (!page.hidden && _hidden) unawaited((_slide..value = 1).animateTo(0)); // the chip or show
     _hidden = page.hidden;
     if (page.hidden != _reportedHidden) _report(); // a swipe or the chip
   }
@@ -117,6 +125,7 @@ class PageSheetState extends State<PageSheet> {
   @override
   void dispose() {
     unawaited(_commands.cancel());
+    _slide.dispose();
     _touch?.cancel();
     unawaited(_server?.close());
     if (_tunnel case final t?) {
@@ -170,7 +179,13 @@ class PageSheetState extends State<PageSheet> {
   void _started(String url) {
     if (url != _failedAt) _failedAt = null;
     _main = url;
-    if (mounted && !_closed && !_loading) setState(() => _loading = true);
+    // a failed main frame's own start shows its error, not a load
+    if (mounted && !_closed && !_loading && _failedAt == null) setState(() => _loading = true);
+    _progress = null;
+  }
+
+  void _progressed(int percent) {
+    if (mounted && !_closed && percent > 0) setState(() => _progress = min(percent, 100) / 100);
   }
 
   void _httpError(String url, int? status) {
@@ -348,6 +363,7 @@ class PageSheetState extends State<PageSheet> {
     _failedAt = null;
     _load = 'loading';
     _loading = true;
+    _progress = null;
     _error = null;
     _report();
     setState(() {});
@@ -383,39 +399,61 @@ class PageSheetState extends State<PageSheet> {
           alignment: Alignment.bottomCenter,
           child: FractionallySizedBox(
             heightFactor: size == null || size >= 100 ? 1 : max(size, 1) / 100,
-            child: Material(
-              key: const Key('pageSheet'),
-              color: C.bg,
-              child: Column(
-                children: [
-                  if (!page.chromeless) ...[_strip(), const Divider(height: 1)],
-                  // the dev server's bytes cross the link, which over Bluetooth is slow
-                  if (page.kind == 'forward' && _loading) const LinearProgressIndicator(key: Key('pageLoading'), minHeight: 2),
-                  Expanded(
-                    child: Stack(
+            child: LayoutBuilder(
+              builder: (context, box) {
+                _height = max(box.maxHeight, 1);
+                return SlideTransition(
+                  position: _slide.drive(Tween(begin: Offset.zero, end: const Offset(0, 1))),
+                  child: Material(
+                    key: const Key('pageSheet'),
+                    color: C.bg,
+                    child: Column(
                       children: [
-                        Positioned.fill(
-                        child: Listener(onPointerDown: (_) => _touchedNow(), child: ExcludeFocus(excluding: page.hidden, child: _view)),
-                      ),
-                        if (_load == 'failed')
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(_error ?? 'The page did not load.', textAlign: TextAlign.center, style: const TextStyle(color: C.danger)),
-                                  if (page.kind == 'forward')
-                                    TextButton(key: const Key('pageReload'), onPressed: _reloadFailed, child: const Text('Reload')),
-                                ],
+                        if (!page.chromeless) ...[_strip(), const Divider(height: 1)],
+                        Expanded(
+                          child: Stack(
+                            children: [
+                              // a web view shows nothing until its first paint
+                              const Positioned.fill(child: ColoredBox(color: C.surface)),
+                              Positioned.fill(
+                                child: Listener(
+                                  onPointerDown: (_) => _touchedNow(),
+                                  child: ExcludeFocus(excluding: page.hidden, child: _view),
+                                ),
                               ),
-                            ),
+                              // over the page, so the strip keeps its height
+                              if (_loading)
+                                Positioned(
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  child: LinearProgressIndicator(key: const Key('pageLoading'), value: _progress, minHeight: 2),
+                                ),
+                              if (_load == 'failed')
+                                Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(24),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _error ?? 'The page did not load.',
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(color: C.danger),
+                                        ),
+                                        if (page.kind == 'forward') TextButton(key: const Key('pageReload'), onPressed: _reloadFailed, child: const Text('Reload')),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
+                        ),
                       ],
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ),
@@ -423,15 +461,27 @@ class PageSheetState extends State<PageSheet> {
     );
   }
 
+  void _dragEnd(DragEndDetails d) {
+    final v = d.velocity.pixelsPerSecond.dy;
+    if (v > 700 || (v > -700 && _slide.value > 0.25)) {
+      unawaited(
+        _slide.animateTo(1).then((_) {
+          if (mounted) widget.onSwipeDown();
+        }),
+      );
+    } else {
+      unawaited(_slide.animateTo(0));
+    }
+  }
+
   // the Mac's strip: the page's identity, its own title dimmed, and close; a swipe down hides the sheet
   Widget _strip() => GestureDetector(
     key: const Key('pageStrip'),
     behavior: HitTestBehavior.opaque,
-    onVerticalDragStart: (_) => _drag = 0,
-    onVerticalDragUpdate: (d) => _drag += d.delta.dy,
-    onVerticalDragEnd: (d) {
-      if (_drag > 48 || d.velocity.pixelsPerSecond.dy > 300) widget.onSwipeDown();
-    },
+    dragStartBehavior: DragStartBehavior.down, // the sheet stays under the finger from the touch
+    onVerticalDragStart: (_) => _slide.stop(),
+    onVerticalDragUpdate: (d) => _slide.value += d.delta.dy / _height,
+    onVerticalDragEnd: _dragEnd,
     child: SizedBox(
       height: 36,
       child: Row(
@@ -532,9 +582,10 @@ Widget _nativeWebView(PageSheetController c) {
     w.setNavigationDelegate(
       NavigationDelegate(
         // a frame's own navigation stays inside the page, as on the Mac; the nonce bounds what it can post
-    onNavigationRequest: (r) => !r.isMainFrame || c.allows(r.url) ? NavigationDecision.navigate : NavigationDecision.prevent,
+        onNavigationRequest: (r) => !r.isMainFrame || c.allows(r.url) ? NavigationDecision.navigate : NavigationDecision.prevent,
         onPageStarted: c.started,
         onPageFinished: c.finished,
+        onProgress: c.progress,
         onWebResourceError: (e) {
           if (e.isForMainFrame ?? false) c.failed(e.description);
         },
