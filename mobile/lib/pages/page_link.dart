@@ -48,9 +48,13 @@ class PageFile {
 }
 
 class _Fetch {
+  _Fetch(this.page);
+  final String page;
   final file = Completer<PageFile>();
   final bytes = StreamController<List<int>>();
 }
+
+const _maxLine = 1 << 20; // the relay closes the whole channel past ControlWire.maxRequestLineBytes
 
 class PageLink extends ChangeNotifier {
   PageLink(Mux mux, String target) : _channel = mux.present(target) {
@@ -67,7 +71,7 @@ class PageLink extends ChangeNotifier {
   final _pages = <String, PhonePage>{}; // oldest first
   final _commands = StreamController<PageCommand>.broadcast();
   final _fetches = <int, _Fetch>{};
-  final _bridges = <int, Completer<String>>{};
+  final _bridges = <int, ({String page, Completer<String> reply})>{};
   var _seq = 0;
   var _disposed = false;
 
@@ -81,7 +85,7 @@ class PageLink extends ChangeNotifier {
   /// Completes on the first `res` line; the rest of the file follows on [PageFile.bytes].
   Future<PageFile> fetch(String id, String path) {
     final seq = ++_seq;
-    final f = _fetches[seq] = _Fetch();
+    final f = _fetches[seq] = _Fetch(id);
     _send({'t': 'fetch', 'id': id, 'seq': seq, 'path': path});
     return f.file.future;
   }
@@ -89,8 +93,11 @@ class PageLink extends ChangeNotifier {
   /// The origin's raw JSON reply to a page's bridge [line].
   Future<String> bridge(String id, String line) {
     final seq = ++_seq;
-    final c = _bridges[seq] = Completer<String>();
-    _send({'t': 'bridge', 'id': id, 'seq': seq, 'line': line});
+    final out = {'t': 'bridge', 'id': id, 'seq': seq, 'line': line};
+    if (utf8.encode(jsonEncode(out)).length >= _maxLine) return Future.error(ElisError('the request is too large'));
+    final c = Completer<String>();
+    _bridges[seq] = (page: id, reply: c);
+    _send(out);
     return c.future;
   }
 
@@ -105,7 +112,7 @@ class PageLink extends ChangeNotifier {
 
   void closed(String id, {required bool dismissed}) {
     _send({'t': 'closed', 'id': id, 'dismissed': dismissed});
-    if (_pages.remove(id) != null) notifyListeners();
+    _drop(id);
   }
 
   @override
@@ -120,7 +127,7 @@ class PageLink extends ChangeNotifier {
   void _send(Map<String, dynamic> line) {
     if (_channel.ended == null) return _channel.send(line);
     if (line['t'] == 'fetch') _fail(line['seq'] as int, _channel.ended!);
-    if (line['t'] == 'bridge') _bridges.remove(line['seq'])?.completeError(ElisError(_channel.ended!));
+    if (line['t'] == 'bridge') _bridges.remove(line['seq'])?.reply.completeError(ElisError(_channel.ended!));
   }
 
   void _line(Map<String, dynamic> o) {
@@ -134,11 +141,7 @@ class PageLink extends ChangeNotifier {
         final (id, seq, action, size) = ('${o['id']}', o['seq'] as int? ?? 0, '${o['action']}', o['sizePercent'] as int?);
         final p = _pages[id];
         if (p == null) return;
-        if (action == 'close') {
-          _pages.remove(id);
-          notifyListeners();
-          return;
-        }
+        if (action == 'close') return _drop(id);
         if (seq > p.appliedSeq) p.appliedSeq = seq;
         if (action == 'hide' || action == 'show') p.hidden = action == 'hide';
         if (action == 'resize') p.sizePercent = size;
@@ -146,7 +149,7 @@ class PageLink extends ChangeNotifier {
       case 'res':
         _res(o);
       case 'reply':
-        final c = _bridges.remove(o['seq']);
+        final c = _bridges.remove(o['seq'])?.reply;
         if (o['error'] case final error?) return c?.completeError(ElisError('$error'));
         c?.complete('${o['response'] ?? ''}');
     }
@@ -173,16 +176,25 @@ class PageLink extends ChangeNotifier {
     unawaited(f.bytes.close());
   }
 
+  /// The relay forgets a closed page's requests without answering them.
+  void _drop(String id) {
+    _failRequests('page closed', page: id);
+    if (_pages.remove(id) != null) notifyListeners();
+  }
+
+  /// Fails the requests of [page], or of every page.
+  void _failRequests(String reason, {String? page}) {
+    for (final MapEntry(key: seq, value: f) in _fetches.entries.toList()) {
+      if (page == null || f.page == page) _fail(seq, reason);
+    }
+    for (final MapEntry(key: seq, value: b) in _bridges.entries.toList()) {
+      if (page == null || b.page == page) _bridges.remove(seq)!.reply.completeError(ElisError(reason));
+    }
+  }
+
   /// The channel ended: every page leaves the phone and every request fails.
   void _ended() {
-    final reason = _channel.ended ?? 'closed';
-    for (final seq in _fetches.keys.toList()) {
-      _fail(seq, reason);
-    }
-    for (final c in _bridges.values) {
-      c.completeError(ElisError(reason));
-    }
-    _bridges.clear();
+    _failRequests(_channel.ended ?? 'closed');
     if (_pages.isEmpty) return;
     _pages.clear();
     if (!_disposed) notifyListeners();

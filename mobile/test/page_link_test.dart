@@ -61,6 +61,30 @@ void main() {
     await fetch;
   });
 
+  test('aClosedPageFailsItsRequests', () async {
+    final (link, r, ch) = await opened();
+    down(r, ch, filePage);
+    await flush();
+    final fetch = expectLater(link.fetch('p1', '/w/a.css'), throwsA(isA<ElisError>()));
+    final bridge = expectLater(link.bridge('p1', '{}'), throwsA(isA<ElisError>()));
+    down(r, ch, {'t': 'command', 'id': 'p1', 'seq': 0, 'action': 'close'});
+    await fetch;
+    await bridge;
+    down(r, ch, filePage);
+    await flush();
+    final again = expectLater(link.fetch('p1', '/w/a.css'), throwsA(isA<ElisError>()));
+    link.closed('p1', dismissed: false);
+    await again;
+  });
+
+  test('anOversizedBridgeLineIsRefusedOnThePhone', () async {
+    final (link, r, ch) = await opened();
+    down(r, ch, filePage);
+    await flush();
+    await expectLater(link.bridge('p1', 'x' * (1 << 20)), throwsA(isA<ElisError>()));
+    expect(dataOn(r, ch), isEmpty);
+  });
+
   test('closedSendsDismissed', () async {
     final (link, r, ch) = await opened();
     down(r, ch, filePage);

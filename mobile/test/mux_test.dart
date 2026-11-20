@@ -593,6 +593,16 @@ void main() {
     expect(ch.ended, 'Disconnected');
   });
 
+  test('aSecondPresentForTheSameTargetIsRefused', () async {
+    final (m, r, _) = await upgraded();
+    m.present('w');
+    final second = m.present('w');
+    await flush();
+    r.send(json(LinkKind.opened, r.frames.last.channel, {'error': 'channel already open'}));
+    await expectLater(second.opened, throwsA(isA<ElisError>()));
+    expect(second.ended, 'channel already open');
+  });
+
   test('anOlderRelayRefusesPresent', () async {
     final (m, r, _) = await upgraded();
     final link = PageLink(m, 'w');

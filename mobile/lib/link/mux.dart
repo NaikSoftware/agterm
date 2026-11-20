@@ -430,7 +430,10 @@ class PresentChannel implements _Channel {
   void _onFrame(LinkFrame f) {
     switch (f.kind) {
       case LinkKind.opened:
-        if (!_refused(_mux, this, _json(f.payload) ?? const {}) && !_isOpened) _opened.complete();
+        final o = _json(f.payload) ?? const {};
+        // the relay refuses a second present channel for a target on the new channel's id
+        if (o['error'] == _duplicateOpen && !_isOpened) return _end(_duplicateOpen);
+        if (!_refused(_mux, this, o) && !_isOpened) _opened.complete();
       case LinkKind.data:
         _buffer.add(f.payload);
         for (var line = _buffer.next(); line != null; line = _buffer.next()) {
