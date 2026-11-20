@@ -3,6 +3,7 @@ import Testing
 import ElisCore
 @testable import elisctlKit
 
+@Suite(.outsidePane)
 struct SessionTranscriptCommandTests {
     private func request(_ argv: [String]) throws -> ControlRequest {
         let command = try #require(try Elisctl.parseAsRoot(argv) as? any RequestCommand)
