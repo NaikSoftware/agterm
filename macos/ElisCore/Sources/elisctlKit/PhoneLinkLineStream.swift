@@ -3,7 +3,7 @@ import Foundation
 import ElisCore
 
 /// Newline-delimited lines both ways over a control-socket stream or a child process's stdio. One line is delivered,
-/// and the next is read only after `resume()`. Callbacks run on `queue`.
+/// and the next only after `resume()`; reading goes on while no whole line waits. Callbacks run on `queue`.
 /// A line over `maxLine` ends the stream, as the peer's end does: lines come from a peer the relay does not trust.
 final class PhoneLinkLineStream: @unchecked Sendable {
     static let maxLine = PresentationCodec.maxFrameBytes
@@ -70,8 +70,10 @@ final class PhoneLinkLineStream: @unchecked Sendable {
                                    readFD: output.fileHandleForReading.fileDescriptor, writeFD: writeFD, queue: queue)
     }
 
-    func start(onLine: @escaping @Sendable (Data) -> Void, onEnd: @escaping @Sendable () -> Void) {
+    /// `paused` holds even the first line until `resume()`; the stream still reads, so the peer's end is seen.
+    func start(paused: Bool = false, onLine: @escaping @Sendable (Data) -> Void, onEnd: @escaping @Sendable () -> Void) {
         lock.withLock { started = true }
+        if !paused { resumed.signal() }
         let reader = Thread { [self] in
             read(onLine)
             stop()
@@ -129,11 +131,11 @@ final class PhoneLinkLineStream: @unchecked Sendable {
                 let line = Data(buffer[buffer.startIndex..<newline])
                 buffer.removeSubrange(buffer.startIndex...newline)
                 guard line.count <= Self.maxLine else { return }
+                resumed.wait()
+                if lock.withLock({ stopping }) { return }
                 queue.async { [self] in
                     if !lock.withLock({ closed }) { onLine(line) }
                 }
-                resumed.wait()
-                if lock.withLock({ stopping }) { return }
             }
             guard buffer.count <= Self.maxLine else { return }
             let count = chunk.withUnsafeMutableBytes { Darwin.read(readFD, $0.baseAddress, $0.count) }

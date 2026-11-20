@@ -13,8 +13,8 @@ struct PhoneLinkLineStreamTests {
 
         var lines: [String] { lock.withLock { received } }
 
-        func start(_ stream: PhoneLinkLineStream) {
-            stream.start(onLine: { line in
+        func start(_ stream: PhoneLinkLineStream, paused: Bool = false) {
+            stream.start(paused: paused, onLine: { line in
                 self.lock.withLock { self.received.append(String(decoding: line, as: UTF8.self)) }
                 self.changed.signal()
             }, onEnd: { self.ended.signal() })
@@ -66,6 +66,25 @@ struct PhoneLinkLineStreamTests {
         #expect(await recorder.waitLines(2))
         #expect(recorder.lines == ["first", "second"])
         stream.resume()
+        #expect(await recorder.waitEnd())
+    }
+
+    @Test func aPausedStreamHoldsItsFirstLineUntilResumed() async throws {
+        let (server, stream) = try socketStream(answer: "{\"ok\":true}\nfirst\n")
+        defer { server.stop() }
+        let recorder = Recorder()
+        recorder.start(stream, paused: true)
+        #expect(!(await recorder.waitLines(1, 0.5)))
+        stream.resume()
+        #expect(await recorder.waitLines(1))
+        #expect(await recorder.waitEnd())
+    }
+
+    @Test func aPausedStreamWithNoLineStillSeesTheEnd() async throws {
+        let (server, stream) = try socketStream(answer: "{\"ok\":true}\n")
+        defer { server.stop() }
+        let recorder = Recorder()
+        recorder.start(stream, paused: true)
         #expect(await recorder.waitEnd())
     }
 

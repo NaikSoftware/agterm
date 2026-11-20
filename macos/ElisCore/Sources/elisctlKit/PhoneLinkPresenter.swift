@@ -24,9 +24,15 @@ final class PhoneLinkPresenter: @unchecked Sendable {
     static let kinds = [PresentationHub.leadReportKind] + PresentationHub.pageKinds
         + [PresentationHub.pageContentKind, PresentationHub.pageDocumentKind, PresentationHub.pendingSnapshotKind,
            PresentationHub.jobTokenKind, PresentationHub.offerIdentityKind, PresentationHub.viewerPhoneKind]
-    /// Page lines waiting in the scheduler past which page pipes are not resumed.
-    static let highWater = 256 * 1024
+    /// Page lines waiting in the scheduler past which page pipes are not resumed and memory answers wait. One memory
+    /// chunk (about 88 KiB) and one pipe line (`maxPipeLine`) may follow the check: 160 + 88 + 240 KiB stays under the
+    /// session's 512 KiB channel buffer, past which the channel overflows and closes.
+    static let highWater = 160 * 1024
+    static let maxPipeLine = 240 * 1024
+    static let maxMime = 256
     static let maxPresenters = 8
+    /// Requests one page may have waiting on its pipe.
+    static let maxWaiting = 32
 
     let channel: UInt32
     let request: PhoneLinkOpen
@@ -47,6 +53,8 @@ final class PhoneLinkPresenter: @unchecked Sendable {
     var phoneLine = Data()
     /// Content and script answers served from memory, oldest first.
     var serving: [MemoryAnswer] = []
+    /// The page whose pipe was resumed last, for round robin.
+    var lastPipe = ""
     private var generation = 0
     /// The origin's hello listed `viewer.phone`; an older origin would route asks to a lead the phone reports.
     private var phoneOrigin = false

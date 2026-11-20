@@ -24,8 +24,8 @@ final class PresentedPage: @unchecked Sendable {
     var waiting: [Int: Waiting] = [:]
     var html: Data?
     var script: Data?
-    /// The pipe delivered a line and waits for `resume()` until the channel drains under `highWater`.
-    var paused = false
+    /// The pipe holds its next line until `pump()` resumes it; at most one pipe of a channel is not paused.
+    var paused = true
 
     init(_ request: PresentationPage) { self.request = request }
 
@@ -80,8 +80,13 @@ extension PhoneLinkPresenter {
         case .forwarded:
             reject(page, "unsupported")
         case .markdown, .text:
-            guard let directory = markdownDirectory, Self.isDirectory(directory) else {
-                log("phone page refused: no markdown renderer folder")
+            var files = MarkdownAssets.textFiles
+            if case .markdown = request.source { files = MarkdownAssets.markdownFiles }
+            let missing = files.filter { name in
+                markdownDirectory.map { !FileManager.default.fileExists(atPath: $0.appendingPathComponent(name).path) } ?? true
+            }
+            guard missing.isEmpty else {
+                log("phone page refused: the markdown renderer lacks \(missing.joined(separator: ", "))")
                 return reject(page, "the markdown renderer is missing")
             }
             openPipe(page)
@@ -160,7 +165,7 @@ extension PhoneLinkPresenter {
             return reject(page, "could not open the page")
         }
         page.pipe = pipe
-        pipe.start(onLine: { [weak self] line in self?.pipeLine(page, line) }, onEnd: { [weak self] in self?.pipeEnded(page) })
+        pipe.start(paused: true, onLine: { [weak self] line in self?.pipeLine(page, line) }, onEnd: { [weak self] in self?.pipeEnded(page) })
         switch page.request.source {
         case .file(let path, _):
             let adapter = Self.adapterScript(javascript: page.request.javascript)
@@ -188,10 +193,32 @@ extension PhoneLinkPresenter {
     }
 
     private func pipeLine(_ page: PresentedPage, _ line: Data) {
+        page.paused = true
         guard !stopped, pages[page.id] === page else { return }
-        if let frame = try? PageServeCodec.decode(line) { answer(page, frame) }
-        guard pages[page.id] === page else { return }
-        if link.pending() < Self.highWater { page.pipe?.resume() } else { page.paused = true }
+        do {
+            answer(page, try PageServeCodec.decode(line))
+        } catch PresentationCodec.FrameError.oversize(let size) {
+            log("phone page \(page.id): the origin sent a \(size)-byte chunk")
+            page.pipe?.close()
+            pipeEnded(page)
+        } catch {
+            log("phone page \(page.id): undecodable origin line: \(error)")
+            let id = (try? JSONSerialization.jsonObject(with: line) as? [String: Any])?["id"] as? Int
+            if let id { fail(page, id, Self.badAnswer) }
+        }
+        pump()
+    }
+
+    static let badAnswer = "bad answer from the origin"
+
+    /// Ends the request `id` with `error` wherever it came from.
+    private func fail(_ page: PresentedPage, _ id: Int, _ error: String) {
+        guard let waiting = page.waiting.removeValue(forKey: id) else { return }
+        switch waiting {
+        case .fetch(let seq): output(.res(id: page.id, seq: seq, mime: nil, data: nil, end: true, error: error))
+        case .bridge(let seq): output(.reply(id: page.id, seq: seq, response: nil, error: error))
+        case .read(_, _, let finish): finish(.failure(SocketClientError(error)))
+        }
     }
 
     private func answer(_ page: PresentedPage, _ frame: PageServeFrame) {
@@ -199,6 +226,7 @@ extension PhoneLinkPresenter {
         let done = { page.waiting[frame.id] = nil }
         switch (waiting, frame) {
         case let (.fetch(seq), .head(_, mime)):
+            guard mime.utf8.count <= Self.maxMime else { return fail(page, frame.id, Self.badAnswer) }
             output(.res(id: page.id, seq: seq, mime: mime, data: nil, end: false, error: nil))
         case let (.fetch(seq), .chunk(_, data)):
             output(.res(id: page.id, seq: seq, mime: nil, data: data, end: false, error: nil))
@@ -210,7 +238,10 @@ extension PhoneLinkPresenter {
             output(.res(id: page.id, seq: seq, mime: nil, data: nil, end: true, error: error))
         case let (.bridge(seq), .reply(_, response)):
             done()
-            output(.reply(id: page.id, seq: seq, response: response, error: nil))
+            let reply = PhonePageDown.reply(id: page.id, seq: seq, response: response, error: nil)
+            // escaping can grow a reply past the room `highWater` leaves for one line
+            output(PhonePageCodec.encode(reply).count <= Self.maxPipeLine ? reply
+                   : .reply(id: page.id, seq: seq, response: nil, error: "the answer is too large for the phone"))
         case let (.bridge(seq), .failure(_, error)):
             done()
             output(.reply(id: page.id, seq: seq, response: nil, error: error))
@@ -237,10 +268,11 @@ extension PhoneLinkPresenter {
         page.waiting[id] = waiting
         guard let line = try? PageServeCodec.encode(frame(id)) else { return }
         page.pipe?.send(line)
+        pump()
     }
 
-    /// Fills the channel up to `highWater`: memory answers first, then one paused pipe per call, each of whose lines
-    /// is at most one chunk.
+    /// Fills the channel up to `highWater`: memory answers, then one pipe's next line. Only one pipe is ever resumed, and
+    /// only under `highWater`, so the lines in flight after the check (one chunk, one pipe line) fit the channel's buffer.
     func pump() {
         while !stopped, link.pending() < Self.highWater, !serving.isEmpty {
             var next = serving.removeFirst()
@@ -251,7 +283,11 @@ extension PhoneLinkPresenter {
             next.offset = end
             if !last { serving.insert(next, at: 0) }
         }
-        guard link.pending() < Self.highWater, let page = pages.values.first(where: \.paused) else { return }
+        guard !stopped, link.pending() < Self.highWater, !pages.values.contains(where: { !$0.paused }) else { return }
+        let ready = pages.values.filter { $0.pipe != nil && !$0.waiting.isEmpty }.sorted { $0.id < $1.id }
+        // round robin by id, so one long transfer does not starve the other pages
+        guard let page = ready.first(where: { $0.id > lastPipe }) ?? ready.first else { return }
+        lastPipe = page.id
         page.paused = false
         page.pipe?.resume()
     }
@@ -387,11 +423,17 @@ extension PhoneLinkPresenter {
             guard case .file = page.request.source, page.pipe != nil, path != PhonePage.contentPath, path != PhonePage.scriptPath else {
                 return output(.res(id: id, seq: seq, mime: nil, data: nil, end: true, error: "not found"))
             }
+            guard page.waiting.count < Self.maxWaiting else {
+                return output(.res(id: id, seq: seq, mime: nil, data: nil, end: true, error: PageServeFrame.busy))
+            }
             pipeSend(page, .fetch(seq: seq)) { .resource(id: $0, path: path) }
         case let .bridge(id, seq, line):
             // a bridge line goes only to its page's pipe, where the origin judges it as a page's request
             guard let page = pages[id], case .file = page.request.source, page.pipe != nil else {
                 return output(.reply(id: id, seq: seq, response: nil, error: "this page has no bridge"))
+            }
+            guard page.waiting.count < Self.maxWaiting else {
+                return output(.reply(id: id, seq: seq, response: nil, error: PageServeFrame.busy))
             }
             pipeSend(page, .bridge(seq: seq)) { .bridge(id: $0, request: line) }
         case let .state(id, load, title, current, canGoBack, appliedSeq, hidden, error):

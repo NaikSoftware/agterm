@@ -153,12 +153,12 @@ struct PhoneLinkPresenterTests {
         for frame: PageServeFrame in [.head(id: resource.id, mimeType: "text/css"), .chunk(id: resource.id, data: Data("a".utf8)), .end(id: resource.id)] {
             pipe.send(try PageServeCodec.encode(frame))
         }
-        #expect(harness.line() == .res(id: "p2", seq: 1, mime: "text/css", data: nil, end: false, error: nil))
         Self.send(stream, gen: 2, .ping)
         #expect(stream.frame { $0 == .ack } != nil)
         #expect(harness.remainingLines().isEmpty)
         harness.pending = 0
         harness.drained()
+        #expect(harness.line() == .res(id: "p2", seq: 1, mime: "text/css", data: nil, end: false, error: nil))
         #expect(harness.line() == .res(id: "p2", seq: 1, mime: nil, data: Data("a".utf8), end: false, error: nil))
         #expect(harness.line() == .res(id: "p2", seq: 1, mime: nil, data: nil, end: true, error: nil))
     }
@@ -250,7 +250,7 @@ struct PhoneLinkPresenterTests {
 
         init(origin: ControlAttachOrigin = PhoneLinkPresenterTests.origin, pending: Int = 0,
              output: PhoneLinkScheduler.Enqueue = .queued, spawn: PhoneLinkPresenter.Spawn? = nil,
-             markdownDirectory: URL? = Harness.markdown) throws {
+             markdownDirectory: URL? = Harness.markdown, buffer: Int? = nil) throws {
             pendingBytes = pending
             try server.start()
             server.holdStreams("zmx.present")
@@ -258,9 +258,15 @@ struct PhoneLinkPresenterTests {
             server.answerAttach(ControlResponse(ok: true, result: ControlResult(attach: RawStubServer.fakeAttach("cat", origin: origin))))
             let link = PhoneLinkPresenter.Link(
                 frame: { [weak self] frame in self?.lock.withLock { self?.sent.append(frame) } },
+                // with a buffer, lines count toward `pending` and past it overflow, as the scheduler's queue does
                 output: { [weak self] line in
-                    self?.lock.withLock { self?.lines.append(line) }
-                    return output
+                    self?.lock.withLock { () -> PhoneLinkScheduler.Enqueue in
+                        guard let self else { return .closed }
+                        self.lines.append(line)
+                        guard let buffer else { return output }
+                        self.pendingBytes += line.count
+                        return self.pendingBytes > buffer ? .overflowed : .queued
+                    } ?? .closed
                 },
                 pending: { [weak self] in self?.pending ?? 0 },
                 ended: { [weak self] in self?.lock.withLock { self?.didEnd = true } })
@@ -313,6 +319,8 @@ struct PhoneLinkPresenterTests {
         }
 
         func waitFrame(_ frame: PhoneLinkFrame) -> Bool { wait { sent.contains(frame) } }
+
+        func sentFrames() -> [PhoneLinkFrame] { lock.withLock { sent } }
 
         func waitEnded() -> Bool { wait { didEnd } }
 

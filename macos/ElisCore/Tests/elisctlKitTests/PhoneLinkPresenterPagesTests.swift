@@ -230,6 +230,86 @@ struct PhoneLinkPresenterPagesTests {
         #expect(String(decoding: script, as: UTF8.self) == MarkdownAssets(directory: Harness.markdown).textScript)
     }
 
+    @Test func twoPipesAnsweringTogetherDoNotOverflowTheChannel() throws {
+        let harness = try Harness(buffer: PhoneLinkSession.bufferLimit)
+        defer { harness.stop() }
+        let (stream, first) = try Self.filePage(harness)
+        defer { withExtendedLifetime(stream) {} }
+        var other = Self.file
+        other.page = "p4"
+        other.token = "t4"
+        Self.send(stream, .pageRequest(other))
+        let second = try #require(harness.server.nextStream())
+        #expect(harness.remainingLines().count == 2)
+        harness.pending = PhoneLinkPresenter.highWater - 1
+        harness.phone(.bridge(id: "p2", seq: 1, line: #"{"cmd":"notify"}"#))
+        harness.phone(.bridge(id: "p4", seq: 1, line: #"{"cmd":"notify"}"#))
+        let bridges = [try #require(Self.pipeFrame(first)), try #require(Self.pipeFrame(second))]
+        let response = "\"" + String(repeating: "a", count: 140_000) + "\""
+        // the origin side blocks while the relay holds a pipe paused
+        for (pipe, bridge) in zip([first, second], bridges) { Thread { Self.answer(pipe, [.reply(id: bridge.id, response: response)]) }.start() }
+        var replies = 0
+        let deadline = Date().addingTimeInterval(30)
+        while replies < 2, Date() < deadline {
+            if case .reply(_, _, response?, nil)? = harness.line(timeout: 1) { replies += 1 }
+            harness.pending = 0
+            harness.drained()
+        }
+        #expect(replies == 2)
+        #expect(!harness.sentFrames().contains(.json(.close, channel: 5, PhoneLinkClose(reason: "overflow"))))
+    }
+
+    @Test func aPhoneCannotQueueRequestsWithoutEnd() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let (stream, pipe) = try Self.filePage(harness)
+        defer { withExtendedLifetime(stream) {} }
+        _ = harness.line()
+        for seq in 1...(PhoneLinkPresenter.maxWaiting + 1) { harness.phone(.fetch(id: "p2", seq: seq, path: "/w/\(seq)")) }
+        #expect(harness.line() == .res(id: "p2", seq: PhoneLinkPresenter.maxWaiting + 1, mime: nil, data: nil, end: true,
+                                       error: PageServeFrame.busy))
+        #expect((1...PhoneLinkPresenter.maxWaiting).allSatisfy { _ in Self.pipeFrame(pipe) != nil })
+    }
+
+    @Test func anOversizedChunkEndsThePage() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let (stream, pipe) = try Self.filePage(harness)
+        _ = harness.line()
+        harness.phone(.fetch(id: "p2", seq: 1, path: "/w/a.bin"))
+        let resource = try #require(Self.pipeFrame(pipe))
+        let data = Data(repeating: 1, count: PageServeCodec.maxChunkBytes + 1).base64EncodedString()
+        pipe.send(#"{"data":"\#(data)","id":\#(resource.id),"kind":"chunk"}"# + "\n")
+        #expect(harness.line() == .command(id: "p2", seq: 0, action: "close", sizePercent: nil))
+        let closed = try #require(stream.frame { if case .pageClosed = $0 { true } else { false } })
+        #expect(closed.body == .pageClosed(PresentationPageChange(page: "p2", reason: PresentationPageChange.channelLost, offer: 9)))
+        #expect(pipe.waitEnd())
+    }
+
+    @Test func anUndecodableOriginLineFailsItsRequest() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let (stream, pipe) = try Self.filePage(harness)
+        defer { withExtendedLifetime(stream) {} }
+        _ = harness.line()
+        harness.phone(.fetch(id: "p2", seq: 1, path: "/w/a.bin"))
+        let resource = try #require(Self.pipeFrame(pipe))
+        pipe.send(#"{"id":\#(resource.id),"kind":"bogus"}"# + "\n")
+        #expect(harness.line() == .res(id: "p2", seq: 1, mime: nil, data: nil, end: true, error: "bad answer from the origin"))
+    }
+
+    @Test func aRendererFolderWithoutItsScriptsRejectsTheMarkdownPage() throws {
+        let empty = FileManager.default.temporaryDirectory.appendingPathComponent("elis-md-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: empty) }
+        let harness = try Harness(markdownDirectory: empty)
+        defer { harness.stop() }
+        let stream = try Self.presentation(harness)
+        Self.send(stream, .pageRequest(Self.content(.text(path: "/w/a.txt", line: nil))))
+        let rejected = try #require(stream.frame { if case .pageRejected = $0 { true } else { false } })
+        #expect(rejected.body == .pageRejected(PresentationPageChange(page: "p3", reason: "the markdown renderer is missing", offer: 4)))
+    }
+
     // MARK: - through the link
 
     @Test func aLargeFileDoesNotOverflowTheChannel() throws {

@@ -816,16 +816,18 @@ final class ControlServerPageServeTests: XCTestCase {
         let fix = try fixture()
         fix.session.surface = GhosttySurfaceView(workingDirectory: "/tmp", backedByZmx: true)
         let session = fix.session.id.uuidString, pane = fix.session.paneIdentity, docs = docs!, path = socketPath!
+        // the fixture already reported this pane `.follower`, as a phone claim makes it
+        XCTAssertEqual(ZmxLeadBook.shared.role(pane: pane), .follower)
+        let elisctl = try XCTUnwrap(Bundle.main.url(forAuxiliaryExecutable: "elisctl"))
         let phone = try XCTUnwrap(HelperClient(path: path))
-        let opener = try XCTUnwrap(HelperClient(path: path))
-        clients += [phone, opener]
+        clients.append(phone)
         let frame: @Sendable (String?) -> PresentationFrame? = { line in line.flatMap { try? PresentationCodec.decode(Data($0.utf8)) } }
         let send: @Sendable (Int, PresentationFrame.Body) -> Void = { gen, body in
             if let line = try? PresentationCodec.encode(PresentationFrame(gen: gen, rev: 0, body: body)) {
                 phone.send(String(decoding: line.dropLast(), as: UTF8.self))
             }
         }
-        let run = offMain { () -> (outcome: String?, tree: String?) in
+        let run = offMain { () -> (status: String?, tree: String?) in
             phone.send(#"{"cmd":"zmx.present","target":"\#(session)"}"#)
             let reply = phone.readLine()
             send(0, .hello(PresentationHello(version: 1, kinds: PresentationHub.supportedKinds + [PresentationHub.viewerPhoneKind],
@@ -835,40 +837,36 @@ final class ControlServerPageServeTests: XCTestCase {
             send(gen, .leadReport(PresentationLeadReport(leaders: [pane])))
             send(gen, .ping)
             while let next = frame(phone.readLine()), next.body != .ack {}
-            opener.send(#"{"cmd":"session.overlay.open","target":"\#(session)","args":{"html":"\#(docs.path)/index.html","cwd":"\#(docs.path)"}}"#)
-            let openedLine = opener.readLine()
-            guard let opened = openedLine, let pageID = try? JSONDecoder().decode(ControlResponse.self, from: Data(opened.utf8)).result?.pageID
-            else { return ("no page id: \(openedLine ?? "nil")", nil) }
+            // the CLI's own --block path, on this test's socket only
+            let block = Process()
+            block.executableURL = elisctl
+            block.arguments = ["session", "overlay", "open", "--html", docs.path + "/index.html", "--cwd", docs.path, "--block",
+                               "--target", session, "--socket", path]
+            block.standardOutput = FileHandle.nullDevice
+            block.standardError = FileHandle.nullDevice
+            guard (try? block.run()) != nil else { return ("elisctl did not start", nil) }
+            defer { if block.isRunning { block.terminate() } }
             var request: PresentationPage?
             while request == nil, let next = frame(phone.readLine()) {
                 if case .pageRequest(let page) = next.body { request = page }
             }
-            guard let request, let pipe = HelperClient(path: path) else { return (nil, nil) }
+            guard let request, let pipe = HelperClient(path: path) else { return ("no page request", nil) }
             defer { close(pipe.fd) }
             pipe.send(#"{"cmd":"session.overlay.page.serve","target":"\#(request.token)"}"#)
             _ = pipe.readLine()
             send(gen, .pageClosed(PresentationPageChange(page: request.page, offer: request.offer)))
-            let deadline = Date().addingTimeInterval(8)
-            while Date() < deadline {
-                guard let poller = HelperClient(path: path) else { return (nil, nil) }
-                defer { close(poller.fd) }
-                poller.send(#"{"cmd":"session.overlay.result","args":{"page":"\#(pageID)"}}"#)
-                let outcome = poller.readLine().flatMap { try? JSONDecoder().decode(ControlResponse.self, from: Data($0.utf8)) }?
-                    .result?.pageOutcome?.outcome
-                if let outcome, outcome != .pending {
-                    let tree = HelperClient(path: path).flatMap { client -> String? in
-                        defer { close(client.fd) }
-                        client.send(#"{"cmd":"tree"}"#)
-                        return client.readLine()
-                    }
-                    return (outcome.rawValue, tree)
-                }
-                usleep(100_000)
+            let deadline = Date().addingTimeInterval(10)
+            while block.isRunning, Date() < deadline { usleep(50_000) }
+            guard !block.isRunning else { return ("--block still running", nil) }
+            let tree = HelperClient(path: path).flatMap { client -> String? in
+                defer { close(client.fd) }
+                client.send(#"{"cmd":"tree"}"#)
+                return client.readLine()
             }
-            return (nil, nil)
+            return (String(block.terminationStatus), tree)
         }
-        let (outcome, tree) = try XCTUnwrap(run)
-        XCTAssertEqual(outcome, ControlHtmlPageOutcomeState.dismissed.rawValue)
+        let (status, tree) = try XCTUnwrap(run)
+        XCTAssertEqual(status, "2", "--block exits 2 for a dismissed page")
         XCTAssertFalse(try XCTUnwrap(tree).contains("htmlOverlays"))
     }
 
