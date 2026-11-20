@@ -390,6 +390,20 @@ struct ClaudeTranscriptTests {
         #expect(fixture.reader.scans == 1)
     }
 
+    @Test func subagentFanOutKeepsTheMainIndex() throws {
+        let agents = 0..<10
+        let fixture = try Fixture([user("u1", parent: nil)] + agents.map { at in
+            toolUse("a\(at)", parent: at == 0 ? "u1" : "a\(at - 1)", id: "t\(at)", name: "Agent", input: #"{"description":"d"}"#, message: "m")
+        })
+        for at in agents {
+            try fixture.write("subagents/agent-x\(at).meta.json", #"{"toolUseId":"t\#(at)"}"#)
+            try fixture.write("subagents/agent-x\(at).jsonl", toolUse("s\(at)", parent: nil, id: "b\(at)", sidechain: true) + "\n")
+        }
+        #expect(try fixture.page().pending.count == 10)
+        #expect(try fixture.page().pending.count == 10)
+        #expect(fixture.reader.scans == 11)
+    }
+
     @Test func instanceIsSharedPerDirectory() {
         #expect(ClaudeTranscript.instance(directory: "/tmp/a") === ClaudeTranscript.instance(directory: "/tmp/a"))
         #expect(ClaudeTranscript.instance(directory: "/tmp/a") !== ClaudeTranscript.instance(directory: "/tmp/b"))

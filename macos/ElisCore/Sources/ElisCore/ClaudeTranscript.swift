@@ -70,21 +70,24 @@ public final class ClaudeTranscript: @unchecked Sendable {
 
     private struct Cache {
         var paths: [String: String] = [:]
-        // least recently used first; each index has its own lock so one session's first scan never stalls another's poll
-        var indexes: [(path: String, index: Locked<ClaudeTranscriptIndex>)] = []
+        // least recently used first, keyed by keepsSidechains so an Agent fan-out never evicts a main transcript;
+        // each index has its own lock so one session's first scan never stalls another's poll
+        var indexes: [Bool: [(path: String, index: Locked<ClaudeTranscriptIndex>)]] = [:]
     }
 
     let claudeDirectory: String
     let cacheLimit: Int
+    let subagentCacheLimit: Int
     private let cache = Locked(Cache())
     private let scanCount = Locked(0)
 
     /// How many indexes were built from scratch.
     var scans: Int { scanCount.withLock { $0 } }
 
-    public init(claudeDirectory: String, cacheLimit: Int = 8) {
+    public init(claudeDirectory: String, cacheLimit: Int = 8, subagentCacheLimit: Int = 64) {
         self.claudeDirectory = claudeDirectory
         self.cacheLimit = cacheLimit
+        self.subagentCacheLimit = subagentCacheLimit
     }
 
     /// Blocking file reads; never call it on the main thread.
@@ -118,15 +121,17 @@ public final class ClaudeTranscript: @unchecked Sendable {
 
     private func index(_ path: String, keepsSidechains: Bool) -> Locked<ClaudeTranscriptIndex> {
         cache.withLock { cache in
-            if let at = cache.indexes.firstIndex(where: { $0.path == path }) {
-                let entry = cache.indexes.remove(at: at)
-                cache.indexes.append(entry)
+            var indexes = cache.indexes[keepsSidechains] ?? []
+            defer { cache.indexes[keepsSidechains] = indexes }
+            if let at = indexes.firstIndex(where: { $0.path == path }) {
+                let entry = indexes.remove(at: at)
+                indexes.append(entry)
                 return entry.index
             }
             scanCount.withLock { $0 += 1 }
             let made = Locked(ClaudeTranscriptIndex(path: path, keepsSidechains: keepsSidechains))
-            cache.indexes.append((path, made))
-            if cache.indexes.count > cacheLimit { cache.indexes.removeFirst() }
+            indexes.append((path, made))
+            if indexes.count > (keepsSidechains ? subagentCacheLimit : cacheLimit) { indexes.removeFirst() }
             return made
         }
     }
