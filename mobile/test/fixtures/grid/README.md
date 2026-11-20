@@ -33,3 +33,4 @@ Layout is the fullscreen TUI (alternate screen) unless the name starts with `cla
 
 The 100-column grids carry an OSC 8 `/rc` link whose session id is replaced with `session_REDACTED`.
 Claude writes U+00A0, not a space, after the input row's `❯`.
+Every grid carries rows from the capturing setup, not from Claude itself: the `● full …` band above the composer (a plugin), the custom statusline, and `← 2 agents` on the mode line; never anchor on them.
