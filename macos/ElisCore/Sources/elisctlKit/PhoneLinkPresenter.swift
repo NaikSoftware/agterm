@@ -31,24 +31,34 @@ final class PhoneLinkPresenter: @unchecked Sendable {
     let channel: UInt32
     let request: PhoneLinkOpen
     private let socketPath: String
-    private let queue: DispatchQueue
+    let queue: DispatchQueue
     private let peer: String
-    private let log: (String) -> Void
-    private let link: Link
-    private let spawn: Spawn
+    let log: (String) -> Void
+    let link: Link
+    let spawn: Spawn
+    /// The renderer scripts' folder for markdown and text pages; nil when the install has none.
+    let markdownDirectory: URL?
+    lazy var assets = MarkdownAssets(directory: markdownDirectory)
     private var stream: PhoneLinkLineStream?
+    private(set) var origin: ControlAttachOrigin?
+    /// Pages by the origin's id, from their request until they close.
+    var pages: [String: PresentedPage] = [:]
+    /// Phone DATA past the last newline.
+    var phoneLine = Data()
+    /// Content and script answers served from memory, oldest first.
+    var serving: [MemoryAnswer] = []
     private var generation = 0
     /// The origin's hello listed `viewer.phone`; an older origin would route asks to a lead the phone reports.
     private var phoneOrigin = false
     private var leads: Set<UUID> = []
     private var sentLeads: Set<UUID> = []
     private var pendingBatch = PresentationPendingBatch()
-    private var stopped = false
+    private(set) var stopped = false
     /// From the app request's send until the stream is connected or refused, even after `stop()`.
     private(set) var asking = false
 
     init(channel: UInt32, request: PhoneLinkOpen, socketPath: String, queue: DispatchQueue, peer: String,
-         log: @escaping (String) -> Void, link: Link, spawn: Spawn? = nil) {
+         log: @escaping (String) -> Void, link: Link, spawn: Spawn? = nil, markdownDirectory: URL? = PhoneLinkPresenter.bundledMarkdown) {
         self.channel = channel
         self.request = request
         self.socketPath = socketPath
@@ -56,6 +66,7 @@ final class PhoneLinkPresenter: @unchecked Sendable {
         self.peer = peer
         self.log = log
         self.link = link
+        self.markdownDirectory = markdownDirectory
         self.spawn = spawn ?? { origin, token in
             if let host = origin.host {
                 return try .process(argv: Self.remoteArgv(host: host, session: origin.session, pageToken: token), queue: queue)
@@ -87,6 +98,7 @@ final class PhoneLinkPresenter: @unchecked Sendable {
             let opened = Result { try spawn(origin, nil) }
             queue.async { [self] in
                 asking = false
+                self.origin = origin
                 connected(opened)
             }
         }
@@ -98,18 +110,17 @@ final class PhoneLinkPresenter: @unchecked Sendable {
         reportLeads()
     }
 
-    /// DATA from the phone: `PhonePageUp` lines.
-    func receive(_: Data) {}
-
-    /// The scheduler sent a frame: page pipes resume under `highWater`.
-    func drained() {}
-
     /// Ends the presentation stream first: the origin then retires the page pipes, where a pipe ending first would
-    /// read as a lost page.
+    /// read as a lost page. A pipe the origin leaves open is closed after `pipeGrace`.
     func stop() {
         guard !stopped else { return }
         stopped = true
         stream?.close()
+        let pipes = pages.values.compactMap(\.pipe)
+        pages = [:]
+        serving = []
+        guard !pipes.isEmpty else { return }
+        queue.asyncAfter(deadline: .now() + Self.pipeGrace) { pipes.forEach { $0.close() } }
     }
 
     private func connected(_ result: Result<PhoneLinkLineStream, Error>) {
@@ -143,7 +154,9 @@ final class PhoneLinkPresenter: @unchecked Sendable {
     private func apply(_ body: PresentationFrame.Body) {
         switch body {
         case .ping: send(.ack)
-        case let .pageRequest(page): show(page)
+        case let .pageRequest(page): pageRequest(page)
+        case let .pageClose(change): pageClose(change)
+        case let .pageCommand(command): pageCommand(command)
         case let .pendingChunk(chunk): pendingBatch.add(chunk)
         case .pendingCommit:
             for entry in (try? pendingBatch.commit()) ?? [] {
@@ -156,16 +169,7 @@ final class PhoneLinkPresenter: @unchecked Sendable {
         }
     }
 
-    private func show(_ page: PresentationPage) {
-        // shortcut: only a URL page reaches the phone; file and content pages need the page pipe and are refused
-        guard case let .url(url) = page.source else {
-            return send(.pageRejected(PresentationPageChange(page: page.page, reason: "unsupported", offer: page.offer)))
-        }
-        output(.page(PhonePage(id: page.page, kind: "url", url: url, javascript: page.javascript, chromeless: page.chromeless,
-                               browse: page.browse, hidden: false, title: page.identity, sizePercent: page.sizePercent)))
-    }
-
-    private func output(_ line: PhonePageDown) {
+    func output(_ line: PhonePageDown) {
         // the scheduler has already dropped the channel's queue mid-line
         if link.output(PhonePageCodec.encode(line)) == .overflowed { close(reason: "overflow") }
     }
@@ -176,7 +180,7 @@ final class PhoneLinkPresenter: @unchecked Sendable {
         send(.leadReport(PresentationLeadReport(leaders: leads.sorted { $0.uuidString < $1.uuidString })))
     }
 
-    private func send(_ body: PresentationFrame.Body) {
+    func send(_ body: PresentationFrame.Body) {
         guard let stream, let line = try? PresentationCodec.encode(PresentationFrame(gen: generation, rev: 0, body: body)) else { return }
         stream.send(line)
     }
@@ -187,7 +191,7 @@ final class PhoneLinkPresenter: @unchecked Sendable {
         link.ended()
     }
 
-    private func close(reason: String) {
+    func close(reason: String) {
         guard !stopped else { return }
         stop()
         link.frame(.json(.close, channel: channel, PhoneLinkClose(reason: reason)))

@@ -812,6 +812,66 @@ final class ControlServerPageServeTests: XCTestCase {
         XCTAssertTrue(fix.server.presentationHub.hasPresenter(session: fix.session.id))
     }
 
+    func testABlockingPageClosedFromThePhoneEndsDismissed() throws {
+        let fix = try fixture()
+        fix.session.surface = GhosttySurfaceView(workingDirectory: "/tmp", backedByZmx: true)
+        let session = fix.session.id.uuidString, pane = fix.session.paneIdentity, docs = docs!, path = socketPath!
+        let phone = try XCTUnwrap(HelperClient(path: path))
+        let opener = try XCTUnwrap(HelperClient(path: path))
+        clients += [phone, opener]
+        let frame: @Sendable (String?) -> PresentationFrame? = { line in line.flatMap { try? PresentationCodec.decode(Data($0.utf8)) } }
+        let send: @Sendable (Int, PresentationFrame.Body) -> Void = { gen, body in
+            if let line = try? PresentationCodec.encode(PresentationFrame(gen: gen, rev: 0, body: body)) {
+                phone.send(String(decoding: line.dropLast(), as: UTF8.self))
+            }
+        }
+        let run = offMain { () -> (outcome: String?, tree: String?) in
+            phone.send(#"{"cmd":"zmx.present","target":"\#(session)"}"#)
+            let reply = phone.readLine()
+            send(0, .hello(PresentationHello(version: 1, kinds: PresentationHub.supportedKinds + [PresentationHub.viewerPhoneKind],
+                                             mode: .mirror)))
+            let first = phone.readLine()
+            guard let gen = frame(first)?.gen else { return ("no hello: \(reply ?? "nil") \(first ?? "nil")", nil) }
+            send(gen, .leadReport(PresentationLeadReport(leaders: [pane])))
+            send(gen, .ping)
+            while let next = frame(phone.readLine()), next.body != .ack {}
+            opener.send(#"{"cmd":"session.overlay.open","target":"\#(session)","args":{"html":"\#(docs.path)/index.html","cwd":"\#(docs.path)"}}"#)
+            let openedLine = opener.readLine()
+            guard let opened = openedLine, let pageID = try? JSONDecoder().decode(ControlResponse.self, from: Data(opened.utf8)).result?.pageID
+            else { return ("no page id: \(openedLine ?? "nil")", nil) }
+            var request: PresentationPage?
+            while request == nil, let next = frame(phone.readLine()) {
+                if case .pageRequest(let page) = next.body { request = page }
+            }
+            guard let request, let pipe = HelperClient(path: path) else { return (nil, nil) }
+            defer { close(pipe.fd) }
+            pipe.send(#"{"cmd":"session.overlay.page.serve","target":"\#(request.token)"}"#)
+            _ = pipe.readLine()
+            send(gen, .pageClosed(PresentationPageChange(page: request.page, offer: request.offer)))
+            let deadline = Date().addingTimeInterval(8)
+            while Date() < deadline {
+                guard let poller = HelperClient(path: path) else { return (nil, nil) }
+                defer { close(poller.fd) }
+                poller.send(#"{"cmd":"session.overlay.result","args":{"page":"\#(pageID)"}}"#)
+                let outcome = poller.readLine().flatMap { try? JSONDecoder().decode(ControlResponse.self, from: Data($0.utf8)) }?
+                    .result?.pageOutcome?.outcome
+                if let outcome, outcome != .pending {
+                    let tree = HelperClient(path: path).flatMap { client -> String? in
+                        defer { close(client.fd) }
+                        client.send(#"{"cmd":"tree"}"#)
+                        return client.readLine()
+                    }
+                    return (outcome.rawValue, tree)
+                }
+                usleep(100_000)
+            }
+            return (nil, nil)
+        }
+        let (outcome, tree) = try XCTUnwrap(run)
+        XCTAssertEqual(outcome, ControlHtmlPageOutcomeState.dismissed.rawValue)
+        XCTAssertFalse(try XCTUnwrap(tree).contains("htmlOverlays"))
+    }
+
     func testLosingThePresenterBringsThePageHereAndClosesItsChannel() throws {
         let fix = try fixture()
         let page = try openFile(fix)

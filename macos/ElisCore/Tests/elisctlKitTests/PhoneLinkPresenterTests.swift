@@ -5,8 +5,8 @@ import ElisCore
 @testable import elisctlKit
 
 struct PhoneLinkPresenterTests {
-    private static let pane = UUID()
-    private static let origin = ControlAttachOrigin(session: "O1", pane: pane.uuidString, host: nil)
+    static let pane = UUID()
+    static let origin = ControlAttachOrigin(session: "O1", pane: pane.uuidString, host: nil)
     private static let leader = #"printf '\033]2;zmx-role;n1:leader:1\007'; "#
 
     // MARK: - through the link
@@ -141,9 +141,25 @@ struct PhoneLinkPresenterTests {
         defer { harness.stop() }
         let stream = try #require(harness.server.nextStream())
         Self.answer(stream, gen: 2)
-        Self.send(stream, gen: 2, .pageRequest(Self.urlPage))
+        let page = PresentationPage(page: "p2", token: "t2", source: .file(path: "/w/index.html", grantRoot: "/w"), identity: "index.html",
+                                    chromeless: false, javascript: false, navigation: false, browse: false, persistent: false,
+                                    backgroundColor: nil, pane: nil, sizePercent: nil, follow: false)
+        Self.send(stream, gen: 2, .pageRequest(page))
+        let pipe = try #require(harness.server.nextStream())
+        guard case .page = harness.line() else { Issue.record("no page line"); return }
+        harness.phone(.fetch(id: "p2", seq: 1, path: "/w/a.css"))
+        let resource = try #require(pipe.readLine().flatMap { try? PageServeCodec.decode($0) })
+        for frame: PageServeFrame in [.head(id: resource.id, mimeType: "text/css"), .chunk(id: resource.id, data: Data("a".utf8)), .end(id: resource.id)] {
+            pipe.send(try PageServeCodec.encode(frame))
+        }
+        #expect(harness.line() == .res(id: "p2", seq: 1, mime: "text/css", data: nil, end: false, error: nil))
         Self.send(stream, gen: 2, .ping)
         #expect(stream.frame { $0 == .ack } != nil)
+        #expect(harness.remainingLines().isEmpty)
+        harness.pending = 0
+        harness.drained()
+        #expect(harness.line() == .res(id: "p2", seq: 1, mime: nil, data: Data("a".utf8), end: false, error: nil))
+        #expect(harness.line() == .res(id: "p2", seq: 1, mime: nil, data: nil, end: true, error: nil))
     }
 
     @Test func anOverflowClosesTheChannel() throws {
@@ -159,12 +175,12 @@ struct PhoneLinkPresenterTests {
 
     // MARK: - helpers
 
-    private static let urlPage = PresentationPage(
+    static let urlPage = PresentationPage(
         page: "p1", token: "t1", source: .url("https://example.com/"), identity: "example.com", chromeless: false, javascript: false,
         navigation: false, browse: false, persistent: false, backgroundColor: nil, pane: nil, sizePercent: nil, follow: false)
 
     /// A link with a `present` channel 5 on S1 open, its origin stream held by the stub.
-    private static func presenting() throws -> (MobileFixture, MemoryPhone, StubStream) {
+    static func presenting() throws -> (MobileFixture, MemoryPhone, StubStream) {
         let (fixture, phone) = try MobileFixture.upgraded()
         serveOrigin(fixture.server)
         phone.deliver(open(5))
@@ -176,7 +192,7 @@ struct PhoneLinkPresenterTests {
     }
 
     /// Attaches carry the origin; a claim leads at once.
-    private static func serveOrigin(_ server: RawStubServer) {
+    static func serveOrigin(_ server: RawStubServer) {
         server.holdStreams("zmx.present")
         server.answerAttach { args in
             let attach = args["claim"] as? Bool == true ? RawStubServer.fakeAttach(leader + "exec cat >/dev/null", nonce: "n1", origin: origin)
@@ -185,12 +201,12 @@ struct PhoneLinkPresenterTests {
         }
     }
 
-    private static func answer(_ stream: StubStream, gen: Int,
-                               kinds: [String] = PresentationHub.supportedKinds + [PresentationHub.viewerPhoneKind]) {
+    static func answer(_ stream: StubStream, gen: Int,
+                       kinds: [String] = PresentationHub.supportedKinds + [PresentationHub.viewerPhoneKind]) {
         send(stream, gen: gen, .hello(PresentationHello(version: 1, kinds: kinds.filter(PhoneLinkPresenter.kinds.contains), mode: .mirror)))
     }
 
-    private static func send(_ stream: StubStream, gen: Int, _ body: PresentationFrame.Body) {
+    static func send(_ stream: StubStream, gen: Int, _ body: PresentationFrame.Body) {
         if let line = try? PresentationCodec.encode(PresentationFrame(gen: gen, rev: 1, body: body)) { stream.send(line) }
     }
 
@@ -198,7 +214,7 @@ struct PhoneLinkPresenterTests {
         if case .hello(let hello) = frame?.body { hello } else { nil }
     }
 
-    private static func open(_ channel: UInt32) -> Data {
+    static func open(_ channel: UInt32) -> Data {
         PhoneLinkFrame.json(.open, channel: channel, PhoneLinkOpen(type: "present", target: "S1")).encoded()
     }
 
@@ -208,34 +224,85 @@ struct PhoneLinkPresenterTests {
 
     private static func lead(_ frame: PhoneLinkFrame?) -> String? { try? frame?.decodeJSON(PhoneLinkLead.self).role }
 
-    private static func finish(_ fixture: MobileFixture, _ phone: MemoryPhone) {
+    static func finish(_ fixture: MobileFixture, _ phone: MemoryPhone) {
         phone.peerLeft()
         _ = fixture.waitLogged("phone disconnected from mem:1")
         fixture.stop()
     }
 
     /// One presenter on channel 5 over a stub app socket, with a link that records its frames.
-    private final class Harness: @unchecked Sendable {
+    /// One presenter on channel 5 over a stub app socket, with a link that records its frames and page lines.
+    final class Harness: @unchecked Sendable {
         let server = RawStubServer()
         let queue = DispatchQueue(label: "presenter.test")
         private let lock = NSLock()
         private var sent: [PhoneLinkFrame] = []
+        private var lines: [Data] = []
         private var didEnd = false
         private var presenter: PhoneLinkPresenter!
+        /// What `link.pending()` answers.
+        var pending: Int {
+            get { lock.withLock { pendingBytes } }
+            set { lock.withLock { pendingBytes = newValue } }
+        }
+        private var pendingBytes: Int
 
         init(origin: ControlAttachOrigin = PhoneLinkPresenterTests.origin, pending: Int = 0,
-             output: PhoneLinkScheduler.Enqueue = .queued, spawn: PhoneLinkPresenter.Spawn? = nil) throws {
+             output: PhoneLinkScheduler.Enqueue = .queued, spawn: PhoneLinkPresenter.Spawn? = nil,
+             markdownDirectory: URL? = Harness.markdown) throws {
+            pendingBytes = pending
             try server.start()
             server.holdStreams("zmx.present")
+            server.holdStreams(Command.sessionOverlayPageServe.rawValue)
             server.answerAttach(ControlResponse(ok: true, result: ControlResult(attach: RawStubServer.fakeAttach("cat", origin: origin))))
             let link = PhoneLinkPresenter.Link(
                 frame: { [weak self] frame in self?.lock.withLock { self?.sent.append(frame) } },
-                output: { _ in output },
-                pending: { pending },
+                output: { [weak self] line in
+                    self?.lock.withLock { self?.lines.append(line) }
+                    return output
+                },
+                pending: { [weak self] in self?.pending ?? 0 },
                 ended: { [weak self] in self?.lock.withLock { self?.didEnd = true } })
             presenter = PhoneLinkPresenter(channel: 5, request: PhoneLinkOpen(type: "present", target: "S1"), socketPath: server.path,
-                                           queue: queue, peer: "mem:1", log: { _ in }, link: link, spawn: spawn)
+                                           queue: queue, peer: "mem:1", log: { _ in }, link: link, spawn: spawn,
+                                           markdownDirectory: markdownDirectory)
             queue.sync { presenter.start() }
+        }
+
+        /// The app bundle's renderer folder in this checkout.
+        static let markdown = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../Elis/Resources/markdown")
+            .standardizedFileURL
+
+        /// Phone DATA as page lines.
+        func phone(_ up: PhonePageUp) {
+            var line = (try? JSONEncoder().encode(up)) ?? Data()
+            line.append(0x0A)
+            phoneBytes(line)
+        }
+
+        func phoneBytes(_ bytes: Data) { queue.async { [self] in presenter.receive(bytes) } }
+
+        func drained() { queue.async { [self] in presenter.drained() } }
+
+        func stopPresenter() { queue.sync { presenter.stop() } }
+
+        /// The next page line, waiting for it.
+        func line(timeout: TimeInterval = 30) -> PhonePageDown? {
+            let deadline = Date().addingTimeInterval(timeout)
+            while Date() < deadline {
+                if let line = lock.withLock({ lines.isEmpty ? nil : lines.removeFirst() }) {
+                    return try? JSONDecoder().decode(PhonePageDown.self, from: line.dropLast())
+                }
+                usleep(10_000)
+            }
+            return nil
+        }
+
+        /// Every page line not read yet, once none came for `quiet` seconds.
+        func remainingLines(quiet: TimeInterval = 0.5) -> [PhonePageDown] {
+            var out: [PhonePageDown] = []
+            while let line = line(timeout: quiet) { out.append(line) }
+            return out
         }
 
         func frames() -> [PhoneLinkFrame] {
