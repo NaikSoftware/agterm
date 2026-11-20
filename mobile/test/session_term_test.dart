@@ -829,9 +829,7 @@ void main() {
     final cols = claim['cols'] as int;
     final box = t.getSize(find.byKey(const Key('term')));
     expect(claim, {'type': 'vt', 'target': 's1', 'pane': 'left', 'claim': true, 'cols': cols, 'rows': (box.height / CellMetrics.fit(box.width, cols).h).floor()});
-    expect(_label(t, 'lead'), 'Leading…');
     await _leader(h);
-    expect(_label(t, 'lead'), 'Leading');
     expect((h.vts.single.cols, h.vts.single.rows), (cols, claim['rows']));
     await h.stop();
   });
@@ -869,7 +867,6 @@ void main() {
     expect(_claims(h), hasLength(2));
     expect(h.r.grids, isEmpty); // the claim brings the grid: no fit to reset first
     expect(h.r.lastChannel, greaterThan(_claimCh + 1));
-    expect(_label(t, 'lead'), 'Leading…');
     await h.stop();
   });
 
@@ -900,7 +897,6 @@ void main() {
     await h.opened();
     await t.pump(const Duration(seconds: 1));
     expect(_claims(h), hasLength(1));
-    expect(find.byKey(const Key('lead')), findsNothing);
     await _key(t, 'Up');
     await t.pump();
     expect(_claims(h), hasLength(2));
@@ -919,7 +915,6 @@ void main() {
     await h.opened();
     await t.pump(const Duration(seconds: 1));
     expect(_claims(h), hasLength(1));
-    expect(find.byKey(const Key('lead')), findsNothing);
     await h.stop();
   });
 
@@ -928,7 +923,6 @@ void main() {
     await h.start();
     await t.pump(const Duration(seconds: 1));
     expect(_claims(h), isEmpty);
-    expect(find.byKey(const Key('lead')), findsNothing);
     await h.stop();
   });
 
@@ -1057,14 +1051,13 @@ void main() {
     await t.tap(find.byKey(const Key('send')));
     await t.pump();
     expect(h.r.lastChannel, _claimCh);
-    expect(find.byKey(const Key('lead')), findsOneWidget);
+    expect(h.r.closes, isNot(contains(_claimCh))); // the claim is still pending
     expect(_types(h), 0);
     h.r.send(json(LinkKind.opened, _claimCh, {'error': 'session not realized'}));
     for (var i = 0; i < 10; i++) {
       await t.pump(const Duration(milliseconds: 10));
     }
     expect(find.text('session not realized'), findsOneWidget);
-    expect(find.byKey(const Key('lead')), findsNothing);
     expect(h.r.typed, ['\x1b[A', '\x03', 'ls', '\r']);
     await _key(t, 'Down');
     await t.pump();
@@ -1232,21 +1225,6 @@ void main() {
     await t.pump();
     expect(h.r.typed, ['\x1b[A']);
     expect(h.r.opens, isEmpty);
-    expect(find.byKey(const Key('lead')), findsNothing);
-    await h.stop();
-  });
-
-  testWidgets('chipShowsPendingThenLeadsThenClears', (t) async {
-    final h = Harness(t, treeOf());
-    await h.start();
-    await h.opened();
-    expect(_label(t, 'lead'), 'Leading…');
-    await _leader(h);
-    expect(_label(t, 'lead'), 'Leading');
-    h.r.send([...json(LinkKind.lead, _claimCh, {'role': 'follower'}), ...json(LinkKind.close, _claimCh, {'reason': 'the computer took the lead back'})]);
-    await t.pump();
-    await t.pump();
-    expect(find.byKey(const Key('lead')), findsNothing);
     await h.stop();
   });
 
@@ -1491,7 +1469,6 @@ void main() {
     expect(h.relays.length, 2);
     await h.opened();
     await t.pump(const Duration(milliseconds: 10));
-    expect(_label(t, 'lead'), 'Leading…');
     expect(find.text('Disconnected.'), findsNothing);
     expect(_claims(h), hasLength(1));
     expect(h.r.grids, isEmpty);
@@ -1544,7 +1521,7 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('appBarShowsTheLead', (t) async {
+  testWidgets('appBarShowsTheName', (t) async {
     await _loadFonts();
     _phone(t);
     final h = Harness(t, treeOf());
@@ -1552,11 +1529,6 @@ void main() {
     await h.opened();
     await t.pump(const Duration(milliseconds: 300));
     await expectLater(find.byType(Scaffold), matchesGoldenFile('goldens/session_screen.png'));
-    await expectLater(find.byType(AppBar), matchesGoldenFile('goldens/session_appbar_pending.png'));
-    expect(t.renderObject<RenderParagraph>(find.text('shell')).didExceedMaxLines, isFalse); // the name is not cut
-    await _leader(h);
-    await t.pump(const Duration(milliseconds: 300));
-    await expectLater(find.byType(AppBar), matchesGoldenFile('goldens/session_appbar_lead.png'));
     expect(t.renderObject<RenderParagraph>(find.text('shell')).didExceedMaxLines, isFalse); // the name is not cut
     await h.stop();
   });

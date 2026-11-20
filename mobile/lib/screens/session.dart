@@ -719,7 +719,6 @@ class _SessionScreenState extends State<SessionScreen> {
               style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
         ]),
         actions: [
-          if (_lead) _Tag(_leading ? 'Leading' : 'Leading…', key: const Key('lead')),
           if (m.state == LinkState.connected && m.via.isNotEmpty) _Tag(m.via, key: const Key('via')),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -1088,7 +1087,7 @@ class _PaneWriter implements GateWriter {
   bool pasteSafe(String text) => _now.pasteSafe(text);
 }
 
-/// A small bordered label in the app bar: the link the phone uses, the lead.
+/// A small bordered label in the app bar: the link the phone uses.
 class _Tag extends StatelessWidget {
   const _Tag(this.text, {super.key});
   final String text;
