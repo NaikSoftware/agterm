@@ -177,6 +177,27 @@ struct ClaudeTranscriptTests {
         #expect(page.items.allSatisfy { $0.running == nil })
     }
 
+    @Test func parallelResultsOffTheChainCloseTheirCallsOnAnAfterPage() throws {
+        let fixture = try Fixture([
+            user("u1", parent: nil),
+            toolUse("a1", parent: "u1", id: "t1", message: "m"),
+            toolUse("a2", parent: "a1", id: "t2", message: "m"),
+            toolUse("a3", parent: "a2", id: "t3", message: "m"),
+        ])
+        let tail = try fixture.page()
+        #expect(tail.items.filter { $0.running == true }.compactMap(\.id) == ["t1", "t2", "t3"])
+        try fixture.append(lines: [
+            toolResult("r3", parent: "a3", id: "t3"),
+            toolResult("r2", parent: "a2", id: "t2"),
+            toolResult("r1", parent: "a1", id: "t1"),
+            text("x", parent: "r1", message: "m2", "done"),
+        ])
+        let poll = try fixture.page(after: tail.next)
+        #expect(!poll.reset)
+        #expect(Set(poll.items.compactMap(\.id)) == ["t1", "t2", "t3"])
+        #expect(poll.items.allSatisfy { $0.running == nil })
+    }
+
     // MARK: - Reset
 
     @Test func heldIDMismatchResets() throws {

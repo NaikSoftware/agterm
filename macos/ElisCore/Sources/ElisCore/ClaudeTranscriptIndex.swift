@@ -87,8 +87,8 @@ final class ClaudeTranscriptIndex {
         return chain
     }
 
-    /// The active chain plus every record sharing a `message.id` with it: parallel tool calls chain off one another,
-    /// so all but one of them sit off the chain.
+    /// The active chain plus every record sharing a `message.id` with it, and their calls' results: parallel tool calls
+    /// chain off one another and each result off its own call, so all but one of each sit off the chain.
     func activeRecords() -> [Int] {
         if let cache = activeCache, cache.count == records.count { return cache.records }
         let chain = activeChain()
@@ -96,6 +96,9 @@ final class ClaudeTranscriptIndex {
         var active = Set(chain)
         for (index, record) in records.enumerated() where !record.sidechain && record.messageID.map(messages.contains) == true {
             active.insert(index)
+        }
+        for (id, call) in toolUses where active.contains(call) {
+            if let result = results[id] { active.insert(result) }
         }
         let sorted = active.sorted()
         activeCache = (records.count, sorted)
