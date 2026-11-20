@@ -408,6 +408,23 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('a content page the web view drops fails', (t) async {
+    final h = await _shown(t, {
+      't': 'page', 'id': 'c1', 'kind': 'content', 'javascript': false, 'chromeless': false, 'browse': false, 'hidden': false,
+      'title': 'big.png',
+    });
+    final fetches = pageUp(h).where((l) => l['t'] == 'fetch').toList();
+    await pageDown(h, [
+      for (final f in fetches) {'t': 'res', 'id': 'c1', 'seq': f['seq'], 'mime': 'text/html', 'data': base64Encode(utf8.encode('<img>')), 'end': true},
+    ]);
+    final web = h.webs.single..empty = true; // Android finishes a dropped document on about:blank too
+    web.c.finished('about:blank');
+    await t.pump();
+    expect(pageUp(h).last, allOf(containsPair('load', 'failed'), containsPair('error', 'the page is too large for the phone')));
+    expect(web.scripts, isEmpty);
+    await h.stop();
+  });
+
   group('a forward page', () {
     late int devPort; // free when the test starts, so the tunnel takes it
     Map<String, Object?> devPage({String id = 'd1'}) => {

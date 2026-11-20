@@ -24,6 +24,9 @@ abstract interface class PageWeb {
   Future<void> goForward();
   Future<bool> canGoBack();
   Future<String?> title();
+
+  /// Whether the document has no element in its head or body, as one the web view dropped.
+  Future<bool> isEmpty();
 }
 
 /// A sheet's side of its web view: the web view calls these, and the builder sets [web].
@@ -168,6 +171,11 @@ class _PageSheetState extends State<PageSheet> {
 
   Future<void> _finished(String url) async {
     if (!mounted || _closed || _failedAt != null) return;
+    // a content page always finishes on about:blank, so only its document tells that the web view dropped it
+    if (page.kind == 'content' && await _web.isEmpty().catchError((Object _) => false)) {
+      return _failed('the page is too large for the phone');
+    }
+    if (!mounted || _closed) return;
     _current = _address(url);
     _load = 'loaded';
     _loading = false;
@@ -557,6 +565,9 @@ class _NativeWeb implements PageWeb {
   Future<bool> canGoBack() => w.canGoBack();
   @override
   Future<String?> title() => w.getTitle();
+  @override
+  Future<bool> isEmpty() async =>
+      '${await w.runJavaScriptReturningResult('!(document.head?.firstElementChild || document.body?.firstElementChild)')}' == 'true';
 }
 
 /// A sheet's bridge under [nonce]; each part installs once per document, so the finish run skips what a head installed.

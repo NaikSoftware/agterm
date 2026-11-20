@@ -325,6 +325,9 @@ class FakeWeb implements PageWeb {
   @override
   Future<String?> title() async => titleText;
   String? titleText = 'doc title';
+  bool empty = false;
+  @override
+  Future<bool> isEmpty() async => empty;
 
   /// The nonce the sheet put in its prelude.
   String get nonce => RegExp(r"const n = '([0-9a-f]+)'").firstMatch(scripts.firstWhere((s) => s.contains('const n')))!.group(1)!;

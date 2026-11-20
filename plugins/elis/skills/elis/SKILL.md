@@ -843,7 +843,7 @@ Pages on the phone: to show the user a page, run `elisctl session overlay open -
 (drop `--js` for a static page, see [Displaying an HTML artifact](#displaying-an-html-artifact)), never `open FILE`,
 which Elis never sees. The page follows the user: it shows on the phone while the phone leads the pane, on the Mac
 otherwise, and moves (reloading) when the lead moves; `tree` marks it `htmlOverlays[].phone`.
-Log pages (`--text --follow-file`), diff pages and markdown with `--navigation` open on the Mac even while the phone leads.
+Log pages (`--text --follow-file`), diff pages, markdown with `--navigation` and `--image` pictures over 6 MB open on the Mac even while the phone leads.
 Questions, pickers, program overlays, HUDs and sounds stay on the Mac too. So a `--block` on one of those pages, or an
 `ask`/`pick`, waits on a screen the user may not see while they drive from the phone: prefer a page the phone shows.
 

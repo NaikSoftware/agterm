@@ -7,8 +7,11 @@ public struct MarkdownEmbedding: Sendable {
     private var read: [String: Int?] = [:]
     private var bytes = 0
     private var pixels = 0
+    private let maxBytes: Int
 
-    public init() {}
+    public init(maxBytes: Int = MarkdownPage.maxImageBytes) {
+        self.maxBytes = maxBytes
+    }
 
     /// room is how many bytes reading `image` may take, nil when it needs no read: a file already read, whose
     /// reference is recorded here, or a spent budget.
@@ -17,9 +20,8 @@ public struct MarkdownEmbedding: Sendable {
             if let known { embedded.references[image.reference] = known }
             return nil
         }
-        guard read.count < MarkdownPage.maxImages, bytes < MarkdownPage.maxImageBytes,
-              pixels < MarkdownPage.maxImagePixels else { return nil }
-        return MarkdownPage.maxImageBytes - bytes
+        guard read.count < MarkdownPage.maxImages, bytes < maxBytes, pixels < MarkdownPage.maxImagePixels else { return nil }
+        return maxBytes - bytes
     }
 
     /// add records what reading `image` gave: a picture still inside the pixel budget is embedded, and anything else,

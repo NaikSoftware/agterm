@@ -269,6 +269,20 @@ struct PhoneLinkPresenterPagesTests {
         #expect(!PhoneLinkPresenter.kinds.contains { ["page.text", "page.files", "page.links"].contains($0) })
     }
 
+    @Test func aMarkdownPageEmbedsPicturesUpToThePhoneBudget() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let stream = try Self.presentation(harness)
+        Self.send(stream, .pageRequest(Self.content(.markdown(path: "/w/r.md"))))
+        let pipe = try #require(harness.server.nextStream())
+        let own = try #require(Self.pipeFrame(pipe))
+        Self.answer(pipe, Self.transfer(own.id, Data("![p](p.png) ![q](q.png)\n".utf8)))
+        let picture = try #require(Self.pipeFrame(pipe))
+        #expect(picture == .resource(id: picture.id, path: "/w/p.png"))
+        Self.answer(pipe, Self.transfer(picture.id, Self.png(ImagePage.phoneMaxBytes - 8)))
+        guard case .page = harness.line() else { Issue.record("no page line"); return }
+    }
+
     @Test func aMarkdownPageCarriesTheUnlinkScript() throws {
         let harness = try Harness()
         defer { harness.stop() }

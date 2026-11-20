@@ -1024,6 +1024,27 @@ struct AppStoreRemotePageTests {
         #expect(phone.sink.pages.isEmpty)
     }
 
+    @Test func anImageTooLargeForThePhoneStaysHere() throws {
+        let session = try Viewers.origin(store, hub: hub)
+        let phone = try Viewers.phone(hub, session)
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        func image(_ name: String, bytes: Int) throws -> HtmlOverlay {
+            let path = dir.appendingPathComponent(name).path
+            #expect(FileManager.default.createFile(atPath: path, contents: nil))
+            try FileHandle(forWritingTo: URL(fileURLWithPath: path)).truncate(atOffset: UInt64(bytes))
+            return HtmlOverlay(source: .image(path: path))
+        }
+
+        let large = try image("large.png", bytes: ImagePage.phoneMaxBytes + 1)
+        #expect(store.openRemotePage(session.id, overlay: large, options: Self.imageOptions, now: Self.start) == .local)
+        #expect(phone.sink.pages.isEmpty)
+        let fits = try image("fits.png", bytes: ImagePage.phoneMaxBytes)
+        #expect(store.openRemotePage(session.id, overlay: fits, options: Self.imageOptions, now: Self.start) == .opened)
+        #expect(phone.sink.pages.count == 1)
+    }
+
     @Test func thePhoneAloneDoesNotMakeASlotRemote() throws {
         let session = try Viewers.origin(store, hub: hub)
         _ = try Viewers.phone(hub, session)

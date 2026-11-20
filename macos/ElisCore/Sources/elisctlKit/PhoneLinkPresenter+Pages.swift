@@ -346,7 +346,8 @@ extension PhoneLinkPresenter {
             read(page, path, limit: MarkdownPage.maxBytes) { [self] data in
                 guard let markdown = String(data: data, encoding: .utf8) else { return reject(page, "not a text file") }
                 let folder = URL(fileURLWithPath: path).deletingLastPathComponent().path
-                embed(page, MarkdownPage.remoteImageReferences(in: markdown, folder: folder)[...], MarkdownEmbedding()) { [self] embedded in
+                embed(page, MarkdownPage.remoteImageReferences(in: markdown, folder: folder)[...],
+                      MarkdownEmbedding(maxBytes: ImagePage.phoneMaxBytes)) { [self] embedded in
                     contentReady(page, html: MarkdownPage.html(markdown: markdown, images: embedded, style: assets.style),
                                  script: assets.script + Self.unlinkScript)
                 }

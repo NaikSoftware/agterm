@@ -22,6 +22,9 @@ public enum ImagePage {
     public static let minimumPoints = 240.0
     /// maxBytes bounds the file a page embeds; a larger one is refused before it is read.
     public static let maxBytes = 64 << 20
+    /// phoneMaxBytes bounds a picture the phone embeds: its web view drops a data-URI page past about 13 MB of HTML
+    /// without an error, and base64 makes this one about 8 MiB.
+    public static let phoneMaxBytes = 6 << 20
     /// maxPixels refuses a picture whose header promises more pixels than this, a decompression bomb's tell.
     /// It bounds one decoded frame, about 400 MB at four bytes a pixel, not the page's total memory.
     public static let maxPixels = 100_000_000
