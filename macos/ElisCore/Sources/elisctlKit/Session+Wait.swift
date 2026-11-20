@@ -44,7 +44,7 @@ final class SessionWaitWatchdog {
 }
 
 extension Session {
-    struct Wait: ParsableCommand {
+    struct Wait: ParsableCommand, ConnectedCommand {
         static let configuration = CommandConfiguration(
             abstract: "Block until a session's agent status is one of the given values.",
             discussion: """
@@ -70,6 +70,7 @@ extension Session {
         var timeout: Double?
         @OptionGroup var target: TargetOptions
         @OptionGroup var options: BasicOptions
+        var connection: any ConnectionOptions { options }
 
         private var statuses: Set<AgentStatus> { Set(until.compactMap(AgentStatus.init(rawValue:))) }
 

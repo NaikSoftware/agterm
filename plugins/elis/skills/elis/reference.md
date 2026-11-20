@@ -137,8 +137,9 @@ waits forever on an absent app. SIGINT and SIGTERM use normal process behavior.
   reads the SELECTED session's workspace only, so right after a foreground create it can name a
   different workspace than `--target active` resolves to; address by id when the two must agree.
 - **For an agent, `active` is the USER's GUI-selected session, not yours.** Omit `--target` (or pass
-  `--target "$ELIS_SESSION_ID"`) to act on the session you run in. With `--window W` the default session is
-  looked up in W only, and with `--socket` naming another instance it is unknown there: pass `--target` then. `session overlay open` opens in the background without switching the user
+  `--target "$ELIS_SESSION_ID"`) to act on the session you run in. With `--window W`, or a `--socket` naming
+  another instance than the pane's `ELIS_SOCKET`, the default is that window's or instance's `active`. A tmux or
+  other program started in a different session carries that session's id. `session overlay open` opens in the background without switching the user
   (both full and floating); pass `--follow` to additionally SELECT the target, switching the user to it.
 - `--window <id|prefix|active>` (on session/workspace/tree/font/notify/pick commands) picks which window's
   tree to act on; default is the frontmost. With `--window` set, that window must be open. Without it,

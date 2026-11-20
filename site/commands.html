@@ -393,9 +393,10 @@
                 <strong style="color: #e6e1d7">For an agent,</strong>
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">active</span> is the
                 <em>user's</em> GUI-selected session, not yours. Omit
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">--target</span> to act on the session you run in. Pass it with
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">--window</span>, which looks the default up in that window only, or with a
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">--socket</span> naming another instance, which does not know your session.
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">--target</span> to act on the session you run in. With
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">--window</span>, or a
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">--socket</span> naming another instance, the default is that window's or
+                instance's <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">active</span>. Inside tmux started from another session, the id is that session's.
               </p>
             </div>
           </section>

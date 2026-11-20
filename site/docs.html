@@ -1571,6 +1571,7 @@ for (const ws of tree.workspaces) for (const s of ws.sessions) {
 <ul>
 <li><code>--target</code> and <code>--workspace</code> take a session or workspace UUID, a unique prefix of it (git-style), or <code>active</code>. Never a name.</li>
 <li>Inside an Elis pane, a session command without <code>--target</code> acts on that pane's session, even when the Mac shows another one or you type on the phone. Outside a pane, and for workspace and surface commands, <code>--target</code> defaults to <code>active</code>.</li>
+<li>With <code>--window</code>, or a <code>--socket</code> of another Elis instance, the default is that window's or instance's <code>active</code>. A tmux session started from another pane keeps that pane's id.</li>
 <li>For a session, <code>active</code> is the selected one. For a workspace, it is the one a new session lands in: a workspace you just created in the foreground, else the selected session's, else the last one.</li>
 <li>A new workspace stays the target until the selection changes (to another session or to none), or until you delete it or hide it with the workspace filter. <code>workspace select</code> moves the target to the one you name, an empty one included. So <code>session new</code> right after <code>workspace new</code> lands in the new workspace.</li>
 <li><code>--window</code> addresses another window's tree; see <a href="#elisctl-windows">Windows</a>.</li>

@@ -157,8 +157,9 @@ Scripts rarely type ids: create with `*.new` (capture the returned id), or act o
 **Agents: omit `--target` to act on your own session.** Your shell runs in `$ELIS_SESSION_ID`, which an
 untargeted session command uses; `--target "$ELIS_SESSION_ID"` says the same and stays valid.
 `--target active` is the session the USER has selected in the GUI, usually a different one while you work,
-and a session led from the phone is never it. A `--socket` naming another Elis instance needs an explicit
-`--target`: your session id belongs to the instance you run in.
+and a session led from the phone is never it. A `--socket` naming another Elis instance, or a `--window`,
+falls back to that instance's or window's `active`. Inside tmux or another long-lived program started from a
+different session the inherited id is that session's: pass `--target` there.
 
 ## Restore modes
 
