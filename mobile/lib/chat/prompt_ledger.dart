@@ -26,6 +26,7 @@ class PromptLedger extends ChangeNotifier {
   final String? Function() blocked; // exited or stale: every mark clears
 
   final _shown = <String>{}, _answered = <String>{}, _stopped = <String>{}, _marked = <String>{};
+  final _spent = <String>{}; // shown, then the input box came back: its dialog is over
   final _off = <String, int>{}; // consecutive grids whose dialog is not this call's
   int _switches;
 
@@ -45,6 +46,9 @@ class PromptLedger extends ChangeNotifier {
 
   bool suppressed(String id) => _stopped.contains(id);
 
+  /// Answered from the phone or closed: the pending list lags the screen, so such a call must never anchor again.
+  bool spent(String id) => _answered.contains(id) || _spent.contains(id);
+
   String? mark(String toolId) => blocked() == null && _marked.contains(toolId) ? closedText : null;
 
   void _onGrid() {
@@ -55,7 +59,10 @@ class PromptLedger extends ChangeNotifier {
       _marked.clear();
       _off.clear();
     } else {
-      if (ClaudeScreen.read(g).bottomStack) _stopped.clear();
+      if (ClaudeScreen.read(g).bottomStack) {
+        _stopped.clear();
+        _spent.addAll(_shown);
+      }
       final d = PromptDialog.read(g);
       for (final c in feed.pending) {
         if (!_shown.contains(c.id)) continue;
@@ -76,13 +83,13 @@ class PromptLedger extends ChangeNotifier {
     final before = _state;
     if (feed.switches != _switches) {
       _switches = feed.switches;
-      for (final s in [_shown, _answered, _stopped, _marked]) {
+      for (final s in [_shown, _answered, _stopped, _marked, _spent]) {
         s.clear();
       }
       _off.clear();
     } else {
       final open = {for (final c in feed.pending) c.id};
-      for (final s in [_shown, _answered, _stopped, _marked]) {
+      for (final s in [_shown, _answered, _stopped, _marked, _spent]) {
         s.retainWhere(open.contains);
       }
       _off.removeWhere((id, _) => !open.contains(id));
@@ -105,7 +112,10 @@ const _proven = checks; // the parameter below shadows the global
 PromptCardBuilder promptCardBuilder(PromptLedger ledger, {Checks checks = _proven, CardChecks cards = cardChecks}) => (context, c) {
   // without SGR the current tab and dim text cannot be told apart
   if (!c.grid.colours) return null;
-  final m = matchPrompt(PromptDialog.read(c.grid), c.pending);
+  final m = matchPrompt(PromptDialog.read(c.grid), [
+    for (final p in c.pending)
+      if (!ledger.spent(p.id)) p,
+  ]);
   if (m == null) return null;
   final id = m.call.id;
   if (ledger.suppressed(id)) return null;

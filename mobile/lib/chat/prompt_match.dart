@@ -47,10 +47,11 @@ bool _has(String hay, String needle) => needle.isNotEmpty && hay.contains(needle
   if (kind == PromptKind.ask) return _ask(d, input);
   final ok = switch (c.name) {
     'Bash' => str('command').trim().isNotEmpty && norm(d.boxed) == norm(str('command')),
-    'Write' || 'Edit' => _path(d, str('file_path')),
+    'Write' => _path(d, str('file_path')) && _shows(d, str('content')),
+    'Edit' => _path(d, str('file_path')) && _shows(d, str('new_string').trim().isEmpty ? str('old_string') : str('new_string')),
     'WebFetch' => _url(d, str('url')),
     'ExitPlanMode' => _plan(d, input),
-    _ => _mcp(d, input),
+    final n => _tool(d, n) && _mcp(d, input),
   };
   return ok ? (question: null) : null;
 }
@@ -108,6 +109,20 @@ bool _path(PromptDialog d, String filePath) {
   if (cut == 0) return h.endsWith(base);
   final tail = h.substring(cut);
   return tail.length >= base.length && p.endsWith(tail);
+}
+
+// A stale pending call on the same path must not anchor the next edit: the diff shows the text's first line.
+// shortcut: only the first 12 characters, so a line wrapped before them by deep indentation has no card; upgrade with a
+// width-aware join of the diff rows
+bool _shows(PromptDialog d, String text) {
+  final line = text.split('\n').map(norm).where((l) => l.isNotEmpty).firstOrNull;
+  return line == null || _has(norm(d.body), line.substring(0, min(12, line.length)));
+}
+
+// The header names the tool by its title or its name; either holds the name's letters and digits.
+bool _tool(PromptDialog d, String name) {
+  String key(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  return _has(key(d.header), key(name.split('__').last));
 }
 
 // "(MCP)" is an expected-state check; the box shows each argument as "key: value", apart from the server-written description.

@@ -102,6 +102,24 @@ void main() {
     }
   });
 
+  test('editAndWriteAnchorOnContentToo', () {
+    final edit = _call('card-edit', (m) => _withInput(m, (i) => i['new_string'] = 'delta'));
+    final write = _call('card-write', (m) => _withInput(m, (i) => i['content'] = 'omega\nbeta\n'));
+    final deletion = _call('card-edit', (m) => _withInput(m, (i) => i['new_string'] = ''));
+    for (final w in [45, 100]) {
+      expect(matchPrompt(_read('card-edit-$w'), [edit]), isNull, reason: '$w');
+      expect(matchPrompt(_read('card-write-$w'), [write]), isNull, reason: '$w');
+      expect(matchPrompt(_read('card-edit-$w'), [deletion]), isNotNull, reason: '$w');
+    }
+  });
+
+  test('mcpAnchorsOnItsToolName', () {
+    final other = _call('card-mcp', (m) => m..['name'] = 'mcp__claude_ai_Claude_Docs__read');
+    for (final w in [45, 100]) {
+      expect(matchPrompt(_read('card-mcp-$w'), [other]), isNull, reason: '$w');
+    }
+  });
+
   test('mcpWithoutArgumentsHasNoCard', () {
     final empty = _call('card-mcp', (m) => m..['input'] = <String, dynamic>{});
     for (final w in [45, 100]) {

@@ -153,4 +153,16 @@ void main() {
       ..idle(1);
     expect(l.mark, isNull);
   });
+
+  test('answeredOrClosedCallIsSpent', () {
+    final l = _L();
+    l.ledger.shown(_id);
+    l.show(_g('card-bash-45'));
+    expect(l.ledger.spent(_id), isFalse);
+    l.idle(1);
+    expect(l.ledger.spent(_id), isTrue);
+    final a = _L();
+    a.ledger.answered(_id);
+    expect(a.ledger.spent(_id), isTrue);
+  });
 }
