@@ -854,15 +854,17 @@ Pass `--js`, or a script-built page is blank. A dev server you start needs its o
 
 ```bash
 npm run dev -- --host 127.0.0.1 --port 5173 >/tmp/dev.log 2>&1 & server=$!
+for _ in $(seq 60); do nc -z 127.0.0.1 5173 && break; sleep 0.5; done  # up to 30 s for the server to listen
 elisctl session overlay open --url http://localhost:5173/ --js --block --target "$ELIS_SESSION_ID"
 kill "$server"
 ```
 
 `--block` holds the call until the user closes the page, and a tool timeout (2 minutes for Claude Code's Bash) would
-kill it before `kill` runs: run the three lines as a background command (the Bash tool's `run_in_background`, or
+kill it before `kill` runs: run the lines as a background command (the Bash tool's `run_in_background`, or
 `( … ) &`), so the server still stops.
 Generated apps (a file manager, a GitHub workflows view, a log viewer) follow the same pattern.
 Only the page's own sheet reaches the server; other apps on the phone cannot. Over Bluetooth it is slow.
+An `https` dev server opens on the Mac even while the phone leads.
 A server that writes absolute `http://localhost:PORT` addresses into its pages may break on the phone, where the
 page loads from `127.0.0.1`.
 

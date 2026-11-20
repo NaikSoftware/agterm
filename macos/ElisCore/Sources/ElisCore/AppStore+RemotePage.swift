@@ -133,6 +133,8 @@ extension AppStore {
             }
             // the phone's web view takes cleartext only from its own loopback server
             if case .url(let url) = source, url.lowercased().hasPrefix("http:") { return false }
+            // the tunnel gate reads plaintext headers, so a TLS dev server stays here
+            if case .forwarded(let url) = source, url.lowercased().hasPrefix("https:") { return false }
         }
         if source.isContent, !hub.supports(PresentationHub.pageContentKind, owner: owner) { return false }
         if case .document = source { return hub.supports(PresentationHub.pageDocumentKind, owner: owner) }

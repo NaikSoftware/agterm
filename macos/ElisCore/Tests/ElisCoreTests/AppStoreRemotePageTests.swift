@@ -1016,6 +1016,14 @@ struct AppStoreRemotePageTests {
         #expect(phone.sink.pages.map(\.source) == [.forwarded("http://127.0.0.1:5173/")])
     }
 
+    @Test func anHttpsLoopbackUrlStaysHereWhileThePhoneForwards() throws {
+        let session = try Viewers.origin(store, hub: hub)
+        let phone = try Viewers.phone(hub, session, kinds: Viewers.phoneKinds + [PresentationHub.pageForwardKind])
+
+        #expect(open(session, try url("https://localhost:5173/")) == .local)
+        #expect(phone.sink.pages.isEmpty)
+    }
+
     @Test func thePhoneAloneDoesNotMakeASlotRemote() throws {
         let session = try Viewers.origin(store, hub: hub)
         _ = try Viewers.phone(hub, session)
