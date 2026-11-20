@@ -31,6 +31,7 @@ Layout is the fullscreen TUI (alternate screen) unless the name starts with `cla
 | `classic-idle`, `classic-working` | classic TUI (`tui: default`), main screen | classic | 100 |
 | `limit` | **synthetic**: `idle-placeholder-45` with the usage-limit lines inserted above the composer; the state cannot be produced on demand | fullscreen | 45 |
 
+`panel-usage-45` is redacted by hand: the reset time, usage figures, counts and skill and subagent names are neutral text in the captured layout.
 The 100-column grids carry an OSC 8 `/rc` link whose session id is replaced with `session_REDACTED`.
 Claude writes U+00A0, not a space, after the input row's `❯`.
 Every grid carries rows from the capturing setup, not from Claude itself: the `● full …` band above the composer (a plugin), the custom statusline, and `← 2 agents` on the mode line; never anchor on them.
