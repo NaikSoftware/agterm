@@ -599,7 +599,11 @@ extension on _ChatViewState {
                 gate: widget.gate,
                 disabledBy: ChatView.blockedReason(exited: widget.exited, stale: widget.stale),
                 held: held,
-                onOpen: onOpen),
+                onOpen: onOpen,
+                // like any chat: what the user sent shows at the newest end
+                onSending: () {
+                  if (_scroll.hasClients) _scroll.jumpTo(0);
+                }),
           ]);
         },
       );

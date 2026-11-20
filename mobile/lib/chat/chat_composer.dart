@@ -49,6 +49,7 @@ class ChatComposer extends StatefulWidget {
       this.disabledBy,
       this.held,
       this.onOpen,
+      this.onSending,
       this.checks = _checks});
 
   final TranscriptFeed feed;
@@ -59,6 +60,7 @@ class ChatComposer extends StatefulWidget {
   final String? disabledBy;
   final String? held; // a prompt or panel owns Claude's input: the composer is disabled with this line
   final VoidCallback? onOpen; // shows the hidden panel again
+  final VoidCallback? onSending; // a send the gate takes
   final Checks checks;
 
   @override
@@ -141,6 +143,7 @@ class ChatComposerState extends State<ChatComposer> {
     text = text.trimRight();
     if (text.isEmpty) return;
     if (_blocked(widget.screen()) case final why?) return _tell(why);
+    widget.onSending?.call();
     setState(() {
       _sending = true;
       _offer = null;

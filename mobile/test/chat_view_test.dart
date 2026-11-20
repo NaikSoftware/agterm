@@ -359,6 +359,38 @@ void main() {
     feed.dispose();
   });
 
+  testWidgets('sendJumpsToTheNewestRow', (t) async {
+    t.view.physicalSize = const Size(400, 800);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final grid = gridFromAnsi(File('test/fixtures/grid/idle-placeholder-45.ansi').readAsStringSync());
+    final grids = ChangeNotifier();
+    final gate = WriteGate(grids: grids, grid: () => grid, writer: () => TypeWriter((_) async => null), remote: () => false, blocked: () => null);
+    final feed = TranscriptFeed(call: (_) async => const {}, canPoll: () => false, remote: false)
+      ..loading = false
+      ..items.addAll([for (final m in _history(40)) ChatItem.fromJson(m)]);
+    final s = Session({'id': 's1', 'name': 'Session one', 'cwd': '/work/elis'}, 'w', 'W');
+    await t.pumpWidget(MaterialApp(
+      theme: buildTheme(),
+      home: Scaffold(
+        body: ChatView(
+            feed: feed, grid: () => grid, grids: grids, gate: gate, s: s, exited: false, stale: false, onTerm: () {}, switcher: const SizedBox()),
+      ),
+    ));
+    await t.drag(find.byKey(const Key('chatList')), const Offset(0, 400));
+    await t.pumpAndSettle();
+    expect(_pixels(t), greaterThan(0));
+    await t.enterText(find.byKey(const Key('composer')), 'hello');
+    await t.pump();
+    await t.tap(find.byKey(const Key('send')));
+    await t.pumpAndSettle();
+    expect(_pixels(t), 0);
+    expect(find.byKey(const Key('jumpToBottom')), findsNothing);
+    await t.pump(const Duration(seconds: 3));
+    await t.pumpWidget(const SizedBox());
+    feed.dispose();
+  });
+
   _chatTest('titleFallsBackToSessionName', (t, c) async {
     await c.start([_text('a1')]);
     expect(find.text('Session one'), findsOneWidget);
