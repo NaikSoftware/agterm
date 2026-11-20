@@ -182,7 +182,7 @@ class WriteGate extends ChangeNotifier {
     _running = true;
     _step = 0;
     _total = total;
-    notifyListeners();
+    _notify();
     GateResult result;
     try {
       await body(GateSequence._(this));
@@ -191,16 +191,28 @@ class WriteGate extends ChangeNotifier {
       result = GateResult(e.outcome, _step, _total, e.reason);
     } finally {
       _running = false;
-      notifyListeners();
+      _notify();
     }
     if (!result.ok) return _stop(result);
     unawaited(HapticFeedback.lightImpact());
     return result;
   }
 
+  bool _disposed = false;
+
+  void _notify() {
+    if (!_disposed) notifyListeners(); // a run outlives an owner that disposed the gate mid-run
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   void _grow(int n) {
     _total += n;
-    notifyListeners();
+    _notify();
   }
 
   GateResult _stop(GateResult r) {
@@ -210,7 +222,7 @@ class WriteGate extends ChangeNotifier {
 
   Future<void> _send(GateStep step) async {
     _step++;
-    notifyListeners();
+    _notify();
     final writer = _writer();
     if (!await writer.lead()) throw const GateStop(GateOutcome.noLead, 'Could not take over the session');
     if (_escape case final gap?) await gap;

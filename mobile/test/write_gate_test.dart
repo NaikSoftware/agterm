@@ -226,6 +226,17 @@ void main() {
         expect(gate.running, isFalse);
       }));
 
+  test('disposingMidRunIsQuiet', () => fakeAsync((a) {
+        final grids = Grids();
+        final (gate, _) = _gate(a, grids, tick: false);
+        GateResult? r;
+        gate.run(1, (s) => s.send(_step(TextWrite('a')))).then((v) => r = v);
+        a.flushMicrotasks();
+        gate.dispose();
+        a.elapse(checks.timeout);
+        expect(r?.outcome, GateOutcome.timeout);
+      }));
+
   test('escapeIsFollowedByAGap', () => fakeAsync((a) {
         final grids = Grids();
         final (gate, w) = _gate(a, grids);
@@ -307,12 +318,22 @@ void main() {
       expect(dataOn(r, _claim), isEmpty);
       expect(leadingAtReady, isNull);
 
-      r.send([...json(LinkKind.opened, _claim, {'cols': 40, 'rows': 20}), ...json(LinkKind.lead, _claim, {'role': 'leader'})]);
+      r.send([
+        ...json(LinkKind.opened, _claim, {'cols': 40, 'rows': 20}),
+        ...json(LinkKind.lead, _claim, {'role': 'leader'}),
+        ...frame(LinkKind.resync, _watch),
+        ...grid(_watch, 40, 20),
+      ]);
+      await flush();
+      await flush();
+      expect(leadingAtReady, isNull, reason: 'the lead change resyncs: no grid to check until the replay');
+      expect(dataOn(r, _claim).expand((f) => f.payload), isEmpty);
+      r.send(frame(LinkKind.data, _watch, utf8.encode('x')));
       await flush();
       await flush();
       expect(leadingAtReady, isTrue);
       expect(sent(r), '\r');
-      r.send(frame(LinkKind.data, _watch, utf8.encode('x')));
+      r.send(frame(LinkKind.data, _watch, utf8.encode('y')));
       expect((await run).outcome, GateOutcome.done);
       expect(sent(r), '\r');
     });
