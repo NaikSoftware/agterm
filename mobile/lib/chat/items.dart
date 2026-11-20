@@ -29,13 +29,14 @@ String? fencedCode(String markdown) {
   return blocks.isEmpty ? null : blocks.join('\n\n');
 }
 
-/// [exited] and [stale] turn open subagent rows to "stopped".
-Widget chatRowWidget(BuildContext c, ChatRow r, {required bool fresh, bool exited = false, bool stale = false}) {
-  final row = Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: _row(c, r, exited || stale));
+/// [exited] and [stale] turn open subagent rows to "stopped"; a non-null [promptMark] replaces a tool row's mark.
+Widget chatRowWidget(BuildContext c, ChatRow r,
+    {required bool fresh, bool exited = false, bool stale = false, String? Function(String toolId)? promptMark}) {
+  final row = Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: _row(c, r, exited || stale, promptMark));
   return fresh ? _FadeIn(r.key, row) : row;
 }
 
-Widget _row(BuildContext c, ChatRow r, bool gone) {
+Widget _row(BuildContext c, ChatRow r, bool gone, String? Function(String)? promptMark) {
   if (r.day != null) {
     return Center(
         child: Text(MaterialLocalizations.of(c).formatMediumDate(r.day!), style: const TextStyle(color: C.dim, fontSize: 12)));
@@ -44,14 +45,16 @@ Widget _row(BuildContext c, ChatRow r, bool gone) {
     return _Expandable(
       key: ValueKey(r.key),
       title: Text(groupLabel(r.group)),
-      body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final t in r.group) _toolRow(t, stopped: false)]),
+      body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [for (final t in r.group) _toolRow(t, stopped: false, promptMark: promptMark)]),
     );
   }
   final i = r.item!;
   return switch (i.kind) {
     'user' => _bubble(c, i),
     'text' => _menu(c, i.text ?? '', chatMarkdown(i.text ?? '')),
-    'tool' => _toolRow(i, stopped: r.interruptedAfter || gone),
+    'tool' => _toolRow(i, stopped: r.interruptedAfter || gone, promptMark: promptMark),
     'compact' => _divider('Conversation compacted', r.key, r.summary?.text),
     'compactSummary' => _divider('Conversation compacted', r.key, i.text ?? ''),
     'interrupted' => _divider('Interrupted', r.key, null),
@@ -182,10 +185,12 @@ String markText(String? mark) => switch (mark) {
 const _toolStyle = TextStyle(color: C.muted, fontSize: 13);
 const _monoStyle = TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: 12, color: C.termText);
 
-Widget _toolRow(ChatItem i, {required bool stopped}) {
+Widget _toolRow(ChatItem i, {required bool stopped, String? Function(String)? promptMark}) {
   final agent = i.name == 'Agent' || i.name == 'Task';
   final trailing = !agent
-      ? markText(i.mark)
+      ? i.rejected
+          ? 'Rejected'
+          : (i.id == null ? null : promptMark?.call(i.id!)) ?? markText(i.mark)
       : switch (subagentState(i, interruptedAfter: stopped, exited: false, stale: false)) {
           SubagentState.running => '◯ running',
           SubagentState.stopped => 'stopped',

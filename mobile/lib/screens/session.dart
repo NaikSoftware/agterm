@@ -12,6 +12,7 @@ import '../chat/claude_screen.dart';
 import '../chat/feed.dart';
 import '../chat/grid.dart';
 import '../chat/mode.dart';
+import '../chat/prompt_ledger.dart';
 import '../chat/transcript.dart';
 import '../chat/write_gate.dart';
 import '../client.dart';
@@ -91,6 +92,7 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _inChat = false;
   bool _picked = false; // the opening pane and mode, picked once the session is known
   TranscriptFeed? _feed;
+  PromptLedger? _ledger;
   final _grids = ValueNotifier(0); // bumped whenever the grid Chat reads may have changed
   late final WriteGate _gate;
   final _composer = GlobalKey<ChatComposerState>();
@@ -146,6 +148,8 @@ class _SessionScreenState extends State<SessionScreen> {
       canPoll: () => mounted && _foreground && !m.background && m.state == LinkState.connected && ModalRoute.of(context)?.isCurrent == true,
       remote: s?.remote ?? false)
     ..addListener(_onFeed);
+
+  PromptLedger get _prompts => _ledger ??= PromptLedger(grids: _grids, grid: _chatGrid, feed: _chatFeed, blocked: () => _chatBlocked);
 
   void _syncFeed() {
     if (!mounted) return;
@@ -236,6 +240,7 @@ class _SessionScreenState extends State<SessionScreen> {
     }
     m.removeListener(_onModel);
     unawaited(_events?.cancel());
+    _ledger?.dispose();
     _feed?.dispose();
     _gate.dispose();
     _grids.dispose();
@@ -785,6 +790,8 @@ class _SessionScreenState extends State<SessionScreen> {
             onTerm: () => _pickMode(ViewMode.term),
             switcher: _toolbar(s),
             composer: _composer,
+            promptCard: promptCardBuilder(_prompts),
+            prompts: _prompts,
             onKey: _press,
             onAnswer: type));
   }

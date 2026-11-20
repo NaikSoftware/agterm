@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:elis_mobile/chat/chat_view.dart';
+import 'package:elis_mobile/chat/grid.dart';
 import 'package:elis_mobile/chat/mode.dart';
+import 'package:elis_mobile/chat/prompt_cards.dart';
 import 'package:elis_mobile/chat/write_gate.dart';
 import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/model.dart';
@@ -13,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'mux_test.dart' show frame, json;
 import 'session_term_test.dart' show FakeVt, Harness, treeOf;
+import 'support/ansi.dart';
 
 const _claude = {'agent': 'claude', 'agentSessionId': 'c1'};
 
@@ -40,6 +44,33 @@ Future<void> _tapKey(WidgetTester t, String key) async {
   await t.tap(find.byKey(Key(key)));
   await t.pumpAndSettle(const Duration(milliseconds: 10));
 }
+
+Grid _g(String name) => gridFromAnsi(File('test/fixtures/grid/$name.ansi').readAsStringSync());
+final _bashPending = jsonDecode(File('test/fixtures/grid/card-bash.pending.json').readAsStringSync()) as List<Object?>;
+final _bashId = (_bashPending.single as Map)['id'] as String;
+
+Map<String, Object> _page({List<Object?> pending = const [], List<Object?> items = const []}) =>
+    {'transcript': 't1', 'size': 10, 'start': 0, 'next': 10, 'items': items, 'pending': pending};
+
+/// The Live pane redraws [name]'s grid.
+Future<void> _show(Harness h, String name) async {
+  for (final v in h.vts) {
+    v.lines = _g(name).rows;
+  }
+  await _redraw(h);
+}
+
+/// Chat over a Live pane whose transcript holds [pending]; the first poll has answered.
+Future<Harness> _cardChat(WidgetTester t, {List<Object?>? pending, List<Object?> items = const [], Map<String, Object> session = _claude}) async {
+  final h = Harness(t, treeOf(session: session));
+  h.r.transcript = _page(pending: pending ?? _bashPending, items: items);
+  await h.start();
+  await h.opened();
+  await t.pump(const Duration(milliseconds: 800));
+  return h;
+}
+
+bool _panel() => find.byKey(const Key('panelSheet')).evaluate().isNotEmpty;
 
 void main() {
   setUp(() => ComposerPref.shown = true);
@@ -276,6 +307,119 @@ void main() {
     await t.pump(const Duration(seconds: 2));
     expect(_chat(), isFalse);
     expect(h.r.transcriptArgs.length, calls);
+    await h.stop();
+  });
+
+  testWidgets('cardDocksForAMatchedCall', (t) async {
+    final h = await _cardChat(t);
+    await _show(h, 'card-bash-45');
+    await _show(h, 'card-bash-45');
+    expect(find.byType(PermissionCard), findsOneWidget);
+    expect(_panel(), isFalse);
+    await h.stop();
+  });
+
+  testWidgets('unmatchedDialogOpensPanel', (t) async {
+    final h = await _cardChat(t, pending: const []);
+    await _show(h, 'card-bash-45');
+    await _show(h, 'card-bash-45');
+    expect(find.byType(PermissionCard), findsNothing);
+    expect(_panel(), isTrue);
+    await h.stop();
+  });
+
+  testWidgets('noCardWithoutColours', (t) async {
+    final h = Harness(t, treeOf(live: false, session: _claude));
+    h.r.transcript = _page(pending: _bashPending);
+    final g = _g('card-bash-45');
+    h.r.text = [for (var r = 0; r < g.rows.length; r++) g.text(r)].join('\n');
+    await h.start();
+    await t.pump(const Duration(seconds: 2));
+    expect(find.byType(PermissionCard), findsNothing);
+    expect(_panel(), isTrue);
+    await h.stop();
+  });
+
+  testWidgets('lateTranscriptReplacesPanel', (t) async {
+    final h = await _cardChat(t, pending: const []);
+    await _show(h, 'card-bash-45');
+    await _show(h, 'card-bash-45');
+    expect(_panel(), isTrue);
+    h.r.transcript = _page(pending: _bashPending);
+    await t.pump(const Duration(milliseconds: 800));
+    await t.pump();
+    expect(find.byType(PermissionCard), findsOneWidget);
+    expect(_panel(), isFalse);
+    await h.stop();
+  });
+
+  testWidgets('stopKeepsPanelAndNoCard', (t) async {
+    final h = await _cardChat(t);
+    await _show(h, 'card-bash-45');
+    await _show(h, 'card-bash-45');
+    await t.ensureVisible(find.text('Yes'));
+    await t.pump();
+    await t.tap(find.text('Yes'));
+    await t.pump();
+    await t.pump();
+    h.r.send([
+      ...json(LinkKind.opened, 3, {'cols': 80, 'rows': 24}),
+      ...json(LinkKind.lead, 3, {'role': 'leader'}),
+    ]);
+    await t.pump();
+    await t.pump(const Duration(seconds: 3)); // the digit's grid change never comes
+    await t.pump();
+    expect(_panel(), isTrue);
+    expect(find.textContaining('Stopped at step 1 of'), findsOneWidget);
+    expect(find.byType(PermissionCard), findsNothing);
+    await _show(h, 'card-bash-45');
+    await _show(h, 'card-bash-45');
+    expect(find.byType(PermissionCard), findsNothing);
+    expect(_panel(), isTrue);
+    await h.stop();
+  });
+
+  testWidgets('remoteRowGetsDisabledCard', (t) async {
+    final h = await _cardChat(t, session: {..._claude, 'remoteHost': 'studio'});
+    await _show(h, 'card-bash-45');
+    await _show(h, 'card-bash-45');
+    expect(find.byType(PermissionCard), findsOneWidget);
+    expect(find.text('Answering is off on remote rows until checked'), findsOneWidget);
+    expect(find.text('Answer in panel'), findsOneWidget);
+    await h.stop();
+  });
+
+  testWidgets('toolRowShowsClosedMark', (t) async {
+    final h = await _cardChat(t, items: [
+      {'kind': 'tool', 'uuid': 'u1', 'id': _bashId, 'name': 'Bash', 'arg': 'touch', 'running': true},
+    ]);
+    await _show(h, 'card-bash-45');
+    await _show(h, 'card-bash-45');
+    expect(find.byType(PermissionCard), findsOneWidget);
+    expect(find.text('Closed on the computer'), findsNothing);
+    await _show(h, 'idle-placeholder-45');
+    await _show(h, 'idle-placeholder-45');
+    expect(find.byType(PermissionCard), findsNothing);
+    expect(find.text('Closed on the computer'), findsOneWidget);
+    await h.stop();
+  });
+
+  testWidgets('toolRowShowsRejected', (t) async {
+    final h = await _cardChat(t, pending: const [], items: [
+      {'kind': 'tool', 'uuid': 'u1', 'id': 'r1', 'name': 'Bash', 'arg': 'rejected one', 'isError': true, 'rejected': true, 'mark': 'error'},
+      {'kind': 'tool', 'uuid': 'u2', 'id': 'r2', 'name': 'Bash', 'arg': 'failed one', 'isError': true, 'mark': 'error'},
+    ]);
+    expect(find.text('Rejected'), findsOneWidget);
+    expect(find.text('✗'), findsOneWidget);
+    await h.stop();
+  });
+
+  testWidgets('chatShowsNoAnswerBarOutsidePanel', (t) async {
+    final h = await _cardChat(t);
+    await _show(h, 'card-bash-45');
+    await _show(h, 'card-bash-45');
+    expect(find.byType(PermissionCard), findsOneWidget);
+    expect(find.byKey(const Key('answer-1')), findsNothing);
     await h.stop();
   });
 }

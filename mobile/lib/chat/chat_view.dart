@@ -14,6 +14,7 @@ import 'feed.dart';
 import 'grid.dart';
 import 'items.dart';
 import 'panel_sheet.dart';
+import 'prompt_ledger.dart';
 import 'rows.dart';
 import 'transcript.dart';
 import 'write_gate.dart';
@@ -93,6 +94,7 @@ class ChatView extends StatefulWidget {
       required this.switcher,
       this.composer,
       this.promptCard,
+      this.prompts,
       this.onKey = _noKey,
       this.onAnswer = _noAnswer});
 
@@ -111,6 +113,7 @@ class ChatView extends StatefulWidget {
   final Widget switcher;
   final GlobalKey<ChatComposerState>? composer; // for the model chip's `send`
   final PromptCardBuilder? promptCard;
+  final PromptLedger? prompts;
   final void Function(String? seq, VtKey? key, int mods) onKey; // the panel's keys: straight to the program, past the gate
   final void Function(String key) onAnswer;
 
@@ -145,8 +148,11 @@ class _ChatViewState extends State<ChatView> {
     feed.addListener(_changed);
     _scroll.addListener(_onScroll);
     widget.grids.addListener(_onGrid);
+    widget.prompts?.addListener(_onPrompts);
     _readGrid();
   }
+
+  void _onPrompts() => setState(() {});
 
   @override
   void didUpdateWidget(ChatView old) {
@@ -154,6 +160,10 @@ class _ChatViewState extends State<ChatView> {
     if (old.grids != widget.grids) {
       old.grids.removeListener(_onGrid);
       widget.grids.addListener(_onGrid);
+    }
+    if (old.prompts != widget.prompts) {
+      old.prompts?.removeListener(_onPrompts);
+      widget.prompts?.addListener(_onPrompts);
     }
     if (widget.exited || widget.stale) _clearPanel();
     if (old.feed == feed) return;
@@ -166,6 +176,7 @@ class _ChatViewState extends State<ChatView> {
   void dispose() {
     _reread?.cancel();
     widget.grids.removeListener(_onGrid);
+    widget.prompts?.removeListener(_onPrompts);
     feed.removeListener(_changed);
     _scroll.dispose();
     super.dispose();
@@ -384,7 +395,7 @@ class _ChatViewState extends State<ChatView> {
         if (_built[r.key] == c) _built.remove(r.key);
         _gone.add(r.key);
       },
-      child: chatRowWidget(c, r, fresh: fresh, exited: widget.exited, stale: widget.stale),
+      child: chatRowWidget(c, r, fresh: fresh, exited: widget.exited, stale: widget.stale, promptMark: widget.prompts?.mark),
     );
   }
 
