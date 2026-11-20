@@ -24,7 +24,7 @@ extension Session {
 
         func makeRequest() throws -> ControlRequest {
             let args = ControlArgs(targets: target.batchTargets)
-            return ControlRequest(cmd: .sessionDetach, target: target.targets.first ?? "active",
+            return ControlRequest(cmd: .sessionDetach, target: target.first,
                                   args: options.withWindow(args == ControlArgs() ? nil : args))
         }
     }

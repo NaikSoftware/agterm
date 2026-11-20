@@ -4,6 +4,7 @@ import Testing
 import ElisCore
 @testable import elisctlKit
 
+@Suite(.outsidePane)
 struct OverlayCommandsTests {
     private func request(_ argv: [String]) throws -> ControlRequest {
         let parsed = try Elisctl.parseAsRoot(argv)

@@ -166,6 +166,10 @@ paths:
   A command that reuses `count` for something else must carry its own `result.text`, which the shared
   formatter prefers over every count spelling; `restore.capture` does, or its pane total would print as
   "N diagnostic(s)".
+- The CLI's untargeted session command sends the pane's `ELIS_SESSION_ID`, else `active`, resolved once in
+  `CallerEnvironment.defaultSessionTarget`: a phone-led pane is never the Mac's selection.
+  Workspace commands keep `active`, since a pane's `ELIS_WORKSPACE_ID` is baked at spawn and goes stale on
+  `session move`; surface commands keep it, since no variable carries a surface id. The wire default stays `active`.
 - Targets accept active, case-insensitive UUID, or unique prefix. Batch targets resolve within the first
   target's store, deduplicate, and fail atomically. Preserve the first target in the legacy top-level field
   so old servers degrade to it rather than active.

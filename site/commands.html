@@ -350,7 +350,8 @@
               Addressing
             </h2>
             <p style="font-size: 16px; line-height: 1.7; color: #cbc6bc; margin: 0 0 16px">
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">--target</span> defaults to
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">--target</span> on a session command run inside an Elis pane defaults to that pane's session
+              (<span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">$ELIS_SESSION_ID</span>). Outside a pane, and for workspace and surface commands, it defaults to
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">active</span> (the selected session, or
               the current workspace). It accepts a full UUID (case-insensitive) or a unique, git-style prefix. Zero matches gives
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">notFound</span>; an ambiguous prefix
@@ -391,11 +392,10 @@
               <p style="font-size: 15px; line-height: 1.65; color: #cbc6bc; margin: 0">
                 <strong style="color: #e6e1d7">For an agent,</strong>
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">active</span> is the
-                <em>user's</em> GUI-selected session, not yours. Your own shell is
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">$ELIS_SESSION_ID</span>. Pass
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc; white-space: nowrap">--target "$ELIS_SESSION_ID"</span>
-                on any session-scoped command that must act on the session you run in — otherwise it hits whatever the user has
-                selected.
+                <em>user's</em> GUI-selected session, not yours. Omit
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">--target</span> to act on the session you run in. Pass it with
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">--window</span>, which looks the default up in that window only, or with a
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">--socket</span> naming another instance, which does not know your session.
               </p>
             </div>
           </section>
@@ -2239,10 +2239,8 @@
               <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 8px 0 0">
                 <strong style="color: #bfbab0">It does not switch the active session by default</strong> — both variants open on
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--target</span> and run in the background. Pass
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--follow</span> to select the target too. An automated
-                caller should pass
-                <span style="font-family: &quot;JetBrains Mono&quot;, monospace; white-space: nowrap">--target "$ELIS_SESSION_ID"</span>, or a blocking
-                full-pane overlay lands on whatever session the user has selected.
+                <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--follow</span> to select the target too. Run outside an Elis pane,
+                it opens on the session the user has selected.
               </p>
               <p style="font-size: 13.5px; line-height: 1.6; color: #949ba4; margin: 8px 0 0">
                 <span style="font-family: &quot;JetBrains Mono&quot;, monospace">--wait</span> keeps the overlay open after the command

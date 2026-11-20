@@ -9,6 +9,7 @@ import Testing
 import ElisCore
 @testable import elisctlKit
 
+@Suite(.outsidePane)
 struct SessionWaitCommandsTests {
     private let run = UUID(uuidString: "CBB5E3D0-7A9B-4C96-9EA2-18B14380DDB1")!
     private let worker = UUID(uuidString: "AAAA1111-0000-4000-8000-000000000001")!

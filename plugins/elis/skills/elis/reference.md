@@ -120,7 +120,9 @@ waits forever on an absent app. SIGINT and SIGTERM use normal process behavior.
 
 ## Addressing
 
-- `--target` defaults to `active` (the selected session / current workspace). Accepts a full UUID
+- An untargeted session command run inside an Elis pane targets that pane's session (`$ELIS_SESSION_ID`).
+  Outside a pane, and for workspace and surface commands, `--target` defaults to `active` (the selected
+  session / current workspace / its focused surface). `--target` accepts a full UUID
   (case-insensitive) or a unique prefix. Zero matches → `notFound`; ambiguous prefix → `ambiguous`
   (the error lists candidates).
 - For a WORKSPACE, `active` is where a new session lands: one created in the foreground (the GUI's New
@@ -134,12 +136,9 @@ waits forever on an absent app. SIGINT and SIGTERM use normal process behavior.
   `session new --create-workspace --no-select`) never takes it. The tree workspace node's `active` flag
   reads the SELECTED session's workspace only, so right after a foreground create it can name a
   different workspace than `--target active` resolves to; address by id when the two must agree.
-- **For an agent, `active` is the USER's GUI-selected session, not yours.** Your shell is
-  `$ELIS_SESSION_ID`; the user is usually on a different session while you work. Pass
-  `--target "$ELIS_SESSION_ID"` on any session-scoped command (`session overlay open`, `session scratch`,
-  `session type`, `session text`, `session background`, `session status`, `session copy`, …) that must act
-  on the session you run in — otherwise it hits
-  whatever the user has selected. `session overlay open` opens in the background without switching the user
+- **For an agent, `active` is the USER's GUI-selected session, not yours.** Omit `--target` (or pass
+  `--target "$ELIS_SESSION_ID"`) to act on the session you run in. With `--window W` the default session is
+  looked up in W only, and with `--socket` naming another instance it is unknown there: pass `--target` then. `session overlay open` opens in the background without switching the user
   (both full and floating); pass `--follow` to additionally SELECT the target, switching the user to it.
 - `--window <id|prefix|active>` (on session/workspace/tree/font/notify/pick commands) picks which window's
   tree to act on; default is the frontmost. With `--window` set, that window must be open. Without it,
@@ -453,7 +452,7 @@ buys nothing. A caller with no tree uses `version`.
   Nor does a plain `session new` or a `session select` in FLAGGED mode: both make the fresh or chosen
   session active while the flagged view renders no row for it, leaving the sidebar unselected. New Session
   from a flagged-tree workspace row, or its hover +, is the same case.
-  A script that changes what is visible should re-read `tree` before using the default `active` target.
+  A script that changes what is visible should re-read `tree` before using `--target active`.
   A workspace
   created while the filter is applied joins the set, so it is visible without breaking the filter — except
   a `workspace new --collapsed` (or a `session new --no-select --create-workspace`), whose whole point is a
@@ -616,7 +615,7 @@ buys nothing. A caller with no tree uses `version`.
   target, inserted directly AFTER it, rooted at the target's focused-pane working directory (the live
   OSC 7 cwd the sidebar row shows and `session reveal` opens); selects + focuses the new session and
   returns its id. There are NO other options — the target session names both the destination workspace
-  and the cwd — and `--target` defaults to `active`. It is equivalent to
+  and the cwd — and `--target` defaults as on any session command (see Addressing). It is equivalent to
   `session new --cwd <source cwd> --after <source>` in ONE atomic round-trip, except that a remote
   source's cwd goes through the local rule first (see Remote sessions): an existing local directory is
   kept, anything else becomes home.

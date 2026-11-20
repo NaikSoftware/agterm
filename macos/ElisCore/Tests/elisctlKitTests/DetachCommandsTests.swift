@@ -4,6 +4,7 @@ import Testing
 @testable import ElisCore
 @testable import elisctlKit
 
+@Suite(.outsidePane)
 struct DetachCommandsTests {
     @Test func sessionDetachSendsItsBatchAndWindow() throws {
         let parsed = try Elisctl.parseAsRoot(["session", "detach", "--target", "s1", "--target", "s2", "--window", "w1"])

@@ -141,7 +141,9 @@ a closed window, but not the live `idleMs`, which is `tree`-only. A MINIMIZED wi
 
 ## Addressing
 
-Commands that target a session or workspace take `--target` (default `active`):
+Commands that target a session or workspace take `--target`. A session command run without it inside an
+Elis pane acts on that pane's session (`$ELIS_SESSION_ID`); outside a pane, and for every workspace command,
+the default is `active`:
 
 - `active` — the selected session / current workspace.
 - a full UUID (case-insensitive), or a unique **prefix** of one (git-style). Zero matches → `notFound`
@@ -150,14 +152,13 @@ Commands that target a session or workspace take `--target` (default `active`):
 `window.*` commands take the window id/prefix/`active` as a positional argument. Other commands accept
 a global `--window <id|prefix|active>` to operate on a specific window's tree (default: the frontmost).
 
-Scripts rarely type ids: create with `*.new` (capture the returned id), or act on `active`.
+Scripts rarely type ids: create with `*.new` (capture the returned id), or act on the default.
 
-**Agents: `active` is almost never your own session.** `active` is the session the USER has selected in
-the GUI; your shell runs in `$ELIS_SESSION_ID`, and the user is usually on a different session while
-you work. For any session-scoped command meant to act on *this* session — `session overlay open`,
-`session scratch`, `session type`, `session text`, `session background`, `session status`, `session copy`,
-… — pass `--target "$ELIS_SESSION_ID"`. Omit it and
-you open overlays / type into whatever the user has selected, not your own session.
+**Agents: omit `--target` to act on your own session.** Your shell runs in `$ELIS_SESSION_ID`, which an
+untargeted session command uses; `--target "$ELIS_SESSION_ID"` says the same and stays valid.
+`--target active` is the session the USER has selected in the GUI, usually a different one while you work,
+and a session led from the phone is never it. A `--socket` naming another Elis instance needs an explicit
+`--target`: your session id belongs to the instance you run in.
 
 ## Restore modes
 
@@ -423,8 +424,7 @@ omitted when expanded).
   included) into the main pane, the split pane with `--pane right`, or the scratch terminal (even hidden)
   with `--pane scratch`. `--pane-id` names one terminal wherever a swap or promotion moved it; an unknown
   token without `--pane` fails with `unknown pane id: <id>`, and `--json` reports the pane typed into as
-  `result.pane`. Pass `--target "$ELIS_SESSION_ID"` to type into YOUR session, not the user's
-  active one (see Addressing). Like `session text`, every `--pane` addresses the surface UNDER a covering
+  `result.pane`. Without `--target` it types into your own session (see Addressing). Like `session text`, every `--pane` addresses the surface UNDER a covering
   overlay — by design, so a pane stays drivable whatever is drawn over it — meaning text typed while one is
   open runs in the hidden shell and is invisible until it closes. There is no write twin of
   `session overlay text`: an overlay runs the caller's own program, so nothing types into one. Typing is the
@@ -465,9 +465,8 @@ omitted when expanded).
   from `tree`'s `cwd`/`title`/`foreground` and the other side from `splitCwd`/`splitForeground`.
 - `session scratch [on|off|toggle] [--command CMD] [--follow]` — full-coverage third shell (hide keeps it alive; `exit`
   recreates). `--command` (when showing) runs a program instead of a shell, run-once like `session new
-  --command` (respawns the scratch if one is open). Target your own session with
-  `--target "$ELIS_SESSION_ID"` (see Addressing); it opens there without switching the window to it
-  unless you pass `--follow`.
+  --command` (respawns the scratch if one is open). Without `--target` it opens in your own session
+  (see Addressing), without switching the window to it unless you pass `--follow`.
 - `session focus [primary|split|left|right|top|bottom|other]` - move focus between split panes. Role and position
   aliases select the same two live terminals; readback remains `left`/`right`.
 - `session resize --split-ratio R | --grow-left D | --grow-right D | --grow-primary D | --grow-split D | --grow-top D | --grow-bottom D` - move the split divider (the GUI only drags
@@ -562,7 +561,7 @@ omitted when expanded).
   A pane that is not currently rendered is refused with `pane not visible`. A SHOWN
   split renders both panes, a HIDDEN one renders only the FOCUSED pane, so the refused one is the pane
   that does not have focus.
-  Target with `--target "$ELIS_SESSION_ID"` for YOUR session (default `active` is the user's selection).
+  Without `--target` it opens in YOUR session; `--target active` is the user's selection.
   **By default `session overlay open` does NOT switch the user** — full and floating (`--size-percent N`, 1-100)
   both open on `--target` and run their program in the background; the panel appears when the user visits
   that session. **Pass `--follow` to select the target after opening** (a no-op if it is already active):

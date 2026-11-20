@@ -62,17 +62,41 @@ struct ClientOptions: ParsableArguments, ConnectionOptions {
     }
 }
 
-/// Options for the commands that address a single session or workspace; `--target` defaults to `active`.
+/// CallerEnvironment is the environment the default target is read from; tests pin it per task.
+enum CallerEnvironment {
+    @TaskLocal static var values = ProcessInfo.processInfo.environment
+
+    /// The caller's own session inside an Elis pane, else `active`: a pane may be led from the phone, where the
+    /// Mac's selection is a session the typist cannot see.
+    static var defaultSessionTarget: String {
+        guard let own = values["ELIS_SESSION_ID"], !own.isEmpty else { return "active" }
+        return own
+    }
+}
+
+/// Options for the commands that address a single session.
 struct TargetOptions: ParsableArguments {
-    @Option(name: .long, help: "Target session/workspace id, unique prefix, or 'active'.")
+    @Option(name: .customLong("target"),
+            help: "Target session id, unique prefix, or 'active' (defaults to this pane's session, else 'active').")
+    var explicit: String?
+
+    var target: String { explicit ?? CallerEnvironment.defaultSessionTarget }
+}
+
+/// Options for the commands that address a workspace. `active` stays the default inside a pane: the pane's
+/// `ELIS_WORKSPACE_ID` is baked at spawn and goes stale once its session moves.
+struct WorkspaceTargetOptions: ParsableArguments {
+    @Option(name: .long, help: "Target workspace id, unique prefix, or 'active'.")
     var target: String = "active"
 }
 
 /// Options for batch-capable session commands. Repeating `--target` preserves CLI order on the wire.
 struct BatchTargetOptions: ParsableArguments {
-    @Option(name: .customLong("target"), help: "Target session id, prefix, or 'active'. Repeat for a batch.")
+    @Option(name: .customLong("target"),
+            help: "Target session id, prefix, or 'active' (defaults to this pane's session, else 'active'). Repeat for a batch.")
     var targets: [String] = []
 
+    var first: String { targets.first ?? CallerEnvironment.defaultSessionTarget }
     var batchTargets: [String]? { targets.count > 1 ? targets : nil }
 }
 

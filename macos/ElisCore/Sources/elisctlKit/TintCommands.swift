@@ -98,7 +98,7 @@ extension Workspace {
             """)
         @Argument(help: ArgumentHelp(TintRequest.colorHelp)) var value: String
         @Option(name: .long, help: ArgumentHelp(TintRequest.onHelp)) var on: String?
-        @OptionGroup var target: TargetOptions
+        @OptionGroup var target: WorkspaceTargetOptions
         @OptionGroup var options: ClientOptions
         @OptionGroup var operation: OperationOptions
 
