@@ -154,7 +154,7 @@ struct PhoneLinkPresenterTests {
         Self.send(stream, gen: 2, .pageRequest(Self.urlPage))
         #expect(stream.waitEnd())
         #expect(harness.waitFrame(.json(.close, channel: 5, PhoneLinkClose(reason: "overflow"))))
-        #expect(harness.ended)
+        #expect(harness.waitEnded())
     }
 
     // MARK: - helpers
@@ -223,8 +223,6 @@ struct PhoneLinkPresenterTests {
         private var didEnd = false
         private var presenter: PhoneLinkPresenter!
 
-        var ended: Bool { lock.withLock { didEnd } }
-
         init(origin: ControlAttachOrigin = PhoneLinkPresenterTests.origin, pending: Int = 0,
              output: PhoneLinkScheduler.Enqueue = .queued, spawn: PhoneLinkPresenter.Spawn? = nil) throws {
             try server.start()
@@ -246,9 +244,13 @@ struct PhoneLinkPresenterTests {
             return lock.withLock { sent }
         }
 
-        func waitFrame(_ frame: PhoneLinkFrame) -> Bool {
+        func waitFrame(_ frame: PhoneLinkFrame) -> Bool { wait { sent.contains(frame) } }
+
+        func waitEnded() -> Bool { wait { didEnd } }
+
+        private func wait(_ condition: () -> Bool) -> Bool {
             let deadline = Date().addingTimeInterval(30)
-            while !lock.withLock({ sent.contains(frame) }) {
+            while !lock.withLock(condition) {
                 if Date() > deadline { return false }
                 usleep(20_000)
             }

@@ -70,7 +70,7 @@ final class PhoneLinkLineStream: @unchecked Sendable {
                                    readFD: output.fileHandleForReading.fileDescriptor, writeFD: writeFD, queue: queue)
     }
 
-    func start(onLine: @escaping (Data) -> Void, onEnd: @escaping () -> Void) {
+    func start(onLine: @escaping @Sendable (Data) -> Void, onEnd: @escaping @Sendable () -> Void) {
         lock.withLock { started = true }
         let reader = Thread { [self] in
             read(onLine)
@@ -121,7 +121,7 @@ final class PhoneLinkLineStream: @unchecked Sendable {
     }
 
     /// Returns at the peer's end, a read error, a line over the cap, or `close()`.
-    private func read(_ onLine: @escaping (Data) -> Void) {
+    private func read(_ onLine: @escaping @Sendable (Data) -> Void) {
         var buffer = Data()
         var chunk = [UInt8](repeating: 0, count: 16 * 1024)
         while true {
