@@ -197,7 +197,7 @@ class _SessionScreenState extends State<SessionScreen> {
     });
   }
 
-  bool get _chatIdle => _chatGrid() != null && ClaudeScreen.read(_chatGrid()!).idle;
+  bool get _chatIdle => _chatBlocked == null && _chatGrid() != null && ClaudeScreen.read(_chatGrid()!).idle;
 
   Grid? _chatGrid() {
     if (term case final t?) return t.frame == null ? null : Grid.of(t.frame!);

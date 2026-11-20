@@ -51,8 +51,13 @@ class _Writer implements GateWriter {
   _Writer(this.onWrite);
   final void Function(GateWrite w) onWrite;
   final writes = <GateWrite>[];
+  VoidCallback? onLead;
   @override
-  Future<bool> lead() async => true;
+  Future<bool> lead() async {
+    onLead?.call();
+    return true;
+  }
+
   @override
   Future<bool> write(GateWrite w) async {
     writes.add(w);
@@ -137,6 +142,44 @@ void main() {
     final p = _C(t, _g('idle-placeholder-45'));
     await p.pump();
     expect(p.field, '');
+  });
+
+  testWidgets('adoptsAtALaterFirstGrid', (t) async {
+    final c = _C(t, Grid(const []));
+    await c.pump();
+    expect(c.field, '');
+    c.grids.set(_g('idle-draft-45'));
+    await t.pump();
+    expect(t.takeException(), isNull);
+    expect(c.field, 'hello there');
+  });
+
+  testWidgets('aDialogBeforeThePasteIsNoChangedDraft', (t) async {
+    final c = _C(t, _g('idle-placeholder-45'));
+    c.writer.onLead = () => c.grids.g = _g('dialog-bash-45');
+    await c.pump();
+    await c.type('hi');
+    await c.send();
+    expect(c.writer.writes, isEmpty);
+    expect(find.text("Claude's input changed on the computer"), findsNothing);
+    expect(find.text("Claude's screen is not as expected"), findsOneWidget);
+  });
+
+  testWidgets('textTypedDuringTheRunStays', (t) async {
+    final idle = _g('idle-placeholder-45');
+    final c = _C(t, idle);
+    var typed = false;
+    c.script((w) => _enter(w) ? idle : _withInput(idle, 'hi'));
+    c.writer.onLead = () {
+      if (typed) return;
+      typed = true;
+      t.widget<TextField>(find.byKey(const Key('composer'))).controller!.text = 'hi and more';
+    };
+    await c.pump();
+    await c.type('hi');
+    await c.send();
+    expect(c.writer.writes.length, 2);
+    expect(c.field, 'hi and more');
   });
 
   testWidgets('noAdoptionWithoutColours', (t) async {

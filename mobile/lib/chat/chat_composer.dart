@@ -133,22 +133,23 @@ class ChatComposerState extends State<ChatComposer> {
     text = text.trimRight();
     if (text.isEmpty) return;
     if (_blocked(widget.screen()) case final why?) return _tell(why);
-    final fromField = text == _field.text.trimRight();
     setState(() {
       _sending = true;
       _offer = null;
     });
     final r = await widget.gate.run(2, (q) => widget.colours ? _live(q, text, replace) : _typed(q, text));
     if (!mounted) return;
+    final draft = norm(widget.screen()?.draft ?? '');
+    final offer = r.reason == _changed && draft.isNotEmpty;
     setState(() {
       _sending = false;
-      if (r.ok && fromField) _field.clear();
-      if (r.reason == _changed) {
+      if (r.ok && _field.text.trimRight() == text) _field.clear();
+      if (offer) {
         _offer = text;
-        _offerDraft = norm(widget.screen()?.draft ?? '');
+        _offerDraft = draft;
       }
     });
-    if (!r.ok && r.reason != _changed) _tell(r.reason);
+    if (!r.ok && !offer) _tell(r.reason);
   }
 
   void _tell(String why) => ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(why)));
@@ -168,7 +169,7 @@ class ChatComposerState extends State<ChatComposer> {
     } else if (bang) {
       q.addSteps(1);
       String? before;
-      await q.send(GateStep(TextWrite(text[0]), why: _changed, ready: (g) {
+      await q.send(GateStep(TextWrite(text[0]), ready: (g) {
         before = _inputRows(g);
         return _empty(ClaudeScreen.read(g));
       }, done: (g) => _inputRows(g) != before));
@@ -193,7 +194,7 @@ class ChatComposerState extends State<ChatComposer> {
   static bool _empty(ClaudeScreen s) => s.bottomStack && s.draft.isEmpty && !s.pastePlaceholder;
 
   GateStep _write(GateWrite w, String text) =>
-      GateStep(w, why: _changed, ready: (g) => _empty(ClaudeScreen.read(g)), done: (g) => pasteShown(ClaudeScreen.read(g), text));
+      GateStep(w, ready: (g) => _empty(ClaudeScreen.read(g)), done: (g) => pasteShown(ClaudeScreen.read(g), text));
 
   // check 5: one press per visual row plus one per newline, so it repeats until the row reads empty
   Future<void> _clear(GateSequence q) async {
