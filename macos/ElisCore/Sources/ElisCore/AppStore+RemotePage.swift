@@ -135,8 +135,7 @@ extension AppStore {
             if case .url(let url) = source, url.lowercased().hasPrefix("http:") { return false }
             // the tunnel gate reads plaintext headers, so a TLS dev server stays here
             if case .forwarded(let url) = source, url.lowercased().hasPrefix("https:") { return false }
-            if case .image(let path, _, _) = source,
-               let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int, size > ImagePage.phoneMaxBytes {
+            if case .image(let path, _, _) = source, case .failure(.tooLarge) = BoundedFile.check(path: path, maxBytes: ImagePage.phoneMaxBytes) {
                 return false
             }
         }
