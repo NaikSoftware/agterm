@@ -41,6 +41,16 @@ void main() {
       expect(Session({'remoteHost': 'mac'}, 'w', 'W').remote, isTrue);
       expect(Session({}, 'w', 'W').remote, isFalse);
     });
+
+    test('remoteTerminalPanesAreLive', () {
+      const surfaces = [
+        {'kind': 'left', 'backedByZmx': false},
+        {'kind': 'right', 'backedByZmx': false},
+      ];
+      expect(Session({'remoteHost': 'box', 'surfaces': surfaces}, 'w', 'W').livePanes, {'left', 'right'});
+      expect(Session({'remoteHost': 'box', 'content': 'page', 'surfaces': surfaces}, 'w', 'W').livePanes, isEmpty);
+      expect(Session({'surfaces': surfaces}, 'w', 'W').livePanes, isEmpty);
+    });
   });
 
   group('AutoFit', () {

@@ -646,6 +646,15 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('serverRowPaneWatchesItsOrigin', (t) async {
+    final h = Harness(t, treeOf(live: false, session: {'remoteHost': 'box'}));
+    await h.start();
+    expect(_watches(h), [
+      {'type': 'vt', 'target': 's1', 'pane': 'left'},
+    ]);
+    await h.stop();
+  });
+
   testWidgets('notLivePaneKeepsTheTextView', (t) async {
     final h = Harness(t, treeOf(live: false));
     await h.start();

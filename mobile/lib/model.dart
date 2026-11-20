@@ -49,7 +49,9 @@ class Session {
         hasSplit = m['hasSplit'] == true,
         livePanes = {
           for (final f in (m['surfaces'] as List? ?? const []))
-            if (f is Map && f['backedByZmx'] == true) '${f['kind']}',
+            // a remote terminal row runs on its origin's zmx, which the Mac's own backedByZmx never reports
+            if (f is Map && (f['backedByZmx'] == true || (m['remoteHost'] as String?)?.isNotEmpty == true && m['content'] != 'page'))
+              '${f['kind']}',
         },
         split = m['split'] == true,
         collapsed = m['collapsed'] == true;
