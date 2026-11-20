@@ -360,13 +360,15 @@ Pages (`present`), `PhoneLinkPresenter`; the spec `docs/superpowers/specs/2026-1
 - OPEN `{type:"forward", target, page}` carries one TCP connection to that address.
   It is refused `no such page` unless the page is open on the `present` channel for `target` and was handed to this
   phone, and `too many connections` past `maxForwards` (16 per phone).
-  The relay connects with a 5 s timeout. Phone bytes go under a 64 KiB window with CREDIT back, as on a claim;
-  past it the channel closes `input overflow`. Server bytes are read only while the channel's queue is under `highWater`.
+  The relay connects with a 5 s timeout.
+  Phone bytes go under a 64 KiB window with CREDIT back, as on a claim; past it the channel closes `input overflow`.
+  Server bytes are read only while the channel's queue is under `highWater`.
   CLOSE reasons: `page closed` (its page left the phone), `closed` (the server ended), `input overflow`, `overflow`,
   `could not connect: …`.
 - The phone queues bytes sent before OPENED, and a CLOSE can arrive before OPENED.
   It pauses socket reads while sent bytes wait for CREDIT.
-- The tunnel gate. The phone's listener binds 127.0.0.1 only, on the dev server's port when free, else a random one;
+- The tunnel gate.
+  The phone's listener binds 127.0.0.1 only, on the dev server's port when free, else a random one;
   a page sent again keeps its port, its new sheet waiting for the old listener to close.
   Each sheet sets a cookie `elis_tunnel_<bound port>` with a 128-bit random value, `HttpOnly`, `SameSite=Strict`,
   through `CookieManager`, and clears it with the sheet; a cookie the platform refuses fails the page.
