@@ -1,0 +1,32 @@
+    · Hold Shift while selecting to use your terminal's native copy instead
+
+  Fable 5.2 is here for your longest and toughest coding tasks. It draws down
+  usage faster than Opus 5.5. Switch with /model.
+  1 more notice hidden (ctrl+o to expand)
+
+❯ Use AskUserQuestion once: multiSelect question Which pets? with options Cat,    
+  Dog, Fish, Bird. Then reply with my picks.                                      
+
+● Declined to answer Claude's questions:
+  ⎿  · Which pets? (Cat / Dog / Fish / Bird)
+  
+❯ Run this exact Bash command: date > /tmp/srv-probe.txt                          
+  
+● Writing current date to /tmp/srv-probe.txt
+  ⎿  $ date > /tmp/srv-probe.txt
+
+──────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" 
+ below
+ Write current date to /tmp/srv-probe.txt
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ date > /tmp/srv-probe.txt
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and always allow access to /tmp from this project
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you
+   4. No
+
+ Esc to cancel · Tab to amend

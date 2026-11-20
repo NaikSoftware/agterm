@@ -44,6 +44,12 @@ void main() {
     }
   });
 
+  test('untitledServerBashDialogMatches', () {
+    final d = PromptDialog.read(Grid.text(File('$_dir/card-bash-82.txt').readAsStringSync()));
+    final call = _call('card-bash-82');
+    expect(matchPrompt(d, [call])?.call.id, call.id);
+  });
+
   test('eachFixtureMatchesWithoutItsTitleRule', () {
     for (final f in Directory(_dir).listSync()) {
       if (!RegExp(r'/card-.*\.ansi$').hasMatch(f.path) || f.path.contains('card-plan-nofile')) continue;
