@@ -14,7 +14,9 @@ import 'feed.dart';
 import 'grid.dart';
 import 'items.dart';
 import 'panel_sheet.dart';
+import 'prompt_dialog.dart';
 import 'prompt_ledger.dart';
+import 'prompt_match.dart';
 import 'rows.dart';
 import 'transcript.dart';
 import 'write_gate.dart';
@@ -29,7 +31,7 @@ class ChatPromptContext {
   final List<PendingCall> pending;
   final WriteGate gate;
   final bool remote, server;
-  final void Function(String? stopped) openPanel;
+  final void Function(String? stopped, PendingCall? call) openPanel; // [call]: the forced panel leaves with its dialog
 }
 
 /// The card for the dialog on screen, or null for the panel sheet.
@@ -153,6 +155,7 @@ class _ChatViewState extends State<ChatView> {
   Timer? _reread;
   bool _panelHidden = false, _panelForced = false;
   String? _stopped;
+  PendingCall? _forcedFor;
 
   TranscriptFeed get feed => widget.feed;
 
@@ -211,6 +214,10 @@ class _ChatViewState extends State<ChatView> {
     if (s == null || !(s.bottomStack || s.dialog)) return;
     if (s.bottomStack) return _clearPanel();
     if (widget.exited || widget.stale) return;
+    if (_forcedFor case final c? when _panelForced) {
+      // another prompt took the screen: the panel and its stop text described the one before
+      if (PromptDialog.read(g!) case final d? when !anchored(d, c)) _clearPanel();
+    }
     _dialogReads++;
     // a dialog drawn once may bring no further frame: a re-read stands in for the second update;
     // its call may be newer than the last poll (2 s on a remote row), so the card need not wait for the next one
@@ -227,13 +234,14 @@ class _ChatViewState extends State<ChatView> {
     _reread?.cancel();
     _dialogReads = 0;
     _panelHidden = _panelForced = false;
-    _stopped = null;
+    _stopped = _forcedFor = null;
   }
 
-  void _openPanel(String? stopped) {
+  void _openPanel(String? stopped, PendingCall? call) {
     if (!mounted) return;
     setState(() {
       _panelForced = true;
+      _forcedFor = call;
       _panelHidden = false;
       _stopped = stopped;
     });

@@ -34,7 +34,7 @@ Future<void> sendAnswer(
   if (r.ok) return onDone();
   if (r.outcome == GateOutcome.busy || c.gate.disposed) return; // a closed screen disposed the ledger and the panel
   onStop();
-  c.openPanel(stopMessage(r));
+  c.openPanel(stopMessage(r), m.call);
 }
 
 /// A full-width card answer: filled when primary, a neutral tile when a [choice], else outlined;
@@ -473,7 +473,7 @@ class _AskCardState extends State<AskCard> {
       buttons: buttons,
       reason: blocked,
       locked: running,
-      onPanel: blocked != null || unproven ? () => widget.c.openPanel(null) : null,
+      onPanel: blocked != null || unproven ? () => widget.c.openPanel(null, widget.m.call) : null,
     );
   }
 }
@@ -622,7 +622,7 @@ class _RowsCardState extends State<_RowsCard> {
             ),
           ],
         ] else
-          CardButton(label: r.label, onPressed: running ? null : () => widget.c.openPanel(null)),
+          CardButton(label: r.label, onPressed: running ? null : () => widget.c.openPanel(null, widget.m.call)),
     ];
     return CardFrame(
       title: widget.title,
@@ -630,7 +630,7 @@ class _RowsCardState extends State<_RowsCard> {
       buttons: buttons,
       reason: blocked,
       locked: running,
-      onPanel: blocked != null || _rows == null ? () => widget.c.openPanel(null) : null,
+      onPanel: blocked != null || _rows == null ? () => widget.c.openPanel(null, widget.m.call) : null,
     );
   }
 }

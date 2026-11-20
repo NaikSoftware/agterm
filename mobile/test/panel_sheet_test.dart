@@ -57,7 +57,7 @@ class _P {
   final typed = <String>[];
   var gateRuns = 0;
   PromptCardBuilder? card;
-  void Function(String?)? openPanel;
+  void Function(String?, PendingCall?)? openPanel;
 
   Future<void> pump({bool exited = false, bool stale = false}) async {
     t.view.physicalSize = const Size(400, 800);
@@ -265,7 +265,7 @@ void main() {
     final p = _P(t, _g('dialog-bash-45'))..card = (_, _) => const SizedBox(key: Key('stubCard'), height: 40);
     await p.pump();
     await p.show('dialog-bash-45');
-    p.openPanel!(stopped);
+    p.openPanel!(stopped, null);
     await t.pump();
     expect(p.panel, isTrue);
     expect(find.text(stopped), findsOneWidget);

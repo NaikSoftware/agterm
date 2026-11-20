@@ -59,7 +59,7 @@ class _Host {
               gate: gate,
               remote: remote,
               server: server,
-              openPanel: (why) => events.add('panel:$why'),
+              openPanel: (why, _) => events.add('panel:$why'),
             );
             void done() => events.add('done');
             void stop() => events.add('stop');

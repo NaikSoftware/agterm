@@ -409,6 +409,29 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('stopTextLeavesWithItsPrompt', (t) async {
+    final h = await _cardChat(t);
+    await _show(h, 'card-bash-45');
+    await _show(h, 'card-bash-45');
+    await t.ensureVisible(find.text('Yes'));
+    await t.pump();
+    await t.tap(find.text('Yes'));
+    await t.pump();
+    await t.pump();
+    h.r.send([
+      ...json(LinkKind.opened, 3, {'cols': 80, 'rows': 24}),
+      ...json(LinkKind.lead, 3, {'role': 'leader'}),
+    ]);
+    await t.pump();
+    await t.pump(const Duration(seconds: 3));
+    await t.pump();
+    expect(find.textContaining('Stopped at step 1 of'), findsOneWidget);
+    await _show(h, 'card-write-45');
+    await _show(h, 'card-write-45');
+    expect(find.textContaining('Stopped at step 1 of'), findsNothing);
+    await h.stop();
+  });
+
   testWidgets('remoteRowGetsDisabledCard', (t) async {
     final h = await _cardChat(t, session: {..._claude, 'remoteHost': 'studio'});
     await _show(h, 'card-bash-45');
