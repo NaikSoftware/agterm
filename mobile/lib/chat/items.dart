@@ -19,22 +19,163 @@ String? fencedCode(String markdown) {
   return blocks.isEmpty ? null : blocks.join('\n\n');
 }
 
-Widget chatRowWidget(BuildContext c, ChatRow r, {required bool fresh}) {
-  final row = Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: _row(c, r));
+/// [exited] and [stale] turn open subagent rows to "stopped".
+Widget chatRowWidget(BuildContext c, ChatRow r, {required bool fresh, bool exited = false, bool stale = false}) {
+  final row = Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: _row(c, r, exited || stale));
   return fresh ? _FadeIn(r.key, row) : row;
 }
 
-Widget _row(BuildContext c, ChatRow r) {
+Widget _row(BuildContext c, ChatRow r, bool gone) {
   if (r.day != null) {
     return Center(
         child: Text(MaterialLocalizations.of(c).formatMediumDate(r.day!), style: const TextStyle(color: C.dim, fontSize: 12)));
+  }
+  if (r.group.isNotEmpty) {
+    return _Expandable(
+      key: ValueKey(r.key),
+      title: Text(groupLabel(r.group)),
+      body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final t in r.group) _toolRow(t, stopped: false)]),
+    );
   }
   final i = r.item!;
   return switch (i.kind) {
     'user' => _bubble(c, i),
     'text' => _menu(c, i.text ?? '', _markdown(i.text ?? '')),
+    'tool' => _toolRow(i, stopped: r.interruptedAfter || gone),
     _ => Text(i.text ?? i.name ?? i.kind, style: const TextStyle(color: C.muted)),
   };
+}
+
+/// The label of a read-only group, e.g. `Read 7 files · Searched 2`.
+String groupLabel(List<ChatItem> tools) {
+  final read = tools.where((t) => t.name == 'Read').length, listed = tools.where((t) => t.name == 'LS').length;
+  final searched = tools.length - read - listed;
+  return [
+    if (read > 0) 'Read $read ${read == 1 ? 'file' : 'files'}',
+    if (searched > 0) 'Searched $searched',
+    if (listed > 0) 'Listed $listed',
+  ].join(' · ');
+}
+
+enum SubagentState { running, finished, stopped }
+
+SubagentState subagentState(ChatItem agentTool, {required bool interruptedAfter, required bool exited, required bool stale}) {
+  if (!agentTool.running || agentTool.mark == 'done' || agentTool.mark == 'error') return SubagentState.finished;
+  return interruptedAfter || exited || stale ? SubagentState.stopped : SubagentState.running;
+}
+
+String markText(String? mark) => switch (mark) {
+      null => '',
+      'ok' => '✓',
+      'error' => '✗',
+      'done' => '✓ done',
+      final m when m.startsWith('exit ') => '✗ $m',
+      final m => m,
+    };
+
+const _toolStyle = TextStyle(color: C.muted, fontSize: 13);
+const _monoStyle = TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: 12, color: C.termText);
+
+Widget _toolRow(ChatItem i, {required bool stopped}) {
+  final agent = i.name == 'Agent' || i.name == 'Task';
+  final trailing = !agent
+      ? markText(i.mark)
+      : switch (subagentState(i, interruptedAfter: stopped, exited: false, stale: false)) {
+          SubagentState.running => '◯ running',
+          SubagentState.stopped => 'stopped',
+          SubagentState.finished => markText(i.mark ?? 'done'),
+        };
+  final patch = i.patch, output = i.output;
+  return _Expandable(
+    key: ValueKey('tool-${i.uuid}'),
+    title: Row(
+      spacing: 8,
+      children: [
+        Text(
+          agent ? i.agentName ?? 'Agent' : i.name ?? 'tool',
+          style: TextStyle(fontWeight: FontWeight.w600, color: agent ? tintColor(i.agentColor ?? '') : null),
+        ),
+        if (agent && i.agentType != null) Text(i.agentType!),
+        Expanded(child: Text(i.arg ?? '', maxLines: 1, overflow: TextOverflow.ellipsis)),
+        Text(trailing, style: trailing.startsWith('✗') ? const TextStyle(color: C.danger) : null),
+      ],
+    ),
+    body: patch != null
+        ? _diff(i.file, patch)
+        : output == null
+            ? null
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(output, style: _monoStyle),
+                  if (i.clipped) const Text('Full output in Term', style: TextStyle(color: C.dim)),
+                ],
+              ),
+  );
+}
+
+Color? _lineColor(String l) => l.startsWith('-') ? C.danger : l.startsWith('+') ? C.completedText : null;
+
+Widget _diff(String? file, List<Hunk> hunks) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      for (final h in hunks) ...[
+        Container(
+          color: C.surface,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Text('${file ?? ''}  @@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@', style: const TextStyle(color: C.dim)),
+        ),
+        for (final l in h.lines)
+          Container(
+            color: _lineColor(l)?.withValues(alpha: .12),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Text(l, style: _monoStyle.copyWith(color: _lineColor(l))),
+          ),
+      ],
+    ]);
+
+/// A secondary-coloured row whose tap opens [body] under it; no [body], no tap.
+class _Expandable extends StatefulWidget {
+  const _Expandable({super.key, required this.title, this.body});
+
+  final Widget title;
+  final Widget? body;
+
+  @override
+  State<_Expandable> createState() => _ExpandableState();
+}
+
+class _ExpandableState extends State<_Expandable> {
+  bool open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = widget.body;
+    return DefaultTextStyle.merge(
+      style: _toolStyle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: body == null ? null : () => setState(() => open = !open),
+            child: Row(
+              children: [
+                Text(open && body != null ? '▾ ' : '▸ '),
+                Expanded(child: widget.title),
+              ],
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            alignment: Alignment.topLeft,
+            child: open && body != null
+                ? Padding(padding: const EdgeInsets.only(left: 14, top: 4), child: body)
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 Widget _bubble(BuildContext c, ChatItem i) => Align(
