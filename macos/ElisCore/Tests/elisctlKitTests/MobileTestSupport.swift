@@ -300,6 +300,7 @@ final class RawStubServer: @unchecked Sendable {
     private var failNextRead = false
     private var attachGate: DispatchSemaphore?
     private var attachPick: (@Sendable ([String: Any]) -> ControlResponse?)?
+    private var raw: [String: String] = [:]
 
     /// What `session.attach` answers; by default the fake viewer prints "hi" and echoes what it reads.
     private var attach = ControlResponse(ok: true, result: ControlResult(attach: fakeAttach("printf 'hi'; cat")))
@@ -311,6 +312,9 @@ final class RawStubServer: @unchecked Sendable {
     }
 
     func answerAttach(_ response: ControlResponse) { lock.withLock { attach = response } }
+
+    /// Answers `cmd` with `text` written as is, so a stream reply can carry lines after its ok.
+    func answerRaw(_ cmd: String, _ text: String) { lock.withLock { raw[cmd] = text } }
 
     /// Answers each `session.attach` by its `args`; nil falls back to `answerAttach`'s answer.
     func answerAttach(by pick: @escaping @Sendable ([String: Any]) -> ControlResponse?) { lock.withLock { attachPick = pick } }
@@ -407,6 +411,11 @@ final class RawStubServer: @unchecked Sendable {
         let cmd = object["cmd"] as? String ?? ""
         if cmd != "events.read" { lock.withLock { received.append(String(decoding: line, as: UTF8.self)) } }
         if cmd == "session.attach", let gate = lock.withLock({ attachGate }) { _ = gate.wait(timeout: .now() + 30) }
+        if let text = lock.withLock({ raw[cmd] }) {
+            let data = Data(text.utf8)
+            data.withUnsafeBytes { _ = UnixSocket.write(conn, $0.baseAddress!, data.count) }
+            return
+        }
         let reply = cmd == "version" ? #"{"ok":true,"result":{"app":{"version":"9.9.9"}}}"#
             : cmd == "events.read" ? eventsReply(object)
             : cmd == "session.attach" ? lock.withLock {
