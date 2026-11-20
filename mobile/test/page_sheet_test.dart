@@ -482,6 +482,20 @@ void main() {
     await closeFile(h);
   });
 
+  testWidgets('the cover goes when the page commits and the stripe runs to the finish', (t) async {
+    final h = await _shown(t, urlPage());
+    final web = h.webs.single;
+    web.c.committed();
+    await t.pump();
+    expect(find.byKey(_cover), findsNothing);
+    expect(find.byKey(_loading), findsOneWidget);
+    expect(pageUp(h).where((l) => l['load'] == 'loaded'), isEmpty);
+    web.c.finished('https://example.com/a');
+    await t.pump();
+    expect(find.byKey(_loading), findsNothing);
+    await h.stop();
+  });
+
   testWidgets('a tap on the covered first load does not reach the page', (t) async {
     final h = await _shown(t, urlPage());
     await t.tap(find.byKey(_cover));
@@ -700,6 +714,9 @@ void main() {
       await t.pump();
       expect(web.reloads, 1);
       expect(find.byKey(_cover), findsOneWidget);
+      web.c.committed();
+      await t.pump();
+      expect(find.byKey(_cover), findsNothing);
       web.c.finished('${web.urls.single}');
       await t.pump();
       expect(pageUp(h).last, containsPair('load', 'loaded'));
