@@ -17,6 +17,8 @@ final class ControlServerTranscriptTests: XCTestCase {
         private let lock = NSLock()
         private var recorded: [[String]] = []
         var reply = ""
+        var status: Int32 = 0
+        var stderr = ""
 
         var reads: [[String]] { lock.withLock { recorded } }
 
@@ -32,7 +34,7 @@ final class ControlServerTranscriptTests: XCTestCase {
             guard line.contains("session transcript") else { return RemoteCommandResult(status: 0, stdout: "", stderr: "") }
             return lock.withLock {
                 recorded.append(argv)
-                return RemoteCommandResult(status: 0, stdout: reply, stderr: "")
+                return RemoteCommandResult(status: status, stdout: reply, stderr: stderr)
             }
         }
 
@@ -117,8 +119,10 @@ final class ControlServerTranscriptTests: XCTestCase {
 
         let reply = await server.dispatch(ControlRequest(cmd: .sessionTranscript, target: row.id.uuidString, args: args))
 
-        XCTAssertEqual(String(decoding: try JSONEncoder().encode(reply), as: UTF8.self),
-                       String(decoding: try JSONEncoder().encode(JSONDecoder().decode(ControlResponse.self, from: Data(printed.utf8))),
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        XCTAssertEqual(String(decoding: try encoder.encode(reply), as: UTF8.self),
+                       String(decoding: try encoder.encode(JSONDecoder().decode(ControlResponse.self, from: Data(printed.utf8))),
                               as: UTF8.self))
         let argv = try XCTUnwrap(runner.reads.first)
         let line = Runner.line(argv)
@@ -161,13 +165,24 @@ final class ControlServerTranscriptTests: XCTestCase {
         XCTAssertEqual(reply.error, "the Elis on buildbox is too old for session.transcript")
     }
 
-    func testUndecodableOriginReplyIsTooOld() async throws {
-        runner.reply = "not json"
+    func testOriginCLIRejectingTheSubcommandIsTooOld() async throws {
+        runner.status = 64
+        runner.stderr = "Error: Unknown option '--target'"
         let row = try attachedRow()
 
         let reply = await server.dispatch(ControlRequest(cmd: .sessionTranscript, target: row.id.uuidString))
 
         XCTAssertEqual(reply.error, "the Elis on buildbox is too old for session.transcript")
+    }
+
+    func testUndecodableOriginReplyIsNoAnswer() async throws {
+        runner.status = 255
+        runner.stderr = "ssh: connect to host buildbox: Operation timed out"
+        let row = try attachedRow()
+
+        let reply = await server.dispatch(ControlRequest(cmd: .sessionTranscript, target: row.id.uuidString))
+
+        XCTAssertEqual(reply.error, "buildbox gave no answer (ssh: connect to host buildbox: Operation timed out)")
     }
 
     func testTranscriptLeavesWindowCacheAlone() async throws {

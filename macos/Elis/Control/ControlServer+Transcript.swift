@@ -56,9 +56,13 @@ extension ControlServer {
             return ControlResponse(ok: false, error: "\(host) cannot be addressed")
         }
         let result = await remoteRunner.run(argv, deadline: Self.remoteTreeDeadline)
-        guard let reply = try? JSONDecoder().decode(ControlResponse.self, from: Data(result.stdout.utf8)),
-              !reply.refusesUnknown(.sessionTranscript) else { return tooOld }
-        return reply
+        if result.refusedArguments { return tooOld }
+        // a slow or offline host is a transient error, never "too old", which disables Chat on the phone
+        guard let reply = try? JSONDecoder().decode(ControlResponse.self, from: Data(result.stdout.utf8)) else {
+            let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return ControlResponse(ok: false, error: "\(host) gave no answer\(stderr.isEmpty ? "" : " (\(stderr))")")
+        }
+        return reply.refusesUnknown(.sessionTranscript) ? tooOld : reply
     }
 
     // never closed: an idle master exits after its ControlPersist
