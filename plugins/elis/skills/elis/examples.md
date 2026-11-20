@@ -727,7 +727,7 @@ elisctl session search --close          # close the search bar
 ## Notify the user in a specific session
 
 ```bash
-elisctl notify "build finished" --title "CI"                 # active session
+elisctl notify "build finished" --title "CI"                 # this pane's session, else the active one
 elisctl notify "tests failed" --target "$sid"               # a specific session
 ```
 

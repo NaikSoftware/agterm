@@ -170,6 +170,7 @@ paths:
   `CallerEnvironment.defaultSessionTarget`: a phone-led pane is never the Mac's selection.
   Workspace commands keep `active`, since a pane's `ELIS_WORKSPACE_ID` is baked at spawn and goes stale on
   `session move`; surface commands keep it, since no variable carries a surface id. The wire default stays `active`.
+  The app unsets an inherited `ELIS_SESSION_ID` at launch, so its hooks and custom commands keep `active`.
 - Targets accept active, case-insensitive UUID, or unique prefix. Batch targets resolve within the first
   target's store, deduplicate, and fail atomically. Preserve the first target in the legacy top-level field
   so old servers degrade to it rather than active.

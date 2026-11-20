@@ -68,10 +68,9 @@ enum CallerEnvironment {
 
     /// The caller's own session inside an Elis pane, else `active`: a pane may be led from the phone, where the
     /// Mac's selection is a session the typist cannot see.
-    static var defaultSessionTarget: String {
-        guard let own = values["ELIS_SESSION_ID"], !own.isEmpty else { return "active" }
-        return own
-    }
+    static var defaultSessionTarget: String { ownSession ?? "active" }
+
+    static var ownSession: String? { values["ELIS_SESSION_ID"].flatMap { $0.isEmpty ? nil : $0 } }
 }
 
 /// Options for the commands that address a single session.

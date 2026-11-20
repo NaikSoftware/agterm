@@ -210,7 +210,7 @@ replays the captured running command inside a new persistent shell. The exclusio
 
 `session type` drives an ALREADY-RUNNING program — it is not a launcher. Its keystrokes land in a line
 buffer you do not own: a newline submits (a multi-line brief becomes N premature Enters), and the user
-or a concurrent agent writes to that same buffer. An untargeted `session type` from another agent hits
+or a concurrent agent writes to that same buffer. A `session type --target active` from another agent hits
 whatever is `active`, and `session new` focuses — so a just-created session is briefly `active`, a stray
 prompt concatenates with yours, and the program starts on the merged line. (`--no-select` skips the
 focus, but the newline and shared-buffer hazards of `type`-as-launcher remain — `--command` is still the
@@ -677,7 +677,7 @@ Pick shares its window modal slot with GUI asks. A background target is raised o
 Read the live picker id from the tree's top-level `pickPending` field.
 
 **ask**: `ask TITLE --button ID=LABEL [--button ...] [--message TEXT]` opens a question and waits for
-an answer. The default `--style terminal` uses the selected session, with one pending ask per session.
+an answer. The default `--style terminal` uses your own session (outside a pane, the selected one), with one pending ask per session.
 `--pane` or `--pane-id` narrows it to a pane without requiring `--target`. An explicit unselected session
 is accepted and keeps its ask hidden and pending. A terminal ask leaves the rest of the window usable.
 `--style gui` uses the window modal slot shared with pick; GUI pane placement requires a selected

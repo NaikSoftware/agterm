@@ -1880,8 +1880,8 @@ it waited for. Results age out oldest-first: the 8 most recent per open window, 
 `elisctl ask [open] TITLE [--button ID=LABEL ...] [--message TEXT]` opens a question without
 reading stdin. Use explicit `ask open` when the title is `open`, `result`, or `cancel`.
 
-`--style terminal` is the default and uses the window's selected session, with one pending ask per
-session. `--target` can name an unselected session without selecting it; its ask waits hidden.
+`--style terminal` is the default and uses the caller's own session inside an Elis pane, else the window's
+selected session, with one pending ask per session. `--target` can name an unselected session without selecting it; its ask waits hidden.
 `--pane left|right` and `--pane-id TOKEN` narrow placement without requiring a target. A live token takes
 precedence over the role, and the pane must be laid out by its session at open.
 `--style gui` uses the window modal slot shared with pick. Without a target, it centers over the
@@ -2151,7 +2151,7 @@ parse diagnostics (0 = clean). App-global (no `--window`).
 `elisctl keymap run NAME [--target T] [--window W]` — start a custom command from `keymap.conf` by its
 exact name, as `keymap list` prints it. It runs as it does from the command palette, with the target
 session's focused pane, primary or split and never its scratch or an overlay, supplying the working
-directory, the selection and the `AGT_*` context; the default target is the active session, and from an
+directory, the selection and the `AGT_*` context; the default target is the caller's session inside an Elis pane, else the active session, and from an
 HTML page the page's own session. `result.id` is that session. Ok means the process started: the
 command is detached, so its exit status and output are not reported, though a command with `--error-hud`
 still shows its panel. An unknown name answers `no custom command named NAME`.

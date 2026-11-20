@@ -43,4 +43,14 @@ struct DefaultTargetTests {
     func workspaceAndSurfaceCommandsKeepActiveInsideAPane(argv: [String]) throws {
         #expect(try request(argv, env: ["ELIS_SESSION_ID": own]).target == "active")
     }
+
+    @Test func aTerminalAskInsideAPaneOpensInItsOwnSession() throws {
+        let ask = { (argv: [String], env: [String: String]) in
+            try CallerEnvironment.$values.withValue(env) { try Ask.Open.parse(argv + ["--button", "ok"]).makeRequest().target }
+        }
+        #expect(try ask(["Q?"], ["ELIS_SESSION_ID": own]) == own)
+        #expect(try ask(["Q?"], [:]) == nil)
+        #expect(try ask(["Q?", "--style", "gui"], ["ELIS_SESSION_ID": own]) == nil)
+        #expect(try ask(["Q?", "--target", "active"], ["ELIS_SESSION_ID": own]) == "active")
+    }
 }
