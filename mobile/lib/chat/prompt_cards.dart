@@ -37,7 +37,8 @@ Future<void> sendAnswer(
   c.openPanel(stopMessage(r));
 }
 
-/// A full-width card answer: filled when primary, outlined and confirmed by a second tap when it persists a rule or mode.
+/// A full-width card answer: filled when primary, a neutral tile when a [choice], else outlined;
+/// confirmed by a second tap when it persists a rule or mode.
 class CardButton extends StatefulWidget {
   const CardButton({
     super.key,
@@ -46,6 +47,7 @@ class CardButton extends StatefulWidget {
     this.onPressed,
     this.primary = false,
     this.secondTap = false,
+    this.choice = false,
     this.checked,
     this.busy,
   });
@@ -53,7 +55,7 @@ class CardButton extends StatefulWidget {
   final String label;
   final String? description;
   final VoidCallback? onPressed;
-  final bool primary, secondTap;
+  final bool primary, secondTap, choice;
   final bool? checked; // a multiSelect toggle
   final String? busy; // the gate's progress, shown in place of the label
 
@@ -88,11 +90,22 @@ class _CardButtonState extends State<CardButton> {
   Widget build(BuildContext context) {
     final on = widget.onPressed == null ? null : _tap;
     final label = widget.busy ?? (_armed != null ? 'Tap again to confirm' : widget.label);
-    final desc = widget.busy == null && _armed == null ? widget.description : null;
+    final desc = widget.busy == null && _armed == null && widget.description != widget.label ? widget.description : null;
+    // a single choice answers on tap: it reads selected while its answer is sent
+    final selected = widget.checked ?? widget.busy != null;
     final child = Row(
       children: [
-        if (widget.checked case final c?)
-          Padding(padding: const EdgeInsets.only(right: 8), child: Icon(c ? Icons.check_box : Icons.check_box_outline_blank, size: 20)),
+        if (widget.choice)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Icon(
+              widget.checked == null
+                  ? (selected ? Icons.radio_button_checked : Icons.radio_button_unchecked)
+                  : (selected ? Icons.check_box : Icons.check_box_outline_blank),
+              size: 20,
+              color: selected ? C.accent : C.muted,
+            ),
+          ),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -115,14 +128,20 @@ class _CardButtonState extends State<CardButton> {
                 onPressed: on,
                 child: child,
               )
-            : widget.secondTap
+            : widget.choice
             ? OutlinedButton(
-                style: OutlinedButton.styleFrom(padding: pad),
+                style: OutlinedButton.styleFrom(
+                  padding: pad,
+                  foregroundColor: C.text,
+                  backgroundColor: selected ? C.accent.withValues(alpha: 0.12) : C.surface2,
+                  side: BorderSide(color: selected ? C.accent : C.line),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
                 onPressed: on,
                 child: child,
               )
-            : FilledButton.tonal(
-                style: FilledButton.styleFrom(padding: pad),
+            : OutlinedButton(
+                style: OutlinedButton.styleFrom(padding: pad, foregroundColor: C.text, side: const BorderSide(color: C.line)),
                 onPressed: on,
                 child: child,
               ),
@@ -326,8 +345,16 @@ class _AskCardState extends State<AskCard> {
     final running = widget.c.gate.running, blocked = _blocked(widget.checks, widget.c), locked = running || blocked != null;
     VoidCallback? act(VoidCallback f) => locked ? null : f;
     String? busy(String label) => running && _sender == label ? widget.c.gate.progress : null;
-    CardButton button(String label, VoidCallback f, {String? description, bool primary = false, bool? checked}) =>
-        CardButton(label: label, description: description, primary: primary, checked: checked, busy: busy(label), onPressed: act(f));
+    CardButton button(String label, VoidCallback f, {String? description, bool primary = false, bool choice = false, bool? checked}) =>
+        CardButton(
+          label: label,
+          description: description,
+          primary: primary,
+          choice: choice,
+          checked: checked,
+          busy: busy(label),
+          onPressed: act(f),
+        );
 
     final review = _step >= _qs.length;
     final q = review ? null : _qs[_step];
@@ -337,10 +364,13 @@ class _AskCardState extends State<AskCard> {
     final go = _qs.length == 1 ? 'Send' : 'Next';
 
     final Widget content;
-    final buttons = <Widget>[
+    // choices, then their fields, then the secondary actions, then the one primary nearest the thumb
+    final buttons = <Widget>[];
+    final secondary = [
       if (discuss) button('Chat about this', () => _send('Chat about this', AskDiscuss())),
       button('Cancel', () => _send('Cancel', AskCancel())),
     ];
+    Widget? primary;
     if (q == null) {
       content = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -354,7 +384,7 @@ class _AskCardState extends State<AskCard> {
           ],
         ],
       );
-      buttons.add(button('Send', () => _send('Send', AskAnswer([for (final q in _qs) q.answer ?? const QuestionAnswer()])), primary: true));
+      primary = button('Send', () => _send('Send', AskAnswer([for (final q in _qs) q.answer ?? const QuestionAnswer()])), primary: true);
     } else {
       final i = _step;
       content = Column(
@@ -394,11 +424,12 @@ class _AskCardState extends State<AskCard> {
               o.label,
               () => setState(() => q.picked.contains(o.label) ? q.picked.remove(o.label) : q.picked.add(o.label)),
               description: o.description,
+              choice: true,
               checked: q.picked.contains(o.label),
             ),
           field,
-          button(go, () => _answer(go, i, _multiAnswer(q)), primary: true),
         ]);
+        primary = button(go, () => _answer(go, i, _multiAnswer(q)), primary: true);
       } else {
         final notes = q.preview && widget.cards.previewNotes;
         String? note() => notes && q.notesOpen && q.notes.text.trim().isNotEmpty ? q.notes.text : null;
@@ -408,6 +439,7 @@ class _AskCardState extends State<AskCard> {
               o.label,
               () => _answer(o.label, i, QuestionAnswer(labels: [o.label], notes: note())),
               description: o.description,
+              choice: true,
             ),
           if (notes) ...[
             button('Notes', () => setState(() => q.notesOpen = !q.notesOpen)),
@@ -421,18 +453,19 @@ class _AskCardState extends State<AskCard> {
                 decoration: const InputDecoration(hintText: 'Notes'),
               ),
           ],
-          if (widget.cards.singleOther) ...[
-            field,
-            CardButton(
-              label: go,
-              primary: true,
-              busy: busy(go),
-              onPressed: q.otherText == null ? null : act(() => _answer(go, i, QuestionAnswer(other: q.otherText))),
-            ),
-          ],
+          if (widget.cards.singleOther) field,
         ]);
+        if (widget.cards.singleOther) {
+          primary = CardButton(
+            label: go,
+            primary: true,
+            busy: busy(go),
+            onPressed: q.otherText == null ? null : act(() => _answer(go, i, QuestionAnswer(other: q.otherText))),
+          );
+        }
       }
     }
+    buttons.addAll([...secondary, ?primary]);
     return CardFrame(
       title: widget.m.call.name,
       step: _qs.length > 1 && !review ? '${_step + 1}/${_qs.length}' : null,

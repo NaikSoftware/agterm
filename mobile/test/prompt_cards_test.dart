@@ -262,6 +262,40 @@ void main() {
     expect(find.text('→ Staging'), findsNothing);
   });
 
+  testWidgets('choicesAreTilesAndOnlyThePrimaryIsFilled', (t) async {
+    Finder filled(String label) => find.ancestor(of: find.text(label).last, matching: find.byType(FilledButton));
+    List<String> order() => [for (final b in t.widgetList<CardButton>(find.byType(CardButton))) b.label];
+    await _Host('card-ask-multi').show(t);
+    expect(order(), ['Oil', 'Bread', 'Rope', 'Chat about this', 'Cancel', 'Send']);
+    for (final l in ['Oil', 'Chat about this', 'Cancel']) {
+      expect(filled(l), findsNothing, reason: l);
+    }
+    expect(filled('Send'), findsOneWidget);
+    await _tap(t, 'Oil');
+    final tile = t.widget<OutlinedButton>(find.ancestor(of: find.text('Oil'), matching: find.byType(OutlinedButton)));
+    expect(tile.style?.side?.resolve({})?.color, C.accent);
+    expect(find.byIcon(Icons.check_box), findsOneWidget);
+
+    await _Host('card-bash').show(t);
+    expect(order().last, 'Yes');
+    expect(filled('Yes'), findsOneWidget);
+    for (final l in ['No', 'More options in panel', 'Yes with a note', 'No with a reason']) {
+      expect(filled(l), findsNothing, reason: l);
+    }
+  });
+
+  testWidgets('descriptionEqualToLabelIsHidden', (t) async {
+    await t.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Column(children: [CardButton(label: 'Night', description: 'Night'), CardButton(label: 'Day', description: 'Sunrise')]),
+        ),
+      ),
+    );
+    expect(find.text('Night'), findsOneWidget);
+    expect(find.text('Sunrise'), findsOneWidget);
+  });
+
   testWidgets('secondTapConfirms', (t) async {
     var taps = 0;
     await t.pumpWidget(
