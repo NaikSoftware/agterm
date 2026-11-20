@@ -182,14 +182,21 @@ class _PageSheetState extends State<PageSheet> {
       if (script != null && script.isNotEmpty) await _web.run(script);
       _canGoBack = await _web.canGoBack();
       final title = await _web.title();
-      // Android names an untitled page by its address, which for a file page carries the sheet's secret
-      _title = title == url || (_prefix != null && title != null && title.contains(_prefix!)) ? null : title;
+      _title = title == null || _isAddress(title, url) ? null : title;
     } on Object {
       // a page that navigated away meanwhile reports its own finish
     }
     if (!mounted) return;
     _report();
     setState(() {});
+  }
+
+  // Android names an untitled page by its address, with or without the scheme; a file page's carries the sheet's secret
+  bool _isAddress(String title, String url) {
+    if (title == url || title == url.replaceFirst(RegExp('^[a-z]+://'), '')) return true;
+    if (_prefix == null) return false;
+    final server = Uri.parse(_prefix!);
+    return title.contains(server.authority) || title.contains(server.pathSegments.first);
   }
 
   /// The Mac's current page: a file page's origin path, never the sheet's server; the relay names a content page's.

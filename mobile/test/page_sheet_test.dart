@@ -317,13 +317,17 @@ void main() {
 
   testWidgets('a file page reports its origin path and never the sheet secret', (t) async {
     final (h, web, url) = await fileShown(t);
-    web.titleText = '$url'; // Android's title for an untitled page
-    web.c.finished('$url#top');
-    await t.pump();
-    final state = pageUp(h).lastWhere((l) => l['t'] == 'state');
-    expect(state['current'], '/w/index.html');
-    expect(state.containsKey('title'), isFalse);
+    for (final title in ['$url', '${url.authority}${url.path}']) { // Android names an untitled page by its address, without the scheme too
+      web.titleText = title;
+      web.c.finished('$url#top');
+      await t.pump();
+      final state = pageUp(h).lastWhere((l) => l['t'] == 'state');
+      expect(state['current'], '/w/index.html');
+      expect(state.containsKey('title'), isFalse);
+    }
     expect(pageUp(h).where((l) => l['t'] == 'state').map(jsonEncode), everyElement(isNot(contains(url.pathSegments.first))));
+    final strip = t.widget<Text>(find.descendant(of: find.byKey(const Key('pageStrip')), matching: find.byType(Text)).first);
+    expect(strip.textSpan!.toPlainText(), isNot(contains(url.pathSegments.first)));
     await closeFile(h);
   });
 
