@@ -25,12 +25,18 @@ final class PhoneLinkLineStream: @unchecked Sendable {
     private var outbox: [Data] = []
     private var closed = false
     private var stopping = false
+    private var started = false
 
     private init(transport: Transport, readFD: Int32, writeFD: Int32, queue: DispatchQueue) {
         self.transport = transport
         self.readFD = readFD
         self.writeFD = writeFD
         self.queue = queue
+    }
+
+    // a started stream's reader closes the socket; one never started has nobody else to
+    deinit {
+        if !started, case .socket(let fd) = transport { Darwin.close(fd) }
     }
 
     /// Sends `request` on the app socket and waits for its ok reply (as `StreamBridge.open`), off `queue`.
@@ -47,10 +53,11 @@ final class PhoneLinkLineStream: @unchecked Sendable {
 
     /// Runs `argv` with pipes on stdin and stdout; stderr is dropped.
     static func process(argv: [String], queue: DispatchQueue) throws -> PhoneLinkLineStream {
-        guard let path = argv.first else { throw SocketClientError("no command to run") }
+        guard !argv.isEmpty else { throw SocketClientError("no command to run") }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = Array(argv.dropFirst())
+        // env finds a bare `ssh` on PATH and execs it, so terminate() still reaches the command
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = argv
         let input = Pipe(), output = Pipe()
         process.standardInput = input
         process.standardOutput = output
@@ -64,6 +71,7 @@ final class PhoneLinkLineStream: @unchecked Sendable {
     }
 
     func start(onLine: @escaping (Data) -> Void, onEnd: @escaping () -> Void) {
+        lock.withLock { started = true }
         let reader = Thread { [self] in
             read(onLine)
             stop()

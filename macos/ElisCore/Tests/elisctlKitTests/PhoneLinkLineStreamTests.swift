@@ -83,6 +83,14 @@ struct PhoneLinkLineStreamTests {
         #expect(await recorder.waitEnd())
     }
 
+    @Test func aBareCommandIsFoundOnPath() async throws {
+        let stream = try PhoneLinkLineStream.process(argv: ["sh", "-c", "echo a"], queue: queue)
+        let recorder = Recorder()
+        recorder.start(stream)
+        #expect(await recorder.waitLines(1))
+        #expect(recorder.lines == ["a"])
+    }
+
     @Test func processStreamCarriesWhatItSends() async throws {
         let stream = try PhoneLinkLineStream.process(argv: ["/bin/sh", "-c", "read line; echo got-$line"], queue: queue)
         let recorder = Recorder()
@@ -96,6 +104,7 @@ struct PhoneLinkLineStreamTests {
     @Test func aLineOverTheCapEndsTheStream() async throws {
         let script = "head -c \(PhoneLinkLineStream.maxLine + 1) /dev/zero | tr '\\0' x; echo; exec sleep 60"
         let stream = try PhoneLinkLineStream.process(argv: ["/bin/sh", "-c", script], queue: queue)
+        defer { stream.close() }
         let recorder = Recorder()
         recorder.start(stream)
         #expect(await recorder.waitEnd())
@@ -104,6 +113,7 @@ struct PhoneLinkLineStreamTests {
 
     @Test func closeSkipsOnEnd() async throws {
         let stream = try PhoneLinkLineStream.process(argv: ["/bin/sh", "-c", "echo a; exec sleep 60"], queue: queue)
+        defer { stream.close() }
         let recorder = Recorder()
         recorder.start(stream)
         #expect(await recorder.waitLines(1))
