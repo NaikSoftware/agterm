@@ -47,6 +47,8 @@ final class PhoneLinkClaim: @unchecked Sendable {
     private var size: (cols: UInt16, rows: UInt16) = (0, 0)
     /// Set once `phone leads` is logged; `phone released` follows it exactly once.
     private(set) var paneID: String?
+    /// The pane identity a `lead.report` names on the origin; nil from an app that predates it.
+    private(set) var originPane: UUID?
     private var stopped = false
     /// Input received and not yet acknowledged by a CREDIT sent.
     private var unacknowledged = 0
@@ -59,6 +61,8 @@ final class PhoneLinkClaim: @unchecked Sendable {
     private var answers: DeviceAttributeResponder? = .init()
     /// From the app request's send until its answer is back on the relay queue, even after `stop()`.
     private(set) var asking = false
+
+    var leading: Bool { paneID != nil && !stopped }
 
     init(channel: UInt32, request: PhoneLinkOpen, watched: String?, socketPath: String, queue: DispatchQueue, peer: String,
          log: @escaping (String) -> Void, after: @escaping (TimeInterval, @escaping @Sendable () -> Void) -> Void, link: Link) {
@@ -141,6 +145,7 @@ final class PhoneLinkClaim: @unchecked Sendable {
         }
         // an app that predates the claim answers a viewer attach, which would never lead
         guard let nonce = attach.nonce else { return refuse("Elis gave no claiming attach for this pane") }
+        originPane = attach.origin.flatMap { UUID(uuidString: $0.pane) }
         lead = ZmxLeadState(attachment: ZmxLeadAttachment(nonce: nonce, claim: true))
         do {
             pty = try PhoneLinkPty.spawn(attach.argv, cols: size.cols, rows: size.rows, onOutput: { [weak self, queue] bytes in

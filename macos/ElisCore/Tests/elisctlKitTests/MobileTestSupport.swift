@@ -301,14 +301,29 @@ final class RawStubServer: @unchecked Sendable {
     private var attachGate: DispatchSemaphore?
     private var attachPick: (@Sendable ([String: Any]) -> ControlResponse?)?
     private var raw: [String: String] = [:]
+    private var streamCmds: Set<String> = []
+    private var streams: [StubStream] = []
 
     /// What `session.attach` answers; by default the fake viewer prints "hi" and echoes what it reads.
     private var attach = ControlResponse(ok: true, result: ControlResult(attach: fakeAttach("printf 'hi'; cat")))
 
     /// A viewer that runs `script` under `sh`, for an 80x24 pane.
     static func fakeAttach(_ script: String, paneID: String = "pane-1", screen: String = "printf '1 80 24 0 0 0\\n'",
-                           remote: Bool = false, nonce: String? = nil) -> ControlAttach {
-        ControlAttach(argv: ["/bin/sh", "-c", script], paneID: paneID, screen: ["/bin/sh", "-c", screen], remote: remote, nonce: nonce)
+                           remote: Bool = false, nonce: String? = nil, origin: ControlAttachOrigin? = nil) -> ControlAttach {
+        ControlAttach(argv: ["/bin/sh", "-c", script], paneID: paneID, screen: ["/bin/sh", "-c", screen], remote: remote, nonce: nonce,
+                      origin: origin)
+    }
+
+    /// Every `cmd` connection is answered ok and kept open as a `StubStream`, in arrival order.
+    func holdStreams(_ cmd: String) { lock.withLock { streamCmds.insert(cmd) } }
+
+    func nextStream(timeout: TimeInterval = 30) -> StubStream? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if let stream = lock.withLock({ streams.isEmpty ? nil : streams.removeFirst() }) { return stream }
+            if Date() > deadline { return nil }
+            usleep(20_000)
+        }
     }
 
     func answerAttach(_ response: ControlResponse) { lock.withLock { attach = response } }
@@ -397,24 +412,30 @@ final class RawStubServer: @unchecked Sendable {
                 // a client that gave up on a held answer is gone by the reply: EPIPE, not a SIGPIPE that kills the run
                 var noSigPipe: Int32 = 1
                 setsockopt(conn, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
-                serve(conn)
-                close(conn)
+                if !serve(conn) { close(conn) }
             }
         }
     }
 
-    private func serve(_ conn: Int32) {
+    /// Whether `conn` was handed to a `StubStream`, which then owns it.
+    private func serve(_ conn: Int32) -> Bool {
         var line = Data()
         var byte: UInt8 = 0
         while read(conn, &byte, 1) == 1, byte != 0x0A { line.append(byte) }
-        guard byte == 0x0A, let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return }
+        guard byte == 0x0A, let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return false }
         let cmd = object["cmd"] as? String ?? ""
         if cmd != "events.read" { lock.withLock { received.append(String(decoding: line, as: UTF8.self)) } }
+        if lock.withLock({ streamCmds.contains(cmd) }) {
+            let stream = StubStream(fd: conn, request: String(decoding: line, as: UTF8.self))
+            stream.send(#"{"ok":true}"# + "\n")
+            lock.withLock { streams.append(stream) }
+            return true
+        }
         if cmd == "session.attach", let gate = lock.withLock({ attachGate }) { _ = gate.wait(timeout: .now() + 30) }
         if let text = lock.withLock({ raw[cmd] }) {
             let data = Data(text.utf8)
             data.withUnsafeBytes { _ = UnixSocket.write(conn, $0.baseAddress!, data.count) }
-            return
+            return false
         }
         let reply = cmd == "version" ? #"{"ok":true,"result":{"app":{"version":"9.9.9"}}}"#
             : cmd == "events.read" ? eventsReply(object)
@@ -425,12 +446,77 @@ final class RawStubServer: @unchecked Sendable {
             : #"{"ok":true,"result":{"echo":"\#(cmd)"}}"#
         let data = Data((reply + "\n").utf8)
         data.withUnsafeBytes { _ = UnixSocket.write(conn, $0.baseAddress!, data.count) }
+        return false
     }
 
     func stop() {
         lock.withLock { stopped = true }
         if let wake = try? SocketClient(path: path).connect() { close(wake) }
         unlink(path)
+    }
+}
+
+/// One held stream connection, played from the origin's side: lines both ways and the client's end.
+final class StubStream: @unchecked Sendable {
+    let request: String
+    private let fd: Int32
+    private var buffer = Data()
+    private var eof = false
+
+    init(fd: Int32, request: String) {
+        self.fd = fd
+        self.request = request
+    }
+
+    deinit { close(fd) }
+
+    func send(_ text: String) { send(Data(text.utf8)) }
+    func send(_ data: Data) { data.withUnsafeBytes { _ = UnixSocket.write(fd, $0.baseAddress!, data.count) } }
+
+    /// The next line the client sent, newline excluded; nil at its end or after `timeout`.
+    func readLine(timeout: TimeInterval = 30) -> Data? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if let newline = buffer.firstIndex(of: 0x0A) {
+                defer { buffer.removeSubrange(buffer.startIndex...newline) }
+                return Data(buffer[buffer.startIndex..<newline])
+            }
+            guard !eof, fill(until: deadline) else { return nil }
+        }
+    }
+
+    func frame(timeout: TimeInterval = 30) -> PresentationFrame? {
+        readLine(timeout: timeout).flatMap { try? PresentationCodec.decode($0) }
+    }
+
+    /// The next frame `matching`, skipping others.
+    func frame(timeout: TimeInterval = 30, matching: (PresentationFrame.Body) -> Bool) -> PresentationFrame? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while let frame = frame(timeout: deadline.timeIntervalSinceNow) {
+            if matching(frame.body) { return frame }
+        }
+        return nil
+    }
+
+    /// Whether the client ended the stream, skipping what it still sent.
+    func waitEnd(timeout: TimeInterval = 30) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !eof {
+            buffer = Data()
+            guard fill(until: deadline) || eof else { return false }
+        }
+        return true
+    }
+
+    /// Reads once; false on timeout.
+    private func fill(until deadline: Date) -> Bool {
+        var poller = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+        let wait = Int32(max(0, deadline.timeIntervalSinceNow) * 1000)
+        guard poll(&poller, 1, wait) > 0 else { return false }
+        var chunk = [UInt8](repeating: 0, count: 65536)
+        let count = read(fd, &chunk, chunk.count)
+        if count <= 0 { eof = true } else { buffer.append(contentsOf: chunk[0..<count]) }
+        return true
     }
 }
 #endif
