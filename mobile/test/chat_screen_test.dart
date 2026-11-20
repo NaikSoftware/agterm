@@ -9,13 +9,15 @@ import 'package:elis_mobile/chat/prompt_cards.dart';
 import 'package:elis_mobile/chat/write_gate.dart';
 import 'package:elis_mobile/link/frame.dart';
 import 'package:elis_mobile/model.dart';
+import 'package:elis_mobile/notice.dart';
 import 'package:elis_mobile/screens/session.dart';
 import 'package:elis_mobile/terminal/vt.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'mux_test.dart' show frame, json;
-import 'session_term_test.dart' show FakeVt, Harness, treeOf;
+import 'session_term_test.dart' show FakeVt, Harness, loadFonts, phone, treeOf;
 import 'support/ansi.dart';
 
 const _claude = {'agent': 'claude', 'agentSessionId': 'c1'};
@@ -301,7 +303,9 @@ void main() {
     }
     await _redraw(h);
     expect(h.r.typed, ['\x1b[A']);
-    await t.tap(find.text('Right pane'));
+    hideNotice(); // the refusal's notice covers the app bar
+    await t.pump();
+    await t.tap(find.byKey(const Key('paneButton')));
     await t.pump();
     next.complete();
     for (var i = 0; i < 10; i++) {
@@ -482,19 +486,31 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('modelChipSitsInChatHeaderNotTheAppBar', (t) async {
-    final h = Harness(t, treeOf(session: _claude));
-    h.r.transcript = {
-      ..._page(items: [
-        {'kind': 'text', 'uuid': 'a1', 'text': 'hello'},
-      ]),
-      'meta': {'title': 'Ask about the lighthouse keeper and the long southern breakwater', 'model': 'claude-haiku-4-5', 'effort': 'medium'},
-    };
-    await h.start();
-    await h.opened();
-    await t.pump(const Duration(milliseconds: 800));
-    expect(find.descendant(of: find.byKey(const Key('chatHeader')), matching: find.byKey(const Key('modelChip'))), findsOneWidget);
-    expect(find.descendant(of: find.byType(AppBar), matching: find.byKey(const Key('modelChip'))), findsNothing);
-    await h.stop();
-  });
+  for (final split in [false, true]) {
+    testWidgets('modelAndPrSitInTheAppBarSubtitle${split ? 'OnASplit' : ''}', (t) async {
+      await loadFonts();
+      phone(t);
+      final h = Harness(t, treeOf(split: split, session: {..._claude, 'cwd': '/work/elis'}));
+      h.r.transcript = {
+        ..._page(items: [
+          {'kind': 'text', 'uuid': 'a1', 'text': 'hello'},
+        ]),
+        'meta': {
+          'title': 'Ask about the lighthouse keeper and the long southern breakwater',
+          'model': 'claude-haiku-4-5',
+          'effort': 'medium',
+          'pr': {'prNumber': 446, 'prRepository': 'o/elis', 'prUrl': 'https://github.com/o/elis/pull/446'},
+        },
+      };
+      await h.start();
+      await h.opened();
+      await t.pump(const Duration(milliseconds: 800));
+      for (final key in ['modelChip', 'prChip']) {
+        expect(find.descendant(of: find.byType(AppBar), matching: find.byKey(Key(key))), findsOneWidget);
+      }
+      expect(t.renderObject<RenderParagraph>(find.byKey(const Key('modelChip'))).didExceedMaxLines, isFalse); // the model is not cut
+      await expectLater(find.byType(Scaffold), matchesGoldenFile('goldens/session_chat${split ? '_split' : ''}.png'));
+      await h.stop();
+    });
+  }
 }

@@ -317,7 +317,9 @@ class ChatComposerState extends State<ChatComposer> {
       : LayoutBuilder(builder: (context, _) {
           final box = _box.currentContext?.findRenderObject() as RenderBox?;
           if (box == null || !box.hasSize) return const SizedBox.shrink();
-          final room = box.localToGlobal(Offset.zero).dy - MediaQuery.paddingOf(context).top - kToolbarHeight - 8; // below the app bar
+          // below the app bar, its subtitle line included
+          final bar = Scaffold.maybeOf(context)?.appBarMaxHeight ?? MediaQuery.paddingOf(context).top + kToolbarHeight;
+          final room = box.localToGlobal(Offset.zero).dy - bar - 8;
           return Align(
             alignment: Alignment.topLeft,
             child: CompositedTransformFollower(

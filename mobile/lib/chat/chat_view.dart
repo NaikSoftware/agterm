@@ -43,16 +43,6 @@ String _errorText(TranscriptError error) =>
 void _noKey(String? seq, VtKey? key, int mods) {}
 void _noAnswer(String key) {}
 
-Widget _chip(String label, {Key? key, VoidCallback? onTap}) => GestureDetector(
-      key: key,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(8)),
-        child: Text(label, style: const TextStyle(fontSize: 12, color: C.text)),
-      ),
-    );
-
 /// The app bar's title in Chat: the transcript's title, else the session's name.
 class ChatTitle extends StatelessWidget {
   const ChatTitle({super.key, required this.feed, required this.s});
@@ -71,24 +61,59 @@ class ChatTitle extends StatelessWidget {
       );
 }
 
-/// The model and effort chip in Chat's header; a tap offers `/model`.
-class ChatModelChip extends StatelessWidget {
-  const ChatModelChip({super.key, required this.feed, this.onChangeModel});
+/// Chat's full-width line under the app bar's title row: `cwd · model · PR #N`.
+/// A tap on the model offers `/model`; a tap on the PR opens it.
+class ChatSubtitle extends StatelessWidget implements PreferredSizeWidget {
+  const ChatSubtitle({super.key, required this.feed, required this.s, this.onChangeModel});
 
   final TranscriptFeed feed;
+  final Session s;
   final VoidCallback? onChangeModel; // null while Claude is not idle
+
+  static const _sub = TextStyle(fontSize: 12, color: C.muted, fontFamily: mono);
+
+  @override
+  Size get preferredSize => const Size.fromHeight(22);
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: feed,
         builder: (context, _) {
           final model = modelLabel(feed.meta?.model, feed.meta?.effort);
-          if (model.isEmpty) return const SizedBox.shrink();
-          return PopupMenuButton<void>(
-            tooltip: '',
-            itemBuilder: (_) => [PopupMenuItem(enabled: onChangeModel != null, onTap: onChangeModel, child: const Text('Change model…'))],
-            // a `/model` since Claude's last answer: the transcript has not caught up yet
-            child: Opacity(opacity: modelPending(feed.items) ? 0.45 : 1, child: _chip(model, key: const Key('modelChip'))),
+          final pr = feed.meta?.pr;
+          final link = (pr?.prNumber, pr?.prUrl);
+          final hasPr = link.$1 != null && link.$2 != null;
+          return Padding(
+            key: const Key('chatSubtitle'),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+            // the cwd gives way first, then the model, each with the separator after it; the PR link stays whole
+            child: LayoutBuilder(
+              builder: (context, box) => Row(children: [
+                Flexible(
+                    child: Text(model.isEmpty && !hasPr ? s.shortCwd : '${s.shortCwd} · ',
+                        style: _sub, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: box.maxWidth),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    if (model.isNotEmpty)
+                      Flexible(
+                        child: PopupMenuButton<void>(
+                          tooltip: '',
+                          itemBuilder: (_) =>
+                              [PopupMenuItem(enabled: onChangeModel != null, onTap: onChangeModel, child: const Text('Change model…'))],
+                          // a `/model` since Claude's last answer: the transcript has not caught up yet
+                          child: Opacity(
+                              opacity: modelPending(feed.items) ? 0.45 : 1,
+                              child: Text(hasPr ? '$model ·' : model,
+                                  key: const Key('modelChip'), style: _sub, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        ),
+                      ),
+                    if (link case (final n?, final url?))
+                      GestureDetector(key: const Key('prChip'), onTap: () => openWebLink(url), child: Text('${model.isEmpty ? '' : ' '}PR #$n', style: _sub)),
+                  ]),
+                ),
+              ]),
+            ),
           );
         },
       );
@@ -106,8 +131,6 @@ class ChatView extends StatefulWidget {
       required this.exited,
       required this.stale,
       required this.onTerm,
-      this.switcher,
-      this.model,
       this.composer,
       this.promptCard,
       this.prompts,
@@ -126,9 +149,7 @@ class ChatView extends StatefulWidget {
   final Session s;
   final bool exited, stale;
   final VoidCallback onTerm;
-  final Widget? switcher; // the split's pane pair
-  final Widget? model; // the model chip, beside the cwd
-  final GlobalKey<ChatComposerState>? composer; // for the model chip's `send`
+  final GlobalKey<ChatComposerState>? composer; // for the model's `send` in [ChatTitle]
   final PromptCardBuilder? promptCard;
   final PromptLedger? prompts;
   final void Function(String? seq, VtKey? key, int mods) onKey; // the panel's keys: straight to the program, past the gate
@@ -148,7 +169,7 @@ class _ChatViewState extends State<ChatView> {
   final Set<String> _gone = {}; // rows built once: scrolling back to a fresh row does not fade it in again
   int _newCount = 0;
   String? _sticky; // a row key: an index would point at another row for the frame after an append
-  bool _away = false, _header = true, _todos = false;
+  bool _away = false, _todos = false;
   int _switches = 0;
   late final _composer = widget.composer ?? GlobalKey<ChatComposerState>();
   int _dialogReads = 0; // consecutive grid reads showing a dialog; a blank, replaying, exited or stale read neither counts nor resets
@@ -313,7 +334,6 @@ class _ChatViewState extends State<ChatView> {
         _switches = feed.switches;
         _away = false;
         _newCount = 0;
-        _header = true;
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -337,27 +357,13 @@ class _ChatViewState extends State<ChatView> {
     final away = p.pixels > _bottomSlack;
     final top = _visible.fold(0, (m, v) => max(m, v.$1));
     final n = stickyPrompt(_rows, top), sticky = n == null ? null : _rows[n].key;
-    // a fling or the jump pill reaches the newest row with no scroll toward it to bring the header back
-    final header = _header || p.pixels <= p.minScrollExtent;
     if (load && p.extentAfter < 400) feed.loadEarlier();
-    if (away == _away && sticky == _sticky && header == _header && (away || _newCount == 0)) return;
+    if (away == _away && sticky == _sticky && (away || _newCount == 0)) return;
     setState(() {
       _away = away;
       _sticky = sticky;
-      _header = header;
       if (!away) _newCount = 0;
     });
-  }
-
-  bool _onUserScroll(UserScrollNotification n) {
-    // `forward` lowers pixels: toward the newest row, at the bottom of this reversed list
-    final show = switch (n.direction) {
-      ScrollDirection.forward => true,
-      ScrollDirection.reverse => n.metrics.maxScrollExtent <= 0, // a list too short to scroll moves nothing
-      ScrollDirection.idle => _header,
-    };
-    if (show != _header) setState(() => _header = show);
-    return false;
   }
 
   /// Scrolls up until [key]'s row is built, then brings it on screen.
@@ -370,24 +376,6 @@ class _ChatViewState extends State<ChatView> {
       _scroll.jumpTo(min(p.pixels + p.viewportDimension, p.maxScrollExtent));
       await WidgetsBinding.instance.endOfFrame;
     }
-  }
-
-  Widget _headerRow() {
-    final pr = feed.meta?.pr;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 6, children: [
-        Row(spacing: 8, children: [
-          Flexible(
-              child: Text(widget.s.shortCwd,
-                  style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis)),
-          if (pr?.prNumber != null && pr?.prUrl != null)
-            _chip('PR #${pr!.prNumber}', key: const Key('prChip'), onTap: () => openWebLink(pr.prUrl)),
-          ?widget.model,
-        ]),
-        ?widget.switcher,
-      ]),
-    );
   }
 
   Widget? _todoStrip() {
@@ -452,13 +440,6 @@ class _ChatViewState extends State<ChatView> {
     final todos = _todoStrip();
     final state = _state();
     final top = [
-      AnimatedSize(
-        key: const Key('chatHeader'),
-        duration: const Duration(milliseconds: 150),
-        alignment: Alignment.topCenter,
-        // without the list there is no scroll to bring the header back
-        child: _header || state != null ? _headerRow() : const SizedBox(width: double.infinity),
-      ),
       if (widget.exited)
         ListTile(
             key: const Key('chatExited'),
@@ -485,18 +466,15 @@ class _ChatViewState extends State<ChatView> {
       if (sticky != null || todos != null) const Divider(height: 1),
     ];
     final list = Stack(children: [
-      NotificationListener<UserScrollNotification>(
-        onNotification: _onUserScroll,
-        child: ListView.builder(
-          key: const Key('chatList'),
-          controller: _scroll,
-          reverse: true,
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(12),
-          itemCount: _rows.length + (feed.loadingEarlier ? 1 : 0),
-          findChildIndexCallback: (k) => k is ValueKey<String> ? _index[k.value] : null,
-          itemBuilder: _row,
-        ),
+      ListView.builder(
+        key: const Key('chatList'),
+        controller: _scroll,
+        reverse: true,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(12),
+        itemCount: _rows.length + (feed.loadingEarlier ? 1 : 0),
+        findChildIndexCallback: (k) => k is ValueKey<String> ? _index[k.value] : null,
+        itemBuilder: _row,
       ),
       if (_away)
         Positioned(

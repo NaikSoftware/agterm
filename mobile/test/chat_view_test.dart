@@ -77,7 +77,7 @@ class _Chat {
     await t.pumpWidget(MaterialApp(
       theme: buildTheme(),
       home: Scaffold(
-        appBar: AppBar(title: ChatTitle(feed: feed, s: s)),
+        appBar: AppBar(title: ChatTitle(feed: feed, s: s), bottom: ChatSubtitle(feed: feed, s: s)),
         body: ChatView(
             feed: feed,
             grid: () => null,
@@ -86,9 +86,7 @@ class _Chat {
             s: s,
             exited: exited,
             stale: stale,
-            onTerm: () => terms++,
-            switcher: const Text('switcher'),
-            model: ChatModelChip(feed: feed)),
+            onTerm: () => terms++),
       ),
     ));
     feed.start();
@@ -234,7 +232,7 @@ void main() {
 
   _chatTest('pagingBackPrepends', (t, c) async {
     final items = _history(30);
-    await c.start(items, start: 50, height: 870); // the composer's 70: the first page-back request leaves its row on screen
+    await c.start(items, start: 50, height: 840); // the composer's 70: the first page-back request leaves its row on screen
     for (var n = 0; n < 10 && c.h.held?.$1['before'] == null; n++) {
       await t.drag(find.byKey(const Key('chatList')), const Offset(0, 600));
       await t.pump();
@@ -255,7 +253,7 @@ void main() {
   for (final tail in [false, true]) {
     _chatTest('pagingBackAtTopKeepsTheReadRow${tail ? 'OnAnAppend' : ''}', (t, c) async {
       final items = _history(30);
-      await c.start(items, start: 50, height: 800);
+      await c.start(items, start: 50, height: 840);
       for (var n = 0; n < 10 && c.h.held?.$1['before'] == null; n++) {
         await t.drag(find.byKey(const Key('chatList')), const Offset(0, 600));
         await t.pump();
@@ -322,19 +320,11 @@ void main() {
     Future<void> pump({required bool idle}) => t.pumpWidget(MaterialApp(
           theme: buildTheme(),
           home: Scaffold(
-            appBar: AppBar(title: ChatTitle(feed: feed, s: s)),
+            appBar: AppBar(
+                title: ChatTitle(feed: feed, s: s),
+                bottom: ChatSubtitle(feed: feed, s: s, onChangeModel: idle ? () => composer.currentState?.send('/model') : null)),
             body: ChatView(
-                feed: feed,
-                grid: () => grid,
-                grids: grids,
-                gate: gate,
-                s: s,
-                exited: false,
-                stale: false,
-                onTerm: () {},
-                switcher: const SizedBox(),
-                model: ChatModelChip(feed: feed, onChangeModel: idle ? () => composer.currentState?.send('/model') : null),
-                composer: composer),
+                feed: feed, grid: () => grid, grids: grids, gate: gate, s: s, exited: false, stale: false, onTerm: () {}, composer: composer),
           ),
         ));
     await pump(idle: false);
@@ -374,7 +364,7 @@ void main() {
       theme: buildTheme(),
       home: Scaffold(
         body: ChatView(
-            feed: feed, grid: () => grid, grids: grids, gate: gate, s: s, exited: false, stale: false, onTerm: () {}, switcher: const SizedBox()),
+            feed: feed, grid: () => grid, grids: grids, gate: gate, s: s, exited: false, stale: false, onTerm: () {}),
       ),
     ));
     await t.drag(find.byKey(const Key('chatList')), const Offset(0, 400));
@@ -407,7 +397,7 @@ void main() {
     await c.start([_text('a1')], meta: {
       'pr': {'prNumber': 446, 'prRepository': 'o/elis', 'prUrl': 'https://github.com/o/elis/pull/446'},
     });
-    expect(find.text('/work/elis'), findsOneWidget);
+    expect(find.text('/work/elis · '), findsOneWidget);
     await t.tap(find.text('PR #446'));
     expect([for (final o in opens) (o.method, o.arguments)], [('view', 'https://github.com/o/elis/pull/446')]);
   });
@@ -444,31 +434,6 @@ void main() {
     await t.tap(find.byKey(const Key('slash-model')));
     await t.pump();
     expect(t.widget<TextField>(find.byKey(const Key('composer'))).controller!.text, '/model ');
-  });
-
-  _chatTest('headerCollapsesOnScrollUp', (t, c) async {
-    await c.start(_history(40));
-    bool shown() => t.getSize(find.byKey(const Key('chatHeader'))).height > 0;
-    expect(find.text('switcher'), findsOneWidget);
-    expect(shown(), isTrue);
-    await t.drag(find.byKey(const Key('chatList')), const Offset(0, 300));
-    await t.pumpAndSettle();
-    expect(shown(), isFalse);
-    await t.drag(find.byKey(const Key('chatList')), const Offset(0, -100));
-    await t.pumpAndSettle();
-    expect(shown(), isTrue);
-  });
-
-  _chatTest('headerReturnsAtTheNewestEnd', (t, c) async {
-    await c.start(_history(40));
-    bool shown() => t.getSize(find.byKey(const Key('chatHeader'))).height > 0;
-    await t.drag(find.byKey(const Key('chatList')), const Offset(0, 300));
-    await t.pumpAndSettle();
-    expect(shown(), isFalse);
-    await t.tap(find.byKey(const Key('jumpToBottom')));
-    await t.pumpAndSettle();
-    expect(_pixels(t), 0);
-    expect(shown(), isTrue);
   });
 
   group('states', () {
@@ -512,7 +477,6 @@ void main() {
         await t.pump();
         expect(find.byKey(const Key('chatUnreadable')), findsOneWidget);
         expect(find.byKey(const Key('chatList')), findsNothing);
-        expect(find.text('switcher'), findsOneWidget);
         await t.tap(find.byKey(const Key('chatTerm')));
         expect(c.terms, 1);
         await t.tap(find.byKey(const Key('chatRetry')));
@@ -558,16 +522,13 @@ void main() {
       expect(find.text('◯ running'), findsOneWidget);
       await t.drag(find.byKey(const Key('chatList')), const Offset(0, 300));
       await t.pumpAndSettle();
-      expect(t.getSize(find.byKey(const Key('chatHeader'))).height, 0);
       await c.tick();
       await c.reply([], transcript: 't2');
       expect(find.text('◯ running'), findsNothing);
       expect(find.byKey(const Key('chatSkeleton')), findsOneWidget);
-      expect(find.text('switcher'), findsOneWidget); // no list left to scroll the header back with
       await c.reply([_text('n1')], transcript: 't2');
       expect(_row('n1'), findsOneWidget);
       expect(find.byKey(const Key('jumpToBottom')), findsNothing);
-      expect(find.text('switcher'), findsOneWidget);
     });
 
     _chatTest('staleStopsOpenSubagents', (t, c) async {

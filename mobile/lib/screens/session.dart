@@ -720,6 +720,7 @@ class _SessionScreenState extends State<SessionScreen> {
         ]),
         actions: [
           _modeButton(s),
+          if (s.hasSplit) _paneButton(),
           if (m.state == LinkState.connected && m.via.isNotEmpty) _Tag(m.via, key: const Key('via')),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -740,19 +741,15 @@ class _SessionScreenState extends State<SessionScreen> {
                 }),
           ),
         ],
-        bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
+        bottom: chat ? _chatSubtitle(s) : const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
       ),
       body: SafeArea(
         child: Column(children: [
-          // the buttons float over the screen's top edge, so the terminal takes the whole height
           Expanded(
               child: Stack(children: [
-            // Chat holds the pane pair in its header; over the terminal it floats
             Positioned.fill(child: chat ? _chatView(s) : _terminal()),
-            if (!chat) ...[
+            if (!chat)
               Positioned(left: 0, bottom: 0, child: TermKeyboard(focus: _keyboard, onKey: _softKey, onText: _softText, onPaste: (t) => _softText(t, paste: true))),
-              if (_toolbar(s) case final bar?) Positioned(top: 6, right: 6, child: bar),
-            ],
             if (m.state != LinkState.connected)
               Center(
                   child: Padding(
@@ -783,16 +780,20 @@ class _SessionScreenState extends State<SessionScreen> {
             exited: _exited(s),
             stale: _chatStale,
             onTerm: () => _pickMode(ViewMode.term),
-            switcher: _toolbar(s),
-            model: ListenableBuilder(
-                listenable: _grids,
-                builder: (context, _) =>
-                    ChatModelChip(feed: f, onChangeModel: _chatIdle ? () => _composer.currentState?.send('/model') : null)),
             composer: _composer,
             promptCard: promptCardBuilder(_prompts),
             prompts: _prompts,
             onKey: _press,
             onAnswer: type));
+  }
+
+  // a fixed line, never folded: nothing in Chat appears or leaves on scroll
+  PreferredSizeWidget _chatSubtitle(Session s) {
+    final line = ListenableBuilder(
+        listenable: _grids,
+        builder: (context, _) =>
+            ChatSubtitle(feed: _chatFeed, s: s, onChangeModel: _chatIdle ? () => _composer.currentState?.send('/model') : null));
+    return PreferredSize(preferredSize: const Size.fromHeight(23), child: Column(children: [line, const Divider()]));
   }
 
   // the icon is the mode shown; a tap picks the other one
@@ -807,43 +808,29 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
-  Widget? _toolbar(Session s) {
-    if (!s.hasSplit) return null;
-    Widget seg(String label, bool on, VoidCallback? onTap, {Key? key}) => Padding(
-          padding: const EdgeInsets.only(left: 6),
-          child: OutlinedButton(
-            key: key,
-            onPressed: onTap,
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, 34),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              backgroundColor: (on ? C.surface2 : C.surface).withValues(alpha: 0.92),
-              foregroundColor: on ? C.text : C.muted,
-              disabledForegroundColor: on ? C.muted : C.dim,
-              side: BorderSide(color: on ? C.line : C.surface2),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text(label, style: TextStyle(fontSize: 12, fontWeight: on ? FontWeight.w600 : null)),
-          ),
-        );
-    void setPane(String p) {
-      if (p == pane) return;
-      _gate.cancel('The pane changed'); // its remaining steps would write into the other pane
-      _release(pane);
-      _macTookBack = false; // a switch claims
-      setState(() {
-        pane = p;
-        text = '';
-      });
-      _syncMode(); // Chat shows only on the agent's pane
-      _syncTerm(); // closes the other pane's channel, opens this one's when it is Live
-      _load();
-      _syncFit();
-    }
-    return Row(key: const Key('toolbar'), mainAxisSize: MainAxisSize.min, children: [
-      seg('Left pane', pane == 'left', () => setPane('left')),
-      seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
-    ]);
+  // the icon is the pane shown; a tap shows the other one
+  Widget _paneButton() {
+    final left = pane == 'left';
+    return IconButton(
+      key: const Key('paneButton'),
+      tooltip: left ? 'Left pane — switch to Right' : 'Right pane — switch to Left',
+      icon: Transform.flip(flipX: !left, child: const Icon(Icons.vertical_split)),
+      onPressed: () => _setPane(left ? 'right' : 'left'),
+    );
+  }
+
+  void _setPane(String p) {
+    _gate.cancel('The pane changed'); // its remaining steps would write into the other pane
+    _release(pane);
+    _macTookBack = false; // a switch claims
+    setState(() {
+      pane = p;
+      text = '';
+    });
+    _syncMode(); // Chat shows only on the agent's pane
+    _syncTerm(); // closes the other pane's channel, opens this one's when it is Live
+    _load();
+    _syncFit();
   }
 
   double _fit = 11, _width = 360, _height = 600;

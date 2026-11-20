@@ -108,9 +108,9 @@ Rules:
 
 ```
 ┌───────────────────────────────────────────┐
-│ ‹ Run Echo Todo Checklist     [💬] ● ⋮    │ app bar: title, mode button, Elis status, ⋮ (holds "Choose mode automatically")
-│   ~/IdeaProjects/elis · PR #446 [Opus·med]│ cwd, PR chip, model chip (+ Left|Right on a split); collapses
-│                                           │ while the user scrolls up, returns on scroll down
+│ ‹ Run Echo Todo Checklist  [💬][◧] ● ⋮    │ app bar: title, mode button, pane button (split only), Elis status,
+│   ~/elis · Opus · medium · PR #446        │ ⋮ (holds "Choose mode automatically"); subtitle: cwd, model, PR;
+│                                           │ the cwd gives way first; nothing collapses on scroll
 ├───────────────────────────────────────────┤
 │ ❯ Now write 40 short facts about squi…    │ sticky last prompt (tap: jump)
 │ ☐ 2/5 · Write tests                ▾      │ todo strip (only while open items)
@@ -172,10 +172,10 @@ Stop and Cancel keep a residual risk: a dialog opening inside that window turns 
 
 | Element | Source | Shows / does | Enabled / visible when |
 |---|---|---|---|
-| Mode switcher | E | One `IconButton` (`modeButton`) first in the session `AppBar` actions: its icon is the mode shown (chat bubble or terminal), a tap picks the other mode; while Chat is unavailable it shows the terminal, disabled, with the reason in its tooltip. The Left/Right pair stays in `_toolbar`, only on a split. Auto is the `⋮` item "Choose mode automatically", checked while no manual pick holds; a manual pick lasts for that Elis session while the phone app runs **[lead]** | Chat enabled while `agent` is `claude` and `agentSessionId` is known (the pane that runs Claude: scope call 1) |
+| Mode switcher | E | One `IconButton` (`modeButton`) first in the session `AppBar` actions: its icon is the mode shown (chat bubble or terminal), a tap picks the other mode; while Chat is unavailable it shows the terminal, disabled, with the reason in its tooltip. On a split, a pane button (`paneButton`) beside it shows the pane on view and a tap shows the other, in both modes. Auto is the `⋮` item "Choose mode automatically", checked while no manual pick holds; a manual pick lasts for that Elis session while the phone app runs **[lead]** | Chat enabled while `agent` is `claude` and `agentSessionId` is known (the pane that runs Claude: scope call 1) |
 | Title | T meta | `custom-title` wins over `ai-title`; falls back to the Elis `name` | Always |
-| PR chip | T meta `pr-link` | `PR #N`; a tap opens `prUrl` | A `pr-link` exists |
-| Model chip | T last assistant `model`, `effort` | `Opus · medium`; dimmed after a `/model` command item until the next assistant record. A tap offers "Change model…", which sends `/model` through Send and opens the panel sheet **[lead]** | Always visible; enabled when idle |
+| PR link | T meta `pr-link` | `PR #N` in the app bar subtitle; a tap opens `prUrl` | A `pr-link` exists |
+| Model | T last assistant `model`, `effort` | `Opus · medium` in the app bar subtitle; dimmed after a `/model` command item until the next assistant record. A tap offers "Change model…", which sends `/model` through Send and opens the panel sheet **[lead]** | Always visible; enabled when idle |
 | Elis status | E | Existing `StatusShape` glyph | Always |
 | Sticky last prompt | T, computed on the phone | The nearest human prompt above the viewport: `promptSource` `typed`, `queued` or `suggestion_accepted`, or `origin.kind: human`; a tap scrolls the phone list to it **[lead]** | While scrolled up past a prompt |
 | Day separator | T `timestamp` | A date row between records on different days **[lead]** | Per day change |

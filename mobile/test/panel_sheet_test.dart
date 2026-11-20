@@ -76,7 +76,6 @@ class _P {
             exited: exited,
             stale: stale,
             onTerm: () {},
-            switcher: const SizedBox(),
             promptCard: (context, c) {
               openPanel = c.openPanel;
               return card?.call(context, c);
