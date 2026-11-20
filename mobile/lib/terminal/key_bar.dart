@@ -1,3 +1,6 @@
+import 'package:flutter/material.dart';
+
+import '../theme.dart';
 import 'vt.dart';
 
 // what each key-bar key types into the pane: xterm sequences, as Konsole sends them, or while the phone leads, the key
@@ -36,4 +39,52 @@ String xtermSeq(VtKey key, int mods) {
   final plain = mods & ~vtAlt;
   final seq = key == VtKey.backspace ? '\x7f' : (keys.where((k) => k.$4 == key && k.$5 == plain).firstOrNull ?? keys.firstWhere((k) => k.$4 == key)).$2!;
   return mods & vtAlt != 0 ? '\x1b$seq' : seq;
+}
+
+/// The row of [keys] under a session, after a key that toggles the soft keyboard.
+class KeyBar extends StatelessWidget {
+  const KeyBar({super.key, required this.onKey, required this.onKeyboard});
+  final void Function(String? seq, VtKey? key, int mods) onKey;
+  final VoidCallback onKeyboard;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 48,
+        child: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+          scrollDirection: Axis.horizontal,
+          itemCount: keys.length + 1,
+          separatorBuilder: (_, _) => const SizedBox(width: 6),
+          itemBuilder: (context, i) {
+            if (i == 0) {
+              return Tooltip(
+                message: 'Keyboard',
+                child: OutlinedButton(
+                  key: const Key('softKeyboard'),
+                  onPressed: onKeyboard,
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(44, 44), padding: const EdgeInsets.symmetric(horizontal: 10), foregroundColor: C.text, backgroundColor: C.surface),
+                  child: const Icon(Icons.keyboard_outlined, size: 18),
+                ),
+              );
+            }
+            final (label, seq, name, key, mods) = keys[i - 1];
+            return Semantics(
+              label: name,
+              button: true,
+              excludeSemantics: true,
+              child: OutlinedButton(
+                key: Key('key-$name'),
+                onPressed: () => onKey(seq, key, mods),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(44, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  foregroundColor: label == '⏎' ? C.accent : C.text,
+                  backgroundColor: label == '⏎' ? C.surface2 : C.surface,
+                ),
+                child: Text(label, style: const TextStyle(fontFamily: mono, fontSize: 13)),
+              ),
+            );
+          },
+        ),
+      );
 }

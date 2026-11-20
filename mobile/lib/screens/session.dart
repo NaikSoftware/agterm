@@ -16,6 +16,8 @@ import '../terminal/terminal_view.dart';
 import '../terminal/vt.dart';
 import '../theme.dart';
 import 'actions.dart';
+import 'answer_bar.dart';
+import 'composer.dart';
 import 'prompt.dart';
 
 class SessionScreen extends StatefulWidget {
@@ -599,9 +601,9 @@ class _SessionScreenState extends State<SessionScreen> {
                     key: const Key('disconnected'), textAlign: TextAlign.center, style: const TextStyle(color: C.danger, fontWeight: FontWeight.w600)),
               )),
           ])),
-          if (options.isNotEmpty) _answers(options),
-          _keyBar(),
-          if (ComposerPref.shown) _composer(),
+          if (options.isNotEmpty) AnswerBar(key: _answersBox, options: options, onAnswer: type),
+          KeyBar(onKey: _press, onKeyboard: _toggleKeyboard),
+          if (ComposerPref.shown) Composer(key: _composerBox, controller: input, focus: inputFocus, onSend: sending ? null : sendInput),
         ]),
       ),
     );
@@ -797,119 +799,6 @@ class _SessionScreenState extends State<SessionScreen> {
               onTap: _tap,
               child: _remoteScroll ? GestureDetector(onVerticalDragUpdate: (d) => _drag(d.delta.dy / (_fit * 1.3)), child: view) : view);
         });
-
-  Widget _answers(List<PromptOption> options) => Padding(
-        key: _answersBox,
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-        child: Row(children: [
-          for (final (i, o) in options.take(4).indexed) ...[
-            if (i > 0) const SizedBox(width: 8),
-            Expanded(
-              child: Tooltip(
-                message: o.label,
-                child: SizedBox(
-                  height: 40,
-                  child: i == 0
-                      ? FilledButton(
-                          key: Key('answer-${o.key}'),
-                          onPressed: () => type(o.key),
-                          style: FilledButton.styleFrom(
-                              backgroundColor: C.blocked,
-                              foregroundColor: const Color(0xFF1A1206),
-                              minimumSize: const Size(0, 40),
-                              padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                          child: Text(options.length > 2 ? o.key : '${o.key} · ${o.label}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                        )
-                      : OutlinedButton(
-                          key: Key('answer-${o.key}'),
-                          onPressed: () => type(o.key),
-                          style: OutlinedButton.styleFrom(minimumSize: const Size(0, 40), padding: EdgeInsets.zero),
-                          child: Text(options.length > 2 ? o.key : '${o.key} · ${o.label}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                ),
-              ),
-            ),
-          ],
-        ]),
-      );
-
-  Widget _keyBar() => SizedBox(
-        height: 48,
-        child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-          scrollDirection: Axis.horizontal,
-          itemCount: keys.length + 1,
-          separatorBuilder: (_, _) => const SizedBox(width: 6),
-          itemBuilder: (context, i) {
-            if (i == 0) {
-              return Tooltip(
-                message: 'Keyboard',
-                child: OutlinedButton(
-                  key: const Key('softKeyboard'),
-                  onPressed: _toggleKeyboard,
-                  style: OutlinedButton.styleFrom(minimumSize: const Size(44, 44), padding: const EdgeInsets.symmetric(horizontal: 10), foregroundColor: C.text, backgroundColor: C.surface),
-                  child: const Icon(Icons.keyboard_outlined, size: 18),
-                ),
-              );
-            }
-            final (label, seq, name, key, mods) = keys[i - 1];
-            return Semantics(
-              label: name,
-              button: true,
-              excludeSemantics: true,
-              child: OutlinedButton(
-                key: Key('key-$name'),
-                onPressed: () => _press(seq, key, mods),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(44, 44),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  foregroundColor: label == '⏎' ? C.accent : C.text,
-                  backgroundColor: label == '⏎' ? C.surface2 : C.surface,
-                ),
-                child: Text(label, style: const TextStyle(fontFamily: mono, fontSize: 13)),
-              ),
-            );
-          },
-        ),
-      );
-
-  Widget _composer() => Padding(
-        key: _composerBox,
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        child: Row(children: [
-          Expanded(
-            child: TextField(
-              key: const Key('composer'),
-              controller: input,
-              focusNode: inputFocus,
-              minLines: 1,
-              maxLines: 4,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => sendInput(),
-              autocorrect: false,
-              style: const TextStyle(fontFamily: mono, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Type, then send with Enter',
-                fillColor: C.surface,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 48,
-            height: 48,
-            child: FilledButton(
-              key: const Key('send'),
-              onPressed: sending ? null : sendInput,
-              style: FilledButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(48, 48), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              child: const Icon(Icons.arrow_forward, semanticLabel: 'Send'),
-            ),
-          ),
-        ]),
-      );
 }
 
 // read-only text has no caret, but SelectableText shows a tap's collapsed selection as a caret handle whenever its
