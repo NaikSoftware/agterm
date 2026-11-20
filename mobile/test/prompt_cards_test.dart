@@ -31,7 +31,7 @@ Map<String, dynamic> _json(String name) =>
 PendingCall _call(String name) => PendingCall.fromJson(_json(name));
 
 class _Host {
-  _Host(String fixture, {List<(Matcher, Grid)> script = const [], this.remote = false})
+  _Host(String fixture, {List<(Matcher, Grid)> script = const [], this.remote = false, this.server = false})
     : call = ValueNotifier(_call(fixture)),
       s = ScriptedGrids(script, _g(fixture)) {
     gate = WriteGate(grids: s, grid: () => s.grid, writer: () => s, remote: () => remote, blocked: () => null);
@@ -39,7 +39,7 @@ class _Host {
 
   final ScriptedGrids s;
   final ValueNotifier<PendingCall> call;
-  final bool remote;
+  final bool remote, server;
   late final WriteGate gate;
   final events = <String>[];
 
@@ -58,6 +58,7 @@ class _Host {
               pending: [call.value],
               gate: gate,
               remote: remote,
+              server: server,
               openPanel: (why) => events.add('panel:$why'),
             );
             void done() => events.add('done');
@@ -210,9 +211,20 @@ void main() {
     expect(find.text('Answering is off on remote rows until checked'), findsOneWidget);
     expect(_enabled(t, _harbour), isFalse);
     expect(find.text('Answer in panel'), findsOneWidget);
-    await h.show(t, checks: const Checks(keys: true, paste: true, remote: true));
+    await h.show(t, checks: const Checks(keys: true, paste: true, attached: true));
     expect(find.text('Answering is off on remote rows until checked'), findsNothing);
     expect(_enabled(t, _harbour), isTrue);
+  });
+
+  testWidgets('serverRowAnswersAttachedRowStaysOff', (t) async {
+    final server = _Host('card-ask-single', remote: true, server: true);
+    await server.show(t);
+    expect(find.text('Answering is off on remote rows until checked'), findsNothing);
+    expect(_enabled(t, _harbour), isTrue);
+    final attached = _Host('card-ask-single', remote: true);
+    await attached.show(t);
+    expect(find.text('Answering is off on remote rows until checked'), findsOneWidget);
+    expect(_enabled(t, _harbour), isFalse);
   });
 
   testWidgets('stopOpensPanelWithMessage', (t) async {

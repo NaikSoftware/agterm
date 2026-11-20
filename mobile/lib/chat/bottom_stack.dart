@@ -38,13 +38,14 @@ class BottomStack extends StatefulWidget {
       required this.gate,
       required this.stale,
       required this.remote,
+      this.server = false,
       this.checks = _checks});
 
   final ClaudeScreen? screen;
   final Grid? grid;
   final TranscriptFeed feed;
   final WriteGate gate;
-  final bool stale, remote;
+  final bool stale, remote, server;
   final Checks checks;
 
   @override
@@ -144,7 +145,7 @@ class _BottomStackState extends State<BottomStack> {
     final shown = {for (final q in s.queued) norm(q)};
     final rows = [for (final q in widget.feed.meta?.queued ?? const <String>[]) if (shown.contains(norm(q))) q];
     final c = widget.checks;
-    final blocked = c.writeBlockedOn(remote: widget.remote);
+    final blocked = c.writeBlockedOn(remote: widget.remote, server: widget.server);
     return [
       for (final q in rows)
         Padding(

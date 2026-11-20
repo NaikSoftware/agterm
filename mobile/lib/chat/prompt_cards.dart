@@ -16,7 +16,7 @@ import 'write_gate.dart';
 String stopMessage(GateResult r) => 'Stopped at step ${r.step} of ${r.total}: ${r.reason}. The prompt may be half answered.';
 
 String? _blocked(Checks checks, ChatPromptContext c) =>
-    checks.writeBlocked ?? (c.remote && !checks.remote ? 'Answering is off on remote rows until checked' : null);
+    checks.writeBlocked ?? (checks.unverified(remote: c.remote, server: c.server) ? 'Answering is off on remote rows until checked' : null);
 
 Future<void> sendAnswer(
   ChatPromptContext c,

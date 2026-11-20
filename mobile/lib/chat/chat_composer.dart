@@ -45,6 +45,7 @@ class ChatComposer extends StatefulWidget {
       required this.screen,
       required this.colours,
       required this.remote,
+      this.server = false,
       required this.gate,
       this.disabledBy,
       this.held,
@@ -55,7 +56,7 @@ class ChatComposer extends StatefulWidget {
   final TranscriptFeed feed;
   final ClaudeScreen? Function() screen;
   final bool colours; // a Live pane's grid: dim text tells a placeholder from a draft
-  final bool remote;
+  final bool remote, server;
   final WriteGate gate;
   final String? disabledBy;
   final String? held; // a prompt or panel owns Claude's input: the composer is disabled with this line
@@ -135,7 +136,7 @@ class ChatComposerState extends State<ChatComposer> {
 
   String? _blocked(ClaudeScreen? s) =>
       widget.disabledBy ??
-      widget.checks.writeBlockedOn(remote: widget.remote) ??
+      widget.checks.writeBlockedOn(remote: widget.remote, server: widget.server) ??
       (s != null && s.dialog ? 'Claude shows a dialog' : s == null || !s.bottomStack ? "Waiting for Claude's screen" : null);
 
   /// Sends [text] to Claude through the gate; the field clears when it held [text].
@@ -278,6 +279,7 @@ class ChatComposerState extends State<ChatComposer> {
                         meta: widget.feed.meta,
                         gate: widget.gate,
                         remote: widget.remote,
+                        server: widget.server,
                         disabledBy: widget.disabledBy,
                         checks: widget.checks),
                     if (_offer != null) _offerRow(),
@@ -370,13 +372,14 @@ class ModeChip extends StatefulWidget {
       required this.meta,
       required this.gate,
       required this.remote,
+      this.server = false,
       this.disabledBy,
       this.checks = _checks});
 
   final ClaudeScreen? screen;
   final TranscriptMeta? meta;
   final WriteGate gate;
-  final bool remote;
+  final bool remote, server;
   final String? disabledBy;
   final Checks checks;
 
@@ -462,7 +465,7 @@ class ModeChipState extends State<ModeChip> {
         s.idle &&
         s.mode != null &&
         widget.disabledBy == null &&
-        widget.checks.writeBlockedOn(remote: widget.remote) == null &&
+        widget.checks.writeBlockedOn(remote: widget.remote, server: widget.server) == null &&
         !widget.gate.running;
     final shells = s?.shells ?? 0;
     return Padding(

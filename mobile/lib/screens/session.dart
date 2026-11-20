@@ -112,7 +112,7 @@ class _SessionScreenState extends State<SessionScreen> {
     m.addListener(_onModel);
     _lifecycle = AppLifecycleListener(onPause: () => _setForeground(false), onResume: () => _setForeground(true));
     _gate = WriteGate(
-        grids: _grids, grid: _chatGrid, writer: _writer, remote: () => s?.remote ?? false, blocked: () => _chatBlocked ?? checks.writeBlockedOn(remote: s?.remote ?? false));
+        grids: _grids, grid: _chatGrid, writer: _writer, remote: () => s?.remote ?? false, blocked: () => _chatBlocked ?? checks.writeBlockedOn(remote: s?.remote ?? false, server: s?.server ?? false));
     _events = m.events.listen((e) {
       if (e['kind'] == 'status' && e['session'] == widget.sessionId) _feed?.pollNow();
     });

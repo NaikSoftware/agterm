@@ -22,13 +22,13 @@ import 'write_gate.dart';
 /// What a prompt card reads and writes through, for plan C's builder.
 class ChatPromptContext {
   const ChatPromptContext(
-      {required this.screen, required this.grid, required this.pending, required this.gate, required this.remote, required this.openPanel});
+      {required this.screen, required this.grid, required this.pending, required this.gate, required this.remote, this.server = false, required this.openPanel});
 
   final ClaudeScreen screen;
   final Grid grid;
   final List<PendingCall> pending;
   final WriteGate gate;
-  final bool remote;
+  final bool remote, server;
   final void Function(String? stopped) openPanel;
 }
 
@@ -432,7 +432,7 @@ class _ChatViewState extends State<ChatView> {
         ? widget.promptCard?.call(
             context,
             ChatPromptContext(
-                screen: ClaudeScreen.read(g), grid: g, pending: feed.pending, gate: widget.gate, remote: widget.s.remote, openPanel: _openPanel))
+                screen: ClaudeScreen.read(g), grid: g, pending: feed.pending, gate: widget.gate, remote: widget.s.remote, server: widget.s.server, openPanel: _openPanel))
         : null;
     final panel = live && (_panelForced || (_counts && card == null));
     final held = card != null ? 'Answer the prompt above' : panel ? 'Claude shows a panel' : null;
@@ -585,7 +585,8 @@ extension on _ChatViewState {
                 feed: feed,
                 gate: widget.gate,
                 stale: widget.stale,
-                remote: widget.s.remote),
+                remote: widget.s.remote,
+                server: widget.s.server),
             ?card,
             ChatComposer(
                 key: _composer,
@@ -596,6 +597,7 @@ extension on _ChatViewState {
                     },
                 colours: g?.colours ?? false,
                 remote: widget.s.remote,
+                server: widget.s.server,
                 gate: widget.gate,
                 disabledBy: ChatView.blockedReason(exited: widget.exited, stale: widget.stale),
                 held: held,

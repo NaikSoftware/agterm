@@ -28,7 +28,7 @@ String agentOf(List<String> argv) {
 }
 
 class Session {
-  Session(Map m, this.workspaceId, this.workspaceName)
+  Session(Map m, this.workspaceId, this.workspaceName, {this.server = false})
       : id = m['id'] ?? '',
         name = (m['name'] as String?)?.isNotEmpty == true ? m['name'] : 'New session',
         status = m['status'] ?? 'idle',
@@ -59,6 +59,7 @@ class Session {
   final String liveAgent; // the tree's own `agent`; `agent` above also guesses from the foreground
   final String agentSessionId, agentPane, remoteHost;
   final bool remote;
+  final bool server; // in an elis-server window, not a row attached from another Mac
   final String id, name, status, agent, cwd, parent, context, tint, workspaceId, workspaceName;
   final int unseen;
   final bool flagged, active, blink, hasSplit, split, collapsed;
@@ -69,13 +70,13 @@ class Session {
 }
 
 class Workspace {
-  Workspace(Map m)
+  Workspace(Map m, {bool server = false})
       : id = m['id'] ?? '',
         name = m['name'] ?? '',
         folder = m['rememberedFolder'] ?? '',
         tint = m['tint'] ?? '',
         active = m['active'] == true,
-        sessions = [for (final s in (m['sessions'] as List? ?? const [])) Session(s as Map, m['id'] ?? '', m['name'] ?? '')];
+        sessions = [for (final s in (m['sessions'] as List? ?? const [])) Session(s as Map, m['id'] ?? '', m['name'] ?? '', server: server)];
 
   final String id, name, folder, tint;
   final bool active;
@@ -331,7 +332,10 @@ class ElisModel extends ChangeNotifier {
       windows = [for (final m in (w['windows'] as List? ?? const [])) AgWindow(m as Map)];
       if (windowId != null && !windows.any((x) => x.id == windowId && x.open)) windowId = null;
       final t = await call('tree');
-      workspaces = [for (final m in ((t['tree'] as Map?)?['workspaces'] as List? ?? const [])) Workspace(m as Map)];
+      final tree = t['tree'] as Map?, remote = tree?['remote'];
+      // shortcut: `origin` is omitted for elis-server and also before a Mac origin answers; upgrade if Mac rows show early
+      final server = remote is Map && remote['origin'] != 'mac';
+      workspaces = [for (final m in (tree?['workspaces'] as List? ?? const [])) Workspace(m as Map, server: server)];
       loaded = true;
       if (background) Watch.clear(Watch.posted.read(sessions));
       if (!_disposed) notifyListeners();

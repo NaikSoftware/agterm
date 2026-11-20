@@ -53,13 +53,13 @@ class _Stack {
   late final gate =
       WriteGate(grids: grids, grid: () => grids.g, writer: () => writer, remote: () => false, blocked: () => null);
 
-  Future<void> pump({bool remote = false, Checks checks = checks, Grid? grid}) async {
+  Future<void> pump({bool remote = false, bool server = false, Checks checks = checks, Grid? grid}) async {
     if (grid != null) grids.g = grid;
     final g = grids.g;
     await t.pumpWidget(MaterialApp(
       home: Scaffold(
         body: BottomStack(
-            screen: ClaudeScreen.read(g), grid: g, feed: feed, gate: gate, stale: false, remote: remote, checks: checks),
+            screen: ClaudeScreen.read(g), grid: g, feed: feed, gate: gate, stale: false, remote: remote, server: server, checks: checks),
       ),
     ));
   }
@@ -117,6 +117,8 @@ void main() {
     expect(_enabled(t, 'Send now'), isFalse);
     expect(find.text(_proven.writeBlockedOn(remote: true)!), findsOneWidget);
     expect(_enabled(t, 'Stop'), isTrue);
+    await s.pump(remote: true, server: true, checks: const Checks(keys: true, paste: true, sendNow: true, server: true));
+    expect(_enabled(t, 'Send now'), isTrue);
   });
 
   testWidgets('sendNowSendsCtrlXThenCtrlS', (t) async {

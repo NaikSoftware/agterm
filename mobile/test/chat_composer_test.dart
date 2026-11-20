@@ -80,7 +80,7 @@ class _C {
   final feed = TranscriptFeed(call: (_) async => const {}, canPoll: () => false, remote: false)..loading = false;
   late final gate = WriteGate(
       grids: grids, grid: () => grids.g, writer: () => typeWriter ?? writer, remote: () => false, blocked: () => null);
-  bool remote = false;
+  bool remote = false, server = false;
   Checks checks = _proven;
   String? disabledBy;
 
@@ -99,6 +99,7 @@ class _C {
                   screen: () => ClaudeScreen.read(grids.g),
                   colours: grids.g.colours,
                   remote: remote,
+                  server: server,
                   gate: gate,
                   disabledBy: disabledBy,
                   checks: checks),
@@ -437,9 +438,24 @@ void main() {
     expect(c.sendEnabled, isFalse);
     expect(find.text('Sending from the phone is not verified on remote sessions yet'), findsOneWidget);
     c.checks = const Checks(
-        keys: true, paste: true, pastedCommandRuns: true, pastedBangSwitches: true, clearInput: (VtKey.u, vtCtrl), remote: true);
+        keys: true, paste: true, pastedCommandRuns: true, pastedBangSwitches: true, clearInput: (VtKey.u, vtCtrl), attached: true);
     await c.pump();
     expect(c.sendEnabled, isTrue);
+  });
+
+  testWidgets('serverRowSendsWithServerChecksOnly', (t) async {
+    final c = _C(t, _g('idle-placeholder-45'))
+      ..remote = true
+      ..server = true
+      ..checks = const Checks(
+          keys: true, paste: true, pastedCommandRuns: true, pastedBangSwitches: true, clearInput: (VtKey.u, vtCtrl), server: true);
+    await c.pump();
+    await c.type('hi');
+    expect(c.sendEnabled, isTrue);
+    c.server = false; // a row attached from another Mac
+    await c.pump();
+    expect(c.sendEnabled, isFalse);
+    expect(find.text('Sending from the phone is not verified on remote sessions yet'), findsOneWidget);
   });
 
   testWidgets('sendDisabledWhileUnproven', (t) async {
@@ -519,9 +535,21 @@ void main() {
       final c = _C(t, _g('idle-placeholder-45'))..remote = true;
       await c.pump();
       expect(chipEnabled(t), isFalse);
-      c.checks = const Checks(keys: true, paste: true, remote: true);
+      c.checks = const Checks(keys: true, paste: true, attached: true);
       await c.pump();
       expect(chipEnabled(t), isTrue);
+    });
+
+    testWidgets('chipEnabledOnAServerRowOnly', (t) async {
+      final c = _C(t, _g('idle-placeholder-45'))
+        ..remote = true
+        ..server = true
+        ..checks = const Checks(keys: true, paste: true, server: true);
+      await c.pump();
+      expect(chipEnabled(t), isTrue);
+      c.server = false;
+      await c.pump();
+      expect(chipEnabled(t), isFalse);
     });
 
     testWidgets('chipShowsTheTranscriptModeWhileHidden', (t) async {

@@ -655,6 +655,17 @@ void main() {
     await h.stop();
   });
 
+  testWidgets('aServerWindowMarksItsRowsServer', (t) async {
+    final h = Harness(t, {...treeOf(session: {'remoteHost': 'box'}), 'remote': {'host': 'box'}});
+    await h.start();
+    expect(h.m.sessions.single.server, isTrue);
+    await h.retree({...treeOf(session: {'remoteHost': 'mini'}), 'remote': {'host': 'mini', 'origin': 'mac'}});
+    expect(h.m.sessions.single.server, isFalse);
+    await h.retree(treeOf(session: {'remoteHost': 'mini'}));
+    expect(h.m.sessions.single.server, isFalse);
+    await h.stop();
+  });
+
   testWidgets('notLivePaneKeepsTheTextView', (t) async {
     final h = Harness(t, treeOf(live: false));
     await h.start();
