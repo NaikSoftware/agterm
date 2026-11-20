@@ -15,15 +15,14 @@ extension PhoneLinkPresenter {
 
     /// A local row's page is reached at its own address; a remote row's through an ssh listener on this Mac's loopback.
     func openForward(_ page: PresentedPage, _ url: String) {
-        guard let forwarded = ForwardedPage(url), let port = UInt16(exactly: forwarded.port) else {
+        guard let forwarded = ForwardedPage(url), let port = UInt16(exactly: forwarded.port), port != 0 else {
             return reject(page, "only a loopback page can be forwarded")
         }
         guard let origin else { return reject(page, "unsupported") }
         pages[page.id] = page
         guard let host = origin.host else { return showForward(page, url, host: forwarded.host, port: port) }
         guard let local = Self.freeLoopbackPort() else { return reject(page, "no free local port for the page's forward") }
-        let address = forwarded.host.contains(":") ? "[\(forwarded.host)]" : forwarded.host
-        let spec = "127.0.0.1:\(local):\(address):\(port)"
+        let spec = forwarded.spec(localPort: Int(local), bindAddress: "127.0.0.1")
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             let opened = Result { try forwardSpawn(RemoteSession.forwardCommand(host: host, spec: spec)) }
             queue.async { [self] in listenerOpened(page, url, local: local, opened) }
@@ -40,7 +39,7 @@ extension PhoneLinkPresenter {
             return reject(page, "could not start the page's forward")
         }
         page.pipe = listener
-        listener.start(paused: true, onLine: { _ in }, onEnd: { [weak self] in self?.listenerEnded(page) })
+        listener.start(paused: true, onLine: { _ in }, onEnd: { [weak self] in self?.pipeEnded(page) })
         awaitListener(page, url, local: local, deadline: Date().addingTimeInterval(Self.forwardReady))
     }
 
@@ -51,19 +50,20 @@ extension PhoneLinkPresenter {
         queue.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.awaitListener(page, url, local: local, deadline: deadline) }
     }
 
-    /// The listener died: no new forward opens, and a page not shown yet is rejected.
-    private func listenerEnded(_ page: PresentedPage) {
-        guard !stopped, pages[page.id] === page else { return }
-        page.pipe = nil
-        page.forward = nil
-        if !page.shown { reject(page, "the page's forward ended") }
-    }
-
     private func showForward(_ page: PresentedPage, _ url: String, host: String, port: UInt16) {
         page.forward = (host, port)
         let request = page.request
         showPage(page, PhonePage(id: page.id, kind: "forward", url: url, javascript: request.javascript, chromeless: request.chromeless,
                                  browse: request.browse, hidden: false, title: request.identity, sizePercent: request.sizePercent))
+    }
+
+    /// Runs `argv` until the relay's end of stdin closes, so a relay killed outright leaves no `ssh -N` behind; a stop's
+    /// SIGTERM reaches the child, and the child's own end ends the wrapper. Stdin is kept on fd 3 because `sh` gives an
+    /// asynchronous list /dev/null as stdin.
+    static func tiedToInput(_ argv: [String]) -> [String] {
+        let script = #"exec 3<&0; "$@" </dev/null >/dev/null 3<&- & pid=$!; (read -r _ <&3; kill $pid) >/dev/null 2>&1 & reader=$!; "#
+            + #"trap 'kill $pid' TERM; wait $pid; kill $reader 2>/dev/null"#
+        return ["/bin/sh", "-c", script, "sh"] + argv
     }
 
     // shortcut: IPv4 copies of the app target's RemotePortForward.freePort/accepts; hoist both to ElisCore if a third caller appears

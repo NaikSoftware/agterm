@@ -207,7 +207,7 @@ extension PhoneLinkPresenter {
     }
 
     /// The pipe ended under a page still open: the origin lost it, as the Mac's channel close reports.
-    private func pipeEnded(_ page: PresentedPage) {
+    func pipeEnded(_ page: PresentedPage) {
         guard !stopped, pages[page.id] === page else { return }
         pages[page.id] = nil
         serving.removeAll { $0.page == page.id }

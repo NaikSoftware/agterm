@@ -81,7 +81,7 @@ final class PhoneLinkPresenter: @unchecked Sendable {
         self.log = log
         self.link = link
         self.markdownDirectory = markdownDirectory
-        self.forwardSpawn = forwardSpawn ?? { try .process(argv: $0, queue: queue) }
+        self.forwardSpawn = forwardSpawn ?? { try .process(argv: Self.tiedToInput($0), queue: queue) }
         self.spawn = spawn ?? { origin, token in
             if let host = origin.host {
                 return try .process(argv: Self.remoteArgv(host: host, session: origin.session, pageToken: token), queue: queue)
