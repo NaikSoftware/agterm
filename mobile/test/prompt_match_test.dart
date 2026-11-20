@@ -44,6 +44,17 @@ void main() {
     }
   });
 
+  test('eachFixtureMatchesWithoutItsTitleRule', () {
+    for (final f in Directory(_dir).listSync()) {
+      if (!RegExp(r'/card-.*\.ansi$').hasMatch(f.path) || f.path.contains('card-plan-nofile')) continue;
+      final name = f.uri.pathSegments.last.replaceFirst(RegExp(r'\.ansi$'), '');
+      final g = gridFromAnsi(File(f.path).readAsStringSync());
+      final title = g.rows.lastIndexWhere((r) => r.text.trim().isNotEmpty);
+      final call = _call(name.replaceFirst(RegExp(r'-\d+$'), ''));
+      expect(matchPrompt(PromptDialog.read(Grid(g.rows.sublist(0, title))), [call])?.call.id, call.id, reason: name);
+    }
+  });
+
   test('askQuestionIndex', () {
     for (final w in [45, 100]) {
       expect(matchPrompt(_read('card-ask-two-$w'), [_call('card-ask-two')])!.question, 0);

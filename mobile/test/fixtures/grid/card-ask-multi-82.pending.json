@@ -1,0 +1,35 @@
+[
+ {
+  "uuid": "1cebcc3f-a5cd-44f2-ba29-2384e74427d6",
+  "source": "main",
+  "input": {
+   "questions": [
+    {
+     "question": "Which pets?",
+     "header": "Pets",
+     "options": [
+      {
+       "label": "Cat",
+       "description": "A cat"
+      },
+      {
+       "label": "Dog",
+       "description": "A dog"
+      },
+      {
+       "label": "Fish",
+       "description": "A fish"
+      },
+      {
+       "description": "A bird",
+       "label": "Bird"
+      }
+     ],
+     "multiSelect": true
+    }
+   ]
+  },
+  "name": "AskUserQuestion",
+  "id": "toolu_01GnFpDdGrzeWnubhj6yLa6c"
+ }
+]

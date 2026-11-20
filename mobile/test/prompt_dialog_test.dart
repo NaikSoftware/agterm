@@ -41,6 +41,15 @@ void main() {
     }
   });
 
+  test('untitledSessionEndsTheDialogAtTheScreenEnd', () {
+    final d = PromptDialog.read(Grid.text(File('test/fixtures/grid/card-ask-multi-82.txt').readAsStringSync()))!;
+    final q = (_input('card-ask-multi-82')['questions'] as List).first as Map<String, dynamic>;
+    expect((d.question, norm(d.header)), (q['question'], '←☐Pets✔Submit→'));
+    expect([for (final o in d.options) o.number], [1, 2, 3, 4, 5, null, 6]);
+    expect([for (final o in d.options.where((o) => o.checked != null)) o.checked], [false, false, false, false, false]);
+    expect(d.footer, 'Enter to select · ↑/↓ to navigate · Esc to cancel');
+  });
+
   test('cursorRow', () {
     for (final w in _widths) {
       expect(_read('card-ask-multi-ticked-$w').cursorOption?.number, 1);

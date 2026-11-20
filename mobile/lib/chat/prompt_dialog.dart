@@ -44,7 +44,7 @@ class PromptDialog {
 
   DialogOption? numbered(String label) => options.where((o) => o.number != null && norm(o.label) == norm(label)).firstOrNull;
 
-  /// Null when the grid ends in no title rule or has no numbered option row below the conversation.
+  /// Null when the grid has no numbered option row below the conversation.
   static PromptDialog? read(Grid g) {
     String t(int r) => g.text(r);
     String trimmed(int r) => t(r).trim();
@@ -63,7 +63,9 @@ class PromptDialog {
     while (b >= 0 && blank(b)) {
       b--;
     }
-    if (b < 0 || !solid(b)) return null;
+    if (b < 0) return null;
+    // an untitled session draws no rule under the dialog: the screen's end closes it
+    if (!solid(b)) b++;
     // a `N. ` deeper than a numbered row above it in the same block is wrapped text, not the last option
     bool deeper(int r) {
       final col = _numbered.firstMatch(t(r))!.group(1)!.length;
