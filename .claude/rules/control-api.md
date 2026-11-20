@@ -374,6 +374,8 @@ Pages (`present`), `PhoneLinkPresenter`; the spec `docs/superpowers/specs/2026-1
   through `CookieManager`, and clears it with the sheet; a cookie the platform refuses fails the page.
   Every accepted connection must present it in its first request's headers within 16 KiB and 5 s,
   or it is closed before any OPEN: the gate fails closed, so no other app or site on the phone reaches the server.
+  Cookies ignore ports, so a hostile app on another phone `127.0.0.1` port the page references could read it;
+  accepted for v1.
 
 `session.attach` answers `result.attach = {argv, paneID, screen, remote, origin, nonce?}`:
 `screen` is the zmx `screen` argv for the same daemon (the relay reads the grid with it),

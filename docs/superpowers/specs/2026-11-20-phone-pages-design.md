@@ -245,6 +245,8 @@ and the board's theme resets each time, because storage is per page.
   Cookies ignore ports, so a value is never reused across sheets.
   On every accepted connection the tunnel reads the first request's headers, with a 16 KiB cap and a timeout.
   Without the right cookie it closes the connection before it opens the `forward` mux channel. It fails closed.
+  Cookies ignore ports, so a hostile app on another phone `127.0.0.1` port that the page references could read the cookie;
+  accepted for v1.
 - The listener binds `127.0.0.1` only and closes with the sheet.
   It first tries the port number of the Mac's dev server, then a random one:
   dev servers bake the port into absolute URLs and HMR WebSocket URLs, and check `Host` and `Origin`.
