@@ -266,9 +266,10 @@ Wire contract for the phone (M4b):
 - OPENED `{"error":"revoked"}` is followed by the link closing.
 - The phone sends CREDIT at least once per window consumed, and a zero-byte CREDIT clears the stall clock.
   A CREDIT in flight across RESYNC can let the relay send up to one extra window.
-- Relay-to-phone CREDIT and LEAD are sent only on a claim channel (Direct input below). Channel ids are used once per link.
+- Relay-to-phone CREDIT goes only on a claim or `forward` channel, LEAD only on a claim (Direct input, Pages below).
+  Channel ids are used once per link.
 - Priority is strict 0 > 1 > vt: a large `tree` answer on Bluetooth holds every vt channel until it is out.
-  A `present` channel is the low class below vt: it sends when no vt channel can,
+  `present` and `forward` channels are the low class below vt: they send when no vt channel can,
   and once after every 8 vt frames while it has something to send (`PhoneLinkScheduler`).
 - Grid poll: every 2 s for a local pane, every 30 s for a remote one.
 - A relay killed by a signal prints no per-pane detach lines: viewer processes end by SIGHUP,
@@ -327,7 +328,7 @@ Pages (`present`), `PhoneLinkPresenter`; the spec `docs/superpowers/specs/2026-1
 - The relay asks `session.attach` for `origin`, then subscribes on the origin as `viewer.phone`:
   `zmx.present` on the app socket, or `ssh -T <host> elisctl zmx present` for a row with a `host`.
   Its hello lists `lead.report`, the page kinds, `page.content`, `page.document`, `pending.snapshot`,
-  `job.token`, `offer.id` and `viewer.phone`, never `page.text`, `page.files` or `page.links`.
+  `job.token`, `offer.id`, `viewer.phone` and `page.forward`, never `page.text`, `page.files` or `page.links`.
   It never asks for the grant and ignores frames other than pages, pings and pending batches.
 - It reports the panes the phone's leading claims hold, and only to an origin whose hello lists `viewer.phone`:
   an older origin would route asks to it.
@@ -336,7 +337,8 @@ Pages (`present`), `PhoneLinkPresenter`; the spec `docs/superpowers/specs/2026-1
 - A file page's pipe is `session.overlay.page.serve <token>`, claimed with the page's single-use token.
   Fetches and bridge lines go only to that pipe, never to channel 0, which carries the pairing token's authority.
   Image, document, markdown and text pages are HTML the relay builds and serves from memory.
-  A loopback `--url` page is refused `a loopback page cannot be shown on the phone`.
+  A loopback `--url` page arrives `forwarded`, since the hello lists `page.forward`, and goes to the phone as kind
+  `forward` (below); one arriving as a plain URL is refused `a loopback page cannot be shown on the phone`.
 - Budget: the channel buffer is 512 KiB, past which it closes `overflow`.
   Page pipes start paused, and only one per channel is resumed at a time, round robin,
   while the channel's queued bytes stay under `highWater` (160 KiB).
@@ -350,6 +352,26 @@ Pages (`present`), `PhoneLinkPresenter`; the spec `docs/superpowers/specs/2026-1
   (`page_sheet.dart`), which stops cross-origin frames.
   On the phone a same-origin frame of a `--js` file page can call the page's `elis` and is trusted as the page,
   with the same grant folder.
+- Dev servers (`PhoneLinkForward`, `PhoneLinkPresenter+Forward`, the phone's `page_tunnel.dart`).
+  A loopback `--url` page goes to the phone as kind `forward` once its address is reachable from the relay:
+  a local row's own host and port, a remote row's an `ssh -N -L` on a free 127.0.0.1 port of this Mac.
+  That child is tied to the relay's stdin, so a relay killed outright leaves none; one not accepting in 10 s
+  rejects the page (`the page's forward did not come up`), and one that dies closes the page.
+- OPEN `{type:"forward", target, page}` carries one TCP connection to that address.
+  It is refused `no such page` unless the page is open on the `present` channel for `target` and was handed to this
+  phone, and `too many connections` past `maxForwards` (16 per phone).
+  The relay connects with a 5 s timeout. Phone bytes go under a 64 KiB window with CREDIT back, as on a claim;
+  past it the channel closes `input overflow`. Server bytes are read only while the channel's queue is under `highWater`.
+  CLOSE reasons: `page closed` (its page left the phone), `closed` (the server ended), `input overflow`, `overflow`,
+  `could not connect: …`.
+- The phone queues bytes sent before OPENED, and a CLOSE can arrive before OPENED.
+  It pauses socket reads while sent bytes wait for CREDIT.
+- The tunnel gate. The phone's listener binds 127.0.0.1 only, on the dev server's port when free, else a random one;
+  a page sent again keeps its port, its new sheet waiting for the old listener to close.
+  Each sheet sets a cookie `elis_tunnel_<bound port>` with a 128-bit random value, `HttpOnly`, `SameSite=Strict`,
+  through `CookieManager`, and clears it with the sheet; a cookie the platform refuses fails the page.
+  Every accepted connection must present it in its first request's headers within 16 KiB and 5 s,
+  or it is closed before any OPEN: the gate fails closed, so no other app or site on the phone reaches the server.
 
 `session.attach` answers `result.attach = {argv, paneID, screen, remote, origin, nonce?}`:
 `screen` is the zmx `screen` argv for the same daemon (the relay reads the grid with it),

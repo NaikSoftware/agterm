@@ -20,7 +20,7 @@ when_to_use: >
   show an image inline, show this markdown file rendered, show this source file or log at a line, show me the diff of a file or the changes as links, tail or follow this log file, search the log or text page in the overlay, wrap long lines in the text or log page, show this HTML page or artifact, make an HTML page or explainer for this and show
   it, make a page that switches sessions or returns a choice, preview the report you generated, show this URL or the running dev server, keep me logged in to a page shown in an overlay, search the scrollback, flag every session in a workspace, tint a session or workspace row a color, pin a project folder to a workspace, route a session to its project workspace, show status or activity under a session in the sidebar, show or hide the file panel (file tree), make a companion session, keep a related program next to a session, duplicate this session with its programs as a companion, make this session a companion, move a companion under another session, open a sub-session under this one, fold a session's companions, show a page as a companion of this session, open a page as its own session row in the sidebar, run my custom command, send a message to the other pane or another agent, read my messages, wait for a message, tell me when the selected session changes, wait until that worker session finishes, bring back the session I just closed, attach a session from another Mac, attach a remote session with all its companions, open a remote window for my Linux server, run sessions on a Linux host with elis-server, watch events or wait for a session on the elis-server host, install elis-server on a Linux host, detach or reattach a remote session, copy this to the clipboard, was Elis upgraded under the running app, upgrade Elis without losing sessions, what recipes are there, connect my phone, pair Elis Mobile, revoke a paired phone, fit a pane to the phone,
   attach a script to a pane's terminal stream, lead or take over a pane from a script, does the phone lead a pane,
-  show this on my phone, show a page where I am,
+  show this on my phone, show a page where I am, show the dev server on my phone,
   the keymap editor will not open.
 allowed-tools: Bash(elisctl *)
 ---
@@ -846,6 +846,24 @@ otherwise, and moves (reloading) when the lead moves; `tree` marks it `htmlOverl
 Log pages (`--text --follow-file`), diff pages and markdown with `--navigation` open on the Mac even while the phone leads.
 Questions, pickers, program overlays, HUDs and sounds stay on the Mac too. So a `--block` on one of those pages, or an
 `ask`/`pick`, waits on a screen the user may not see while they drive from the phone: prefer a page the phone shows.
+
+Dev servers on the phone: a `--url` page on the session host's loopback (`localhost`, `127.0.0.1`, `::1`) shows on
+the phone too, hot reload included; the relay carries its connections, through ssh for a row on another host.
+Pass `--js`, or a script-built page is blank. A `--url` page takes no `--block`, and a dev server you start needs its
+own stop condition, so wait on the page's outcome and stop the server when the page closes:
+
+```bash
+npm run dev -- --host 127.0.0.1 --port 5173 >/tmp/dev.log 2>&1 & server=$!
+reply=$(elisctl session overlay open --url http://localhost:5173/ --js --target "$ELIS_SESSION_ID" --json)
+page=$(printf '%s' "$reply" | sed -n 's/.*"pageID":"\([^"]*\)".*/\1/p')
+while elisctl session overlay result --page "$page" | grep -q '"pending"'; do sleep 2; done
+kill "$server"
+```
+
+Generated apps (a file manager, a GitHub workflows view, a log viewer) follow the same pattern.
+Only the page's own sheet reaches the server; other apps on the phone cannot. Over Bluetooth it is slow.
+A server that writes absolute `http://localhost:PORT` addresses into its pages may break on the phone, where the
+page loads from `127.0.0.1`.
 
 **version** — `elisctl version` — which Elis is serving this socket, as `result.app` (`version`, plus
 `commit` when the build recorded one), and the bundle on disk as `result.installed`, which differs from
