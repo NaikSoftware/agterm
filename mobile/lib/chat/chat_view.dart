@@ -51,33 +51,43 @@ Widget _chip(String label, {Key? key, VoidCallback? onTap}) => GestureDetector(
       ),
     );
 
-/// The app bar's title in Chat: the transcript's title, else the session's name, and the model chip.
+/// The app bar's title in Chat: the transcript's title, else the session's name.
 class ChatTitle extends StatelessWidget {
-  const ChatTitle({super.key, required this.feed, required this.s, this.onChangeModel});
+  const ChatTitle({super.key, required this.feed, required this.s});
 
   final TranscriptFeed feed;
   final Session s;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: feed,
+        builder: (context, _) {
+          final title = feed.meta?.title ?? '';
+          return Text(title.isEmpty ? s.name : title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis);
+        },
+      );
+}
+
+/// The model and effort chip in Chat's header; a tap offers `/model`.
+class ChatModelChip extends StatelessWidget {
+  const ChatModelChip({super.key, required this.feed, this.onChangeModel});
+
+  final TranscriptFeed feed;
   final VoidCallback? onChangeModel; // null while Claude is not idle
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: feed,
         builder: (context, _) {
-          final m = feed.meta;
-          final title = m?.title ?? '';
-          final model = modelLabel(m?.model, m?.effort);
-          return Row(spacing: 8, children: [
-            Flexible(
-                child: Text(title.isEmpty ? s.name : title,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+          final model = modelLabel(feed.meta?.model, feed.meta?.effort);
+          if (model.isEmpty) return const SizedBox.shrink();
+          return PopupMenuButton<void>(
+            tooltip: '',
+            itemBuilder: (_) => [PopupMenuItem(enabled: onChangeModel != null, onTap: onChangeModel, child: const Text('Change model…'))],
             // a `/model` since Claude's last answer: the transcript has not caught up yet
-            if (model.isNotEmpty)
-              PopupMenuButton<void>(
-                tooltip: '',
-                itemBuilder: (_) => [PopupMenuItem(enabled: onChangeModel != null, onTap: onChangeModel, child: const Text('Change model…'))],
-                child: Opacity(opacity: modelPending(feed.items) ? 0.45 : 1, child: _chip(model, key: const Key('modelChip'))),
-              ),
-          ]);
+            child: Opacity(opacity: modelPending(feed.items) ? 0.45 : 1, child: _chip(model, key: const Key('modelChip'))),
+          );
         },
       );
 }
@@ -95,6 +105,7 @@ class ChatView extends StatefulWidget {
       required this.stale,
       required this.onTerm,
       required this.switcher,
+      this.model,
       this.composer,
       this.promptCard,
       this.prompts,
@@ -114,6 +125,7 @@ class ChatView extends StatefulWidget {
   final bool exited, stale;
   final VoidCallback onTerm;
   final Widget switcher;
+  final Widget? model; // the model chip, beside the cwd
   final GlobalKey<ChatComposerState>? composer; // for the model chip's `send`
   final PromptCardBuilder? promptCard;
   final PromptLedger? prompts;
@@ -356,6 +368,7 @@ class _ChatViewState extends State<ChatView> {
                   style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis)),
           if (pr?.prNumber != null && pr?.prUrl != null)
             _chip('PR #${pr!.prNumber}', key: const Key('prChip'), onTap: () => openWebLink(pr.prUrl)),
+          ?widget.model,
         ]),
         widget.switcher,
       ]),

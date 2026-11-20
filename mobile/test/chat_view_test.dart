@@ -87,7 +87,8 @@ class _Chat {
             exited: exited,
             stale: stale,
             onTerm: () => terms++,
-            switcher: const Text('switcher')),
+            switcher: const Text('switcher'),
+            model: ChatModelChip(feed: feed)),
       ),
     ));
     feed.start();
@@ -321,7 +322,7 @@ void main() {
     Future<void> pump({required bool idle}) => t.pumpWidget(MaterialApp(
           theme: buildTheme(),
           home: Scaffold(
-            appBar: AppBar(title: ChatTitle(feed: feed, s: s, onChangeModel: idle ? () => composer.currentState?.send('/model') : null)),
+            appBar: AppBar(title: ChatTitle(feed: feed, s: s)),
             body: ChatView(
                 feed: feed,
                 grid: () => grid,
@@ -332,6 +333,7 @@ void main() {
                 stale: false,
                 onTerm: () {},
                 switcher: const SizedBox(),
+                model: ChatModelChip(feed: feed, onChangeModel: idle ? () => composer.currentState?.send('/model') : null),
                 composer: composer),
           ),
         ));

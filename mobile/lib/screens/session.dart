@@ -712,12 +712,7 @@ class _SessionScreenState extends State<SessionScreen> {
       appBar: AppBar(
         titleSpacing: 0,
         title: chat
-            ? ListenableBuilder(
-                listenable: _grids,
-                builder: (context, _) => ChatTitle(
-                    feed: _chatFeed,
-                    s: s,
-                    onChangeModel: _chatIdle ? () => _composer.currentState?.send('/model') : null))
+            ? ChatTitle(feed: _chatFeed, s: s)
             : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(s.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
           Text([s.shortCwd, if (s.agent.isNotEmpty) s.agent].join(' · '),
@@ -789,6 +784,10 @@ class _SessionScreenState extends State<SessionScreen> {
             stale: _chatStale,
             onTerm: () => _pickMode(ViewMode.term),
             switcher: _toolbar(s),
+            model: ListenableBuilder(
+                listenable: _grids,
+                builder: (context, _) =>
+                    ChatModelChip(feed: f, onChangeModel: _chatIdle ? () => _composer.currentState?.send('/model') : null)),
             composer: _composer,
             promptCard: promptCardBuilder(_prompts),
             prompts: _prompts,

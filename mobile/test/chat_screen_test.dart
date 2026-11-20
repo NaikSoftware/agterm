@@ -422,4 +422,20 @@ void main() {
     expect(find.byKey(const Key('answer-1')), findsNothing);
     await h.stop();
   });
+
+  testWidgets('modelChipSitsInChatHeaderNotTheAppBar', (t) async {
+    final h = Harness(t, treeOf(session: _claude));
+    h.r.transcript = {
+      ..._page(items: [
+        {'kind': 'text', 'uuid': 'a1', 'text': 'hello'},
+      ]),
+      'meta': {'title': 'Ask about the lighthouse keeper and the long southern breakwater', 'model': 'claude-haiku-4-5', 'effort': 'medium'},
+    };
+    await h.start();
+    await h.opened();
+    await t.pump(const Duration(milliseconds: 800));
+    expect(find.descendant(of: find.byKey(const Key('chatHeader')), matching: find.byKey(const Key('modelChip'))), findsOneWidget);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.byKey(const Key('modelChip'))), findsNothing);
+    await h.stop();
+  });
 }
