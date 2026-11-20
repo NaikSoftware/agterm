@@ -22,6 +22,10 @@ class AskAnswer extends CardAnswer {
 
 class AskDiscuss extends CardAnswer {} // "Chat about this"
 
+/// The numbered "Chat about this" row below the list's rule.
+DialogOption? discussRow(PromptDialog d) =>
+    d.options.where((o) => o.belowRule && o.number != null && norm(o.label) == norm('Chat about this')).firstOrNull;
+
 class AskCancel extends CardAnswer {}
 
 class OptionAnswer extends CardAnswer {
@@ -159,8 +163,7 @@ class _Ask extends _Card {
 
   List<GateStep> steps(CardAnswer a) => switch (a) {
     AskDiscuss() => [
-      for (final o in d0.options.where((o) => o.belowRule && o.number != null).take(1))
-        step(TextWrite('${o.number}'), (d) => keyable(d) && d.options.any((x) => x.belowRule && x.number == o.number), gone),
+      if (discussRow(d0) case final o?) step(TextWrite('${o.number}'), (d) => keyable(d) && discussRow(d)?.number == o.number, gone),
     ],
     AskCancel() => switch (d0.review ? row(d0, 'Cancel')?.number : null) {
       final n? => [step(TextWrite('$n'), (d) => d.review && !field(d) && row(d, 'Cancel')?.number == n, gone)],

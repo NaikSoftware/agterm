@@ -280,6 +280,11 @@ void main() {
       expect(s.sentWrites, ['5']);
     });
 
+    test('discussNeedsItsLabel $w', () {
+      final other = gridFromAnsi(File('test/fixtures/grid/card-ask-single-$w.ansi').readAsStringSync().replaceAll('Chat about this', 'Skip this item'));
+      expect(cardSteps(_match(other, _call('card-ask-single')), AskDiscuss()), isEmpty);
+    });
+
     test('cancelUsesReviewRowOrLastEsc $w', () {
       final review = _g('card-ask-review-$w');
       final s = ScriptedGrids([(equals('2'), idle)], review);

@@ -358,7 +358,7 @@ class _AskCardState extends State<AskCard> {
 
     final review = _step >= _qs.length;
     final q = review ? null : _qs[_step];
-    final discuss = widget.m.dialog.options.any((o) => o.belowRule && o.number != null);
+    final discuss = discussRow(widget.m.dialog) != null;
     // an unproven step is reached through the panel (rule 14)
     final unproven = q != null && !q.multi && (!widget.cards.singleOther || (q.preview && !widget.cards.previewNotes));
     final go = _qs.length == 1 ? 'Send' : 'Next';
