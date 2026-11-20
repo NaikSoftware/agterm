@@ -41,9 +41,6 @@ class PageSheetController {
 
   bool get javascript => _sheet._javascript;
 
-  /// A content page is the Mac's own rendering, themed: its web view starts on the surface color, not black.
-  bool get themed => _sheet.page.kind == 'content';
-
   /// A message on the page's `ElisChannel`, which every frame of every page can reach.
   void message(String text) => _sheet._message(text);
 
@@ -606,7 +603,6 @@ Widget _nativeWebView(PageSheetController c) {
       ),
     ),
   );
-  if (c.themed) unawaited(w.setBackgroundColor(C.surface));
   unawaited(w.addJavaScriptChannel('ElisChannel', onMessageReceived: (m) => c.message(m.message)));
   if (w.platform case final AndroidWebViewController a) {
     unawaited(a.setAllowFileAccess(false));
