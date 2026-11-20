@@ -94,7 +94,8 @@ class _PanelSheetState extends State<PanelSheet> {
             ),
           ),
           if (options.isNotEmpty) AnswerBar(options: options, onAnswer: widget.onAnswer),
-          KeyBar(onKey: widget.onKey, onKeyboard: _toggleKeyboard),
+          // Chat never sends Ctrl+C: Claude Code clears its input or exits on it
+          KeyBar(onKey: widget.onKey, onKeyboard: _toggleKeyboard, omit: const {'Control C'}),
           // text goes as onAnswer's typed keys; a free-text panel (the /resume filter) reads it like the answer digits
           TermKeyboard(
               focus: _keyboard,

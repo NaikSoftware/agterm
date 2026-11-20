@@ -107,6 +107,7 @@ void main() {
     expect(find.textContaining('Do you want to proceed?'), findsOneWidget);
     expect(find.byKey(const Key('answer-1')), findsOneWidget);
     expect(find.byKey(const Key('key-Escape')), findsOneWidget);
+    expect(find.byKey(const Key('key-Control C')), findsNothing);
   });
 
   testWidgets('dialogOnOpenShowsAfterReread', (t) async {

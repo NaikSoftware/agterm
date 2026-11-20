@@ -43,9 +43,15 @@ String xtermSeq(VtKey key, int mods) {
 
 /// The row of [keys] under a session, after a key that toggles the soft keyboard when [onKeyboard] is given.
 class KeyBar extends StatelessWidget {
-  const KeyBar({super.key, required this.onKey, this.onKeyboard});
+  const KeyBar({super.key, required this.onKey, this.onKeyboard, this.omit = const {}});
   final void Function(String? seq, VtKey? key, int mods) onKey;
   final VoidCallback? onKeyboard;
+  final Set<String> omit; // key names left off the bar
+
+  List<(String, String?, String, VtKey?, int)> get _keys => [
+        for (final k in keys)
+          if (!omit.contains(k.$3)) k,
+      ];
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -53,7 +59,7 @@ class KeyBar extends StatelessWidget {
         child: ListView.separated(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
           scrollDirection: Axis.horizontal,
-          itemCount: keys.length + (onKeyboard == null ? 0 : 1),
+          itemCount: _keys.length + (onKeyboard == null ? 0 : 1),
           separatorBuilder: (_, _) => const SizedBox(width: 6),
           itemBuilder: (context, i) {
             if (onKeyboard == null) i++;
@@ -68,7 +74,7 @@ class KeyBar extends StatelessWidget {
                 ),
               );
             }
-            final (label, seq, name, key, mods) = keys[i - 1];
+            final (label, seq, name, key, mods) = _keys[i - 1];
             return Semantics(
               label: name,
               button: true,
