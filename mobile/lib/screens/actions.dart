@@ -88,7 +88,7 @@ Future<String?> pickTint(BuildContext context, String title) => showModalBottomS
       ),
     );
 
-Future<void> showSessionActions(BuildContext context, ElisModel m, Session s, {VoidCallback? onClosed, VoidCallback? onComposer}) {
+Future<void> showSessionActions(BuildContext context, ElisModel m, Session s, {VoidCallback? onClosed, VoidCallback? onComposer, bool? autoMode, VoidCallback? onAutoMode}) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -106,6 +106,11 @@ Future<void> showSessionActions(BuildContext context, ElisModel m, Session s, {V
               child: Text(s.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
             _item(Icons.desktop_windows_outlined, 'Show on the computer', () => run(() => m.act('session.select', target: s.id))),
+            if (onAutoMode != null)
+              _item(autoMode == true ? Icons.check_box : Icons.check_box_outline_blank, 'Choose mode automatically', key: const Key('autoMode'), () {
+                Navigator.pop(sheet);
+                onAutoMode();
+              }),
             if (onComposer != null)
               _item(Icons.keyboard_outlined, ComposerPref.shown ? 'Hide composer' : 'Show composer', key: const Key('composerToggle'), () {
                 Navigator.pop(sheet);

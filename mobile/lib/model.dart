@@ -208,6 +208,8 @@ class ElisModel extends ChangeNotifier {
   bool loaded = false;
   final _alerts = StreamController<Alert>.broadcast();
   Stream<Alert> get alerts => _alerts.stream;
+  final _events = StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get events => _events.stream; // every event read, alerting or not
   bool _running = false, _disposed = false;
   final fitted = <String, (int, int)>{}; // "session/pane" whose grid is set to this phone's → its columns and rows
   bool background = false; // in the background with the connection kept up for alerts: screens stop polling
@@ -382,6 +384,7 @@ class ElisModel extends ChangeNotifier {
   }
 
   void _onEvent(Map<String, dynamic> e) {
+    _events.add(e);
     if (background && e['kind'] == 'session.closed') Watch.clear(Watch.posted.closed(e['session'] as String? ?? ''));
     final a = Alert.of(e);
     if (a == null) return;
@@ -397,6 +400,7 @@ class ElisModel extends ChangeNotifier {
     _lifecycle.dispose();
     _c?.close();
     _alerts.close();
+    _events.close();
     super.dispose();
   }
 }

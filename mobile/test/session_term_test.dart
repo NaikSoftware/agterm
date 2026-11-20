@@ -42,6 +42,11 @@ class Relay {
   final refused = <String>{}; // commands answered with an error
   int refusedFits = 0; // the next session.grid fits (not resets) answered with an error, as a covered pane does
   final held = <String, List<List<int>>>{}; // answers kept back until the test sends them
+  Map<String, Object> transcript = {'transcript': 't1', 'size': 0, 'start': 0, 'next': 0, 'items': <Object>[]}; // what session.transcript answers
+  final transcriptArgs = <Map>[];
+  final errors = <String, String>{}; // commands answered with this error text
+  final events = <Map<String, Object>>[]; // the next events.read's items
+  int eventsServed = 0; // events.read replies that carried items
   final _decoder = LinkDecoder();
   final _lines = LineBuffer();
   final _control = LineBuffer();
@@ -74,11 +79,12 @@ class Relay {
       if (r['cmd'] == 'session.scroll') scrolls.add(r['args'] as Map);
       if (r['cmd'] == 'session.text') textArgs.add(r['args'] as Map);
       if (r['cmd'] == 'session.type') typed.add((r['args'] as Map)['text'] as String);
+      if (r['cmd'] == 'session.transcript') transcriptArgs.add(r['args'] as Map);
       final fit = r['cmd'] == 'session.grid' && (r['args'] as Map)['columns'] != null;
       final covered = fit && refusedFits > 0;
       if (covered) refusedFits--;
-      final List<int>? reply =
-          refused.contains(r['cmd']) || covered ? frame(LinkKind.data, 0, utf8.encode('${jsonEncode({'id': r['id'], 'ok': false, 'error': 'refused ${r['cmd']}'})}\n')) : null;
+      final error = errors[r['cmd']] ?? (refused.contains(r['cmd']) || covered ? 'refused ${r['cmd']}' : null);
+      final List<int>? reply = error != null ? frame(LinkKind.data, 0, utf8.encode('${jsonEncode({'id': r['id'], 'ok': false, 'error': error})}\n')) : null;
       if (held[r['cmd']] case final q?) {
         q.add(reply ?? frame(LinkKind.data, 0, answer(r['id'])));
         continue;
@@ -90,13 +96,21 @@ class Relay {
       final result = switch (r['cmd']) {
         'tree' => {'tree': tree},
         'events.read' => {
-            'events': {'run': 'r', 'next': 0, 'items': <Object>[]},
+            'events': {'run': 'r', 'next': 0, 'items': _takeEvents()},
           },
+        'session.transcript' => transcript,
         'session.text' => {'text': text, 'columns': (grids.isEmpty ? null : grids.last['columns'] as int?) ?? 40}, // the fit's width
         _ => <String, Object>{},
       };
       send(frame(LinkKind.data, 0, answer(r['id'], result)));
     }
+  }
+
+  List<Object> _takeEvents() {
+    final items = [...events];
+    events.clear();
+    if (items.isNotEmpty) eventsServed++;
+    return items;
   }
 
   void send(List<int> bytes) => _input.add(Uint8List.fromList(bytes));
@@ -110,7 +124,7 @@ class Relay {
   int get texts => calls.where((c) => c == 'session.text').length;
 }
 
-Map<String, Object> treeOf({bool live = true, bool split = false}) => {
+Map<String, Object> treeOf({bool live = true, bool split = false, Map<String, Object> session = const {}}) => {
       'workspaces': [
         {
           'id': 'w1',
@@ -124,6 +138,7 @@ Map<String, Object> treeOf({bool live = true, bool split = false}) => {
                 {'id': 'surface:s1:left', 'kind': 'left', 'backedByZmx': live},
                 if (split) {'id': 'surface:s1:right', 'kind': 'right', 'backedByZmx': live},
               ],
+              ...session,
             },
           ],
         },
@@ -1254,11 +1269,13 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('toolbarIsEmptyWithoutASplit', (t) async {
+  testWidgets('toolbarShowsTheModeWithoutASplit', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
-    expect(find.byKey(const Key('toolbar')), findsNothing);
+    expect(find.byKey(const Key('toolbar')), findsOneWidget);
+    expect(find.byKey(const Key('modeTerm')), findsOneWidget);
+    expect(find.byKey(const Key('rightPane')), findsNothing);
     expect(find.text('Take over'), findsNothing);
     await h.stop();
   });
@@ -1498,7 +1515,7 @@ void main() {
     await h.opened();
     final bar = find.byKey(const Key('toolbar'));
     final segs = find.descendant(of: bar, matching: find.byType(OutlinedButton));
-    expect(segs, findsNWidgets(2));
+    expect(segs, findsNWidgets(4)); // Chat, Term, Left, Right
     for (final e in segs.evaluate()) {
       final r = t.getRect(find.byWidget(e.widget));
       expect((r.left >= 0, r.right <= 360), (true, true));
