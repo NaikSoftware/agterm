@@ -235,7 +235,7 @@ extension PhoneLinkPresenter {
             output(.res(id: page.id, seq: seq, mime: nil, data: nil, end: true, error: nil))
         case let (.fetch(seq), .failure(_, error)):
             done()
-            output(.res(id: page.id, seq: seq, mime: nil, data: nil, end: true, error: error))
+            output(.res(id: page.id, seq: seq, mime: nil, data: nil, end: true, error: String(error.prefix(PresentationPageState.maxError))))
         case let (.bridge(seq), .reply(_, response)):
             done()
             let reply = PhonePageDown.reply(id: page.id, seq: seq, response: response, error: nil)
@@ -244,7 +244,7 @@ extension PhoneLinkPresenter {
                    : .reply(id: page.id, seq: seq, response: nil, error: "the answer is too large for the phone"))
         case let (.bridge(seq), .failure(_, error)):
             done()
-            output(.reply(id: page.id, seq: seq, response: nil, error: error))
+            output(.reply(id: page.id, seq: seq, response: nil, error: String(error.prefix(PresentationPageState.maxError))))
         case let (.read(buffer, limit, finish), .chunk(_, chunk)):
             buffer.data.append(chunk)
             guard buffer.data.count <= limit else {

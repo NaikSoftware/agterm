@@ -25,10 +25,11 @@ final class PhoneLinkPresenter: @unchecked Sendable {
         + [PresentationHub.pageContentKind, PresentationHub.pageDocumentKind, PresentationHub.pendingSnapshotKind,
            PresentationHub.jobTokenKind, PresentationHub.offerIdentityKind, PresentationHub.viewerPhoneKind]
     /// Page lines waiting in the scheduler past which page pipes are not resumed and memory answers wait. One memory
-    /// chunk (about 88 KiB) and one pipe line (`maxPipeLine`) may follow the check: 160 + 88 + 240 KiB stays under the
+    /// chunk (under 88 KiB) and one pipe line (`maxPipeLine`) may follow the check: 160 + 88 + 260 KiB stays under the
     /// session's 512 KiB channel buffer, past which the channel overflows and closes.
     static let highWater = 160 * 1024
-    static let maxPipeLine = 240 * 1024
+    /// A whole origin frame and the phone line's own framing.
+    static let maxPipeLine = PresentationCodec.maxFrameBytes + 4 * 1024
     static let maxMime = 256
     static let maxPresenters = 8
     /// Requests one page may have waiting on its pipe.

@@ -259,6 +259,35 @@ struct PhoneLinkPresenterPagesTests {
         #expect(!harness.sentFrames().contains(.json(.close, channel: 5, PhoneLinkClose(reason: "overflow"))))
     }
 
+    @Test func aBridgeReplyAsLargeAsAFrameReachesThePhone() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let (stream, pipe) = try Self.filePage(harness)
+        defer { withExtendedLifetime(stream) {} }
+        _ = harness.line()
+        harness.phone(.bridge(id: "p2", seq: 1, line: #"{"cmd":"tree"}"#))
+        let bridge = try #require(Self.pipeFrame(pipe))
+        let response = "\"" + String(repeating: "a", count: PresentationCodec.maxFrameBytes - 1024) + "\""
+        Thread { Self.answer(pipe, [.reply(id: bridge.id, response: response)]) }.start()
+        #expect(harness.line() == .reply(id: "p2", seq: 1, response: response, error: nil))
+    }
+
+    @Test func anOriginFailureIsCutToItsCap() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let (stream, pipe) = try Self.filePage(harness)
+        defer { withExtendedLifetime(stream) {} }
+        _ = harness.line()
+        harness.phone(.fetch(id: "p2", seq: 1, path: "/w/a"))
+        harness.phone(.bridge(id: "p2", seq: 2, line: #"{"cmd":"tree"}"#))
+        let fetch = try #require(Self.pipeFrame(pipe)), bridge = try #require(Self.pipeFrame(pipe))
+        let error = String(repeating: "e", count: 200_000)
+        Thread { Self.answer(pipe, [.failure(id: fetch.id, error: error), .failure(id: bridge.id, error: error)]) }.start()
+        let cut = String(error.prefix(PresentationPageState.maxError))
+        #expect(harness.line() == .res(id: "p2", seq: 1, mime: nil, data: nil, end: true, error: cut))
+        #expect(harness.line() == .reply(id: "p2", seq: 2, response: nil, error: cut))
+    }
+
     @Test func aPhoneCannotQueueRequestsWithoutEnd() throws {
         let harness = try Harness()
         defer { harness.stop() }
