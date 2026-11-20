@@ -60,3 +60,28 @@ List<ChatRow> chatRows(List<ChatItem> items) {
   flush();
   return rows.reversed.toList();
 }
+
+/// The index of the newest human prompt older than [topVisible] in newest-first [rows].
+int? stickyPrompt(List<ChatRow> rows, int topVisible) {
+  for (var n = topVisible + 1; n < rows.length; n++) {
+    if (rows[n].item?.isHumanPrompt ?? false) return n;
+  }
+  return null;
+}
+
+final _family = RegExp(r'^claude-(?:[\d-]+-)?(opus|sonnet|haiku|fable)\b');
+
+/// `claude-opus-4-5` and `medium` as `Opus · medium`; an id of no known family stays raw.
+String modelLabel(String? model, String? effort) {
+  final f = model == null ? null : _family.firstMatch(model)?[1];
+  final name = f == null ? model : '${f[0].toUpperCase()}${f.substring(1)}';
+  return [?name, ?effort].join(' · ');
+}
+
+const _assistant = {'text', 'thinking', 'tool'};
+
+/// A `/model` ran after Claude's last answer, so the transcript's model may be outdated.
+bool modelPending(List<ChatItem> items) {
+  final cmd = items.lastIndexWhere((i) => i.kind == 'command' && i.name == 'model');
+  return cmd > items.lastIndexWhere((i) => _assistant.contains(i.kind));
+}

@@ -10,6 +10,14 @@ import 'transcript.dart';
 
 const _open = MethodChannel('elis/open');
 
+/// Opens [href] in the phone's browser; anything but an `http` or `https` link is ignored.
+void openWebLink(String? href) {
+  final uri = Uri.tryParse(href ?? '');
+  if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+    _open.invokeMethod<bool>('view', href).catchError((_) => false);
+  }
+}
+
 /// Hands [text] to Android's share sheet.
 Future<void> shareText(String text) => _open.invokeMethod<bool>('share', text).catchError((_) => false);
 
@@ -329,12 +337,7 @@ Widget _markdown(String text) => Builder(
         ),
         // model-written: no image fetch or file read, and only web links leave the app
         imageBuilder: (uri, title, alt) => Text(alt ?? '$uri', style: const TextStyle(color: C.muted)),
-        onTapLink: (_, href, _) {
-          final uri = Uri.tryParse(href ?? '');
-          if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-            _open.invokeMethod<bool>('view', href).catchError((_) => false);
-          }
-        },
+        onTapLink: (_, href, _) => openWebLink(href),
       ),
     );
 

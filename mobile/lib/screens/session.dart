@@ -682,7 +682,9 @@ class _SessionScreenState extends State<SessionScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        title: chat
+            ? ChatTitle(feed: _chatFeed, s: s)
+            : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(s.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
           Text([s.shortCwd, if (s.agent.isNotEmpty) s.agent].join(' · '),
               style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
@@ -716,11 +718,12 @@ class _SessionScreenState extends State<SessionScreen> {
           // the buttons float over the screen's top edge, so the terminal takes the whole height
           Expanded(
               child: Stack(children: [
-            // Chat starts below the toolbar, which floats over the terminal's top edge only
-            Positioned.fill(top: chat ? 54 : 0, child: chat ? _chatView(s) : _terminal()),
-            if (!chat)
+            // Chat holds the toolbar in its header; over the terminal it floats
+            Positioned.fill(child: chat ? _chatView(s) : _terminal()),
+            if (!chat) ...[
               Positioned(left: 0, bottom: 0, child: TermKeyboard(focus: _keyboard, onKey: _softKey, onText: _softText, onPaste: (t) => _softText(t, paste: true))),
-            Positioned(top: 6, right: 6, child: _toolbar(s)),
+              Positioned(top: 6, right: 6, child: _toolbar(s)),
+            ],
             if (m.state != LinkState.connected)
               Center(
                   child: Padding(
@@ -750,7 +753,8 @@ class _SessionScreenState extends State<SessionScreen> {
             s: s,
             exited: s.liveAgent != 'claude',
             stale: f.stale || m.state != LinkState.connected,
-            onTerm: () => _pickMode(ViewMode.term)));
+            onTerm: () => _pickMode(ViewMode.term),
+            switcher: _toolbar(s)));
   }
 
   Widget _toolbar(Session s) {

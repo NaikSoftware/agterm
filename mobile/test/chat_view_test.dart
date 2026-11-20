@@ -1,0 +1,256 @@
+import 'dart:async';
+
+import 'package:elis_mobile/chat/chat_view.dart';
+import 'package:elis_mobile/chat/feed.dart';
+import 'package:elis_mobile/chat/rows.dart';
+import 'package:elis_mobile/chat/transcript.dart';
+import 'package:elis_mobile/chat/write_gate.dart';
+import 'package:elis_mobile/model.dart';
+import 'package:elis_mobile/theme.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+class _Host {
+  final calls = <(Map<String, dynamic>, Completer<Map<String, dynamic>>)>[];
+
+  Future<Map<String, dynamic>> call(Map<String, dynamic> args) {
+    final c = Completer<Map<String, dynamic>>();
+    calls.add((args, c));
+    return c.future;
+  }
+
+  (Map<String, dynamic>, Completer<Map<String, dynamic>>)? get held => calls.where((c) => !c.$2.isCompleted).lastOrNull;
+}
+
+Map<String, dynamic> _text(String uuid, [int lines = 0]) =>
+    {'kind': 'text', 'uuid': uuid, 'text': [uuid, for (var n = 0; n < lines; n++) 'more $n'].join('\n\n')};
+Map<String, dynamic> _prompt(String uuid) => {'kind': 'user', 'uuid': uuid, 'text': uuid, 'promptSource': 'typed'};
+Map<String, dynamic> _tool(String uuid) => {'kind': 'tool', 'uuid': uuid, 'name': 'Bash', 'arg': uuid};
+Map<String, dynamic> _command(String uuid, String name) => {'kind': 'command', 'uuid': uuid, 'name': name};
+
+// uneven heights: a lazy list estimates unbuilt rows from the built ones
+List<Map<String, dynamic>> _history(int n) => [
+      for (var i = 0; i < n; i++)
+        switch (i % 3) {
+          0 => _prompt('p$i'),
+          1 => _text('t$i', i % 5),
+          _ => _tool('b$i'),
+        },
+    ];
+
+class _Chat {
+  _Chat(this.t);
+
+  final WidgetTester t;
+  final h = _Host();
+  late final feed = TranscriptFeed(call: h.call, canPoll: () => true, remote: false);
+  int _next = 100;
+
+  Future<void> start(List<Map<String, dynamic>> items, {Map<String, dynamic> meta = const {}, int start = 0}) async {
+    t.view.physicalSize = const Size(400, 800);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final s = Session({'id': 's1', 'name': 'Session one', 'cwd': '/work/elis'}, 'w', 'W');
+    final gate = WriteGate(
+        grids: ChangeNotifier(), grid: () => null, writer: () => throw UnimplementedError(), remote: () => false, blocked: () => null);
+    await t.pumpWidget(MaterialApp(
+      theme: buildTheme(),
+      home: Scaffold(
+        appBar: AppBar(title: ChatTitle(feed: feed, s: s)),
+        body: ChatView(
+            feed: feed,
+            grid: () => null,
+            grids: ChangeNotifier(),
+            gate: gate,
+            s: s,
+            exited: false,
+            stale: false,
+            onTerm: () {},
+            switcher: const Text('switcher')),
+      ),
+    ));
+    feed.start();
+    await reply(items, meta: meta, start: start);
+  }
+
+  /// Answers the held tail poll with [items] after the cursor.
+  Future<void> reply(List<Map<String, dynamic>> items, {Map<String, dynamic> meta = const {}, int start = 0}) async {
+    await t.pump();
+    _next += 10;
+    h.held!.$2.complete({'transcript': 't1', 'size': _next, 'start': start, 'next': _next, 'items': items, 'meta': meta});
+    await t.pump();
+    await t.pump();
+    await t.pump(); // the post-frame scroll bookkeeping
+  }
+
+  /// Lets the next tail poll go out.
+  Future<void> tick() => t.pump(const Duration(milliseconds: 800));
+}
+
+/// A widget test over a [_Chat], which leaves no feed timer behind.
+void _chatTest(String name, Future<void> Function(WidgetTester t, _Chat c) body) => testWidgets(name, (t) async {
+      final c = _Chat(t);
+      await body(t, c);
+      await t.pumpWidget(const SizedBox());
+      c.feed.dispose();
+    });
+
+Finder _row(String uuid) => find.text(uuid, findRichText: true);
+
+Rect _list(WidgetTester t) => t.getRect(find.byKey(const Key('chatList')));
+
+/// The uuids of [items] whose row is fully on screen.
+List<String> _onScreen(WidgetTester t, List<Map<String, dynamic>> items) {
+  final list = _list(t);
+  return [
+    for (final i in items)
+      if (_row(i['uuid'] as String).evaluate().isNotEmpty)
+        if (t.getRect(_row(i['uuid'] as String).first) case final r when r.top >= list.top && r.bottom <= list.bottom) i['uuid'] as String,
+  ];
+}
+
+double _pixels(WidgetTester t) => t.widget<ListView>(find.byKey(const Key('chatList'))).controller!.position.pixels;
+
+void main() {
+  test('stickyPromptIsNearestAbove', () {
+    final rows = chatRows([
+      for (final m in [_prompt('u1'), _text('a1'), {'kind': 'user', 'uuid': 'tool-result'}, _prompt('u2'), _text('a2'), _text('a3')])
+        ChatItem.fromJson(m),
+    ]);
+    expect([for (final r in rows) r.key], ['a3', 'a2', 'u2', 'tool-result', 'a1', 'u1']);
+    expect(stickyPrompt(rows, 0), 2);
+    expect(stickyPrompt(rows, 2), 5);
+    expect(stickyPrompt(rows, 5), isNull);
+  });
+
+  test('modelLabel', () {
+    expect(modelLabel('claude-opus-4-5', 'medium'), 'Opus · medium');
+    expect(modelLabel('claude-sonnet-4-5[1m]', null), 'Sonnet');
+    expect(modelLabel('gpt-x', 'high'), 'gpt-x · high');
+    expect(modelLabel(null, null), '');
+  });
+
+  _chatTest('stickyTapScrollsToPrompt', (t, c) async {
+    await c.start([_prompt('first prompt'), for (var i = 0; i < 40; i++) _text('r$i', i % 4)]);
+    expect(_row('first prompt'), findsNothing);
+    expect(find.descendant(of: find.byKey(const Key('stickyPrompt')), matching: find.text('❯ first prompt')), findsOneWidget);
+    await t.tap(find.byKey(const Key('stickyPrompt')));
+    await t.pumpAndSettle();
+    expect(_onScreen(t, [_prompt('first prompt')]), ['first prompt']);
+  });
+
+  _chatTest('appendWhileScrolledUpKeepsView', (t, c) async {
+    final items = _history(40);
+    await c.start(items);
+    await t.drag(find.byKey(const Key('chatList')), const Offset(0, 400));
+    await t.pumpAndSettle();
+    final anchor = _onScreen(t, items).first;
+    final before = t.getRect(_row(anchor).first).top;
+    await c.tick();
+    await c.reply([_text('n1', 6), _prompt('n2'), _tool('n3')]);
+    await t.pump();
+    expect(t.getRect(_row(anchor).first).top, before);
+    expect(find.text('↓ 3 new'), findsOneWidget);
+    await t.tap(find.byKey(const Key('jumpToBottom')));
+    await t.pumpAndSettle();
+    expect(_pixels(t), 0);
+    expect(find.byKey(const Key('jumpToBottom')), findsNothing);
+  });
+
+  _chatTest('atBottomFollows', (t, c) async {
+    await c.start(_history(40));
+    await c.tick();
+    await c.reply([_text('n1', 6), _prompt('n2')]);
+    await t.pumpAndSettle();
+    expect(_pixels(t), 0);
+    expect(_onScreen(t, [_prompt('n2')]), ['n2']);
+    expect(find.byKey(const Key('jumpToBottom')), findsNothing);
+  });
+
+  _chatTest('pagingBackPrepends', (t, c) async {
+    final items = _history(30);
+    await c.start(items, start: 50);
+    for (var n = 0; n < 10 && c.h.held?.$1['before'] == null; n++) {
+      await t.drag(find.byKey(const Key('chatList')), const Offset(0, 600));
+      await t.pump();
+    }
+    expect(c.h.held!.$1['before'], '50');
+    await t.pumpAndSettle();
+    expect(find.text('Loading earlier…'), findsOneWidget);
+    final anchor = _onScreen(t, items).last;
+    final before = t.getRect(_row(anchor).first).top;
+    c.h.held!.$2.complete({'transcript': 't1', 'size': 200, 'start': 0, 'next': 50, 'items': [_text('old1', 3), _prompt('old2')]});
+    await t.pump();
+    await t.pump();
+    expect(find.text('Loading earlier…'), findsNothing);
+    expect(t.getRect(_row(anchor).first).top, before);
+    expect(find.textContaining('new'), findsNothing);
+  });
+
+  _chatTest('modelChipDimsAfterModelCommand', (t, c) async {
+    const meta = {'title': 'Echo todo', 'model': 'claude-opus-4-5', 'effort': 'medium'};
+    await c.start([_prompt('p1'), _text('a1')], meta: meta);
+    expect(find.text('Echo todo'), findsOneWidget);
+    double opacity() => t.widget<Opacity>(find.ancestor(of: find.text('Opus · medium'), matching: find.byType(Opacity))).opacity;
+    expect(opacity(), 1);
+    await c.tick();
+    await c.reply([_command('m1', 'model')], meta: meta);
+    expect(opacity(), lessThan(1));
+    await c.tick();
+    await c.reply([_text('a2')], meta: meta);
+    expect(opacity(), 1);
+  });
+
+  _chatTest('titleFallsBackToSessionName', (t, c) async {
+    await c.start([_text('a1')]);
+    expect(find.text('Session one'), findsOneWidget);
+  });
+
+  _chatTest('prChipOpensUrl', (t, c) async {
+    final opens = <MethodCall>[];
+    final messenger = t.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(const MethodChannel('elis/open'), (m) async {
+      opens.add(m);
+      return true;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(const MethodChannel('elis/open'), null));
+    await c.start([_text('a1')], meta: {
+      'pr': {'prNumber': 446, 'prRepository': 'o/elis', 'prUrl': 'https://github.com/o/elis/pull/446'},
+    });
+    expect(find.text('/work/elis'), findsOneWidget);
+    await t.tap(find.text('PR #446'));
+    expect([for (final o in opens) (o.method, o.arguments)], [('view', 'https://github.com/o/elis/pull/446')]);
+  });
+
+  _chatTest('todoStripHidesWhenAllDone', (t, c) async {
+    Map<String, dynamic> todos(String second) => {
+          'todos': [
+            {'content': 'Write code', 'status': 'completed'},
+            {'content': 'Write tests', 'status': second},
+          ],
+        };
+    await c.start([_text('a1')], meta: todos('in_progress'));
+    expect(find.text('☐ 1/2 · Write tests'), findsOneWidget);
+    expect(find.text('Write code'), findsNothing);
+    await t.tap(find.byKey(const Key('todoStrip')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Write code'), findsOneWidget);
+    await c.tick();
+    await c.reply([], meta: todos('completed'));
+    expect(find.byKey(const Key('todoStrip')), findsNothing);
+  });
+
+  _chatTest('headerCollapsesOnScrollUp', (t, c) async {
+    await c.start(_history(40));
+    bool shown() => t.getSize(find.byKey(const Key('chatHeader'))).height > 0;
+    expect(find.text('switcher'), findsOneWidget);
+    expect(shown(), isTrue);
+    await t.drag(find.byKey(const Key('chatList')), const Offset(0, 300));
+    await t.pumpAndSettle();
+    expect(shown(), isFalse);
+    await t.drag(find.byKey(const Key('chatList')), const Offset(0, -100));
+    await t.pumpAndSettle();
+    expect(shown(), isTrue);
+  });
+}
