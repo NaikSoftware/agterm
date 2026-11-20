@@ -655,6 +655,23 @@ void main() {
     expect(dataOn(r, id).map((d) => d.payload.length), [65536, 70000 - 65536]);
   });
 
+  test('aForwardBacklogEndsOnCreditAndAnUnflushedCloseGoesAtOnce', () async {
+    final (m, r, _) = await upgraded();
+    final ch = m.forward('w', 'p1');
+    await flush();
+    final id = r.frames.last.channel;
+    expect(ch.send(Uint8List(65536)), true);
+    expect(ch.backlog, isNull);
+    expect(ch.send(Uint8List(10)), true);
+    final backlog = ch.backlog!;
+    r.send(frame(LinkKind.credit, id, LinkFrame.credit(id, 65536).payload));
+    await backlog;
+    expect(ch.backlog, isNull);
+    ch.send(Uint8List(65536 + 10));
+    unawaited(ch.close(flush: false));
+    expect((r.frames.last.kind, r.frames.last.channel), (LinkKind.close, id));
+  });
+
   test('aRefusedForwardThrowsTheReason', () async {
     final (m, r, _) = await upgraded();
     final ch = m.forward('w', 'p1');

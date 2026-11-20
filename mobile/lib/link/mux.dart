@@ -467,6 +467,9 @@ class _Outbox {
 
   bool get waiting => _queue.isNotEmpty;
 
+  /// Completes once the queue has gone out or been cleared; null while nothing waits.
+  Future<void>? get backlog => waiting ? (_drained ??= Completer<void>()).future : null;
+
   /// Waits at most [limit] for the queue to go out.
   Future<void> drained(Duration limit) => (_drained ??= Completer<void>()).future.timeout(limit, onTimeout: () {});
 
@@ -493,7 +496,8 @@ class _Outbox {
   }
 
   void _settle() {
-    if (_drained case final d? when !d.isCompleted) d.complete();
+    _drained?.complete();
+    _drained = null;
   }
 }
 
@@ -523,9 +527,13 @@ class ForwardChannel implements _Channel {
   /// Queues [bytes] for the server; false, sending nothing, when the channel ended or more than 1 MiB would wait.
   bool send(Uint8List bytes) => !_in.isClosed && _out.send(bytes);
 
-  /// Sends CLOSE once the queued bytes are out, waiting at most 2 s for CREDIT; the relay does not answer it.
-  Future<void> close() async {
-    if (_out.waiting && _mux._channels[id] == this) await _out.drained(const Duration(seconds: 2));
+  /// Non-null while sent bytes wait for the relay's CREDIT: a reader pauses until it completes.
+  Future<void>? get backlog => _out.backlog;
+
+  /// Sends CLOSE, with [flush] once the queued bytes are out, waiting at most 2 s for CREDIT; the relay does not
+  /// answer it.
+  Future<void> close({bool flush = true}) async {
+    if (flush && _out.waiting && _mux._channels[id] == this) await _out.drained(const Duration(seconds: 2));
     if (_mux._channels[id] != this) return;
     _mux._add(LinkFrame.json(LinkKind.close, id, {'reason': 'closed'}));
     _end(null);

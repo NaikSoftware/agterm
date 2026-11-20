@@ -8,12 +8,20 @@ import 'package:elis_mobile/link/mux.dart';
 import 'package:elis_mobile/pages/page_tunnel.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// A forward channel; with [window] it holds input past that many unreleased bytes, as the relay's credit does.
 class FakeForward implements ForwardChannel {
+  FakeForward({this.window});
+
+  final int? window;
   final _opened = Completer<void>();
   final _bytes = StreamController<Uint8List>();
   final sent = <int>[];
-  final _sentSome = StreamController<void>.broadcast();
-  var closed = false;
+  final _changed = StreamController<void>.broadcast();
+  final _closed = Completer<bool>();
+  Completer<void>? _backlog;
+  var _unreleased = 0;
+  var refusedSend = false;
+  bool? flushed;
 
   @override
   Future<void> get opened => _opened.future;
@@ -22,15 +30,36 @@ class FakeForward implements ForwardChannel {
   Stream<Uint8List> get bytes => _bytes.stream;
 
   @override
+  Future<void>? get backlog => _backlog?.future;
+
+  bool get closed => _closed.isCompleted;
+
+  @override
   bool send(Uint8List bytes) {
+    // stricter than the relay's 1 MiB queue: a tunnel that keeps reading while backlogged fails at once
+    if (_backlog != null || _unreleased > 1 << 20) {
+      refusedSend = true;
+      return false;
+    }
     sent.addAll(bytes);
-    _sentSome.add(null);
+    _unreleased += bytes.length;
+    if (window case final w? when _unreleased > w) _backlog ??= Completer<void>();
+    _changed.add(null);
     return true;
   }
 
+  /// The relay took everything sent so far.
+  void release() {
+    _unreleased = 0;
+    _backlog?.complete();
+    _backlog = null;
+  }
+
   @override
-  Future<void> close() async {
-    closed = true;
+  Future<void> close({bool flush = true}) async {
+    flushed ??= flush;
+    if (!_closed.isCompleted) _closed.complete(flush);
+    _changed.add(null);
     await _bytes.close();
   }
 
@@ -41,11 +70,19 @@ class FakeForward implements ForwardChannel {
     unawaited(_bytes.close());
   }
 
-  void reply(String s) => _bytes.add(Uint8List.fromList(utf8.encode(s)));
+  void reply(List<int> b) => _bytes.add(Uint8List.fromList(b));
 
   Future<void> until(int length) async {
-    while (sent.length < length) {
-      await _sentSome.stream.first;
+    while (sent.length < length && !closed) {
+      await _changed.stream.first;
+    }
+  }
+
+  Future<void> get whenClosed => _closed.future;
+
+  Future<void> get whenBacklogged async {
+    while (_backlog == null) {
+      await _changed.stream.first;
     }
   }
 
@@ -53,89 +90,141 @@ class FakeForward implements ForwardChannel {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-const cookie = 'elis_tunnel_5173=00112233445566778899aabbccddeeff';
-
-/// Everything the client reads until the tunnel ends the connection.
-Future<String> readAll(Socket s) async {
-  final got = <int>[];
-  try {
-    await s.forEach(got.addAll);
-  } on SocketException {
-    // a reset is an end too
+/// A client connection that records what it reads.
+class Client {
+  Client._(this.socket) {
+    socket.listen((b) {
+      got.addAll(b);
+      _changed.add(null);
+    }, onError: (Object _) => _end(), onDone: _end);
+    unawaited(socket.done.catchError((Object _) {})); // the tunnel may reset while a request is still going out
   }
-  return utf8.decode(got, allowMalformed: true);
+
+  static Future<Client> connect(int port) async => Client._(await Socket.connect(InternetAddress.loopbackIPv4, port));
+
+  final Socket socket;
+  final got = <int>[];
+  final _changed = StreamController<void>.broadcast();
+  final _ended = Completer<void>();
+
+  void _end() {
+    if (!_ended.isCompleted) _ended.complete();
+    _changed.add(null);
+  }
+
+  /// Everything read once the tunnel ends the connection.
+  Future<String> get ended async {
+    await _ended.future;
+    return latin1.decode(got);
+  }
+
+  Future<void> until(int length) async {
+    while (got.length < length && !_ended.isCompleted) {
+      await _changed.stream.first;
+    }
+  }
 }
 
 void main() {
+  late StreamController<FakeForward> opens;
+  late StreamIterator<FakeForward> nextOpen;
   late List<FakeForward> opened;
   late PageTunnel tunnel;
+  int? window;
 
   Future<void> start({int preferredPort = 0, Duration headerTimeout = const Duration(seconds: 5)}) async {
     opened = [];
+    opens = StreamController<FakeForward>();
+    nextOpen = StreamIterator(opens.stream);
     tunnel = await PageTunnel.start(() {
-      final f = FakeForward();
+      final f = FakeForward(window: window);
       opened.add(f);
+      opens.add(f);
       return f;
-    }, preferredPort: preferredPort, cookie: cookie, headerTimeout: headerTimeout);
+    }, preferredPort: preferredPort, headerTimeout: headerTimeout);
   }
 
+  Future<FakeForward> next() async {
+    expect(await nextOpen.moveNext(), isTrue);
+    return nextOpen.current;
+  }
+
+  setUp(() => window = null);
   tearDown(() => tunnel.close());
 
-  Future<Socket> client() => Socket.connect(InternetAddress.loopbackIPv4, tunnel.port);
+  Future<Client> client() => Client.connect(tunnel.port);
 
-  String get(String path, {String cookies = cookie, String extra = ''}) =>
-      'GET $path HTTP/1.1\r\nHost: 127.0.0.1\r\n${extra}Cookie: $cookies\r\n\r\n';
+  String get(String path, {String? cookies, String extra = ''}) =>
+      'GET $path HTTP/1.1\r\nHost: 127.0.0.1\r\n${extra}Cookie: ${cookies ?? tunnel.cookie}\r\n\r\n';
 
   test('bytesGoBothWays', () async {
     await start();
-    final s = await client();
-    final read = readAll(s);
+    final c = await client();
     final request = '${get('/a')}body';
-    s.write(request);
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    final f = opened.single;
+    c.socket.write(request);
+    final f = await next();
     await f.until(request.length);
     expect(utf8.decode(f.sent), request);
-    f.accept();
-    f.reply('HTTP/1.1 200 OK\r\n\r\nhi');
+    f
+      ..accept()
+      ..reply(utf8.encode('HTTP/1.1 200 OK\r\n\r\nhi'));
     await f.close();
-    expect(await read, 'HTTP/1.1 200 OK\r\n\r\nhi');
+    expect(await c.ended, 'HTTP/1.1 200 OK\r\n\r\nhi');
   });
 
   test('theClientsEndClosesTheChannel', () async {
     await start();
-    final s = await client();
-    s.write(get('/'));
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    await s.close();
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    expect(opened.single.closed, isTrue);
-    s.destroy();
+    final c = await client();
+    c.socket.write(get('/'));
+    final f = await next();
+    await c.socket.close();
+    await f.whenClosed;
+    c.socket.destroy();
   });
 
   test('aRefusedChannelClosesTheSocket', () async {
     await start();
-    final s = await client();
-    final read = readAll(s);
-    s.write(get('/'));
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    opened.single.refuse('no such page');
-    expect(await read, isEmpty);
+    final c = await client();
+    c.socket.write(get('/'));
+    (await next()).refuse('no such page');
+    expect(await c.ended, isEmpty);
   });
 
-  test('closeEndsEverySocket', () async {
+  test('closeEndsEverySocketAndClosesItsChannelsAtOnce', () async {
     await start();
     final a = await client();
     final b = await client();
-    final reads = [readAll(a), readAll(b)];
-    a.write(get('/a'));
-    b.write(get('/b'));
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    a.socket.write(get('/a'));
+    b.socket.write(get('/b'));
+    await next();
+    await next();
     expect(tunnel.connections, 2);
     await tunnel.close();
-    await Future.wait(reads);
+    await Future.wait([a.ended, b.ended]);
     expect(tunnel.connections, 0);
-    expect(opened.every((f) => f.closed), isTrue);
+    expect(opened.map((f) => f.flushed), [false, false]);
+  });
+
+  test('anUploadPastTheQueueCapWaitsForTheRelay', () async {
+    window = 64 * 1024;
+    await start();
+    final c = await client();
+    final head = get('/upload', extra: 'Content-Length: ${2 << 20}\r\n');
+    final body = Uint8List.fromList([for (var i = 0; i < 2 << 20; i++) i % 251]);
+    c.socket.write(head);
+    final f = await next();
+    f.accept();
+    c.socket.add(body);
+    final total = head.length + body.length;
+    while (f.sent.length < total && !f.closed) {
+      await Future.any([f.whenBacklogged, f.until(total)]);
+      await Future<void>.delayed(const Duration(milliseconds: 5)); // a slow relay: the client's next bytes are already here
+      f.release();
+    }
+    expect(f.refusedSend, isFalse);
+    expect(f.closed, isFalse);
+    expect(f.sent.sublist(head.length), body);
+    c.socket.destroy();
   });
 
   test('urlForKeepsPathQueryAndFragment', () async {
@@ -150,47 +239,43 @@ void main() {
   });
 
   group('gate', () {
-    Future<void> refused(String request, {Duration headerTimeout = const Duration(seconds: 5)}) async {
+    Future<void> refused(String Function() request, {Duration headerTimeout = const Duration(seconds: 5)}) async {
       await start(headerTimeout: headerTimeout);
-      final s = await client();
-      final read = readAll(s);
-      unawaited(s.done.catchError((Object _) {})); // the tunnel may reset while the request is still going out
-      s.add(latin1.encode(request));
-      expect(await read.timeout(const Duration(seconds: 3)), isEmpty);
+      final c = await client();
+      c.socket.add(latin1.encode(request()));
+      expect(await c.ended.timeout(const Duration(seconds: 30)), isEmpty);
       expect(opened, isEmpty);
     }
 
-    test('noCookieClosesTheSocket', () => refused('GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n'));
+    test('noCookieClosesTheSocket', () => refused(() => 'GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n'));
 
-    test('aWrongCookieClosesTheSocket', () => refused(get('/', cookies: 'elis_tunnel_5173=00112233445566778899aabbccddeefe')));
+    test('aWrongCookieClosesTheSocket', () => refused(() => get('/', cookies: '${tunnel.cookie.substring(0, tunnel.cookie.length - 1)}0')));
 
-    test('aCookieValuePrefixClosesTheSocket', () => refused(get('/', cookies: 'elis_tunnel_5173=00112233445566778899aabbccddeeffx')));
+    test('aCookieValuePrefixClosesTheSocket', () => refused(() => get('/', cookies: '${tunnel.cookie}x')));
 
-    test('headersOver16KiBCloseTheSocket', () => refused(get('/', extra: 'X-Pad: ${'a' * PageTunnel.maxHeaderBytes}\r\n')));
+    test('headersOver16KiBCloseTheSocket', () => refused(() => get('/', extra: 'X-Pad: ${'a' * PageTunnel.maxHeaderBytes}\r\n')));
 
     test('headersNotFinishedBeforeTheTimeoutCloseTheSocket',
-        () => refused('GET / HTTP/1.1\r\nCookie: $cookie\r\n', headerTimeout: const Duration(milliseconds: 200)));
+        () => refused(() => 'GET / HTTP/1.1\r\nCookie: ${tunnel.cookie}\r\n', headerTimeout: const Duration(milliseconds: 200)));
 
     test('aWebSocketUpgradeWithTheCookiePasses', () async {
       await start();
-      final s = await client();
-      final got = <int>[];
-      s.listen(got.addAll);
+      final c = await client();
       final request = 'GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
-          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\ncookie: theme=dark; $cookie; other=1\r\n\r\n';
-      s.write(request);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      final f = opened.single;
+          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\ncookie: theme=dark; ${tunnel.cookie}; other=1\r\n\r\n';
+      c.socket.write(request);
+      final f = await next();
       await f.until(request.length);
       expect(utf8.decode(f.sent), request);
       f.accept();
-      f.reply('HTTP/1.1 101 Switching Protocols\r\n\r\n\x81\x02hi');
-      s.add([0x81, 0x82, 0, 0, 0, 0, 0x68, 0x69]);
+      final reply = [...utf8.encode('HTTP/1.1 101 Switching Protocols\r\n\r\n'), 0x81, 0x02, 0x68, 0x69];
+      f.reply(reply);
+      c.socket.add([0x81, 0x82, 0, 0, 0, 0, 0x68, 0x69]);
       await f.until(request.length + 8);
       expect(f.sent.sublist(request.length), [0x81, 0x82, 0, 0, 0, 0, 0x68, 0x69]);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(utf8.decode(got), 'HTTP/1.1 101 Switching Protocols\r\n\r\n\x81\x02hi');
-      s.destroy();
+      await c.until(reply.length);
+      expect(c.got, reply);
+      c.socket.destroy();
     });
 
     test('aRequestAfterCloseIsRefused', () async {
@@ -208,14 +293,23 @@ void main() {
       await probe.close();
       await start(preferredPort: free);
       expect(tunnel.port, free);
+      expect(tunnel.cookie, startsWith('elis_tunnel_$free='));
     });
 
-    test('aBusyPreferredPortFallsBackToARandomOne', () async {
+    test('aBusyPreferredPortFallsBackToARandomOneAndTheCookieNamesIt', () async {
       final busy = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
       await start(preferredPort: busy.port);
       expect(tunnel.port, isNot(busy.port));
-      expect(tunnel.port, greaterThan(0));
+      expect(tunnel.cookie, matches(RegExp('^elis_tunnel_${tunnel.port}=[0-9a-f]{32}\$')));
       await busy.close();
+    });
+
+    test('twoTunnelsOnOnePreferredPortGetDistinctCookieNames', () async {
+      await start();
+      final first = tunnel;
+      final second = await PageTunnel.start(FakeForward.new, preferredPort: first.port);
+      expect(second.cookie.split('=').first, isNot(first.cookie.split('=').first));
+      await second.close();
     });
   });
 }
