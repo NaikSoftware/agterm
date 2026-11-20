@@ -39,6 +39,62 @@ struct PhoneLinkPresenterPagesTests {
         #expect(harness.remainingLines().isEmpty)
     }
 
+    @Test func aForwardedPageBecomesAForwardLine() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let stream = try Self.presentation(harness)
+        Self.send(stream, .pageRequest(Self.forwarded("http://127.0.0.1:5173/")))
+        guard case .page(let line) = harness.line() else { Issue.record("no page line"); return }
+        #expect(line.kind == "forward" && line.url == "http://127.0.0.1:5173/")
+        let target = try #require(harness.forwardTarget("p1"))
+        #expect(target.host == "127.0.0.1" && target.port == 5173)
+        Self.send(stream, .pageClose(PresentationPageChange(page: "p1")))
+        #expect(harness.line() == .command(id: "p1", seq: 0, action: "close", sizePercent: nil))
+        #expect(harness.forwardTarget("p1") == nil)
+    }
+
+    @Test func aRemoteRowStartsOneListenerPerPage() throws {
+        let box = HarnessBox()
+        let recorder = ForwardRecorder()
+        let remote = ControlAttachOrigin(session: "O1", pane: PhoneLinkPresenterTests.pane.uuidString, host: "h")
+        let harness = try Harness(origin: remote, spawn: { origin, _ in
+            while box.harness == nil { usleep(1000) }
+            let harness = try #require(box.harness)
+            return try .socket(path: harness.server.path, request: ControlRequest(cmd: .zmxPresent, target: origin.session), queue: harness.queue)
+        }, forwardSpawn: { argv in
+            let harness = try #require(box.harness)
+            try recorder.record(argv)
+            return try .socket(path: harness.server.path, request: ControlRequest(cmd: .sessionOverlayPageServe, target: "forward"),
+                               queue: harness.queue)
+        })
+        box.harness = harness
+        defer { harness.stop() }
+        let stream = try Self.presentation(harness)
+        Self.send(stream, .pageRequest(Self.forwarded("http://127.0.0.1:5173/")))
+        guard case .page(let line) = harness.line() else { Issue.record("no page line"); return }
+        #expect(line.kind == "forward")
+        let listener = try #require(harness.server.nextStream())
+        let target = try #require(harness.forwardTarget("p1"))
+        #expect(harness.forwardTarget("p1")?.port == target.port)
+        #expect(target.host == "127.0.0.1")
+        #expect(recorder.argvs == [try RemoteSession.forwardCommand(host: "h", spec: "127.0.0.1:\(target.port):127.0.0.1:5173")])
+        Self.send(stream, .pageClose(PresentationPageChange(page: "p1")))
+        #expect(listener.waitEnd())
+        #expect(harness.forwardTarget("p1") == nil)
+    }
+
+    @Test func aNonLoopbackForwardIsRejected() throws {
+        let harness = try Harness()
+        defer { harness.stop() }
+        let stream = try Self.presentation(harness)
+        Self.send(stream, .pageRequest(Self.forwarded("http://example.com/")))
+        let rejected = try #require(stream.frame { if case .pageRejected = $0 { true } else { false } })
+        guard case .pageRejected(let change) = rejected.body else { return }
+        #expect(change.page == "p1")
+        #expect(harness.remainingLines().isEmpty)
+        #expect(harness.forwardTarget("p1") == nil)
+    }
+
     @Test func aFetchIsServedThroughThePageChannel() throws {
         let harness = try Harness()
         defer { harness.stop() }
@@ -410,6 +466,12 @@ struct PhoneLinkPresenterPagesTests {
         return page
     }
 
+    private static func forwarded(_ url: String) -> PresentationPage {
+        var page = PhoneLinkPresenterTests.urlPage
+        page.source = .forwarded(url)
+        return page
+    }
+
     /// The presentation stream, answered.
     private static func presentation(_ harness: Harness) throws -> StubStream {
         let stream = try #require(harness.server.nextStream())
@@ -485,6 +547,34 @@ struct PhoneLinkPresenterPagesTests {
 }
 
 final class HarnessBox: @unchecked Sendable { var harness: PhoneLinkPresenterTests.Harness? }
+
+/// Records forward argvs and listens on the local port each one names, as the ssh listener would.
+final class ForwardRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [[String]] = []
+    private var sockets: [Int32] = []
+
+    deinit { sockets.forEach { close($0) } }
+
+    var argvs: [[String]] { lock.withLock { recorded } }
+
+    func record(_ argv: [String]) throws {
+        let port = try #require(argv.last?.firstMatch(of: /127\.0\.0\.1:(\d+):/).flatMap { UInt16($0.1) })
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let bound = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        try #require(fd >= 0 && bound == 0 && listen(fd, 8) == 0)
+        lock.withLock {
+            recorded.append(argv)
+            sockets.append(fd)
+        }
+    }
+}
 
 /// Reads channel 5's page lines off the phone, granting their credit one frame late, and records where vt DATA fell.
 private final class LinkReader {

@@ -250,7 +250,7 @@ struct PhoneLinkPresenterTests {
 
         init(origin: ControlAttachOrigin = PhoneLinkPresenterTests.origin, pending: Int = 0,
              output: PhoneLinkScheduler.Enqueue = .queued, spawn: PhoneLinkPresenter.Spawn? = nil,
-             markdownDirectory: URL? = Harness.markdown, buffer: Int? = nil) throws {
+             forwardSpawn: PhoneLinkPresenter.ForwardSpawn? = nil, markdownDirectory: URL? = Harness.markdown, buffer: Int? = nil) throws {
             pendingBytes = pending
             try server.start()
             server.holdStreams("zmx.present")
@@ -272,7 +272,7 @@ struct PhoneLinkPresenterTests {
                 ended: { [weak self] in self?.lock.withLock { self?.didEnd = true } })
             presenter = PhoneLinkPresenter(channel: 5, request: PhoneLinkOpen(type: "present", target: "S1"), socketPath: server.path,
                                            queue: queue, peer: "mem:1", log: { _ in }, link: link, spawn: spawn,
-                                           markdownDirectory: markdownDirectory)
+                                           forwardSpawn: forwardSpawn, markdownDirectory: markdownDirectory)
             queue.sync { presenter.start() }
         }
 
@@ -292,6 +292,8 @@ struct PhoneLinkPresenterTests {
         func drained() { queue.async { [self] in presenter.drained() } }
 
         func stopPresenter() { queue.sync { presenter.stop() } }
+
+        func forwardTarget(_ page: String) -> (host: String, port: UInt16)? { queue.sync { presenter.forwardTarget(page: page) } }
 
         /// The next page line, waiting for it.
         func line(timeout: TimeInterval = 30) -> PhonePageDown? {

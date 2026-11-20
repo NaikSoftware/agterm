@@ -15,7 +15,10 @@ final class PresentedPage: @unchecked Sendable {
     final class Buffer { var data = Data() }
 
     let request: PresentationPage
+    /// The page's pipe, or a remote row's forward listener.
     var pipe: PhoneLinkLineStream?
+    /// Where a forward channel of a shown forwarded page connects.
+    var forward: (host: String, port: UInt16)?
     /// The `page` line went out; commands before it wait in `held`.
     var shown = false
     var hidden = false
@@ -30,6 +33,8 @@ final class PresentedPage: @unchecked Sendable {
     init(_ request: PresentationPage) { self.request = request }
 
     var id: String { request.page }
+
+    var isForwarded: Bool { if case .forwarded = request.source { true } else { false } }
 }
 
 /// A content page's HTML or script, sent from memory as `res` chunks.
@@ -77,8 +82,8 @@ extension PhoneLinkPresenter {
             pages[page.id] = page
             showPage(page, PhonePage(id: page.id, kind: "url", url: url, javascript: request.javascript, chromeless: request.chromeless,
                                      browse: request.browse, hidden: false, title: request.identity, sizePercent: request.sizePercent))
-        case .forwarded:
-            reject(page, "unsupported")
+        case .forwarded(let url):
+            openForward(page, url)
         case .markdown, .text:
             var files = MarkdownAssets.textFiles
             if case .markdown = request.source { files = MarkdownAssets.markdownFiles }
@@ -127,13 +132,13 @@ extension PhoneLinkPresenter {
         output(.command(id: page.id, seq: command.seq, action: action, sizePercent: command.action == .resize ? command.sizePercent : nil))
     }
 
-    private func reject(_ page: PresentedPage, _ reason: String) {
+    func reject(_ page: PresentedPage, _ reason: String) {
         if pages[page.id] === page { pages[page.id] = nil }
         page.pipe?.close()
         send(.pageRejected(PresentationPageChange(page: page.id, reason: reason, offer: page.request.offer)))
     }
 
-    private func showPage(_ page: PresentedPage, _ line: PhonePage) {
+    func showPage(_ page: PresentedPage, _ line: PhonePage) {
         var line = line
         line.hidden = page.hidden
         page.shown = true

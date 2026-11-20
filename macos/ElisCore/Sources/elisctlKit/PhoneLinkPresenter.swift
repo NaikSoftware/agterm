@@ -20,10 +20,13 @@ final class PhoneLinkPresenter: @unchecked Sendable {
 
     /// Opens the presentation stream for `origin`, or with a page token that page's pipe; runs off the relay queue.
     typealias Spawn = (ControlAttachOrigin, _ pageToken: String?) throws -> PhoneLinkLineStream
+    /// Starts a remote row's `ssh -N -L` listener for one forwarded page; runs off the relay queue.
+    typealias ForwardSpawn = ([String]) throws -> PhoneLinkLineStream
 
     static let kinds = [PresentationHub.leadReportKind] + PresentationHub.pageKinds
         + [PresentationHub.pageContentKind, PresentationHub.pageDocumentKind, PresentationHub.pendingSnapshotKind,
-           PresentationHub.jobTokenKind, PresentationHub.offerIdentityKind, PresentationHub.viewerPhoneKind]
+           PresentationHub.jobTokenKind, PresentationHub.offerIdentityKind, PresentationHub.viewerPhoneKind,
+           PresentationHub.pageForwardKind]
     /// Page lines waiting in the scheduler past which page pipes are not resumed and memory answers wait. One memory
     /// chunk (under 88 KiB) and one pipe line (`maxPipeLine`) may follow the check: 160 + 88 + 260 KiB stays under the
     /// session's 512 KiB channel buffer, past which the channel overflows and closes.
@@ -43,6 +46,7 @@ final class PhoneLinkPresenter: @unchecked Sendable {
     let log: (String) -> Void
     let link: Link
     let spawn: Spawn
+    let forwardSpawn: ForwardSpawn
     /// The renderer scripts' folder for markdown and text pages; nil when the install has none.
     let markdownDirectory: URL?
     lazy var assets = MarkdownAssets(directory: markdownDirectory)
@@ -67,7 +71,8 @@ final class PhoneLinkPresenter: @unchecked Sendable {
     private(set) var asking = false
 
     init(channel: UInt32, request: PhoneLinkOpen, socketPath: String, queue: DispatchQueue, peer: String,
-         log: @escaping (String) -> Void, link: Link, spawn: Spawn? = nil, markdownDirectory: URL? = PhoneLinkPresenter.bundledMarkdown) {
+         log: @escaping (String) -> Void, link: Link, spawn: Spawn? = nil, forwardSpawn: ForwardSpawn? = nil,
+         markdownDirectory: URL? = PhoneLinkPresenter.bundledMarkdown) {
         self.channel = channel
         self.request = request
         self.socketPath = socketPath
@@ -76,6 +81,7 @@ final class PhoneLinkPresenter: @unchecked Sendable {
         self.log = log
         self.link = link
         self.markdownDirectory = markdownDirectory
+        self.forwardSpawn = forwardSpawn ?? { try .process(argv: $0, queue: queue) }
         self.spawn = spawn ?? { origin, token in
             if let host = origin.host {
                 return try .process(argv: Self.remoteArgv(host: host, session: origin.session, pageToken: token), queue: queue)
@@ -125,7 +131,9 @@ final class PhoneLinkPresenter: @unchecked Sendable {
         guard !stopped else { return }
         stopped = true
         stream?.close()
-        let pipes = pages.values.compactMap(\.pipe)
+        // a forward listener is not the origin's, so nothing waits for the origin to retire it
+        pages.values.filter(\.isForwarded).forEach { $0.pipe?.close() }
+        let pipes = pages.values.filter { !$0.isForwarded }.compactMap(\.pipe)
         pages = [:]
         serving = []
         guard !pipes.isEmpty else { return }

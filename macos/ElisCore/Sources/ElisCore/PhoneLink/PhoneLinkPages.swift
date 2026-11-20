@@ -3,7 +3,7 @@ import Foundation
 /// One page shown on the phone; its fields sit beside `"t": "page"` in the line.
 public struct PhonePage: Codable, Equatable, Sendable {
     public var id: String
-    /// `file`, `url` or `content`.
+    /// `file`, `url`, `content` or `forward` (a loopback page reached through the relay).
     public var kind: String
     /// A file page's absolute path on the origin.
     public var path: String?
