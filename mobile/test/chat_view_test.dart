@@ -427,6 +427,18 @@ void main() {
     expect(shown(), isTrue);
   });
 
+  _chatTest('headerReturnsAtTheNewestEnd', (t, c) async {
+    await c.start(_history(40));
+    bool shown() => t.getSize(find.byKey(const Key('chatHeader'))).height > 0;
+    await t.drag(find.byKey(const Key('chatList')), const Offset(0, 300));
+    await t.pumpAndSettle();
+    expect(shown(), isFalse);
+    await t.tap(find.byKey(const Key('jumpToBottom')));
+    await t.pumpAndSettle();
+    expect(_pixels(t), 0);
+    expect(shown(), isTrue);
+  });
+
   group('states', () {
     tearDown(() {
       ModePicks.pick('s1', null);

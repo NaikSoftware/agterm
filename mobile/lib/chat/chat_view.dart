@@ -325,11 +325,14 @@ class _ChatViewState extends State<ChatView> {
     final away = p.pixels > _bottomSlack;
     final top = _visible.fold(0, (m, v) => max(m, v.$1));
     final n = stickyPrompt(_rows, top), sticky = n == null ? null : _rows[n].key;
+    // a fling or the jump pill reaches the newest row with no scroll toward it to bring the header back
+    final header = _header || p.pixels <= p.minScrollExtent;
     if (load && p.extentAfter < 400) feed.loadEarlier();
-    if (away == _away && sticky == _sticky && (away || _newCount == 0)) return;
+    if (away == _away && sticky == _sticky && header == _header && (away || _newCount == 0)) return;
     setState(() {
       _away = away;
       _sticky = sticky;
+      _header = header;
       if (!away) _newCount = 0;
     });
   }
