@@ -392,6 +392,15 @@ struct AppStoreRemotePageTests {
         #expect(HtmlPageOutcomes.shared.outcome(for: page.id)?.outcome == .dismissed)
     }
 
+    @Test func aURLPageAnotherMacShowsIsPendingUntilItsCloseDismissesIt() throws {
+        let (session, _) = try origin()
+        let page = try url("https://example.com/")
+        #expect(open(session, page) == .opened)
+        #expect(HtmlPageOutcomes.shared.outcome(for: page.id)?.outcome == .pending)
+        store.closeRemoteOverlay(session.id, pane: nil)
+        #expect(HtmlPageOutcomes.shared.outcome(for: page.id)?.outcome == .dismissed)
+    }
+
     @Test func aSubmitRecordsTheAnswerAndALaterCloseKeepsIt() throws {
         let (session, _) = try origin()
         let page = file()

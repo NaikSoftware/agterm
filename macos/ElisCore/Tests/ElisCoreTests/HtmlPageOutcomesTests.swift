@@ -69,6 +69,14 @@ struct HtmlPageOutcomesTests {
         #expect(outcomes.outcome(for: id)?.value == nil)
     }
 
+    @Test func closingAURLPageRecordsDismissed() throws {
+        let page = HtmlOverlay(source: .url(try #require(URL(string: "http://localhost:5173/"))))
+        #expect(store.openHtmlOverlay(session.id, pane: nil, overlay: page, sizePercent: nil) == nil)
+        #expect(state(page.id) == .pending)
+        #expect(store.closeOverlay(session.id))
+        #expect(state(page.id) == .dismissed)
+    }
+
     @Test func aPaneSlotPageSubmitsAndDismissesLikeTheSessionSlot() throws {
         store.toggleSplit(session.id)
         session.surface = SpySurface(paneToken: "left")
