@@ -30,6 +30,22 @@ struct PhoneLinkForwardTests {
         }
         #expect(received == reply)
         #expect(credited == UInt32(Self.request.count))
+        phone.deliver(PhoneLinkFrame.data(channel: 10, Data("last".utf8)).encoded()
+            + PhoneLinkFrame.json(.close, channel: 10, PhoneLinkClose(reason: "done")).encoded())
+        #expect(peer.waitReceived(Self.request.count + 4)?.suffix(4) == Data("last".utf8))
+        #expect(peer.waitEOF())
+    }
+
+    @Test func linkLossClosesTheSocket() throws {
+        let server = try LoopbackServer()
+        defer { server.stop() }
+        let link = try Self.linkedPage(port: server.port)
+        defer { withExtendedLifetime(link.stream) { link.fixture.stop() } }
+        link.phone.deliver(Self.open(10))
+        #expect(link.reader.opened(from: link.phone, channel: 10) == PhoneLinkOpened())
+        let peer = try #require(server.nextPeer())
+        link.phone.peerLeft()
+        #expect(peer.waitEOF())
     }
 
     @Test func aForwardForAnUnknownPageIsRefused() throws {

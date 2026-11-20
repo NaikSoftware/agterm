@@ -27,6 +27,7 @@ final class PhoneLinkForward: @unchecked Sendable {
     static let maxForwards = 16
     static let connectTimeout: TimeInterval = 5
     static let readSize = 16384
+    static let flushGrace: TimeInterval = 2
 
     let channel: UInt32
     private let host: String
@@ -56,6 +57,7 @@ final class PhoneLinkForward: @unchecked Sendable {
         self.port = port
         self.queue = queue
         self.link = link
+        // shortcut: a write blocks a GCD thread while the server stops reading (`window` bounds it); use a Thread if forwards multiply
         writes = DispatchQueue(label: "phone-link-forward-writes")
     }
 
@@ -87,10 +89,18 @@ final class PhoneLinkForward: @unchecked Sendable {
         }
     }
 
-    /// Ends the forward without a word to the phone; what the phone sent and was not written yet is dropped.
+    /// Ends the forward without a word to the phone. Bytes the phone sent before go out first, unless the server stops
+    /// reading them for `flushGrace`.
     func stop() {
         guard !stopped else { return }
         stopped = true
+        early = []
+        writes.async { [self] in shutdownSocket() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + Self.flushGrace) { [self] in shutdownSocket() }
+    }
+
+    /// Wakes a blocked read or write; a reader parked on the permit then reads the end.
+    private func shutdownSocket() {
         lock.withLock { if fd >= 0 { UnixSocket.shutdown(fd) } }
         permit.signal()
     }
