@@ -117,6 +117,19 @@ void main() {
         f.dispose();
       }));
 
+  test('unterminatedTailWaitsForTheInterval', () => fakeAsync((a) {
+        final (f, h) = _started(a);
+        _firstReply(a, h);
+        a.elapse(f.interval);
+        final n = h.calls.length;
+        h.reply(_page(const [], next: 200, size: 230));
+        a.flushMicrotasks();
+        expect(h.calls, hasLength(n), reason: 'a trailing partial line does not advance next');
+        a.elapse(f.interval);
+        expect(h.calls, hasLength(n + 1));
+        f.dispose();
+      }));
+
   test('remotePollsEvery2s', () => fakeAsync((a) {
         final (f, h) = _started(a, remote: true);
         _firstReply(a, h);

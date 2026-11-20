@@ -123,6 +123,7 @@ class TranscriptFeed extends ChangeNotifier {
       }
     }
     transcript = page.transcript;
+    final advanced = page.next > _next && page.items.isNotEmpty;
     _next = page.next;
     meta = page.meta;
     pending = page.pending;
@@ -130,7 +131,8 @@ class TranscriptFeed extends ChangeNotifier {
     error = null;
     _answered();
     _notify();
-    return page.next < page.size;
+    // a trailing partial line holds next below size: only a page that moved polls again at once
+    return advanced && page.next < page.size;
   }
 
   void _fail(TranscriptError e) {
