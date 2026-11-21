@@ -12,7 +12,7 @@
     {"kind": "bash", "uuid": "u4", "at": 2600, "time": "2026-11-20T09:00:10.000Z", "text": "git status"},
     {"kind": "interrupted", "uuid": "u5", "at": 3000, "time": "2026-11-20T09:00:20.000Z"},
     {"kind": "compactSummary", "uuid": "u6", "at": 3400, "time": "2026-11-20T09:01:00.000Z", "text": "Summary of the earlier conversation", "clipped": true},
-    {"kind": "taskNotification", "uuid": "u7", "at": 9000, "time": "2026-11-20T09:02:00.000Z", "text": "Background task finished"},
+    {"kind": "message", "uuid": "u7", "at": 9000, "time": "2026-11-20T09:02:00.000Z", "channel": "task", "id": "toolu_9", "status": "completed", "from": "scout", "summary": "Agent \"Map callers\" completed", "text": "Done."},
     {"kind": "text", "uuid": "a1", "at": 9500, "time": "2026-11-20T09:02:05.000Z", "text": "I'll look at the test.", "message": "msg_01"},
     {"kind": "thinking", "uuid": "a2", "at": 9900, "time": "2026-11-20T09:02:06.000Z", "durationMs": 4200},
     {"kind": "tool", "uuid": "a3", "at": 10400, "time": "2026-11-20T09:02:07.000Z", "id": "toolu_01", "name": "Read", "arg": "src/app.ts", "readOnly": true, "file": "/repo/src/app.ts", "output": "1\tconst a = 1;"},

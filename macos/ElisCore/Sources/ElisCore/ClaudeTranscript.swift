@@ -443,10 +443,18 @@ private final class PageBuilder {
                 made = [item]
             }
         } else if let object = reader.object(record) {
-            made = decoded(object, at: entry.offset)
+            made = decoded(object, at: entry.offset).map(namingAgent)
         }
         rawItems[record] = made
         return made
+    }
+
+    /// A task message about an Agent call comes `from` that agent: its name, else its description or type.
+    private func namingAgent(_ item: ControlTranscriptItem) -> ControlTranscriptItem {
+        guard item.channel == "task", let agent = item.id.flatMap({ index.agents[$0]?.wire }) else { return item }
+        var item = item
+        item.from = agent.name ?? agent.description ?? agent.agentType
+        return item
     }
 
     // shortcut: one result record per tool record, as Claude Code writes one tool_use per record; upgrade if that changes

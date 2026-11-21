@@ -129,15 +129,11 @@ struct ClaudeTranscriptItemsTests {
         #expect(aborted.map(\.uuid) == ["a1", "a1#1"])
     }
 
-    @Test func compactSummaryAndTaskNotification() {
+    @Test func compactSummary() {
         let summary = items(#"{"type":"user","uuid":"u1","isCompactSummary":true,"message":{"role":"user","content":"<artifact-content-authored-by-oth"# +
                 #"ers/>\nThis session is being continued.\n<system-reminder>x</system-reminder>"}}"#)
         #expect(summary.map(\.kind) == ["compactSummary"])
         #expect(summary.first?.text?.contains("This session is being continued.") == true)
-        let note = items(#"{"type":"user","uuid":"u1","message":{"role":"user","content":"<task-notification>\n<task-id>w1</task-id>\n<summary>done"# +
-                #"</summary>\n</task-notification>"},"origin":{"kind":"task-notification"},"promptSource":"system"}"#)
-        #expect(note.map(\.kind) == ["taskNotification"])
-        #expect(note.first?.text?.contains("<summary>done</summary>") == true)
     }
 
     @Test func assistantTextCarriesMessageID() {

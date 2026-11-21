@@ -429,7 +429,7 @@ Records kept as items:
 | `user` command tags, local command output, bash tags | `command`, `commandOutput`, `bash` |
 | `user` `[Request interrupted…]`, `interruptedMessageId` | `interrupted` |
 | `user` `isCompactSummary` | `compactSummary` |
-| `user` `<task-notification>` | `taskNotification` |
+| `user` `<task-notification>`, `<teammate-message>` blocks, `<cross-session-message>` (`isMeta`, `origin.kind` `peer`) | `message` with `channel` `task`, `teammate` or `session`; a teammate's `idle_notification` is dropped |
 | `assistant` `text` | `text`, grouped by `message.id` |
 | `assistant` `thinking` | `thinking`, duration only |
 | `assistant` `tool_use` + its `tool_result` (by `tool_use_id`) | `tool`: name, short argument, `mark`, clipped `output` or `patch`, `isError`, `exitCode` from `/^Exit code (\d+)/` |

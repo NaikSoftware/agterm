@@ -11,7 +11,7 @@ void main() {
   test('decodesEveryItemKind', () {
     final p = TranscriptPage.fromJson(_load('tail.json'));
     expect(p.items.map((i) => i.kind).toSet(), {'user', 'image', 'command', 'commandOutput', 'bash', 'interrupted', 'compactSummary',
-        'taskNotification', 'text', 'thinking', 'tool', 'error', 'compact', 'notice', 'hook', 'oversized'});
+        'message', 'text', 'thinking', 'tool', 'error', 'compact', 'notice', 'hook', 'oversized'});
     expect(p.pending.map((c) => c.source), ['main', 'a1']);
     expect(p.pending.last.agentType, 'general-purpose');
     expect(p.pending.last.agentName, 'scout');

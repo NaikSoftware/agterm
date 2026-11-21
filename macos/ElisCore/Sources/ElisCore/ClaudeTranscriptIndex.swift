@@ -290,16 +290,10 @@ final class ClaudeTranscriptIndex {
     // the other statuses come from its shell tasks.
     private func endAgent(_ text: String, at time: String?) {
         let states = ["completed": "done", "failed": "failed", "killed": "stopped", "stopped": "stopped"]
-        guard let call = Self.tag("tool-use-id", in: text), agents[call] != nil,
-              let state = Self.tag("status", in: text).flatMap({ states[$0] })
+        guard let call = ClaudeTranscriptItems.tag("tool-use-id", in: text), agents[call] != nil,
+              let state = ClaudeTranscriptItems.tag("status", in: text).flatMap({ states[$0] })
         else { return }
         agents[call]?.ended = (state, time)
-    }
-
-    private static func tag(_ name: String, in text: String) -> String? {
-        guard let open = text.range(of: "<\(name)>"), let close = text.range(of: "</\(name)>", range: open.upperBound..<text.endIndex)
-        else { return nil }
-        return String(text[open.upperBound..<close.lowerBound])
     }
 
     private static func blocks(_ message: [String: Any]?, type: String) -> [[String: Any]] {

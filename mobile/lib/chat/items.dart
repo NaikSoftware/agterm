@@ -64,7 +64,7 @@ Widget _row(BuildContext c, ChatRow r, bool gone, String? Function(String)? prom
     'error' => _menu(c, i.text ?? '', Text(i.text ?? '', style: const TextStyle(color: C.danger))),
     'hook' => _notice(i.text, warning: true),
     'notice' => _notice(i.text, warning: i.raw['level'] == 'warning'),
-    'taskNotification' => _notice(i.text, warning: false),
+    'message' => _message(i),
     'thinking' => Text(i.durationMs == null ? 'Thought' : 'Thought for ${(i.durationMs! / 1000).round()}s', style: _toolStyle),
     'command' => Row(spacing: 8, children: [
         Container(
@@ -106,6 +106,33 @@ Widget _notice(String? text, {required bool warning}) {
     Icon(warning ? Icons.warning_amber_rounded : Icons.info_outline, size: 16, color: color),
     Expanded(child: Text(text ?? '', style: TextStyle(color: color, fontSize: 13))),
   ]);
+}
+
+/// Text another session, a teammate or a background task sent: one muted line, its body under a tap.
+Widget _message(ChatItem i) {
+  final body = i.text?.trim() ?? '';
+  final String title;
+  final IconData icon;
+  var colour = C.dim;
+  if (i.channel == 'task') {
+    final verb = switch (i.status) { 'failed' => 'failed', 'killed' || 'stopped' => 'stopped', _ => 'finished' };
+    title = i.from == null ? i.summary ?? 'Background task $verb' : '${i.from} $verb';
+    icon = verb == 'failed' ? Icons.error_outline : Icons.task_alt;
+    if (verb == 'failed') colour = C.danger;
+  } else {
+    final gist = i.summary ?? body.split('\n').first;
+    title = 'Message from ${i.from ?? 'another session'}${gist.isEmpty ? '' : ' · $gist'}';
+    icon = Icons.mail_outline;
+    colour = tintColor(i.agentColor ?? '') ?? colour;
+  }
+  return _Expandable(
+    key: ValueKey('message-${i.uuid}'),
+    title: Row(spacing: 6, children: [
+      Icon(icon, size: 14, color: colour),
+      Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis)),
+    ]),
+    body: body.isEmpty ? null : chatMarkdown(body),
+  );
 }
 
 Widget _monoBlock(String text) => Container(

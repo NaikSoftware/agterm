@@ -69,10 +69,15 @@ class ChatItem {
   String? get agentName => _str(raw, 'agentName');
   String? get agentColor => _str(raw, 'agentColor');
   String? get message => _str(raw, 'message');
+  String? get channel => _str(raw, 'channel');
+  String? get from => _str(raw, 'from');
+  String? get summary => _str(raw, 'summary');
+  String? get status => _str(raw, 'status');
   int? get durationMs => _int(raw, 'durationMs');
   int? get bytes => _int(raw, 'bytes');
 
   bool get isHumanPrompt =>
+      kind == 'user' &&
       const {'typed', 'queued', 'suggestion_accepted'}.contains(_str(raw, 'promptSource')) || _str(raw, 'origin') == 'human';
 }
 

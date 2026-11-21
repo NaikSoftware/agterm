@@ -289,8 +289,38 @@ void main() {
     await _pump(t, ChatItem.fromJson({'kind': 'notice', 'uuid': 'n2', 'text': 'While you were away', 'level': 'info'}));
     expect(_color(t, 'While you were away'), C.muted);
     expect(find.byIcon(Icons.info_outline), findsOneWidget);
-    await _pump(t, _item('taskNotification', 't1', text: 'Background task finished'));
-    expect(find.byIcon(Icons.info_outline), findsOneWidget);
+  });
+
+  testWidgets('messageFromAnotherSessionIsACollapsedCard', (t) async {
+    await _pump(t, ChatItem.fromJson({
+      'kind': 'message', 'uuid': 'm1', 'channel': 'teammate', 'from': 'scout', 'agentColor': 'green',
+      'summary': 'Found 3 callers', 'text': 'The callers are **a**, b and c.',
+    }));
+    expect(find.text('Message from scout · Found 3 callers'), findsOneWidget);
+    expect(find.textContaining('The callers are'), findsNothing);
+    expect(find.textContaining('teammate-message'), findsNothing);
+    await t.tap(find.text('Message from scout · Found 3 callers'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('The callers are', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('messageWithoutSummaryShowsItsFirstLine', (t) async {
+    await _pump(t, ChatItem.fromJson({'kind': 'message', 'uuid': 'm1', 'channel': 'session', 'from': 'Chat mode', 'text': 'Check the build.\n\nMore.'}));
+    expect(find.text('Message from Chat mode · Check the build.'), findsOneWidget);
+  });
+
+  testWidgets('taskMessageIsOneLine', (t) async {
+    await _pump(t, ChatItem.fromJson({'kind': 'message', 'uuid': 'm1', 'channel': 'task', 'from': 'scout', 'status': 'completed'}));
+    expect(find.text('scout finished'), findsOneWidget);
+    await _pump(t, ChatItem.fromJson({'kind': 'message', 'uuid': 'm2', 'channel': 'task', 'from': 'scout', 'status': 'failed'}));
+    expect(find.text('scout failed'), findsOneWidget);
+    await _pump(t, ChatItem.fromJson({'kind': 'message', 'uuid': 'm3', 'channel': 'task', 'status': 'killed', 'summary': 'Background command stopped'}));
+    expect(find.text('Background command stopped'), findsOneWidget);
+  });
+
+  test('messageIsNeverAHumanPrompt', () {
+    final m = ChatItem.fromJson({'kind': 'message', 'uuid': 'm1', 'channel': 'session', 'promptSource': 'typed', 'text': 'x'});
+    expect(stickyPrompt([ChatRow('a', item: _item('text', 'a', text: 'x')), ChatRow('m1', item: m)], 0), isNull);
   });
 
   testWidgets('thinkingShowsDurationOnly', (t) async {

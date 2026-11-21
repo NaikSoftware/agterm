@@ -110,6 +110,18 @@ struct ClaudeTranscriptAgentsTests {
         #expect(try fixture.agents.map(\.state) == ["failed"])
     }
 
+    @Test func taskMessageComesFromItsAgent() throws {
+        let fixture = try Fixture([
+            user("u1", parent: nil),
+            agentCall("a1", parent: "u1", id: "t1", input: #"{"description":"Map callers","name":"scout"}"#),
+            agentResult("r1", parent: "a1", id: "t1", result: launched("abc")),
+            notification("n1", parent: "r1", task: "abc", call: "t1", status: "completed"),
+        ])
+        let page = try fixture.reader.page(ClaudeTranscriptRequest(sessionID: "s1")).get()
+        let message = try #require(page.items.first { $0.kind == "message" })
+        #expect(message.channel == "task" && message.from == "scout" && message.status == "completed")
+    }
+
     @Test func queuedNotificationEndsTheAgentBeforeItIsDelivered() throws {
         let fixture = try Fixture([
             user("u1", parent: nil),

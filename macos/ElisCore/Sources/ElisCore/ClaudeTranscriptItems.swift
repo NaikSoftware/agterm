@@ -43,9 +43,13 @@ enum ClaudeTranscriptItems {
     }
 
     private static func userItems(_ record: [String: Any]) -> [ControlTranscriptItem] {
-        if record["isMeta"] as? Bool == true { return [] }
         let content = (record["message"] as? [String: Any])?["content"]
         let blocks = content.flatMap { $0 as? String }.map { [["type": "text", "text": $0]] } ?? content as? [[String: Any]] ?? []
+        if record["isMeta"] as? Bool == true {
+            // a cross-session message is the one meta record shown
+            guard (record["origin"] as? [String: Any])?["kind"] as? String == "peer" else { return [] }
+            return blocks.flatMap { ClaudeTranscriptMessages.items($0["text"] as? String ?? "") ?? [] }
+        }
         if record["isCompactSummary"] as? Bool == true {
             return [item("compactSummary", text: blocks.compactMap { $0["text"] as? String }.joined(separator: "\n"))]
         }
@@ -61,7 +65,7 @@ enum ClaudeTranscriptItems {
     private static func textItems(_ text: String, record: [String: Any]) -> [ControlTranscriptItem] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("[Request interrupted") { return [item("interrupted")] }
-        if trimmed.hasPrefix("<task-notification>") { return [item("taskNotification", text: trimmed)] }
+        if let messages = ClaudeTranscriptMessages.items(trimmed) { return messages }
         if let tagged = tagItems(text) { return tagged }
         let typed = stripping("system-reminder", from: text).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !typed.isEmpty else { return [] }
@@ -266,7 +270,7 @@ enum ClaudeTranscriptItems {
     // MARK: - Text
 
     /// The text inside the first `<name>…</name>`, nil when the tag is absent.
-    private static func tag(_ name: String, in text: String) -> String? {
+    static func tag(_ name: String, in text: String) -> String? {
         guard let open = text.range(of: "<\(name)>"),
               let close = text.range(of: "</\(name)>", range: open.upperBound..<text.endIndex)
         else { return nil }

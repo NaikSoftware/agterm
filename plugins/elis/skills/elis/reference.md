@@ -803,8 +803,10 @@ error keeps those names for compatibility.
   already hold replaces it: a tool item comes back with its result, a text item with the rest of its message.
   `reset: true` means drop what you hold and keep this page; it follows a `/rewind`, a retry, a shrunk file or a
   `--transcript` that is not the one read. Item kinds: `user`, `image`, `command`, `commandOutput`, `bash`,
-  `interrupted`, `compactSummary`, `taskNotification`, `text`, `thinking`, `tool`, `error`, `compact`, `notice`,
-  `hook`, `oversized`. A `tool` item has `name`, `arg`, `mark` (`running`, `ok`, `exit N`, `+N −M`, …), `output` or
+  `interrupted`, `compactSummary`, `message`, `text`, `thinking`, `tool`, `error`, `compact`, `notice`,
+  `hook`, `oversized`. A `message` item is text another session, a teammate or a background task put into the
+  conversation, never a prompt the user typed: `channel` (`session`, `teammate`, `task`), `from`, `summary`, `text`
+  (the body without its tags), and for a task `id` (the tool call it reports on) and `status`. A `tool` item has `name`, `arg`, `mark` (`running`, `ok`, `exit N`, `+N −M`, …), `output` or
   `patch` clipped at 4 KiB (`clipped`), `isError`, and `rejected` when the user refused the prompt.
   `--max-bytes` lowers the 49152-byte page budget. Errors: `no adapter` (the pane runs no Claude Code),
   `transcript not found`. It works on rows attached from another Mac and on elis-server rows; a host predating

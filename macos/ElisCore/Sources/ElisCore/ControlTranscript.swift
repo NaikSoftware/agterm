@@ -33,6 +33,10 @@ public struct ControlTranscriptItem: Codable, Sendable, Equatable {
     public var agentColor: String?
     public var trigger: String?
     public var level: String?
+    public var channel: String?
+    public var from: String?
+    public var summary: String?
+    public var status: String?
 
     public init(kind: String, uuid: String, at: Int, time: String? = nil) {
         self.kind = kind
