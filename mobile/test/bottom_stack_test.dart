@@ -49,6 +49,7 @@ class _Stack {
   final _Grids grids;
   late final writer = _Writer((w) => onWrite?.call(w));
   void Function(GateWrite w)? onWrite;
+  String? tapped;
   final feed = TranscriptFeed(call: (_) async => const {}, canPoll: () => false, remote: false)..loading = false;
   late final gate =
       WriteGate(grids: grids, grid: () => grids.g, writer: () => writer, remote: () => false, blocked: () => null);
@@ -59,7 +60,16 @@ class _Stack {
     await t.pumpWidget(MaterialApp(
       home: Scaffold(
         body: BottomStack(
-            screen: ClaudeScreen.read(g), grid: g, feed: feed, gate: gate, stale: false, remote: remote, server: server, checks: checks),
+            screen: ClaudeScreen.read(g),
+            grid: g,
+            feed: feed,
+            gate: gate,
+            stale: false,
+            remote: remote,
+            server: server,
+            checks: checks,
+            onAgent: (id) => tapped = id,
+            now: () => _now),
       ),
     ));
   }
@@ -71,6 +81,8 @@ FilledButton? _button(WidgetTester t, String label) =>
 bool _enabled(WidgetTester t, String label) => _button(t, label)?.onPressed != null;
 
 ChatItem _text(String text) => ChatItem.fromJson({'kind': 'text', 'uuid': 't1', 'text': text});
+
+final _now = DateTime.utc(2026, 11, 21, 8);
 
 const _proven = Checks(keys: true, paste: true, sendNow: true);
 
@@ -189,6 +201,61 @@ void main() {
     await t.pump();
     expect(find.textContaining(first), findsOneWidget);
     expect(find.textContaining(second), findsOneWidget);
+  });
+
+  Map<String, dynamic> agent(String id, String state, {String? name, String? type, String? color, String? description, Duration? ago}) => {
+        'id': id,
+        'state': state,
+        'name': ?name,
+        'agentType': ?type,
+        'color': ?color,
+        'description': ?description,
+        if (ago != null) 'startedAt': _now.toUtc().subtract(ago).toIso8601String(),
+      };
+
+  testWidgets('collapsedStatuslineCountsRunningAgents', (t) async {
+    final s = _Stack(t, 'bash-mode-45');
+    s.feed.meta = TranscriptMeta.fromJson({
+      'agents': [agent('t1', 'running'), agent('t2', 'running'), agent('t3', 'done')],
+    });
+    await s.pump();
+    expect(find.text('· 2 agents'), findsOneWidget);
+    s.feed.meta = TranscriptMeta.fromJson({
+      'agents': [agent('t1', 'running'), agent('t3', 'done')],
+    });
+    await s.pump();
+    expect(find.text('· 1 agent'), findsOneWidget);
+    s.feed.meta = TranscriptMeta.fromJson({
+      'agents': [agent('t3', 'done')],
+    });
+    await s.pump();
+    expect(find.byKey(const Key('agentsHint')), findsNothing);
+  });
+
+  testWidgets('expandedStatuslineListsAgentsAndJumpsToOne', (t) async {
+    final s = _Stack(t, 'bash-mode-45');
+    s.feed.meta = TranscriptMeta.fromJson({
+      'agents': [
+        agent('t1', 'running', name: 'scout', color: 'green', description: 'Find callers', ago: const Duration(seconds: 95)),
+        agent('t2', 'running', type: 'Explore', description: 'Map the module'),
+        agent('t3', 'failed', type: 'general-purpose', description: 'Old run'),
+      ],
+    });
+    await s.pump();
+    expect(find.text('Agents'), findsNothing);
+    await t.tap(find.byKey(const Key('statusline')));
+    await t.pump();
+    expect(find.text('Agents'), findsOneWidget);
+    expect(find.text('· 2 agents'), findsNothing);
+    expect(find.text('scout'), findsOneWidget);
+    expect(find.text('1m 35s'), findsOneWidget);
+    expect(find.text('Explore'), findsOneWidget);
+    expect(t.getTopLeft(find.text('Explore')).dy, lessThan(t.getTopLeft(find.text('general-purpose')).dy));
+    Opacity opacity(String text) => t.widget<Opacity>(find.ancestor(of: find.text(text), matching: find.byType(Opacity)).first);
+    expect(opacity('general-purpose').opacity, lessThan(1));
+    expect(find.text('failed'), findsOneWidget);
+    await t.tap(find.text('scout'));
+    expect(s.tapped, 't1');
   });
 
   testWidgets('statuslineStaleUnderDialog', (t) async {

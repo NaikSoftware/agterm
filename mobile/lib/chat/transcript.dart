@@ -122,6 +122,24 @@ class Todo {
   final String? activeForm;
 }
 
+/// A subagent or teammate; [id] is its Agent call's tool id, [state] `running`, `done`, `failed` or `stopped`.
+class AgentRef {
+  AgentRef.fromJson(Map<String, dynamic> m)
+      : id = _str(m, 'id') ?? '',
+        state = _str(m, 'state') ?? '',
+        agentType = _str(m, 'agentType'),
+        name = _str(m, 'name'),
+        color = _str(m, 'color'),
+        description = _str(m, 'description'),
+        startedAt = DateTime.tryParse(_str(m, 'startedAt') ?? '');
+
+  final String id, state;
+  final String? agentType, name, color, description;
+  final DateTime? startedAt;
+
+  bool get running => state == 'running';
+}
+
 class TranscriptMeta {
   TranscriptMeta.fromJson(Map<String, dynamic> m)
       : title = _str(m, 'title'),
@@ -134,11 +152,14 @@ class TranscriptMeta {
         todos = [for (final t in _maps(m, 'todos')) Todo.fromJson(t)],
         queued = [for (final q in m['queued'] is List ? m['queued'] as List : const []) if (q is String) q],
         continuedIn = _str(m, 'continuedIn'),
-        skillsAt = _int(m, 'skillsAt');
+        skillsAt = _int(m, 'skillsAt'),
+        agents = [for (final a in _maps(m, 'agents')) AgentRef.fromJson(a)];
 
   final String? title, lastPrompt, permissionMode, agentName, model, effort, continuedIn;
   final PrRef? pr;
   final List<Todo> todos;
+  /// Running first, in launch order, then the host's three latest finished.
+  final List<AgentRef> agents;
   final List<String> queued;
   final int? skillsAt;
 }

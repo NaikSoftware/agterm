@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:elis_mobile/chat/bottom_stack.dart';
 import 'package:elis_mobile/chat/chat_composer.dart';
 import 'package:elis_mobile/chat/chat_view.dart';
 import 'package:elis_mobile/chat/claude_screen.dart';
@@ -157,6 +158,39 @@ void main() {
     await t.tap(find.byKey(const Key('stickyPrompt')));
     await t.pumpAndSettle();
     expect(_onScreen(t, [_prompt('first prompt')]), ['first prompt']);
+  });
+
+  _chatTest('agentTapScrollsToItsCall', (t, c) async {
+    final call = {'kind': 'tool', 'uuid': 'ag', 'id': 'call9', 'name': 'Agent', 'arg': 'scout', 'agentName': 'scout'};
+    await c.start([call, for (var i = 0; i < 40; i++) _text('r$i', i % 4)], meta: {
+      'agents': [
+        {'id': 'call9', 'state': 'running', 'name': 'scout'},
+      ],
+    });
+    final row = find.byKey(const ValueKey('tool-ag'));
+    expect(row, findsNothing);
+    t.widget<BottomStack>(find.byType(BottomStack)).onAgent!('call9');
+    await t.pumpAndSettle();
+    final list = _list(t), r = t.getRect(row);
+    expect(r.top >= list.top && r.bottom <= list.bottom, isTrue);
+  });
+
+  _chatTest('agentTapLoadsTheEarlierPageHoldingItsCall', (t, c) async {
+    await c.start([for (var i = 0; i < 40; i++) _text('r$i', i % 4)], start: 50);
+    t.widget<BottomStack>(find.byType(BottomStack)).onAgent!('call9');
+    for (var n = 0; n < 20 && c.h.held?.$1['before'] == null; n++) {
+      await t.pump();
+    }
+    expect(c.h.held!.$1['before'], '50');
+    c.h.held!.$2.complete({
+      'transcript': 't1', 'size': 200, 'start': 0, 'next': 50,
+      'items': [
+        {'kind': 'tool', 'uuid': 'ag', 'id': 'call9', 'name': 'Agent', 'arg': 'scout'},
+      ],
+    });
+    await t.pumpAndSettle();
+    final list = _list(t), r = t.getRect(find.byKey(const ValueKey('tool-ag')));
+    expect(r.top >= list.top && r.bottom <= list.bottom, isTrue);
   });
 
   _chatTest('stickyHoldsItsPromptThroughAppend', (t, c) async {

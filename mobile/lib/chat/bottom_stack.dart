@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../terminal/vt.dart';
@@ -6,6 +9,7 @@ import 'checks.dart';
 import 'claude_screen.dart';
 import 'feed.dart';
 import 'grid.dart';
+import 'transcript.dart';
 import 'write_gate.dart';
 
 const _checks = checks; // the field below shadows the constant in its own default
@@ -39,7 +43,9 @@ class BottomStack extends StatefulWidget {
       required this.stale,
       required this.remote,
       this.server = false,
-      this.checks = _checks});
+      this.checks = _checks,
+      this.onAgent,
+      this.now = DateTime.now});
 
   final ClaudeScreen? screen;
   final Grid? grid;
@@ -47,6 +53,9 @@ class BottomStack extends StatefulWidget {
   final WriteGate gate;
   final bool stale, remote, server;
   final Checks checks;
+  /// A tap on an agent in the expanded statusline, with its Agent call's tool id.
+  final void Function(String id)? onAgent;
+  final DateTime Function() now;
 
   @override
   State<BottomStack> createState() => _BottomStackState();
@@ -178,6 +187,8 @@ class _BottomStackState extends State<BottomStack> {
 
   Widget _statusline(ClaudeScreen s) {
     final hidden = s.dialog; // a dialog covers them: the last seen rows, dimmed
+    final agents = widget.feed.meta?.agents ?? const <AgentRef>[];
+    final running = agents.where((a) => a.running).length;
     Widget row(VtRow r) => Text.rich(_colours ? _spans(r) : TextSpan(text: r.text.trim()),
         style: _mono, maxLines: _expanded ? null : 1, softWrap: _expanded, overflow: _expanded ? null : TextOverflow.ellipsis);
     return GestureDetector(
@@ -188,16 +199,63 @@ class _BottomStackState extends State<BottomStack> {
         opacity: hidden ? 0.45 : 1,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 2, 8, 4),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [for (final r in _expanded ? _status : _status.take(1)) row(r)])),
-            Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 16, color: C.dim),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [for (final r in _expanded ? _status : _status.take(1)) row(r)])),
+              if (!_expanded && running > 0)
+                Text(running == 1 ? '· 1 agent' : '· $running agents', key: const Key('agentsHint'), style: _small),
+              Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 16, color: C.dim),
+            ]),
+            if (_expanded && agents.isNotEmpty)
+              _Ticking(
+                  active: running > 0,
+                  now: widget.now,
+                  builder: (now) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                        const Padding(padding: EdgeInsets.only(top: 6, bottom: 2), child: Text('Agents', style: _small)),
+                        for (final a in [...agents.where((a) => a.running), ...agents.where((a) => !a.running).take(3)])
+                          _agent(a, now),
+                      ])),
           ]),
         ),
       ),
     );
+  }
+
+  Widget _agent(AgentRef a, DateTime now) {
+    final colour = a.color == null ? null : tintColor(a.color!);
+    final started = a.startedAt;
+    return GestureDetector(
+      key: Key('agent-${a.id}'),
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onAgent == null ? null : () => widget.onAgent!(a.id),
+      child: Opacity(
+        opacity: a.running ? 1 : 0.5,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 2, right: 24),
+          child: Row(spacing: 6, children: [
+            SizedBox.square(
+                dimension: 8,
+                child: colour == null ? null : DecoratedBox(decoration: BoxDecoration(color: colour, shape: BoxShape.circle))),
+            Text(a.name ?? a.agentType ?? 'agent', style: const TextStyle(fontSize: 12, color: C.termText, fontWeight: FontWeight.w600)),
+            if (a.description case final d?)
+              Expanded(child: Text(d, style: _small, maxLines: 1, overflow: TextOverflow.ellipsis))
+            else
+              const Spacer(),
+            Text(a.running ? (started == null ? '' : _elapsed(now.difference(started))) : a.state, style: _small),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  static String _elapsed(Duration d) {
+    final s = max(0, d.inSeconds);
+    if (s < 60) return '${s}s';
+    if (s < 3600) return '${s ~/ 60}m ${s % 60}s';
+    return '${s ~/ 3600}h ${s % 3600 ~/ 60}m';
   }
 
   static TextSpan _spans(VtRow r) {
@@ -225,4 +283,46 @@ class _BottomStackState extends State<BottomStack> {
     }
     return TextSpan(children: spans);
   }
+}
+
+/// Rebuilds [builder] each second while [active], so a running agent's elapsed time moves between polls.
+class _Ticking extends StatefulWidget {
+  const _Ticking({required this.active, required this.now, required this.builder});
+
+  final bool active;
+  final DateTime Function() now;
+  final Widget Function(DateTime now) builder;
+
+  @override
+  State<_Ticking> createState() => _TickingState();
+}
+
+class _TickingState extends State<_Ticking> {
+  Timer? _timer;
+
+  void _arm() {
+    _timer?.cancel();
+    _timer = widget.active ? Timer.periodic(const Duration(seconds: 1), (_) => setState(() {})) : null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _arm();
+  }
+
+  @override
+  void didUpdateWidget(_Ticking old) {
+    super.didUpdateWidget(old);
+    if (old.active != widget.active) _arm();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(widget.now());
 }

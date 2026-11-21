@@ -369,17 +369,40 @@ class _ChatViewState extends State<ChatView> {
     });
   }
 
-  /// Scrolls up until [key]'s row is built, then brings it on screen.
-  Future<void> _reveal(String key) async {
-    for (var n = 0; n < 100 && mounted && _scroll.hasClients; n++) {
-      final c = _built[key];
+  /// Scrolls up, loading earlier pages, until the row [key] names is built, then brings it on screen;
+  /// it stops at the start of the transcript or at a page that added no row.
+  Future<void> _reveal(String? Function() key) async {
+    for (var n = 0; n < 200 && mounted && _scroll.hasClients; n++) {
+      final c = _built[key() ?? ''];
       if (c != null && c.mounted) return Scrollable.ensureVisible(c, alignment: 1, duration: const Duration(milliseconds: 200));
       final p = _scroll.position;
-      if (p.pixels >= p.maxScrollExtent) return;
-      _scroll.jumpTo(min(p.pixels + p.viewportDimension, p.maxScrollExtent));
+      if (p.pixels < p.maxScrollExtent) {
+        _scroll.jumpTo(min(p.pixels + p.viewportDimension, p.maxScrollExtent));
+      } else {
+        if (feed.atStart) return;
+        final count = _rows.length;
+        unawaited(feed.loadEarlier());
+        await _earlierLoaded();
+        if (!mounted || _rows.length == count) return;
+      }
       await WidgetsBinding.instance.endOfFrame;
     }
   }
+
+  Future<void> _earlierLoaded() {
+    final done = Completer<void>();
+    void check() {
+      if (feed.loadingEarlier || done.isCompleted) return;
+      feed.removeListener(check);
+      done.complete();
+    }
+
+    feed.addListener(check);
+    check();
+    return done.future;
+  }
+
+  void _revealCall(String id) => _reveal(() => _rows.where((r) => r.item?.id == id).firstOrNull?.key);
 
   Widget? _todoStrip() {
     final todos = feed.meta?.todos ?? const [];
@@ -457,7 +480,7 @@ class _ChatViewState extends State<ChatView> {
       if (sticky != null)
         InkWell(
           key: const Key('stickyPrompt'),
-          onTap: () => _reveal(sticky.key),
+          onTap: () => _reveal(() => sticky.key),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 28, 6), // clear of the link icon
             child: Align(
@@ -579,7 +602,8 @@ extension on _ChatViewState {
                 gate: widget.gate,
                 stale: widget.stale,
                 remote: widget.s.remote,
-                server: widget.s.server),
+                server: widget.s.server,
+                onAgent: _revealCall),
             ?card,
             ChatComposer(
                 key: _composer,
