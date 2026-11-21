@@ -15,6 +15,7 @@ Layout is the fullscreen TUI (alternate screen) unless the name starts with `cla
 | `idle-no-statusline` | statusline command printing nothing (`statusLine: null` is rejected as invalid settings) | fullscreen | 45 |
 | `working` | a reply being written, `esc to interrupt`; this build drops the spinner row while text streams | fullscreen | 45, 100 |
 | `working-thinking` | spinner row before the reply starts (`✽ Wrangling… (2s · ↓ 40 tokens · thinking)`) | fullscreen | 45 |
+| `working-mcp` | **synthetic**: `working`'s composer and footer under a text reply and a running `⏺ memroot - memory_retrieve (MCP)(…)` call wrapped over 2 rows | fullscreen | 45, 100 |
 | `working-wrapped` | spinner status `running PreToolUse hooks…` wrapped over 2 rows | fullscreen | 45 |
 | `queued` | `⎿  Queued` row and `Press up to edit queued messages` | fullscreen | 45 |
 | `interrupted-queued` | Esc while queued: `⎿  Interrupted · What should Claude do ins…`, the queued prompt working | fullscreen | 45 |

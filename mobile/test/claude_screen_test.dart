@@ -56,6 +56,18 @@ void main() {
     expect(g.text(b), '  Fishermen read it like a page.');
     expect(_g('working-100').text(_s('working-100').streaming!.$1), startsWith('⏺ '));
   });
+  test('toolCallIsNotStreamingText', () {
+    for (final f in ['working-mcp-45', 'working-mcp-100']) {
+      final g = _g(f);
+      final call = g.rows.indexWhere((row) => row.text.startsWith('⏺ memroot'));
+      for (final blinked in [false, true]) {
+        // Claude blinks a running call's ⏺ off
+        if (blinked) g.rows[call] = VtRow([for (final c in '  ${g.text(call).substring(2)}'.runes) VtCell(String.fromCharCode(c))]);
+        final (a, b) = ClaudeScreen.read(g).streaming!;
+        expect((g.text(a), b), ("⏺ I'll check the project memory first.", a), reason: '$f blinked: $blinked');
+      }
+    }
+  });
   test('wrappedWorkingLineJoins', () {
     final s = _s('working-wrapped-45');
     expect(s.working, 'Incubating… (running PreToolUse hooks… 2/3 · 1s · ↓ 25 tokens)');

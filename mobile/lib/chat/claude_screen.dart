@@ -6,7 +6,8 @@ enum ClaudeMode { manual, acceptEdits, plan, auto, bypass }
 
 final _rule = RegExp(r'^─+( .* ─+)?$');
 final _spinner = RegExp(r'^[✶✻✽✢·] \S+…( \(|$)');
-final _toolCall = RegExp(r'^⏺ [\w.:-]+\(');
+final _toolCall = RegExp(r'^(?:[\w.:-]+|[^(]+ \(MCP\))\(');
+final _blinkedCall = RegExp(r'^(?:[A-Z][\w.:-]*|[^(]+ \(MCP\))\(');
 final _paste = RegExp(r'^\[Pasted text #\d+( \+\d+ lines)?\]$');
 final _shells = RegExp(r'·\s*(\d+)\s*shells?');
 const _modes = {
@@ -125,15 +126,20 @@ class ClaudeScreen {
     }
 
     if (s.busy) {
-      final start = [for (var r = prompt + 1; r < above; r++) r]
-          .where((r) => g.text(r).startsWith('⏺ ') && !_toolCall.hasMatch(g.text(r)))
-          .lastOrNull;
+      // `⏺ server - tool (MCP)(` may wrap; a running call blinks its ⏺ off, leaving the indent after a blank row
+      bool call(int r) {
+        final t = g.text(r);
+        if (t.startsWith('⏺ ')) return _toolCall.hasMatch(_block(g, r, above).substring(2));
+        return t.startsWith('  ') && r > 0 && g.text(r - 1).trim().isEmpty && _blinkedCall.hasMatch(_block(g, r, above));
+      }
+
+      final start = [for (var r = prompt + 1; r < above; r++) r].where((r) => g.text(r).startsWith('⏺ ') && !call(r)).lastOrNull;
       if (start != null) {
         var end = start;
         for (var r = start + 1; r < above; r++) {
           final t = g.text(r);
           if (t.isEmpty) continue;
-          if (!t.startsWith('  ')) break;
+          if (!t.startsWith('  ') || call(r)) break;
           end = r;
         }
         s.streaming = (start, end);

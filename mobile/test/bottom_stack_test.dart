@@ -235,6 +235,25 @@ void main() {
     expect(find.textContaining('Fishermen read it like a page.'), findsNothing);
   });
 
+  testWidgets('streamingStaysSteadyWhileACallBlinks', (t) async {
+    final s = _Stack(t, 'working-mcp-45');
+    final on = s.grids.g, off = _g('working-mcp-45');
+    final call = off.rows.indexWhere((row) => row.text.startsWith('⏺ memroot'));
+    off.rows[call] = VtRow([for (final c in '  ${off.text(call).substring(2)}'.runes) VtCell(String.fromCharCode(c))]);
+    Future<void> frames(Matcher reply) async {
+      for (final g in [on, off, on, off]) {
+        await s.pump(grid: g);
+        await t.pump(const Duration(milliseconds: 300));
+        expect(find.textContaining('memory_retrieve'), findsNothing);
+        expect(find.textContaining('check the project memory'), reply);
+      }
+    }
+
+    await frames(findsOneWidget);
+    s.feed.items.add(_text("I'll check the project memory first."));
+    await frames(findsNothing);
+  });
+
   testWidgets('limitBannerCancel', (t) async {
     final s = _Stack(t, 'limit-45');
     s.onWrite = (_) => Future.microtask(() => s.grids.set(_g('idle-placeholder-45')));
