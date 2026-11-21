@@ -1645,6 +1645,14 @@ the spec `docs/superpowers/specs/2026-11-20-phone-chat-mode-design.md` owns the 
   `ControlPersist`. A refused argument or an unknown-command reply answers
   `the Elis on HOST is too old for session.transcript`; an undecodable or slow reply is `HOST gave no answer`,
   never too old, which would disable Chat on the phone. The read leaves the window cache alone.
+- `meta.agents` folds Agent calls from the main records in the index. A foreground call runs until its result.
+  A call answered `async_launched` or `teammate_spawned` ends only on a `<task-notification>` naming its tool id, in
+  a user record with `origin.kind` `task-notification` or an earlier `queue-operation` enqueue; the same text in
+  `last-prompt` or request blobs never counts. Without one, the page reads the tail of `subagents/agent-<agentId>.jsonl`
+  (cached by mtime and size): a last assistant record with `end_turn` is `done`, which is also how an idle teammate
+  ends, since its `idle_notification` reaches the lead late; anything else runs while the file was written within
+  `agentSilence` (15 min, above Bash's 600 s foreground cap), else the agent is left out.
+  A teammate stopped mid-tool reads running until that bound: `TaskStop`'s task id is not the agent id.
 - `PageSessionRefusal` refuses it on a page row. It is a read: no event, no `EventFormatter` entry, and the
   tree's `agent`, `agentPane` and `agentSessionId` name what it reads.
 

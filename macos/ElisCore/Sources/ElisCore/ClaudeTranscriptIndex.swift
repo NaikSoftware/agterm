@@ -14,6 +14,16 @@ struct TranscriptRecord: Equatable {
     var oversized: Bool
 }
 
+/// An Agent call folded from the main records; the page resolves a launched one's state from its file.
+struct TranscriptAgent {
+    var call: Int
+    var wire: ControlTranscriptAgent
+    /// The `subagents/agent-<id>` name of a background agent or teammate, whose call returns at launch.
+    var file: String?
+    var launched = false
+    var ended: (state: String, at: String?)?
+}
+
 /// A Claude Code transcript JSONL indexed once and extended per poll; only whole lines count.
 final class ClaudeTranscriptIndex {
     static let chunk = 1 << 20
@@ -33,6 +43,8 @@ final class ClaudeTranscriptIndex {
     private(set) var closers: [Int: [String]] = [:]
     /// The `skill_listing` records since the last initial one.
     private(set) var skillListings: [Int] = []
+    /// Agent tool_use id → its call.
+    private(set) var agents: [String: TranscriptAgent] = [:]
 
     private var prefix = Data()
     private var byUUID: [String: Int] = [:]
@@ -163,7 +175,10 @@ final class ClaudeTranscriptIndex {
         // a tool_result too big to parse closes the calls of the assistant record it names
         guard !fields.sidechain || keepsSidechains, let source = fields.strings["sourceToolAssistantUUID"].flatMap({ byUUID[$0] })
         else { return }
-        for (id, call) in openCalls where call == source { close(id, by: records.count - 1) }
+        for (id, call) in openCalls where call == source {
+            close(id, by: records.count - 1)
+            if agents[id]?.launched == false { agents[id]?.ended = ("done", nil) }
+        }
     }
 
     private func append(_ record: TranscriptRecord) {
@@ -200,6 +215,7 @@ final class ClaudeTranscriptIndex {
                 guard let id = block["id"] as? String else { continue }
                 toolUses[id] = index
                 if results[id] == nil { openCalls[id] = index }
+                if ["Agent", "Task"].contains(block["name"] as? String) { foldAgentCall(id, block: block, object: object, index: index) }
                 if block["name"] as? String == "TodoWrite", let todos = (block["input"] as? [String: Any])?["todos"] as? [[String: Any]] {
                     let folded = todos.compactMap { todo in
                         (todo["content"] as? String).map {
@@ -214,6 +230,11 @@ final class ClaudeTranscriptIndex {
             for block in Self.blocks(message, type: "tool_result") {
                 guard let id = block["tool_use_id"] as? String else { continue }
                 close(id, by: index)
+                if agents[id] != nil { foldAgentResult(id, block: block, object: object) }
+            }
+            if (object["origin"] as? [String: Any])?["kind"] as? String == "task-notification" {
+                let text = message?["content"] as? String ?? Self.blocks(message, type: "text").compactMap { $0["text"] as? String }.joined()
+                endAgent(text, at: object["timestamp"] as? String)
             }
         default: break
         }
@@ -230,7 +251,10 @@ final class ClaudeTranscriptIndex {
     private func foldQueue(_ object: [String: Any]) {
         let content = object["content"] as? String
         switch object["operation"] as? String {
-        case "enqueue": queue.append(content)
+        case "enqueue":
+            queue.append(content)
+            // a notification queued behind a busy turn already ends the agent
+            if let content, content.contains("<task-notification>") { endAgent(content, at: object["timestamp"] as? String) }
         case "dequeue": if !queue.isEmpty { queue.removeFirst() }
         case "remove", "popAll":
             if let at = queue.firstIndex(where: { $0 == content }) ?? queue.firstIndex(where: { $0 == nil }) { queue.remove(at: at) }
@@ -238,6 +262,44 @@ final class ClaudeTranscriptIndex {
         }
         let queued = queue.compactMap { $0 }
         meta.queued = queued.isEmpty ? nil : queued
+    }
+
+    private func foldAgentCall(_ id: String, block: [String: Any], object: [String: Any], index: Int) {
+        let input = block["input"] as? [String: Any]
+        var wire = ControlTranscriptAgent(id: id, state: "running")
+        wire.agentType = input?["subagent_type"] as? String
+        wire.name = input?["name"] as? String
+        wire.description = input?["description"] as? String
+        wire.startedAt = object["timestamp"] as? String
+        agents[id] = TranscriptAgent(call: index, wire: wire)
+    }
+
+    private func foldAgentResult(_ id: String, block: [String: Any], object: [String: Any]) {
+        let result = object["toolUseResult"] as? [String: Any]
+        guard ["async_launched", "teammate_spawned"].contains(result?["status"] as? String) else {
+            agents[id]?.ended = (block["is_error"] as? Bool == true ? "failed" : "done", object["timestamp"] as? String)
+            return
+        }
+        agents[id]?.launched = true
+        agents[id]?.file = result?["agentId"] as? String
+        agents[id]?.wire.color = result?["color"] as? String
+        if agents[id]?.wire.agentType == nil { agents[id]?.wire.agentType = result?["agent_type"] as? String }
+    }
+
+    // Claude Code 2.1.329 ends a launched agent with `<task-notification>`; agents were only seen `completed`,
+    // the other statuses come from its shell tasks.
+    private func endAgent(_ text: String, at time: String?) {
+        let states = ["completed": "done", "failed": "failed", "killed": "stopped", "stopped": "stopped"]
+        guard let call = Self.tag("tool-use-id", in: text), agents[call] != nil,
+              let state = Self.tag("status", in: text).flatMap({ states[$0] })
+        else { return }
+        agents[call]?.ended = (state, time)
+    }
+
+    private static func tag(_ name: String, in text: String) -> String? {
+        guard let open = text.range(of: "<\(name)>"), let close = text.range(of: "</\(name)>", range: open.upperBound..<text.endIndex)
+        else { return nil }
+        return String(text[open.upperBound..<close.lowerBound])
     }
 
     private static func blocks(_ message: [String: Any]?, type: String) -> [[String: Any]] {

@@ -74,6 +74,7 @@ public final class ClaudeTranscript: @unchecked Sendable {
         var paths: [String: String] = [:]
         var misses: [String: Date] = [:]
         var metas: [String: (modified: Date?, size: Int?, meta: SubagentMeta)] = [:]
+        var tails: [String: (modified: Date, size: Int?, endsTurn: Bool)] = [:]
         // least recently used first, keyed by keepsSidechains so an Agent fan-out never evicts a main transcript;
         // each index has its own lock so one session's first scan never stalls another's poll
         var indexes: [Bool: [(path: String, index: Locked<ClaudeTranscriptIndex>)]] = [:]
@@ -101,17 +102,83 @@ public final class ClaudeTranscript: @unchecked Sendable {
         dispatchPrecondition(condition: .notOnQueue(.main))
         guard let id = SessionLauncher.plainSessionID(request.sessionID), let path = path(for: id) else { return .failure(.notFound) }
         let sessionDirectory = String(path.dropLast(".jsonl".count))
-        let built = index(path, keepsSidechains: false).withLock { index -> (ClaudeTranscriptPage, [String: String?])? in
+        let built = index(path, keepsSidechains: false).withLock { index -> (ClaudeTranscriptPage, [String: String?], [TranscriptAgent])? in
             guard refresh(&index), let reader = RecordReader(index: index, sessionDirectory: sessionDirectory) else { return nil }
             return PageBuilder(reader: reader).page(request, id: id)
         }
-        guard let (found, agents) = built else {
+        guard let (found, open, agents) = built else {
             _ = cache.withLock { $0.paths.removeValue(forKey: id) }
             return .failure(.notFound)
         }
         var page = found
-        if !agents.isEmpty { page.pending += subagentPending(agents, sessionDirectory: sessionDirectory) }
+        if !open.isEmpty { page.pending += subagentPending(open, sessionDirectory: sessionDirectory) }
+        page.meta.agents = listed(agents, sessionDirectory: sessionDirectory)
         return .success(page)
+    }
+
+    /// How long a launched agent's file may stay unwritten and still read running. A subagent inside a foreground Bash,
+    /// capped at 600 s, writes nothing meanwhile; past this bound an agent with no end record is presumed gone.
+    public static let agentSilence: TimeInterval = 15 * 60
+    static let tailWindow = 256 << 10
+
+    /// Running agents in call order, then the three most recently finished; a launched agent with no end record and
+    /// no readable file, or one silent past `agentSilence`, is left out.
+    private func listed(_ agents: [TranscriptAgent], sessionDirectory: String) -> [ControlTranscriptAgent]? {
+        let now = now()
+        var running: [(call: Int, agent: ControlTranscriptAgent)] = [], finished: [(at: Date, agent: ControlTranscriptAgent)] = []
+        for folded in agents {
+            var agent = folded.wire
+            if let ended = folded.ended {
+                agent.state = ended.state
+                finished.append((ended.at.flatMap { try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse($0) } ?? .distantPast,
+                                 agent))
+            } else if !folded.launched {
+                running.append((folded.call, agent))
+            } else if let name = folded.file.flatMap(SessionLauncher.plainSessionID),
+                      let tail = tail("\(sessionDirectory)/subagents/agent-\(name).jsonl") {
+                if tail.endsTurn {
+                    agent.state = "done"
+                    finished.append((tail.modified, agent))
+                } else if now.timeIntervalSince(tail.modified) < Self.agentSilence {
+                    running.append((folded.call, agent))
+                }
+            }
+        }
+        let list = running.sorted { $0.call < $1.call }.map(\.agent) + finished.sorted { $0.at > $1.at }.prefix(3).map(\.agent)
+        return list.isEmpty ? nil : list
+    }
+
+    /// An agent file's modification date and whether its last turn ended, read again only when the file changed.
+    private func tail(_ path: String) -> (modified: Date, endsTurn: Bool)? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+              let modified = attributes[.modificationDate] as? Date
+        else { return nil }
+        let size = attributes[.size] as? Int
+        if let known = cache.withLock({ $0.tails[path] }), known.modified == modified, known.size == size { return (modified, known.endsTurn) }
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        let end = (try? handle.seekToEnd()) ?? 0
+        let from = end > UInt64(Self.tailWindow) ? end - UInt64(Self.tailWindow) : 0
+        try? handle.seek(toOffset: from)
+        let endsTurn = Self.endsTurn((try? handle.readToEnd()) ?? Data(), whole: from == 0)
+        cache.withLock { $0.tails[path] = (modified, size, endsTurn) }
+        return (modified, endsTurn)
+    }
+
+    /// True when the last whole conversation record is an assistant turn that ended; an idle teammate stops there too.
+    static func endsTurn(_ data: Data, whole: Bool) -> Bool {
+        var lines = data.split(separator: 0x0A)
+        if !whole, !lines.isEmpty { lines.removeFirst() }
+        if data.last != 0x0A, !lines.isEmpty { lines.removeLast() }
+        for line in lines.reversed() {
+            guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else { continue }
+            switch object["type"] as? String {
+            case "assistant": return (object["message"] as? [String: Any])?["stop_reason"] as? String == "end_turn"
+            case "user": return false
+            default: continue
+            }
+        }
+        return false
     }
 
     private func path(for id: String) -> String? {
@@ -263,7 +330,7 @@ private final class PageBuilder {
         active = reader.index.activeRecords()
     }
 
-    func page(_ request: ClaudeTranscriptRequest, id: String) -> (ClaudeTranscriptPage, [String: String?]) {
+    func page(_ request: ClaudeTranscriptRequest, id: String) -> (ClaudeTranscriptPage, [String: String?], [TranscriptAgent]) {
         let budget = min(request.maxBytes, ClaudeTranscript.pageBudget)
         var page = ClaudeTranscriptPage(transcript: id, size: index.size, start: index.end, next: index.end,
                                         meta: index.meta, skipped: index.skipped)
@@ -287,7 +354,7 @@ private final class PageBuilder {
                 page.pending.append(reader.pending(call, source: "main"))
             }
         }
-        return (page, agents)
+        return (page, agents, index.agents.values.filter { isActive($0.call) })
     }
 
     // MARK: - Walks

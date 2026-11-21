@@ -50,6 +50,9 @@ extension SocketClient {
         if let title = result.meta?.title { lines.append("title: \(title)") }
         if let model = result.meta?.model { lines.append("model: \(model)") }
         if let mode = result.meta?.permissionMode { lines.append("permissionMode: \(mode)") }
+        for agent in result.meta?.agents ?? [] {
+            lines.append("agent: " + [agent.state, agent.name ?? agent.agentType, agent.description].compactMap { $0 }.joined(separator: " "))
+        }
         for item in items {
             let detail = item.kind == "tool" ? [item.name, item.arg, item.mark].compactMap { $0 }.joined(separator: " ") : item.text ?? ""
             lines.append(detail.isEmpty ? item.kind : "\(item.kind)  \(detail)")

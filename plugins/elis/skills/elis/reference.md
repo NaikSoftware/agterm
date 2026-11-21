@@ -792,7 +792,12 @@ error keeps those names for compatibility.
   `kind  text` line per item, then `next N`; `--json` prints the page:
   `transcript` (the Claude session id), `size`, `start`, `next`, `reset` (omitted when false), `items`, `pending`
   (open tool calls, omitted when none), `meta` (`title`, `lastPrompt`, `permissionMode`, `pr`, `model`, `todos`,
-  `queued`, …), `commands` (slash commands, on a tail page) and `skipped` (undecodable lines, omitted at 0).
+  `queued`, `agents`, …), `commands` (slash commands, on a tail page) and `skipped` (undecodable lines, omitted at 0).
+  `meta.agents` lists the session's subagents and teammates: the running ones in launch order, then the three most
+  recently finished, each with `id` (its Agent call's tool id), `agentType`, `name` and `color` (teammates),
+  `description`, `startedAt` and `state` (`running`, `done`, `failed`, `stopped`; an idle teammate is `done` and can
+  run again). A background agent silent for 15 minutes with no end record is left out. Human output prints one
+  `agent:` line each.
   Paging: no `--after`/`--before` is the newest items; pass `next` as `--after` to read what was appended since
   (`next < size` means read again now), or `start` as `--before` for older items. An item whose `uuid` you
   already hold replaces it: a tool item comes back with its result, a text item with the rest of its message.

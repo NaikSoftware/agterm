@@ -119,8 +119,25 @@ public struct ControlTranscriptMeta: Codable, Sendable, Equatable {
     public var queued: [String]?
     public var continuedIn: String?
     public var skillsAt: Int?
+    public var agents: [ControlTranscriptAgent]?
 
     public init() {}
+}
+
+/// One subagent; `id` is its Agent call's tool_use id and `state` is `running`, `done`, `failed` or `stopped`.
+public struct ControlTranscriptAgent: Codable, Sendable, Equatable {
+    public var id: String
+    public var agentType: String?
+    public var name: String?
+    public var color: String?
+    public var description: String?
+    public var startedAt: String?
+    public var state: String
+
+    public init(id: String, state: String) {
+        self.id = id
+        self.state = state
+    }
 }
 
 public struct ControlTranscriptCommand: Codable, Sendable, Equatable {

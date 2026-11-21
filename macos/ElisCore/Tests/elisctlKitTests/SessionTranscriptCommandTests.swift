@@ -50,6 +50,10 @@ struct SessionTranscriptCommandTests {
         var meta = ControlTranscriptMeta()
         meta.title = "Fix tests"
         meta.model = "opus"
+        var agent = ControlTranscriptAgent(id: "t1", state: "running")
+        agent.name = "scout"
+        agent.description = "Find callers"
+        meta.agents = [agent]
         var user = ControlTranscriptItem(kind: "user", uuid: "u1", at: 0)
         user.text = "hello"
         var tool = ControlTranscriptItem(kind: "tool", uuid: "u2", at: 20)
@@ -63,6 +67,7 @@ struct SessionTranscriptCommandTests {
         #expect(SocketClient.formatResponse(ControlResponse(ok: true, result: result)) == """
         title: Fix tests
         model: opus
+        agent: running scout Find callers
         user  hello
         tool  Bash Run tests ok
         interrupted
