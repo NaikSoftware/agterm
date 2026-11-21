@@ -1,0 +1,12 @@
+[
+ {
+  "uuid": "04c56a30-6776-4e47-84aa-6329e7e99dfe",
+  "source": "main",
+  "name": "Bash",
+  "input": {
+   "description": "Write current date to /tmp/srv-probe.txt",
+   "command": "date > /tmp/srv-probe.txt"
+  },
+  "id": "toolu_012GvpD2Xg1xXchoBCRWZQGG"
+ }
+]

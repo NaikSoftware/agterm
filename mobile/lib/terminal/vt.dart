@@ -25,8 +25,10 @@ enum VtKey {
   d(23),
   l(31),
   r(37),
+  s(38),
   z(45),
   u(40),
+  x(43),
   unidentified(0);
 
   const VtKey(this.code);
@@ -251,6 +253,8 @@ class VtSnapshot {
 }
 
 class VtRow {
+  VtRow(this.cells);
+
   VtRow._(Uint32List s, int r) : cells = List.generate(s[0], (c) => VtCell._(s, _hdrWords + (r * s[0] + c) * _cellWords));
 
   /// One cell per column; the right half of a wide character is a [VtCell.spacer].
@@ -283,6 +287,8 @@ class VtRow {
 }
 
 class VtCell {
+  const VtCell(this.text, {this.fg, this.bg, this.flags = 0});
+
   VtCell._(Uint32List s, int w)
       : text = _text(s, w),
         fg = _color(s[w + 2]),

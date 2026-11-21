@@ -131,6 +131,8 @@ final class ControlServer {
     /// forwardedPages names the server each page a remote window created lives on, so its result is read there after
     /// that window is gone; `ControlServer+RemoteActions` owns them.
     var forwardedPages: [UUID: String] = [:]
+    var attachedTranscriptPools: [String: SshConnectionPool] = [:]
+    var claudeDirectory = ClaudeHome.directory()
     /// catalogPagePause is the wait before a remote page row's claim is tried again.
     var catalogPagePause: () async -> Void = { try? await Task.sleep(for: .seconds(2)) }
     var forwardLauncher: RemoteForwardLauncher = RemoteForwardProcessLauncher()
@@ -139,7 +141,7 @@ final class ControlServer {
     var replicaFlushScheduled = false
     var openWorkTracking = 0
 
-    nonisolated private func cachedWindows() -> [ControlWindowNode] {
+    nonisolated func cachedWindows() -> [ControlWindowNode] {
         cacheLock.lock(); defer { cacheLock.unlock() }
         return cachedWindowNodes
     }
@@ -639,13 +641,11 @@ final class ControlServer {
     nonisolated private static func waitsOnNetwork(_ cmd: Command) -> Bool {
         // companion creation may ssh to a remote parent's origin, which can be this Mac's own socket; every session.text leaves the accept thread, as a covered remote pane's is read over ssh
         [.zmxTree, .zmxAttach, .zmxAttachGroup, .sessionRestart, .sessionCompanionNew, .sessionCompanionDuplicate,
-         .sessionCompanionPage, .sessionText, .windowRemoteOpen, .phoneEnable, .phonePort, .phoneRevoke].contains(cmd)
+         .sessionCompanionPage, .sessionText, .sessionTranscript, .windowRemoteOpen, .phoneEnable, .phonePort, .phoneRevoke].contains(cmd)
     }
 
     // these polling reads cannot change window nodes; skip the AppKit rebuild
-    nonisolated private static func leavesWindowsUnchanged(_ cmd: Command) -> Bool {
-        cmd == .eventsRead || cmd == .msgRead
-    }
+    nonisolated private static func leavesWindowsUnchanged(_ cmd: Command) -> Bool { [.eventsRead, .msgRead, .sessionTranscript].contains(cmd) }
 
     /// Read bytes from `conn` up to (and excluding) the first newline. Returns nil on EOF-before-newline, a
     /// read error, the `maxLineBytes` cap, or the `readDeadlineSeconds` overall cap.
@@ -746,7 +746,7 @@ final class ControlServer {
                 .sessionOverlayResult, .sessionOverlaySubmit, .sessionOverlayCopy, .sessionOverlayText,
                 .sessionOverlayHide, .sessionOverlayShow, .sessionOverlayToggle, .sessionOverlayFollow, .sessionOverlaySearch,
                 .sessionOverlayChanges, .sessionOverlayFiles, .sessionOverlayWrap,
-                .sessionBackground, .sessionText, .sessionGrid, .sessionScroll, .sessionAttach, .quick, .quickType, .quickText,
+                .sessionBackground, .sessionText, .sessionTranscript, .sessionGrid, .sessionScroll, .sessionAttach, .quick, .quickType, .quickText,
                 .windowNew, .windowList, .windowSelect, .windowGo,
                 .windowClose, .windowRename, .windowDelete, .windowResize, .windowMove, .windowZoom,
                 .windowFullscreen, .windowMinimize, .windowRemoteOpen, .windowRemoteDismiss,

@@ -38,6 +38,7 @@ struct RemotePresentationClientTests {
         var huds: [PresentationHud?] = []
         var contexts: [String?] = []
         var agentSessions: [String?] = []
+        var agents: [PresentationAgent?] = []
         var notifies: [PresentationNotify] = []
         var messages: [PresentationMessage] = []
         var mails: [PresentationMail?] = []
@@ -83,6 +84,7 @@ struct RemotePresentationClientTests {
             connection: { recorder.connections.append($0) },
             context: { recorder.contexts.append($0) },
             agentSession: { recorder.agentSessions.append($0) },
+            agent: { recorder.agents.append($0) },
             mode: { recorder.modes.append($0) },
             askRequest: {
                 recorder.asks.append($0)
@@ -243,6 +245,28 @@ struct RemotePresentationClientTests {
         transport.deliver(line(.agentSession("c2"), rev: 2))
 
         #expect(recorder.agentSessions == ["c1", "c2"])
+    }
+
+    @Test func viewerAppliesAgentAndClearsAtStreamEnd() {
+        let client = makeClient()
+        client.start()
+        let claude = PresentationAgent(name: "claude", pane: "left")
+
+        connect(client, snapshot: PresentationSnapshot(status: nil, hud: nil, agent: claude),
+                kinds: ["status", "hud", "notify", "agent"])
+        transport.deliver(line(.agent(PresentationAgent(name: "claude", pane: "right")), rev: 2))
+        transport.close("ssh exited")
+
+        #expect(recorder.agents == [claude, PresentationAgent(name: "claude", pane: "right"), nil])
+    }
+
+    @Test func originWithoutAgentKindLeavesAgentUnset() {
+        let client = makeClient()
+        client.start()
+
+        connect(client, kinds: ["status", "hud", "notify"])
+
+        #expect(recorder.agents == [nil])
     }
 
     @Test func aSnapshotsRespawnsAreASeedAndAFramesAreNot() {

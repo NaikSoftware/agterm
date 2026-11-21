@@ -35,9 +35,9 @@ extension ControlDispatcher {
 
     /// The surface selector without scratch: grid, scroll and attach serve a phone's view of a split pane.
     func parseGridPane(_ raw: String?) -> PaneSelection<StatusPane> {
-        if case .pane(.scratch) = parseSurfacePane(raw) {
+        if case .pane(.scratch) = Self.parseSurfacePane(raw) {
             return .rejected(ControlResponse(ok: false, error: "invalid pane: \(raw ?? "")"))
         }
-        return parseSurfacePane(raw)
+        return Self.parseSurfacePane(raw)
     }
 }

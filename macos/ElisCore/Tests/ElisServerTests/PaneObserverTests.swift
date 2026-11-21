@@ -8,15 +8,24 @@ struct PaneObserverTests {
     private let harness: ServerHarness
     private let observer: PaneObserver
     private let directories = DirectoryBox()
+    private let probes = ProbeBox()
+    private let claudeDirectory: String
 
     init() throws {
         harness = try ServerHarness()
-        let directories = directories
-        observer = PaneObserver(store: harness.store, panes: harness.panes, cwd: { directories.value[$0] })
+        let (directories, probes) = (directories, probes)
+        observer = PaneObserver(store: harness.store, panes: harness.panes, cwd: { directories.value[$0] },
+                                agentProbe: { probes.value[$0] })
+        claudeDirectory = (harness.scratch.root as NSString).appendingPathComponent("claude")
+        observer.claudeDirectory = claudeDirectory
     }
 
     final class DirectoryBox: @unchecked Sendable {
         var value: [Int32: String] = [:]
+    }
+
+    final class ProbeBox: @unchecked Sendable {
+        var value: [Int32: AgentPaneProbe] = [:]
     }
 
     private func session(split: Bool = false) throws -> Session {
@@ -38,6 +47,71 @@ struct PaneObserverTests {
     }
 
     private var later: Date { Date().addingTimeInterval(1) }
+
+    private func runClaude(in session: Session) throws {
+        let sessions = (claudeDirectory as NSString).appendingPathComponent("sessions")
+        try FileManager.default.createDirectory(atPath: sessions, withIntermediateDirectories: true)
+        try Data(#"{"sessionId":"s1"}"#.utf8).write(to: URL(fileURLWithPath: (sessions as NSString).appendingPathComponent("42.json")))
+        probes.value[100] = AgentPaneProbe(pid: 42, argv: ["claude"])
+        observer.apply([record(session.paneIdentity)], listedAt: later)
+    }
+
+    @Test func observerRecordsClaudeAndItsSession() throws {
+        let session = try session()
+
+        try runClaude(in: session)
+
+        #expect(session.runningAgent == .claude)
+        #expect(session.agentPane == .left)
+        #expect(session.agentSessionID == "s1")
+    }
+
+    @Test func observerClearsAgentWhenProbeShowsAShell() throws {
+        let session = try session()
+        try runClaude(in: session)
+
+        probes.value[100] = AgentPaneProbe(pid: 100, argv: ["-bash"])
+        observer.apply([record(session.paneIdentity)], listedAt: later)
+
+        #expect(session.runningAgent == nil)
+        #expect(session.agentPane == nil)
+    }
+
+    @Test func serverTreeCarriesAgentFields() throws {
+        let session = try session()
+
+        try runClaude(in: session)
+
+        let tree = try #require(harness.actions.controlTree(window: nil).result?.tree)
+        let node = try #require(tree.workspaces.flatMap(\.sessions).first { $0.id == session.id.uuidString })
+        let json = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(node)) as? [String: Any])
+        #expect(json["agent"] as? String == "claude")
+        #expect(json["agentSessionId"] as? String == "s1")
+        #expect(json["agentPane"] as? String == "left")
+    }
+
+    private final class FrameSink: PresentationSink {
+        var bodies: [PresentationFrame.Body] = []
+        func offer(_ frame: PresentationFrame) -> Bool {
+            bodies.append(frame.body)
+            return true
+        }
+        func close(_: PresentationHub.CloseReason) {}
+    }
+
+    @Test func serverPublishesAgentToPresenters() throws {
+        let session = try session()
+        let sink = FrameSink()
+        let hub = try #require(harness.store.presentationHub)
+        _ = try hub.subscribe(session: session.id, hello: PresentationHello(version: PresentationCodec.version,
+                                                                            kinds: PresentationHub.supportedKinds, mode: .mirror),
+                              sink: sink) { harness.store.presentationSnapshot(forSession: session.id) }
+
+        try runClaude(in: session)
+
+        #expect(sink.bodies.contains(.agent(PresentationAgent(name: "claude", pane: "left"))))
+        #expect(sink.bodies.contains(.agentSession("s1")))
+    }
 
     @Test func aPageRowOutlivesListingsThatNameNoDaemonOfIt() async throws {
         let anchor = try session()

@@ -1,0 +1,40 @@
+
+[38;5;174m ▐[48;5;16m▛███▛█[39m[49m   [1mClaude Code[0m [38;5;246mv2.1.329[39m
+[38;5;174m▝▜[48;5;16m█████[49m█▀[39m  [38;5;246mHaiku 5.5 · Claude Ultra[39m
+[38;5;174m ▝▝   ▝▝ [39m  [38;5;246m~/…/worktrees/phone-chat-mode[39m
+
+
+[38;5;246m[48;5;237m❯ [38;5;231mReply in English. Call the AskUserQuestion[39m
+  [38;5;231mtool yourself, no subagent: one question [39m
+  [38;5;231m"Which lighthouse should the story visit?"[39m
+  [38;5;231mwith header "Lighthouse", single choice, [39m
+  [38;5;231moptions "North Cape" (description "A cold [39m
+  [38;5;231mrocky point."), "Harbour light on the long[39m
+  [38;5;231msouthern breakwater" (description "A calm[39m
+  [38;5;231mport town."), "Island tower" (description[39m
+  [38;5;231m"Far out at sea."). Nothing else.[39m
+
+[38;5;246m[49m⏺[39m Which lighthouse should the story visit?
+[38;5;246m─────────────────────────────────────────────
+[38;5;16m[48;5;153m ☐ Lighthouse [39m[49m
+
+[1m[38;5;231mWhich lighthouse should the story visit?[0m
+
+[38;5;153m❯[39m [38;5;246m1.[39m [38;5;153mNorth Cape[39m
+     [38;5;246mA cold rocky point.[39m
+  [38;5;246m2.[39m Harbour light on the long southern
+     breakwater
+     [38;5;246mA calm port town.[39m
+  [38;5;246m3.[39m Island tower
+     [38;5;246mFar out at sea.[39m
+  [38;5;246m4. Type something.[39m
+[38;5;246m─────────────────────────────────────────────
+[39m  5. Chat about this
+
+[38;5;246mEnter to select · ↑/↓ to navigate · Esc to [39m
+[38;5;246mcancel[39m
+
+
+
+
+[38;5;244m───────────── Ask Lighthouse Story Question ─

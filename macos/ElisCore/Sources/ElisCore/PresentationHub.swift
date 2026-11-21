@@ -70,7 +70,7 @@ public final class PresentationHub {
     }
 
     /// The frame kinds this origin can produce.
-    nonisolated public static let supportedKinds = ["status", "hud", "notify", "message", "mail", "context", "agent.session", "info", "layout", "sound", askFormKind, askOtherKind,
+    nonisolated public static let supportedKinds = ["status", "hud", "notify", "message", "mail", "context", "agent.session", "agent", "info", "layout", "sound", askFormKind, askOtherKind,
                                         overlayPointsKind, pageContentKind, pageDocumentKind, pageLinksKind, statusShapesKind,
                                         statusCheckmarkKind, linkClickKind, pendingSnapshotKind, jobTokenKind, pageForwardKind,
                                         pageTextKind, pageFilesKind, statusClearKind, restartRespawnKind, presenterVacantKind,

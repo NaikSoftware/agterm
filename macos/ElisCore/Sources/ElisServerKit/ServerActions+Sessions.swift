@@ -277,6 +277,18 @@ extension ServerActions {
         }
     }
 
+    public func transcriptSource(_ target: String?, window: String?, pane: StatusPane?, paneID: String?) -> ControlTranscriptLookup {
+        if let refusal = windowRefusal(window) { return .refused(refusal) }
+        switch resolveSession(target) {
+        case .failure(let refusal): return .refused(refusal.response)
+        case .success(let session):
+            switch session.transcriptSource(token: paneID, pane: pane, claudeDirectory: claudeDirectory) {
+            case .success(let source): return .source(source)
+            case .failure(let refusal): return .refused(ControlResponse(ok: false, error: refusal.message))
+            }
+        }
+    }
+
     // MARK: - Resolution
 
     func withSession(_ target: String?, window: String?, _ body: (Session) -> ControlResponse) -> ControlResponse {

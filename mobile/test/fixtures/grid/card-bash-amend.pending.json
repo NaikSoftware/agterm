@@ -1,0 +1,12 @@
+[
+  {
+    "id": "toolu_01HzfcwPqdP1vU3aN8kMsksM",
+    "uuid": "debdf835-0ca0-4b44-b215-ba9035305e62",
+    "source": "main",
+    "name": "Bash",
+    "input": {
+      "command": "touch /tmp/elis-fixture-lantern-keeper-notebook-entry.txt",
+      "description": "Create empty fixture file in /tmp"
+    }
+  }
+]

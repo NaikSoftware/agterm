@@ -1,0 +1,40 @@
+
+[38;5;211m⏺[39m [1mBash[0m(ls /tmp)
+[38;5;246m  ⎿  Interrupted · What should Claude do ins…
+[39m
+[38;5;246m[48;5;237m❯ [38;5;231mRun the shell command sleep 600 with the [39m
+  [38;5;231mBash tool using run_in_background true. Do[39m
+  [38;5;231mnothing else.[39m
+
+[38;5;114m[49m⏺[39m [1mBash[0m(sleep 600)
+[38;5;246m  ⎿  Running in the background (↓ to [39m
+[38;5;246m  ⎿  3 [1mPostToolUse[0m[38;5;246m hooks ran[39m
+
+                   [38;5;246m01:52 AM[39m [38;5;246mclaude-haiku-5-5[39m
+[38;5;231m⏺[39m The [38;5;153msleep 600[39m command runs in the
+  background as task [38;5;153mb0al6iy4k[39m. It finishes
+  in about 10 minutes, and I will get a
+  notification then.
+
+[38;5;246m✻[39m [38;5;246mCrunched for 5s · done 1:52 AM[39m
+
+[38;5;246m[48;5;237m❯ [38;5;231mUse the AskUserQuestion tool to ask me to [39m
+  [38;5;231mpick a fruit: Apple or Banana. Nothing [39m
+  [38;5;231melse.[39m
+[49m
+[38;5;246m⏺[39m Answered Claude's questions:
+[38;5;246m  ⎿  · Which fruit do you pick? → Apple[39m
+[38;5;246m  ⎿  1 [1mPostToolUse[0m[38;5;246m hook ran[39m
+
+                   [38;5;246m01:52 AM[39m [38;5;246mclaude-haiku-5-5[39m
+[38;5;231m⏺[39m You picked Apple.
+
+[38;5;246m✻[39m [38;5;246mCogitated for 3s · done 1:52 AM · 1 shell [39m
+  [38;5;246mstill running[39m
+
+[38;5;246m[48;5;237m❯[39m [38;5;231m/model[39m [49m
+[38;5;246m  ⎿  [39mKept model as [38;5;153mHaiku 5.5[39m
+
+[2m─────────────────────────────────────────────
+[0m  [38;5;246mShowing detailed transcript · ctrl+…verbose
+[39m                                      [38;5;246m [39m

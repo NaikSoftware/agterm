@@ -1,0 +1,40 @@
+[48;5;237m  [38;5;231mtool yourself, no subagent: one question [39m
+  [38;5;231m"How many lanterns should the keeper [39m
+  [38;5;231mlight?" with header "Lanterns", single [39m
+  [38;5;231mchoice, options with labels exactly "7" [39m
+  [38;5;231m(description "A modest night.") and "42" [39m
+  [38;5;231m(description "A festival night."). Nothing[39m
+  [38;5;231melse.[39m
+
+[49m  [38;5;246mCalled [1m1[0m[38;5;246m tool [39m
+[38;5;246m  ⎿  Interrupted · What should Claude do ins…
+
+[48;5;237m❯ [38;5;231mReply in English. Call the AskUserQuestion[39m
+  [38;5;231mtool yourself, no subagent: one question [39m
+  [38;5;231m"Which supplies should the keeper carry?" [39m
+  [38;5;231mwith header "Supplies", multiSelect true, [39m
+  [38;5;231moptions "Oil" (description "For the [39m
+  [38;5;231mlamp."), "Bread" (description "For the [39m
+  [38;5;231mnight."), "Rope" (description "For the [39m
+  [38;5;231mboat."). Nothing else.[39m
+
+[38;5;246m[49m⏺[39m Which supplies should the keeper carry?
+[38;5;246m─────────────────────────────────────────────
+← [38;5;16m[48;5;153m ☐ Supplies [39m[49m ✔ Submit  →
+
+[1m[38;5;231mWhich supplies should the keeper carry?[0m
+
+[38;5;153m❯[39m [38;5;246m1.[39m [ ] [38;5;153mOil[39m
+         [38;5;246mFor the lamp.[39m
+  [38;5;246m2.[39m [ ] Bread
+         [38;5;246mFor the night.[39m
+  [38;5;246m3.[39m [ ] Rope
+         [38;5;246mFor the boat.[39m
+  [38;5;246m4. [39m[ ] [38;5;246mType something[39m
+     [1mSubmit[0m
+[38;5;246m─────────────────────────────────────────────
+[39m  5. Chat about this
+
+[38;5;246mEnter to select · ↑/↓ to navigate · Esc to [39m
+[38;5;246mcancel[39m
+[38;5;244m───────────── Ask Lighthouse Story Question ─

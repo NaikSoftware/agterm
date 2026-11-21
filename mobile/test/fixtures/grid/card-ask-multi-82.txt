@@ -1,0 +1,32 @@
+
+  ✔ Using flicker-free rendering · if you want to go back, use /tui classic
+    · Click to move your cursor in the text input
+    · Click to expand collapsed tool results
+    · By default, text auto-copies when you select it (/config to change)
+    · Hold Shift while selecting to use your terminal's native copy instead
+
+  Fable 5.2 is here for your longest and toughest coding tasks. It draws down
+  usage faster than Opus 5.5. Switch with /model.
+  1 more notice hidden (ctrl+o to expand)
+
+❯ Use AskUserQuestion once: multiSelect question Which pets? with options Cat,    
+  Dog, Fish, Bird. Then reply with my picks.                                      
+──────────────────────────────────────────────────────────────────────────────────
+←  ☐ Pets  ✔ Submit  →
+
+Which pets?
+
+❯ 1. [ ] Cat
+         A cat
+  2. [ ] Dog
+         A dog
+  3. [ ] Fish
+         A fish
+  4. [ ] Bird
+         A bird
+  5. [ ] Type something
+     Submit
+──────────────────────────────────────────────────────────────────────────────────
+  6. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

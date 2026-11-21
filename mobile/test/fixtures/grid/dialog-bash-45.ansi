@@ -1,0 +1,40 @@
+  and somehow it never sounds old.
+
+  I stand at the edge and listen.
+  The water reaches my feet,
+  cold, then gone, then back again.
+  I think about how little I control,
+  and how much I am held.
+
+  The sea keeps its own time.
+  It keeps the moon in its pull,
+  the ships in its memory,
+  and every wave that breaks
+  and never really leaves.
+
+[38;5;246m✻[39m [38;5;246mChurned for 6s · done 1:50 AM[39m
+
+[38;5;246m[48;5;237m❯ [38;5;231mRun the shell command ls /tmp with the [39m
+  [38;5;231mBash tool. Nothing else.[39m
+[49m
+[38;5;246m⏺[39m Listing contents of /tmp
+[38;5;246m  ⎿  $ ls /tmp[39m
+
+[38;5;153m─────────────────────────────────────────────
+[39m [1m[38;5;153mBash command[0m
+ [1mTip: auto mode handles these prompts for [0m
+ [1myou — choose "switch to auto mode" below[0m
+ [38;5;246mList contents of /tmp[39m
+[38;5;239m╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[39m ls /tmp
+[38;5;239m╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[39m Do you want to proceed?
+ [38;5;153m❯[39m [38;5;246m1. [38;5;153mYes[39m
+   [38;5;246m2. [39mYes, allow reading from [1m/private/tmp[0m
+      from this project
+   [38;5;246m3. [39mYes, and switch to auto mode[38;5;246m · auto [39m
+      [38;5;246mmode handles these prompts for you[39m
+   [38;5;246m4. [39mNo
+
+ [38;5;246mEsc to cancel · Tab to amend[39m
+[38;5;244m───────────── Write Lighthouse Keeper Story ─

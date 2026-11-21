@@ -27,6 +27,8 @@ public struct RemotePresentationEffects {
     public var connection: @MainActor (RemotePresentationConnection) -> Void
     public var context: @MainActor (String?) -> Void
     public var agentSession: @MainActor (String?) -> Void
+    /// agent carries the origin's running agent; nil also when the stream ends, since the origin no longer reports it.
+    public var agent: @MainActor (PresentationAgent?) -> Void
     /// info carries the origin's sidebar info line, nil for none; a snapshot sends it too.
     public var info: @MainActor (PresentationInfo?) -> Void
     public var layout: @MainActor (PresentationLayout) -> Void
@@ -64,6 +66,7 @@ public struct RemotePresentationEffects {
                 connection: @escaping @MainActor (RemotePresentationConnection) -> Void,
                 context: @escaping @MainActor (String?) -> Void = { _ in },
                 agentSession: @escaping @MainActor (String?) -> Void = { _ in },
+                agent: @escaping @MainActor (PresentationAgent?) -> Void = { _ in },
                 info: @escaping @MainActor (PresentationInfo?) -> Void = { _ in },
                 mode: @escaping @MainActor (PresentationMode) -> Void = { _ in },
                 askRequest: @escaping @MainActor (PresentationAsk) -> Bool = { _ in false },
@@ -92,6 +95,7 @@ public struct RemotePresentationEffects {
         self.connection = connection
         self.context = context
         self.agentSession = agentSession
+        self.agent = agent
         self.info = info
         self.layout = layout
         self.mode = mode
@@ -271,12 +275,14 @@ public final class RemotePresentationClient {
             effects.hud(snapshot.hud)
             effects.context(snapshot.context)
             effects.agentSession(snapshot.agentSession)
+            effects.agent(snapshot.agent)
             effects.info(snapshot.info)
             effects.mail(snapshot.mail)
             if let respawns = snapshot.respawns { effects.respawns(respawns, true) }
         case .status(let status): effects.status(status)
         case .context(let context): effects.context(context)
         case .agentSession(let id): effects.agentSession(id)
+        case .agent(let agent): effects.agent(agent)
         case .info(let info): effects.info(info)
         case .layout(let layout): applyLayout(layout)
         case .hud(let hud): effects.hud(hud)
@@ -363,6 +369,7 @@ public final class RemotePresentationClient {
             effects.warn(reason)
         }
         report(.failed(reason))
+        effects.agent(nil)
         // the role goes with the link it was granted to
         report(.mirror)
         retryAt = now().addingTimeInterval(RemoteRetryBackoff.delay(afterFailures: failures))

@@ -1,0 +1,31 @@
+[
+  {
+    "id": "toolu_01A1MaNy4141A2MhtPi1cEUN",
+    "uuid": "00011942-5953-46b2-a01f-e8aa663c1c0d",
+    "source": "main",
+    "name": "AskUserQuestion",
+    "input": {
+      "questions": [
+        {
+          "question": "Which supplies should the keeper carry?",
+          "header": "Supplies",
+          "multiSelect": true,
+          "options": [
+            {
+              "label": "Oil",
+              "description": "For the lamp."
+            },
+            {
+              "label": "Bread",
+              "description": "For the night."
+            },
+            {
+              "label": "Rope",
+              "description": "For the boat."
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,50 @@
+{
+  "transcript": "3f1c2a9e-7b4d-4e21-9a0c-5d6e7f8a9b0c",
+  "size": 48210,
+  "start": 1024,
+  "next": 48210,
+  "skipped": 2,
+  "items": [
+    {"kind": "user", "uuid": "u1", "at": 1024, "time": "2026-11-20T09:00:00.000Z", "text": "Fix the failing test", "promptSource": "typed", "origin": "human"},
+    {"kind": "image", "uuid": "u1#1", "at": 1024, "time": "2026-11-20T09:00:00.000Z", "mediaType": "image/png", "bytes": 67, "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="},
+    {"kind": "command", "uuid": "u2", "at": 2048, "time": "2026-11-20T09:00:05.000Z", "name": "model", "args": "opus"},
+    {"kind": "commandOutput", "uuid": "u3", "at": 2300, "time": "2026-11-20T09:00:06.000Z", "text": "Set model to opus"},
+    {"kind": "bash", "uuid": "u4", "at": 2600, "time": "2026-11-20T09:00:10.000Z", "text": "git status"},
+    {"kind": "interrupted", "uuid": "u5", "at": 3000, "time": "2026-11-20T09:00:20.000Z"},
+    {"kind": "compactSummary", "uuid": "u6", "at": 3400, "time": "2026-11-20T09:01:00.000Z", "text": "Summary of the earlier conversation", "clipped": true},
+    {"kind": "message", "uuid": "u7", "at": 9000, "time": "2026-11-20T09:02:00.000Z", "channel": "task", "id": "toolu_9", "status": "completed", "from": "scout", "summary": "Agent \"Map callers\" completed", "text": "Done."},
+    {"kind": "text", "uuid": "a1", "at": 9500, "time": "2026-11-20T09:02:05.000Z", "text": "I'll look at the test.", "message": "msg_01"},
+    {"kind": "thinking", "uuid": "a2", "at": 9900, "time": "2026-11-20T09:02:06.000Z", "durationMs": 4200},
+    {"kind": "tool", "uuid": "a3", "at": 10400, "time": "2026-11-20T09:02:07.000Z", "id": "toolu_01", "name": "Read", "arg": "src/app.ts", "readOnly": true, "file": "/repo/src/app.ts", "output": "1\tconst a = 1;"},
+    {"kind": "tool", "uuid": "a4", "at": 11000, "time": "2026-11-20T09:02:09.000Z", "id": "toolu_02", "name": "Bash", "arg": "npm test", "mark": "exit 1", "exitCode": 1, "isError": true, "output": "1 failing", "clipped": true},
+    {"kind": "tool", "uuid": "a5", "at": 12000, "time": "2026-11-20T09:02:12.000Z", "id": "toolu_03", "name": "Edit", "arg": "src/app.ts", "mark": "+2 −1", "file": "/repo/src/app.ts", "patch": [{"oldStart": 1, "oldLines": 1, "newStart": 1, "newLines": 2, "lines": ["-const a = 1;", "+const a = 2;", "+export { a };"]}]},
+    {"kind": "tool", "uuid": "a6", "at": 13000, "time": "2026-11-20T09:02:15.000Z", "id": "toolu_04", "name": "Write", "arg": "notes.md", "mark": "error", "isError": true, "rejected": true},
+    {"kind": "tool", "uuid": "a7", "at": 14000, "time": "2026-11-20T09:02:20.000Z", "id": "toolu_05", "name": "Agent", "arg": "Find callers", "mark": "running", "running": true, "agentType": "general-purpose", "agentName": "scout", "agentColor": "blue"},
+    {"kind": "error", "uuid": "a8", "at": 20000, "time": "2026-11-20T09:03:00.000Z", "text": "API Error: 529 overloaded"},
+    {"kind": "compact", "uuid": "s1", "at": 21000, "time": "2026-11-20T09:04:00.000Z", "trigger": "manual"},
+    {"kind": "notice", "uuid": "s2", "at": 22000, "time": "2026-11-20T09:04:10.000Z", "text": "Context low", "level": "warning"},
+    {"kind": "hook", "uuid": "s3", "at": 23000, "time": "2026-11-20T09:04:20.000Z", "text": "PreToolUse hook blocked the call"},
+    {"kind": "oversized", "uuid": "s4", "at": 24000, "time": "2026-11-20T09:04:30.000Z", "bytes": 5242880}
+  ],
+  "pending": [
+    {"id": "toolu_06", "uuid": "a9", "source": "main", "name": "AskUserQuestion", "input": {"questions": [{"question": "Which file?", "options": [{"label": "a.ts"}, {"label": "b.ts"}]}]}},
+    {"id": "toolu_07", "uuid": "b1", "source": "a1", "agentType": "general-purpose", "agentName": "scout", "name": "Bash", "input": {"command": "rm -rf build"}}
+  ],
+  "meta": {
+    "title": "Fix the failing test",
+    "lastPrompt": "Fix the failing test",
+    "permissionMode": "default",
+    "pr": {"prNumber": 446, "prRepository": "NaikSoftware/elis", "prUrl": "https://github.com/NaikSoftware/elis/pull/446"},
+    "agentName": "main",
+    "model": "claude-opus-4-1",
+    "effort": "high",
+    "todos": [{"content": "Run the tests", "status": "in_progress", "activeForm": "Running the tests"}],
+    "queued": ["then commit"],
+    "continuedIn": "8a7b6c5d-0000-4000-8000-000000000001",
+    "skillsAt": 1500
+  },
+  "commands": [
+    {"name": "model", "description": "Set the AI model for Claude Code", "source": "builtin", "panel": true},
+    {"name": "review", "description": "Review a pull request", "source": "skill", "panel": false}
+  ]
+}

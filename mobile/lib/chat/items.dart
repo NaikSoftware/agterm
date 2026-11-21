@@ -1,0 +1,408 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+
+import '../theme.dart';
+import 'rows.dart';
+import 'transcript.dart';
+
+const _open = MethodChannel('elis/open');
+
+/// Opens [href] in the phone's browser; anything but an `http` or `https` link is ignored.
+void openWebLink(String? href) {
+  final uri = Uri.tryParse(href ?? '');
+  if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+    _open.invokeMethod<bool>('view', href).catchError((_) => false);
+  }
+}
+
+/// Hands [text] to Android's share sheet.
+Future<void> shareText(String text) => _open.invokeMethod<bool>('share', text).catchError((_) => false);
+
+final _fence = RegExp(r'^ {0,3}(`{3,}|~{3,})[^\n]*\n([\s\S]*?)^ {0,3}\1[ \t]*$', multiLine: true);
+
+/// The fenced blocks of [markdown], joined by a blank line; null without one.
+String? fencedCode(String markdown) {
+  final blocks = [for (final m in _fence.allMatches(markdown)) m[2]!.replaceFirst(RegExp(r'\n$'), '')];
+  return blocks.isEmpty ? null : blocks.join('\n\n');
+}
+
+/// [exited] and [stale] turn open subagent rows to "stopped"; a non-null [promptMark] replaces a tool row's mark.
+Widget chatRowWidget(BuildContext c, ChatRow r,
+    {required bool fresh, bool exited = false, bool stale = false, String? Function(String toolId)? promptMark}) {
+  final row = Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: _row(c, r, exited || stale, promptMark));
+  return fresh ? _FadeIn(r.key, row) : row;
+}
+
+Widget _row(BuildContext c, ChatRow r, bool gone, String? Function(String)? promptMark) {
+  if (r.day != null) {
+    return Center(
+        child: Text(MaterialLocalizations.of(c).formatMediumDate(r.day!), style: const TextStyle(color: C.dim, fontSize: 12)));
+  }
+  if (r.group.isNotEmpty) {
+    return _Expandable(
+      key: ValueKey(r.key),
+      title: Row(spacing: 8, children: [
+        Expanded(child: Text(runLabel(r.group), maxLines: 1, overflow: TextOverflow.ellipsis)),
+        if (_runMark(r.group, promptMark, stopped: r.interruptedAfter || gone) case final m) Text(m, style: m.startsWith('✗') ? const TextStyle(color: C.danger) : null),
+      ]),
+      body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [for (final t in r.group) _toolRow(t, stopped: false, promptMark: promptMark)]),
+    );
+  }
+  final i = r.item!;
+  return switch (i.kind) {
+    'user' => _bubble(c, i),
+    'text' => _menu(c, i.text ?? '', chatMarkdown(i.text ?? '')),
+    'tool' => _toolRow(i, stopped: r.interruptedAfter || gone, promptMark: promptMark),
+    'compact' => _divider('Conversation compacted', r.key, r.summary?.text),
+    'compactSummary' => _divider('Conversation compacted', r.key, i.text ?? ''),
+    'interrupted' => _divider('Interrupted', r.key, null),
+    'error' => _menu(c, i.text ?? '', Text(i.text ?? '', style: const TextStyle(color: C.danger))),
+    'hook' => _notice(i.text, warning: true),
+    'notice' => _notice(i.text, warning: i.raw['level'] == 'warning'),
+    'message' => _message(i),
+    'thinking' => Text(i.durationMs == null ? 'Thought' : 'Thought for ${(i.durationMs! / 1000).round()}s', style: _toolStyle),
+    'command' => Row(spacing: 8, children: [
+        Container(
+          key: Key('chip-${i.uuid}'),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(8)),
+          child: Text('/${i.name ?? ''}', style: _monoStyle),
+        ),
+        if (i.raw['args'] case final String a when a.isNotEmpty)
+          Expanded(child: Text(a, style: _toolStyle, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      ]),
+    'commandOutput' => _menu(c, i.text ?? '', _monoBlock(i.text ?? '')),
+    'bash' => _menu(c, i.text ?? '', Text('! ${i.text ?? ''}', style: _monoStyle)),
+    'image' => _image(c, i),
+    'oversized' => _placeholder('Record too large to show · ${byteSize(i.bytes ?? 0)}'),
+    _ => Text(i.text ?? i.name ?? i.kind, style: const TextStyle(color: C.muted)),
+  };
+}
+
+/// [bytes] as `67 B`, `12 KB` or `2.3 MB` (binary units).
+String byteSize(int bytes) => bytes < 1024
+    ? '$bytes B'
+    : bytes < 1024 * 1024
+        ? '${(bytes / 1024).round()} KB'
+        : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+
+Widget _divider(String label, String key, String? body) {
+  final line = Row(spacing: 8, children: [
+    const Expanded(child: Divider(color: C.line)),
+    Text(label, style: const TextStyle(color: C.dim, fontSize: 12)),
+    const Expanded(child: Divider(color: C.line)),
+  ]);
+  return body == null ? line : _Expandable(key: ValueKey('divider-$key'), title: line, body: chatMarkdown(body));
+}
+
+Widget _notice(String? text, {required bool warning}) {
+  final color = warning ? C.blockedText : C.muted;
+  return Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 6, children: [
+    Icon(warning ? Icons.warning_amber_rounded : Icons.info_outline, size: 16, color: color),
+    Expanded(child: Text(text ?? '', style: TextStyle(color: color, fontSize: 13))),
+  ]);
+}
+
+/// Text another session, a teammate or a background task sent: one muted line, its body under a tap.
+Widget _message(ChatItem i) {
+  final body = i.text?.trim() ?? '';
+  final String title;
+  final IconData icon;
+  var colour = C.dim;
+  if (i.channel == 'task') {
+    final verb = switch (i.status) { 'failed' => 'failed', 'killed' || 'stopped' => 'stopped', _ => 'finished' };
+    title = i.from == null ? i.summary ?? 'Background task $verb' : '${i.from} $verb';
+    icon = verb == 'failed' ? Icons.error_outline : Icons.task_alt;
+    if (verb == 'failed') colour = C.danger;
+  } else {
+    final gist = i.summary ?? body.split('\n').first;
+    title = 'Message from ${i.from ?? 'another session'}${gist.isEmpty ? '' : ' · $gist'}';
+    icon = Icons.mail_outline;
+    colour = tintColor(i.agentColor ?? '') ?? colour;
+  }
+  return _Expandable(
+    key: ValueKey('message-${i.uuid}'),
+    title: Row(spacing: 6, children: [
+      Icon(icon, size: 14, color: colour),
+      Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis)),
+    ]),
+    body: body.isEmpty ? null : chatMarkdown(body),
+  );
+}
+
+Widget _monoBlock(String text) => Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: C.term, borderRadius: BorderRadius.circular(8)),
+      child: Text(text, style: _monoStyle),
+    );
+
+Widget _placeholder(String label) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(border: Border.all(color: C.line), borderRadius: BorderRadius.circular(8)),
+      child: Row(mainAxisSize: MainAxisSize.min, spacing: 6, children: [
+        const Icon(Icons.image_outlined, size: 16, color: C.dim),
+        Flexible(child: Text(label, style: const TextStyle(color: C.muted, fontSize: 13))),
+      ]),
+    );
+
+Uint8List? _decode(String data) {
+  try {
+    return base64Decode(data);
+  } on FormatException {
+    return null;
+  }
+}
+
+Widget _image(BuildContext c, ChatItem i) {
+  final type = i.raw['mediaType'] is String ? i.raw['mediaType'] as String : 'image';
+  final placeholder = _placeholder('$type · ${byteSize(i.bytes ?? 0)}');
+  final data = i.raw['data'];
+  final bytes = data is String ? _decode(data) : null;
+  if (bytes == null || bytes.isEmpty) return placeholder;
+  Widget image() => Image.memory(bytes, gaplessPlayback: true, errorBuilder: (_, _, _) => placeholder);
+  return Align(
+    alignment: Alignment.centerLeft,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => showDialog<void>(
+        context: c,
+        builder: (d) => GestureDetector(
+          onTap: () => Navigator.pop(d),
+          child: InteractiveViewer(maxScale: 8, child: Center(child: image())),
+        ),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48, maxWidth: 200, maxHeight: 200),
+        child: ClipRRect(borderRadius: BorderRadius.circular(8), child: image()),
+      ),
+    ),
+  );
+}
+
+/// The label of a run of tool calls: its first three distinct tools, an MCP tool by its own name, then a count,
+/// e.g. `Read, Grep, search and 5 other calls`.
+String runLabel(List<ChatItem> tools) {
+  final names = tools.map((t) => (t.name ?? 'tool').split('__').last).toSet().take(3).toList();
+  final rest = tools.length - names.length;
+  return rest == 0 ? names.join(', ') : '${names.join(', ')} and $rest other ${rest == 1 ? 'call' : 'calls'}';
+}
+
+String _toolMark(ChatItem i, String? Function(String)? promptMark) =>
+    i.rejected ? 'Rejected' : (i.id == null ? null : promptMark?.call(i.id!)) ?? markText(i.mark);
+
+String _runMark(List<ChatItem> tools, String? Function(String)? promptMark, {required bool stopped}) {
+  if (tools.any((t) => t.running)) return stopped ? 'stopped' : '◯ running';
+  final failed = tools.where((t) => t.rejected || t.isError || _toolMark(t, promptMark).startsWith('✗')).length;
+  return failed > 0 ? '✗ $failed' : '✓';
+}
+
+enum SubagentState { running, finished, stopped }
+
+SubagentState subagentState(ChatItem agentTool, {required bool interruptedAfter, required bool exited, required bool stale}) {
+  if (!agentTool.running || agentTool.mark == 'done' || agentTool.mark == 'error') return SubagentState.finished;
+  return interruptedAfter || exited || stale ? SubagentState.stopped : SubagentState.running;
+}
+
+String markText(String? mark) => switch (mark) {
+      null => '',
+      'ok' => '✓',
+      'error' => '✗',
+      'done' => '✓ done',
+      final m when m.startsWith('exit ') => '✗ $m',
+      final m => m,
+    };
+
+const _toolStyle = TextStyle(color: C.muted, fontSize: 13);
+const _monoStyle = TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: 12, color: C.termText);
+
+Widget _toolRow(ChatItem i, {required bool stopped, String? Function(String)? promptMark}) {
+  final agent = i.isAgent;
+  final trailing = !agent
+      ? _toolMark(i, promptMark)
+      : switch (subagentState(i, interruptedAfter: stopped, exited: false, stale: false)) {
+          SubagentState.running => '◯ running',
+          SubagentState.stopped => 'stopped',
+          SubagentState.finished => markText(i.mark ?? 'done'),
+        };
+  final patch = i.patch, output = i.output;
+  return _Expandable(
+    key: ValueKey('tool-${i.uuid}'),
+    title: Row(
+      spacing: 8,
+      children: [
+        Text(
+          agent ? i.agentName ?? 'Agent' : i.name ?? 'tool',
+          style: TextStyle(fontWeight: FontWeight.w600, color: agent ? tintColor(i.agentColor ?? '') : null),
+        ),
+        if (agent && i.agentType != null) Text(i.agentType!),
+        Expanded(child: Text(i.arg ?? '', maxLines: 1, overflow: TextOverflow.ellipsis)),
+        Text(trailing, style: trailing.startsWith('✗') ? const TextStyle(color: C.danger) : null),
+      ],
+    ),
+    body: patch != null
+        ? _diff(i.file, patch)
+        : output == null
+            ? null
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(output, style: _monoStyle),
+                  if (i.clipped) const Text('Full output in Term', style: TextStyle(color: C.dim)),
+                ],
+              ),
+  );
+}
+
+Color? _lineColor(String l) => l.startsWith('-') ? C.danger : l.startsWith('+') ? C.completedText : null;
+
+Widget _diff(String? file, List<Hunk> hunks) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      for (final h in hunks) ...[
+        Container(
+          color: C.surface,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Text('${file ?? ''}  @@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@', style: const TextStyle(color: C.dim)),
+        ),
+        for (final l in h.lines)
+          Container(
+            color: _lineColor(l)?.withValues(alpha: .12),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Text(l, style: _monoStyle.copyWith(color: _lineColor(l))),
+          ),
+      ],
+    ]);
+
+/// A secondary-coloured row whose tap opens [body] under it; no [body], no tap.
+class _Expandable extends StatefulWidget {
+  const _Expandable({super.key, required this.title, this.body});
+
+  final Widget title;
+  final Widget? body;
+
+  @override
+  State<_Expandable> createState() => _ExpandableState();
+}
+
+class _ExpandableState extends State<_Expandable> {
+  bool open = false, closing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = widget.body;
+    return DefaultTextStyle.merge(
+      style: _toolStyle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: body == null
+                ? null
+                : () => setState(() {
+                      open = !open;
+                      closing = !open;
+                    }),
+            child: Row(
+              children: [
+                Text(open && body != null ? '▾ ' : '▸ '),
+                Expanded(child: widget.title),
+              ],
+            ),
+          ),
+          // only the tap animates: a body that a poll grows resizes in one frame, which the list's keep-view shift absorbs
+          ClipRect(
+            child: AnimatedAlign(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              alignment: Alignment.topLeft,
+              heightFactor: open ? 1 : 0,
+              onEnd: () => setState(() => closing = false),
+              child: (open || closing) && body != null
+                  ? Padding(padding: const EdgeInsets.only(left: 14, top: 4), child: body)
+                  : const SizedBox(width: double.infinity),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _bubble(BuildContext c, ChatItem i) => Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 48),
+        child: _menu(
+          c,
+          i.text ?? '',
+          Container(
+            key: Key('bubble-${i.uuid}'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(16)),
+            child: Text(i.text ?? '', style: const TextStyle(fontSize: 15)),
+          ),
+        ),
+      ),
+    );
+
+// `selectable: true` fights the list's scroll, so text leaves through the long-press menu
+Widget _menu(BuildContext c, String text, Widget child) => GestureDetector(behavior: HitTestBehavior.opaque, onLongPress: () => _actions(c, text), child: child);
+
+void _actions(BuildContext c, String text) {
+  final code = fencedCode(text);
+  showModalBottomSheet<void>(
+    context: c,
+    builder: (sheet) {
+      Widget item(IconData icon, String label, VoidCallback run) => ListTile(
+          leading: Icon(icon, color: C.muted),
+          title: Text(label),
+          onTap: () {
+            Navigator.pop(sheet);
+            run();
+          });
+      return SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          item(Icons.copy, 'Copy', () => Clipboard.setData(ClipboardData(text: text))),
+          if (code != null) item(Icons.code, 'Copy code', () => Clipboard.setData(ClipboardData(text: code))),
+          item(Icons.share_outlined, 'Share', () => shareText(text)),
+        ]),
+      );
+    },
+  );
+}
+
+Widget chatMarkdown(String text) => Builder(
+      builder: (c) => MarkdownBody(
+        data: text,
+        // the default `pre` already scrolls horizontally in the `code` style
+        styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(c)).copyWith(
+          code: const TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: 13, color: C.termText),
+          codeblockDecoration: BoxDecoration(color: C.term, borderRadius: BorderRadius.circular(8)),
+        ),
+        // model-written: no image fetch or file read, and only web links leave the app
+        imageBuilder: (uri, title, alt) => Text(alt ?? '$uri', style: const TextStyle(color: C.muted)),
+        onTapLink: (_, href, _) => openWebLink(href),
+      ),
+    );
+
+class _FadeIn extends StatelessWidget {
+  const _FadeIn(this.id, this.child);
+
+  final String id;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        builder: (_, t, child) =>
+            Opacity(key: Key('fresh-$id'), opacity: t, child: Transform.translate(offset: Offset(0, 8 * (1 - t)), child: child)),
+        child: child,
+      );
+}

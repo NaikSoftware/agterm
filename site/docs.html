@@ -218,6 +218,7 @@
             <a href="#remote-sessions" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Remote sessions</a>
             <a href="#remote-server" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Remote server</a>
             <a href="#phone-app" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Phone app</a>
+            <a href="#phone-chat" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Chat on the phone</a>
             <a href="#notifications" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Notifications</a>
             <a href="#accessibility" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Accessibility</a>
             <a href="#settings" style="color: #bfbab0; padding: 7px 12px; border-radius: 7px" class="hv9">Customization</a>
@@ -1108,12 +1109,12 @@ s=$(elisctl zmx tree studio.local --json \
 <p><a href="https://github.com/NaikSoftware/elis/tree/master/mobile">Elis Mobile</a> is an Android app that shows your Mac's sessions on a phone and types into them. It talks to Elis through a relay that this Mac runs, and the relay is off by default.</p>
 <ul>
 <li><strong>Pairing.</strong> Choose Elis ▸ Connect a Phone…, switch it on, and scan the QR in the app, or paste the <code>elis://pair</code> link. From a terminal, <code>elisctl mobile serve</code> prints the same code. The window also sets the address and port, copies the link, and revokes pairing.</li>
-<li><strong>Bluetooth.</strong> The phone also connects over Bluetooth, so it works without Wi-Fi. It is on by default while the relay is on, and the same pairing code serves both links. The first time, macOS asks to let Elis use Bluetooth. If you refuse, the Bluetooth row in Connect a Phone… shows <em>Off: unauthorized</em> and an Open Bluetooth Settings button. The row also reads <em>Starting…</em>, <em>Advertising</em> or <em>Off</em> with a reason. Range is about 10 m. The phone tries Wi-Fi first and then Bluetooth; its Prefer Bluetooth setting reverses that. A Mac with no Wi-Fi address pairs over Bluetooth alone: type an address only if you also want a Wi-Fi link. The phone app needs Android 15 or later.</li>
+<li><strong>Bluetooth.</strong> The phone also connects over Bluetooth, so it works without Wi-Fi. It is on by default while the relay is on, and the same pairing code serves both links. The first time, macOS asks to let Elis use Bluetooth. If you refuse, the Bluetooth row in Connect a Phone… shows <em>Off: unauthorized</em> and an Open Bluetooth Settings button. The row also reads <em>Starting…</em>, <em>Advertising</em> or <em>Off</em> with a reason. Range is about 10 m. The phone tries Wi-Fi first and then Bluetooth; its Prefer Bluetooth setting reverses that. A faint Wi-Fi or Bluetooth icon in the top-right corner of an open session shows which link it uses. A Mac with no Wi-Fi address pairs over Bluetooth alone: type an address only if you also want a Wi-Fi link. The phone app needs Android 15 or later.</li>
 <li><strong>Security.</strong> The phone checks the Mac's TLS certificate against the fingerprint in the code, so a different host is refused. The token in the code is the only credential: anyone who holds it controls your terminals. Revoke Paired Phones…, or <code>elisctl mobile reset</code>, replaces the token and disconnects every phone, over Wi-Fi and over Bluetooth. Share the code like a password.</li>
 <li><strong>Fit to phone.</strong> While a session is open on the phone, the phone forces its pane to a narrower character grid, and gives it back when you leave the session or switch panes; the pane you switch to gets the fit and the lead. The pane then shows that grid in its top-left corner. Session ▸ Restore Terminal Size, or the same item in a session's sidebar menu, gives the size back. Resizing the view clears the grid, and so does the phone disconnecting or the relay stopping. After the Mac takes a pane back, the phone stops fitting until you leave the session. The soft keyboard never resizes the program; rotating the phone does.</li>
 <li><strong>Live terminal.</strong> A session in <a href="#restore-live">Live sessions</a> mode shows on the phone as a live, colored terminal. Other sessions show as text. A full-screen program shows its terminal; a shell or a command printing lines shows its history.</li>
 <li><strong>Gestures.</strong> On the terminal, one finger scrolls the program, two fingers zoom (up to 6x) and pan, and a double tap resets the zoom and returns to the bottom rows. A tap on the line with the visible text cursor opens the keyboard; a tap elsewhere clicks where the program tracks the mouse. Double tap, pinch, long press and triple tap only look.</li>
-<li><strong>Direct input.</strong> The phone takes the lead of a Live pane when you open it, resume the app on it or switch to it, and the session screen shows the chip <em>Leading</em> (<em>Leading…</em> while it is taken). The pane on the Mac shows <em>In use on your phone</em>. A tap on the line with the visible text cursor opens the keyboard, whose keys go straight to the program; it stays until you hide it. The keyboard key at the start of the key row shows or hides it on any pane, and pressing it does not take the lead. The composer, for long text, voice and autocorrect, is hidden until the session's ⋯ menu shows it (Show composer, Hide composer); the phone remembers the choice. A shell still shows its history while the phone leads, on rows attached from another Mac and on elis-server rows too. Leaving the screen, switching panes, pausing the app or a dropped link returns the lead. A key on the Mac's cover takes it back, and the phone leads again at its next input. A pane that is not Live, or a host that cannot hand over the lead, is typed into through the Mac, which keeps the lead.</li>
+<li><strong>Direct input.</strong> The phone takes the lead of a Live pane when you open it, resume the app on it or switch to it. The pane on the Mac shows <em>In use on your phone</em>. A tap on the line with the visible text cursor opens the keyboard, whose keys go straight to the program; it stays until you hide it. The keyboard key at the start of the key row shows or hides it on any pane, and pressing it does not take the lead. The composer, for long text, voice and autocorrect, is hidden until the session's ⋯ menu shows it (Show composer, Hide composer); the phone remembers the choice. A shell still shows its history while the phone leads, on rows attached from another Mac and on elis-server rows too. Leaving the screen, switching panes, pausing the app or a dropped link returns the lead. A key on the Mac's cover takes it back, and the phone leads again at its next input. A pane that is not Live, or a host that cannot hand over the lead, is typed into through the Mac, which keeps the lead.</li>
 <li><strong>Pages.</strong> A page a session opens with <code>elisctl session overlay open</code> shows on the phone while the phone leads its pane, and on the Mac otherwise.
 <ul>
 <li>The page follows the lead both ways, so a page already open moves when the lead moves. A move reloads the page: scroll position and form input are lost. A command waiting with <code>--block</code> keeps waiting through moves.</li>
@@ -1121,7 +1122,7 @@ s=$(elisctl zmx tree studio.local --json \
 <li>Log pages (<code>--text --follow-file</code>), diff pages, markdown with <code>--navigation</code>, <code>--image</code> pictures over 6 MB and plain <code>http://</code> <code>--url</code> pages of another host open on the Mac even while the phone leads. A markdown page on the phone embeds pictures up to 6 MB in all and shows the alt text of the rest. Questions, pickers, program overlays, HUDs and status sounds stay on the Mac.</li>
 <li>A dev server shows on the phone too: a <code>--url</code> page on the session host's <code>localhost</code>, <code>127.0.0.1</code> or <code>::1</code> opens in the sheet, hot reload included, also for a session on another Mac or an elis-server host. Open it with <code>--js</code>, or a script-built page stays blank: <code>elisctl session overlay open --url http://localhost:5173 --js</code>. Generated apps, such as a file manager, a workflow view or a log viewer, work the same way.</li>
 <li>An <code>https</code> dev server opens on the Mac even while the phone leads.</li>
-<li>Over Bluetooth a dev server page is slow. The sheet shows a loading bar until the page loads, and the session's top bar names the link, <em>Wi-Fi</em> or <em>BT</em>.</li>
+<li>Over Bluetooth a dev server page is slow. The sheet shows a loading bar until the page loads, and the faint link icon in the session's top-right corner shows Wi-Fi or Bluetooth.</li>
 <li>Only the page's own sheet reaches the dev server: other apps and websites on the phone cannot. The way in closes with the sheet. A phone keeps up to 16 connections to dev servers open at a time.</li>
 <li>On the phone the page loads from <code>127.0.0.1</code>, so a dev server that writes absolute <code>http://localhost:PORT</code> addresses into its pages may not work there.</li>
 <li>On the phone, markdown links are plain text, and a tap on a link past the page's bounds asks before it opens the browser, as on the Mac. A <code>--persistent</code> page keeps no logins on the phone.</li>
@@ -1130,6 +1131,94 @@ s=$(elisctl zmx tree studio.local --json \
 <li><strong>Troubleshooting.</strong> When the Mac's firewall or endpoint security blocks incoming connections, connect over Bluetooth: it needs no incoming network connection.</li>
 </ul>
 <p>The <a href="commands.html#phone">phone</a> and <a href="commands.html#mobile">mobile</a> commands drive all of this from a script.</p>
+</section>
+
+          <!-- CHAT ON THE PHONE -->
+          <section id="phone-chat" class="doc-v2" style="scroll-margin-top: 88px; padding-top: 56px">
+<h2>Chat on the phone</h2>
+<p>A pane running Claude Code can show on the phone as a chat instead of a terminal. Chat builds the conversation from Claude Code's transcript file and reads Claude's live screen only for what the file does not hold: the working line, the statusline, the mode and any open dialog.</p>
+<h3 id="phone-chat-modes">Switch between Chat and Term</h3>
+<p>The mode button in the session's app bar shows the current mode: a chat bubble for Chat, a terminal for Term. A tap switches to the other mode. Chat is available while Claude Code runs in the pane; otherwise the button shows the terminal and is disabled, and a long press tells why. By default a pane running Claude opens in Chat and any other pane in Term. A tap keeps that choice for the session while the phone app runs; the session's ⋯ menu item <strong>Choose mode automatically</strong> goes back to the default. On a split, the pane button next to it shows which pane is on view, and a tap shows the other one, in Chat and in Term.</p>
+<h3 id="phone-chat-read">Read the conversation</h3>
+<ul>
+<li>The app bar shows Claude's title for the conversation, or the session name. The line under it shows the folder, the model such as <em>Opus · medium</em>, and <em>PR #N</em>, which opens the pull request. On a narrow screen the folder gives way first.</li>
+<li>Your messages show as bubbles and Claude's replies as formatted text. A long press on a message offers Copy, Copy code and Share.</li>
+<li>Each tool call is one row with its name, a short argument and a result mark. A tap opens its output or, for an edit, the diff; long output stops at <em>Full output in Term</em>. Two or more tool calls in a row fold into one row such as <em>Read, Grep, search and 5 other calls</em>, with one mark for the run; a tap lists the calls. A subagent and a call that waits for your answer keep their own row.</li>
+<li>Subagents show as rows that read running or finished. A message that another session or a teammate sent to Claude is never shown as yours: it is one muted line, <em>Message from scout · Found 3 callers</em>, and a tap opens its text. A background task's report reads as one line such as <em>scout finished</em>. Thinking shows as <em>Thought for 4s</em>, never its content. Dividers mark a compacted conversation and an interruption; errors, failed hooks and notices get their own rows, and images show as thumbnails.</li>
+<li>While you scroll up, your last prompt above the view stays pinned at the top; a tap returns to it. While Claude's to-do list has open items, a strip shows the count and the current item, and a tap expands it. The <em>↓ N new</em> button returns to the bottom.</li>
+</ul>
+<h3 id="phone-chat-send">Send and queue</h3>
+<p>The composer at the bottom has autocorrect and grows to 6 lines. When Chat opens, it takes over the text already typed at Claude's prompt on the computer. Send clears Claude's prompt, pastes your text and presses Enter. If the text at Claude's prompt changed on the computer in the meantime, the phone sends nothing and offers <strong>Replace</strong> and <strong>Keep</strong>.</p>
+<p>While Claude works, Send reads <strong>Queue</strong>, and your message waits in Claude's queue as it does when you press Enter in the terminal. Queued messages show as gray rows. <code>/model</code>, <code>/effort</code>, <code>/fast</code>, <code>/status</code>, <code>/tasks</code> and <code>/usage</code> run at once instead. When Send is disabled with text in the field, a line under it says why, for example <em>Claude shows a dialog</em> or <em>Waiting for Claude's screen</em>.</p>
+<p>Above the composer, the working line mirrors Claude's spinner text with a <strong>Stop</strong> button, which presses Esc. A usage-limit banner has <strong>Cancel</strong>. The reply Claude is still writing shows below the last message until it lands in the transcript. The statusline shows its first row; a tap shows every row. While subagents or teammates run, the first row ends with <em>· N agents</em>, and the expanded statusline lists them under <strong>Agents</strong>: each running agent with its teammate colour and elapsed time, then the last three that finished, dimmed. A tap on an agent scrolls the chat to the call that started it.</p>
+<h3 id="phone-chat-slash">The "/" menu</h3>
+<p>Typing <code>/</code> as the first character opens a list of Claude's built-in commands and the commands and skills of this conversation, filtered as you type. A pick puts <code>/name </code> in the field, and Send sends it. Commands that open a panel in Claude, such as <code>/model</code> or <code>/usage</code>, are marked <em>opens in panel</em>.</p>
+<h3 id="phone-chat-mode-model">Change the mode or the model</h3>
+<p>The chip at the start of the composer's row shows Claude's permission mode (<em>manual</em>, <em>accept edits</em>, <em>plan</em>, <em>auto</em>, <em>bypass</em>). A tap opens a list of modes; a pick presses Shift+Tab until Claude shows that mode. Auto and bypass need a second tap. The chip works only while Claude is idle with no dialog open, because Shift+Tab also answers some prompts. A badge beside it shows how many background shells Claude runs.</p>
+<p>A tap on the model in the app bar offers <strong>Change model…</strong>, which sends <code>/model</code> and opens Claude's model picker in a panel.</p>
+<h3 id="phone-chat-panels">Panels and prompts</h3>
+<p>When Claude shows a dialog or a panel that has no <a href="#phone-chat-cards">card</a> (<code>/usage</code>, <code>/model</code>, folder trust and the like), a panel sheet opens over the chat with Claude's live screen, answer buttons for numbered options and the key row. It closes by itself when Claude's prompt is back. Swipe it down to read the chat; the composer then reads <em>Claude shows a panel · Open</em> and stays disabled until the panel is gone.</p>
+<h3 id="phone-chat-cards">Answering Claude's prompts</h3>
+<p>When Claude asks a question (AskUserQuestion), asks permission to run a tool, or asks you to approve a plan, Chat shows a card above the composer and the phone vibrates. The card's title is the tool's name with <em>needs you</em>. It shows what Claude wants: the command and its description, the file content or the diff, the URL, the MCP tool and its arguments, the plan as formatted text, or the question with its options. Below are buttons for the options on Claude's screen, with the main one (<em>Yes</em>, <em>Send</em>) last, nearest your thumb. While a card is up, the composer reads <em>Answer the prompt above</em>.</p>
+<p><strong>A question with several steps.</strong> Each question is one step, counted in the title (<em>1/2</em>). Tap an option, or tick several and tap <strong>Next</strong>; after the last step, a review lists every question with your answers, and <strong>Send</strong> answers them all. <strong>Cancel</strong> cancels the whole question, and <strong>Chat about this</strong>, when Claude offers it, declines it so you can reply in the chat.</p>
+<p><strong>Other and notes.</strong> The <em>Other</em> field takes your own answer; on a question with several picks it is added to the ticked ones. On an option with a preview, <strong>Notes</strong> opens a field whose text goes with the option you tap next.</p>
+<p><strong>Yes or No with a note.</strong> On a permission card, <strong>Yes with a note</strong> and <strong>No with a reason</strong> open a field; <strong>Send</strong> answers and passes your text to Claude. On a plan card, <strong>Change</strong> opens a field for what to change, and Claude comes back with a new plan.</p>
+<p><strong>A second tap.</strong> Options that save a rule or change the mode, such as <em>always allow</em>, <em>don't ask again</em> or the plan's <em>Yes, and use auto mode</em>, show Claude's own words in an outlined button. The first tap reads <em>Tap again to confirm</em> for 3 s, so a stray tap never grants more than this one call.</p>
+<p><strong>Sending and stopping.</strong> The phone sends an answer one key at a time and checks Claude's screen before each key; the button you tapped reads <em>Sending 2/4</em> meanwhile. If the screen is not what the next key expects, for example because you answered on the computer, the phone stops and opens the panel sheet with <em>Stopped at step k of n: &lt;reason&gt;. The prompt may be half answered.</em> It never retries or undoes: look at Claude's screen in the sheet and finish there with its answer buttons and key row.</p>
+<p><strong>Closed on the computer.</strong> When the prompt leaves Claude's screen without an answer reaching the transcript, because it was answered or dismissed on the computer, the card goes and the tool's row reads <em>Closed on the computer</em> until Claude records the result. An answered card becomes the tool's ordinary row; a refused call reads <em>Rejected</em>.</p>
+<p><strong>When the panel sheet shows instead.</strong> A dialog Chat has no card for, a prompt it cannot tie to exactly one tool call, and the prompts of a subagent teammate running in its own pane open the <a href="#phone-chat-panels">panel sheet</a>. So does any dialog on a pane that is not in <a href="#restore-live">Live sessions</a> mode. An answer the phone has not yet verified it can send safely shows as <strong>Answer in panel</strong> or <strong>More options in panel</strong> on the card.</p>
+<p><strong>Remote sessions.</strong> Cards answer on an elis-server session as on a local one. On a session attached from another Mac, the card shows, but its buttons stay disabled with <em>Answering is off on remote rows until checked</em> until answering there is verified; <strong>Answer in panel</strong> still works.</p>
+<h3 id="phone-chat-mac">What Chat never does to the computer</h3>
+<p>Chat never resizes Claude's pane and never scrolls it: scrolling moves only the phone's list. The phone takes the lead of a Live pane only at its first input, at the size the pane already has, and the computer shows its usual <em>In use on your phone</em> cover (<a href="#phone-app">Direct input</a>). A pane fitted to the phone in Term keeps that size when you switch to Chat. Every key Chat sends is checked against Claude's screen right before it goes, and a sequence stops when the screen is not what it expects.</p>
+<h3 id="phone-chat-remote">Remote sessions</h3>
+<p>Chat works the same on a session attached from another Mac and on an elis-server session; the conversation is read on the host that runs Claude and refreshes every 2 s instead of 700 ms. Sending, Queue and the mode chip work on an elis-server session. On a session attached from another Mac they stay disabled for now, with the line <em>Sending from the phone is not verified on remote sessions yet</em>. A host whose Elis is too old to serve the transcript leaves Chat disabled with <em>Update Elis on &lt;host&gt;</em>. A pane that is not in <a href="#restore-live">Live sessions</a> mode shows Chat without colors: it never takes over Claude's draft, and dialogs always open the panel sheet.</p>
+<h3 id="phone-chat-states">States</h3>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>When</th>
+<th>Chat shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Claude Code is not running in the pane</td>
+<td>Chat disabled; the pane shows Term.</td>
+</tr>
+<tr>
+<td>The conversation is loading</td>
+<td>Placeholder bubbles, and <em>Loading earlier…</em> while older messages load at the top.</td>
+</tr>
+<tr>
+<td>No messages yet</td>
+<td><em>Claude is ready</em>, with a few commands to start from.</td>
+</tr>
+<tr>
+<td>The transcript cannot be read</td>
+<td>A message with <strong>Retry</strong> and <strong>Term</strong>.</td>
+</tr>
+<tr>
+<td><code>/clear</code>, <code>/resume</code>, a rewind or a retry</td>
+<td>The new conversation, loaded from its end.</td>
+</tr>
+<tr>
+<td>Claude exits while Chat is shown</td>
+<td>The history stays, with a <em>Claude exited</em> row and a <strong>Term</strong> button; sending is disabled.</td>
+</tr>
+<tr>
+<td>The link to the computer stalls</td>
+<td><em>Reconnecting…</em>; the working line and statusline dim and every write is disabled until it recovers.</td>
+</tr>
+<tr>
+<td>The host's Elis is too old</td>
+<td>Chat disabled, with <em>Update Elis on &lt;host&gt;</em>.</td>
+</tr>
+</tbody>
+</table>
 </section>
 
           <!-- NOTIFICATIONS -->
@@ -2367,6 +2456,16 @@ elisctl session info --clear --target &quot;$ELIS_SESSION_ID&quot;</code></pre>
 <li>A session attached from another Mac shows that Mac's line too, unless one is set here.</li>
 <li><code>tree</code> reports <code>info</code>, <code>infoMarkdown</code> and <code>infoHideAfter</code>.</li>
 </ul>
+<h3 id="status-transcript">Read Claude's conversation</h3>
+<p>A script can read the Claude Code conversation running in a session as a list of prompts, replies and tool calls, taken from Claude Code's own transcript rather than the screen, so a finished reply reads whole however far it scrolled away.</p>
+<pre class="bash"><code>elisctl session transcript --target &quot;$ID&quot;
+elisctl session transcript --after 18234 --json --target &quot;$ID&quot;</code></pre>
+<ul>
+<li>It reads the pane <code>tree</code> names in <code>agentPane</code>, the one running Claude Code, whichever pane has focus. A pane without Claude Code answers <code>no adapter</code>.</li>
+<li>The first form prints the newest items and a <code>next</code> offset; pass it to <code>--after</code> to read only what was added since, and a page's <code>start</code> to <code>--before</code> to read older items.</li>
+<li>It works on a session attached from another Mac and on an elis-server session, reading there. An Elis on that host too old for the command answers <code>the Elis on HOST is too old for session.transcript</code>.</li>
+</ul>
+<p>The command reference lists every field: <a href="commands.html#session">session transcript</a>.</p>
 <h3 id="status-tint">Row tint</h3>
 <p>A tint tells rows apart at a glance: red for production, green for development. Pick one from <strong>Tint</strong> in a session or workspace row menu: None or one of twelve colors (red, orange, yellow, green, blue, purple, gray, teal, pink, brown, indigo, mint) that follow light and dark mode. A tint colors the row's icon and name.</p>
 <pre class="bash"><code>elisctl session tint red --target &quot;$ELIS_SESSION_ID&quot;

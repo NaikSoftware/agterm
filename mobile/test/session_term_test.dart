@@ -43,6 +43,11 @@ class Relay {
   final refused = <String>{}; // commands answered with an error
   int refusedFits = 0; // the next session.grid fits (not resets) answered with an error, as a covered pane does
   final held = <String, List<List<int>>>{}; // answers kept back until the test sends them
+  Map<String, Object> transcript = {'transcript': 't1', 'size': 0, 'start': 0, 'next': 0, 'items': <Object>[]}; // what session.transcript answers
+  final transcriptArgs = <Map>[];
+  final errors = <String, String>{}; // commands answered with this error text
+  final events = <Map<String, Object>>[]; // the next events.read's items
+  int eventsServed = 0; // events.read replies that carried items
   final _decoder = LinkDecoder();
   final _lines = LineBuffer();
   final _control = LineBuffer();
@@ -75,11 +80,12 @@ class Relay {
       if (r['cmd'] == 'session.scroll') scrolls.add(r['args'] as Map);
       if (r['cmd'] == 'session.text') textArgs.add(r['args'] as Map);
       if (r['cmd'] == 'session.type') typed.add((r['args'] as Map)['text'] as String);
+      if (r['cmd'] == 'session.transcript') transcriptArgs.add(r['args'] as Map);
       final fit = r['cmd'] == 'session.grid' && (r['args'] as Map)['columns'] != null;
       final covered = fit && refusedFits > 0;
       if (covered) refusedFits--;
-      final List<int>? reply =
-          refused.contains(r['cmd']) || covered ? frame(LinkKind.data, 0, utf8.encode('${jsonEncode({'id': r['id'], 'ok': false, 'error': 'refused ${r['cmd']}'})}\n')) : null;
+      final error = errors[r['cmd']] ?? (refused.contains(r['cmd']) || covered ? 'refused ${r['cmd']}' : null);
+      final List<int>? reply = error != null ? frame(LinkKind.data, 0, utf8.encode('${jsonEncode({'id': r['id'], 'ok': false, 'error': error})}\n')) : null;
       if (held[r['cmd']] case final q?) {
         q.add(reply ?? frame(LinkKind.data, 0, answer(r['id'])));
         continue;
@@ -91,13 +97,21 @@ class Relay {
       final result = switch (r['cmd']) {
         'tree' => {'tree': tree},
         'events.read' => {
-            'events': {'run': 'r', 'next': 0, 'items': <Object>[]},
+            'events': {'run': 'r', 'next': 0, 'items': _takeEvents()},
           },
+        'session.transcript' => transcript,
         'session.text' => {'text': text, 'columns': (grids.isEmpty ? null : grids.last['columns'] as int?) ?? 40}, // the fit's width
         _ => <String, Object>{},
       };
       send(frame(LinkKind.data, 0, answer(r['id'], result)));
     }
+  }
+
+  List<Object> _takeEvents() {
+    final items = [...events];
+    events.clear();
+    if (items.isNotEmpty) eventsServed++;
+    return items;
   }
 
   void send(List<int> bytes) => _input.add(Uint8List.fromList(bytes));
@@ -111,7 +125,7 @@ class Relay {
   int get texts => calls.where((c) => c == 'session.text').length;
 }
 
-Map<String, Object> treeOf({bool live = true, bool split = false}) => {
+Map<String, Object> treeOf({bool live = true, bool split = false, Map<String, Object> session = const {}}) => {
       'workspaces': [
         {
           'id': 'w1',
@@ -125,6 +139,7 @@ Map<String, Object> treeOf({bool live = true, bool split = false}) => {
                 {'id': 'surface:s1:left', 'kind': 'left', 'backedByZmx': live},
                 if (split) {'id': 'surface:s1:right', 'kind': 'right', 'backedByZmx': live},
               ],
+              ...session,
             },
           ],
         },
@@ -132,7 +147,7 @@ Map<String, Object> treeOf({bool live = true, bool split = false}) => {
     };
 
 class FakeSnapshot implements VtSnapshot {
-  FakeSnapshot(this.cols, this.rows, this.altScreen, {this.cursorY = 0, this.cursorVisible = false});
+  FakeSnapshot(this.cols, this.rows, this.altScreen, {this.cursorY = 0, this.cursorVisible = false, this.lines = const []});
   @override
   final int cols, rows;
   @override
@@ -144,7 +159,7 @@ class FakeSnapshot implements VtSnapshot {
   @override
   final bool cursorVisible;
   @override
-  List<VtRow> get lines => const [];
+  final List<VtRow> lines;
 }
 
 class FakeVt implements Vt {
@@ -155,6 +170,7 @@ class FakeVt implements Vt {
   bool alt = true; // a full-screen program: Term, no scrollback
   int cursorY = 0;
   bool cursorVisible = false;
+  List<VtRow> lines = []; // the grid rows a snapshot shows
 
   @override
   void write(Uint8List bytes) => written.addAll(bytes);
@@ -179,7 +195,7 @@ class FakeVt implements Vt {
   VtSnapshot snapshot() {
     snapshots++;
     if (failSnapshot) throw StateError('boom');
-    return FakeSnapshot(cols, rows, alt, cursorY: cursorY, cursorVisible: cursorVisible);
+    return FakeSnapshot(cols, rows, alt, cursorY: cursorY, cursorVisible: cursorVisible, lines: lines);
   }
   @override
   void dispose() => disposed = true;
@@ -406,13 +422,13 @@ Future<void> _pinch(WidgetTester t, Offset c) async {
   await t.pump(const Duration(milliseconds: 400));
 }
 
-Future<void> _loadFonts() async {
+Future<void> loadFonts() async {
   for (final (family, file) in [('Inter', 'Inter'), ('JetBrainsMono', 'JetBrainsMono')]) {
     await (FontLoader(family)..addFont(rootBundle.load('assets/fonts/$file.ttf'))).load();
   }
 }
 
-void _phone(WidgetTester t) {
+void phone(WidgetTester t) {
   t.view.physicalSize = const Size(1080, 2340);
   t.view.devicePixelRatio = 3;
   addTearDown(t.view.reset);
@@ -769,13 +785,33 @@ void main() {
     final h = Harness(t, treeOf(split: true));
     await h.start();
     await h.opened();
-    await t.tap(find.byKey(const Key('rightPane')));
+    await t.tap(find.byKey(const Key('paneButton')));
     await t.pump();
     expect(h.r.closes, [2, 3]);
     expect(_watches(h).last, {'type': 'vt', 'target': 's1', 'pane': 'right'});
     expect(h.r.lastWatch, 4);
     await h.opened();
     expect(find.byType(TerminalView), findsOneWidget);
+    await h.stop();
+  });
+
+  testWidgets('serverRowPaneWatchesItsOrigin', (t) async {
+    final h = Harness(t, treeOf(live: false, session: {'remoteHost': 'box'}));
+    await h.start();
+    expect(_watches(h), [
+      {'type': 'vt', 'target': 's1', 'pane': 'left'},
+    ]);
+    await h.stop();
+  });
+
+  testWidgets('aServerWindowMarksItsRowsServer', (t) async {
+    final h = Harness(t, {...treeOf(session: {'remoteHost': 'box'}), 'remote': {'host': 'box'}});
+    await h.start();
+    expect(h.m.sessions.single.server, isTrue);
+    await h.retree({...treeOf(session: {'remoteHost': 'mini'}), 'remote': {'host': 'mini', 'origin': 'mac'}});
+    expect(h.m.sessions.single.server, isFalse);
+    await h.retree(treeOf(session: {'remoteHost': 'mini'}));
+    expect(h.m.sessions.single.server, isFalse);
     await h.stop();
   });
 
@@ -942,9 +978,7 @@ void main() {
     final cols = claim['cols'] as int;
     final box = t.getSize(find.byKey(const Key('term')));
     expect(claim, {'type': 'vt', 'target': 's1', 'pane': 'left', 'claim': true, 'cols': cols, 'rows': (box.height / CellMetrics.fit(box.width, cols).h).floor()});
-    expect(_label(t, 'lead'), 'Leading…');
     await _leader(h);
-    expect(_label(t, 'lead'), 'Leading');
     expect((h.vts.single.cols, h.vts.single.rows), (cols, claim['rows']));
     await h.stop();
   });
@@ -982,7 +1016,6 @@ void main() {
     expect(_claims(h), hasLength(2));
     expect(h.r.grids, isEmpty); // the claim brings the grid: no fit to reset first
     expect(h.r.lastChannel, greaterThan(_claimCh + 1));
-    expect(_label(t, 'lead'), 'Leading…');
     await h.stop();
   });
 
@@ -991,7 +1024,7 @@ void main() {
     await h.start();
     await h.opened();
     await _leader(h);
-    await t.tap(find.byKey(const Key('rightPane')));
+    await t.tap(find.byKey(const Key('paneButton')));
     await t.pump();
     await t.pump();
     expect(h.r.closes, containsAll([2, _claimCh]));
@@ -1013,7 +1046,6 @@ void main() {
     await h.opened();
     await t.pump(const Duration(seconds: 1));
     expect(_claims(h), hasLength(1));
-    expect(find.byKey(const Key('lead')), findsNothing);
     await _key(t, 'Up');
     await t.pump();
     expect(_claims(h), hasLength(2));
@@ -1032,7 +1064,6 @@ void main() {
     await h.opened();
     await t.pump(const Duration(seconds: 1));
     expect(_claims(h), hasLength(1));
-    expect(find.byKey(const Key('lead')), findsNothing);
     await h.stop();
   });
 
@@ -1041,7 +1072,6 @@ void main() {
     await h.start();
     await t.pump(const Duration(seconds: 1));
     expect(_claims(h), isEmpty);
-    expect(find.byKey(const Key('lead')), findsNothing);
     await h.stop();
   });
 
@@ -1170,14 +1200,13 @@ void main() {
     await t.tap(find.byKey(const Key('send')));
     await t.pump();
     expect(h.r.lastChannel, _claimCh);
-    expect(find.byKey(const Key('lead')), findsOneWidget);
+    expect(h.r.closes, isNot(contains(_claimCh))); // the claim is still pending
     expect(_types(h), 0);
     h.r.send(json(LinkKind.opened, _claimCh, {'error': 'session not realized'}));
     for (var i = 0; i < 10; i++) {
       await t.pump(const Duration(milliseconds: 10));
     }
     expect(find.text('session not realized'), findsOneWidget);
-    expect(find.byKey(const Key('lead')), findsNothing);
     expect(h.r.typed, ['\x1b[A', '\x03', 'ls', '\r']);
     await _key(t, 'Down');
     await t.pump();
@@ -1212,7 +1241,7 @@ void main() {
     await _key(t, 'Up');
     await t.pump();
     expect(h.r.lastChannel, _claimCh);
-    await t.tap(find.byKey(const Key('rightPane')));
+    await t.tap(find.byKey(const Key('paneButton')));
     await t.pump();
     await _leader(h); // too late: closed at once
     await h.opened();
@@ -1250,7 +1279,7 @@ void main() {
     expect((claim, _claims(h).length), (watch + 1, 2));
     await _leader(h, claim);
     expect(_typed(h, claim), '\x1b[A');
-    await t.tap(find.byKey(const Key('rightPane')));
+    await t.tap(find.byKey(const Key('paneButton')));
     await t.pump();
     expect(h.r.closes, containsAll([watch, claim]));
     await h.stop();
@@ -1345,21 +1374,6 @@ void main() {
     await t.pump();
     expect(h.r.typed, ['\x1b[A']);
     expect(h.r.opens, isEmpty);
-    expect(find.byKey(const Key('lead')), findsNothing);
-    await h.stop();
-  });
-
-  testWidgets('chipShowsPendingThenLeadsThenClears', (t) async {
-    final h = Harness(t, treeOf());
-    await h.start();
-    await h.opened();
-    expect(_label(t, 'lead'), 'Leading…');
-    await _leader(h);
-    expect(_label(t, 'lead'), 'Leading');
-    h.r.send([...json(LinkKind.lead, _claimCh, {'role': 'follower'}), ...json(LinkKind.close, _claimCh, {'reason': 'the computer took the lead back'})]);
-    await t.pump();
-    await t.pump();
-    expect(find.byKey(const Key('lead')), findsNothing);
     await h.stop();
   });
 
@@ -1402,17 +1416,32 @@ void main() {
     await h.stop();
   });
 
-  testWidgets('toolbarIsEmptyWithoutASplit', (t) async {
+  testWidgets('linkIconFloatsOverTheTerminalAndTakesNoTouch', (t) async {
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
-    expect(find.byKey(const Key('toolbar')), findsNothing);
+    final icon = find.byKey(const Key('via'));
+    expect(find.descendant(of: find.byType(AppBar), matching: icon), findsNothing);
+    expect(t.widget<Semantics>(icon).properties.label, 'Wi-Fi');
+    expect(find.descendant(of: icon, matching: find.byIcon(Icons.wifi)), findsOneWidget);
+    expect(find.ancestor(of: icon, matching: find.byType(IgnorePointer)), findsWidgets);
+    final term = t.getRect(find.byKey(const Key('term')));
+    expect(t.getRect(icon).topRight, term.topRight + const Offset(-6, 6));
+    await h.stop();
+  });
+
+  testWidgets('noPaneButtonWithoutASplit', (t) async {
+    final h = Harness(t, treeOf());
+    await h.start();
+    await h.opened();
+    expect(find.byKey(const Key('paneButton')), findsNothing);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.byKey(const Key('modeButton'))), findsOneWidget);
     expect(find.text('Take over'), findsNothing);
     await h.stop();
   });
 
   testWidgets('terminalRunsEdgeToEdge', (t) async {
-    _phone(t);
+    phone(t);
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
@@ -1543,7 +1572,7 @@ void main() {
     await h.opened();
     await _pinch(t, t.getCenter(find.byKey(const Key('term'))));
     expect(_zoom(t), greaterThan(1.5));
-    await t.tap(find.byKey(const Key('rightPane')));
+    await t.tap(find.byKey(const Key('paneButton')));
     await t.pump();
     await h.opened();
     expect(_zoom(t), 1);
@@ -1555,7 +1584,7 @@ void main() {
     await h.start();
     h.r.held['session.grid'] = [];
     await h.retree(treeOf(split: true)); // the fitted pane becomes Live: its fit is reset before the claim
-    await t.tap(find.byKey(const Key('rightPane')));
+    await t.tap(find.byKey(const Key('paneButton')));
     await t.pump();
     h.r.held.remove('session.grid')!.forEach(h.r.send);
     await t.pump();
@@ -1602,7 +1631,6 @@ void main() {
     expect(h.relays.length, 2);
     await h.opened();
     await t.pump(const Duration(milliseconds: 10));
-    expect(_label(t, 'lead'), 'Leading…');
     expect(find.text('Disconnected.'), findsNothing);
     expect(_claims(h), hasLength(1));
     expect(h.r.grids, isEmpty);
@@ -1637,37 +1665,35 @@ void main() {
     await h.stop();
   });
 
-  // real fonts: the test font is wider than both
-  testWidgets('toolbarFitsAPhoneWidthWithASplit', (t) async {
-    await _loadFonts();
-    _phone(t);
+  testWidgets('paneButtonShowsAndSwitchesThePane', (t) async {
+    await loadFonts();
+    phone(t);
     final h = Harness(t, treeOf(split: true));
     await h.start();
     await h.opened();
-    final bar = find.byKey(const Key('toolbar'));
-    final segs = find.descendant(of: bar, matching: find.byType(OutlinedButton));
-    expect(segs, findsNWidgets(2));
-    for (final e in segs.evaluate()) {
-      final r = t.getRect(find.byWidget(e.widget));
-      expect((r.left >= 0, r.right <= 360), (true, true));
-    }
-    await expectLater(bar, matchesGoldenFile('goldens/session_toolbar_split.png'));
+    final button = find.byKey(const Key('paneButton'));
+    (String?, bool) shown() =>
+        (t.widget<IconButton>(button).tooltip, t.widget<Transform>(find.descendant(of: button, matching: find.byType(Transform))).transform.storage[0] < 0);
+    expect(find.descendant(of: find.byType(AppBar), matching: button), findsOneWidget);
+    expect(shown(), ('Left pane — switch to Right', false));
+    await t.pump(const Duration(milliseconds: 300));
+    await expectLater(find.byType(Scaffold), matchesGoldenFile('goldens/session_split.png'));
+    await t.tap(button);
+    await t.pump();
+    await h.opened();
+    expect(shown(), ('Right pane — switch to Left', true));
+    expect(_watches(h).last['pane'], 'right');
     await h.stop();
   });
 
-  testWidgets('appBarShowsTheLead', (t) async {
-    await _loadFonts();
-    _phone(t);
+  testWidgets('appBarShowsTheName', (t) async {
+    await loadFonts();
+    phone(t);
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
     await t.pump(const Duration(milliseconds: 300));
     await expectLater(find.byType(Scaffold), matchesGoldenFile('goldens/session_screen.png'));
-    await expectLater(find.byType(AppBar), matchesGoldenFile('goldens/session_appbar_pending.png'));
-    expect(t.renderObject<RenderParagraph>(find.text('shell')).didExceedMaxLines, isFalse); // the name is not cut
-    await _leader(h);
-    await t.pump(const Duration(milliseconds: 300));
-    await expectLater(find.byType(AppBar), matchesGoldenFile('goldens/session_appbar_lead.png'));
     expect(t.renderObject<RenderParagraph>(find.text('shell')).didExceedMaxLines, isFalse); // the name is not cut
     await h.stop();
   });
@@ -1883,10 +1909,10 @@ void main() {
     await h.start();
     await h.opened();
     final pending = h.r.lastChannel;
-    await t.tap(find.byKey(const Key('rightPane')));
+    await t.tap(find.byKey(const Key('paneButton')));
     await t.pump();
     expect(h.r.closes, contains(pending), reason: 'closed before its OPENED, so the relay never attaches it');
-    await t.tap(find.text('Left pane'));
+    await t.tap(find.byKey(const Key('paneButton')));
     await t.pump();
     await h.opened();
     expect([for (final c in _claims(h)) c['pane']], ['left', 'left']); // the right pane never opened
@@ -2635,7 +2661,7 @@ void main() {
   });
 
   testWidgets('rotationRefitsAndTheKeyboardDoesNot', (t) async {
-    _phone(t);
+    phone(t);
     final h = Harness(t, treeOf());
     await h.start();
     await h.opened();
@@ -2660,7 +2686,7 @@ void main() {
   });
 
   testWidgets('rotationResizesTheLeadOnTheHistory', (t) async {
-    _phone(t);
+    phone(t);
     final h = await _shortHistory(t);
     await _lead(h);
     final claim = _claims(h).single;
@@ -2866,7 +2892,7 @@ void main() {
     await h.start();
     await h.opened();
     await _takeBack(h);
-    await t.tap(find.byKey(const Key('rightPane')));
+    await t.tap(find.byKey(const Key('paneButton')));
     await t.pump();
     await t.pump();
     await h.opened();

@@ -1,0 +1,30 @@
+
+[38;5;246m[48;5;237m❯ [38;5;231mReply in English. Call the AskUserQuestion tool yourself, no subagent: one question "Which [39m
+  [38;5;231mlighthouse should the story visit?" with header "Lighthouse", single choice, options "North Cape"[39m
+  [38;5;231m(description "A cold rocky point."), "Harbour light on the long southern breakwater" [39m
+  [38;5;231m(description "A calm port town."), "Island tower" (description "Far out at sea."). Nothing else.[39m
+
+[49m  [38;5;246mCalled [1m1[0m[38;5;246m tool [39m
+[38;5;246m  ⎿  Interrupted · What should Claude do instead?[39m
+
+[38;5;246m[48;5;237m❯ [38;5;231mReply in English. Call the AskUserQuestion tool yourself, no subagent: one question "How many [39m
+  [38;5;231mlanterns should the keeper light?" with header "Lanterns", single choice, options with labels [39m
+  [38;5;231mexactly "7" (description "A modest night.") and "42" (description "A festival night."). Nothing [39m
+  [38;5;231melse.[39m
+
+[38;5;246m[49m [39m How many lanterns should the keeper light?
+[38;5;246m────────────────────────────────────────────────────────────────────────────────────────────────────
+[38;5;16m[48;5;153m ☐ Lanterns [39m[49m
+
+[1m[38;5;231mHow many lanterns should the keeper light?[0m
+
+[38;5;153m❯[39m [38;5;246m1.[39m [38;5;153m7[39m
+     [38;5;246mA modest night.[39m
+  [38;5;246m2.[39m 42
+     [38;5;246mA festival night.[39m
+  [38;5;246m3. Type something.[39m
+[38;5;246m────────────────────────────────────────────────────────────────────────────────────────────────────
+[39m  4. Chat about this
+
+[38;5;246mEnter to select · ↑/↓ to navigate · Esc to cancel[39m
+[38;5;244m──────────────────────────────────────────────────────────────────── Ask Lighthouse Story Question ─

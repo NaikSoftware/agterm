@@ -18,10 +18,14 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         ble = BleChannel(this, flutterEngine.dartExecutor.binaryMessenger)
-        // a web link opens in the browser; no url_launcher dependency for one call
+        // `view` opens a web link in the browser, `share` shows the share sheet; no plugin dependency for two calls
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "elis/open").setMethodCallHandler { call, result ->
             try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(call.arguments as String)))
+                val arg = call.arguments as String
+                startActivity(
+                    if (call.method == "share") Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, arg), null)
+                    else Intent(Intent.ACTION_VIEW, Uri.parse(arg))
+                )
                 result.success(true)
             } catch (e: ActivityNotFoundException) {
                 result.success(false)

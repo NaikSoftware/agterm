@@ -1,0 +1,42 @@
+[
+  {
+    "id": "toolu_01CoZsawJi1PG48eJiQmFLXk",
+    "uuid": "e430c2e9-8598-4f1e-a6c1-c026c0891e90",
+    "source": "main",
+    "name": "AskUserQuestion",
+    "input": {
+      "questions": [
+        {
+          "question": "Which environment should the keeper deploy the lamp to?",
+          "header": "Environment",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Staging",
+              "description": "Try it first."
+            },
+            {
+              "label": "Production",
+              "description": "The real coast."
+            }
+          ]
+        },
+        {
+          "question": "Which shift should the keeper take?",
+          "header": "Watch schedule",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Night",
+              "description": "Dusk to dawn."
+            },
+            {
+              "label": "Day",
+              "description": "Dawn to dusk."
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

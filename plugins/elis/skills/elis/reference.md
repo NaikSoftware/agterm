@@ -273,6 +273,7 @@ directory, or the directory a top-level page was created in),
 `opencode`, `antigravity` — even one a script started; omitted for none),
 `agentSessionId` (the last Claude Code conversation in the session, kept after claude exits, cleared while another
 agent runs, mirrored from an origin; omitted when none),
+`agentPane` (`left` or `right`, the pane running `agent`; omitted with it),
 `foreground`/`splitForeground` (the live argv of each pane's foreground
 process — what it is running — omitted when the pane sits at its shell prompt, and also for a
 setuid/setgid foreground process like `top` or `sudo`, whose argv macOS refuses to expose),
@@ -785,6 +786,31 @@ error keeps those names for compatibility.
   NOT an error (returns `ok` with an empty string, unlike `session copy`'s `no selection`), but a failed
   read IS an error (`failed to read surface buffer`). Pipe the text into `grep`/`fzf` to extract URLs,
   paths, etc.
+- `session transcript [--pane left|right] [--pane-id TOKEN] [--after N | --before N] [--transcript ID] [--max-bytes N] [--target] [--window W]`:
+  a page of the Claude Code conversation running in the session, read from its transcript file. `--pane` defaults to the
+  node's `agentPane`; `scratch` is refused. Human output prints the title, model and permission mode, one
+  `kind  text` line per item, then `next N`; `--json` prints the page:
+  `transcript` (the Claude session id), `size`, `start`, `next`, `reset` (omitted when false), `items`, `pending`
+  (open tool calls, omitted when none), `meta` (`title`, `lastPrompt`, `permissionMode`, `pr`, `model`, `todos`,
+  `queued`, `agents`, …), `commands` (slash commands, on a tail page) and `skipped` (undecodable lines, omitted at 0).
+  `meta.agents` lists the session's subagents and teammates: the running ones in launch order, then the three most
+  recently finished, each with `id` (its Agent call's tool id), `agentType`, `name` and `color` (teammates),
+  `description`, `startedAt` and `state` (`running`, `done`, `failed`, `stopped`; an idle teammate is `done` and can
+  run again). A background agent silent for 15 minutes with no end record is left out. Human output prints one
+  `agent:` line each.
+  Paging: no `--after`/`--before` is the newest items; pass `next` as `--after` to read what was appended since
+  (`next < size` means read again now), or `start` as `--before` for older items. An item whose `uuid` you
+  already hold replaces it: a tool item comes back with its result, a text item with the rest of its message.
+  `reset: true` means drop what you hold and keep this page; it follows a `/rewind`, a retry, a shrunk file or a
+  `--transcript` that is not the one read. Item kinds: `user`, `image`, `command`, `commandOutput`, `bash`,
+  `interrupted`, `compactSummary`, `message`, `text`, `thinking`, `tool`, `error`, `compact`, `notice`,
+  `hook`, `oversized`. A `message` item is text another session, a teammate or a background task put into the
+  conversation, never a prompt the user typed: `channel` (`session`, `teammate`, `task`), `from`, `summary`, `text`
+  (the body without its tags), and for a task `id` (the tool call it reports on) and `status`. A `tool` item has `name`, `arg`, `mark` (`running`, `ok`, `exit N`, `+N −M`, …), `output` or
+  `patch` clipped at 4 KiB (`clipped`), `isError`, and `rejected` when the user refused the prompt.
+  `--max-bytes` lowers the 49152-byte page budget. Errors: `no adapter` (the pane runs no Claude Code),
+  `transcript not found`. It works on rows attached from another Mac and on elis-server rows; a host predating
+  it answers `the Elis on HOST is too old for session.transcript`. A page session refuses it.
 - `session search [needle] [--next|--prev|--close] [--target] [--window W]` — search the target
   session's live terminal scrollback. Selects the target first (so the search bar and match highlights
   render). With a `needle` it sets the query (opening the bar if needed) and highlights matches; with no

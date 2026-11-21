@@ -1,0 +1,13 @@
+[
+  {
+    "id": "toolu_01AAqbYdz55P3kDF4DvKc4sf",
+    "uuid": "f0546e58-8c2b-4247-b080-ed48c4aac0fd",
+    "source": "a7db812d605fdade9",
+    "agentType": "general-purpose",
+    "name": "WebFetch",
+    "input": {
+      "url": "https://example.org/",
+      "prompt": "Return the page title."
+    }
+  }
+]

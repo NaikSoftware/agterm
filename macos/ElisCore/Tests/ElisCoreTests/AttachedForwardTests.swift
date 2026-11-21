@@ -29,6 +29,14 @@ struct AttachedForwardTests {
         #expect(forward.outcome(of: try printed(reply, status: 1), host: "box") == tooOld)
     }
 
+    @Test func transcriptWordsJoinValuesToFlags() {
+        let arguments = ClaudeTranscriptArguments(pane: .right, paneID: "p1", after: 10, before: nil, held: "-x", maxBytes: 100)
+
+        #expect(TranscriptForward.words(session: "s1", paneID: "p1", pane: .right, arguments: arguments)
+            == ["session", "transcript", "--target", "s1", "--pane-id=p1", "--after=10", "--transcript=-x", "--max-bytes=100"])
+        #expect(TranscriptForward.words(session: "s1", paneID: nil, pane: .left, arguments: arguments).contains("--pane"))
+    }
+
     @Test func anOriginRefusalKeepsItsReason() throws {
         #expect(forward.outcome(of: try printed(ControlResponse(ok: false, error: "no such session"), status: 1), host: "box")
             == .refused("no such session"))

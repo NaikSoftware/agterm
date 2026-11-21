@@ -1,0 +1,40 @@
+[38;5;246m[48;5;237m❯ [38;5;231mRun the shell command ls /tmp with the [39m
+  [38;5;231mBash tool. Nothing else.[39m
+[49m
+  [38;5;246mListed [1m1[0m[38;5;246m directory [39m
+[38;5;246m  ⎿  Interrupted · What should Claude do ins…
+
+[48;5;237m❯ [38;5;231mRun the shell command sleep 600 with the [39m
+  [38;5;231mBash tool using run_in_background true. Do[39m
+  [38;5;231mnothing else.[39m
+
+[49m  [38;5;246mRan [1m1[0m[38;5;246m shell command [39m
+
+[38;5;231m⏺[39m The [38;5;153msleep 600[39m command runs in the
+  background as task [38;5;153mb0al6iy4k[39m. It finishes
+  in about 10 minutes, and I will get a
+  notification then.
+
+[38;5;246m✻[39m [38;5;246mCrunched for 5s · done 1:52 AM[39m
+
+[38;5;246m[48;5;237m❯ [38;5;231mUse the AskUserQuestion tool to ask me to [39m
+  [38;5;231mpick a fruit: Apple or Banana. Nothing [39m
+  [38;5;231melse.[39m
+[49m
+[38;5;246m⏺[39m Which fruit do you pick?
+[38;5;246m─────────────────────────────────────────────
+[38;5;16m[48;5;153m ☐ Fruit [39m[49m
+
+[1m[38;5;231mWhich fruit do you pick?[0m
+
+[38;5;153m❯[39m [38;5;246m1.[39m [38;5;153mApple[39m
+     [38;5;246mPick apple.[39m
+  [38;5;246m2.[39m Banana
+     [38;5;246mPick banana.[39m
+  [38;5;246m3. Type something.[39m
+[38;5;246m─────────────────────────────────────────────
+[39m  4. Chat about this
+
+[38;5;246mEnter to select · ↑/↓ to navigate · Esc to [39m
+[38;5;246mcancel[39m
+[38;5;244m───────────── Write Lighthouse Keeper Story ─

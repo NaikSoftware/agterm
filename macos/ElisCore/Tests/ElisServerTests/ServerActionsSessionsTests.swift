@@ -389,6 +389,24 @@ struct ServerActionsSessionsTests {
         #expect(nodes.filter { $0.content == "page" }.count == 2)
     }
 
+    @Test func serverAnswersTranscriptFromItsClaudeDir() async throws {
+        let session = try harness.session(newSession())
+        let claude = URL(fileURLWithPath: harness.scratch.root).appendingPathComponent("claude")
+        let file = claude.appendingPathComponent("projects/-proj/c1.jsonl")
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data((#"{"type":"user","uuid":"u1","parentUuid":null,"isSidechain":false,"timestamp":"T","# +
+            #""message":{"role":"user","content":"hello"}}"# + "\n").utf8).write(to: file)
+        harness.actions.claudeDirectory = claude.path
+        harness.store.setRunningAgent(.claude, pane: .left, forSession: session.id)
+        harness.store.setAgentSessionID("c1", forSession: session.id)
+
+        let reply = await harness.actions.serve(ControlRequest(cmd: .sessionTranscript, target: session.id.uuidString))
+
+        #expect(reply.ok, "\(reply)")
+        #expect(reply.result?.transcript == "c1")
+        #expect(reply.result?.items?.map(\.text) == ["hello"])
+    }
+
     @Test func aLoopbackPageRowIsRefusedAtCreation() async throws {
         let anchor = try harness.session(newSession())
         let count = harness.store.workspaces.flatMap(\.sessions).count

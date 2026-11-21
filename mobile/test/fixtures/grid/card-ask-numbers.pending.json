@@ -1,0 +1,27 @@
+[
+  {
+    "id": "toolu_015ozvLAkYp4vjz92uhtYMJY",
+    "uuid": "54e2b4b5-aae6-4d05-b243-c6a7d58a1b36",
+    "source": "main",
+    "name": "AskUserQuestion",
+    "input": {
+      "questions": [
+        {
+          "question": "How many lanterns should the keeper light?",
+          "header": "Lanterns",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "7",
+              "description": "A modest night."
+            },
+            {
+              "label": "42",
+              "description": "A festival night."
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

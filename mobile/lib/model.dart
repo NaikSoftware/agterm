@@ -28,11 +28,16 @@ String agentOf(List<String> argv) {
 }
 
 class Session {
-  Session(Map m, this.workspaceId, this.workspaceName)
+  Session(Map m, this.workspaceId, this.workspaceName, {this.server = false})
       : id = m['id'] ?? '',
         name = (m['name'] as String?)?.isNotEmpty == true ? m['name'] : 'New session',
         status = m['status'] ?? 'idle',
         agent = (m['agent'] as String?)?.isNotEmpty == true ? m['agent'] : agentOf((m['foreground'] as List?)?.cast<String>() ?? const []),
+        liveAgent = m['agent'] ?? '',
+        agentSessionId = m['agentSessionId'] ?? '',
+        agentPane = m['agentPane'] ?? 'left',
+        remoteHost = m['remoteHost'] ?? '',
+        remote = (m['remoteHost'] as String?)?.isNotEmpty == true,
         cwd = m['cwd'] ?? '',
         parent = m['parent'] ?? '',
         context = m['context'] ?? '',
@@ -44,11 +49,17 @@ class Session {
         hasSplit = m['hasSplit'] == true,
         livePanes = {
           for (final f in (m['surfaces'] as List? ?? const []))
-            if (f is Map && f['backedByZmx'] == true) '${f['kind']}',
+            // a remote terminal row runs on its origin's zmx, which the Mac's own backedByZmx never reports
+            if (f is Map && (f['backedByZmx'] == true || (m['remoteHost'] as String?)?.isNotEmpty == true && m['content'] != 'page'))
+              '${f['kind']}',
         },
         split = m['split'] == true,
         collapsed = m['collapsed'] == true;
 
+  final String liveAgent; // the tree's own `agent`; `agent` above also guesses from the foreground
+  final String agentSessionId, agentPane, remoteHost;
+  final bool remote;
+  final bool server; // in an elis-server window, not a row attached from another Mac
   final String id, name, status, agent, cwd, parent, context, tint, workspaceId, workspaceName;
   final int unseen;
   final bool flagged, active, blink, hasSplit, split, collapsed;
@@ -59,13 +70,13 @@ class Session {
 }
 
 class Workspace {
-  Workspace(Map m)
+  Workspace(Map m, {bool server = false})
       : id = m['id'] ?? '',
         name = m['name'] ?? '',
         folder = m['rememberedFolder'] ?? '',
         tint = m['tint'] ?? '',
         active = m['active'] == true,
-        sessions = [for (final s in (m['sessions'] as List? ?? const [])) Session(s as Map, m['id'] ?? '', m['name'] ?? '')];
+        sessions = [for (final s in (m['sessions'] as List? ?? const [])) Session(s as Map, m['id'] ?? '', m['name'] ?? '', server: server)];
 
   final String id, name, folder, tint;
   final bool active;
@@ -201,6 +212,8 @@ class ElisModel extends ChangeNotifier {
   bool loaded = false;
   final _alerts = StreamController<Alert>.broadcast();
   Stream<Alert> get alerts => _alerts.stream;
+  final _events = StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get events => _events.stream; // every event read, alerting or not
   bool _running = false, _disposed = false;
   final fitted = <String, (int, int)>{}; // "session/pane" whose grid is set to this phone's → its columns and rows
   bool background = false; // in the background with the connection kept up for alerts: screens stop polling
@@ -319,7 +332,10 @@ class ElisModel extends ChangeNotifier {
       windows = [for (final m in (w['windows'] as List? ?? const [])) AgWindow(m as Map)];
       if (windowId != null && !windows.any((x) => x.id == windowId && x.open)) windowId = null;
       final t = await call('tree');
-      workspaces = [for (final m in ((t['tree'] as Map?)?['workspaces'] as List? ?? const [])) Workspace(m as Map)];
+      final tree = t['tree'] as Map?, remote = tree?['remote'];
+      // shortcut: `origin` is omitted for elis-server and also before a Mac origin answers; upgrade if Mac rows show early
+      final server = remote is Map && remote['origin'] != 'mac';
+      workspaces = [for (final m in (tree?['workspaces'] as List? ?? const [])) Workspace(m as Map, server: server)];
       loaded = true;
       if (background) Watch.clear(Watch.posted.read(sessions));
       if (!_disposed) notifyListeners();
@@ -375,6 +391,7 @@ class ElisModel extends ChangeNotifier {
   }
 
   void _onEvent(Map<String, dynamic> e) {
+    _events.add(e);
     if (background && e['kind'] == 'session.closed') Watch.clear(Watch.posted.closed(e['session'] as String? ?? ''));
     final a = Alert.of(e);
     if (a == null) return;
@@ -390,6 +407,7 @@ class ElisModel extends ChangeNotifier {
     _lifecycle.dispose();
     _c?.close();
     _alerts.close();
+    _events.close();
     super.dispose();
   }
 }

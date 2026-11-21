@@ -5,9 +5,20 @@ import 'package:flutter/gestures.dart' show kDoubleTapSlop, kDoubleTapTimeout, k
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../chat/chat_composer.dart';
+import '../chat/chat_view.dart';
+import '../chat/checks.dart';
+import '../chat/claude_screen.dart';
+import '../chat/feed.dart';
+import '../chat/grid.dart';
+import '../chat/mode.dart';
+import '../chat/prompt_ledger.dart';
+import '../chat/transcript.dart';
+import '../chat/write_gate.dart';
 import '../client.dart';
-import '../link/mux.dart';
+import '../link/mux.dart' hide Grid;
 import '../model.dart';
+import '../terminal/key_bar.dart';
 import '../pages/page_link.dart';
 import '../pages/page_sheet.dart';
 import '../terminal/row_cache.dart';
@@ -18,31 +29,9 @@ import '../terminal/terminal_view.dart';
 import '../terminal/vt.dart';
 import '../theme.dart';
 import 'actions.dart';
+import 'answer_bar.dart';
+import 'composer.dart';
 import 'prompt.dart';
-
-// what each key-bar key types into the pane: xterm sequences, as Konsole sends them, or while the phone leads, the key
-// the emulator encodes in the program's own modes
-const keys = [
-  ('esc', '\x1b', 'Escape', VtKey.escape, 0),
-  ('tab', '\t', 'Tab', VtKey.tab, 0),
-  ('⇧tab', '\x1b[Z', 'Shift Tab', VtKey.tab, vtShift),
-  ('^C', '\x03', 'Control C', VtKey.c, vtCtrl),
-  ('↑', '\x1b[A', 'Up', VtKey.arrowUp, 0),
-  ('↓', '\x1b[B', 'Down', VtKey.arrowDown, 0),
-  ('←', '\x1b[D', 'Left', VtKey.arrowLeft, 0),
-  ('→', '\x1b[C', 'Right', VtKey.arrowRight, 0),
-  ('⏎', '\r', 'Enter', VtKey.enter, 0),
-  ('^D', '\x04', 'Control D', VtKey.d, vtCtrl),
-  ('^L', '\x0c', 'Control L', VtKey.l, vtCtrl),
-  ('^R', '\x12', 'Control R', VtKey.r, vtCtrl),
-  ('^Z', '\x1a', 'Control Z', VtKey.z, vtCtrl),
-  ('^U', '\x15', 'Control U', VtKey.u, vtCtrl),
-  ('home', '\x1b[H', 'Home', VtKey.home, 0),
-  ('end', '\x1b[F', 'End', VtKey.end, 0),
-  ('pgup', '\x1b[5~', 'Page up', VtKey.pageUp, 0),
-  ('pgdn', '\x1b[6~', 'Page down', VtKey.pageDown, 0),
-  ('paste', null, 'Paste', null, 0), // the clipboard
-];
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key, required this.model, required this.sessionId, @visibleForTesting this.vt = openVt, @visibleForTesting this.onKeyboard,
@@ -114,6 +103,18 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _quietFit = false; // the refit after a refused claim: a refusal of it repeats the claim's, already said
   final _refused = <String>{}; // panes whose terminal the relay refused on this visit: text view until they stop being Live
   final _closedRecently = <String, Timer>{}; // a pane's channel closed mid-stream: a second close soon falls back to text
+  final _openedPanes = <String>{}; // panes whose terminal was OPENED on this visit: before that Chat is connecting, not stale
+  // latched, not shownMode on each build: Chat stays when Claude exits, until the user leaves it
+  bool _inChat = false;
+  bool _picked = false; // the opening pane and mode, picked once the session is known
+  TranscriptFeed? _feed;
+  PromptLedger? _ledger;
+  final _grids = ValueNotifier(0); // bumped whenever the grid Chat reads may have changed
+  late final WriteGate _gate;
+  final _composer = GlobalKey<ChatComposerState>();
+  Future<void>? _taking; // the claim [_takeOver] is making
+  StreamSubscription<Map<String, dynamic>>? _events;
+  String? _agentSessionId;
   PageLink? _pages; // the session's pages while the screen is open, in the background too
   Mux? _pagesMux;
   var _pagesRetry = true;
@@ -130,8 +131,17 @@ class _SessionScreenState extends State<SessionScreen> {
     poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _load());
     m.addListener(_onModel);
     _lifecycle = AppLifecycleListener(onPause: () => _setForeground(false), onResume: () => _setForeground(true));
+    _gate = WriteGate(
+        grids: _grids, grid: _chatGrid, writer: _writer, remote: () => s?.remote ?? false, blocked: () => _chatBlocked ?? checks.writeBlockedOn(remote: s?.remote ?? false, server: s?.server ?? false));
+    _events = m.events.listen((e) {
+      if (e['kind'] == 'status' && e['session'] == widget.sessionId) _feed?.pollNow();
+    });
+    _pickStart();
     _syncTerm();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncFit()); // the first layout gives the screen's size
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncFit(); // the first layout gives the screen's size
+      _syncFeed(); // canPoll asks the route, which initState may not
+    });
     _visit();
   }
 
@@ -139,6 +149,100 @@ class _SessionScreenState extends State<SessionScreen> {
     _foreground = on;
     _syncTerm();
     _syncFit();
+    _syncFeed();
+  }
+
+  /// Opens on the agent's pane when Chat shows there, else on the left pane.
+  void _pickStart() {
+    final s = this.s;
+    if (_picked || s == null) return;
+    _picked = true;
+    _agentSessionId = s.agentSessionId;
+    if (shownMode(s, s.agentPane) != ViewMode.chat) return;
+    pane = s.agentPane;
+    _inChat = true;
+  }
+
+  TranscriptFeed get _chatFeed => _feed ??= TranscriptFeed(
+      call: (args) => m.call('session.transcript', target: widget.sessionId, args: {...args, 'pane': s?.agentPane ?? pane}),
+      canPoll: () => mounted && _foreground && !m.background && m.state == LinkState.connected && ModalRoute.of(context)?.isCurrent == true,
+      remote: s?.remote ?? false)
+    ..addListener(_onFeed);
+
+  PromptLedger get _prompts => _ledger ??= PromptLedger(grids: _grids, grid: _chatGrid, feed: _chatFeed, blocked: () => _chatBlocked);
+
+  void _syncFeed() {
+    if (!mounted) return;
+    if (_inChat && _foreground) return _chatFeed.start();
+    _feed?.stop();
+  }
+
+  void _onFeed() {
+    if (_feed?.error != TranscriptError.hostTooOld || !ModePicks.tooOld.add(widget.sessionId)) return;
+    _syncMode();
+    if (s case final s?) report(context, _tooOld(s));
+  }
+
+  String _tooOld(Session s) => 'Update Elis on ${s.remoteHost.isEmpty ? 'the computer' : s.remoteHost}';
+
+  bool _exited(Session s) => s.liveAgent != 'claude';
+
+  // a Live pane that showed its terminal this visit and has no running one now
+  bool get _termLost =>
+      _openedPanes.contains(pane) && s?.livePanes.contains(pane) == true && !_refused.contains(pane) && term?.opened != true;
+
+  bool get _chatStale => _feed?.stale == true || m.state != LinkState.connected || _termLost;
+
+  String? get _chatBlocked => switch (s) {
+        final s? => ChatView.blockedReason(exited: _exited(s), stale: _chatStale),
+        null => null,
+      };
+
+  void _pickMode(ViewMode mode) {
+    ModePicks.pick(widget.sessionId, mode);
+    _syncMode();
+  }
+
+  void _syncMode() {
+    if (s case final s?) _setMode(shownMode(s, pane) == ViewMode.chat);
+  }
+
+  void _setMode(bool chat) {
+    if (chat == _inChat) return;
+    setState(() => _inChat = chat);
+    _syncFeed();
+    if (chat) return;
+    // Term's fit, claim and resize, once Term has laid out: the phone grid reads its size
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _inChat) return;
+      unawaited(_syncFit());
+      _onTerm();
+      unawaited(_load());
+    });
+  }
+
+  bool get _chatIdle => _chatBlocked == null && _chatGrid() != null && ClaudeScreen.read(_chatGrid()!).idle;
+
+  Grid? _chatGrid() {
+    if (term case final t?) return t.frame == null ? null : Grid.of(t.frame!);
+    return text.isEmpty ? null : Grid.text(text);
+  }
+
+  GateWriter _writer() => _PaneWriter(
+      () => _direct,
+      LeadWriter(() => term, _gateClaim),
+      TypeWriter((text) async {
+        await _replay;
+        return m.act('session.type', target: widget.sessionId, args: {'text': text, 'pane': pane});
+      }));
+
+  // false as soon as the claim is refused, so the gate does not wait out the lead's deadline
+  Future<bool> _gateClaim() async {
+    if (!mounted) return false; // a gate run can outlive the screen
+    _claim();
+    final t = _claimed;
+    await _taking;
+    return t != null && _claimed == t;
   }
 
   // a visit as on the computer: an auto-reset status (an agent's Done) clears on the way in and on the way out
@@ -155,6 +259,11 @@ class _SessionScreenState extends State<SessionScreen> {
       t.cancel();
     }
     m.removeListener(_onModel);
+    unawaited(_events?.cancel());
+    _ledger?.dispose();
+    _feed?.dispose();
+    _gate.dispose();
+    _grids.dispose();
     _lifecycle.dispose();
     _pages?.dispose();
     _release(pane);
@@ -172,6 +281,12 @@ class _SessionScreenState extends State<SessionScreen> {
     if (m.loaded && s == null) {
       Navigator.of(context).maybePop(); // closed on the computer
       return;
+    }
+    _pickStart();
+    _syncFeed(); // a session that loaded after initState may open in Chat
+    if (s?.agentSessionId != _agentSessionId) {
+      _agentSessionId = s?.agentSessionId;
+      _feed?.pollNow();
     }
     if (pane == 'right' && s?.hasSplit != true) pane = 'left';
     _syncTerm(); // a reconnect brings a new mux; a pane can stop being Live
@@ -232,6 +347,8 @@ class _SessionScreenState extends State<SessionScreen> {
   void _onTerm() {
     final t = term;
     if (!mounted || t == null) return;
+    _grids.value++;
+    if (t.opened) _openedPanes.add(t.pane);
     if (t.ended case final reason?) {
       t.removeListener(_onTerm);
       if (_claimed == t) _coveredTries = 3;
@@ -256,7 +373,7 @@ class _SessionScreenState extends State<SessionScreen> {
       unawaited(_syncFit());
     } else {
       // on OPENED, not before: the relay pins the claim to the pane the watch resolved
-      if (t.opened && _openClaim != t) {
+      if (!_inChat && t.opened && _openClaim != t) {
         _openClaim = t;
         _pagesRetry = true;
         _syncPages();
@@ -333,19 +450,25 @@ class _SessionScreenState extends State<SessionScreen> {
     t.arm();
     if (open) _quiet = t;
     setState(() => _claimed = t);
-    unawaited(_takeOver(t));
+    unawaited(_taking = _takeOver(t));
   }
 
   Future<void> _takeOver(TermSession t) async {
     bool mine() => mounted && _lead && _claimed == t; // a pause or pane switch meanwhile closed [t]: nothing to say
     await _replay; // a lead taken before the Mac typed the replay would have zmx drop it
     if (!mine()) return;
-    // the computer's grid back first, after any fit in flight (auto-fit stands down while [_lead]): a session grid
-    // would fight the phone's
-    await _syncFit();
-    if (!mine()) return;
-    if (m.fitted.containsKey(_fitKey)) return _abandon(t, null); // the reset was refused, and said
-    final g = _leadGrid = _seenGrid = _phoneGrid();
+    final (int, int) g;
+    if (_inChat && t.snapshot != null) {
+      g = (t.snapshot!.cols, t.snapshot!.rows); // Chat keeps the grid it found, a Term fit included
+    } else {
+      // the computer's grid back first, after any fit in flight (auto-fit stands down while [_lead]): a session grid
+      // would fight the phone's
+      await _syncFit();
+      if (!mine()) return;
+      if (m.fitted.containsKey(_fitKey)) return _abandon(t, null); // the reset was refused, and said
+      g = _seenGrid = _phoneGrid();
+    }
+    _leadGrid = g;
     final err = await t.takeOver(g.$1, g.$2);
     if (err != null && mine()) _abandon(t, err);
   }
@@ -381,6 +504,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   // a layout change (a rotation, not the keyboard) resizes the lead, or refits, once it settles
   void _layoutGrid() {
+    if (_inChat) return;
     final g = _phoneGrid();
     if (g == _seenGrid) return;
     _seenGrid = g;
@@ -391,7 +515,7 @@ class _SessionScreenState extends State<SessionScreen> {
   // only once leading: before that TermSession drops a resize while the claim waits for OPENED
   void _resizeLead() {
     final g = _seenGrid;
-    if (!_leading || g == null || g == _leadGrid) return;
+    if (_inChat || !_leading || g == null || g == _leadGrid) return;
     _leadGrid = g;
     term!.resizeLead(g.$1, g.$2);
   }
@@ -414,7 +538,7 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<void> _load() async {
     // a delayed read (after a fit, a key) can fire after the screen closed
     if (!mounted || polling || m.state != LinkState.connected || m.background || ModalRoute.of(context)?.isCurrent != true) return;
-    if (_termShown) {
+    if (_inChat ? term != null : _termShown) {
       if (s != null && s!.unseen > 0) unawaited(m.act('session.seen', target: widget.sessionId));
       return;
     }
@@ -422,7 +546,7 @@ class _SessionScreenState extends State<SessionScreen> {
     try {
       // fitted, the grid has more rows than the computer's view shows; reading the last ones gets all of them
       final fit = m.fitted[_fitKey];
-      final rows = _history ? 2000 : fit?.$2 ?? 0;
+      final rows = _inChat ? 0 : _history ? 2000 : fit?.$2 ?? 0; // Chat reads the screen only
       final r = await m.call('session.text', target: widget.sessionId, args: {'pane': pane, if (rows > 0) 'lines': rows});
       final t = _trimEnd('${r['text'] ?? ''}');
       final columns = (r['columns'] as num?)?.toInt();
@@ -434,7 +558,10 @@ class _SessionScreenState extends State<SessionScreen> {
         autoFit.wanted = false; // the computer took the grid back: do not take it again on this visit
       }
       // a new grid width resizes the text even when the screen's text is the same (an idle shell)
-      if (mounted && (t != text || error != null || columns != _columns || lost)) setState(() => (text = t, error = null, _columns = columns));
+      if (mounted && (t != text || error != null || columns != _columns || lost)) {
+        setState(() => (text = t, error = null, _columns = columns));
+        _grids.value++;
+      }
       if (s != null && s!.unseen > 0) unawaited(m.act('session.seen', target: widget.sessionId));
     } on ElisError catch (e) {
       if (mounted) setState(() => error = e.message);
@@ -492,7 +619,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   /// True when a call was made and succeeded.
   Future<bool> _fitOnce() async {
-    if (!mounted) return false;
+    if (!mounted || _inChat) return false; // Chat never resizes Claude
     final visible = _foreground && !m.background && m.state == LinkState.connected;
     final fit = m.fitted[_fitKey];
     // a fit at another grid than the screen's now (a rotation) is made again
@@ -588,8 +715,8 @@ class _SessionScreenState extends State<SessionScreen> {
   // session.type at a time so the keystrokes keep their order
   void _softKey(VtKey key, int mods) {
     _claim();
-    if (!_direct) return _typeSoft(_seq(key, mods));
-    _sent(term!.key(key, mods: mods, seq: _seq(key, mods)));
+    if (!_direct) return _typeSoft(xtermSeq(key, mods));
+    _sent(term!.key(key, mods: mods, seq: xtermSeq(key, mods)));
   }
 
   void _softText(String text, {bool paste = false}) {
@@ -601,20 +728,6 @@ class _SessionScreenState extends State<SessionScreen> {
   void _typeSoft(String text) {
     _typeAll([text], pane);
     Future.delayed(const Duration(milliseconds: 150), _load);
-  }
-
-  /// What [key] with [mods] types indirectly, as xterm sends it: cursor keys carry the modifiers as `CSI 1;m`, other
-  /// keys take alt as a leading ESC.
-  static String _seq(VtKey key, int mods) {
-    final m = 1 + (mods & vtShift != 0 ? 1 : 0) + (mods & vtAlt != 0 ? 2 : 0) + (mods & vtCtrl != 0 ? 4 : 0);
-    final cursor = const {
-      VtKey.arrowUp: '1;mA', VtKey.arrowDown: '1;mB', VtKey.arrowRight: '1;mC', VtKey.arrowLeft: '1;mD', //
-      VtKey.home: '1;mH', VtKey.end: '1;mF', VtKey.pageUp: '5;m~', VtKey.pageDown: '6;m~',
-    }[key];
-    if (cursor != null && m > 1) return '\x1b[${cursor.replaceFirst('m', '$m')}';
-    final plain = mods & ~vtAlt;
-    final seq = key == VtKey.backspace ? '\x7f' : (keys.where((k) => k.$4 == key && k.$5 == plain).firstOrNull ?? keys.firstWhere((k) => k.$4 == key)).$2!;
-    return mods & vtAlt != 0 ? '\x1b$seq' : seq;
   }
 
   Future<void> sendInput() async {
@@ -644,21 +757,24 @@ class _SessionScreenState extends State<SessionScreen> {
     final s = this.s;
     if (s == null) return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
     final t = term;
-    _pickView(t?.replaying == true ? null : t?.snapshot); // a reset's main screen is not the program's
-    final options = promptOptions(_termShown ? t!.snapshot!.lines.map((l) => l.text).join('\n') : text);
+    _pickView(t?.frame); // a reset's main screen is not the program's
+    final chat = _inChat;
+    final options = chat ? const <PromptOption>[] : promptOptions(_termShown ? t!.snapshot!.lines.map((l) => l.text).join('\n') : text);
     _answersShown = options.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        title: chat
+            ? ChatTitle(feed: _chatFeed, s: s)
+            : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(s.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
           Text([s.shortCwd, if (s.agent.isNotEmpty) s.agent].join(' · '),
               style: const TextStyle(fontSize: 12, color: C.muted, fontFamily: mono), overflow: TextOverflow.ellipsis),
         ]),
         actions: [
+          _modeButton(s),
+          if (s.hasSplit) _paneButton(),
           if (_pages?.page case final p? when p.hidden) PageChip(title: p.title, onTap: () => _pages!.setHidden(p, false)),
-          if (_lead) _Tag(_leading ? 'Leading' : 'Leading…', key: const Key('lead')),
-          if (m.state == LinkState.connected && m.via.isNotEmpty) _Tag(m.via, key: const Key('via')),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Semantics(
@@ -668,20 +784,27 @@ class _SessionScreenState extends State<SessionScreen> {
             key: const Key('sessionMenu'),
             tooltip: 'Session actions',
             icon: const Icon(Icons.more_vert),
-            onPressed: () => showSessionActions(context, m, s, onClosed: () => Navigator.of(context).maybePop(), onComposer: () => setState(() {})),
+            onPressed: () => showSessionActions(context, m, s,
+                onClosed: () => Navigator.of(context).maybePop(),
+                onComposer: () => setState(() {}),
+                autoMode: ModePicks.of(s.id) == null,
+                onAutoMode: () {
+                  ModePicks.pick(s.id, null);
+                  _syncMode();
+                }),
           ),
         ],
-        bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
+        bottom: chat ? _chatSubtitle(s) : const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
       ),
       body: SafeArea(
         child: Stack(fit: StackFit.expand, children: [
           ExcludeFocus(excluding: _covered, child: Column(children: [
-          // the buttons float over the screen's top edge, so the terminal takes the whole height
           Expanded(
               child: Stack(children: [
-            Positioned.fill(child: _terminal()),
-            Positioned(left: 0, bottom: 0, child: TermKeyboard(focus: _keyboard, onKey: _softKey, onText: _softText, onPaste: (t) => _softText(t, paste: true))),
-            Positioned(top: 6, right: 6, child: _toolbar(s)),
+            Positioned.fill(child: chat ? _chatView(s) : _terminal()),
+            if (m.state == LinkState.connected && m.via.isNotEmpty) Positioned(top: 6, right: 6, child: _LinkIcon(m.via)),
+            if (!chat)
+              Positioned(left: 0, bottom: 0, child: TermKeyboard(focus: _keyboard, onKey: _softKey, onText: _softText, onPaste: (t) => _softText(t, paste: true))),
             if (m.state != LinkState.connected)
               Center(
                   child: Padding(
@@ -691,9 +814,9 @@ class _SessionScreenState extends State<SessionScreen> {
                     key: const Key('disconnected'), textAlign: TextAlign.center, style: const TextStyle(color: C.danger, fontWeight: FontWeight.w600)),
               )),
           ])),
-          if (options.isNotEmpty) _answers(options),
-          _keyBar(),
-          if (ComposerPref.shown) _composer(),
+          if (options.isNotEmpty) AnswerBar(key: _answersBox, options: options, onAnswer: type),
+          if (!chat) KeyBar(onKey: _press, onKeyboard: _toggleKeyboard),
+          if (!chat && ComposerPref.shown) Composer(key: _composerBox, controller: input, focus: inputFocus, onSend: sending ? null : sendInput),
           ])),
           if (_pages?.page case final p?)
             PageSheet(key: _sheetFor(p), link: _pages!, page: p, onSwipeDown: () => _pages!.setHidden(p, true), webView: widget.pageWebView),
@@ -702,40 +825,70 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
-  Widget _toolbar(Session s) {
-    if (!s.hasSplit) return const SizedBox.shrink();
-    Widget seg(String label, bool on, VoidCallback onTap, {Key? key}) => Padding(
-          padding: const EdgeInsets.only(left: 6),
-          child: OutlinedButton(
-            key: key,
-            onPressed: onTap,
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, 34),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              backgroundColor: (on ? C.surface2 : C.surface).withValues(alpha: 0.92),
-              foregroundColor: on ? C.text : C.muted,
-              side: BorderSide(color: on ? C.line : C.surface2),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text(label, style: TextStyle(fontSize: 12, fontWeight: on ? FontWeight.w600 : null)),
-          ),
-        );
-    void setPane(String p) {
-      if (p == pane) return;
-      _release(pane);
-      _macTookBack = false; // a switch claims
-      setState(() {
-        pane = p;
-        text = '';
-      });
-      _syncTerm(); // closes the other pane's channel, opens this one's when it is Live
-      _load();
-      _syncFit();
-    }
-    return Row(key: const Key('toolbar'), mainAxisSize: MainAxisSize.min, children: [
-      seg('Left pane', pane == 'left', () => setPane('left')),
-      seg('Right pane', pane == 'right', () => setPane('right'), key: const Key('rightPane')),
-    ]);
+  Widget _chatView(Session s) {
+    final f = _chatFeed;
+    return ListenableBuilder(
+        listenable: f,
+        builder: (context, _) => ChatView(
+            feed: f,
+            grid: _chatGrid,
+            grids: _grids,
+            gate: _gate,
+            s: s,
+            exited: _exited(s),
+            stale: _chatStale,
+            onTerm: () => _pickMode(ViewMode.term),
+            composer: _composer,
+            promptCard: promptCardBuilder(_prompts),
+            prompts: _prompts,
+            onKey: _press,
+            onAnswer: type));
+  }
+
+  // a fixed line, never folded: nothing in Chat appears or leaves on scroll
+  PreferredSizeWidget _chatSubtitle(Session s) {
+    final line = ListenableBuilder(
+        listenable: _grids,
+        builder: (context, _) =>
+            ChatSubtitle(feed: _chatFeed, s: s, onChangeModel: _chatIdle ? () => _composer.currentState?.send('/model') : null));
+    return PreferredSize(preferredSize: const Size.fromHeight(23), child: Column(children: [line, const Divider()]));
+  }
+
+  // the icon is the mode shown; a tap picks the other one
+  Widget _modeButton(Session s) {
+    final canSwitch = chatAvailable(s, pane) || _inChat;
+    final reason = ModePicks.tooOld.contains(s.id) ? _tooOld(s) : 'No Claude in this pane';
+    return IconButton(
+      key: const Key('modeButton'),
+      tooltip: _inChat ? 'Chat — switch to Term' : canSwitch ? 'Term — switch to Chat' : 'Term — $reason',
+      icon: Icon(_inChat ? Icons.chat_bubble_outline : Icons.terminal),
+      onPressed: canSwitch ? () => _pickMode(_inChat ? ViewMode.term : ViewMode.chat) : null,
+    );
+  }
+
+  // the icon is the pane shown; a tap shows the other one
+  Widget _paneButton() {
+    final left = pane == 'left';
+    return IconButton(
+      key: const Key('paneButton'),
+      tooltip: left ? 'Left pane — switch to Right' : 'Right pane — switch to Left',
+      icon: Transform.flip(flipX: !left, child: const Icon(Icons.vertical_split)),
+      onPressed: () => _setPane(left ? 'right' : 'left'),
+    );
+  }
+
+  void _setPane(String p) {
+    _gate.cancel('The pane changed'); // its remaining steps would write into the other pane
+    _release(pane);
+    _macTookBack = false; // a switch claims
+    setState(() {
+      pane = p;
+      text = '';
+    });
+    _syncMode(); // Chat shows only on the agent's pane
+    _syncTerm(); // closes the other pane's channel, opens this one's when it is Live
+    _load();
+    _syncFit();
   }
 
   double _fit = 11, _width = 360, _height = 600;
@@ -895,119 +1048,6 @@ class _SessionScreenState extends State<SessionScreen> {
               onTap: _tap,
               child: _remoteScroll ? GestureDetector(onVerticalDragUpdate: (d) => _drag(d.delta.dy / (_fit * 1.3)), child: view) : view);
         });
-
-  Widget _answers(List<PromptOption> options) => Padding(
-        key: _answersBox,
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-        child: Row(children: [
-          for (final (i, o) in options.take(4).indexed) ...[
-            if (i > 0) const SizedBox(width: 8),
-            Expanded(
-              child: Tooltip(
-                message: o.label,
-                child: SizedBox(
-                  height: 40,
-                  child: i == 0
-                      ? FilledButton(
-                          key: Key('answer-${o.key}'),
-                          onPressed: () => type(o.key),
-                          style: FilledButton.styleFrom(
-                              backgroundColor: C.blocked,
-                              foregroundColor: const Color(0xFF1A1206),
-                              minimumSize: const Size(0, 40),
-                              padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                          child: Text(options.length > 2 ? o.key : '${o.key} · ${o.label}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                        )
-                      : OutlinedButton(
-                          key: Key('answer-${o.key}'),
-                          onPressed: () => type(o.key),
-                          style: OutlinedButton.styleFrom(minimumSize: const Size(0, 40), padding: EdgeInsets.zero),
-                          child: Text(options.length > 2 ? o.key : '${o.key} · ${o.label}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                ),
-              ),
-            ),
-          ],
-        ]),
-      );
-
-  Widget _keyBar() => SizedBox(
-        height: 48,
-        child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-          scrollDirection: Axis.horizontal,
-          itemCount: keys.length + 1,
-          separatorBuilder: (_, _) => const SizedBox(width: 6),
-          itemBuilder: (context, i) {
-            if (i == 0) {
-              return Tooltip(
-                message: 'Keyboard',
-                child: OutlinedButton(
-                  key: const Key('softKeyboard'),
-                  onPressed: _toggleKeyboard,
-                  style: OutlinedButton.styleFrom(minimumSize: const Size(44, 44), padding: const EdgeInsets.symmetric(horizontal: 10), foregroundColor: C.text, backgroundColor: C.surface),
-                  child: const Icon(Icons.keyboard_outlined, size: 18),
-                ),
-              );
-            }
-            final (label, seq, name, key, mods) = keys[i - 1];
-            return Semantics(
-              label: name,
-              button: true,
-              excludeSemantics: true,
-              child: OutlinedButton(
-                key: Key('key-$name'),
-                onPressed: () => _press(seq, key, mods),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(44, 44),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  foregroundColor: label == '⏎' ? C.accent : C.text,
-                  backgroundColor: label == '⏎' ? C.surface2 : C.surface,
-                ),
-                child: Text(label, style: const TextStyle(fontFamily: mono, fontSize: 13)),
-              ),
-            );
-          },
-        ),
-      );
-
-  Widget _composer() => Padding(
-        key: _composerBox,
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        child: Row(children: [
-          Expanded(
-            child: TextField(
-              key: const Key('composer'),
-              controller: input,
-              focusNode: inputFocus,
-              minLines: 1,
-              maxLines: 4,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => sendInput(),
-              autocorrect: false,
-              style: const TextStyle(fontFamily: mono, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Type, then send with Enter',
-                fillColor: C.surface,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.line)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 48,
-            height: 48,
-            child: FilledButton(
-              key: const Key('send'),
-              onPressed: sending ? null : sendInput,
-              style: FilledButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(48, 48), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              child: const Icon(Icons.arrow_forward, semanticLabel: 'Send'),
-            ),
-          ),
-        ]),
-      );
 }
 
 // read-only text has no caret, but SelectableText shows a tap's collapsed selection as a caret handle whenever its
@@ -1083,16 +1123,36 @@ class _SingleTapState extends State<_SingleTap> {
       );
 }
 
-/// A small bordered label in the app bar: the link the phone uses, the lead.
-class _Tag extends StatelessWidget {
-  const _Tag(this.text, {super.key});
-  final String text;
+/// The `_direct` rule at each write: leads while the pane is direct, `session.type` once it is not, so a claim refused
+/// during [lead] sends this write indirectly as Term's input does.
+class _PaneWriter implements GateWriter {
+  _PaneWriter(this._direct, this._leader, this._typer);
+  final bool Function() _direct;
+  final GateWriter _leader, _typer;
+
+  GateWriter get _now => _direct() ? _leader : _typer;
 
   @override
-  Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(border: Border.all(color: C.line), borderRadius: BorderRadius.circular(6)),
-        child: Text(text, style: const TextStyle(fontSize: 11, color: C.muted, fontWeight: FontWeight.w600)),
+  Future<bool> lead() async => !_direct() || await _leader.lead() || !_direct();
+
+  @override
+  Future<bool> write(GateWrite w) => _now.write(w);
+
+  @override
+  bool pasteSafe(String text) => _now.pasteSafe(text);
+}
+
+/// The link the phone uses ('Wi-Fi' or 'BT'), faint over the content's top-right corner; it never takes a touch.
+class _LinkIcon extends StatelessWidget {
+  const _LinkIcon(this.via);
+  final String via;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        child: Semantics(
+          key: const Key('via'),
+          label: via,
+          child: Opacity(opacity: 0.4, child: Icon(via == 'BT' ? Icons.bluetooth : Icons.wifi, size: 16, color: C.muted)),
+        ),
       );
 }

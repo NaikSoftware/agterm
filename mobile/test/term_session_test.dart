@@ -101,6 +101,18 @@ void main() {
     expect(sent(r), _reply);
   });
 
+  test('frameIsNullWhileAResyncReplays', () async {
+    final (s, r, _) = await watched();
+    expect(s.frame, isNotNull);
+    r.send([...frame(LinkKind.resync, _watch), ...grid(_watch, 80, 24)]);
+    await flush();
+    expect(s.frame, isNull);
+    expect(s.snapshot, isNotNull, reason: 'the Term view keeps its frame through the replay');
+    r.send(frame(LinkKind.data, _watch, utf8.encode('x')));
+    await flush();
+    expect(s.frame, isNotNull);
+  });
+
   test('repliesWaitForTheResyncAfterLeader', () async {
     final (s, r, vt) = await watched();
     await lead(s, r, resync: false);

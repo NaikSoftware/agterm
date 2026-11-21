@@ -1,0 +1,13 @@
+[
+  {
+    "id": "toolu_01BwjMRsxMhYrq5UQk5oBYMp",
+    "uuid": "cdda1303-1f4a-4977-b40e-47b48447d126",
+    "source": "abfc9d439fee925ae",
+    "agentType": "general-purpose",
+    "name": "Bash",
+    "input": {
+      "command": "touch /tmp/elis-fixture-keeper/subagent-lantern-entry.txt",
+      "description": "Create the subagent-lantern-entry.txt fixture file"
+    }
+  }
+]

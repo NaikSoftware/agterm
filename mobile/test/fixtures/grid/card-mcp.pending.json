@@ -1,0 +1,13 @@
+[
+  {
+    "id": "toolu_01CP9WrArB35ifUyxWRczXPm",
+    "uuid": "b9bea21f-b8d4-4f2e-94f5-f142f0ca0c21",
+    "source": "main",
+    "name": "mcp__claude_ai_Claude_Docs__guide",
+    "input": {
+      "items": [
+        "topic.index"
+      ]
+    }
+  }
+]

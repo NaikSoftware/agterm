@@ -11,6 +11,8 @@ enum RemoteRoute: Sendable {
     case attached(AttachedPlan)
     /// reopenAttached reopens a Recent Closed entry of a row attached from another host.
     case reopenAttached(UUID, window: String?)
+    /// transcript reads an attached or server row's `session.transcript` on the host running its Claude.
+    case transcript(host: String, row: UUID, words: [String])
     case refused(ControlResponse)
 }
 
@@ -25,6 +27,7 @@ extension ControlServer {
         if let route = attachedRoute(request) { return route }
         if let route = historyRoute(request) { return route }
         if let route = attachedRecentRoute(request) { return route }
+        if request.cmd == .sessionTranscript { return transcriptRoute(request) }
         if request.cmd == .sessionRestore, routedStore(request)?.remoteActions != nil {
             return .refused(ControlResponse(ok: false, error: "elis-server keeps every pane running"))
         }
@@ -126,6 +129,8 @@ extension ControlServer {
             return await serverPageResult(page, host: host)
         case .attached(let plan):
             return await runAttached(plan)
+        case .transcript(let host, let row, let words):
+            return await runTranscript(host: host, row: row, words: words)
         case .reopenAttached(let id, let window):
             defer { refreshWindowCache() }
             return await reopenAttached(id, window: window)
