@@ -470,6 +470,7 @@ void main() {
   testWidgets('toolRowShowsRejected', (t) async {
     final h = await _cardChat(t, pending: const [], items: [
       {'kind': 'tool', 'uuid': 'u1', 'id': 'r1', 'name': 'Bash', 'arg': 'rejected one', 'isError': true, 'rejected': true, 'mark': 'error'},
+      {'kind': 'text', 'uuid': 't1', 'text': 'then'},
       {'kind': 'tool', 'uuid': 'u2', 'id': 'r2', 'name': 'Bash', 'arg': 'failed one', 'isError': true, 'mark': 'error'},
     ]);
     expect(find.text('Rejected'), findsOneWidget);

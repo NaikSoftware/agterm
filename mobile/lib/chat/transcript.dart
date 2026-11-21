@@ -64,7 +64,7 @@ class ChatItem {
   int? get exitCode => _int(raw, 'exitCode');
   bool get clipped => _bool(raw, 'clipped');
   bool get running => _bool(raw, 'running');
-  bool get readOnly => _bool(raw, 'readOnly');
+  bool get isAgent => name == 'Agent' || name == 'Task';
   String? get agentType => _str(raw, 'agentType');
   String? get agentName => _str(raw, 'agentName');
   String? get agentColor => _str(raw, 'agentColor');

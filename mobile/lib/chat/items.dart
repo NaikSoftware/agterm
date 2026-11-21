@@ -44,7 +44,10 @@ Widget _row(BuildContext c, ChatRow r, bool gone, String? Function(String)? prom
   if (r.group.isNotEmpty) {
     return _Expandable(
       key: ValueKey(r.key),
-      title: Text(groupLabel(r.group)),
+      title: Row(spacing: 8, children: [
+        Expanded(child: Text(runLabel(r.group), maxLines: 1, overflow: TextOverflow.ellipsis)),
+        if (_runMark(r.group, promptMark, stopped: r.interruptedAfter || gone) case final m) Text(m, style: m.startsWith('✗') ? const TextStyle(color: C.danger) : null),
+      ]),
       body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [for (final t in r.group) _toolRow(t, stopped: false, promptMark: promptMark)]),
@@ -155,15 +158,21 @@ Widget _image(BuildContext c, ChatItem i) {
   );
 }
 
-/// The label of a read-only group, e.g. `Read 7 files · Searched 2`.
-String groupLabel(List<ChatItem> tools) {
-  final read = tools.where((t) => t.name == 'Read').length, listed = tools.where((t) => t.name == 'LS').length;
-  final searched = tools.length - read - listed;
-  return [
-    if (read > 0) 'Read $read ${read == 1 ? 'file' : 'files'}',
-    if (searched > 0) 'Searched $searched',
-    if (listed > 0) 'Listed $listed',
-  ].join(' · ');
+/// The label of a run of tool calls: its first three distinct tools, an MCP tool by its own name, then a count,
+/// e.g. `Read, Grep, search and 5 other calls`.
+String runLabel(List<ChatItem> tools) {
+  final names = tools.map((t) => (t.name ?? 'tool').split('__').last).toSet().take(3).toList();
+  final rest = tools.length - names.length;
+  return rest == 0 ? names.join(', ') : '${names.join(', ')} and $rest other ${rest == 1 ? 'call' : 'calls'}';
+}
+
+String _toolMark(ChatItem i, String? Function(String)? promptMark) =>
+    i.rejected ? 'Rejected' : (i.id == null ? null : promptMark?.call(i.id!)) ?? markText(i.mark);
+
+String _runMark(List<ChatItem> tools, String? Function(String)? promptMark, {required bool stopped}) {
+  if (tools.any((t) => t.running)) return stopped ? 'stopped' : '◯ running';
+  final failed = tools.where((t) => t.rejected || t.isError || _toolMark(t, promptMark).startsWith('✗')).length;
+  return failed > 0 ? '✗ $failed' : '✓';
 }
 
 enum SubagentState { running, finished, stopped }
@@ -186,11 +195,9 @@ const _toolStyle = TextStyle(color: C.muted, fontSize: 13);
 const _monoStyle = TextStyle(fontFamily: mono, fontFamilyFallback: monoFallback, fontSize: 12, color: C.termText);
 
 Widget _toolRow(ChatItem i, {required bool stopped, String? Function(String)? promptMark}) {
-  final agent = i.name == 'Agent' || i.name == 'Task';
+  final agent = i.isAgent;
   final trailing = !agent
-      ? i.rejected
-          ? 'Rejected'
-          : (i.id == null ? null : promptMark?.call(i.id!)) ?? markText(i.mark)
+      ? _toolMark(i, promptMark)
       : switch (subagentState(i, interruptedAfter: stopped, exited: false, stale: false)) {
           SubagentState.running => '◯ running',
           SubagentState.stopped => 'stopped',
@@ -255,7 +262,7 @@ class _Expandable extends StatefulWidget {
 }
 
 class _ExpandableState extends State<_Expandable> {
-  bool open = false;
+  bool open = false, closing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -267,7 +274,12 @@ class _ExpandableState extends State<_Expandable> {
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: body == null ? null : () => setState(() => open = !open),
+            onTap: body == null
+                ? null
+                : () => setState(() {
+                      open = !open;
+                      closing = !open;
+                    }),
             child: Row(
               children: [
                 Text(open && body != null ? '▾ ' : '▸ '),
@@ -275,13 +287,18 @@ class _ExpandableState extends State<_Expandable> {
               ],
             ),
           ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            alignment: Alignment.topLeft,
-            child: open && body != null
-                ? Padding(padding: const EdgeInsets.only(left: 14, top: 4), child: body)
-                : const SizedBox(width: double.infinity),
+          // only the tap animates: a body that a poll grows resizes in one frame, which the list's keep-view shift absorbs
+          ClipRect(
+            child: AnimatedAlign(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              alignment: Alignment.topLeft,
+              heightFactor: open ? 1 : 0,
+              onEnd: () => setState(() => closing = false),
+              child: (open || closing) && body != null
+                  ? Padding(padding: const EdgeInsets.only(left: 14, top: 4), child: body)
+                  : const SizedBox(width: double.infinity),
+            ),
           ),
         ],
       ),

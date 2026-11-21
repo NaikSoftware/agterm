@@ -188,6 +188,43 @@ void main() {
     expect(find.byKey(const Key('jumpToBottom')), findsNothing);
   });
 
+  _chatTest('growingRunKeepsItsExpansion', (t, c) async {
+    await c.start([_prompt('p1'), _tool('b1'), _tool('b2')]);
+    await t.tap(find.text('Bash and 1 other call'));
+    await t.pumpAndSettle();
+    expect(_row('b1'), findsOneWidget);
+    await c.tick();
+    await c.reply([_tool('b3')]);
+    await t.pumpAndSettle();
+    expect(find.text('Bash and 2 other calls'), findsOneWidget);
+    expect(_row('b3'), findsOneWidget);
+    await t.tap(find.text('Bash and 2 other calls'));
+    await t.pumpAndSettle();
+    await c.tick();
+    await c.reply([_tool('b4')]);
+    await t.pumpAndSettle();
+    expect(_row('b4'), findsNothing);
+  });
+
+  _chatTest('growingRunKeepsTheReadRow', (t, c) async {
+    final items = [..._history(40), _tool('x1'), _tool('x2')];
+    await c.start(items);
+    await t.tap(find.text('Bash and 1 other call'));
+    await t.pumpAndSettle();
+    await t.drag(find.byKey(const Key('chatList')), const Offset(0, 60));
+    await t.pumpAndSettle();
+    expect(_row('x1'), findsOneWidget);
+    final anchor = _onScreen(t, items).first;
+    final before = t.getRect(_row(anchor).first).top;
+    await c.tick();
+    await c.reply([_tool('x3'), _tool('x4')]);
+    for (var n = 0; n < 3; n++) {
+      await t.pump(const Duration(milliseconds: 100));
+      expect(t.getRect(_row(anchor).first).top, before, reason: 'frame $n');
+    }
+    expect(_row('x4'), findsOneWidget);
+  });
+
   for (final append in [false, true]) {
     _chatTest('pollMidDragKeepsScrolling${append ? 'WithAppend' : ''}', (t, c) async {
       final items = _history(40);

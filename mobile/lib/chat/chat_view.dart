@@ -183,7 +183,7 @@ class _ChatViewState extends State<ChatView> {
   @override
   void initState() {
     super.initState();
-    _setRows(chatRows(feed.items));
+    _setRows(chatRows(feed.items, pending: {for (final p in feed.pending) p.id}));
     _switches = feed.switches;
     feed.addListener(_changed);
     _scroll.addListener(_onScroll);
@@ -316,12 +316,15 @@ class _ChatViewState extends State<ChatView> {
 
   void _changed() {
     if (!mounted) return;
-    final rows = chatRows(feed.items);
+    final rows = chatRows(feed.items, pending: {for (final p in feed.pending) p.id});
     final old = _rows;
-    final k = old.isEmpty ? -1 : rows.indexWhere((r) => r.key == old.first.key);
+    // a newest single call that a poll joins to a run moves to the run's key
+    final k = old.isEmpty ? -1 : rows.indexWhere((r) => r.key == old.first.key || r.key == 'group-${old.first.key}');
     final added = k <= 0 ? 0 : rows.take(k).where((r) => r.day == null).length;
-    // away from the bottom, any change keeps the row the user is reading where it is
-    final anchor = _away ? _built[_visible.firstOrNull?.$2]?.findRenderObject() : null;
+    // away from the bottom, any change keeps the row the user is reading where it is: the oldest on screen,
+    // since a growing tool run is the newest and anchoring it would push every row above it
+    final read = _visible.fold<(int, String)?>(null, (m, v) => m == null || v.$1 > m.$1 ? v : m);
+    final anchor = _away ? _built[read?.$2]?.findRenderObject() : null;
     final at = _offset(anchor);
     final switched = feed.switches != _switches;
     _keep = anchor == null || at == null ? null : (anchor, at);

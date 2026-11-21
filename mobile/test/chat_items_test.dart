@@ -26,7 +26,6 @@ Future<void> _pumpRow(WidgetTester t, ChatRow r, {bool fresh = false, bool exite
 ChatItem _tool(String uuid, String name, [Map<String, dynamic> fields = const {}]) =>
     ChatItem.fromJson({'kind': 'tool', 'uuid': uuid, 'name': name, ...fields});
 
-ChatItem _ro(String uuid, String name) => _tool(uuid, name, {'readOnly': true});
 
 Color? _color(WidgetTester t, String text) =>
     t.widget<RichText>(find.descendant(of: find.text(text), matching: find.byType(RichText))).text.style?.color;
@@ -121,29 +120,50 @@ void main() {
         home: Scaffold(body: Builder(builder: (c) => chatRowWidget(c, chatRows([_item('user', 'u1', text: 'a', time: '2026-11-20T12:00:00.000')])[1], fresh: false)))));
     expect(find.text('Fri, Nov 20'), findsOneWidget);
   });
-  test('threeReadOnlyCallsGroup', () {
-    final three = chatRows([_ro('r1', 'Read'), _ro('g1', 'Grep'), _ro('g2', 'Glob')]);
-    expect(three.single.key, 'group-r1');
-    expect(three.single.item, isNull);
-    expect(groupLabel(three.single.group), 'Read 1 file · Searched 2');
-    expect([for (final r in chatRows([_ro('r1', 'Read'), _ro('g1', 'Grep')])) r.key], ['g1', 'r1']);
-    final grown = chatRows([_ro('r1', 'Read'), _ro('g1', 'Grep'), _ro('g2', 'Glob'), _ro('r2', 'Read')]);
-    expect(grown.single.key, three.single.key);
-    expect(groupLabel(grown.single.group), 'Read 2 files · Searched 2');
+  test('consecutiveToolCallsFold', () {
+    final two = chatRows([_tool('r1', 'Read'), _tool('e1', 'Edit')]);
+    expect(two.single.key, 'group-r1');
+    expect(two.single.item, isNull);
+    expect(runLabel(two.single.group), 'Read, Edit');
+    final grown = chatRows([_tool('r1', 'Read'), _tool('e1', 'Edit'), _tool('b1', 'Bash')]);
+    expect(grown.single.key, two.single.key);
+    expect([for (final r in chatRows([_tool('r1', 'Read'), ChatItem.fromJson({'kind': 'text', 'uuid': 'a1'}), _tool('e1', 'Edit')])) r.key], ['e1', 'a1', 'r1']);
   });
 
-  testWidgets('groupRowExpandsToItsTools', (t) async {
-    await _pumpRow(t, chatRows([_ro('r1', 'Read'), _ro('g1', 'Grep'), _ro('g2', 'Glob')]).single);
-    expect(find.text('Grep'), findsNothing);
-    await t.tap(find.text('Read 1 file · Searched 2'));
+  test('runLabelNamesThreeToolsAndCountsTheRest', () {
+    final names = ['Read', 'Grep', 'mcp__docs__search', 'Read', 'Bash', 'Edit', 'Grep', 'Write'];
+    final run = chatRows([for (final (n, name) in names.indexed) _tool('t$n', name)]).single.group;
+    expect(runLabel(run), 'Read, Grep, search and 5 other calls');
+    expect(runLabel(run.take(4).toList()), 'Read, Grep, search and 1 other call');
+  });
+
+  test('agentAndPendingCallsBreakARun', () {
+    final agent = chatRows([_tool('r1', 'Read'), _tool('r2', 'Read'), _tool('a1', 'Agent'), _tool('r3', 'Read')]);
+    expect([for (final r in agent) r.key], ['r3', 'a1', 'group-r1']);
+    final asked = [_tool('r1', 'Read'), _tool('r2', 'Read', {'id': 'toolu_2'}), _tool('r3', 'Read')];
+    expect([for (final r in chatRows(asked, pending: {'toolu_2'})) r.key], ['r3', 'r2', 'r1']);
+  });
+
+  testWidgets('runRowExpandsAndCollapses', (t) async {
+    await _pumpRow(t, chatRows([_tool('r1', 'Read'), _tool('g1', 'Grep', {'arg': 'pattern'})]).single);
+    expect(find.text('pattern'), findsNothing);
+    await t.tap(find.text('Read, Grep'));
     await t.pumpAndSettle();
-    expect(find.text('Grep'), findsOneWidget);
-    expect(find.text('Glob'), findsOneWidget);
+    expect(find.text('pattern'), findsOneWidget);
+    await t.tap(find.text('Read, Grep'));
+    await t.pumpAndSettle();
+    expect(find.text('pattern'), findsNothing);
   });
 
-  test('editBashNeverGroup', () {
-    final rows = chatRows([_ro('r1', 'Read'), _ro('r2', 'Read'), _tool('e1', 'Edit'), _ro('r3', 'Read')]);
-    expect([for (final r in rows) r.key], ['r3', 'e1', 'r2', 'r1']);
+  testWidgets('runRowAggregatesMarks', (t) async {
+    Future<void> marks(List<Map<String, dynamic>> fields, String mark) async {
+      await _pumpRow(t, chatRows([for (final (n, f) in fields.indexed) _tool('t$n', 'Bash', f)]).single);
+      expect(find.text(mark), findsOneWidget);
+    }
+
+    await marks([{'mark': 'error'}, {'running': true}], '◯ running');
+    await marks([{'mark': 'exit 1'}, {'rejected': true}, {'mark': 'ok'}], '✗ 2');
+    await marks([{'mark': 'ok'}, {'mark': 'done'}], '✓');
   });
 
   testWidgets('toolRowShowsNameArgMark', (t) async {
@@ -166,7 +186,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('line 1\nline 2'), findsOneWidget);
     expect(find.text('Full output in Term'), findsOneWidget);
-    expect(find.ancestor(of: find.text('line 1\nline 2'), matching: find.byType(AnimatedSize)), findsOneWidget);
+    expect(find.ancestor(of: find.text('line 1\nline 2'), matching: find.byType(AnimatedAlign)), findsOneWidget);
   });
 
   testWidgets('diffRendersHunks', (t) async {

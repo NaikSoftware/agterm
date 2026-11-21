@@ -1143,7 +1143,7 @@ s=$(elisctl zmx tree studio.local --json \
 <ul>
 <li>The app bar shows Claude's title for the conversation, or the session name. The line under it shows the folder, the model such as <em>Opus · medium</em>, and <em>PR #N</em>, which opens the pull request. On a narrow screen the folder gives way first.</li>
 <li>Your messages show as bubbles and Claude's replies as formatted text. A long press on a message offers Copy, Copy code and Share.</li>
-<li>Each tool call is one row with its name, a short argument and a result mark. A tap opens its output or, for an edit, the diff; long output stops at <em>Full output in Term</em>. Three or more reads and searches in a row fold into one row such as <em>Read 7 files · Searched 2</em>.</li>
+<li>Each tool call is one row with its name, a short argument and a result mark. A tap opens its output or, for an edit, the diff; long output stops at <em>Full output in Term</em>. Two or more tool calls in a row fold into one row such as <em>Read, Grep, search and 5 other calls</em>, with one mark for the run; a tap lists the calls. A subagent and a call that waits for your answer keep their own row.</li>
 <li>Subagents show as rows that read running or finished. Thinking shows as <em>Thought for 4s</em>, never its content. Dividers mark a compacted conversation and an interruption; errors, failed hooks and notices get their own rows, and images show as thumbnails.</li>
 <li>While you scroll up, your last prompt above the view stays pinned at the top; a tap returns to it. While Claude's to-do list has open items, a strip shows the count and the current item, and a tap expands it. The <em>↓ N new</em> button returns to the bottom.</li>
 </ul>

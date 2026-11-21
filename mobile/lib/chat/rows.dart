@@ -1,6 +1,6 @@
 import 'transcript.dart';
 
-/// One list row: an item, a group of read-only tool items, or a day separator ([day] set).
+/// One list row: an item, a run of consecutive tool calls, or a day separator ([day] set).
 class ChatRow {
   const ChatRow(this.key, {this.item, this.group = const [], this.day, this.interruptedAfter = false, this.summary});
 
@@ -23,14 +23,16 @@ String _dayKey(DateTime d) => 'day-${d.toIso8601String().substring(0, 10)}';
 
 /// The rows for [items] (oldest first), newest first for a `reverse: true` list; a day row sits above each day's first item.
 /// A `compactSummary` right after a `compact` folds into the divider's row, keyed by the divider.
-/// Three or more consecutive read-only tool items share one row, keyed by the first so a poll that grows it keeps the key.
-List<ChatRow> chatRows(List<ChatItem> items) {
+/// Two or more consecutive tool calls share one row, keyed by the first so a poll that grows it keeps the key;
+/// an Agent call and a call in [pending] (its prompt needs the user) keep their own row.
+List<ChatRow> chatRows(List<ChatItem> items, {Set<String> pending = const {}}) {
   final rows = <ChatRow>[];
   final lastStop = items.lastIndexWhere((i) => i.kind == 'interrupted');
   var run = <ChatItem>[];
+  var runEnd = 0;
   void flush() {
-    if (run.length >= 3) {
-      rows.add(ChatRow('group-${run.first.uuid}', group: run));
+    if (run.length >= 2) {
+      rows.add(ChatRow('group-${run.first.uuid}', group: run, interruptedAfter: runEnd < lastStop));
     } else {
       rows.addAll([for (final i in run) ChatRow(i.uuid, item: i)]);
     }
@@ -50,8 +52,9 @@ List<ChatRow> chatRows(List<ChatItem> items) {
       rows.add(ChatRow(_dayKey(d), day: d));
       shown = d;
     }
-    if (i.kind == 'tool' && i.readOnly) {
+    if (i.kind == 'tool' && !i.isAgent && !pending.contains(i.id)) {
       run.add(i);
+      runEnd = n;
       continue;
     }
     flush();
